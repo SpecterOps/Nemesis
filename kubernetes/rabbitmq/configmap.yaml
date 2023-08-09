@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: rabbitmq-server
+    app.kubernetes.io/name: nemesis-rabbitmq
+  name: nemesis-rabbitmq-config
+  namespace: default
+data:
+  enabled_plugins: |
+    [rabbitmq_management,rabbitmq_peer_discovery_k8s,rabbitmq_prometheus].
+
+  rabbitmq.conf: |
+    ## Clustering
+    cluster_formation.peer_discovery_backend = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    # Use the Pods hostname instead of IP addresses to create a cluster.
+    # The Pod IP doesn't work with persistence because new Pods get a new IP addresses,
+    # that doesn't have access to existing data after the node name has changed.
+    cluster_formation.k8s.address_type = hostname
+    cluster_formation.node_cleanup.interval = 10
+    # Set to false if automatic removal of unknown/absent nodes
+    # is desired. This can be dangerous, see
+    #  * http://www.rabbitmq.com/cluster-formation.html#node-health-checks-and-cleanup
+    #  * https://groups.google.com/forum/#!msg/rabbitmq-users/wuOfzEywHXo/k8z_HWIkBgAJ
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+    ## queue master locator
+    queue_master_locator = min-masters
+    ## The default "guest" user is only permitted to access the server
+    ## via a loopback interface (e.g. localhost)
+    ## See http://www.rabbitmq.com/access-control.html#loopback-users
+    loopback_users.guest = false
+
+    management.path_prefix = /rabbitmq/

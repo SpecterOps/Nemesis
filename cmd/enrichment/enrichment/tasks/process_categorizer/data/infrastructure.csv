@@ -1,0 +1,26 @@
+# Format: <program.exe>,<product> - <description>
+btservice.exe,BeyondTrust PowerBroker (selective user elevation)
+certsrv.exe,Microsoft Windows - Certificate Service
+CcmExec.exe,System Center Configuration Manager - Host Process
+CmRcService.exe,System Center Configuration Manager - Remote Control Service
+DFSRs.exe,Microsoft Windows - Distributed File System Replication
+dns.exe,Microsoft Windows - Domain Name System (DNS) Server
+LMIGuardian.exe,LogMeIn
+LogMeInSystray.exe,LogMeIn
+miiserver.exe,Microsoft Azure AD Connect - Synchronization service.
+NomadBranch.exe,1E - NomadBranch
+policyHost.exe,Microsoft - Policy Platform Service (used by SCCM)
+PXELiteServer.exe,1E - NomadBranch PXE Server
+PSEXESVC.exe,Sysinternals PsExec - PsExec Service
+RaMaint.exe,LogMeIn
+sqlservr.exe,Microsoft SQL Server - SQL Server Windows NT
+sqlwriter.exe,Microsoft SQL Server - SQL Server VSS Writer
+TeamViewer_Service.exe,TeamViewer
+VGAuthService.exe,VMware Workstation - VMware Guest Authentication Service
+vmacthlp.exe,VMware Tools - VMware Activation Helper
+vmtoolsd.exe,VMware Tools - VMware Tools Core Service
+vmware-converter-a.exe,VMware vCenter Converter Standalone - VMware Converter Service
+vmware-converter.exe,VMware vCenter Converter Standalone - VMware Converter Service
+ZSAService.exe,ZScaler
+ZSATray.exe,ZScaler
+ZSATunnel.exe,ZScaler

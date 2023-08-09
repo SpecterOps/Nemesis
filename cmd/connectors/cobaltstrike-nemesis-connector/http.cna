@@ -1,0 +1,516 @@
+# Always keep 4 and 34 enabled - they'll help catch common developer mistakes
+debug(debug() | 4);     # 4  =	display a runtime warning for the first time use of non-declared variables.
+#debug(debug() | 8);    # 8  =  DEBUGGING: trace all function calls
+debug(debug() | 34);    # 34 = "throw" all errors flagged for use with &checkError
+#debug(debug() | 64);   # 64 =	DEBUGGING: trace all predicate decisions (follow program logic)
+
+
+import java.net.*;
+import java.io.DataOutputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+
+# have to add this to the -Dclass path in the `agscript` binary >_<
+import SSLUtils;
+
+global('%nemesis::Settings');
+
+
+sub http::UploadFile {
+    # Uploads a file to the http://nemesis/file endpoint, returning a object_id UUID
+
+    local('$1 $filepath @parts $filename $auth_header $guid $file_bytes $in $url $urlobj $con $wr $responseCode $message $inputLine $message2 $date $url $urlobj $con');
+
+    $filepath = $1;
+    @parts = split('/', $filepath);
+    $filename = @parts[-1];
+    $file_bytes = file::ReadAllBytes($filepath);
+
+    # POST to http://nemesis/file
+    $url = %nemesis::Settings['NemesisApiUrl']. 'file';
+    $urlobj = [new URL: $url];
+    $con = [$urlobj openConnection];
+
+    # headers/auth stuffs
+    [$con setRequestProperty: "User-Agent", "NemesisCobaltStrikeConnector"];
+    [$con setRequestProperty: "Content-Type", "application/octet-stream"];
+    $auth_header = "Basic " . base64_encode(%nemesis::Settings['NemesisCreds']);
+    [$con setRequestProperty: "Authorization", $auth_header];
+    [$con setRequestMethod: "POST"];
+    [$con setDoOutput: true];
+    [$con setConnectTimeout: 5000];
+
+    # TODO: handle very large files!
+    try {
+        [$con connect];
+        $wr = [new DataOutputStream: [$con getOutputStream]];
+        [$wr writeBytes: $file_bytes];
+        [$wr flush];
+        [$wr close];
+
+        $responseCode = 0;
+        try {
+            $responseCode = [$con getResponseCode];
+        }
+        catch $message
+        {
+            logger::WriteError("[UploadFile] " . $message);
+        }
+
+        if($responseCode == 200) {
+
+            try {
+                $in = [new BufferedReader: [new InputStreamReader: [$con getInputStream]]];
+
+                $inputLine = [$in readLine];
+                if($inputLine eq "") {
+                    $inputLine = [$in readLine];
+                }
+
+                [$in close];
+
+                return http::getObjectID($inputLine);
+            }
+            catch $message {
+                logger::WriteError("[UploadFile] Error in parsing upload response: " . $message);
+                return $null;
+            }
+        }
+        else {
+            logger::WriteError("[UploadFile] Response code from Nemesis server: " . $responseCode);
+        }
+    }
+    catch $message2
+    {
+        logger::WriteError("[UploadFile] " . $message2);
+    }
+
+    return $null;
+}
+
+
+sub http::YaraFile {
+    # Uploads a file to the http://nemesis/yara endpoint, returning any yara results
+
+    local('$1 $filepath @parts $filename $auth_header $footer $guid $body $file_bytes $in $url $urlobj $con $wr $responseCode $message $inputLine $message2 $date $url $urlobj $con');
+
+    $filepath = $1;
+    @parts = split('/', $filepath);
+    $filename = @parts[-1];
+    $file_bytes = file::ReadAllBytes($filepath);
+
+    # separator we're using for the stream bounaries
+    $guid = helpers::GetRandomFileName();
+
+    # part 1 - initial header for file bytes
+    $body = "--" . $guid . "\r\n";
+    $body = $body . "Content-Disposition: form-data; name=\"file\"; filename=\"" . $filename . "\"" . "\r\n";
+    $body = $body . "Content-Type: application/octet-stream\r\n\r\n";
+
+    $footer = "\r\n--" . $guid . "\r\n";
+
+    $url = %nemesis::Settings['NemesisYaraUrl'] . 'file';
+    println("url: " . $url);
+    $urlobj = [new URL: $url];
+    $con = [$urlobj openConnection];
+
+    # headers/auth stuffs
+    [$con setRequestProperty: "User-Agent", "NemesisCobaltStrikeConnector"];
+    # make sure we set the GUID that defines our boundary
+    [$con setRequestProperty: "Content-Type", "multipart/form-data; boundary=" . $guid];
+    $auth_header = "Basic " . base64_encode("nemesis:Password123!");
+    [$con setRequestProperty: "Authorization", $auth_header];
+    [$con setRequestMethod: "POST"];
+    [$con setDoOutput: true];
+    [$con setConnectTimeout: 5000];
+
+    try {
+        [$con connect];
+        $wr = [new DataOutputStream: [$con getOutputStream]];
+        [$wr writeBytes: $body];
+        [$wr writeBytes: $file_bytes];
+        [$wr writeBytes: $footer];
+        [$wr flush];
+        [$wr close];
+
+        $responseCode = 0;
+        try {
+            $responseCode = [$con getResponseCode];
+        }
+        catch $message
+        {
+            println("[UploadFile] " . $message);
+        }
+
+        if($responseCode == 200) {
+
+            try {
+                $in = [new BufferedReader: [new InputStreamReader: [$con getInputStream]]];
+
+                $inputLine = [$in readLine];
+                if($inputLine eq "") {
+                    $inputLine = [$in readLine];
+                }
+
+                [$in close];
+
+                return $inputLine;
+            }
+            catch $message {
+                println("[UploadFile] Error in parsing upload response: " . $message);
+                return $null;
+            }
+        }
+        else {
+            println("[UploadFile] Response code from Nemesis server: " . $responseCode);
+        }
+    }
+    catch $message2
+    {
+        println("[UploadFile] " . $message2);
+    }
+
+    return $null;
+
+}
+
+
+sub http::getObjectID {
+    # Small helper that extracts an object_id field from JSON results
+    local('$1 $obj')
+
+    $obj = json_new_jsonobject($1);
+    return json_value($obj, "object_id");
+}
+
+
+sub http::PostData {
+    # posts data to the appropriate API endpoint, returning a unique UUID message ID
+
+    local('$1 $2 $3 $4 $BID $Datatype $auth_header $Data $TimeStamp $JsonData $url $urlobj $con $wr $responseCode $in $inputLine');
+
+    $BID = $1;
+    $Datatype = $2;
+    $Data = $3;
+    $TimeStamp = $4;
+
+    $url = %nemesis::Settings['NemesisApiUrl'] . 'data';
+    $urlobj = [new URL: $url];
+
+    $con = [$urlobj openConnection];
+
+    if(%nemesis::Settings['DebugJson']) {
+        $JsonData = helpers::BuildJson($BID, $Datatype, $Data, $TimeStamp);
+        logger::WriteVerbose("PostData URL: " . $url);
+        logger::WriteVerbose($Datatype . " JSON: " . $JsonData);
+    } else {
+        $JsonData = helpers::BuildJson($BID, $Datatype, $Data, $TimeStamp);
+    }
+
+
+    # headers/auth stuffs
+    [$con setRequestProperty: "User-Agent", "NemesisCobaltStrikeConnector"];
+    [$con setRequestProperty: "Content-Type", "application/octet-stream"];
+    $auth_header = "Basic " . base64_encode(%nemesis::Settings['NemesisCreds']);
+    [$con setRequestProperty: "Authorization", $auth_header];
+    [$con setRequestMethod: "POST"];
+    [$con setDoOutput: true];
+    [$con setConnectTimeout: 5000];
+
+
+    try {
+        [$con connect];
+        $wr = [new DataOutputStream: [$con getOutputStream]];
+        [$wr writeBytes: $JsonData];
+        [$wr flush];
+        [$wr close];
+
+        $responseCode = 0;
+        try {
+            $responseCode = [$con getResponseCode];
+        }
+        catch $message
+        {
+            logger::WriteError("[PostData] error: " . $message);
+        }
+
+        if($responseCode == 200) {
+
+            try {
+                $in = [new BufferedReader: [new InputStreamReader: [$con getInputStream]]];
+
+                $inputLine = [$in readLine];
+                if($inputLine eq "") {
+                    $inputLine = [$in readLine];
+                }
+
+                [$in close];
+
+                return http::getObjectID($inputLine);
+            }
+            catch $message {
+                logger::WriteError("[PostData] Error in parsing upload response: " . $message);
+                return $null;
+            }
+        }
+        else {
+            logger::WriteError("[PostData] Response code from Nemesis server: " . $responseCode);
+        }
+    }
+    catch $message2
+    {
+        logger::WriteError("Error : " . $message2);
+        # show_error("Error : " . $message2);
+    }
+}
+
+
+sub http::GetFileData {
+    # Get data about a processed file (referenced by the message UUID from http::PostData) from the Elasticsearch server
+
+    local('$1 $2 $3 $MessageID $url $urlobj $base64_creds $con $JsonData $wr $creds $message $responseCode $parsed $response $in $inputline $SSL $inputLine');
+
+    $MessageID = $1;
+
+    $url = %nemesis::Settings['ElasticsearchUrl'] . "file_data_enriched/_search?pretty";
+
+    $urlobj = [new URL: $url];
+
+    $con = $null;
+
+    $SSL = [new SSLUtils];
+    [SSLUtils ignoreSsl];
+
+    $con = [$urlobj openConnection];
+
+    [$con setRequestProperty: "User-Agent", "NemesisCobaltStrikeConnector"];
+    [$con setRequestProperty: "Content-Type", "application/json"];
+    $creds = %nemesis::Settings['NemesisCreds'];
+    $base64_creds = "Basic " . base64_encode([$creds getBytes:[StandardCharsets UTF_8]]);
+    [$con setRequestProperty: "Authorization", $base64_creds];
+    [$con setRequestMethod: "POST"];
+    [$con setDoOutput: true];
+    [$con setConnectTimeout: 5000];
+
+    # logger::WriteVerbose("Getting FileDataEnriched data for message_id '" . $MessageID . "' from server: " . $url);
+
+    # to pull additional fields, specify them in the _source/includes component
+    $JsonData = "
+{
+    \"_source\": {
+        \"includes\": [ \"path\", \"size\", \"objectId\", \"analysis\", \"magicType\", \"nemesisFileType\", \"noseyparker\", \"yaraMatches\", \"extractedPlaintext\", \"convertedPdf\",  \"containsDpapi\", \"parsedData.hasParsedCredentials\", \"parsedData.officeDocOle.encrypted\", \"parsedData.officeDocNew.encrypted\", \"hashes.sha1\", \"metadata.messageId\" ]
+    },
+    \"query\": {
+        \"bool\": {
+            \"filter\": [
+              {
+                \"match_phrase\": {
+                  \"metadata.messageId\": \"$MessageID\"
+                }
+              }
+            ]
+        }
+    }
+}
+    ";
+
+    try {
+        [$con connect];
+        $wr = [new DataOutputStream: [$con getOutputStream]];
+        [$wr writeBytes: $JsonData];
+        [$wr flush];
+        [$wr close];
+
+        $responseCode = 0;
+        try {
+            $responseCode = [$con getResponseCode];
+        }
+        catch $message
+        {
+            logger::WriteError("[GetFileData] error: " . $message);
+        }
+
+        if($responseCode == 200) {
+
+            try {
+                $in = [new BufferedReader: [new InputStreamReader: [$con getInputStream]]];
+
+                $inputLine = [$in readLine];
+                $response = $inputLine . "\r\n";
+
+                while($inputLine ne "") {
+                    $inputLine = [$in readLine];
+                    $response = $response . $inputLine . "\r\n";
+                }
+
+                [$in close];
+
+                return json_loads($response);
+            }
+            catch $message {
+                logger::WriteError("[GetFileData] Error in parsing upload response: " . $message);
+                return $null;
+            }
+        }
+        else {
+            # logger::WriteError("[GetFileData] Response code from Nemesis server: " . $responseCode);
+        }
+    }
+    catch $message2
+    {
+        show_error("Error : " . $message2);
+    }
+}
+
+
+sub http::GetFileResults {
+    local('$1 $Retries $NumResults $Results $SleepSecs $Sleep $MessageID $message')
+
+    # Loops for file data processing
+
+    $MessageID = $1;
+    $Retries = $2;
+    $SleepSecs = $3;
+
+    if(!$Retries) {
+        $Retries = 10;
+    }
+    if(!$SleepSecs) {
+        $SleepSecs = 3;
+    }
+
+    $Sleep = $SleepSecs * 1000;
+    $NumResults = 0;
+
+    while(($NumResults lt 1) && ($Retries gt 0)) {
+        sleep(3000);
+        $Results = http::GetFileData($MessageID);
+        try {
+            if($Results) {
+                if("hits" in $Results) {
+                    if("total" in $Results["hits"]) {
+                        $NumResults = $Results["hits"]["total"]["value"];
+                    }
+                    else {
+                        $NumResults = 0;
+                    }
+                }
+                else {
+                    $NumResults = 0;
+                }
+            }
+            else {
+                $NumResults = 0;
+            }
+        }
+        catch $message {
+            $NumResults = 0;
+        }
+        $Retries = $Retries - 1;
+    }
+
+    return $Results;
+}
+
+
+sub http::GetProcessData {
+    # Get data about a processed process listing (referenced by the message UUID from http::PostData) from the Elasticsearch server
+
+    local('$1 $2 $3 $MessageID $url $urlobj $base64_creds $con $JsonData $wr $creds $message $responseCode $parsed $response $in $inputline $SSL $inputLine');
+
+    $MessageID = $1;
+
+    $url = %nemesis::Settings['ElasticsearchUrl'] . "process_category/_search?pretty";
+    logger::WriteVerbose("Elasticsearch URL: " . $url);
+
+    $urlobj = [new URL: $url];
+
+    $con = $null;
+
+    $SSL = [new SSLUtils];
+    [SSLUtils ignoreSsl];
+
+    $con = [$urlobj openConnection];
+
+    [$con setRequestProperty: "User-Agent", "NemesisCobaltStrikeConnector"];
+    [$con setRequestProperty: "Content-Type", "application/json"];
+    $creds = %nemesis::Settings['ElasticsearchCreds'];
+    $base64_creds = "Basic " . base64_encode([$creds getBytes:[StandardCharsets UTF_8]]);
+    [$con setRequestProperty: "Authorization", $base64_creds];
+    [$con setRequestMethod: "POST"];
+    [$con setDoOutput: true];
+    [$con setConnectTimeout: 5000];
+
+    logger::WriteVerbose("Getting ProcessCategory data for message_id '" . $MessageID . "' from server: " . $url);
+
+    # to pull additional fields, specify them in the _source/includes component
+    $JsonData = "
+{
+    \"size\": 10000,
+    \"_source\": {
+        \"includes\": [ \"name\", \"processId\", \"parentProcessId\", \"arch\", \"token.session\", \"token.user.name\", \"category.category\", \"category.description\"]
+    },
+    \"query\": {
+        \"bool\": {
+            \"filter\": [
+              {
+                \"match_phrase\": {
+                  \"metadata.messageId\": \"$MessageID\"
+                }
+              }
+            ]
+        }
+    }
+}
+    ";
+
+    try {
+        [$con connect];
+        $wr = [new DataOutputStream: [$con getOutputStream]];
+        [$wr writeBytes: $JsonData];
+        [$wr flush];
+        [$wr close];
+
+        $responseCode = 0;
+        try {
+            $responseCode = [$con getResponseCode];
+        }
+        catch $message
+        {
+            logger::WriteError("[GetProcessData] error: " . $message);
+        }
+
+        if($responseCode == 200) {
+
+            try {
+                $in = [new BufferedReader: [new InputStreamReader: [$con getInputStream]]];
+
+                $inputLine = [$in readLine];
+                $response = $inputLine . "\r\n";
+
+                while($inputLine ne "") {
+                    $inputLine = [$in readLine];
+                    $response = $response . $inputLine . "\r\n";
+                }
+
+                [$in close];
+
+                # logger::WriteVerbose("response: " . $response);
+
+                return json_loads($response);
+            }
+            catch $message {
+                logger::WriteError("[GetProcessData] Error in parsing response: " . $message);
+                return $null;
+            }
+        }
+        else {
+            logger::WriteError("[GetProcessData] Response code from Nemesis server: " . $responseCode);
+        }
+    }
+    catch $message2
+    {
+        show_error("Error : " . $message2);
+    }
+}

@@ -1,0 +1,41 @@
+sub readbof {
+	local('$barch $handle $data $msg');
+	$barch  = barch($1);
+
+	# read in the right BOF file
+    println(script_resource("./build/ $+ $2 $+ . $+ $barch $+ .o"))
+	$handle = openf(script_resource("./build/ $+ $2 $+ . $+ $barch $+ .o"));
+	$data   = readb($handle, -1);
+	closef($handle);
+	if(strlen($data) == 0)
+	{
+		berror($1, "could not read bof file");
+	}
+
+	$msg = iff( ($3 eq $null || $3 eq ""), "Running $2", $3);
+	blog($1, $msg);
+	btask($1, $msg);
+	return $data;
+}
+
+alias bof_reg_collect {
+	local('$params $args $text');
+
+	if(size(@_) < 2)
+	{
+		berror($1, beacon_command_detail("bof_reg_collect"));
+		return;
+	}
+
+	$hive = $2;
+	$path = $3;
+
+	$args = bof_pack($1, "zzz", "bof_reg_collect.nemesis", $hive, $path);
+	beacon_inline_execute($1, readbof($1, "reg_collect", $msg), "go", $args);
+}
+
+beacon_command_register(
+	"bof_reg_collect",
+	"Does Nemesis registry things",
+	"Usage: bof_reg_collect <HKCR|HKCU|HKLM|HKU|HKCC> <path>"
+);

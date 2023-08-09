@@ -1,0 +1,8 @@
+[flake8]
+ignore = E231, E241
+per-file-ignores =
+    __init__.py:F401
+    enrichment/lib/ext_tools/office2john.py:*
+max-line-length = 240
+count = true
+exclude = enrichment/lib/ext_tools

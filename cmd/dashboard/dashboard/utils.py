@@ -1,0 +1,899 @@
+# Standard Libraries
+import datetime
+import os
+import re
+import time
+from typing import List, Tuple
+
+# 3rd Party Libraries
+import bcrypt
+import pandas as pd
+import psycopg
+import requests
+import streamlit as st
+import streamlit_authenticator as stauth
+from elasticsearch import Elasticsearch
+from sqlalchemy import create_engine
+from sqlalchemy import text as sql_text
+
+# pull in and check all of our required environment variables
+WAIT_TIMEOUT = 5
+POSTGRES_CONNECTION_URI = os.environ.get("POSTGRES_CONNECTION_URI") or ""
+ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL") or ""
+ELASTICSEARCH_USER = os.environ.get("ELASTICSEARCH_USER") or ""
+ELASTICSEARCH_PASSWORD = os.environ.get("ELASTICSEARCH_PASSWORD") or ""
+DASHBOARD_USER = os.environ.get("DASHBOARD_USER")
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
+NLP_URL = os.environ.get("NLP_URL")
+NEMESIS_API_URL = "http://enrichment-webapi:9910/"
+
+if not all(
+    var is not None and var != ""
+    for var in (
+        POSTGRES_CONNECTION_URI,
+        ELASTICSEARCH_URL,
+        ELASTICSEARCH_USER,
+        ELASTICSEARCH_PASSWORD,
+        DASHBOARD_USER,
+        DASHBOARD_PASSWORD,
+        NLP_URL,
+    )
+):
+    raise Exception("Missing environment variables. Please check your .env file.")
+
+engine = create_engine(POSTGRES_CONNECTION_URI)
+
+
+######################################################
+#
+# NLP helpers
+#
+######################################################
+
+
+def semantic_search(search_phrase: str, num_results: int = 4) -> dict:
+    """
+    Calls {NLP_URL}/semantic_search to extract password candidates from a plaintext document.
+    """
+
+    try:
+        data = {"search_phrase": search_phrase, "num_results": num_results}
+        url = f"{NLP_URL}semantic_search"
+        result = requests.post(url, json=data)
+        return result.json()
+    except Exception as e:
+        return {"error": f"Error calling semantic_search with search_phrase '{search_phrase}' : {e}"}
+
+
+######################################################
+#
+# Postgres helpers (mostly for the Chromium page)
+#
+######################################################
+
+def get_unique_sources(table: str):
+    """
+    Given a table name return all of the unique sources for that table.
+    """
+    try:
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT DISTINCT source FROM nemesis.{table}")
+                return [x[0] for x in cur.fetchall()]
+    except Exception as e:
+        st.error(f"Exception querying the database: {e}")
+
+
+def get_unique_projects(table: str):
+    """
+    Given a table name return all of the unique project for that table.
+    """
+    try:
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT DISTINCT project_id FROM nemesis.{table}")
+                return [x[0] for x in cur.fetchall()]
+    except Exception as e:
+        st.error(f"Exception querying the database: {e}")
+
+
+def get_usernames_for_source(table: str, source: str) -> List[str]:
+    """
+    Given a table name (cookies, logins, history, downloads) and source term
+    return all of the unique usernames for that source/table.
+    """
+    with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT DISTINCT username FROM nemesis.chromium_{table} WHERE source ILIKE %s", (source,))
+            return [x[0] for x in cur.fetchall()]
+
+
+def get_browsers_for_source_username(table: str, source: str, username: str) -> List[str]:
+    """
+    Given a table name (cookies, logins, history, downloads), source term, and
+    username return all of the unique browsers for that combination.
+    """
+    with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT DISTINCT browser FROM nemesis.chromium_{table} WHERE source ILIKE %s AND username ILIKE %s", (source, username)
+            )
+            return ["all"] + [x[0] for x in cur.fetchall()]
+
+
+def get_cookie_df(
+    source: str, username: str, browser: str, site: str, name: str, show_encrypted: bool, show_expired: bool
+) -> pd.DataFrame:
+    """Return a cookies dataframe based on the query parameters."""
+
+    query = """
+        SELECT chromium_cookies.source AS source, chromium_cookies.username AS username, chromium_cookies.browser AS browser, chromium_cookies.host_key AS domain, chromium_cookies.name AS name, chromium_cookies.path AS path, chromium_cookies.value_dec AS value, chromium_cookies.expires_utc AS expires_utc, chromium_cookies.unique_db_id::varchar AS unique_db_id, notes.value as notes
+
+        FROM chromium_cookies
+
+        LEFT JOIN notes
+        ON chromium_cookies.unique_db_id = notes.unique_db_id
+
+        WHERE source ILIKE :source AND username ILIKE :username AND browser ILIKE :browser AND host_key ILIKE :host_key AND name ILIKE :name
+    """
+
+    if not show_encrypted:
+        query += " AND is_decrypted = True"
+
+    if not show_expired:
+        query += " AND expires_utc > now() at time zone 'utc'"
+
+    try:
+        with engine.connect() as conn:
+            params = {"source": source, "username": username, "browser": browser, "host_key": site, "name": name}
+            return pd.read_sql_query(sql_text(query), conn, params=params)
+    except Exception as e:
+        st.error(f"Error retrieving `chromium_cookies` from the database: {e}", icon="🚨")
+        print(f"Exception: {e}")
+
+
+def get_login_df(
+    source: str, username: str, browser: str, url: str, login_username: str, show_encrypted: bool, show_blank: bool
+) -> pd.DataFrame:
+    """Return a logins dataframe based on the query parameters."""
+
+    query = """
+        SELECT chromium_logins.source AS source, chromium_logins.username AS username, chromium_logins.browser AS browser, chromium_logins.origin_url AS url, chromium_logins.username_value AS username_value, chromium_logins.password_value_dec AS password, chromium_logins.date_last_used AS last_used, chromium_logins.times_used AS used, chromium_logins.unique_db_id::varchar AS unique_db_id, notes.value as notes
+
+        FROM chromium_logins
+
+        LEFT JOIN notes
+        ON chromium_logins.unique_db_id = notes.unique_db_id
+
+        WHERE source ILIKE :source AND username ILIKE :username AND browser ILIKE :browser AND origin_url ILIKE :url AND username_value ILIKE :login_username
+    """
+
+    if not show_encrypted:
+        query += " AND is_decrypted = True"
+    if show_blank:
+        query += " AND length(password_value_dec) > 0"
+
+    try:
+        with engine.connect() as conn:
+            params = {"source": source, "username": username, "browser": browser, "url": url, "login_username": login_username}
+            return pd.read_sql_query(sql_text(query), conn, params=params)
+    except Exception as e:
+        st.error(f"Error retrieving `chromium_logins` from the database: {e}", icon="🚨")
+
+
+def get_history_df(source: str, username: str, browser: str, url: str, title: str):
+    """Return a history dataframe based on the query parameters."""
+
+    query = """
+        SELECT chromium_history.source AS source, chromium_history.username AS username, chromium_history.browser AS browser, chromium_history.url AS url, chromium_history.title AS title, chromium_history.visit_count AS visits, chromium_history.last_visit_time AS last_visit_time, chromium_history.unique_db_id::varchar AS unique_db_id, notes.value as notes
+
+        FROM chromium_history
+
+        LEFT JOIN notes
+        ON chromium_history.unique_db_id = notes.unique_db_id
+
+        WHERE chromium_history.source ILIKE :source AND chromium_history.username ILIKE :username AND chromium_history.browser ILIKE :browser AND chromium_history.url ILIKE :url AND chromium_history.title ILIKE :title
+    """
+    try:
+        with engine.connect() as conn:
+            params = {"source": source, "username": username, "browser": browser, "url": url, "title": title}
+            return pd.read_sql_query(sql_text(query), conn, params=params)
+    except Exception as e:
+        st.error(f"Error retrieving `chromium_history` from the database: {e}", icon="🚨")
+
+
+def get_download_df(source: str, username: str, browser: str, url: str, download_path: str):
+    """Return a downloads dataframe based on the query parameters."""
+
+    query = """
+        SELECT chromium_downloads.source AS source, chromium_downloads.username AS username, chromium_downloads.browser AS browser, chromium_downloads.url AS url, chromium_downloads.download_path as download_path, chromium_downloads.end_time as timestamp, chromium_downloads.danger_type as danger_type, chromium_downloads.unique_db_id::varchar AS unique_db_id, notes.value as notes
+
+        FROM chromium_downloads
+
+        LEFT JOIN notes
+        ON chromium_downloads.unique_db_id = notes.unique_db_id
+
+        WHERE chromium_downloads.source ILIKE :source AND chromium_downloads.username ILIKE :username AND chromium_downloads.browser ILIKE :browser AND chromium_downloads.url ILIKE :url AND chromium_downloads.download_path ILIKE :download_path
+    """
+    try:
+        with engine.connect() as conn:
+            params = {"source": source, "username": username, "browser": browser, "url": url, "download_path": download_path}
+            return pd.read_sql_query(sql_text(query), conn, params=params)
+    except Exception as e:
+        st.error(f"Error retrieving `chromium_downloads` from the database: {e}", icon="🚨")
+
+
+@st.cache_data(ttl=1000, show_spinner="Fetching fresh data from the database...")
+def get_masterkeys() -> pd.DataFrame:
+    """Performs the main database query for masterkeys so the data can be cached on reruns."""
+
+    query = """
+        SELECT dpapi_masterkeys.source, dpapi_masterkeys.username, dpapi_masterkeys.user_sid, dpapi_masterkeys.timestamp, dpapi_masterkeys.type, dpapi_masterkeys.masterkey_guid::text, dpapi_masterkeys.is_decrypted, COUNT(dpapi_blobs.unique_db_id) AS dpapi_blobs, COUNT(chromium_state_files.unique_db_id) AS state_files
+
+        from dpapi_masterkeys
+
+        LEFT JOIN dpapi_blobs
+        ON dpapi_masterkeys.masterkey_guid = dpapi_blobs.masterkey_guid
+
+        LEFT JOIN chromium_state_files
+        ON dpapi_masterkeys.masterkey_guid = chromium_state_files.masterkey_guid
+
+        GROUP BY dpapi_masterkeys.masterkey_guid
+    """
+
+    try:
+        with engine.connect() as conn:
+            # read the query directly into the dataframe and return it
+            df = pd.read_sql_query(sql_text(query), conn)
+
+            # st.session_state["df"] is set to the database output on each non-cached run
+            st.session_state["df_loaded"] = True
+            print("[*] Retrieved fresh data from the database!")
+            return df
+    except Exception as e:
+        st.error(f"Error retrieving dpapi_masterkeys from the database: {e}", icon="🚨")
+
+
+@st.cache_data(ttl=1000, show_spinner="Fetching fresh data from the database...")
+def get_password_data() -> pd.DataFrame:
+    """Performs the main database query for passwords so the data can be cached on reruns."""
+
+    # query the `nemesis.authentication_data` table for entries of type "password"
+    #   we need a left outer join here with the `nemesis.triage` table
+    query = """
+        SELECT authentication_data.unique_db_id::varchar, authentication_data.agent_id, authentication_data.timestamp, authentication_data.username, authentication_data.data, authentication_data.uri as url, authentication_data.source, authentication_data.originating_object_id::varchar as object_id, triage.value as triage, notes.value as notes
+
+        FROM authentication_data
+
+        LEFT JOIN triage
+        ON authentication_data.unique_db_id = triage.unique_db_id
+
+        LEFT JOIN notes
+        ON authentication_data.unique_db_id = notes.unique_db_id
+
+        WHERE authentication_data.type = 'password'
+    """
+
+    try:
+        with engine.connect() as conn:
+            # read the query directly into the dataframe and return it
+            df = pd.read_sql_query(sql_text(query), conn)
+
+            # st.session_state["df"] is set to the database output on each non-cached run
+            st.session_state["df_loaded"] = True
+            print("[*] Retrieved fresh data from the database!")
+            return df
+    except Exception as e:
+        st.error(f"Error retrieving authentication_data from the database: {e}", icon="🚨")
+
+
+def update_triage_table(unique_db_id: str, table_name: str, operator: str, triage_value: str, originating_object_id: str = "") -> None:
+    """
+    Updates the triage table with the triage value for the specified unique_db_id.
+
+    If an originating_object_id is passed, that file object is updated as well.
+    """
+    try:
+        # update the triage value in the Postgres `nemesis.triage` table for this unique_db_id
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            print(f"[*] Changing triage for unique_db_id object '{unique_db_id}' to value '{triage_value}'")
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO nemesis.triage (unique_db_id, table_name, operator, value, modification_time)
+                    VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, now() at time zone 'utc')
+                    ON CONFLICT (unique_db_id)
+                    DO UPDATE SET value = %(value)s, modification_time = now() at time zone 'utc'
+                    """,
+                    {"unique_db_id": unique_db_id, "table_name": table_name, "operator": operator, "value": triage_value},
+                )
+
+                # update the originating object
+                if originating_object_id:
+                    cur.execute(
+                        """
+                        SELECT unique_db_id::varchar
+                        FROM nemesis.file_data_enriched
+                        WHERE object_id = %s
+                        """,
+                        (originating_object_id,),
+                    )
+                    output = cur.fetchone()
+                    if output:
+                        print(f"[*] Changing originating_object_id object '{originating_object_id}' to triage value '{triage_value}'")
+                        cur.execute(
+                            """
+                            INSERT INTO nemesis.triage (unique_db_id, table_name, operator, value, modification_time)
+                            VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, now() at time zone 'utc')
+                            ON CONFLICT (unique_db_id)
+                            DO UPDATE SET value = %(value)s, modification_time = now() at time zone 'utc'
+                            """,
+                            {"unique_db_id": unique_db_id, "table_name": "file_data_enriched", "operator": operator, "value": triage_value},
+                        )
+            conn.commit()
+
+    except Exception as e:
+        st.error(f"Exception saving data to the database: {e}", icon="🚨")
+
+
+def update_notes_table(unique_db_id: str, table_name: str, operator: str, notes_value: str) -> None:
+    """
+    Updates the notes table with the notes value for the specified unique_db_id.
+    """
+    try:
+        # update the triage value in the Postgres `nemesis.triage` table for this unique_db_id
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            print(f"[*] Changing notes for unique_db_id object '{unique_db_id}' to value '{notes_value}'")
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO nemesis.notes (unique_db_id, table_name, operator, value, modification_time)
+                    VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, now() at time zone 'utc')
+                    ON CONFLICT (unique_db_id)
+                    DO UPDATE SET value = %(value)s, modification_time = now() at time zone 'utc'
+                    """,
+                    {"unique_db_id": unique_db_id, "table_name": table_name, "operator": operator, "value": notes_value},
+                )
+
+            conn.commit()
+
+    except Exception as e:
+        st.error(f"Exception saving data to the database: {e}", icon="🚨")
+
+
+def postgres_count_entries(table_name: str) -> int:
+    """
+    Given a table name, returns the total number of entries.
+    """
+    try:
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM nemesis.{table_name}")
+                return cur.fetchone()[0]
+    except Exception as e:
+        return -1
+
+
+def postgres_count_dpapi_blobs(show_all=True, show_dec=True, masterkey_guid=""):
+    """
+    Count the number of dpapi_blobs matching specific criteria.
+    """
+
+    query = "SELECT COUNT(*) FROM nemesis.dpapi_blobs "
+
+    try:
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            with conn.cursor() as cur:
+                if not show_all:
+                    # if this section isn't hit, all enc/dec are shown
+                    if show_dec:
+                        # only show decrypted
+                        query += "WHERE is_decrypted = True "
+                    else:
+                        # only show encrypted
+                        query += "WHERE is_decrypted = False "
+                    if masterkey_guid != "":
+                        query += f"WHERE masterkey_guid = '{masterkey_guid}'"
+                elif masterkey_guid != "":
+                    query += f"WHERE masterkey_guid = '{masterkey_guid}'"
+                cur.execute(query)
+                return cur.fetchone()[0]
+    except Exception as e:
+        print(f"Exception: {e}")
+        return -1
+
+
+def postgres_count_state_files(show_all=True, show_dec=True, masterkey_guid=""):
+    """
+    Count the number of chromium_state_files matching specific criteria.
+    """
+
+    query = "SELECT COUNT(*) FROM nemesis.chromium_state_files "
+
+    try:
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            with conn.cursor() as cur:
+                if not show_all:
+                    # if this section isn't hit, all enc/dec are shown
+                    if show_dec:
+                        # only show decrypted
+                        query += "WHERE is_decrypted = True "
+                    else:
+                        # only show encrypted
+                        query += "WHERE is_decrypted = False "
+                    if masterkey_guid != "":
+                        query += f"WHERE masterkey_guid = '{masterkey_guid}'"
+                elif masterkey_guid != "":
+                    query += f"WHERE masterkey_guid = '{masterkey_guid}'"
+                cur.execute(query)
+                return cur.fetchone()[0]
+    except Exception as e:
+        print(f"Exception: {e}")
+        return -1
+
+
+def postgres_count_masterkeys(show_all=True, show_dec=True, key_type=""):
+    """
+    Count the number of masterkeys matching specific criteria.
+
+    Types: domain_user, local_user, machine
+    """
+
+    query = "SELECT COUNT(*) FROM nemesis.dpapi_masterkeys "
+
+    try:
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            with conn.cursor() as cur:
+                if not show_all:
+                    # if this section isn't hit, all enc/dec are shown
+                    if show_dec:
+                        # only show decrypted
+                        query += "WHERE is_decrypted = True "
+                    else:
+                        # only show encrypted
+                        query += "WHERE is_decrypted = False "
+                    if key_type:
+                        query += f"AND type = '{key_type}'"
+                elif key_type:
+                    query += f"WHERE type = '{key_type}'"
+                cur.execute(query)
+                return cur.fetchone()[0]
+    except Exception as e:
+        print(f"Exception: {e}")
+        return -1
+
+
+def postgres_file_search(
+    start: datetime.datetime,
+    end: datetime.datetime,
+    from_i: int = 0,
+    size: int = 8,
+    source: str = "%",
+    project_id: str = "%",
+    file_hash: str = "",
+    path_pattern: str = "",
+    notes_pattern: str = "",
+    tags: List[str] = [],
+    show_triaged: bool = False,
+    show_archive_originated: bool = False,
+    order_desc_timestamp: bool = False,
+) -> Tuple:
+    """
+    Searches the nemesis.file_data_enriched table for paginated results given
+    the supplied search parameters.
+
+    TODO: timestamp filtering?
+    """
+
+    # query for our count, based in the filters
+    query_count = """
+        SELECT COUNT(*)
+
+        FROM file_data_enriched
+
+        LEFT JOIN triage
+            ON file_data_enriched.unique_db_id = triage.unique_db_id
+
+        LEFT JOIN notes
+            ON file_data_enriched.unique_db_id = notes.unique_db_id
+            AND notes.value ILIKE :notes
+
+        WHERE file_data_enriched.source ILIKE :source
+          AND file_data_enriched.project_id ILIKE :project_id
+    """
+
+    # actual data query
+    query = """
+        SELECT  file_data_enriched.project_id as project_id,
+                file_data_enriched.source as source,
+                file_data_enriched.timestamp as timestamp,
+                file_data_enriched.unique_db_id::varchar,
+                file_data_enriched.agent_id as agent_id,
+                file_data_enriched.object_id::varchar as object_id,
+                file_data_enriched.path as path,
+                file_data_enriched.name as name,
+                file_data_enriched.size as size,
+                file_data_enriched.md5 as md5,
+                file_data_enriched.sha1 as sha1,
+                file_data_enriched.sha256 as sha256,
+                file_data_enriched.nemesis_file_type as nemesis_file_type,
+                file_data_enriched.magic_type as magic_type,
+                file_data_enriched.converted_pdf_id::varchar as converted_pdf_id,
+                file_data_enriched.extracted_plaintext_id::varchar as extracted_plaintext_id,
+                file_data_enriched.extracted_source_id::varchar as extracted_source_id,
+                file_data_enriched.tags as tags,
+                file_data_enriched.originating_object_id as originating_object_id,
+                triage.value as triage,
+                triage.unique_db_id as triage_unique_db_id,
+                notes.value as notes
+
+        FROM file_data_enriched
+
+        LEFT JOIN triage
+            ON file_data_enriched.unique_db_id = triage.unique_db_id
+
+        LEFT JOIN notes
+            ON file_data_enriched.unique_db_id = notes.unique_db_id
+            AND notes.value ILIKE :notes
+
+        WHERE source ILIKE :source
+          AND project_id ILIKE :project_id
+          AND timestamp >= :start AND timestamp < :end
+    """
+    if path_pattern:
+        query_count += "\n          AND path ILIKE :path"
+        query += "\n          AND path ILIKE :path"
+    if file_hash:
+        query_count += "\n          AND (file_data_enriched.md5 ILIKE :md5 OR file_data_enriched.sha1 ILIKE :sha1 OR file_data_enriched.sha256 ILIKE :sha256)"
+        query += "\n          AND (md5 ILIKE :md5 OR sha1 ILIKE :sha1 OR sha256 ILIKE :sha256)"
+    if tags:
+        for i in range(len(tags)):
+            query_count += f"\n          AND :tag_{i} = ANY(file_data_enriched.tags)"
+            query += f"\n          AND :tag_{i} = ANY(file_data_enriched.tags)"
+    if not show_triaged:
+        query_count += "\n          AND triage.value IS NULL"
+        query += "\n          AND triage.value IS NULL"
+    if not show_archive_originated:
+        query_count += "\n          AND originating_object_id = '00000000-0000-0000-0000-000000000000'"
+        query += "\n          AND originating_object_id = '00000000-0000-0000-0000-000000000000'"
+    if notes_pattern:
+        query_count += "\n          AND notes.value ILIKE :notes"
+        query += "\n          AND notes.value ILIKE :notes"
+
+    if order_desc_timestamp:
+        query += "\n        ORDER BY timestamp DESC"
+
+    # add in the pagination
+    query += "\n        LIMIT :size OFFSET :from_i"
+
+    try:
+        with engine.connect() as conn:
+            params = {
+                "start": start,
+                "end": end,
+                "source": source,
+                "project_id": project_id,
+                "path": path_pattern,
+                "notes": f"%{notes_pattern}%",
+                "md5": file_hash,
+                "sha1": file_hash,
+                "sha256": file_hash,
+                "size": size,
+                "from_i": from_i,
+            }
+
+            # have to dynamically build this because of how we have to search
+            #   through arrays in postgres
+            for i in range(len(tags)):
+                params[f"tag_{i}"] = tags[i]
+
+            total_hits = pd.read_sql_query(sql_text(query_count), conn, params=params)["count"].iloc[0]
+            df = pd.read_sql_query(sql_text(query), conn, params=params)
+            return (total_hits, df)
+    except Exception as e:
+        st.error(f"Error retrieving `file_data_enriched` from the database: {e}", icon="🚨")
+        return (None, None)
+
+
+######################################################
+#
+# Common Authentication/Header Helpers
+#
+######################################################
+
+
+# cache the data so we don't have to bcrypt every time
+@st.cache_data
+def get_credentials() -> dict:
+    """Returns the credential dictionary needed by stauth.Authenticate()"""
+    hashed_password = bcrypt.hashpw(DASHBOARD_PASSWORD.encode(), bcrypt.gensalt()).decode()
+    credentials = {
+        "usernames": {DASHBOARD_USER: {"email": f"{DASHBOARD_USER}@nemesis.local", "name": DASHBOARD_USER, "password": hashed_password}}
+    }
+    return credentials
+
+
+def header() -> str:
+    """Writes out the logo/auth header/etc. for all pages."""
+
+    st.set_page_config(
+        layout="wide",
+        page_title="Nemesis",
+        page_icon="😈",
+        menu_items={
+            "Get Help": "https://www.github.com/SpecterOps/Nemesis"
+        }
+    )
+
+    st.markdown(
+        """
+            <style>
+                .css-18e3th9 {
+                        padding-top: 0rem;
+                        padding-bottom: 10rem;
+                        padding-left: 5rem;
+                        padding-right: 5rem;
+                    }
+                .css-1d391kg {
+                        padding-top: 2.5rem;
+                        padding-right: 1rem;
+                        padding-bottom: 2.5rem;
+                        padding-left: 1rem;
+                    }
+            </style>
+            """,
+        unsafe_allow_html=True,
+    )
+
+    st.image("./img/nemesis_logo.png", width=300)
+
+    # hack to hide the default Streamlit footer
+    hide_streamlit_style = """
+                <style>
+                #MainMenu {visibility: hidden;}
+                footer {visibility: hidden;}
+                </style>
+                """
+    st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+    # force authentication
+    return authenticate_header()
+
+
+def authenticate_header() -> str:
+    """
+    Reads in the necessary authentication information and checks the state
+    versus the current user's cookies. Used at the top of every page.
+    """
+
+    authenticator = stauth.Authenticate(get_credentials(), "nemesis", "nemesis", 30)
+
+    name, authentication_status, username = authenticator.login("Login", "main")
+
+    if st.session_state["authentication_status"]:
+        # st.write(f"Welcome *{name}*  :smiling_imp:")
+        # authenticator.logout("Logout", "main")
+        return name
+    elif st.session_state["authentication_status"] is False:
+        st.error("Username/password is incorrect")
+        return ""
+    elif st.session_state["authentication_status"] is None:
+        st.warning("Please enter your username and password")
+        return ""
+
+
+######################################################
+#
+# Elasticsearch Helpers
+#
+######################################################
+
+
+def simplify_es_text_result(result: dict) -> dict:
+    """Simplifies an elastic result into the three parts we want to use."""
+    res = result["_source"]
+    res["url"] = result["_id"]
+    # join list of highlights into a sentence
+    res["highlights"] = "...".join(result["highlight"]["text"])
+    return res
+
+
+def wait_for_elasticsearch():
+    """
+    Wait for a connection to be established with Nemesis' Elasticsearch container,
+    and return the es_client object when a connection is established.
+    """
+
+    while True:
+        try:
+            es_client = Elasticsearch(ELASTICSEARCH_URL, basic_auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD), verify_certs=False)
+            es_client.info()
+            return es_client
+        except Exception:
+            print(
+                "Encountered an exception while trying to connect to Elasticsearch %s, trying again in %s seconds...",
+                ELASTICSEARCH_URL,
+                WAIT_TIMEOUT,
+            )
+            time.sleep(WAIT_TIMEOUT)
+            continue
+
+
+def get_elastic_total_indexed_documents(index_name="file_data_plaintext", query={}) -> int:
+    """
+    Returns the total number of documents indexed in the specified index.
+    """
+    try:
+        es_client = wait_for_elasticsearch()
+        if query:
+            return es_client.count(index=index_name, query=query)["count"]
+        else:
+            return es_client.count(index=index_name)["count"]
+    except Exception as e:
+        return 0
+
+
+def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
+    """
+    Searches the 'file_data_plaintext' index in Elasticsearch for
+    the supplied search term, paginating results based on the
+    from_i and size.
+    """
+    try:
+        es_client = wait_for_elasticsearch()
+        query = {"match": {"text": search_term}}
+        highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
+        fields = [
+            "_id",
+            "originatingObjectPath",
+            "originatingObjectURL",
+            "originatingObjectId",
+            "originatingObjectConvertedPdfUrl",
+            "wordCount",
+            "metadata.source",
+        ]
+        return es_client.search(
+            index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields
+        )
+    except Exception as e:
+        if "index_not_found_exception" in f"{e}":
+            st.error("Elastic index 'file_data_plaintext' doesn't yet exist - no text data has been extracted yet!", icon="🚨")
+        else:
+            st.error(f"Exception querying Elastic: {e}", icon="🚨")
+        return {}
+
+
+def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
+    """
+    Searches the 'file_data_sourcecode' index in Elasticsearch for
+    the supplied search term, paginating results based on the
+    from_i and size.
+    """
+    try:
+        es_client = wait_for_elasticsearch()
+        query = {"match": {"text": search_term}}
+        highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
+        fields = [
+            "_id",
+            "downloadURL",
+            "fileObjectURL",
+            "extension",
+            "language",
+            "name",
+            "path",
+            "size",
+            "metadata.source",
+        ]
+        return es_client.search(
+            index="file_data_sourcecode", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields
+        )
+    except Exception as e:
+        if "index_not_found_exception" in f"{e}":
+            st.error("Elastic index 'file_data_sourcecode' doesn't yet exist - no source code files have been downloaded yet!", icon="🚨")
+        else:
+            st.error(f"Exception querying Elastic: {e}", icon="🚨")
+        return {}
+
+
+def elastic_np_search(from_i: int, size: int) -> dict:
+    """
+    Searches the 'file_data_enriched' index in Elasticsearch for
+    any files that have NoseyParker results, paginating results based
+    on the from_i and size.
+    """
+    try:
+        es_client = wait_for_elasticsearch()
+        query = {"exists": {"field": "noseyparker"}}
+        fields = ["objectId", "name", "magicType", "path", "nemesisFileType", "hashes.sha1", "metadata.source", "noseyparker"]
+        return es_client.search(index="file_data_enriched", query=query, from_=from_i, size=size, source_includes=fields)
+    except Exception as e:
+        if "index_not_found_exception" in f"{e}":
+            st.error("Elastic index 'file_data_enriched' doesn't yet exist - no files have been processed yet!", icon="🚨")
+        else:
+            st.error(f"Exception querying Elastic: {e}", icon="🚨")
+        return {}
+
+
+######################################################
+#
+# Misc. Helpers
+#
+######################################################
+
+def is_valid_chromium_file_path(file_path: str) -> bool:
+    """Returns true if the supplied path is a valid Chromium file path."""
+
+    if re.search(
+        ".*/(?P<username>.*)/AppData/Local/(Google|Microsoft|BraveSoftware)/(?P<browser>Chrome|Edge|Brave-Browser)/User Data/(?P<type>Local State|Default/History|Default/Login Data|Default/Cookies|Default/Network/Cookies)$",
+        file_path,
+        re.IGNORECASE
+    ):
+        return True
+    elif re.search(
+        ".*/(?P<username>.*)/AppData/Roaming/Opera Software/Opera Stable/(?P<type>Local State|History|Login Data|Cookies|Network/Cookies)$",
+        file_path,
+        re.IGNORECASE
+    ):
+        return True
+    else:
+        return False
+
+
+def escape_markdown(text: str) -> str:
+    """Basic helper to escape markdown specicial characters."""
+    parse = re.sub(r"([_*\[\]()~`>\#\+\-=|\.!])", r"\\\1", text)
+    reparse = re.sub(r"\\\\([_*\[\]()~`>\#\+\-=|\.!])", r"\1", parse)
+    return reparse
+
+
+def local_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+
+def remote_css(url):
+    st.markdown(f'<link href="{url}" rel="stylesheet">', unsafe_allow_html=True)
+
+
+def nemesis_post_file(file_bytes):
+    """
+    Takes a series of raw file bytes and POSTs it to the NEMESIS_API_URL /file API endpoint.
+    """
+    try:
+        r = requests.request("POST", f"{NEMESIS_API_URL}file", data=file_bytes, headers={"Content-Type": "application/octet-stream"})
+
+        if r.status_code != 200:
+            st.warning(f"Failed to upload file to Nemesis: {r.status_code}", icon="⚠️")
+            return None
+        else:
+            json_result = r.json()
+            if "object_id" in json_result:
+                return json_result["object_id"]
+            else:
+                st.warning(f"Error retrieving 'object_id' field from result", icon="⚠️")
+                return None
+    except Exception as e:
+        st.warning(f"Failed to upload file to Nemesis: {e}", icon="⚠️")
+        return None
+
+
+def nemesis_post_data(data):
+    """
+    Takes a json blob and POSTs it to the NEMESIS_API_URL /data API endpoint.
+    """
+    try:
+        r = requests.post(f"{NEMESIS_API_URL}data", json=data)
+        if r.status_code != 200:
+            st.warning(f"Error posting to Nemesis URL {NEMESIS_API_URL}data ({r.status_code}) : {r.json()}", icon="⚠️")
+            return None
+        else:
+            json_result = r.json()
+            if "object_id" in json_result:
+                return json_result["object_id"]
+            else:
+                st.warning(f"Error retrieving 'object_id' field from result", icon="⚠️")
+                return None
+    except Exception as e:
+        st.warning(f"Error posting to Nemesis URL {NEMESIS_API_URL}data : {e}", icon="⚠️")
+        return None

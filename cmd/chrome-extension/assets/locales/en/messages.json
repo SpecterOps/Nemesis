@@ -1,0 +1,11 @@
+{
+    "appName": {
+        "message": "Nemesis"
+    },
+    "appShortName": {
+        "message": "nemesis"
+    },
+    "appDescription": {
+        "message": "Nemesis extension"
+    }
+}

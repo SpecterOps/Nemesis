@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nlp
+  labels:
+    app: nlp
+    component: enrichment-pipeline
+spec:
+  type: NodePort
+  ports:
+    - name: "9803"
+      port: 9803
+      targetPort: 9803
+      nodePort: 31803
+  selector:
+    app: nlp
+status:
+  loadBalancer: {}

@@ -1,0 +1,60 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Service: enrichment",
+            "type": "python",
+            "request": "launch",
+            "module": "enrichment",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "env": {
+                // "PYTHONASYNCIODEBUG": "1",
+                "BETTER_EXCEPTIONS": "1",
+                "FORCE_COLOR": "1",
+            }
+        },
+        {
+            "name": "submit_to_nemesis.py - File",
+            "type": "python",
+            "request": "launch",
+            "module": "enrichment.cli.submit_to_nemesis",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "env": {
+                // "PYTHONASYNCIODEBUG": "1",
+                "BETTER_EXCEPTIONS": "1",
+                "FORCE_COLOR": "1",
+            },
+            "args": [
+                "-f",
+                "${workspaceFolder}/../../sample_files/appsettings.json",
+                "${workspaceFolder}/../../sample_files/SiteList.xml",
+                "${workspaceFolder}/../../sample_files/dotnet_assembly.exe",
+            ]
+        },
+        {
+            "name": "submit_to_nemesis.py - Folder",
+            "type": "python",
+            "request": "launch",
+            "module": "enrichment.cli.submit_to_nemesis",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "env": {
+                // "PYTHONASYNCIODEBUG": "1",
+                "BETTER_EXCEPTIONS": "1",
+                "FORCE_COLOR": "1",
+            },
+            "args": [
+                "--folder",
+                "${workspaceFolder}/../../sample_files"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "nemesis-connector"
+version = "0.1.0"
+description = ""
+authors = ["SpecterOps <info@specterops.io>"]
+readme = "README.md"
+packages = [{include = "nemesis_connector"}]
+
+[tool.poetry.dependencies]
+python = "^3.10.10"
+requests = "^2.28.2"
+httpx = "^0.23.3"
+dynaconf = "^3.1.12"
+pydantic = "^1.10.7"
+
+[tool.poetry.dev-dependencies]
+outflank-stage1 = {path = "../../../lib/outflank_stage1"}
+pytest = "^7.1.2"
+black = "^22.6.0"
+flake8 = "^5.0.4"
+mypy = "^0.971"
+
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core"]

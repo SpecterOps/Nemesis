@@ -1,0 +1,8 @@
+[flake8]
+ignore = E231, E241
+max-line-length = 240
+count = true
+max-complexity = 10
+max-cognitive-complexity=20
+exclude =
+    .venv

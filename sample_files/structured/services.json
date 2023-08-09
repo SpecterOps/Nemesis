@@ -1,0 +1,36 @@
+{
+    "data": [
+        {
+            "name": "Winmgmt",
+            "display_name": "Windows Management Instrumentation",
+            "description": "Provides a common interface and object model to access management information about operating system, devices, applications and services. If this service is stopped, most Windows-based software will not function properly. If this service is disabled, any services that explicitly depend on it will fail to start.",
+            "start_name": "localSystem",
+            "state": "Running",
+            "start_mode": "Auto",
+            "type": "SYSTEM",
+            "service_command": "C:/Windows/system32/svchost.exe -k netsvcs -p",
+            "service_dll": "C:/Windows/system32/wbem/WMIsvc.dll",
+            "service_sddl": "O:SYD:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)"
+        },
+        {
+            "name": "DevicesFlowUserSvc_6ce64",
+            "display_name": "DevicesFlow_6ce64",
+            "description": "Allows ConnectUX and PC Settings to Connect and Pair with WiFi displays and Bluetooth devices.",
+            "state": "Stopped",
+            "start_mode": "Manual",
+            "type": "USER",
+            "service_command": "C:/Windows/system32/svchost.exe -k DevicesFlow",
+            "service_sddl": "O:SYD:(A;;CCLCSWRPWPDTLOCRRC;;;SU)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPWPDTLOCRRC;;;IU)(A;;CCLCSWRPWPDTLOCRRC;;;AU)(A;;CCLCSWRPWPDTLOCRRC;;;AC)(A;;CCLCSWRPWPDTLOCRRC;;;S-1-5-21-2702878673-795188819-444038987-2781)"
+        }
+    ],
+    "metadata": {
+        "agent_id": "339429212",
+        "agent_type": "beacon",
+        "automated": false,
+        "data_type": "services",
+        "expiration": "2024-04-03T10:08:40.000Z",
+        "source": "DC",
+        "project": "ASSESS-X",
+        "timestamp": "2023-04-03T10:08:40.000Z"
+    }
+}

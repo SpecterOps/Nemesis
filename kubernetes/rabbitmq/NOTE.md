@@ -1,0 +1,1 @@
+RabbitMQ manifests derived from https://github.com/GoogleCloudPlatform/click-to-deploy/tree/master/k8s/rabbitmq/chart/rabbitmq

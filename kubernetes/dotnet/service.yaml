@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dotnet
+  labels:
+    app: dotnet
+    component: enrichment-pipeline
+spec:
+  type: NodePort
+  ports:
+    - name: "9800"
+      port: 9800
+      targetPort: 9800
+      nodePort: 31800
+    # - name: "9801"
+    #   port: 9801
+    #   targetPort: 9801
+    #   nodePort: 31801
+  selector:
+    app: dotnet
+status:
+  loadBalancer: {}

@@ -1,0 +1,7 @@
+# Format: <program.exe>,<product> - <description>
+chrome.exe,Google Chrome
+firefox.exe,Mozilla Firefox
+iexplore.exe,Microsoft Internet Explorer
+microsoftedge.exe,Microsoft Edge
+microsoftedgecp.exe,Microsoft Edge
+msedge.exe,Microsoft Edge

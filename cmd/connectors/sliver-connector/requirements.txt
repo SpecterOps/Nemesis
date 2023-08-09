@@ -1,0 +1,4 @@
+aiohttp==3.8.4
+grpcio==1.54.2
+grpcio-tools==1.54.2
+protobuf==3.20.3

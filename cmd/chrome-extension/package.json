@@ -1,0 +1,63 @@
+{
+    "name": "nemesis2",
+    "description": "hack things",
+    "version": "0.0.1",
+    "homepage": "http://chrome.google.com/webstore",
+    "author": "ENTER YOUR NAME HERE",
+    "repository": {
+        "type": "git",
+        "url": "ENTER GIT REPO URL"
+    },
+    "scripts": {
+        "start": "xt-build -e dev -w",
+        "start:firefox": "xt-build -e dev -p firefox -w",
+        "build:css": "postcss styles.css -o dist/assets/css/styles.css",
+        "build": "xt-build -e prod && npm run build:css",
+        "build:firefox": "xt-build -e prod -p firefox",
+        "clean": "xt-clean",
+        "docs": "xt-docs",
+        "test": "xt-test",
+        "coverage": "nyc --reporter=lcov npm run test",
+        "sync": "xt-sync",
+        "lint": "eslint 'src/**/*.js'"
+    },
+    "babel": {
+        "presets": [
+            "@babel/preset-env"
+        ]
+    },
+    "eslintIgnore": [
+        "test/**/*"
+    ],
+    "dependencies": {
+        "ip-range-check": "^0.2.0",
+        "ipaddr.js": "^2.1.0"
+    },
+    "devDependencies": {
+        "autoprefixer": "^10.4.14",
+        "extension-cli": "latest",
+        "flowbite-typography": "^1.0.3",
+        "postcss-cli": "^10.1.0",
+        "tailwindcss": "^3.3.3"
+    },
+    "xtdocs": {
+        "source": {
+            "include": [
+                "README.md",
+                "src"
+            ]
+        }
+    },
+    "xtbuild": {
+        "js_bundles": [
+            {
+                "name": "background",
+                "src": "./src/index.js"
+            },
+            {
+                "name": "options",
+                "src": "./src/options.js"
+            }
+        ]
+    }
+}

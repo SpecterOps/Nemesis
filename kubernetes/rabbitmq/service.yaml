@@ -1,0 +1,25 @@
+# This services is used to connect to the RabbitMQ using Port Forwarding
+# or expose an external IP and run RabbitMQ cluster behind a LoadBalancer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nemesis-rabbitmq-svc
+  labels:
+    app.kubernetes.io/name: nemesis
+    app.kubernetes.io/component: rabbitmq-server
+spec:
+  ports:
+  - name: amqp
+    port: 5672
+  - name: amqp-ssl
+    port: 5671
+  - name: clustering
+    port: 25672
+  - name: prometheus
+    port: 15692
+  - name: http
+    port: 15672
+  selector:
+    app.kubernetes.io/name: nemesis
+    app.kubernetes.io/component: rabbitmq-server
+  type: ClusterIP

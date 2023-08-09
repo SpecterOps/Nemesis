@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <title>Nemesis Options</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/assets/css/styles.css">
+</head>
+
+<body class="bg-gray-50 dark:bg-gray-900">
+    <div class="flex flex-col items-center justify-center px-6 py-8 mx-auto md:h-screen lg:py-0">
+        <div
+            class="w-full bg-white rounded-lg shadow dark:border md:mt-0 sm:max-w-md xl:p-0 dark:bg-gray-800 dark:border-gray-700">
+            <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
+                <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl dark:text-white">
+                    Nemesis Configuration
+                </h1>
+                <form class="space-y-4 md:space-y-6" action="#" id="nemesis-form">
+                    <div>
+                        <label for="url" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+                            Agent ID</label>
+                        <input type="agent_key" name="agent_key" id="agent_key" autocomplete=""
+                            class="bg-gray-50 border border-gray-300 text-gray-900 sm:text-sm rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                            required="" aria-describedby="agent-id-explanation">
+                        <p id="agent-id-explanation" class="mt-2 text-sm text-gray-500 dark:text-gray-400">Used to
+                            identify source of uploads</a>.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label for="url" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Nemesis
+                            Base URL</label>
+                        <input type="url" name="url" id="url"
+                            class="bg-gray-50 border border-gray-300 text-gray-900 sm:text-sm rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                            placeholder="https://localhost/api" required="">
+                    </div>
+
+                    <div>
+                        <label for="username" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+                            Username</label>
+                        <input type="username" name="username" id="username"
+                            class="bg-gray-50 border border-gray-300 text-gray-900 sm:text-sm rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                            placeholder="Username" required="">
+                    </div>
+                    <div>
+                        <label for="password"
+                            class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Password</label>
+                        <input type="password" name="password" id="password" placeholder="••••••••"
+                            class="bg-gray-50 border border-gray-300 text-gray-900 sm:text-sm rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                            required="">
+                    </div>
+
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input id="whitelist-toggle" type="checkbox" value="" class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600">
+                        </div>
+                        <span class="ml-3 text-sm font-medium text-gray-900 dark:text-gray-300">Use Domain
+                            Allowlist</span>
+                    </label>
+
+                    <div id="whitelist-div" class="hidden">
+                        <label for="whitelist" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+                            Allowlist</label>
+                        <textarea id="whitelist" rows="4" aria-describedby="whitelist-explanation"
+                            class="block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                            placeholder="google.com&#10;amazon.com&#10;192.168.1.1/24"></textarea>
+                        <p id="whitelist-explanation" class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                            Host names or IP ranges separated by a newline</a>
+                        </p>
+                    </div>
+
+                    <button id="submit" type="submit"
+                        class="w-full text-white bg-primary-600 hover:bg-primary-700 focus:ring-4 focus:outline-none focus:ring-primary-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-primary-600 dark:hover:bg-primary-700 dark:focus:ring-primary-800">Submit
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/options.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,87 @@
+# ref - https://github.com/epodegrid/kubegenie-dataset/blob/fbdf295014152a22d1feb146a8a889e477c4392c/E/elasticsearch-exporter-XHCu0jlpFMlCN/elasticsearch-exporter.yaml
+
+# NOTE: we're using the "default" namespace instead of the "monitoring" namespace
+#   here because the Elastic server password is stored in that namespace
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: elasticsearch-exporter
+  name: elasticsearch-exporter
+spec:
+  type: NodePort
+  ports:
+    - name: "9108"
+      port: 9108
+      targetPort: 9108
+      nodePort: 31108
+  selector:
+    app: elasticsearch-exporter
+status:
+  loadBalancer: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch-exporter
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch-exporter
+  template:
+    metadata:
+      labels:
+        app: elasticsearch-exporter
+    spec:
+      serviceAccountName: default
+      restartPolicy: Always
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - env:
+            - name: ES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-users
+                  key: username
+            - name: ES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-users
+                  key: password
+          image: quay.io/prometheuscommunity/elasticsearch-exporter:v1.5.0
+          name: elasticsearch-exporter
+          command:
+            - elasticsearch_exporter
+            - --es.uri=http://nemesis-es-internal-http:9200
+            # - --es.ssl-skip-verify
+            - --es.all
+            - --es.cluster_settings
+            - --es.indices
+            - --es.indices_settings
+            - --es.shards
+            - --es.snapshots
+            - --es.timeout=30s
+            - --web.listen-address=:9108
+            - --web.telemetry-path=/metrics
+          ports:
+            - containerPort: 9108
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 1
+            timeoutSeconds: 5
+            periodSeconds: 5

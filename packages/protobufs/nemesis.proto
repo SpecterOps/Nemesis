@@ -1,0 +1,1799 @@
+syntax = "proto3";
+package server;
+
+import "google/protobuf/timestamp.proto";
+option go_package = "pkg.specterops.io/nemesis/nemesispb";
+
+
+
+////////////////////////////////////////////////////
+//
+// General messages
+//
+////////////////////////////////////////////////////
+
+// Generic Error message
+message Error {
+  string error = 1;
+}
+
+
+// Used by containers to signal the "alerting" container
+message Alert {
+  // Currently just "slack"
+  string type = 1;
+
+  // Text to send for the alert
+  string text = 2;
+
+  // The service the message originated from (optional)
+  string originating_service = 3;
+}
+
+
+////////////////////////////////////////////////////
+//
+// Nemesis API Ingestion Messages
+//
+////////////////////////////////////////////////////
+
+
+// Metadata header that's send with every message to the API
+// ODR: defined in README.md
+message Metadata {
+  // Name or unique identifier for an agent
+  string agent_id = 1;
+
+  // Name of the type of agent (ex. beacon)
+  string agent_type = 2;
+
+  // If the submission was automatically or manually sent
+  bool automated = 3;
+
+  // Name of the ODR the body must conform to
+  string data_type = 4;
+
+  // The semi-unique source for the data
+  //  For host-related data_types, this is the hostname
+  //  For network-related data_types, this is the network name
+  //  For AD-related data_types, this is the full qualified domain name
+  string source = 5;
+
+  // Name or unique identifier for a project
+  string project = 6;
+
+  // Time the C2 platform sent the data to the ODS
+  google.protobuf.Timestamp timestamp = 7;
+
+  // Time the data should be removed from the ODS
+  google.protobuf.Timestamp expiration = 8;
+
+  // Name or unique identifier for a message
+  string message_id = 9;
+}
+message MetadataHeader {
+  Metadata metadata = 1;
+}
+
+
+// Data that may be used to authenticate to a resource. The resource does not
+// need to be accessible over a network and a local resource may be specified
+// using the file:// scheme in the URI parameter. The type data may be anything
+// that may be used to authenticate such as a password, certificate, JWT, SAML
+// token, TGT, NTLM hash, private key, etc. The authentication data does not
+// need to be additionally encoded because all ODR string parameters already
+// support hex encoding values.
+// ODR: `authentication_data`, defined in docs/odr/references/authentication_data.md
+//    See authentication_data.md for supported "type" values.
+message AuthenticationDataIngestion {
+  // Case sensitive data or a Nemesis UUID reference (if over 1k)
+  string data = 1;
+
+  // type of the authentication data
+  string type = 2;
+
+  // Boolean for if data is a reference to a binary submission
+  bool is_file = 3;
+
+  // Location of where the data is valid
+  string uri = 4;
+
+  // Simple or FQDN username
+  string username = 5;
+
+  // any additional notes/context
+  string notes = 6;
+
+  // the Nemesis UUID referencing the original file the hash was extracted from (if applicable)
+  string originating_object_id = 7;
+}
+message AuthenticationDataIngestionMessage {
+  Metadata metadata = 1;
+  repeated AuthenticationDataIngestion data = 2;
+}
+
+
+// The content of a specific file system resource. The path must be in a UNC,
+// file system, or mapped path format. File system and mapped paths must be
+// absolute and use forward slashes for separators (e.g. /). Paths are expected
+// to be canonicalized but there is no verification of this.
+// ODR: `file_data`, defined in file_data.md
+message FileDataIngestion {
+  // Nemesis UUID referring to the uploaded file
+  string object_id = 1;
+
+  // Case sensitive file path
+  string path = 2;
+
+  // Size of the file, in bytes
+  uint64 size = 3;
+
+  // If the file was extracted from another existing file in Nemesis (e.g., a zip or jar),
+  //   this optional field is the Nemesis UUID referencing the original file
+  string originating_object_id = 4;
+}
+message FileDataIngestionMessage {
+  Metadata metadata = 1;
+  repeated FileDataIngestion data = 2;
+}
+
+
+// Information about a specific file system resource. Note that file_info is
+// more specialized than the path_list submission which may include information
+// about non-file system resources (ex. registry paths). The path must be in a
+// UNC, file system, or mapped path format. File system and mapped paths must be
+// absolute and use forward slashes for separators (e.g. /). Paths are expected
+// to be canonicalized but there is no verification of this. Submission
+// parameters may accommodate files from most operating systems. The only
+// submission parameters that are required is the file path and type. Note that
+// all date time parameters in ODRs including for the modified, access, and
+// creation times for Windows files are expected to be UTC.
+message FileInformationIngestion {
+  // case sensitive file path
+  string path = 1;
+
+  // case insensitive full name of file type
+  //    currently: file, folder, share
+  string type = 3;
+
+  // size in bytes
+  uint64 size = 5;
+
+  // file creation time in UTC
+  google.protobuf.Timestamp creation_time = 7;
+
+  // file last access time in UTC
+  google.protobuf.Timestamp access_time = 9;
+
+  // file modification time in UTC
+  google.protobuf.Timestamp modification_time = 11;
+
+  // *nix permission number
+  uint32 access_mode = 13;
+
+  // *nix case sensitive file group membership
+  string group = 15;
+
+  // *nix string for an inode or file id
+  string id = 17;
+
+  // case sensitive owner (*nix and Windows)
+  string owner = 19;
+
+  // case sensitive Windows permission string
+  string sddl = 21;
+
+  // optional Windows VersionInfo fields
+  string version_info = 30;
+}
+message FileInformationIngestionMessage {
+  Metadata metadata = 1;
+  repeated FileInformationIngestion data = 2;
+}
+
+
+// Used in ProcessIngestion
+message Principal {
+  // Security identifier, if known
+  string sid = 1;
+
+  // Name of the principal, if known. The format should be the Down-Level Logon Name (e.g., DOMAIN\user)
+  string name = 2;
+}
+message Token {
+  message TokenPrivilege {
+    // Privilege name (e.g., SeDebugPrivilege)
+    string privilege_name = 1;
+
+    // Is the privileged enabled
+    bool enabled = 2;
+  }
+  enum TokenType {
+    TOKENTYPE_UNSPECIFIED = 0;
+    TOKENTYPE_PRIMARY = 1;
+    TOKENTYPE_IMPERSONATION = 2;
+  }
+  enum ImpersonationLevel {
+    IMPERSONATIONLEVEL_UNSPECIFIED = 0;
+    IMPERSONATIONLEVEL_ANONYMOUS = 1;
+    IMPERSONATIONLEVEL_IDENTIFICATION = 2;
+    IMPERSONATIONLEVEL_IMPERSONATION = 3;
+    IMPERSONATIONLEVEL_DELEGATION = 4;
+  }
+
+  Principal user = 1;
+
+  repeated Principal groups = 2;
+
+  repeated TokenPrivilege privileges = 3;
+
+  TokenType type = 4;
+
+  ImpersonationLevel impersonation_level = 5;
+
+  uint32 session = 6;
+}
+
+
+// Information about the currently running processes for the host the agent is
+// running on. The file_name parameter must be in a UNC, file system, or mapped
+// path format. File system and mapped paths must be absolute and use forward
+// slashes for separators (e.g. /). Paths are expected to be canonicalized but
+// there is no verification of this. Submission parameters may accommodate
+// processes information for most operating systems. The only submission
+// parameter that is required is the process id. Note that all start time
+// parameters are expected to be from the Unix epoch.
+message ProcessIngestion {
+  // The name of the process
+  string name = 1;
+
+  // The current command line information
+  string command_line = 2;
+
+  // If known, the file that was executed
+  string file_name = 3;
+
+  // Process id
+  int32 process_id = 4;
+
+  // Parent process id
+  int32 parent_process_id = 5;
+
+  // Architecture of the process
+  string arch = 6;
+
+  // When the process was started
+  google.protobuf.Timestamp start_time = 7;
+
+  // The amount of memory used by the process, in bytes
+  int64 memory = 8;
+
+  // If present, Windows token information
+  Token token = 9;
+}
+message ProcessIngestionMessage {
+  Metadata metadata = 1;
+  repeated ProcessIngestion data = 2;
+}
+
+
+// Data that may consist of anything. Developers and operators may use this type
+// to push arbitrary data to the ODS to take advantage of any builtin or custom
+// automated post processing the ODS performs. Example use cases include daily
+// status reports, C2 logs, and other data that may be unique to the workflow of
+// a team.
+message RawDataIngestion {
+  // User defined case insensitive keywords
+  repeated string tags = 1;
+
+  // Boolean for if data is a reference to a binary submission
+  bool is_file = 2;
+
+  // Raw data or a UUID reference to data in the ODS
+  string data = 3;
+}
+message RawDataIngestionMessage {
+  Metadata metadata = 1;
+  repeated RawDataIngestion data = 2;
+}
+
+
+message RegistryValueIngestion {
+  enum RegistryValueKind {
+    UNKNOWN = 0;
+    STRING  = 1;
+    EXPAND_STRING = 2;
+    BINARY = 3;
+    DWORD = 4;
+    DWORD_BIG_ENDIAN = 5;
+    LINK = 6;
+    MULTI_STRING = 7;
+    QWORD = 11;
+  }
+
+  // Case-sensitive absolute registry key path. Use backslashes for separators (e.g. `HKLM\Software`)
+  // This is the only required field since without it the others do not make sense.Alert
+  // If all other fields aren't present, this indicates that the key exists and may or may not have values.
+  string key = 1;
+
+  // (optional) Case sensitive value name. Set this to the empty string to indicate a key's default value.
+  optional string value_name = 2;
+
+  // (optional) Type of the registry value
+  optional RegistryValueKind value_kind = 3;
+
+  // (optional) string representation of the value
+  optional string value = 4;
+
+  // (optional) string SDDL representation of key's security descriptor
+  optional string sddl = 5;
+
+  // (optional) string comma separated tags for the registry key
+  optional string tags = 6;
+}
+message RegistryValueIngestionMessage {
+  Metadata metadata = 1;
+  repeated RegistryValueIngestion data = 2;
+}
+
+
+// Child listings for a specified path. The path must be in a UNC, URI, file
+// system, or mapped path format. File system and mapped paths must be absolute
+// and use forward slashes for separators (e.g. /). Paths are expected to be
+// canonicalized but there is no verification of this. The mapped file format
+// may be used to specify a registry keys as well using PowerShell convention of
+// specifying the hive name as the drive (ex. HKLM:).
+message PathListIngestion {
+  // Case sensitive resource path
+  string path = 1;
+
+  // Case sensitive child items
+  repeated string items = 2;
+}
+message PathListIngestionMessage {
+  Metadata metadata = 1;
+  repeated PathListIngestion data = 2;
+}
+
+
+// Information about Windows services.
+message ServiceIngestion {
+  // Case sensitive service name.
+  string name = 1;
+
+  // Case sensitive service display name.
+  string display_name = 2;
+
+  // Case sensitive service description
+  string description = 3;
+
+  // Case sensitive username the service starts as
+  string start_name = 4;
+
+  // Case insensitive state of the service (running, stopped, etc.)
+  string state = 5;
+
+  // Case insensitive start mode of the service (automatic, disabled, etc.)
+  string start_mode = 6;
+
+  // Case insensitive type of the service.
+  string type = 7;
+
+  // Case sensitive, quote-escaped, binary path of the serbice binary + any arguments
+  string service_command = 8;
+
+  // Case sensitive file path of the service DLL being loaded into SVCHOST
+  string service_dll = 9;
+
+  // Case sensitive Windows permission string
+  string service_sddl = 10;
+}
+message ServiceIngestionMessage {
+  Metadata metadata = 1;
+  repeated ServiceIngestion data = 2;
+}
+
+
+// Information about Windows named pipes.
+message NamedPipeIngestion {
+  // Case sensitive name.
+  string name = 1;
+
+  // Name of the server process that for named pipe, if known
+  string server_process_name = 2;
+
+  // PID of the server process that for named pipe, if known
+  int32 server_process_id = 3;
+
+  // Path of the server process that for named pipe, if known
+  string server_process_path = 4;
+
+  // Case sensitive Windows permission string
+  string sddl = 5;
+}
+message NamedPipeIngestionMessage {
+  Metadata metadata = 1;
+  repeated NamedPipeIngestion data = 2;
+}
+
+
+message CookieIngestion {
+  // Path of the user data folder, if known.
+  string user_data_directory = 1;
+
+  // Domain/host_key for the cookie
+  string domain = 2;
+
+  // Path on the domain for the cookie.
+  string path = 3;
+
+  // Name of the cookie value.
+  string name = 4;
+
+  // Plaintext decrypted cookie value (if decrypted).
+  string value = 5;
+
+  // Base64 encoding of encrypted value bytes.
+  string value_enc = 6;
+
+  // Timestamp of when the cookie expires.
+  google.protobuf.Timestamp expires = 10;
+
+  // Timestamp of when the cookie was created.
+  google.protobuf.Timestamp creation = 11;
+
+  // Timestamp of when the cookie was last accessed.
+  google.protobuf.Timestamp last_access = 12;
+
+  // Timestamp of when the cookie was last updated.
+  google.protobuf.Timestamp last_update = 13;
+
+  // True/1 if the cookie can only be accessed by the server.
+  bool secure = 15;
+
+  // True/1 if the cookie can only be accessed by the server.
+  bool http_only = 16;
+
+  // True if the cookie is deleted when the user closes their browser.
+  bool session = 17;
+
+  // STRICT/LAX/NONE, protection against CSRF attacks.
+  string samesite = 18;
+
+  // The port number of the source origin.
+  uint32 source_port = 19;
+}
+message CookieIngestionMessage {
+  Metadata metadata = 1;
+  repeated CookieIngestion data = 2;
+}
+
+
+// Connections between the host the agent is running with itself or another
+// host. These could also be listening ports (i.e., netstat output)
+// Addresses are expected to conform to the public standard for the address
+// type but there is no verification of this as well.
+// As an example, ethernet addresses are expected to use a hyphen as a separator
+// instead of a colon as per IEEE 802.3 but this is not verified.
+//
+// The protocol list and matching source and destination lists represent the
+// protocol stack used for a connection. The lists only need to represent a
+// portion of the protocol stack and do not need to represent the entirety of
+// it. The lists allow the ODR to be reused for any connection type an operator
+// may be interested in without having to make a new ODR for each new connection
+// type.
+//
+// local_address is treated as source, remote_address is treated as destination
+//
+message NetworkConnectionIngestion {
+  // Local/source address for the connection
+  string local_address = 1;
+
+  // Remote/destination address for the connection
+  string remote_address = 2;
+
+  // Protocol specification ("tcp,ipv4", "udp,ipv4", "tcp,ipv6", etc.)
+  string protocol = 3;
+
+  // Optional - case insensitive state of the connection (e.g., listen, established, etc.)
+  string state = 4;
+
+  // Optional - process ID handling the connection
+  uint32 process_id = 5;
+
+  // Optional - process name/command line handling the connection
+  string process_name = 6;
+
+  // Optional - service name handling the connection
+  string service = 7;
+}
+message NetworkConnectionIngestionMessage {
+  Metadata metadata = 1;
+  repeated NetworkConnectionIngestion data = 2;
+}
+
+
+////////////////////////////////////////////////////
+//
+// file_data parsed file format messages
+//
+////////////////////////////////////////////////////
+
+
+message SlackWorkspaces {
+  message SlackWorkspace {
+      string username = 1;
+      string workspace_id = 2;
+      string workspace_domain = 3;
+      string workspace_name = 4;
+      string workspace_icon_url = 5;
+  }
+  repeated SlackWorkspace workspaces = 1;
+}
+
+
+message SlackDownloads {
+  message SlackDownload {
+      string username = 1;
+      string workspace_id = 2;
+      string download_id = 3;
+      string team_id = 4;
+      string user_id = 5;
+      string url = 6;
+      string download_path = 7;
+      string download_state = 8;
+      google.protobuf.Timestamp start_time = 9;
+      google.protobuf.Timestamp end_time = 10;
+  }
+  repeated SlackDownload downloads = 1;
+}
+
+
+message Lnk {
+  string target = 1;
+  string working_directory = 2;
+  string command_line_arguments = 3;
+  string machine_identifier = 4;
+  string comment = 5;
+  uint64 target_file_size = 6;
+  string location = 7; // "local" or "remote"
+  bool run_as_admin = 8;
+  google.protobuf.Timestamp creation_time = 10;
+  google.protobuf.Timestamp accessed_time = 11;
+  google.protobuf.Timestamp modified_time = 12;
+}
+
+
+message Passwd {
+  message PasswdEntry {
+      string username = 1;
+      string user_id = 2;
+      string group_id = 3;
+      string home_directory = 4;
+      string shell = 5;
+  }
+  repeated PasswdEntry entries = 1;
+}
+
+
+message Shadow {
+  message ShadowEntry {
+      string username = 1;
+      google.protobuf.Timestamp password_last_changed = 2;
+      string password = 3;
+  }
+  repeated ShadowEntry entries = 1;
+}
+
+
+// .doc/.ppt/.xls/etc.
+message OfficeDocOle {
+  string title = 1;
+  string creator = 2;
+  google.protobuf.Timestamp created = 3;
+  google.protobuf.Timestamp modified = 4;
+  string keywords = 5;
+  string comments = 6;
+  string last_modified_by = 7;
+  string subject = 8;
+  string creating_application = 9;
+  uint32 total_edit_time = 10;
+  uint32 num_pages = 11;
+  uint32 num_slides = 12;
+  uint32 num_chars = 13;
+  bool is_encrypted = 15;
+  optional string encryption_hash = 16; // office2john hash representing the document password
+}
+
+
+// .docx/.pptx/.xlsx/etc.
+message OfficeDocNew {
+  string title = 1;
+  string creator = 2;
+  google.protobuf.Timestamp created = 3;
+  google.protobuf.Timestamp modified = 4;
+  string description = 5;
+  string keywords = 6;
+  string last_modified_by = 7;
+  string subject = 8;
+  uint32 revision = 9;
+  bool is_encrypted = 10;
+  optional string encryption_hash = 11; // office2john hash representing the document password
+}
+
+
+message Pdf {
+  uint32 num_pages = 1;
+  string title = 2;
+  string author = 3;
+  string subject = 4;
+  string creator = 5;
+  string producer = 6;
+  google.protobuf.Timestamp created = 7;
+  google.protobuf.Timestamp modified = 8;
+  repeated string keywords = 9;
+  bool is_encrypted = 10;
+  optional string encryption_hash = 11; // pdf2john hash representing the document password
+}
+
+
+message GroupPolicyPreferences {
+  message GroupPolicyPreferencesEntry {
+      string username = 1;
+      string cpassword = 2;
+      string password = 3;
+      string newname = 4;
+      string description = 5;
+      google.protobuf.Timestamp changed = 6;
+      string action = 7;
+      bool disabled = 8;
+      bool never_expires = 9;
+  }
+  repeated GroupPolicyPreferencesEntry entries = 1;
+}
+
+
+message McafeeSitelist {
+  message McafeeSitelistEntry {
+      string name = 1;
+      string type = 2;
+      string username = 3;
+      string password = 4;
+      string password_encrypted = 5;
+      bool enabled = 6;
+      bool local = 7;
+      string server = 8;
+      string domain_name = 9;
+      string share_name = 10;
+      bool useauth = 11;
+      string relativepath = 12;
+      bool used_loggedon_user_account = 13;
+  }
+  repeated McafeeSitelistEntry entries = 1;
+}
+
+
+message Tomcat {
+  message TomcatEntry {
+      string username = 1;
+      string password = 2;
+      repeated string roles = 3;
+  }
+  repeated string roles = 1;
+  repeated TomcatEntry entries = 2;
+}
+
+
+message JWTToken {
+  string key = 1;
+  string issuer = 2;
+  string audience = 3;
+  string minutes_to_expiration = 4;
+}
+message DatabaseCredential {
+  string type = 1;
+  string server = 2;
+  string database = 3;
+  string username = 4;
+  string password = 5;
+}
+message ConnectionString {
+  string name = 1;
+  string provider_name = 2;
+  string connection_string = 3;
+  DatabaseCredential database_credential = 4;
+}
+
+
+message WebConfig {
+  repeated ConnectionString connection_strings = 1;
+}
+
+
+message AppSettings {
+  repeated ConnectionString connection_strings = 1;
+  repeated JWTToken jwt_tokens = 2;
+}
+
+
+// Used in Pe - TODO: combine into one block?
+enum VerificationFlags {
+  OK = 0;
+  INVALID_SIGNER = 1;
+  UNSUPPORTED_ALGORITHM = 2;
+  INCONSISTENT_DIGEST_ALGORITHM = 4;
+  CERT_NOT_FOUND = 8;
+  CORRUPTED_CONTENT_INFO = 16;
+  CORRUPTED_AUTH_DATA = 32;
+  MISSING_PKCS9_MESSAGE_DIGEST = 64;
+  BAD_DIGEST = 128;
+  NO_SIGNATURE = 512;
+  BAD_SIGNATURE = 256;
+  CERT_EXPIRED = 1024;
+  CERT_FUTURE = 2048;
+}
+message Signature {
+  uint32 version = 1;
+  repeated string signers = 2;
+  VerificationFlags verification_flags = 3;
+}
+message Header {
+  uint32 major_image_version = 1;
+  uint32 major_linker_version = 2;
+  uint32 major_operating_system_version = 3;
+  uint32 major_subsystem_version = 4;
+  uint32 minor_image_version = 5;
+  uint32 minor_linker_version = 6;
+  uint32 minor_operating_system_version = 7;
+  uint32 minor_subsystem_version = 8;
+  google.protobuf.Timestamp time_date_stamp = 9;
+}
+message Symbol {
+  string func_name = 1;
+  uint64 offset = 2;
+  int32 ordinal = 3;
+}
+message Exports {
+  repeated Symbol symbols = 1;
+}
+message Dll {
+  string name = 1;
+  repeated Symbol symbols = 2;
+}
+message Imports {
+  repeated Dll dlls = 1;
+}
+message VersionInfo {
+  string assembly_version = 1;
+  string comments = 2;
+  string company_name = 3;
+  string file_description = 4;
+  string file_version = 5;
+  string internal_name = 6;
+  string legal_copyright = 7;
+  string legal_trademarks = 8;
+  string original_filename = 9;
+  string private_build = 10;
+  string product_name = 11;
+  string product_version = 12;
+  string special_build = 13;
+}
+message Pe {
+  Header header = 1;
+  Exports exports = 2;
+  Imports imports = 3;
+  VersionInfo version_info = 4;
+  repeated string string_resources = 5;
+  repeated Signature signatures = 6;
+}
+
+
+// Used in DotnetAssembly - TODO: combine into one block
+message Resource {
+  string name = 1;
+  string md5 = 2;
+  string sha1 = 3;
+  string sha256 = 4;
+}
+message Typeref {
+  string module_name = 1;
+  string function_name = 2;
+}
+message ImplMapEntry {
+  string module_name = 1;
+  string function_name = 2;
+}
+message DotnetAssembly {
+  Header header = 1;
+  Exports exports = 3;
+  Imports imports = 5;
+  VersionInfo version_info = 7;
+  repeated string string_resources = 9;
+  repeated Signature signatures = 11;
+  repeated Resource resources = 13;
+  string pdb_string = 15;
+  string dotnet_version = 17;
+  repeated Typeref typerefs = 19;
+  repeated ImplMapEntry impl_map_entries = 21;
+}
+
+
+message Archive {
+  message ArchiveEntry {
+      string name = 1;
+      bool is_dir = 2;
+      uint32 compress_size = 3;
+      uint32 uncompress_size = 4;
+      google.protobuf.Timestamp last_modified = 5;
+  }
+  string type = 1;
+  bool is_encrypted = 3;
+  uint32 uncompressed_size = 5;
+  optional string encryption_hash = 7; // *2john hash representing the archive password
+  repeated ArchiveEntry entries = 10;
+}
+
+
+message RegHiveSystem {
+  bytes boot_key = 1;
+}
+
+message DomainCachedCredential{
+  // true if the hive values are decrypted
+  bool is_decrypted = 1;
+
+  // raw bytes extracted from the registry key
+  bytes enc_raw_value = 2;
+
+  // DOMAIN.CORP/username
+  string domain_long = 3;
+
+  // username
+  string user_name = 4;
+
+  // counts for Vista style iteration
+  int32 iteration_count = 5;
+
+  // bytes of the decoded domain cached hash
+  bytes cached_hash = 6;
+
+  // string representation of the crackable hash
+  string answer = 7;
+
+  // timestamp of the login, UTC
+  google.protobuf.Timestamp timestamp = 8;
+}
+message LSASecret {
+  // name of the secret
+  string name = 1;
+
+  // true if the value is decrypted
+  bool is_decrypted = 2;
+
+  // encrypted bytes of the secret
+  bytes value_enc = 3;
+
+  // decrypted bytes of the secret
+  bytes value_dec = 4;
+
+  // string representation of the decrypted secret
+  string value_dec_str = 5;
+}
+message RegHiveSecurity {
+  // true if the hive values are decrypted
+  bool is_decrypted = 1;
+
+  // true if hive is post XP
+  bool vista_style = 2;
+
+  // enc/dec bytes of the LSASecret
+  bytes lsa_secret_key_enc = 5;
+  bytes lsa_secret_key_dec = 6;
+
+  // enc/dec bytes of the NLKM key
+  bytes nlkm_secret_enc = 7;
+  bytes nlkm_secret_dec = 8;
+
+  // one or more LSA secrets
+  repeated LSASecret lsa_secrets = 10;
+
+  // one or more domain cached creds
+  repeated DomainCachedCredential domain_cached_credentials = 12;
+}
+
+
+message SamHash {
+  // true if the value is decrypted
+  bool is_decrypted = 1;
+
+  // true if the hash is a "new style" hash
+  bool new_style = 2;
+
+  // name of the local user account
+  string username = 3;
+
+  // RID of the local user account
+  uint32 rid = 4;
+
+  // bytes of the enc/dec LM hash value
+  bytes lm_hash_enc = 5;
+  bytes lm_hash_dec = 6;
+
+  // bytes of the enc/dec NT hash value
+  bytes nt_hash_enc = 7;
+  bytes nt_hash_dec = 8;
+
+  // string representation of the total hash
+  string answer = 10;
+}
+message RegHiveSam {
+  // true if the hive values are decrypted
+  bool is_decrypted = 1;
+
+  // bytes of the encrypted source for the HashedBootKey
+  bytes f_bytes = 2;
+
+  // bytes of the decrypted HashedBootKey
+  bytes hashed_boot_key = 3;
+
+  // one or more local SAM hashes
+  repeated SamHash sam_hashes = 5;
+}
+
+
+// RawParsedData is for unstructured data meant for the user instead of an automated pipeline
+message RawParsedData {
+  string data = 1;
+}
+
+
+// not yet used
+message DpapiCredentialAttribute {
+  // https://github.com/fortra/impacket/blob/8799a1a2c42ad74423841d21ed5f4193ea54f3d5/impacket/dpapi.py#L850-L862
+
+  uint32 flags = 1;
+
+  string keyword = 2;
+
+  bytes data = 3;
+}
+message DpapiCredentialFile {
+  // https://github.com/fortra/impacket/blob/8799a1a2c42ad74423841d21ed5f4193ea54f3d5/impacket/dpapi.py#L196-L204
+  enum CREDENTIAL_FLAGS {
+    CRED_FALGS_UNKNOWN = 0x0;
+    CRED_FLAGS_PASSWORD_FOR_CERT = 0x1;
+    CRED_FLAGS_PROMPT_NOW = 0x2;
+    CRED_FLAGS_USERNAME_TARGET = 0x4;
+    CRED_FLAGS_OWF_CRED_BLOB = 0x8;
+    CRED_FLAGS_REQUIRE_CONFIRMATION = 0x10;
+    CRED_FLAGS_WILDCARD_MATCH = 0x20;
+    CRED_FLAGS_VSM_PROTECTED = 0x40;
+    CRED_FLAGS_NGC_CERT = 0x80;
+  }
+  // https://github.com/fortra/impacket/blob/8799a1a2c42ad74423841d21ed5f4193ea54f3d5/impacket/dpapi.py#L216-L220
+  enum CREDENTIAL_PERSIST {
+    CRED_PERSIST_NONE = 0x0;
+    CRED_PERSIST_SESSION = 0x1;
+    CRED_PERSIST_LOCAL_MACHINE = 0x2;
+    CRED_PERSIST_ENTERPRISE = 0x3;
+  }
+  // https://github.com/fortra/impacket/blob/8799a1a2c42ad74423841d21ed5f4193ea54f3d5/impacket/dpapi.py#L206=L214
+  enum CREDENTIAL_TYPE {
+    CRED_TYPE_UNKNOWN = 0x0;
+    CRED_TYPE_GENERIC = 0x1;
+    CRED_TYPE_DOMAIN_PASSWORD = 0x2;
+    CRED_TYPE_DOMAIN_CERTIFICATE = 0x3;
+    CRED_TYPE_DOMAIN_VISIBLE_PASSWORD = 0x4;
+    CRED_TYPE_GENERIC_CERTIFICATE = 0x5;
+    CRED_TYPE_DOMAIN_EXTENDED = 0x6;
+    CRED_TYPE_MAXIMUM = 0x7;
+    CRED_TYPE_MAXIMUM_EX = 0x8;
+  }
+
+  // unique identifier of the carved DPAPI blob ID that decrypts to the data below
+  //   TODO: how to exactly handle this being decrypted?
+  string dpapi_blob_id = 1;
+
+  google.protobuf.Timestamp last_written = 5;
+
+  CREDENTIAL_FLAGS flags = 6;
+
+  CREDENTIAL_PERSIST persist = 7;
+
+  CREDENTIAL_TYPE type = 8;
+
+  string comment = 10;
+
+  string target = 12;
+
+  string target_alias = 14;
+
+  string username = 16;
+
+  string credential = 18;
+
+  repeated DpapiCredentialAttribute credential_attribute = 20;
+}
+
+
+message ChromiumHistoryFile {
+  string user_data_directory = 1;
+  string browser = 2;
+  string username = 3;
+  uint32 urls_count = 4;
+  uint32 downloads_count = 5;
+}
+
+
+message ChromiumLoginsFile {
+  string user_data_directory = 1;
+  string browser = 2;
+  string username = 3;
+  uint32 logins_count = 4;
+}
+
+
+message ChromiumCookiesFile {
+  string user_data_directory = 1;
+  string browser = 2;
+  string username = 3;
+  uint32 cookies_count = 4;
+}
+
+
+message ChromiumStateFile {
+  string user_data_directory = 1;
+  string browser = 2;
+  string username = 3;
+  google.protobuf.Timestamp installation_date = 5;
+  uint32 launch_count = 6;
+  string masterkey_guid = 10;
+  bytes key_bytes_enc = 11;
+  bytes app_bound_fixed_data_enc = 12;
+  bool is_decrypted = 13;
+  bytes key_bytes_dec = 14;
+  bytes app_bound_fixed_data_dec = 15;
+  string originating_object_id = 20;
+}
+
+
+message EvtxFile {
+  string converted_csv = 1;         // Nemesis UUID
+  string converted_json = 3;        // Nemesis UUID
+  string originating_object_id = 5; // Nemesis UUID
+}
+
+
+// Represents any file data type specifically parsed by Nemesis
+//  This is the container for the above section of messages
+message ParsedData {
+  oneof data_type {
+      string error = 1;
+      Pe pe = 10;
+      DotnetAssembly dotnet_assembly = 12;
+      Passwd passwd = 14;
+      Shadow shadow = 16;
+      OfficeDocNew office_doc_new = 17;
+      OfficeDocOle office_doc_ole = 18;
+      Pdf pdf = 19;
+      GroupPolicyPreferences group_policy_preferences = 20;
+      McafeeSitelist mcafee_sitelist = 22;
+      WebConfig web_config = 24;
+      AppSettings appsettings = 26;
+      Tomcat tomcat = 28;
+      Archive archive = 30;
+      Lnk lnk = 31;
+      RawParsedData raw_parsed_data = 35;
+
+      DpapiMasterkey dpapi_masterkey = 40;
+      DpapiCredentialFile dpapi_credential = 42;
+      // DpapiVault dpapi_vault = 43;
+
+      ChromiumHistoryFile chromium_history = 45;
+      ChromiumLoginsFile chromium_logins = 46;
+      ChromiumCookiesFile chromium_cookies = 47;
+      ChromiumStateFile chromium_state_file = 48;
+
+      SlackDownloads slack_downloads = 50;
+      SlackWorkspaces slack_workspaces = 51;
+
+      RegHiveSystem reg_hive_system = 55;
+      RegHiveSecurity reg_hive_security = 56;
+      RegHiveSam reg_hive_sam = 57;
+
+      EvtxFile evtx_file = 60;
+  }
+  // true if the parsed data has some kind of hash/password parsed
+  bool has_parsed_credentials = 5;
+
+  // true if the file is encrypted in some way
+  bool is_encrypted = 7;
+}
+
+
+////////////////////////////////////////////////////
+//
+// Analysis messages
+//
+////////////////////////////////////////////////////
+
+message DotnetAnalysis {
+  message GadgetCall {
+    string gadget_name = 1;
+    string method_name = 2;
+    string filter_level = 3;
+  }
+  bool has_deserialization = 1;
+  bool has_cmd_execution = 2;
+  bool has_remoting = 3;
+  repeated string remoting_channels = 5;
+  bool is_wcf_server = 7;
+  bool is_wcf_client = 9;
+  repeated GadgetCall serialization_gadget_calls = 11;
+  repeated GadgetCall wcf_server_calls = 13;
+  repeated GadgetCall client_calls = 15;
+  repeated GadgetCall remoting_calls = 17;
+  repeated GadgetCall cmd_execution_calls = 19;
+}
+
+message Analysis {
+  oneof analysis_type {
+      DotnetAnalysis dotnet_analysis = 1;
+  }
+}
+
+
+////////////////////////////////////////////////////
+//
+// Other internal Chromium messages
+//
+////////////////////////////////////////////////////
+
+message ChromiumHistoryEntry {
+  string originating_object_id = 1;
+  string user_data_directory = 2;
+  string username = 3;
+  string browser = 4;
+  string url = 5;
+  string title = 6;
+  uint32 visit_count = 7;
+  uint32 typed_count = 8;
+  google.protobuf.Timestamp last_visit_time = 9;
+}
+message ChromiumHistoryMessage {
+  Metadata metadata = 1;
+  repeated ChromiumHistoryEntry data = 2;
+}
+
+
+message ChromiumDownload {
+  string originating_object_id = 1;
+  string user_data_directory = 2;
+  string username = 3;
+  string browser = 4;
+  string url = 5;
+  string download_path = 6;
+  google.protobuf.Timestamp start_time = 7;
+  google.protobuf.Timestamp end_time = 8;
+  uint32 total_bytes = 9;
+  string danger_type = 10;
+}
+message ChromiumDownloadMessage {
+  Metadata metadata = 1;
+  repeated ChromiumDownload data = 2;
+}
+
+
+message ChromiumLogin {
+  string originating_object_id = 1;
+  string user_data_directory = 2;
+  string username = 3;
+  string browser = 4;
+  string origin_url = 5;
+  string username_value = 6;
+  string signon_realm = 7;
+  google.protobuf.Timestamp date_created = 8;
+  google.protobuf.Timestamp date_last_used = 9;
+  google.protobuf.Timestamp date_password_modified = 10;
+  uint32 times_used = 11;
+  bytes password_value_enc = 15;
+  string encryption_type = 16;
+  string masterkey_guid = 17;
+  bool is_decrypted = 20;
+  string password_value_dec = 21;
+}
+message ChromiumLoginMessage {
+  Metadata metadata = 1;
+  repeated ChromiumLogin data = 2;
+}
+
+
+message ChromiumCookie {
+  string originating_object_id = 1;
+  string user_data_directory = 2;
+  string username = 3;
+  string browser = 4;
+  string host_key = 5;
+  string name = 6;
+  string path = 7;
+  google.protobuf.Timestamp creation = 8;
+  google.protobuf.Timestamp expires = 9;
+  google.protobuf.Timestamp last_access = 10;
+  google.protobuf.Timestamp last_update = 11;
+  bool is_secure = 12;
+  bool is_httponly = 13;
+  bool is_session = 14;
+  string samesite = 15;
+  int32 source_port = 16;
+  bytes value_enc = 20;
+  string encryption_type = 21;
+  string masterkey_guid = 22;
+  bool is_decrypted = 24;
+  string value_dec = 25;
+  string classification = 30; // added in enrichment
+}
+message ChromiumCookieMessage {
+  Metadata metadata = 1;
+  repeated ChromiumCookie data = 2;
+}
+
+
+message ChromiumStateFileMessage {
+  Metadata metadata = 1;
+  repeated ChromiumStateFile data = 2;
+}
+
+
+////////////////////////////////////////////////////
+//
+// DPAPI
+//
+////////////////////////////////////////////////////
+
+message DpapiDomainBackupkey {
+  // the unique GUID identifying the domain backup key
+  string domain_backupkey_guid = 1;
+
+  // the FQDN of the domain controller the backup key was retrieved from
+  string domain_controller = 3;
+
+  // the actual bytes of the domain backupkey
+  bytes domain_backupkey_bytes = 5;
+}
+message DpapiDomainBackupkeyMessage {
+  Metadata metadata = 1;
+  repeated DpapiDomainBackupkey data = 2;
+}
+
+
+// also used in ParsedData
+message DpapiMasterkey {
+  // the Nemesis UUID returned by the web-api/file endpoint, also the name the file is stored as in S3
+  string object_id = 1;
+
+  // whether this is a "domain_user, "local_user", or "machine" masterkey
+  string type = 2;
+
+  // the username the masterkey belongs to
+  string username = 3;
+
+  // the SID of the user the masterkey belongs to
+  string user_sid = 4;
+
+  // the GUID that identifies that masterkey
+  string masterkey_guid = 5;
+
+  // true if the key has been decrypted
+  bool is_decrypted = 6;
+
+  // the raw bytes of the masterkey subkey
+  bytes masterkey_bytes = 7;
+
+  // bytes backupkey_bytes = 8;
+  // bytes credhist_bytes = 9;
+
+  // GUID of the domain master/backup key
+  string domain_backupkey_guid = 10;
+
+  // bytes encrypted by the domain backup key
+  bytes domainkey_pb_secret = 11;
+
+  // the full decrypted master key
+  bytes decrypted_key_full = 12;
+
+  // the sha1 representation of the masterkey
+  bytes decrypted_key_sha1 = 13;
+}
+message DpapiMasterkeyMessage {
+  Metadata metadata = 1;
+  repeated DpapiMasterkey data = 2;
+}
+
+
+message DpapiBlob {
+  // unique identifier so originating documents can keep track of which DPAPI blobs were extracted from it
+  //  in this case this ID does NOT refer to a file in S3
+  string dpapi_blob_id = 1;
+
+  // the Nemesis UUID referencing the original file the dpapi blob was extracted from
+  string originating_object_id = 3;
+
+  // the Nemesis UUID referencing the registry key the dpapi blob was extracted from
+  string originating_registry_id = 4;
+
+  // the GUID of the masterkey for the blob
+  string masterkey_guid = 5;
+
+  // true if enc_data/dec_data are references to a binary submission (UUID in S3)
+  bool is_file = 7;
+
+  // true if the dpapi blob has been decrypted
+  bool is_decrypted = 9;
+
+  // If the encrypted data is < 1024 bytes it will be stored as bytes in this field
+  bytes enc_data_bytes = 11;
+
+  // If the encrypted data is > 1024 bytes it will be will be stored in S3 as a UUID file
+  string enc_data_object_id = 13;
+
+  // If the decrypted data is < 1024 bytes it will be stored as bytes in this field
+  bytes dec_data_bytes = 15;
+
+  // If the decrypted data is > 1024 bytes it will be will be stored in S3 as a UUID file
+  string dec_data_object_id = 17;
+}
+message DpapiBlobMessage {
+  Metadata metadata = 1;
+  repeated DpapiBlob data = 2;
+}
+
+
+////////////////////////////////////////////////////
+//
+// Internal "enriched" schema messages
+//
+////////////////////////////////////////////////////
+
+message ServiceEnriched {
+  // Original service data ingested
+  ServiceIngestion origin = 1;
+
+  // Categorization information about the service
+  string category = 2;
+
+  // Enrichments that ran and succeeded
+  repeated string enrichments_success = 3;
+
+  // Enrichments that ran but failed
+  repeated string enrichments_failure = 4;
+}
+
+message ServiceEnrichedMessage {
+  Metadata metadata = 1;
+  repeated ServiceEnriched data = 2;
+}
+
+
+message ProcessCategory {
+  // The category of the type of process (AV, EDR, infrastructure, etc.)
+  string category = 1;
+
+  // A description of process
+  optional string description = 2;
+}
+
+message ProcessEnriched {
+  // Original process data ingested
+  ProcessIngestion origin = 1;
+
+  // Categorization information about the process
+  ProcessCategory category = 2;
+
+  // Enrichments that ran and succeeded
+  repeated string enrichments_success = 3;
+
+  // Enrichments that ran but failed
+  repeated string enrichments_failure = 4;
+}
+
+message ProcessEnrichedMessage {
+  Metadata metadata = 1;
+  repeated ProcessEnriched data = 2;
+}
+
+
+// Protobuf representation of NoseyParker JSON output
+message NoseyParker {
+
+  message Offset_span {
+      uint32 start = 1;
+      uint32 end = 2;
+  }
+
+  message Start {
+      uint32 line = 1;
+      uint32 column = 2;
+  }
+
+  message End {
+      uint32 line = 1;
+      uint32 column = 2;
+  }
+
+  message Source_span {
+      Start start = 1;
+      End end = 2;
+  }
+
+  message Location {
+      Offset_span offset_span = 1;
+      Source_span source_span = 2;
+  }
+
+  message Snippet {
+      string before = 1;
+      string matching = 2;
+      string after = 3;
+  }
+
+  message Provenance {
+      string kind = 1;
+      string path = 2;
+  }
+
+  message Matches {
+      string blob_id = 1;
+      Location location = 2;
+      uint32 capture_group_index = 3;
+      string match_content = 4;
+      Snippet snippet = 5;
+      string rule_name = 6;
+      Provenance provenance = 7;
+  }
+
+  message RuleMatches {
+      string rule_name = 1;
+      string match_content = 2;
+      uint32 num_matches = 3;
+      repeated Matches matches = 4;
+  }
+
+  repeated RuleMatches rule_matches = 1;
+  bool has_matches = 2;
+}
+
+
+message Canaries {
+  message Canary {
+    string type = 1;
+    repeated string data = 2;
+  }
+  bool canaries_present = 1;
+  repeated Canary canaries = 2;
+}
+message FileHashes {
+  string md5 = 1;
+  string sha1 = 2;
+  string sha256 = 3;
+}
+message FileDataEnriched {
+  // the Nemesis UUID returned by the web-api/file endpoint, also the name the file is stored as in S3
+  string object_id = 1;
+
+  // If the file was extracted from another existing file in Nemesis (e.g., a zip or jar),
+  //   this optional field is the Nemesis UUID referencing the original file
+  string originating_object_id = 2;
+
+  // Enrichments that ran and succeeded
+  repeated string enrichments_success = 3;
+
+  // Enrichments that ran but failed
+  repeated string enrichments_failure = 4;
+
+  // The path must be in a UNC, file system, or mapped path format. File system and mapped paths must be
+  // absolute and use forward slashes for separators (e.g. /).
+  string path = 5;
+
+  // Size of the file, in bytes
+  uint64 size = 6;
+
+  // The base file name
+  string name = 7;
+
+  // The file extension
+  string extension = 8;
+
+  // Various hashes for the file
+  FileHashes hashes = 10;
+
+  // The "Nemesis file type", i.e. any format defined in /cmd/file-processor/file_types/
+  string nemesis_file_type = 11;
+
+  // The magic mime type returned from libmagic (a la the `file` command)
+  string magic_type = 13;
+
+  // True if the file is binary, False if it's text
+  bool is_binary = 15;
+
+  // True if the file is a supported source code file extension
+  bool is_source_code = 16;
+
+  // True if the file is an office form consumed by Tika for text extraction
+  bool is_office_doc = 17;
+
+  // any Nemesis-specific data parsed from the file
+  ParsedData parsed_data = 19;
+
+  // any file analysis (e.g., dotnet analysis)
+  Analysis analysis = 21;
+
+  // if the document was converted to a PDF, this is the Nemesis object_id/UUID referring to that file in S3
+  string converted_pdf = 23;
+
+  // if the document had plaintext extracted, this is the Nemesis object_id/UUID referring to that file in S3
+  optional string extracted_plaintext = 25;
+
+  // if the binary had source code extracted (i.e., .NET decompilation), this is the Nemesis object_id/UUID referring to that file in S3
+  string extracted_source = 27;
+
+  // any NoseyParker results if this file wasn't binary
+  NoseyParker noseyparker = 29;
+
+  // any Yara rule matches
+  repeated string yara_matches = 31;
+
+  // possible document canaries
+  Canaries canaries = 33;
+
+  // true if the file contains DPAPI data
+  bool contains_dpapi = 40;
+
+  // one or more object_id's that refer to DpapiBlob structures that were extracted from this file
+  repeated string dpapi_blobs = 42;
+}
+message FileDataEnrichedMessage {
+  Metadata metadata = 1;
+  repeated FileDataEnriched data = 2;
+}
+
+
+// Hashes extracted from processed files
+message ExtractedHash {
+  // md5/sha1/etc.
+  string hash_type = 1;
+
+  // actual hash data
+  string hash_value = 2;
+
+  // the Nemesis UUID referencing the original file the hash was extracted from
+  string originating_object_id = 3;
+
+  // hash value formatted for Hashcat
+  string hashcat_formatted_value = 5;
+
+  // hash value formatted for JohnTheRipper
+  string jtr_formatted_value = 6;
+
+  // whether the hash has been cracked
+  bool is_cracked = 10;
+
+  // if cracked, the jtr pot value
+  string jtr_pot_line = 11;
+
+  // whether the value was checked against the top X passwords with JTR
+  bool checked_against_top_passwords = 12;
+
+  // if cracked, the plaintext value
+  string plaintext_value = 13;
+
+  // not yet used
+  bool is_submitted_to_cracker = 20;
+
+  // not yet used
+  google.protobuf.Timestamp cracker_submission_time = 21;
+
+  // not yet used
+  google.protobuf.Timestamp cracker_cracked_time = 22;
+}
+message ExtractedHashMessage {
+  Metadata metadata = 1;
+  repeated ExtractedHash data = 2;
+}
+
+
+message FileDataPlaintext {
+  message PasswordCandidate {
+    // "Candidate" password matches (from regex/ML models)
+    string left_context = 1;
+    string password = 2;
+    string right_context = 3;
+  }
+
+  // the Nemesis UUID referencing the plaintext file in S3
+  string object_id = 1;
+
+  // Enrichments that ran and succeeded
+  repeated string enrichments_success = 2;
+
+  // Enrichments that ran but failed
+  repeated string enrichments_failure = 3;
+
+  // the Nemesis UUID referencing the original file the plaintext was extracted from
+  string originating_object_id = 5;
+
+  // if the originating document was converted to a PDF, this is the Nemesis object_id/UUID referring to that file in S3
+  string originating_object_converted_pdf = 6;
+
+  // the path of the originating downloaded file/object, if it exists
+  string originating_object_path = 7;
+
+  // the size (in bytes) of the originating file/object, if it exists
+  uint64 originating_object_size = 8;
+
+  // number of individual tokens
+  uint64 word_count = 9;
+
+  // short summary of the text
+  string summary = 11;
+
+  // any extracted model password candidates
+  repeated PasswordCandidate model_passwords = 20;
+
+  // any extracted regex password candidates
+  repeated PasswordCandidate regex_passwords = 22;
+
+  // any NoseyParker results (including hashes) for the plaintext
+  NoseyParker noseyparker = 24;
+}
+message FileDataPlaintextMessage {
+  Metadata metadata = 1;
+  repeated FileDataPlaintext data = 2;
+}
+
+
+message FileDataSourcecode {
+  // the Nemesis UUID referencing the source code file in S3
+  string object_id = 1;
+
+  // If the file was extracted from another existing file in Nemesis (e.g., a zip or jar),
+  //   this optional field is the Nemesis UUID referencing the original file
+  string originating_object_id = 2;
+
+  // The path must be in a UNC, file system, or mapped path format. File system and mapped paths must be
+  // absolute and use forward slashes for separators (e.g. /).
+  string path = 3;
+
+  // The base file name
+  string name = 4;
+
+  // The file extension
+  string extension = 5;
+
+  // Language for the source code file
+  string language = 7;
+
+  // Size of the file, in bytes
+  uint64 size = 9;
+}
+message FileDataSourcecodeMessage {
+  Metadata metadata = 1;
+  repeated FileDataSourcecode data = 2;
+}
+
+
+message Process {
+  // The name of the process
+  string name = 1;
+
+  // The current command line information
+  string command_line = 2;
+
+  // If known, the file that was executed
+  string file_name = 3;
+
+  // Process id
+  uint32 process_id = 5;
+
+  // Parent process id
+  uint32 parent_process_id = 7;
+
+  // Architecture of the process
+  string arch = 8;
+
+  // When the process was started
+  google.protobuf.Timestamp start_time = 10;
+
+  // The amount of memory used by the process, in bytes
+  uint64 memory = 11;
+
+  // If present, Windows token information
+  Token token = 12;
+}
+message ProcessMessage {
+  Metadata metadata = 1;
+  repeated Process data = 2;
+}
+
+
+/////////////////////////////////////////////////////
+//
+// Not yet used
+//
+/////////////////////////////////////////////////////
+
+
+// Addresses that may be used to refer to the host the agent is running on or a
+// network resource on the host. Addresses are expected to conform to the public
+// standard for the address type but there is no verification of this. As an
+// example, ethernet addresses are expected to use a hyphen as a separator
+// instead of a colon as per IEEE 802.3 but this is not verified.
+message NetworkAddressIngestion {
+  // Case sensitive address
+  string address = 1;
+
+  // Case insensitive name for the address type
+  // TODO: Make into an enum: ipv4, ipv6, mac, host, netbios, spn, ethernet
+  string type = 2;
+
+  // Name or id for a network interface card
+  string nic = 3;
+}
+message NetworkAddressIngestionMessage {
+  Metadata metadata = 1;
+  repeated NetworkAddressIngestion data = 2;
+}
+
+
+// Network routing rules for the host the agent is running on. The network mask
+// must be specified separately from the destination address. Addresses and
+// network masks are also expected to conform to the public standard for the
+// address type but there is no verification of this.
+message RouteDataIngestion {
+  // Case sensitive address
+  string destination = 1;
+
+  // Address of the routing host
+  string gateway = 2;
+
+  // Network mask for the destination address
+  string mask = 3;
+
+  // Name or id for a network interface card
+  string nic = 4;
+
+  // Protocol of the route rule
+  string protocol = 5;
+}
+message RouteDataIngestionMessage {
+  Metadata metadata = 1;
+  repeated RouteDataIngestion data = 2;
+}
+
+
+// Current time information about the host the agent is running on. The
+// subparameters of the Users list must delimited by spaces in CSV submissions.
+// Note that all date time parameters are expected to be in UTC from the Unix
+// epoch regardless of what time zone the host uses.
+message UserTime {
+  string user = 1;
+  uint32 session = 2;
+  uint64 time = 3;
+}
+message TimeDataIngestion {
+  // Current time for the host
+  google.protobuf.Timestamp current = 1;
+
+  // How long the host has been running in seconds
+  uint64 runtime = 2;
+
+  // List of users, their session, and their time logged on
+  repeated UserTime users = 3;
+
+  // The time zone that the host uses
+  string zone = 4;
+}
+message TimeDataIngestionMessage {
+  Metadata metadata = 1;
+  repeated TimeDataIngestion data = 2;
+}
+

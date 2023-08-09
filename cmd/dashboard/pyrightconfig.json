@@ -1,0 +1,40 @@
+{
+    "include": [
+        "**/*.py"
+    ],
+    "exclude": [
+        "**/__pycache__/**",
+        "**/.git/objects/**",
+        "**/.git/subtree-cache/**",
+        "**/.hg/store/**",
+        "**/.ipynb_checkpoints/**",
+        "**/.mypy_cache/**",
+        "**/.pytest_cache/**",
+        "**/.venv/**",
+        "**/*.egg-info/**",
+        "**/build/**",
+        "**/dist/**",
+        "**/node_modules/*/**",
+        "enrichment/lib/ext_tools/*",
+    ],
+    "executionEnvironments": [
+        {
+            "root": ".",
+            "pythonVersion": "3.11",
+            "extraPaths": [
+                "../../packages/python/nemesiscommon",
+                "../../packages/python/nemesispb",
+            ]
+        },
+    ],
+    "ignore": [
+        "enrichment/lib/ext_tools"
+    ],
+    "pythonVersion": "3.11",
+    "reportMissingImports": true,
+    "reportMissingTypeStubs": false,
+    "typeCheckingMode": "basic",
+    "useLibraryCodeForTypes": true,
+    "venvPath": ".",
+    "venv": ".venv"
+}

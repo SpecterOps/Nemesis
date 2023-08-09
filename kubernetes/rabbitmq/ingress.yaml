@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rabbitmqadmin-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+    ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header   Authorization $http_authorization;
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /rabbitmq/
+            pathType: Prefix
+            backend:
+              service:
+                name: nemesis-rabbitmq-svc
+                port:
+                  number: 15672

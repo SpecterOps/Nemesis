@@ -1,0 +1,22 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Service: passwordcracker",
+            "type": "python",
+            "request": "launch",
+            "module": "passwordcracker",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "env": {
+                // "PYTHONASYNCIODEBUG": "1",
+                "BETTER_EXCEPTIONS": "1",
+                "FORCE_COLOR": "1",
+            }
+        },
+    ]
+}

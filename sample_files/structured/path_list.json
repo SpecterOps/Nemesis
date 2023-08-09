@@ -1,0 +1,32 @@
+{
+    "data": [
+        {
+            "path": "C:\\",
+            "items": [
+                "$RECYCLE.BIN\\",
+                "EFI\\",
+                "PerfLogs\\",
+                "Program Files\\",
+                "Program Files (x86)\\",
+                "ProgramData\\",
+                "sources\\",
+                "System Volume Information\\",
+                "Users\\",
+                "WcSandboxState\\",
+                "Windows\\",
+                "pagefile.sys",
+                "swapfile.sys"
+            ]
+        }
+    ],
+    "metadata": {
+        "agent_id": "339429212",
+        "agent_type": "beacon",
+        "automated": false,
+        "data_type": "path_list",
+        "expiration": "2024-04-03T10:08:40.000Z",
+        "source": "DC",
+        "project": "ASSESS-X",
+        "timestamp": "2023-04-03T10:08:40.000Z"
+    }
+}

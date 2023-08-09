@@ -1,0 +1,49 @@
+# Always keep 4 and 34 enabled - they'll help catch common developer mistakes
+debug(debug() | 4);     # 4  =	display a runtime warning for the first time use of non-declared variables.
+#debug(debug() | 8);    # 8  =  DEBUGGING: trace all function calls
+debug(debug() | 34);    # 34 = "throw" all errors flagged for use with &checkError
+#debug(debug() | 64);   # 64 =	DEBUGGING: trace all predicate decisions (follow program logic)
+
+global('$logger::OutputFunc');
+
+sub logger::WriteOutputGui {
+    local('$1 $Message');
+    $Message = $1;
+
+    println($Message);
+    [[System out] println: $Message];
+}
+
+sub logger::WriteOutputHeadless {
+    local('$1 $Message');
+    $Message = $1;
+
+    println($Message);
+}
+
+sub logger::Initialize {
+    local('$1 $IsHeadless');
+    $IsHeadless = $1;
+
+    if($IsHeadless) {
+        $logger::OutputFunc = function('&logger::WriteOutputHeadless');
+    } else {
+        $logger::OutputFunc = function('&logger::WriteOutputGui');
+    }
+}
+
+sub logger::WriteError {
+    local('$1 $Message $Func');
+
+    $Message = "[Nemesis][ERROR]: $1";
+    $Func = $logger::OutputFunc;
+    [$Func: $Message];
+}
+
+sub logger::WriteVerbose {
+    local('$1 $Message $Func');
+
+    $Message = "[Nemesis] $1";
+    $Func = $logger::OutputFunc;
+    [$Func: $Message];
+}

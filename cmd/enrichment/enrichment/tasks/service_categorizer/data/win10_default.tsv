@@ -1,0 +1,253 @@
+# ref - https://ss64.com/nt/syntax-services.html
+#Service Display Name 	Service (Registry Key)	Description	Default Status
+ActiveX Installer (AxInstSV)	AxInstSV	UAC validation to control the installation of Active-X controls via the internet.	Manual
+Agent Activation Runtime_?????	AarSvc_?????	Chatbot Runtime for activating Conversational agent applications - Clippy returns.	Manual
+AllJoyn Router Service	AJRouter	IoT integration.	Manual (Trigger Start)
+App Readiness	AppReadiness	Runs at first logon to prepare apps for use.	Manual
+Application Identity	AppIDSvc	Verify Application identity, used by AppLocker.	Manual (Trigger Start)
+Application Information	Appinfo	Facilitates running applications with additional administrative privileges. If disabled those additional privileges will not be available.	Manual (Trigger Start, Running)
+Application Layer Gateway Service	ALG	Enables plugins for the now ancient internet connection sharing.	Manual
+Application Management	AppMgmt	Required for Group Policy software management, Not Available in Win 10 home.	Manual
+AppX Deployment Service (AppXSVC)	AppXSvc	Windows Store integration. Cannot be disabled.	Manual
+AssignedAccessManager Service	AssignedAccessManagerSvc	Kiosk mode, Not Available in Win 10 home.	Manual
+Auto Time Zone Updater	tzautoupdate	Automatically set the Time Zone.	Disabled
+AVCTP service	BthAvctpSvc	Audio Video Control TP service - Bluetooth / Wireless.	Manual (Trigger Start)
+Background Intelligent Transfer Service	BITS	Transfer files.	Manual or Automatic (Delayed Start, Running)
+Background Tasks Infrastructure Service	BrokerInfrastructure	Cannot be disabled.	Automatic (Running)
+Base Filtering Engine	BFE	Manage Windows Firewall and IPsec policies and implements user mode filtering. Do not disable.	Automatic (Running)
+BitLocker Drive Encryption Service	BDESVC	Secure startup and volume encryption.	Manual (Trigger Start)
+Block Level Backup Engine Service	wbengine	Used by Windows Backup.	Manual
+Bluetooth Audio Gateway Service	BTAGService	Bluetooth Audio - Wireless headsets.	Manual (Trigger Start)
+Bluetooth Support Service	bthserv	Discovery of Bluetooth devices.	Manual (Trigger Start)
+Bluetooth User Support Service_?????	BluetoothUserService_?????	Bluetooth features.	Manual (Trigger Start)
+BranchCache	PeerDistSvc	Used by Windows Update for download sharing on the local subnet.	Manual
+Capability Access Manager Service	camsvc	Manage UWP apps.	Manual
+CaptureService_?????	CaptureService_?????	Screen Capture Service via the Windows.Grapics.Capture API.	Manual
+Cellular Time	autotimesvc	Set the time based on NITZ messages from a mobile network.	Manual
+Certificate Propagation	CertPropSvc	Manage certificates for Smart Card login.	Manual (Trigger Start)
+Client License Service (ClipSVC)	ClipSVC	Support for Microsoft store, cannot be disabled.	Manual (Trigger Start)
+Clipboard User Service_?????	cbdhsvc_?????	Clipboard.	Manual
+CNG Key Isolation	KeyIso	Secure long lived keys for cryptographic operations.	Manual (Trigger Start, Running)
+COM+ Event System	EventSystem	COM Event notification service, required for COM+	Manual
+COM+ System Application	COMSysApp	Network discovery of systems on local network.	Manual (Trigger Start)
+Connected Devices Platform Service	CDPSvc	Connected Devices Platform.	Automatic (Delayed Start, Trigger Start)
+Connected Devices Platform User Service_?????	CDPUserSvc_?????	Connected Devices Platform.	Automatic (Running)
+Connected User Experiences and Telemetry	DiagTrack	Feedback and Diagnostics.	Automatic (Running)
+ConsentUX_?????	ConsentUxUserSvc_?????	Connect and pair WiFi and Bluetooth devices, ConnectUX.	Manual
+Contact Data_?????	PimIndexMaintenanceSvc_?????	Indexes contact data for fast contact searching.	Manual
+CoreMessaging	CoreMessagingRegistrar	Cannot be disabled. Manages communication between system components.	Automatic (Running)
+Credential Manager	VaultSvc	Secure storage and retrieval of credentials. Control Panel: Credential Manager.	Manual
+CredentialEnrollmentManagerUserSvc_?????	CredentialEnrollmentManagerUserSvc_?????	Credential Enrolment Manager.	Manual
+Cryptographic Services	CryptSvc	Manage root certificates.	Automatic (Running)
+Data Sharing Service	DsSvc	Data brokering between applications.	Manual (Trigger Start)
+Data Usage	DusmSvc	Network data usage,data limit/metered networks.	Automatic (Running)
+DCOM Server Process Launcher	DcomLaunch	Required for COM and DCOM object activation requests.	Automatic (Running)
+Delivery Optimization	DoSvc	Content delivery Optimisation.	Automatic (Delayed Start)
+Device Association Service	DeviceAssociationService	Pairing between the system and wired or wireless devices.	Manual (Trigger Start)
+Device Install Service	DeviceInstall	Recognise new hardware, do not disable.	Manual (Trigger Start)
+Device Management Enrollment Service	DmEnrollmentSvc	Device enrolment/management.	Manual
+Device Management Wireless Application Protocol (WAP) Push message Routing Service	dmwappushservice	WAP - Sync device sessions.	Manual
+Device Setup Manager	DsmSvc	Install device drivers.	Manual (Trigger Start)
+DeviceAssociationBroker_?????	DeviceAssociationBrokerSvc_?????	Pair devices.	Manual
+DevicePicker_?????	DevicePickerUserSvc_?????	Manage Miracast DLNA and DIAL UI.	Manual
+DevicesFlow_?????	DevicesFlowUserSvc_?????	Connect and pair WiFi and Bluetooth devices, ConnectUX/PC settings.	Manual
+DevQuery Background Discovery Broker	DevQueryBroker	Enable apps to discover devices with a background task.	Manual (Trigger Start)
+DHCP Client	Dhcp	Allocate an IP address to this computer automatically.	Automatic (Running)
+Diagnostic Execution Service	diagsvc	Enable troubleshooting support.	Manual (Trigger Start)
+Diagnostic Policy Service	DPS	Enable problem detection, troubleshooting and resolution for Windows components.	Automatic (Running)
+Diagnostic Service Host	WdiServiceHost	Diagnostics for Local Services.	Manual (Running)
+Diagnostic System Host	WdiSystemHost	Diagnostics for the Local System.	Manual
+DialogBlockingService	DialogBlockingService	DialogBlockingService	Disabled
+Display Enhancement Service	DisplayEnhancementService	Brightness.	Manual (Trigger Start)
+Display Policy Service	DispBrokerDesktopSvc	Connection and configuration of local and remote displays.	Automatic (Delayed Start)
+Distributed Link Tracking Client	TrkWks	Attempt to maintain valid links between NTFS files across a network.	Automatic (Running)
+Distributed Transaction Coordinator	MSDTC	Co-ordinate transactions between resource managers, database, file and message queues.	Manual
+DNS Client	Dnscache	Cache DNS queries and register the computername.	Automatic (Trigger Start, Running)
+Downloaded Maps Manager	MapsBroker	Windows/Bing maps.	Automatic (Delayed Start)
+Embedded Mode	embeddedmode	Activate background applications.	Manual (Trigger Start)
+Encrypting File System (EFS)	EFS	Allow storage of encrypted files on NTFS file systems.	Manual (Trigger Start)
+Enterprise App Management Service	EntAppSvc	Cannot be disabled. Enterprise Application management.	Manual
+Extensible Authentication Protocol	Eaphost	Network Authentication - VPN NAP and Wireless.	Manual
+File History Service	fhsvc	Used by Windows Backup.	Manual (Trigger Start)
+Function Discovery Provider Host	fdPHost	Network discovery and Web Service discovery.	Manual
+Function Discovery Resource Publication	FDResPub	Publish this computer and resources over the network.	Manual (Running)
+GameDVR and Broadcast User Service_?????	BcastDVRUserService_?????	Game recordings and Live broadcasts. Cannot be disabled.	Manual (Trigger Start)
+Geolocation Service	lfsvc	Manage Geofences - a geographic location with associated events.	Manual (Trigger Start, Running)
+GraphicsPerfSvc	GraphicsPerfSvc	Monitor graphics performance.	Manual (Trigger Start)
+Group Policy Client	gpsvc	Cannot be disabled. Apply admin settings through group policy.	Automatic (Trigger Start)
+Human Interface Device Service	hidserv	Activate and maintain hot buttons on keyboards and other controls.	Manual (Trigger Start)
+HV Host Service	HvHost	Hyper-V interface for performance counters.	Manual (Trigger Start)
+Hyper-V Data Exchange Service	vmickvpexchange	Hyper-V interface for data exchange.	Manual (Trigger Start)
+Hyper-V Guest Service Interface	vmicguestinterface	Hyper-V interface for VM services.	Manual (Trigger Start)
+Hyper-V Guest Shutdown Service	vmicshutdown	Hyper-V interface for VM shutdown.	Manual (Trigger Start)
+Hyper-V Heartbeat Service	vmicheartbeat	Hyper-V identify frozen VMs.	Manual (Trigger Start)
+Hyper-V PowerShell Direct Service	vmicvmsession	Hyper-V interface for PowerShell.	Manual (Trigger Start)
+Hyper-V Remote Desktop Virtualization Service	vmicrdv	Hyper-V desktop interface. Not Available in Win 10 home.	Manual (Trigger Start)
+Hyper-V Time Synchronization Service	vmictimesync	Hyper-V time sync.	Manual (Trigger Start)
+Hyper-V Volume Shadow Copy Requestor	vmicvss	Hyper-V shadow copy/backup.	Manual (Trigger Start)
+IKE and AuthIP IPsec Keying Modules	IKEEXT	Internet Key exchange.	Manual (Trigger Start)
+Internet Connection Sharing (ICS)	SharedAccess	Provides NAT/name resolution for small office networks. Very rarely needed.	Manual (Trigger Start)
+IP Helper	iphlpsvc	IPv6 translation.	Automatic (Running)
+IP Translation Configuration Service	IpxlatCfgSvc	IPv6 translation.	Manual (Trigger Start)
+IPsec Policy Agent	PolicyAgent	Network level peer authentication. Enforces IPsec policies.	Manual (Trigger Start)
+KtmRm for Distributed Transaction Coordinator	KtmRm	Co-ordinates distributed transactions. MSDTC/KTM.	Manual (Trigger Start)
+Language Experience Service	LxpSvc	Deployment infrastructure for configuring additional languages.	Manual
+Link-Layer Topology Discovery Mapper	lltdsvc	Creates a Network map describing each PC and device.	Manual
+Local Profile Assistant Service	wlpasvc	Profile management for local subscriber identity modules.	Manual (Trigger Start)
+Local Session Manager	LSM	Cannot be disabled. Manage local user sessions.	Automatic (Running)
+MessagingService_?????	MessagingService_?????	Text Messaging.	Manual (Trigger Start)
+Microsoft (R) Diagnostics Hub Standard Collector Service	diagnosticshub.standardcollector.service	Collect real-time Event Tracing for Windows (ETW) events.	Manual
+Microsoft Account Sign-in Assistant	wlidsvc	Running if using MS account to log in to computer.	Manual (Trigger Start)
+Microsoft App-V Client	AppVClient	Manage App-V users and virtual applications. Not Available in Win 10 home.	Disabled
+Microsoft iSCSI Initiator Service	MSiSCSI	Manage iSCSI devices.	Manual
+Microsoft Keyboard Filter	MsKeyboardFilter	Control keystroke filtering and mapping.	Not Installed (Disabled)
+Microsoft Passport	NgcSvc	Process isolation for cryptographic keys. Cannot be disabled.	Manual (Trigger Start)
+Microsoft Passport Container	NgcCtnrSvc	Manage Local user identity keys and smartcard access. Cannot be disabled.	Manual (Trigger Start)
+Microsoft Software Shadow Copy Provider	swprv	Volume Shadow Copy. Used by Windows Backup.	Manual (Runs at boot, then stops)
+Microsoft Storage Spaces SMP	smphost	Manage storage pools with multiple disks (WSS).	Manual
+Microsoft Store Install Service	InstallService	Microsoft Store.	Manual
+Microsoft Windows SMS Router Service.	SmsRouter	Route messages.	Manual (Trigger Start)
+Natural Authentication	NaturalAuthentication	Signal aggregator service for automatic device lock/unlock.	Manual (Trigger Start)
+Net.Msmq/Net.Pipe/Net.Tcp Listener Adapter	NetMsmqActivator/NetPipeActivator/NetTcpActivator	 	Not installed
+Net.Tcp Port Sharing Service	 	Provides ability to share TCP ports over net.tcp	Disabled
+Netlogon	Netlogon	Connect to a domain controller.	Manual
+Network Connected Devices Auto-Setup	NcdAutoSetup	Discover and install qualified devices.	Manual (Trigger Start, Running)
+Network Connection Broker	NcbService	Broker connections between Windows store apps and the internet.	Manual (Trigger Start, Running)
+Network Connections	Netman	Manage network and Dial-up connections.	Manual
+Network Connectivity Assistant	NcaSvc	DirectAccess status notification.	Manual (Trigger Start)
+Network List Service	netprofm	Identify networks.	Manual (Running)
+Network Location Awareness	NlaSvc	Notify changes in the network configuration.	Automatic (Running)
+Network Setup Service	NetSetupSvc	Manage installation and configuration of network drivers.	Manual (Trigger Start)
+Network Store Interface Service	nsi	Network notifications for user mode clients.	Automatic (Running)
+Offline Files	CscService	Perform offline maintenance on the offline files cache. Not Available in Win 10 home.	Manual (Trigger Start)
+OpenSSH Authentication Agent	ssh-agent	Agent to hold private keys used for public key authentication.	Manual
+Optimize drives	defragsvc	Optimise file storage by defragmenting on disc.	Manual
+Parental Controls	WpcMonSvc	Enforces parental controls in Windows.	Manual
+Payments and NFC/SE Manager	SEMgrSvc	Manage payments and Near Field Communication (NFC) based secure elements.	Manual (Trigger Start)
+Peer Name Resolution Protocol	PNRPsvc	Enable serverless peer name resolution over the internet (Remote Assistance).	Manual
+Peer Networking Grouping	p2psvc	Enables multi-party communication using peer-peer grouping. (Home Group).	Manual
+Peer Networking Identity Manager	p2pimsvc	Identity services for peer Name resolution and peer-peer grouping services.	Manual
+Performance Counter DLL Host	PerfHost	Enable remote users and 64 bit processes to query perf counters provided by 32-bit DLLs.	Manual
+Performance Logs & Alerts	pla	Collect performance data from local or remote computers.	Manual
+Phone Service	PhoneSvc	Manage the telephony state.	Manual (Trigger Start)
+Plug and Play	PlugPlay	Recognise new hardware. Do not disable.	Manual (Running)
+PNRP Machine Name Publication Service	PNRPAutoReg	Publish a machine name using Peer name resolution protocol.	Manual
+Portable Device Enumerator Service	WPDBusEnum	Enforce group policy for removable mass storage devices. Enables transferring and synchronising content.	Manual (Trigger Start)
+Power	Power	Manage power policy and power policy notifications.	Automatic (Running)
+Print Spooler	Spooler	Spool print jobs. Do not disable.	Automatic (Running)
+Printer Extensions and Notifications	PrintNotify	Open custom printer dialogue boxes and handle notifications from a remote print server or printer.	Manual
+PrintWorkflow_?????	PrintWorkflowUserSvc_?????	Print Workflow. Cannot be disabled.	Manual
+Problem Reports and Solutions Control Panel Support	wercplsupport	System level problem reports.	Manual
+Program Compatibility Assistant Service	PcaSvc	Program Compatibility Assistant (PCA)	Automatic (Running)
+Quality Windows Audio Video Experience	QWAVE	Platform for A/V streaming applications on IP home networks.	Manual
+Radio Management Service	RmSvc	Radio Management and Airplane Mode - wireless comms / Bluetooth.	Manual
+Recommended Troubleshooting Service	TroubleshootingSvc	Automatic mitigation for known problems and recommended troubleshooting options.	Manual
+Remote Access Auto Connection Manager	RasAuto	Automatically connect to a remote network whenever a DNS name is used.	Manual
+Remote Access Connection Manager	RasMan	Manage Dial-Up and VPM connections.	Manual
+Remote Desktop Configuration	SessionEnv	Remote Desktop related activities, temporary folders,themes and certificates.	Manual
+Remote Desktop Services	TermService	Allow users to connect interactively with a remote computer. To prevent remote use of this computer clear the checkboxes on the Remote tab of the system properties control panel item.	Manual
+Remote Desktop Services UserMode Port Redirector	UmRdpService	Allow redirection of Printers/Drivers/Ports for RDP connections.	Manual
+Remote Procedure Call (RPC)	RpcSs	Object activation for COM and DCOM. Cannot be disabled.	Automatic (Running)
+Remote Procedure Call (RPC) Locator	RpcLocator	No functionality in Windows 10, this is provided for Application Compatibility.	Manual
+Remote Registry	RemoteRegistry	Enable remote users to modify the registry on this computer.	Disabled
+Retail Demo Service	RetailDemo	Allows running the Retail Demo mode which will erase all files and restore Windows to a factory default. You may prefer to disable this.	Manual
+Routing and Remote Access	RemoteAccess	LAN and WAN routing to other businesses.	Disabled
+RPC Endpoint Mapper	RpcEptMapper	Resolve RPC interface identifiers to a transport endpoint. Cannot be disabled.	Automatic (Running)
+Runtime Broker	RuntimeBroker	Microsoft core process, manages permissions for all universal (Windows Store) apps.	Automatic (Running)
+Secondary Logon	seclogon	Enable starting processes under alternate credentials.	Manual
+Secure Socket Tunneling Protocol Service	SstpSvc	SSTP VPN Capability.	Manual
+Security Accounts Manager	SamSs	Allows SAM to accept request from other services.	Automatic (Running)
+Security Center	wscsvc	Monitor and report security health settings: Firewall, Anti-Virus,Anti-Spyware.	Automatic (Delayed Start, Running)
+Sensor Data Service	SensorDataService	Delivers data from a variety of sensors.	Manual (Trigger Start)
+Sensor Monitoring Service	SensrSvc	Monitor sensors to expose data and user state e.g. Adjust brightness.	Manual (Trigger Start)
+Sensor Service	SensorService	Manage Simple Device Orientation (SDO) and History for sensors. Reports device orientation changes.	Manual (Trigger Start)
+Server	LanmanServer	File, Print and named pipe sharing over the network.	Automatic (Running)
+Shared PC Account Manager	shpamsvc	Manage profiles and accounts on a SharedPC configured device.	Disabled
+Shell Hardware Detection	ShellHWDetection	Autoplay notification.	Automatic (Running)
+Smart Card	SCardSvr	Support for Smart Card login/logout.	Disabled
+Smart Card Device Enumeration Service	ScDeviceEnum	Support for Smart Card login/logout.	Manual (Trigger Start)
+Smart Card Removal Policy	SCPolicySvc	Support for Smart Card login/logout.	Manual
+SNMP Trap	SNMPTRAP	Handle Simple Network Management Protocol (SNMP) agent messages.	Manual
+Software Protection	sppsvc	Download and install Digital Licences. Cannot be disabled.	Automatic (Delayed Start,Trigger Start)
+Spatial Data Service	SharedRealitySvc	Virtual Reality data manager.	Manual
+Spot Verifier	svsvc	Verify potential file system corruptions.	Manual (Trigger Start)
+SSDP Discovery	SSDPSRV	Discover UPnP /SSDP devices. Enables SSDP device discovery. Can be disabled.	Manual (Running)
+State Repository Service	StateRepository	Reports Application State. Cannot be disabled.	Manual (Running)
+Still Image Acquisition Events	WiaRpc	Launch applications associated with still image acquisition.	Manual
+Storage Service	StorSvc	Adds 'System Volume Information' folder to external USB memory devices. Required for Windows Store.	Manual (Trigger Start)
+Storage Tiers Management	TieringEngineService	Optimise the placement of data in storage tiers on all tiered storage spaces.	Manual
+Sync Host_?????	OneSyncSvc_?????	Sync mail, contacts calendar and other user data.	Automatic (Delayed Start)
+SysMain	SysMain	Tune system performance over time.	Automatic (Running)
+System Event Notification Service	SENS	Monitor system events and notify COM+ subscribers.	Automatic (Running)
+System Events Broker	SystemEventsBroker	Co-ordinates background work for WinRT. Cannot be disabled.	Automatic (Trigger Start, Running)
+System Guard Runtime Monitor Broker	SgrmBroker	Attests to Windows platform integrity.	Automatic (Delayed Start, Running)
+Task Scheduler	Schedule	Schedule Automated Tasks. Cannot be Stopped or disabled.	Automatic (Running)
+TCP/IP NetBIOS Helper	lmhosts	Provides NetBIOS over TCP/IP (NetBT) Enables sharing Files, Printers and logon to the network.	Manual (Trigger Start, Running)
+Telephony	TapiSrv	Support for programs that control telephony devices.	Manual
+Themes	Themes	User Theme Management.	Automatic (Running)
+Time Broker	TimeBrokerSvc	Background work for WinRT application.	Manual (Trigger Start, Running)
+Touch Keyboard and Handwriting Panel Service	TabletInputService	Enables touch keyboard and handwriting panel pan and ink functionality.	Manual (Trigger Start)
+Update Orchestrator Service	UsoSvc	Manages Windows Updates.	Manual (Running)
+UPnP Device Host	upnphost	Allows UPnP devices to be hosted on this computer.	Manual
+User Data Access_?????	UserDataSvc_?????	Provides apps access to structured user data, including contact info, calendars, messages. Cannot be disabled.	Manual (Running)
+User Data Storage_?????	UnistoreSvc_?????	Handles storage of structured user data, including contact info, calendars, messages.Cannot be disabled.	Manual (Running)
+User Experience Virtualization Service	UevAgentService	Support for the roaming of OS and application settings. Not Available in Win 10 home.	Disabled
+User Manager	UserManager	Support for Multi-User interaction.	Automatic (Trigger Start, Running)
+User Profile Service	ProfSvc	Loading and unloading of user profiles.	Automatic (Running)
+Virtual Disk	vds	Magagement of disks and volumes.	Manual
+Volume Shadow Copy	VSS	Manages and implements Volume Shadow copies used for backup and other purposes.	Manual
+Volumetric Audio Compositor Service	VacSvc	Hosts spacial analysis for mixed reality audio simulation.	Not Installed
+WalletService	WalletService	Objects used by clients of the wallet.	Manual
+WarpJITSvc	WarpJITSvc	JIT out of process service for Windows Advanced Rasterization Platform (WARP) when running with Arbitrary Code Guard (ACG) enabled.	Manual (Trigger Start)
+Web Account Manager	TokenBroker	Provide single sign on to apps and services.	Manual (Running)
+WebClient	WebClient	Enable Windows based programs to create access and modify internet based files.	Manual (Trigger Start)
+Wi-Fi Direct Services Connection Manager Service	WFDSConMgrSvc	Connect to wireless display and/or dock.	Manual (Trigger Start)
+Windows Audio	Audiosrv	Manage Audio.	Automatic (Running)
+Windows Audio Endpoint Builder	AudioEndpointBuilder	Manage Audio devices.	Automatic (Running)
+Windows Backup	SDRSVC	Windows Backup.	Manual
+Windows Biometric Service	WbioSrvc	Capture and edit biometric data without gaining direct access to any biometric hardware or samples.	Manual (Trigger Start)
+Windows Camera Frame Server	FrameServer	Access video frames from camera devices.	Manual (Trigger Start)
+Windows Connect Now - Config Registrar	wcncsvc	Wireless Protected Setup (WPS) protocol.	Manual
+Windows Connection Manager	Wcmsvc	Makes automatic connect/disconnect decisions based on the network connectivity options currently available to the PC.	Automatic (Trigger Start, Running)
+Windows Defender Advanced Threat Protection Service	Sense	Security event monitor. Not Available in Win 10 home	Manual
+Windows Defender Antivirus Network Inspection Service	WdNisSvc	Anti-Virus Cannot be disabled.	Manual (Running)
+Windows Defender Antivirus Service	WinDefend	Malware detection. Cannot be disabled.	Automatic (Running)
+Windows Defender Firewall	mpssvc	Firewall. Cannot be disabled.	Automatic (Running)
+Windows Encryption Provider Host Service	WEPHOSTSVC	Exchange Active Sync (EAS) policies for Email encryption with 3rd parties.	Manual (Trigger Start)
+Windows Error Reporting Service	WerSvc	Allows errors to be reported.	Manual (Trigger Start)
+Windows Event Collector	Wecsvc	Remote event log management.	Manual
+Windows Event Log	EventLog	Manage and query event logs.	Automatic (Running)
+Windows Font Cache Service	FontCache	Cache font data.	Automatic (Running)
+Windows Image Acquisition (WIA)	stisvc	Image acquisition for scanners and cameras.	Manual
+Windows Insider Service	wisvc	Used only for Windows insider - beta testing of new versions of Windows.	Manual (Trigger Start)
+Windows Installer	msiserver	Install applications from an .MSI or .MSP package. Cannot be disabled.	Manual
+Windows License Manager Service	LicenseManager	Windows Store.	Manual (Trigger Start)
+Windows Management Instrumentation	Winmgmt	Windows Management Instrumentation (WMI).	Automatic (Running)
+Windows Management Service	WManSvc	Provisioning and enrolment services.	Manual
+Windows Media Player Network Sharing Service	WMPNetworkSvc	Share Windows Media Player libraries with other devices using PnP.	Disabled
+Windows Mixed Reality OpenXR Service	MixedRealityOpenXRSvc	Enable Mixed reality OpenXR runtime.	Manual
+Windows Mobile Hotspot Service	icssvc	Share a Mobile Data Connection with another device.	Manual (Trigger Start)
+Windows Modules Installer	TrustedInstaller	Windows Update, installer service.	Manual
+Windows Perception Service	spectrum	Virtual Reality Service.	Manual (Trigger Start)
+Windows Perception Simulation Service	perceptionsimulation	Enables spatial perception simulation - camera and spatial input simulation.	Manual
+Windows Presentation Foundation Font Cache 3.0.0.0	FontCache3.0.0.0	Optimise the performance of WPF applications by caching commonly used files.	Not Installed (Manual)
+Windows Push Notifications System Service	WpnService	Push Notifications.	Automatic (Running)
+Windows Push Notifications User Service_?????	WpnUserService_?????	Local and push notifications: tile, toast and raw.	Automatic (Running)
+Windows PushToInstall Service	PushToInstall	Windows Store.	Manual
+Windows Remote Management (WS-Management)	WinRM	Remote Management.	Manual
+Windows Search	WSearch	Search content indexing.	Automatic (Delayed Start, Running)
+Windows Security Service	SecurityHealthService	Device protection.	Manual
+Windows Time	W32Time	Date and Time Synchronisation.	Manual (Trigger Start)
+Windows Update	wuauserv	Windows Update.	Manual (Trigger Start)
+Windows Update Medic Service	WaaSMedicSvc	Remediation and protection of Windows Update components.	Manual
+WinHTTP Web Proxy Auto-Discovery Service	WinHttpAutoProxySvc	Web Proxy Auto-Discovery over HTTP.	Manual (Running)
+Wired AutoConfig	dot3svc	IEEE 802.1 authentication over Ethernet.	Manual
+WLAN AutoConfig	WlanSvc	Connect and Disconnect from a Wireless LAN, it is strongly recommended that this service is left set to Automatic if a Wireless Card is installed.	Automatic
+WMI Performance Adapter	wmiApSrv	Provide performance information from WMI providers to clients on the network.	Manual
+Work Folders	workfolderssvc	Sync files with the Work Folders server enabling you to use the files on any PC where you have setup Work Folders.	Manual
+Workstation	LanmanWorkstation	Connect to remote servers using SMB 2.0 or 3.0	Automatic (Running)
+WWAN AutoConfig	WwanSvc	Manages Mobile Broadband Data Connections (GSM and CDMA) by auto-configuring the network.	Manual
+Xbox Accessory Management Service	XboxGipSvc	Xbox Accessories.	Manual (Trigger Start)
+Xbox Live Auth Manager	XblAuthManager	Xbox Authentication.	Manual
+Xbox Live Game Save	XblGameSave	Xbox sync with game server.	Manual (Trigger Start)
+Xbox Live Networking Service	XboxNetApiSvc	Xbox API.

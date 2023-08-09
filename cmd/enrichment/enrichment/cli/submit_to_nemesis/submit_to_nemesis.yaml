@@ -1,0 +1,10 @@
+elasticsearch_creds: nemesis:Qwerty12345
+elasticsearch_url: http://127.0.0.1:8080/elastic/
+expiration_days: 100
+# nemesis_url: http://127.0.0.1:8080/api/
+nemesis_url: http://127.0.0.1:8080/api/
+nemesis_creds: nemesis:Qwerty12345
+network_name: 'test'
+operator_name: WILL
+project_name: ASSESS-TEST
+log_level: INFO

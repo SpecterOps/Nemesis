@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgadmin-config
+data:
+  config_local.py: |
+    # Allow email addresses that end with .local
+    import email_validator
+    email_validator.SPECIAL_USE_DOMAIN_NAMES.remove("local")
+
+  # pgpass: |
+  #   postgres:5432:postgres:postgres:nemesis
+  servers.json: |
+    {
+        "Servers": {
+          "1": {
+            "Name": "Nemesis",
+            "Group": "Servers",
+            "Port": 5432,
+            "Username": "nemesis",
+            "Host": "postgres",
+            "SSLMode": "prefer",
+            "MaintenanceDB": "postgres"
+          }
+        }
+    }
