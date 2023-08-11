@@ -132,3 +132,4 @@ See [development.md](./docs/development.md)
 
 Nemesis is built on large chunk of other people's work. Throughout the codebase we've provided citations, references, and applicable licenses for anything used or adapted from public sources. If we're forgotten proper credit anywhere, please let us know or submit a pull request!
 
+We also want to acknowledge Evan McBroom, Hope Walker, and Carlo Alcantara from SpecterOps for their help with the initial Nemesis concept and amazing feedback throughout the development process.
