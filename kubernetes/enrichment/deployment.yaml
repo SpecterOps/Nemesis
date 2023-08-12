@@ -56,9 +56,6 @@ spec:
             - name: YARA_API_PORT
               value: "9700"
 
-            - name: DISABLE_ALERTING
-              value: "False"
-
             - name: CONTEXT_WORDS
               value: "5"
             - name: ML_CHUNK_SIZE
@@ -193,6 +190,11 @@ spec:
               value: Nemesis
             - name: SLACK_EMOJI
               value: ":smiling_imp:"
+            - name: DISABLE_ALERTING
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: disable-slack-alerting
             - name: REPROCESSING_WORKERS
               value: "5"
 

@@ -54,10 +54,10 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     elasticsearch_url: HttpUrlWithSlash
     web_api_url: HttpUrlWithSlash
     public_kibana_url: HttpUrlWithSlash
-    slack_webhook_url: HttpUrl
+    slack_webhook_url: Optional[str]
     slack_username: str
     slack_emoji: str
-    slack_channel: str
+    slack_channel: Optional[str]
     tensorflow_uri: str
     context_words: PositiveInt
     chunk_size: PositiveInt
@@ -74,6 +74,10 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     @validator("slack_channel")
     def slack_channel_is_valid(cls, channel: str) -> str:
         pattern = r"^#[a-zA-Z0-9_-]{1,80}$"
+
+        if channel is None or channel == "":
+            return None
+        
         if re.match(pattern, channel):
             return channel
         else:

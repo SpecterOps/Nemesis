@@ -140,19 +140,22 @@ def get_kubectl_value(key):
     elif key == "log_level":
         return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"log-level\"}}'")
 
-    elif key == "slack_channel":
-        return run_cmd(
-            "kubectl get configmaps operation-config -o=go-template='{{index .data \"slack-alert-channel\"}}'"
-        )
-
     elif key == "data_expiration_days":
         return run_cmd(
             "kubectl get configmaps operation-config -o=go-template='{{index .data \"data-expiration-days\"}}'"
         )
 
+    elif key == "disable_slack_alerting":
+        return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"disable-slack-alerting\"}}'")
+
     elif key == "nemesis_http_server":
         return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"nemesis-http-server\"}}'")
 
+    elif key == "slack_channel":
+        return run_cmd(
+            "kubectl get configmaps operation-config -o=go-template='{{index .data \"slack-alert-channel\"}}'"
+        )
+    
     elif key == "slack_webhook":
         return run_cmd(
             "kubectl get secret operation-creds -o=go-template='{{index .data \"slack_web_hook\"}}' | base64 -d"
@@ -302,6 +305,7 @@ def set_config_values(config_values):
             run_cmd(
                 "kubectl create configmap operation-config"
                 + f" --from-literal=slack-alert-channel={v.get('slack_channel')}"
+                + f" --from-literal=disable-slack-alerting={v.get('disable_slack_alerting')}"
                 + f" --from-literal=log-level={v.get('log_level')}"
                 + f" --from-literal=assessment-id={v.get('assessment_id')}"
                 + f" --from-literal=storage_provider={v.get('storage_provider')}"
@@ -524,7 +528,7 @@ def validate_config_values(config_keys):
 
     if not v.get("force"):
         for config_key in config_keys:
-            if config_key != "basic_auth_password" and config_key != "data_expiration_days":
+            if config_key != "basic_auth_password" and config_key != "data_expiration_days" and config_key != "slack_webhook" and config_key != "slack_channel":
                 if not v.get(config_key):
                     # set the value for to config key if it already exists in Kubectl
                     config_value = get_kubectl_value(config_key)
@@ -671,11 +675,14 @@ def validate_config_values(config_keys):
             # set a random password if not supplied or already set
             v.set("rabbitmq_erlang_cookie", get_random_password(24))
 
-
     # make sure we have everything set
     all_values_set = True
     for config_key in config_keys:
         if not v.get(config_key) and not get_kubectl_value(config_key):
+            if config_key == "slack_webhook" or config_key == "slack_channel":
+                # These values do not have to be set
+                continue
+
             logger.error(f"\n[!] Required configuration key value '{config_key}' not supplied and not already present!\n")
             all_values_set = True
 
@@ -910,6 +917,7 @@ if __name__ == "__main__":
         "nemesis_http_server",
         "data_expiration_days",
         "log_level",
+        "disable_slack_alerting",
         "slack_channel",
         "slack_webhook",
         "basic_auth_password",
@@ -969,8 +977,9 @@ if __name__ == "__main__":
         "--data_expiration_days", "--exp", type=int, help="Days after ingestion to set data to expire (default: 100)"
     )
     parser.add_argument("--log_level", "--log", type=str, help="Level of logging (default: info)")
-    parser.add_argument("--slack_channel", "--channel", type=str, help="Slack channel name for alerting.")
-    parser.add_argument("--slack_webhook", "--webhook", type=str, help="Slack https://... webhook for alerting.")
+    parser.add_argument("--disable_slack_alerting", type=bool, help="Should slack alerting be disabled?", required=False)
+    parser.add_argument("--slack_channel", "--channel", type=str, help="Slack channel name for alerting.", required=False)
+    parser.add_argument("--slack_webhook", "--webhook", type=str, help="Slack https://... webhook for alerting.", required=False)
     parser.add_argument("--basic_auth_user", "--user", type=str, help="User to use for basic auth to the web-api")
     parser.add_argument(
         "--basic_auth_password", "--password", type=str, help="Password to use for basic auth to the web-api"
