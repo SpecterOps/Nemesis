@@ -23,8 +23,10 @@ For a file to be processed, the raw file bytes first need to be posted to the co
 basic = HTTPBasicAuth(NEMESIS_USERNAME, NEMESIS_PASSWORD)
 r = requests.request("POST", f"{NEMESIS_URL}/file", auth=basic, data=file_bytes, headers={"Content-Type": "application/octet-stream"})
 json_result = r.json()
-object_id = json_result["object_id"]
+nemesis_file_id = json_result["object_id"]
 ```
+
+The `nemesis_file_id` is used in the `file_data` message in Step 2 below. This UUID is the unique reference for the file in Nemesis.
 
 ## Step 2 - File Data Message
 
