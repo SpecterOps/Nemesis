@@ -1,0 +1,10 @@
+.env
+bin
+.DS_Store
+__pycache__
+.pytest_cache
+.mypy_cache
+*.asc
+nemesis.config
+config.yml
+
