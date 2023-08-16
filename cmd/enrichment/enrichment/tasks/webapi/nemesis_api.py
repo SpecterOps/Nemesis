@@ -1,12 +1,12 @@
 # Standard Libraries
-import asyncio
 import base64
 import json
 import os
 import tempfile
 import urllib.parse
 import uuid
-from enum import Enum, StrEnum
+from datetime import datetime
+from enum import StrEnum
 from typing import Dict, List, Optional
 
 # 3rd Party Libraries
@@ -348,6 +348,12 @@ class NemesisApiRoutes(Routable):
         except:
             return Response(status_code=400, content=f"Invalid {data_type} message")
 
+        try:
+            expiration_string = json_data["metadata"]["expiration"]
+            expiration = datetime.strptime(expiration_string, "%Y-%m-%dT%H:%M:%S.000Z")
+        except:
+            return Response(status_code=400, content="Invalid expiration value in metadata field")
+
         await logger.ainfo("Received data message", data_type=obj.metadata.data_type)
 
         # make sure we filter out registry values we're not currently supporting
@@ -368,7 +374,7 @@ class NemesisApiRoutes(Routable):
         obj.metadata.message_id = id_
 
         # save off the raw POST message for possible replay later
-        await self.db.add_api_data_message(id_, body_bytes)
+        await self.db.add_api_data_message(id_, body_bytes, expiration)
 
         if obj.metadata.data_type in self.producers:
             producer = self.producers[obj.metadata.data_type]

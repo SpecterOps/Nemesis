@@ -5,7 +5,7 @@ import os
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from types import TracebackType
@@ -352,7 +352,7 @@ class ServiceColumn(Enum):
 
 class NemesisDbInterface(ABC):
     @abstractmethod
-    async def add_api_data_message(self, message_id: str, message_bytes: bytes) -> None:
+    async def add_api_data_message(self, message_id: str, message_bytes: bytes, expiration: datetime) -> None:
         pass
 
     @abstractmethod
@@ -552,14 +552,15 @@ class NemesisDb(NemesisDbInterface):
     # Functions that help with reprocessing
     #
 
-    async def add_api_data_message(self, message_id: str, message_bytes: bytes) -> None:
+    async def add_api_data_message(self, message_id: str, message_bytes: bytes, expiration: datetime) -> None:
         """Adds a new `nemesis.api_data_message` entry to the database."""
 
         async with self.pool.acquire() as conn:
             await conn.execute(
-                "INSERT INTO nemesis.api_data_messages (message_id, message_bytes) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                "INSERT INTO nemesis.api_data_messages (message_id, message_bytes, expiration) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
                 message_id,
                 message_bytes,
+                expiration
             )
 
     async def clear_database(self) -> None:
@@ -571,6 +572,19 @@ class NemesisDb(NemesisDbInterface):
             )
             for table_name in table_names:
                 await conn.execute(f"TRUNCATE TABLE nemesis.{table_name[0]} CASCADE")
+
+    async def expunge_expirated_data(self) -> None:
+        """Clears data from all tables where the `expiration` has now passed."""
+        async with self.pool.acquire() as conn:
+            table_names = await conn.fetch(
+                "SELECT table_name FROM information_schema.columns WHERE column_name = 'expiration'",
+            )
+            for table_name_result in table_names:
+                table_name = table_name_result["table_name"]
+                # the DB timezone is already set to UTC in the schema
+                await conn.execute(
+                    f"DELETE FROM nemesis.{table_name} WHERE expiration <= NOW()"
+                )
 
     async def get_api_data_messages(self) -> AsyncGenerator[bytes, None]:
         """Returns the raw bytes for all POST /data messages."""

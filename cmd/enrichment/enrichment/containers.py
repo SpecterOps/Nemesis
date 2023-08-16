@@ -15,6 +15,7 @@ from enrichment.services.text_extractor import TikaTextExtractor
 from enrichment.settings import EnrichmentSettings
 from enrichment.tasks.chromium_cookie import ChromiumCookie
 from enrichment.tasks.dpapi.dpapi import Dpapi
+from enrichment.tasks.data_expunge import DataExpunge
 from enrichment.tasks.elastic_connector import ElasticConnector
 from enrichment.tasks.file_processor import FileProcessor
 from enrichment.tasks.postgres_connector.postgres_connector import (
@@ -614,6 +615,12 @@ class Container(containers.DeclarativeContainer):
         ServiceCategorizer, inputq_service_servicecategorizer, outputq_serviceenriched, service_categorizer
     )
 
+    task_dataexpunge = providers.Factory(
+        DataExpunge,
+        elasticsearch_client,
+        database
+    )
+
     #
     # Web APIs (alphabetical order)
     #
@@ -650,4 +657,5 @@ class Container(containers.DeclarativeContainer):
         registryhive=task_registryhive,  # type: ignore
         servicecategorizer=task_servicecategorizer,  # type: ignore
         yara_api=task_yara_api,  # type: ignore
+        dataexpunge=task_dataexpunge,  # type: ignore
     )
