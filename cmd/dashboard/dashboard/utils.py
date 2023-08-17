@@ -296,20 +296,25 @@ def update_triage_table(unique_db_id: str, table_name: str, operator: str, triag
     try:
         # update the triage value in the Postgres `nemesis.triage` table for this unique_db_id
         with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            triage_value = triage_value.lower()
             print(f"[*] Changing triage for unique_db_id object '{unique_db_id}' to value '{triage_value}'")
 
             with conn.cursor() as cur:
+                # get the expiration of the associated object so we can use it for the triage table update
+                cur.execute(f"SELECT expiration FROM nemesis.{table_name} WHERE unique_db_id = '{unique_db_id}'")
+                expiration = cur.fetchone()[0]
+
                 cur.execute(
                     """
-                    INSERT INTO nemesis.triage (unique_db_id, table_name, operator, value, modification_time)
-                    VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, now() at time zone 'utc')
+                    INSERT INTO nemesis.triage (unique_db_id, table_name, operator, value, expiration, modification_time)
+                    VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, %(expiration)s, now() at time zone 'utc')
                     ON CONFLICT (unique_db_id)
                     DO UPDATE SET value = %(value)s, modification_time = now() at time zone 'utc'
                     """,
-                    {"unique_db_id": unique_db_id, "table_name": table_name, "operator": operator, "value": triage_value},
+                    {"unique_db_id": unique_db_id, "table_name": table_name, "operator": operator, "value": triage_value, "expiration": expiration},
                 )
 
-                # update the originating object
+                # if there's a linked originating object, update that as well
                 if originating_object_id:
                     cur.execute(
                         """
@@ -324,12 +329,12 @@ def update_triage_table(unique_db_id: str, table_name: str, operator: str, triag
                         print(f"[*] Changing originating_object_id object '{originating_object_id}' to triage value '{triage_value}'")
                         cur.execute(
                             """
-                            INSERT INTO nemesis.triage (unique_db_id, table_name, operator, value, modification_time)
-                            VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, now() at time zone 'utc')
+                            INSERT INTO nemesis.triage (unique_db_id, table_name, operator, value, expiration, modification_time)
+                            VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, %(expiration)s, now() at time zone 'utc')
                             ON CONFLICT (unique_db_id)
                             DO UPDATE SET value = %(value)s, modification_time = now() at time zone 'utc'
                             """,
-                            {"unique_db_id": unique_db_id, "table_name": "file_data_enriched", "operator": operator, "value": triage_value},
+                            {"unique_db_id": unique_db_id, "table_name": "file_data_enriched", "operator": operator, "value": triage_value, "expiration": expiration},
                         )
             conn.commit()
 
@@ -345,15 +350,20 @@ def update_notes_table(unique_db_id: str, table_name: str, operator: str, notes_
         # update the triage value in the Postgres `nemesis.triage` table for this unique_db_id
         with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
             print(f"[*] Changing notes for unique_db_id object '{unique_db_id}' to value '{notes_value}'")
+
             with conn.cursor() as cur:
+                # get the expiration of the associated object so we can use it for the notes table update
+                cur.execute(f"SELECT expiration FROM nemesis.{table_name} WHERE unique_db_id = '{unique_db_id}'")
+                expiration = cur.fetchone()[0]
+
                 cur.execute(
                     """
-                    INSERT INTO nemesis.notes (unique_db_id, table_name, operator, value, modification_time)
-                    VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, now() at time zone 'utc')
+                    INSERT INTO nemesis.notes (unique_db_id, table_name, operator, value, expiration, modification_time)
+                    VALUES (%(unique_db_id)s, %(table_name)s, %(operator)s, %(value)s, %(expiration)s, now() at time zone 'utc')
                     ON CONFLICT (unique_db_id)
                     DO UPDATE SET value = %(value)s, modification_time = now() at time zone 'utc'
                     """,
-                    {"unique_db_id": unique_db_id, "table_name": table_name, "operator": operator, "value": notes_value},
+                    {"unique_db_id": unique_db_id, "table_name": table_name, "operator": operator, "value": notes_value, "expiration": expiration},
                 )
 
             conn.commit()

@@ -443,6 +443,7 @@ data:
             unique_db_id UUID NOT NULL PRIMARY KEY,     -- unique_db_id UUID of the object that's been triaged
             table_name TEXT,                            -- optional table name the unique_db_id originates from
             modification_time TIMESTAMP WITH TIME ZONE, -- Last time the field was modified
+            expiration DATE NOT NULL,                   -- date when the entry should be wiped from the database
             operator TEXT,                              -- optional name of the operator making the change
             value TEXT                                  -- Useful/Not Useful/Unknown, or not set
         );
@@ -452,6 +453,7 @@ data:
             unique_db_id UUID NOT NULL PRIMARY KEY,     -- unique_db_id UUID of the object that has a note added
             table_name TEXT,                            -- optional table name the unique_db_id originates from
             modification_time TIMESTAMP WITH TIME ZONE, -- Last time the field was modified
+            expiration DATE NOT NULL,                   -- date when the entry should be wiped from the database
             operator TEXT,                              -- optional name of the operator making the change
             value TEXT                                  -- text of the note an operator left
         );
@@ -467,7 +469,8 @@ data:
         --  we can replay them later for reprocessing.
         CREATE TABLE api_data_messages (
             message_id TEXT PRIMARY KEY,    -- the unique message ID of the posted data message
-            message_bytes BYTEA NOT NULL    -- raw bytes of an incoming message
+            message_bytes BYTEA NOT NULL,   -- raw bytes of an incoming message
+            expiration DATE NOT NULL        -- date when the message should be wiped from the database
         );
 
         COMMIT;
