@@ -1,0 +1,50 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "group": "build",
+            "label": "Build container image using local Docker",
+            "type": "process",
+            "command": "skaffold",
+            "args": [
+                "build",
+                "-p=no-push"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "panel": "shared",
+                "showReuseMessage": true
+            }
+        },
+        {
+            "label": "Deploy to Kubernetes cluster",
+            "type": "process",
+            "command": "skaffold",
+            "args": [
+                "run"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "panel": "shared",
+                "showReuseMessage": true
+            }
+        },
+        {
+            "label": "View application logs on Kubernetes",
+            "type": "process",
+            "command": "kubectl",
+            "args": [
+                "logs",
+                "--selector",
+                "app=hello-world"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "panel": "shared",
+                "showReuseMessage": true
+            }
+        }
+    ]
+}
