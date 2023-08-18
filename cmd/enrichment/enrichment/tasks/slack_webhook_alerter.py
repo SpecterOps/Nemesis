@@ -42,7 +42,9 @@ class SlackWebHookAlerter(TaskInterface):
         self.disable_alerting = disable_alerting
 
         if self.disable_alerting:
-            logger.info("Slack alerting is disabled.")
+            logger.info("Slack alerting is DISABLED.")
+        else:
+            logger.info("Slack alerting is ENABLED.")
 
 
     async def run(self) -> None:

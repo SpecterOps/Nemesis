@@ -675,6 +675,17 @@ def validate_config_values(config_keys):
             # set a random password if not supplied or already set
             v.set("rabbitmq_erlang_cookie", get_random_password(24))
 
+    if not v.get("disable_slack_alerting") or v.get("disable_slack_alerting") == "<no value>":
+        disable_slack_alerting = get_kubectl_value("disable_slack_alerting")
+        if disable_slack_alerting:
+            v.set("disable_slack_alerting", disable_slack_alerting)
+        else:
+            v.set("disable_slack_alerting", True)
+    disable_slack_alerting = v.get("disable_slack_alerting")
+    if disable_slack_alerting.lower() not in ["true", "false"]:
+        logger.error(f"The disable_slack_alerting argument must be either 'True' or 'False'. Supplied value: {disable_slack_alerting}")
+        sys.exit(1)
+
     if not v.get("slack_channel") or v.get("slack_channel") == "<no value>":
         slack_channel_kubectl = get_kubectl_value("slack_channel")
         if slack_channel_kubectl:

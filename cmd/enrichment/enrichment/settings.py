@@ -78,7 +78,6 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
         if channel is None or channel == str(None) or channel == "":
             return None
 
-        print(f"channel: '{channel}' Type: {type(channel)}  Result: {channel is None or channel == ''}")
         if re.match(pattern, channel):
             return channel
         else:
