@@ -214,10 +214,11 @@ Setup Variables
 | STORAGE_PROVIDER          | storage_provider        | --storage_provider        | Storage provider to use, either `minio` (default) or `aws`                                 |
 | ASSESSMENT_ID             | assessment_id           | --assessment_id           | An ID for the assessment                                                                   |
 | NEMESIS_HTTP_SERVER       | nemesis_http_server     | --nemesis_http_server     | The public HTTP server of the Nemesis server (for link creation)                           |
-| LOG_LEVEL                 | log_level               | --log                     | DEBUG, INFO, WARNING, ERROR                                                                |
+| LOG_LEVEL                 | log_level               | --log_level               | (optional) Python logging level. Possible values: DEBUG, INFO, WARNING, ERROR, CRITICAL    |
 | DATA_EXPIRATION_DAYS      | data_expiration_days    | --data_expiration_days    | The number of days to set for data expiration (default 100)                                |
-| SLACK_CHANNEL             | slack_channel           | --slack_channel           | A Slack channel name for alerting (w/o #)                                                  |
-| SLACK_WEBHOOK             | slack_webhook           | --slack_webhook           | A Slack webhook for alerting (optional)                                                    |
+| DISABLE_SLACK_ALERTING    | DISABLE_SLACK_ALERTING  | --disable_slack_alerting  | Should slack alerting be disabled? Possible values: True/False                             |
+| SLACK_CHANNEL             | slack_channel           | --slack_channel           | (optional) A Slack channel name for alerting, including the '#' (e.g., #nemesis)           |
+| SLACK_WEBHOOK             | slack_webhook           | --slack_webhook           | (optional) A Slack webhook for alerting                                                    |
 | BASIC_AUTH_USER           | basic_auth_user         | --basic_auth_user         | The username for basic auth to the Nemesis endpoint (default: nemesis)                     |
 | BASIC_AUTH_PASSWORD       | basic_auth_password     | --basic_auth_password     | The basic auth password for the Nemesis  endpoit(default: random 24 characters)            |
 | DASHBOARD_USER            | dashboard_user          | --dashboard_user          | The username for the main Nemesis dashboard                                                |

@@ -1,0 +1,55 @@
+{
+	"folders": [
+		{
+			"path": "..",
+			"name": "ods"
+		},
+		{
+			"path": "../cmd/dashboard",
+			"name": "dashboard"
+		},
+		{
+			"path": "../cmd/dotnet",
+			"name": "dotnet"
+		},
+		{
+			"path": "../cmd/enrichment",
+			"name": "enrichment"
+		},
+		{
+			"path": "../cmd/nlp",
+			"name": "nlp"
+		},
+		{
+			"path": "../cmd/passwordcracker",
+			"name": "passwordcracker"
+		},
+		{
+			"path": "../packages/python/nemesiscommon",
+			"name": "packages/nemesiscommon"
+		},
+		{
+			"path": "../packages/python/nemesispb",
+			"name": "packages/nemesispb"
+		},
+	],
+	"settings": {
+		"files.exclude": {
+			"**/__pycache__": true,
+			"**/.DS_Store": true,
+			"**/.git": true,
+			"**/.hg": true,
+			"**/.mypy_cache": true,
+			"**/.pytest_cache": true,
+			"**/.svn": true,
+			"**/.venv": true,
+			"**/CVS": true,
+			"**/Thumbs.db": true,
+		},
+		"[python]": {
+			"diffEditor.ignoreTrimWhitespace": false,
+			"editor.wordBasedSuggestions": false,
+			"editor.formatOnSave": true
+		},
+	}
+}

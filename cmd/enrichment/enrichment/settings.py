@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 # 3rd Party Libraries
 from nemesiscommon.settings import FileProcessingService
 from pydantic import Field, PositiveInt, validator
-from pydantic.networks import AnyHttpUrl, AnyUrl, HttpUrl, Parts, PostgresDsn
+from pydantic.networks import AnyHttpUrl, AnyUrl, Parts, PostgresDsn
 
 
 class HttpUrlWithSlash(AnyHttpUrl):
@@ -54,10 +54,10 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     elasticsearch_url: HttpUrlWithSlash
     web_api_url: HttpUrlWithSlash
     public_kibana_url: HttpUrlWithSlash
-    slack_webhook_url: HttpUrl
+    slack_webhook_url: Optional[str]
     slack_username: str
     slack_emoji: str
-    slack_channel: str
+    slack_channel: Optional[str]
     tensorflow_uri: str
     context_words: PositiveInt
     chunk_size: PositiveInt
@@ -72,8 +72,12 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     registry_value_batch_size: PositiveInt = 5000  # number of registry values to emit per reg carving message
 
     @validator("slack_channel")
-    def slack_channel_is_valid(cls, channel: str) -> str:
+    def slack_channel_is_valid(cls, channel: Optional[str]) -> Optional[str]:
         pattern = r"^#[a-zA-Z0-9_-]{1,80}$"
+
+        if channel is None or channel == str(None) or channel == "":
+            return None
+
         if re.match(pattern, channel):
             return channel
         else:
