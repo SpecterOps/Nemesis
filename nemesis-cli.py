@@ -543,7 +543,7 @@ def validate_config_values(config_keys):
         if log_level:
             v.set("log_level", log_level)
         else:
-            v.set("log_level", "info")
+            v.set("log_level", "INFO")
 
     if not v.get("basic_auth_user") or v.get("basic_auth_user") == "<no value>":
         basic_auth_kubectl = get_kubectl_value("basic_auth_user")
