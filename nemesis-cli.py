@@ -25,18 +25,18 @@ exit_early = False
 try:
     import boto3
 except:
-    logger.error("[!] Please run `pip3 install boto3`")
+    logger.error("Please run `pip3 install boto3`")
     exit_early = True
 try:
     from vyper import v
 except:
-    logger.error("[!] Please run `pip3 install vyper-config`")
+    logger.error("Please run `pip3 install vyper-config`")
     exit_early = True
 
 try:
     from passlib.hash import apr_md5_crypt
 except:
-    logger.error("[!] Please run `pip3 install passlib`")
+    logger.error("Please run `pip3 install passlib`")
     exit_early = True
 if exit_early:
     sys.exit(1)
@@ -155,7 +155,7 @@ def get_kubectl_value(key):
         return run_cmd(
             "kubectl get configmaps operation-config -o=go-template='{{index .data \"slack-alert-channel\"}}'"
         )
-    
+
     elif key == "slack_webhook":
         return run_cmd(
             "kubectl get secret operation-creds -o=go-template='{{index .data \"slack_web_hook\"}}' | base64 -d"
@@ -528,7 +528,8 @@ def validate_config_values(config_keys):
 
     if not v.get("force"):
         for config_key in config_keys:
-            if config_key != "basic_auth_password" and config_key != "data_expiration_days" and config_key != "slack_webhook" and config_key != "slack_channel":
+            not_required_args = ["basic_auth_password", "data_expiration_days", "slack_webhook", "slack_channel", "log_level", "pgadmin_email"]
+            if config_key not in not_required_args:
                 if not v.get(config_key):
                     # set the value for to config key if it already exists in Kubectl
                     config_value = get_kubectl_value(config_key)
@@ -537,7 +538,6 @@ def validate_config_values(config_keys):
                         config_value = input(f"\n[*] Please enter a value for '{config_key}' : ")
                     v.set(config_key, config_value)
 
-    # some of our defaults
     if not v.get("log_level") or v.get("log_level") == "<no value>":
         log_level = get_kubectl_value("log_level")
         if log_level:
@@ -675,15 +675,26 @@ def validate_config_values(config_keys):
             # set a random password if not supplied or already set
             v.set("rabbitmq_erlang_cookie", get_random_password(24))
 
+    if not v.get("slack_channel") or v.get("slack_channel") == "<no value>":
+        slack_channel_kubectl = get_kubectl_value("slack_channel")
+        if slack_channel_kubectl:
+            v.set("slack_channel", slack_channel_kubectl)
+        else:
+            v.set("slack_channel", None)
+
+    slack_channel = v.get("slack_channel")
+    if slack_channel and slack_channel[0] != "#":
+        logger.error(f"The slack_channel argument must start with a '#'. Supplied value: {slack_channel}")
+        sys.exit(1)
+
     # make sure we have everything set
     all_values_set = True
     for config_key in config_keys:
         if not v.get(config_key) and not get_kubectl_value(config_key):
             if config_key == "slack_webhook" or config_key == "slack_channel":
-                # These values do not have to be set
                 continue
 
-            logger.error(f"\n[!] Required configuration key value '{config_key}' not supplied and not already present!\n")
+            logger.error(f"\nRequired configuration key value '{config_key}' not supplied and not already present!\n")
             all_values_set = True
 
     if not all_values_set:

@@ -56,9 +56,9 @@ The only other publicly forwarded port is **9001** if minio is used for storage 
 
 Elasticsearch, PostgreSQL, and Minio (if using instead of AWS S3) have persistent storage volumes in the cluster.
 
-### Artifact Storage Backend
+### Storage Backend
 
-By default Minio will be used for artifact storage. If `storage_provider=s3` is set via any config option, AWS S3 storage is used along with proper KMS key encryption. If this is the case, the `aws_*` config variables need to be completed, otherwise these values are ignored.
+By default Minio will be used for storage. If `storage_provider=s3` is set via any config option, AWS S3 storage is used in conjunction with KMS for encryption. If this is the case, the `aws_*` config variables need to be completed, otherwise these values are ignored.
 
 ### Elasticsearch
 

@@ -4,10 +4,13 @@ import asyncio
 # 3rd Party Libraries
 import httpx
 import nemesispb.nemesis_pb2 as pb
+import structlog
 from nemesiscommon.messaging import MessageQueueConsumerInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async.aio import time as metrics
 from prometheus_client import Summary
+
+logger = structlog.get_logger(module=__name__)
 
 
 class SlackWebHookAlerter(TaskInterface):
@@ -32,15 +35,15 @@ class SlackWebHookAlerter(TaskInterface):
         self.in_q_alert = in_q_alert
         self.web_hook_url = web_hook_url
 
-        if not disable_alerting:
-            if not channel.startswith("#"):
-                channel = f"#{channel}"
+        self.username = username
+        self.emoji = emoji
+        self.channel = channel
+        self.http_client = http_client
+        self.disable_alerting = disable_alerting
 
-            self.username = username
-            self.emoji = emoji
-            self.channel = channel
-            self.http_client = http_client
-            self.disable_alerting = disable_alerting
+        if self.disable_alerting:
+            logger.info("Slack alerting is disabled.")
+
 
     async def run(self) -> None:
         await self.in_q_alert.Read(self.process_message)  # type: ignore
