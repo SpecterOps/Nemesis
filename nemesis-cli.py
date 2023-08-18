@@ -528,7 +528,7 @@ def validate_config_values(config_keys):
 
     if not v.get("force"):
         for config_key in config_keys:
-            not_required_args = ["basic_auth_password", "data_expiration_days", "slack_webhook", "slack_channel", "log_level", "pgadmin_email"]
+            not_required_args = ["basic_auth_password", "data_expiration_days", "log_level", "pgadmin_email"]
             if config_key not in not_required_args:
                 if not v.get(config_key):
                     # set the value for to config key if it already exists in Kubectl
@@ -678,13 +678,15 @@ def validate_config_values(config_keys):
     if not v.get("disable_slack_alerting") or v.get("disable_slack_alerting") == "<no value>":
         disable_slack_alerting = get_kubectl_value("disable_slack_alerting")
         if disable_slack_alerting:
+            disable_slack_alerting = bool(disable_slack_alerting)
             v.set("disable_slack_alerting", disable_slack_alerting)
         else:
-            v.set("disable_slack_alerting", True)
-    disable_slack_alerting = v.get("disable_slack_alerting")
+            v.set("disable_slack_alerting", "True")
+    disable_slack_alerting = str(v.get("disable_slack_alerting"))
     if disable_slack_alerting.lower() not in ["true", "false"]:
         logger.error(f"The disable_slack_alerting argument must be either 'True' or 'False'. Supplied value: {disable_slack_alerting}")
         sys.exit(1)
+    disable_slack_alerting = disable_slack_alerting.lower() == "true"
 
     if not v.get("slack_channel") or v.get("slack_channel") == "<no value>":
         slack_channel_kubectl = get_kubectl_value("slack_channel")
@@ -694,8 +696,25 @@ def validate_config_values(config_keys):
             v.set("slack_channel", None)
 
     slack_channel = v.get("slack_channel")
-    if slack_channel and slack_channel[0] != "#":
-        logger.error(f"The slack_channel argument must start with a '#'. Supplied value: {slack_channel}")
+    if not disable_slack_alerting:
+        if slack_channel:
+            if slack_channel[0] != "#":
+                logger.error(f"The slack_channel argument must start with a '#'. Supplied value: {slack_channel}")
+                sys.exit(1)
+        else:
+            logger.error(f"The slack_channel argument must be set if slack alerting is enabled.")
+            sys.exit(1)
+
+    if not v.get("slack_webhook") or v.get("slack_webhook") == "<no value>":
+        slack_webhook_kubectl = get_kubectl_value("slack_webhook")
+        if slack_webhook_kubectl:
+            v.set("slack_webhook", slack_webhook_kubectl)
+        else:
+            v.set("slack_webhook", None)
+
+    slack_webhook = v.get("slack_webhook")
+    if not disable_slack_alerting and slack_webhook and slack_webhook[0:8] != "https://":
+        logger.error(f"The slack_webhook argument must start with a 'https://'. Supplied value: {slack_webhook}")
         sys.exit(1)
 
     # make sure we have everything set
@@ -999,7 +1018,7 @@ if __name__ == "__main__":
         "--data_expiration_days", "--exp", type=int, help="Days after ingestion to set data to expire (default: 100)"
     )
     parser.add_argument("--log_level", "--log", type=str, help="Level of logging (default: info)")
-    parser.add_argument("--disable_slack_alerting", type=bool, help="Should slack alerting be disabled?", required=False)
+    parser.add_argument("--disable_slack_alerting", type=str, help="Should slack alerting be disabled? Values: True/False", required=False)
     parser.add_argument("--slack_channel", "--channel", type=str, help="Slack channel name for alerting.", required=False)
     parser.add_argument("--slack_webhook", "--webhook", type=str, help="Slack https://... webhook for alerting.", required=False)
     parser.add_argument("--basic_auth_user", "--user", type=str, help="User to use for basic auth to the web-api")
