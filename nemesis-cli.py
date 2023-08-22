@@ -233,22 +233,22 @@ def get_kubectl_value(key):
 
     elif key == "rabbitmq_admin_user":
         return run_cmd(
-            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq_admin_user\"}}' | base64 -d"
+            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-admin-user\"}}' | base64 -d"
         )
 
     elif key == "rabbitmq_admin_password":
         return run_cmd(
-            "kubectl get secret rabbmitmq-creds -o=go-template='{{index .data \"rabbitmq_admin_password\"}}' | base64 -d"
+            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-admin-password\"}}' | base64 -d"
         )
 
     elif key == "rabbitmq_connectionuri":
         return run_cmd(
-            "kubectl get secret rabbmitmq-creds -o=go-template='{{index .data \"rabbitmq_connectionuri\"}}' | base64 -d"
+            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-connectionuri\"}}' | base64 -d"
         )
 
     elif key == "rabbitmq_erlang_cookie":
         return run_cmd(
-            "kubectl get secret rabbmitmq-creds -o=go-template='{{index .data \"rabbitmq_erlang_cookie\"}}' | base64 -d"
+            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-erlang-cookie\"}}' | base64 -d"
         )
 
     else:
