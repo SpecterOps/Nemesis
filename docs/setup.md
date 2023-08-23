@@ -26,6 +26,7 @@ Docker and docker-compose
 ```bash
 sudo apt-get update
 sudo apt-get install curl
+sudo mkdir /etc/apt/keyrings/ 2>/dev/null
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
 
