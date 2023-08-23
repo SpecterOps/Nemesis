@@ -20,27 +20,18 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
-# Check dependencies
-exit_early = False
-try:
-    import boto3
-except:
-    logger.error("Please run `pip3 install boto3`")
-    exit_early = True
-try:
-    from vyper import v
-except:
-    logger.error("Please run `pip3 install vyper-config`")
-    exit_early = True
-
-try:
-    from passlib.hash import apr_md5_crypt
-except:
-    logger.error("Please run `pip3 install passlib`")
-    exit_early = True
-if exit_early:
+if os.geteuid() == 0:
+    logger.error("Please do not run this script as root")
     sys.exit(1)
 
+# Check dependencies
+try:
+    import boto3
+    from passlib.hash import apr_md5_crypt
+    from vyper import v
+except:
+    logger.error("Please run `pip3 install boto3 vyper-config passlib`")
+    sys.exit(1)
 
 version = "v0.1.0a"
 
