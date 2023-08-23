@@ -33,6 +33,14 @@ Built on Kubernetes with scale in mind, our goal with Nemesis was to create a ce
 
 Nemesis aims to automate a number of repetitive tasks operators encounter on engagements, empower operators’ analytic capabilities and collective knowledge, and create structured and unstructured data stores of as much operational data as possible to help guide future research and facilitate offensive data analysis.
 
+## Nemesis Blog Posts:
+
+| Post Name                                   | Publication Date | Link                                                                               |
+|---------------------------------------------|------------------|------------------------------------------------------------------------------------|
+| *Hacking With Your Nemesis*                 | Aug 9, 2023      | https://posts.specterops.io/hacking-with-your-nemesis-7861f75fcab4                 |
+| *Challenges In Post-Exploitation Workflows* | Aug 2, 2023      | https://posts.specterops.io/challenges-in-post-exploitation-workflows-2b3469810fe9 |
+| *On (Structured) Data*                      | Jul 26, 2023     | https://posts.specterops.io/on-structured-data-707b7d9876c6                        |
+
 # Setup
 
 1. Ensure the hardware/software requisites are met and configuration values are completed [as described here in the setup](./docs/setup.md)
