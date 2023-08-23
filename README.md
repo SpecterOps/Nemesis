@@ -43,7 +43,7 @@ Nemesis aims to automate a number of repetitive tasks operators encounter on eng
 
 In the root directory of the repo, use skaffold to start everything:
 ```
-skaffold run
+skaffold run  --port-forward
 ```
 
 Run `skaffold delete` to remove running pods.
