@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import aiohttp
 import redis
 import requests
-from elasticsearch import Elasticsearch
+from elasticsearch import AuthenticationException, Elasticsearch
 # Mythic Sync Libraries
 # 3rd Party Libraries
 from mythic import mythic, mythic_classes
@@ -271,8 +271,6 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
     except:
         rconn.mset({"last_file_id": 0})
         start_id = 0
-
-    start_id = 39
 
     nemesis_file_subscription = """
     subscription NemesisFileSubscription {
@@ -752,36 +750,50 @@ async def create_tag_types(mythic_instance: mythic_classes.Mythic):
 
 async def wait_for_service() -> None:
     """Wait for an HTTP session to be established with Mythic."""
-    while True:
-        mythic_sync_log.info(f"Attempting to connect to {MYTHIC_URL}")
-        async with aiohttp.ClientSession() as session:
-            async with session.get(MYTHIC_URL, ssl=False) as resp:
-                if resp.status != 200:
-                    mythic_sync_log.warning(
-                        "Expected 200 OK and received HTTP code %s while trying to connect to Mythic, trying again in %s seconds...",
-                        resp.status,
-                        WAIT_TIMEOUT,
-                    )
-                    await asyncio.sleep(WAIT_TIMEOUT)
-                    continue
-        return
+    retries = 5
+    while retries >= 0:
+        retries -= 1
+        if retries == 0:
+            mythic_sync_log.error("Out of retries for connecting to Mythic")
+            return False
+        mythic_sync_log.info(f"Attempting to connect to Mythic URL: {MYTHIC_URL}")
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=WAIT_TIMEOUT)) as session:
+                async with session.get(MYTHIC_URL, ssl=False) as resp:
+                    if resp.status != 200:
+                        mythic_sync_log.warning(
+                            "Expected 200 OK and received HTTP code %s while trying to connect to Mythic, trying again in %s seconds...",
+                            resp.status,
+                            WAIT_TIMEOUT,
+                        )
+                        await asyncio.sleep(WAIT_TIMEOUT)
+                        continue
+            return True
+        except asyncio.exceptions.TimeoutError as e:
+            mythic_sync_log.warning(f"Timeout error connecting to Mythic URL: '{MYTHIC_URL}'. Trying again in {WAIT_TIMEOUT} seconds, retries: {retries}.")
 
 
 async def wait_for_redis() -> None:
     """Wait for a connection to be established with Mythic's Redis container."""
     global rconn
-    while True:
+    retries = 5
+    while retries >= 0:
+        retries -= 1
+        if retries == 0:
+            mythic_sync_log.exception("Out of retries for connecting to Redis")
+            return False
         try:
             rconn = redis.Redis(host=REDIS_HOSTNAME, port=REDIS_PORT, db=1)
             # we're only using ints for our redis DB
             rconn.set_response_callback("GET", int)
-            return
+            return True
         except Exception:
             mythic_sync_log.exception(
-                "Encountered an exception while trying to connect to Redis, %s:%s, trying again in %s seconds...",
+                "Encountered an exception while trying to connect to Redis, %s:%s, trying again in %s seconds, retries: %s...",
                 REDIS_HOSTNAME,
                 REDIS_PORT,
                 WAIT_TIMEOUT,
+                retries
             )
             await asyncio.sleep(WAIT_TIMEOUT)
             continue
@@ -789,7 +801,13 @@ async def wait_for_redis() -> None:
 
 async def wait_for_authentication() -> mythic_classes.Mythic:
     """Wait for authentication with Mythic to complete."""
-    while True:
+    retries = 5
+    while retries >= 0:
+        retries -= 1
+        if retries == 0:
+            mythic_sync_log.exception("Out of retries for authenticating to Mythic")
+            return False
+
         # If ``MYTHIC_API_KEY`` is not set in the environment, then authenticate with user credentials
         if len(MYTHIC_API_KEY) == 0:
             mythic_sync_log.info(
@@ -804,23 +822,17 @@ async def wait_for_authentication() -> mythic_classes.Mythic:
                     server_ip=MYTHIC_IP,
                     server_port=MYTHIC_PORT,
                     ssl=True,
-                    timeout=-1,
                 )
-            except Exception:
-                mythic_sync_log.exception(
-                    "Encountered an exception while trying to authenticate to Mythic, trying again in %s seconds...",
-                    WAIT_TIMEOUT,
-                )
-                await asyncio.sleep(WAIT_TIMEOUT)
-                continue
-            try:
-                # await mythic.get_me(mythic=mythic_instance) # TODO: replace?
-                pass
-            except Exception:
-                mythic_sync_log.exception(
-                    "Encountered an exception while trying to authenticate to Mythic, trying again in %s seconds...",
-                    WAIT_TIMEOUT,
-                )
+            except Exception as e:
+                if hasattr(e, 'errors') and len(e.errors) > 0 and "message" in e.errors[0]:
+                    message = e.errors[0]["message"]
+                    mythic_sync_log.error(
+                        f"Encountered an exception while trying to authenticate to Mythic, trying again in {WAIT_TIMEOUT} seconds: '{message}'"
+                    )
+                else:
+                    mythic_sync_log.error(
+                        f"Encountered an exception while trying to authenticate to Mythic, trying again in {WAIT_TIMEOUT} seconds: {e}"
+                    )
                 await asyncio.sleep(WAIT_TIMEOUT)
                 continue
         elif MYTHIC_USERNAME == "" and MYTHIC_PASSWORD == "":
@@ -861,32 +873,77 @@ async def wait_for_authentication() -> mythic_classes.Mythic:
 async def wait_for_elasticsearch() -> None:
     """Wait for a connection to be established with Nemesis' Elasticsearch container."""
     global es_client
-    while True:
+
+    retries = 5
+    while retries >= 0:
+        retries -= 1
+        if retries == 0:
+            mythic_sync_log.error("Out of retries for reaching the Elasticsearch endpoint")
+            return False
         try:
-            es_client = Elasticsearch(ELASTICSEARCH_URL, basic_auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD), verify_certs=False)
-            es_client.info()
-            return
-        except Exception:
-            mythic_sync_log.exception(
-                "Encountered an exception while trying to connect to Elasticsearch %s, trying again in %s seconds...",
-                ELASTICSEARCH_URL,
-                WAIT_TIMEOUT,
-            )
+            get = requests.get(ELASTICSEARCH_URL, auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD))
+            status_code = get.status_code
+            if status_code == 200:
+                mythic_sync_log.info("Successfully reached the Elasticsearch endpoint")
+                break
+            elif status_code == 401:
+                mythic_sync_log.warning(f"Error reaching the Elasticsearch endpoint, code {status_code}, likely incorrect ELASTICSEARCH_USER / ELASTICSEARCH_PASSWORD")
+                return False
+            else:
+                mythic_sync_log.warning(
+                    f"Failed to reach the Elasticsearch endpoint {ELASTICSEARCH_URL}, status: {status_code}, retries: {retries}. Trying again in {WAIT_TIMEOUT} seconds"
+                    )
+        except requests.exceptions.RequestException as e:
+            mythic_sync_log.warning(
+                f"Exception reaching the Elasticsearch endpoint {ELASTICSEARCH_URL}. Trying again in {WAIT_TIMEOUT} seconds, retries: {retries}. Exception: {e}."
+                )
             await asyncio.sleep(WAIT_TIMEOUT)
             continue
+
+    try:
+        es_client = Elasticsearch(ELASTICSEARCH_URL, basic_auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD), verify_certs=False)
+        es_client.info()
+        mythic_sync_log.info("Successfully authenticated to the Elasticsearch endpoint")
+    except AuthenticationException as e:
+        mythic_sync_log.warning(f"Error authenticating to Elasticsearch, code {e.status_code}, likely incorrect ELASTICSEARCH_USER / ELASTICSEARCH_PASSWORD")
+        return False
+    except Exception as e:
+        mythic_sync_log.warning(
+            f"Exception authenticating to Elasticsearch endpoint {ELASTICSEARCH_URL}. Trying again in {WAIT_TIMEOUT} seconds, retries: {retries}. Exception: {e}"
+            )
+        return False
+
+    return True
 
 
 async def scripting():
     while True:
-        await wait_for_redis()
-        mythic_sync_log.info("Successfully connected to Redis")
-        await wait_for_elasticsearch()
-        mythic_sync_log.info("Successfully connected to Nemesis-Elasticsearch")
-        await wait_for_service()
-        mythic_sync_log.info(f"Successfully connected to {MYTHIC_URL}")
-        mythic_sync_log.info("Trying to authenticate to Mythic")
+
+        if await wait_for_redis():
+            mythic_sync_log.info("Successfully connected to Redis")
+        else:
+            await asyncio.sleep(WAIT_TIMEOUT)
+            continue
+
+        if await wait_for_elasticsearch():
+            mythic_sync_log.info("Successfully connected to Nemesis-Elasticsearch")
+        else:
+            await asyncio.sleep(WAIT_TIMEOUT)
+            continue
+
+        if await wait_for_service():
+            mythic_sync_log.info(f"Successfully connected to Mythic URL {MYTHIC_URL}")
+        else:
+            await asyncio.sleep(WAIT_TIMEOUT)
+            continue
+
         mythic_instance = await wait_for_authentication()
-        mythic_sync_log.info("Successfully authenticated to Mythic")
+        if mythic_instance:
+            mythic_sync_log.info("Successfully authenticated to Mythic")
+        else:
+            await asyncio.sleep(WAIT_TIMEOUT)
+            continue
+
         # create our initial tags
         mythic_sync_log.info("Creating tag types")
         await create_tag_types(mythic_instance)

@@ -15,11 +15,15 @@ MYTHIC_USERNAME=mythic_admin
 MYTHIC_PASSWORD=SuperSecretPassword
 REDIS_HOSTNAME=redis
 REDIS_PORT=6379
-NEMESIS_HTTP_SERVER=http://127.0.0.1:8000
+NEMESIS_HTTP_SERVER=http://172.16.111.187:8000
 NEMESIS_CREDS=nemesis:password
 ELASTICSEARCH_USER=elastic
 ELASTICSEARCH_PASSWORD=password
+MAX_FILE_SIZE=100000000
+EXPIRATION_DAYS=100
 ```
+
+**Make sure the `NEMESIS_HTTP_SERVER` and `MYTHIC_IP` variables do not reference localhost or 127.0.0.1! They need to be reachable from a Docker container.**
 
 Once the environment variables are setup, you can launch the service by using `docker-compose`:
 
@@ -27,18 +31,13 @@ Once the environment variables are setup, you can launch the service by using `d
 sudo docker-compose up --build
 ```
 
-### Verify Successful Start-Up
-
-
 ## Troubleshooting
 
 Logs can be seen from the docker container via `sudo docker logs mythic_nemesis_sync` and follow them with `sudo docker logs --follow mythic_nemesis_sync`.
 
 Ensure the host where `mythic_nemesis_sync` is running has network access to the Nemesis and Mythic servers.
 
-`mythic_nemesis_sync` uses an internal Redis database to sync what events have already been sent to Nemesis, avoiding duplicates.
-
-If the `mythic_nemesis_sync` service goes down, it is safe to stand it back up and avoid duplicates as long as nothing has forcefully stopped Mythic's Redis container.
+`mythic_nemesis_sync` uses an internal Redis database to sync what events have already been sent to Nemesis, avoiding duplicates. If the `mythic_nemesis_sync` service goes down, it *should* be safe to stand it back up - duplicates should be available long as nothing has forcefully stopped/deleted Mythic's Redis container.
 
 ## References
 
