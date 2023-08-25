@@ -41,6 +41,10 @@ Ensure the host where `mythic_nemesis_sync` is running has network access to the
 
 `mythic_nemesis_sync` uses an internal Redis database to sync what events have already been sent to Nemesis, avoiding duplicates. If the `mythic_nemesis_sync` service goes down, it *should* be safe to stand it back up - duplicates should be available long as nothing has forcefully stopped/deleted Mythic's Redis container.
 
+## Reprocessing Data
+
+The container uses Redis to keep a persistent store of Mythic data that's been submitted to Nemesis. If you want to reprocess data, set `CLEAR_REDIS=True` in settings.env to clear the Redis database. There will be a 30 second pause on startup with a warning message indicating aborting the standup will avoid clearing the database.
+
 ## References
 
 - [Mythic](https://github.com/its-a-feature/Mythic) - Multi-platform C2 Framework
