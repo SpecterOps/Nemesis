@@ -20,6 +20,7 @@ import nemesispb.nemesis_pb2 as pb
 import structlog
 import yara
 from binaryornot.check import is_binary
+from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.services.text_extractor import TextExtractorInterface
 from nemesiscommon.messaging import (MessageQueueConsumerInterface,
                                      MessageQueueProducerInterface)
@@ -39,6 +40,7 @@ logger = structlog.get_logger(module=__name__)
 class FileProcessor(TaskInterface):
     alerter: AlerterInterface
     storage: StorageInterface
+    db: NemesisDb
     text_extractor: TextExtractorInterface
 
     # URIs
@@ -75,6 +77,7 @@ class FileProcessor(TaskInterface):
         self,
         alerter: AlerterInterface,
         storage: StorageInterface,
+        db: NemesisDb,
         text_extractor: TextExtractorInterface,
         # URIs
         crack_list_uri: str,
@@ -107,6 +110,7 @@ class FileProcessor(TaskInterface):
     ):
         self.alerter = alerter
         self.storage = storage
+        self.db = db
         self.text_extractor = text_extractor
 
         self.crack_list_uri = crack_list_uri
@@ -272,6 +276,18 @@ class FileProcessor(TaskInterface):
         file_data.is_source_code = is_source_code
         file_data.nemesis_file_type = "unknown"
 
+        try:
+            file_previously_processed = (await self.db.is_file_processed(file_data.hashes.sha256))[0][0]
+        except:
+            file_previously_processed = False
+
+        if file_previously_processed:
+            await logger.ainfo(
+                "File has already been processed.",
+                file_name=file_data.name,
+                sha256=file_data.hashes.sha256,
+            )
+
         ###########################################################
         #
         # Nemesis-defined file format parsing
@@ -371,13 +387,13 @@ class FileProcessor(TaskInterface):
                     file_data.parsed_data.CopyFrom(parsed)
                     try:
                         if file_data.parsed_data.has_parsed_credentials:
-                            await self.alerter.file_data_alert(
-                                file_data=file_data,
-                                metadata=metadata,
-                                title="Parsed Credentials",
-                                text="File is a known type and has some form of parsed credentials!",
-                            )
-
+                            if not file_previously_processed:
+                                await self.alerter.file_data_alert(
+                                    file_data=file_data,
+                                    metadata=metadata,
+                                    title="Parsed Credentials",
+                                    text="File is a known type and has some form of parsed credentials!",
+                                )
                     except:
                         pass
 
@@ -470,11 +486,12 @@ class FileProcessor(TaskInterface):
 
                     if noseyparker_output and len(noseyparker_output.rule_matches) > 0:
                         file_data.noseyparker.CopyFrom(noseyparker_output)
-                        await self.alerter.file_data_alert(
-                            file_data=file_data,
-                            title="NoseyParker Results",
-                            metadata=metadata,
-                        )
+                        if not file_previously_processed:
+                            await self.alerter.file_data_alert(
+                                file_data=file_data,
+                                title="NoseyParker Results",
+                                metadata=metadata,
+                            )
                 except Exception as e:
                     await logger.aexception(e, message="Noseyparker scanning failed")
                     enrichments_failure.append(constants.E_NOSEYPARKER_SCAN)
@@ -492,11 +509,12 @@ class FileProcessor(TaskInterface):
 
                 file_data.contains_dpapi = True
 
-                await self.alerter.file_data_alert(
-                    file_data=file_data,
-                    metadata=metadata,
-                    title="DPAPI data present",
-                )
+                if not file_previously_processed:
+                    await self.alerter.file_data_alert(
+                        file_data=file_data,
+                        metadata=metadata,
+                        title="DPAPI data present",
+                    )
 
                 # carve any DPAPI blobs
                 carved = await helpers.carve_dpapi_blobs_from_file(file_path_on_disk, file_uuid_str, metadata)
@@ -590,12 +608,13 @@ class FileProcessor(TaskInterface):
                 urls = urls.replace(".", "[.]")
                 text += f"*Rule {rule} :* {urls}\n"
 
-            await self.alerter.file_data_alert(
-                file_data=file_data,
-                metadata=metadata,
-                title="Possible canaries detected",
-                text=text,
-            )
+            if not file_previously_processed:
+                await self.alerter.file_data_alert(
+                    file_data=file_data,
+                    metadata=metadata,
+                    title="Possible canaries detected",
+                    text=text,
+                )
 
         # run Yara on the file
         yara_results = await self.yara_opsec_scan(file_path_on_disk)
@@ -613,12 +632,13 @@ class FileProcessor(TaskInterface):
 
                 if alert_rules:
                     rule_matches_str = ", ".join(alert_rules)
-                    await self.alerter.file_data_alert(
-                        file_data=file_data,
-                        metadata=metadata,
-                        title="Yara rule match(es)",
-                        text=f"*Rules:* {rule_matches_str}",
-                    )
+                    if not file_previously_processed:
+                        await self.alerter.file_data_alert(
+                            file_data=file_data,
+                            metadata=metadata,
+                            title="Yara rule match(es)",
+                            text=f"*Rules:* {rule_matches_str}",
+                        )
 
         # if the file isn't a binary file (or is a Chromium history file)
         #   run NoseyParker on it for anything we can find
@@ -629,11 +649,12 @@ class FileProcessor(TaskInterface):
 
                 if noseyparker_output and len(noseyparker_output.rule_matches) > 0:
                     file_data.noseyparker.CopyFrom(noseyparker_output)
-                    await self.alerter.file_data_alert(
-                        file_data=file_data,
-                        title="NoseyParker Results",
-                        metadata=metadata,
-                    )
+                    if not file_previously_processed:
+                        await self.alerter.file_data_alert(
+                            file_data=file_data,
+                            title="NoseyParker Results",
+                            metadata=metadata,
+                        )
             except Exception as e:
                 await logger.aexception(e, message="Noseyparker scanning failed")
                 enrichments_failure.append(constants.E_NOSEYPARKER_SCAN)
@@ -672,33 +693,34 @@ class FileProcessor(TaskInterface):
                         enrichments_success.append(constants.E_DOTNET_ANALYSIS)
                         file_data.analysis.CopyFrom(dotnet_results["analysis"])
 
-                        try:
-                            if file_data.analysis.dotnet_analysis.has_deserialization:
-                                await self.alerter.file_data_alert(
-                                    file_data=file_data,
-                                    metadata=metadata,
-                                    title="Potential Deserialization Found",
-                                )
-                        except:
-                            pass
-                        try:
-                            if file_data.analysis.dotnet_analysis.has_cmd_execution:
-                                await self.alerter.file_data_alert(
-                                    file_data=file_data,
-                                    metadata=metadata,
-                                    title="Potential Command Execution Found",
-                                )
-                        except:
-                            pass
-                        try:
-                            if file_data.analysis.dotnet_analysis.has_remoting:
-                                await self.alerter.file_data_alert(
-                                    file_data=file_data,
-                                    metadata=metadata,
-                                    title="Potential Remoting Found",
-                                )
-                        except:
-                            pass
+                        if not file_previously_processed:
+                            try:
+                                if file_data.analysis.dotnet_analysis.has_deserialization:
+                                    await self.alerter.file_data_alert(
+                                        file_data=file_data,
+                                        metadata=metadata,
+                                        title="Potential Deserialization Found",
+                                    )
+                            except:
+                                pass
+                            try:
+                                if file_data.analysis.dotnet_analysis.has_cmd_execution:
+                                    await self.alerter.file_data_alert(
+                                        file_data=file_data,
+                                        metadata=metadata,
+                                        title="Potential Command Execution Found",
+                                    )
+                            except:
+                                pass
+                            try:
+                                if file_data.analysis.dotnet_analysis.has_remoting:
+                                    await self.alerter.file_data_alert(
+                                        file_data=file_data,
+                                        metadata=metadata,
+                                        title="Potential Remoting Found",
+                                    )
+                            except:
+                                pass
 
                         if "object_id" in dotnet_results["decompilation"] and dotnet_results["decompilation"]["object_id"] is not None:
                             file_data.extracted_source = dotnet_results["decompilation"]["object_id"]
@@ -707,11 +729,12 @@ class FileProcessor(TaskInterface):
                                 noseyparker_output = helpers.run_noseyparker_on_archive(temp_decomp_file.name)
                                 if noseyparker_output:
                                     file_data.noseyparker.CopyFrom(noseyparker_output)
-                                    await self.alerter.file_data_alert(
-                                        file_data=file_data,
-                                        title="NoseyParker Results",
-                                        metadata=metadata,
-                                    )
+                                    if not file_previously_processed:
+                                        await self.alerter.file_data_alert(
+                                            file_data=file_data,
+                                            title="NoseyParker Results",
+                                            metadata=metadata,
+                                        )
 
                 else:
                     enrichments_failure.append(constants.E_DOTNET_ANALYSIS)

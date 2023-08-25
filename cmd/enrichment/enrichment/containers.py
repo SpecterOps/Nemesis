@@ -14,8 +14,8 @@ from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.services.text_extractor import TikaTextExtractor
 from enrichment.settings import EnrichmentSettings
 from enrichment.tasks.chromium_cookie import ChromiumCookie
-from enrichment.tasks.dpapi.dpapi import Dpapi
 from enrichment.tasks.data_expunge import DataExpunge
+from enrichment.tasks.dpapi.dpapi import Dpapi
 from enrichment.tasks.elastic_connector import ElasticConnector
 from enrichment.tasks.file_processor import FileProcessor
 from enrichment.tasks.postgres_connector.postgres_connector import (
@@ -534,6 +534,7 @@ class Container(containers.DeclarativeContainer):
         FileProcessor,
         alerter_service,
         storage_service,
+        database,
         text_extractor,
         # URIs
         config.crack_list_uri,
