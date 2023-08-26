@@ -404,14 +404,17 @@ class PostgresConnector(TaskInterface):
 
         for data in event.data:
             path = data.path
-            if not path.endswith("\\"):
-                path = f"{path}\\"
 
-            if re.match("^[a-zA-Z]{1}:\\.*", path):
+            if path.contains("\\") and not path.endswith("\\"):
+                path = f"{path}\\"
+            elif path.contains("/") and not path.endswith("/"):
+                path = f"{path}/"
+
+            if re.match(r"^([a-zA-Z]{1}:){0,1}[\\\/].*", path):
                 # this is a file system path
 
                 for item in data.items:
-                    if item.endswith("\\"):
+                    if item.endswith("\\") or item.endswith("/"):
                         object_type = "folder"
                     else:
                         object_type = "file"
@@ -456,7 +459,7 @@ class PostgresConnector(TaskInterface):
             else:
                 extension = ""
 
-            if re.match(r"^[a-zA-Z]{1}:[\\/].*", path):
+            if re.match(r"^([a-zA-Z]{1}:){0,1}[\\\/].*", path):
                 # this is a file system path
 
                 f = FileInfo(

@@ -10,6 +10,8 @@ You could probably do 3 processors and 10 GB RAM, just might need to change how 
 
 Additionally, only x64 architecture has been tested and is supported. ARM platforms (e.g., Mac devives with M* chips) are not currently supported but we intend to support these in the future.
 
+**Do not install the following requirements as root! Minikube is particular does not like to be run as root.**
+
 # Software Requirements
 **The following requirements need to be installed:**
 
@@ -24,6 +26,7 @@ Docker and docker-compose
 ```bash
 sudo apt-get update
 sudo apt-get install curl
+sudo mkdir /etc/apt/keyrings/ 2>/dev/null
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
 

@@ -10,15 +10,19 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import aiohttp
+import gql
 import redis
 import requests
-from elasticsearch import Elasticsearch
+from elasticsearch import AuthenticationException, Elasticsearch
 # Mythic Sync Libraries
 # 3rd Party Libraries
 from mythic import mythic, mythic_classes
 from requests.auth import HTTPBasicAuth
 
-logging.basicConfig(format="%(levelname)s:%(message)s")
+# logging.basicConfig(format="%(levelname)s:%(message)s")
+logging.basicConfig(
+    format='%(levelname)s %(asctime)s %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S')
 mythic_sync_log = logging.getLogger("mythic_sync_logger")
 mythic_sync_log.setLevel(logging.DEBUG)
 
@@ -52,6 +56,15 @@ REDIS_PORT = os.environ.get("REDIS_PORT")
 if REDIS_PORT is None:
     mythic_sync_log.error("REDIS_PORT must be supplied!\n")
     sys.exit(1)
+
+# If we want to reprocess everything, signal we want to clear Redis after startup
+clear_redis = False
+try:
+    clear_redis_str = f"{os.environ.get('CLEAR_REDIS')}".lower()
+    if clear_redis_str.startswith("t"):
+        clear_redis = True
+except:
+    pass
 
 # Redis connector
 rconn = None
@@ -116,7 +129,10 @@ def nemesis_post_data(data):
         basic = HTTPBasicAuth(basic_auth_parts[0], basic_auth_parts[1])
         r = requests.post(f"{NEMESIS_URL}/data", auth=basic, json=data)
         if r.status_code != 200:
-            mythic_sync_log.error(f"[nemesis_post_data] Error posting to Nemesis URL {NEMESIS_URL}/data ({r.status_code}) : {r.json()}")
+            try:
+                mythic_sync_log.error(f"[nemesis_post_data] Error posting to Nemesis URL {NEMESIS_URL}/data ({r.status_code}) : {r.text}")
+            except:
+                mythic_sync_log.error(f"[nemesis_post_data] Error posting to Nemesis URL {NEMESIS_URL}/data ({r.status_code})")
             return None
         else:
             return r.json()
@@ -262,17 +278,11 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
         The Mythic instance to be used to query the Mythic database
     """
 
-    # # clear Redis, for testing
-    # for key in rconn.keys('*'):
-    #     rconn.delete(key)
-
     try:
         start_id = rconn.get("last_file_id")
     except:
         rconn.mset({"last_file_id": 0})
         start_id = 0
-
-    start_id = 39
 
     nemesis_file_subscription = """
     subscription NemesisFileSubscription {
@@ -300,7 +310,7 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
         start_id
     )
 
-    mythic_sync_log.info("Starting subscription for file data")
+    mythic_sync_log.info(f"Starting subscription for file data, start_id: {start_id}")
     async for data in mythic.subscribe_custom_query(mythic=mythic_instance, query=nemesis_file_subscription):
         try:
             file_meta = data["filemeta_stream"][0]
@@ -360,85 +370,87 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
                 file_data["size"] = file_size
                 file_data["object_id"] = nemesis_file_id
 
-                # post to the Nemesis data API (`data`` needs to be an array of dictionaries!)
+                # post to the Nemesis data API (`data` needs to be an array of dictionaries!)
                 resp = nemesis_post_data({"metadata": metadata, "data": [file_data]})
 
-                message_id = resp["object_id"]
-                mythic_sync_log.info(f"Nemesis message_id for submitted file_data: {message_id}")
+                # if the post works we get JSON/non-none
+                if resp:
+                    message_id = resp["object_id"]
+                    mythic_sync_log.info(f"Nemesis message_id for submitted file_data: {message_id}")
 
-                # mark this file as processed in Redis now that it was submitted
-                rconn.mset({redis_key: 1})
+                    # mark this file as processed in Redis now that it was submitted
+                    rconn.mset({redis_key: 1})
 
-                # mark this Mythic ID as the last processed file ID
-                last_file_id = rconn.get("last_file_id")
-                if file_id > last_file_id:
-                    rconn.mset({"last_file_id": file_id})
+                    # mark this Mythic ID as the last processed file ID
+                    last_file_id = rconn.get("last_file_id")
+                    if file_id > last_file_id:
+                        rconn.mset({"last_file_id": file_id})
 
-                # get the metadata for the processed file from Elasticsearch
-                file_metadata = await get_processed_file_metadata(message_id)
+                    # get the metadata for the processed file from Elasticsearch
+                    file_metadata = await get_processed_file_metadata(message_id)
 
-                if not file_metadata:
-                    mythic_sync_log.error("Couldn't retrieve metadata for processed file!")
-                    continue
+                    if not file_metadata:
+                        mythic_sync_log.error("Couldn't retrieve metadata for processed file!")
+                        continue
 
-                mythic_sync_log.debug(f"File metadata for {message_id} retrieved from Elastic")
+                    mythic_sync_log.debug(f"File metadata for {message_id} retrieved from Elastic")
 
-                # this is any metadata that we're doing to display as JSON for the "file_metadata" tag
-                file_metadata_display = {}
-                if "size" in file_metadata and file_metadata["size"]:
-                    file_metadata_display["size"] = file_metadata["size"]
-                if "isBinary" in file_metadata and file_metadata["isBinary"]:
-                    file_metadata_display["is_binary"] = "true"
-                if "isOfficeDoc" in file_metadata and file_metadata["isOfficeDoc"]:
-                    file_metadata_display["is_office_doc"] = "true"
-                if "magicType" in file_metadata and file_metadata["magicType"]:
-                    file_metadata_display["magic_type"] = file_metadata["magicType"]
-                if "nemesisFileType" in file_metadata and file_metadata["nemesisFileType"]:
-                    file_metadata_display["nemesis_file_type"] = file_metadata["nemesisFileType"]
+                    # this is any metadata that we're doing to display as JSON for the "file_metadata" tag
+                    file_metadata_display = {}
+                    if "size" in file_metadata and file_metadata["size"]:
+                        file_metadata_display["size"] = file_metadata["size"]
+                    if "isBinary" in file_metadata and file_metadata["isBinary"]:
+                        file_metadata_display["is_binary"] = "true"
+                    if "isOfficeDoc" in file_metadata and file_metadata["isOfficeDoc"]:
+                        file_metadata_display["is_office_doc"] = "true"
+                    if "magicType" in file_metadata and file_metadata["magicType"]:
+                        file_metadata_display["magic_type"] = file_metadata["magicType"]
+                    if "nemesisFileType" in file_metadata and file_metadata["nemesisFileType"]:
+                        file_metadata_display["nemesis_file_type"] = file_metadata["nemesisFileType"]
 
-                if "objectIdURL" in file_metadata and file_metadata["objectIdURL"]:
-                    file_metadata_display["Download File"] = file_metadata["objectIdURL"]
-                if "extractedSourceURL" in file_metadata and file_metadata["extractedSourceURL"]:
-                    file_metadata_display["Download Decompiled Source"] = file_metadata["extractedSourceURL"]
-                if "convertedPdfURL" in file_metadata and file_metadata["convertedPdfURL"]:
-                    file_metadata_display["View Converted PDF"] = file_metadata["convertedPdfURL"]
-                if "extractedPlaintextURL" in file_metadata and file_metadata["extractedPlaintextURL"]:
-                    file_metadata_display["Extracted Plaintext (Elastic)"] = file_metadata["extractedPlaintextURL"]
+                    if "objectIdURL" in file_metadata and file_metadata["objectIdURL"]:
+                        file_metadata_display["Download File"] = file_metadata["objectIdURL"]
+                    if "extractedSourceURL" in file_metadata and file_metadata["extractedSourceURL"]:
+                        file_metadata_display["Download Decompiled Source"] = file_metadata["extractedSourceURL"]
+                    if "convertedPdfURL" in file_metadata and file_metadata["convertedPdfURL"]:
+                        file_metadata_display["View Converted PDF"] = file_metadata["convertedPdfURL"]
+                    if "extractedPlaintextURL" in file_metadata and file_metadata["extractedPlaintextURL"]:
+                        file_metadata_display["Extracted Plaintext (Elastic)"] = file_metadata["extractedPlaintextURL"]
 
-                # TODO: fixate the index ID
-                kibana_file_link = f"{KIBANA_URL}/app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{nemesis_file_id}')))))&_g=(time:(from:now-1y%2Fd,to:now))"
+                    # TODO: fixate the index ID
+                    kibana_file_link = f"{KIBANA_URL}/app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{nemesis_file_id}')))))&_g=(time:(from:now-1y%2Fd,to:now))"
 
-                # update the comment for the file in Mythic to indicate it was processed
-                await mythic.update_file_comment(mythic_instance, file_uuid=mythic_file_id, comment="Processed by Nemesis 😈")
+                    # update the comment for the file in Mythic to indicate it was processed
+                    await mythic.update_file_comment(mythic_instance, file_uuid=mythic_file_id, comment="Processed by Nemesis 😈")
 
-                # add a basic metadata Mythic tag
-                await add_mythic_tag(mythic_instance, "file_metadata", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=json.dumps(file_metadata_display))
+                    # add a basic metadata Mythic tag
+                    await add_mythic_tag(mythic_instance, "file_metadata", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=json.dumps(file_metadata_display))
 
-                # custom tags
-                if ("containsDpapi" in file_metadata) and (file_metadata["containsDpapi"]):
-                    await add_mythic_tag(mythic_instance, "contains_dpapi", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
+                    # custom tags
+                    if ("containsDpapi" in file_metadata) and (file_metadata["containsDpapi"]):
+                        await add_mythic_tag(mythic_instance, "contains_dpapi", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
 
-                if ("parsedData" in file_metadata) and ("hasParsedCredentials" in file_metadata["parsedData"]) and file_metadata["parsedData"]["hasParsedCredentials"]:
-                    await add_mythic_tag(mythic_instance, "parsed_credentials", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
+                    if ("parsedData" in file_metadata) and ("hasParsedCredentials" in file_metadata["parsedData"]) and file_metadata["parsedData"]["hasParsedCredentials"]:
+                        await add_mythic_tag(mythic_instance, "parsed_credentials", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
 
-                if ("analysis" in file_metadata) and ("dotnetDeserialization" in file_metadata["analysis"]) and (file_metadata["analysis"]["dotnetDeserialization"]["hasDeserialization"] == 1):
-                    await add_mythic_tag(mythic_instance, "deserialization", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
+                    if ("analysis" in file_metadata) and ("dotnetDeserialization" in file_metadata["analysis"]) and (file_metadata["analysis"]["dotnetDeserialization"]["hasDeserialization"] == 1):
+                        await add_mythic_tag(mythic_instance, "deserialization", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
 
-                if ("parsedData" in file_metadata) and ("isEncrypted" in file_metadata["parsedData"]) and file_metadata["parsedData"]["isEncrypted"]:
-                    await add_mythic_tag(mythic_instance, "encrypted", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
+                    if ("parsedData" in file_metadata) and ("isEncrypted" in file_metadata["parsedData"]) and file_metadata["parsedData"]["isEncrypted"]:
+                        await add_mythic_tag(mythic_instance, "encrypted", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
 
-                if ("yaraMatches" in file_metadata) and (file_metadata["yaraMatches"]):
-                    rule_names = ", ".join(file_metadata["yaraMatches"])
-                    data = json.dumps({"rule_names": rule_names})
-                    await add_mythic_tag(mythic_instance, "yara_matches", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=data)
+                    if ("yaraMatches" in file_metadata) and (file_metadata["yaraMatches"]):
+                        rule_names = ", ".join(file_metadata["yaraMatches"])
+                        data = json.dumps({"rule_names": rule_names})
+                        await add_mythic_tag(mythic_instance, "yara_matches", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=data)
 
-                if ("noseyparker" in file_metadata) and (file_metadata["noseyparker"]):
-                    rule_names_dict = {}
-                    for match in file_metadata["noseyparker"]["ruleMatches"]:
-                        rule_names_dict[match["ruleName"]] = True
-                    rule_names = ", ".join(rule_names_dict.keys())
-                    data = json.dumps({"rule_names": rule_names})
-                    await add_mythic_tag(mythic_instance, "noseyparker", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=data)
+                    if ("noseyparker" in file_metadata) and (file_metadata["noseyparker"]):
+                        rule_names_dict = {}
+                        for match in file_metadata["noseyparker"]["ruleMatches"]:
+                            rule_names_dict[match["ruleName"]] = True
+                        rule_names = ", ".join(rule_names_dict.keys())
+                        data = json.dumps({"rule_names": rule_names})
+                        await add_mythic_tag(mythic_instance, "noseyparker", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=data)
 
         except Exception:
             mythic_sync_log.exception(
@@ -474,6 +486,15 @@ async def handle_filebrowser(mythic_instance: mythic_classes.Mythic) -> None:
             parent_path_text
             timestamp
             can_have_children
+            task {
+                callback {
+                    agent_callback_id
+                    operation {
+                        name
+                    }
+                }
+                id
+            }
             metadata
         }
     }
@@ -481,7 +502,7 @@ async def handle_filebrowser(mythic_instance: mythic_classes.Mythic) -> None:
         start_id
     )
 
-    mythic_sync_log.info("Starting subscription for file browser information")
+    mythic_sync_log.info(f"Starting subscription for file browser information, start_id: {start_id}")
     async for data in mythic.subscribe_custom_query(mythic=mythic_instance, query=nemesis_filebrowser_subscription):
 
         # group by the agent ID
@@ -492,12 +513,12 @@ async def handle_filebrowser(mythic_instance: mythic_classes.Mythic) -> None:
         for file in files:
             mythic_id = file["id"]
             redis_key = f"filebrowser{mythic_id}"
-
             try:
                 redis_entry_id = rconn.get(redis_key)
             except:
                 redis_entry_id = None
 
+            # if this key is _not_ already processed
             if not redis_entry_id:
                 callback_id = file["task"]["callback"]["agent_callback_id"]
 
@@ -507,7 +528,7 @@ async def handle_filebrowser(mythic_instance: mythic_classes.Mythic) -> None:
                     metadata["agent_id"] = callback_id
                     metadata["agent_type"] = "mythic"
                     metadata["automated"] = True
-                    metadata["data_type"] = "process"
+                    metadata["data_type"] = "file_information"
                     metadata["expiration"] = convert_timestamp(file["timestamp"], EXPIRATION_DAYS)
                     metadata["source"] = file["host"]
                     metadata["project"] = file["task"]["callback"]["operation"]["name"]
@@ -519,24 +540,46 @@ async def handle_filebrowser(mythic_instance: mythic_classes.Mythic) -> None:
 
                 file_data = {}
                 file_data["path"] = file["full_path_text"].replace("\\", "/")
-                file_data["size"] = file["metadata"]["size"]
 
-                if file["can_have_children"]:
+                if "metadata" in file and "size" in file["metadata"]:
+                    file_data["size"] = file["metadata"]["size"]
+
+                if "can_have_children" in file and file["can_have_children"]:
                     file_data["type"] = "folder"
                 else:
                     file_data["type"] = "file"
 
-                if "access_time" in file["metadata"] and file["metadata"]["access_time"]:
-                    file_data["access_time"] = convert_timestamp(file["metadata"]["access_time"])
-                if "modify_time" in file["metadata"] and file["metadata"]["modify_time"]:
-                    file_data["modification_time"] = convert_timestamp(file["metadata"]["modify_time"])
+                if "metadata" in file and "access_time" in file["metadata"] and file["metadata"]["access_time"]:
+                    access_time = file["metadata"]["access_time"]
+                    if isinstance(access_time, int):
+                        file_data["access_time"] = datetime.fromtimestamp(access_time // 1000).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                    else:
+                        file_data["access_time"] = convert_timestamp(access_time)
+                if "metadata" in file and "modify_time" in file["metadata"] and file["metadata"]["modify_time"]:
+                    modify_time = file["metadata"]["modify_time"]
+                    if isinstance(modify_time, int):
+                        file_data["modification_time"] = datetime.fromtimestamp(modify_time // 1000).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                    else:
+                        file_data["modification_time"] = convert_timestamp(modify_time)
 
-                # TODO: translate file["metadata"]["permissions"] to sddl
+                # TODO: translate file["metadata"]["permissions"] to sddl for Windows machines, if possible
+
+                # handle *nix permissions
+                if "metadata" in file and "permissions" in file["metadata"] and len(file["metadata"]["permissions"]) > 0 \
+                    and "permissions" in file["metadata"]["permissions"][0] and file["metadata"]["permissions"][0]["permissions"]:
+                    try:
+                        persmission_json = json.loads(file["metadata"]["permissions"][0]["permissions"])
+                        if "user" in persmission_json:
+                            owner = persmission_json["user"]
+                            file_data["owner"] = owner
+                    except Exception as e:
+                        pass
 
                 all_data[callback_id]["data"].append(file_data)
 
                 # mark this file browser entry as seen
                 # TODO: does this need to be after the nemesis_post_data call?
+                #       but when how do we handle last_filebrowser_id...
                 rconn.mset({redis_key: 1})
 
                 # mark this Mythic ID as the last processed process ID
@@ -547,7 +590,10 @@ async def handle_filebrowser(mythic_instance: mythic_classes.Mythic) -> None:
         # for each unique agent ID, issue one request with all batched file browser information
         #   but using the same metadata entry
         for key in all_data:
-            nemesis_post_data(all_data[key])
+            resp = nemesis_post_data(all_data[key])
+            if resp:
+                message_id = resp["object_id"]
+                mythic_sync_log.info(f"Nemesis message_id for submitted file listing data: {message_id}")
 
 
 async def handle_process(mythic_instance: mythic_classes.Mythic, chunk_size: int = 100) -> None:
@@ -560,10 +606,6 @@ async def handle_process(mythic_instance: mythic_classes.Mythic, chunk_size: int
     ``chunk_size``
         The number of process results to handle at a time.
     """
-
-    # # clear Redis, for testing
-    # for key in rconn.keys("*"):
-    #     rconn.delete(key)
 
     try:
         start_id = rconn.get("last_process_id")
@@ -590,7 +632,7 @@ async def handle_process(mythic_instance: mythic_classes.Mythic, chunk_size: int
     }
     """ % (chunk_size, start_id)
 
-    mythic_sync_log.info("Starting subscription for process data")
+    mythic_sync_log.info(f"Starting subscription for process data, start_id: {start_id}")
     async for data in mythic.subscribe_custom_query(mythic=mythic_instance, query=nemesis_process_subscription):
 
         # group by the callback ID
@@ -666,6 +708,7 @@ async def handle_process(mythic_instance: mythic_classes.Mythic, chunk_size: int
 
                 # mark this process entry as seen
                 # TODO: does this need to be after the nemesis_post_data call?
+                #       but when how do we handle last_filebrowser_id...
                 rconn.mset({redis_key: 1})
 
                 # mark this Mythic ID as the last processed process ID
@@ -677,44 +720,45 @@ async def handle_process(mythic_instance: mythic_classes.Mythic, chunk_size: int
         #   but using the same metadata entry
         for key in all_data:
             resp = nemesis_post_data(all_data[key])
-            message_id = resp["object_id"]
-            mythic_sync_log.info(f"Nemesis message_id for submitted process data: {message_id}")
+            if resp:
+                message_id = resp["object_id"]
+                mythic_sync_log.info(f"Nemesis message_id for submitted process data: {message_id}")
 
-            # get the metadata for the processed file from Elasticsearch
-            nemesis_processes = await get_process_metadata(message_id, chunk_size)
+                # get the metadata for the processed file from Elasticsearch
+                nemesis_processes = await get_process_metadata(message_id, chunk_size)
 
-            for nemesis_process in nemesis_processes:
-                if "name" in nemesis_process["origin"]:
-                    name = nemesis_process["origin"]["name"]
-                else:
-                    name = ""
+                for nemesis_process in nemesis_processes:
+                    if "name" in nemesis_process["origin"]:
+                        name = nemesis_process["origin"]["name"]
+                    else:
+                        name = ""
 
-                if "processId" in nemesis_process["origin"]:
-                    process_id = nemesis_process["origin"]["processId"]
-                else:
-                    process_id = ""
+                    if "processId" in nemesis_process["origin"]:
+                        process_id = nemesis_process["origin"]["processId"]
+                    else:
+                        process_id = ""
 
-                tag_calls = []
-                key = f"{name}{process_id}"
-                if key in mythic_process_lookup_table[callback_id]:
-                    category = nemesis_process["category"]["category"]
+                    tag_calls = []
+                    key = f"{name}{process_id}"
+                    if key in mythic_process_lookup_table[callback_id]:
+                        category = nemesis_process["category"]["category"]
 
-                    if category != "Unknown":
-                        mythictree_id = mythic_process_lookup_table[callback_id][key]
+                        if category != "Unknown":
+                            mythictree_id = mythic_process_lookup_table[callback_id][key]
 
-                        if "description" in nemesis_process["category"]:
-                            description = nemesis_process["category"]["description"]
-                            data = json.dumps({"description": description})
-                        else:
-                            data = ""
+                            if "description" in nemesis_process["category"]:
+                                description = nemesis_process["category"]["description"]
+                                data = json.dumps({"description": description})
+                            else:
+                                data = ""
 
-                        tag_calls.append(add_mythic_tag(mythic_instance, category, mythictree_id=mythictree_id, data=data))
+                            tag_calls.append(add_mythic_tag(mythic_instance, category, mythictree_id=mythictree_id, data=data))
 
-                await asyncio.gather(*tag_calls)
+                    await asyncio.gather(*tag_calls)
 
 
 async def add_mythic_tag(mythic_instance: mythic_classes.Mythic, tag_name: str, source: str = "Nemesis", filemeta_id: int = -1, mythictree_id: int = -1, task_id: int = -1, url: str = "", data: str = ""):
-    """Adds a file or process tag from an existing tag type."""
+    """Adds a file or process tag to Mythic from an existing created tag type."""
 
     if filemeta_id != -1:
         filemeta_ids = [filemeta_id]
@@ -752,36 +796,55 @@ async def create_tag_types(mythic_instance: mythic_classes.Mythic):
 
 async def wait_for_service() -> None:
     """Wait for an HTTP session to be established with Mythic."""
-    while True:
-        mythic_sync_log.info(f"Attempting to connect to {MYTHIC_URL}")
-        async with aiohttp.ClientSession() as session:
-            async with session.get(MYTHIC_URL, ssl=False) as resp:
-                if resp.status != 200:
-                    mythic_sync_log.warning(
-                        "Expected 200 OK and received HTTP code %s while trying to connect to Mythic, trying again in %s seconds...",
-                        resp.status,
-                        WAIT_TIMEOUT,
-                    )
-                    await asyncio.sleep(WAIT_TIMEOUT)
-                    continue
-        return
+    retries = 5
+    while retries >= 0:
+        retries -= 1
+        if retries == 0:
+            mythic_sync_log.error("Out of retries for connecting to Mythic")
+            return False
+        mythic_sync_log.info(f"Attempting to connect to Mythic URL: {MYTHIC_URL}")
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=WAIT_TIMEOUT)) as session:
+                async with session.get(MYTHIC_URL, ssl=False) as resp:
+                    if resp.status != 200:
+                        mythic_sync_log.warning(
+                            "Expected 200 OK and received HTTP code %s while trying to connect to Mythic, trying again in %s seconds...",
+                            resp.status,
+                            WAIT_TIMEOUT,
+                        )
+                        await asyncio.sleep(WAIT_TIMEOUT)
+                        continue
+            return True
+        except asyncio.exceptions.TimeoutError as e:
+            mythic_sync_log.warning(f"Timeout error connecting to Mythic URL: '{MYTHIC_URL}'. Trying again in {WAIT_TIMEOUT} seconds, retries: {retries}.")
 
 
 async def wait_for_redis() -> None:
     """Wait for a connection to be established with Mythic's Redis container."""
     global rconn
-    while True:
+    retries = 5
+    while retries >= 0:
+        retries -= 1
+        if retries == 0:
+            mythic_sync_log.exception("Out of retries for connecting to Redis")
+            return False
         try:
             rconn = redis.Redis(host=REDIS_HOSTNAME, port=REDIS_PORT, db=1)
             # we're only using ints for our redis DB
             rconn.set_response_callback("GET", int)
-            return
+            if clear_redis:
+                mythic_sync_log.warning("CLEAR_REDIS env variable set, clearing Redis database in 30 seconds (stop standup to cancel)...")
+                await asyncio.sleep(30)
+                for key in rconn.keys('*'):
+                    rconn.delete(key)
+            return True
         except Exception:
             mythic_sync_log.exception(
-                "Encountered an exception while trying to connect to Redis, %s:%s, trying again in %s seconds...",
+                "Encountered an exception while trying to connect to Redis, %s:%s, trying again in %s seconds, retries: %s...",
                 REDIS_HOSTNAME,
                 REDIS_PORT,
                 WAIT_TIMEOUT,
+                retries
             )
             await asyncio.sleep(WAIT_TIMEOUT)
             continue
@@ -789,7 +852,13 @@ async def wait_for_redis() -> None:
 
 async def wait_for_authentication() -> mythic_classes.Mythic:
     """Wait for authentication with Mythic to complete."""
-    while True:
+    retries = 5
+    while retries >= 0:
+        retries -= 1
+        if retries == 0:
+            mythic_sync_log.exception("Out of retries for authenticating to Mythic")
+            return False
+
         # If ``MYTHIC_API_KEY`` is not set in the environment, then authenticate with user credentials
         if len(MYTHIC_API_KEY) == 0:
             mythic_sync_log.info(
@@ -804,22 +873,18 @@ async def wait_for_authentication() -> mythic_classes.Mythic:
                     server_ip=MYTHIC_IP,
                     server_port=MYTHIC_PORT,
                     ssl=True,
-                    timeout=-1,
+                    logging_level=logging.ERROR,
+                    timeout=-1
                 )
-            except Exception:
-                mythic_sync_log.exception(
-                    "Encountered an exception while trying to authenticate to Mythic, trying again in %s seconds...",
-                    WAIT_TIMEOUT,
+            except gql.transport.exceptions.TransportQueryError as e:
+                mythic_sync_log.error(
+                    f"Encountered an exception while trying to authenticate to Mythic, trying again in {WAIT_TIMEOUT} seconds: '{e.errors[0]['message']}'"
                 )
                 await asyncio.sleep(WAIT_TIMEOUT)
                 continue
-            try:
-                # await mythic.get_me(mythic=mythic_instance) # TODO: replace?
-                pass
-            except Exception:
-                mythic_sync_log.exception(
-                    "Encountered an exception while trying to authenticate to Mythic, trying again in %s seconds...",
-                    WAIT_TIMEOUT,
+            except Exception as e:
+                mythic_sync_log.error(
+                    f"Encountered an exception while trying to authenticate to Mythic, trying again in {WAIT_TIMEOUT} seconds: {e}"
                 )
                 await asyncio.sleep(WAIT_TIMEOUT)
                 continue
@@ -844,13 +909,18 @@ async def wait_for_authentication() -> mythic_classes.Mythic:
                     server_ip=MYTHIC_IP,
                     server_port=MYTHIC_PORT,
                     ssl=True,
-                    global_timeout=-1,
+                    logging_level=logging.ERROR,
+                    timeout=-1
                 )
-                # await mythic.get_me(mythic=mythic_instance) # TODO: replace?
-            except Exception:
-                mythic_sync_log.exception(
-                    "Failed to authenticate with the Mythic API token, trying again in %s seconds...",
-                    WAIT_TIMEOUT,
+            except gql.transport.exceptions.TransportQueryError as e:
+                mythic_sync_log.error(
+                    f"Encountered an exception while trying to authenticate to Mythic with an API token, trying again in {WAIT_TIMEOUT} seconds: '{e.errors[0]['message']}'"
+                )
+                await asyncio.sleep(WAIT_TIMEOUT)
+                continue
+            except Exception as e:
+                mythic_sync_log.error(
+                    f"Encountered an exception while trying to authenticate to Mythic with an API token, trying again in {WAIT_TIMEOUT} seconds: {e}"
                 )
                 await asyncio.sleep(WAIT_TIMEOUT)
                 continue
@@ -861,32 +931,77 @@ async def wait_for_authentication() -> mythic_classes.Mythic:
 async def wait_for_elasticsearch() -> None:
     """Wait for a connection to be established with Nemesis' Elasticsearch container."""
     global es_client
-    while True:
+
+    retries = 5
+    while retries >= 0:
+        retries -= 1
+        if retries == 0:
+            mythic_sync_log.error("Out of retries for reaching the Elasticsearch endpoint")
+            return False
         try:
-            es_client = Elasticsearch(ELASTICSEARCH_URL, basic_auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD), verify_certs=False)
-            es_client.info()
-            return
-        except Exception:
-            mythic_sync_log.exception(
-                "Encountered an exception while trying to connect to Elasticsearch %s, trying again in %s seconds...",
-                ELASTICSEARCH_URL,
-                WAIT_TIMEOUT,
-            )
+            get = requests.get(ELASTICSEARCH_URL, auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD))
+            status_code = get.status_code
+            if status_code == 200:
+                mythic_sync_log.info("Successfully reached the Elasticsearch endpoint")
+                break
+            elif status_code == 401:
+                mythic_sync_log.warning(f"Error reaching the Elasticsearch endpoint, code {status_code}, likely incorrect ELASTICSEARCH_USER / ELASTICSEARCH_PASSWORD")
+                return False
+            else:
+                mythic_sync_log.warning(
+                    f"Failed to reach the Elasticsearch endpoint {ELASTICSEARCH_URL}, status: {status_code}, retries: {retries}. Trying again in {WAIT_TIMEOUT} seconds"
+                    )
+        except requests.exceptions.RequestException as e:
+            mythic_sync_log.warning(
+                f"Exception reaching the Elasticsearch endpoint {ELASTICSEARCH_URL}. Trying again in {WAIT_TIMEOUT} seconds, retries: {retries}. Exception: {e}."
+                )
             await asyncio.sleep(WAIT_TIMEOUT)
             continue
+
+    try:
+        es_client = Elasticsearch(ELASTICSEARCH_URL, basic_auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD), verify_certs=False)
+        es_client.info()
+        mythic_sync_log.info("Successfully authenticated to the Elasticsearch endpoint")
+    except AuthenticationException as e:
+        mythic_sync_log.warning(f"Error authenticating to Elasticsearch, code {e.status_code}, likely incorrect ELASTICSEARCH_USER / ELASTICSEARCH_PASSWORD")
+        return False
+    except Exception as e:
+        mythic_sync_log.warning(
+            f"Exception authenticating to Elasticsearch endpoint {ELASTICSEARCH_URL}. Trying again in {WAIT_TIMEOUT} seconds, retries: {retries}. Exception: {e}"
+            )
+        return False
+
+    return True
 
 
 async def scripting():
     while True:
-        await wait_for_redis()
-        mythic_sync_log.info("Successfully connected to Redis")
-        await wait_for_elasticsearch()
-        mythic_sync_log.info("Successfully connected to Nemesis-Elasticsearch")
-        await wait_for_service()
-        mythic_sync_log.info(f"Successfully connected to {MYTHIC_URL}")
-        mythic_sync_log.info("Trying to authenticate to Mythic")
+
+        if await wait_for_redis():
+            mythic_sync_log.info("Successfully connected to Redis")
+        else:
+            await asyncio.sleep(WAIT_TIMEOUT)
+            continue
+
+        if await wait_for_elasticsearch():
+            mythic_sync_log.info("Successfully connected to Nemesis-Elasticsearch")
+        else:
+            await asyncio.sleep(WAIT_TIMEOUT)
+            continue
+
+        if await wait_for_service():
+            mythic_sync_log.info(f"Successfully connected to Mythic URL {MYTHIC_URL}")
+        else:
+            await asyncio.sleep(WAIT_TIMEOUT)
+            continue
+
         mythic_instance = await wait_for_authentication()
-        mythic_sync_log.info("Successfully authenticated to Mythic")
+        if mythic_instance:
+            mythic_sync_log.info("Successfully authenticated to Mythic")
+        else:
+            await asyncio.sleep(WAIT_TIMEOUT)
+            continue
+
         # create our initial tags
         mythic_sync_log.info("Creating tag types")
         await create_tag_types(mythic_instance)
@@ -895,11 +1010,12 @@ async def scripting():
         try:
             _ = await asyncio.gather(
                 handle_file(mythic_instance=mythic_instance),
-                # handle_process(mythic_instance=mythic_instance),
-                # handle_filebrowser(mythic_instance=mythic_instance),
+                handle_process(mythic_instance=mythic_instance),
+                handle_filebrowser(mythic_instance=mythic_instance),
             )
         except Exception:
             mythic_sync_log.exception("Encountered an exception while subscribing to tasks and responses, restarting...")
 
+        await asyncio.sleep(WAIT_TIMEOUT)
 
 asyncio.run(scripting())

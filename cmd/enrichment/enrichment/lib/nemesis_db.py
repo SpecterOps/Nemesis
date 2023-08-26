@@ -512,6 +512,10 @@ class NemesisDbInterface(ABC):
     async def update_decrypted_chromium_cookie(self, unique_db_id: UUID4, value_dec: str) -> None:
         pass
 
+    @abstractmethod
+    async def is_file_processed(self, file_sha256: str) -> bool:
+        pass
+
 
 NemesisDbT = TypeVar("NemesisDbT", bound="NemesisDb")
 _Record = TypeVar("_Record", bound=asyncpg.protocol.Record)
@@ -1485,6 +1489,15 @@ class NemesisDb(NemesisDbInterface):
         query = "UPDATE nemesis.chromium_cookies SET value_dec = $1, is_decrypted = True WHERE unique_db_id = $2"
         async with self.pool.acquire() as conn:
             await conn.execute(query, value_dec, unique_db_id)
+
+    async def is_file_processed(self, file_sha256: str) -> bool:
+        """Takes the sha256 of a file and returns whether the file has already been processed."""
+
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(
+                "SELECT EXISTS (SELECT true FROM nemesis.file_data_enriched WHERE sha256 = $1)",
+                file_sha256
+            )
 
     # async def sanitize_identifier(self, identifier: str) -> str:
     #     """Sanitizes a postgres column names to make it safe for use in dynamic queries

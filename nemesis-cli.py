@@ -20,27 +20,18 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 
-# Check dependencies
-exit_early = False
-try:
-    import boto3
-except:
-    logger.error("Please run `pip3 install boto3`")
-    exit_early = True
-try:
-    from vyper import v
-except:
-    logger.error("Please run `pip3 install vyper-config`")
-    exit_early = True
-
-try:
-    from passlib.hash import apr_md5_crypt
-except:
-    logger.error("Please run `pip3 install passlib`")
-    exit_early = True
-if exit_early:
+if os.geteuid() == 0:
+    logger.error("Please do not run this script as root")
     sys.exit(1)
 
+# Check dependencies
+try:
+    import boto3
+    from passlib.hash import apr_md5_crypt
+    from vyper import v
+except:
+    logger.error("Please run `pip3 install boto3 vyper-config passlib`")
+    sys.exit(1)
 
 version = "v0.1.0a"
 
@@ -233,22 +224,22 @@ def get_kubectl_value(key):
 
     elif key == "rabbitmq_admin_user":
         return run_cmd(
-            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq_admin_user\"}}' | base64 -d"
+            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-admin-user\"}}' | base64 -d"
         )
 
     elif key == "rabbitmq_admin_password":
         return run_cmd(
-            "kubectl get secret rabbmitmq-creds -o=go-template='{{index .data \"rabbitmq_admin_password\"}}' | base64 -d"
+            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-admin-password\"}}' | base64 -d"
         )
 
     elif key == "rabbitmq_connectionuri":
         return run_cmd(
-            "kubectl get secret rabbmitmq-creds -o=go-template='{{index .data \"rabbitmq_connectionuri\"}}' | base64 -d"
+            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-connectionuri\"}}' | base64 -d"
         )
 
     elif key == "rabbitmq_erlang_cookie":
         return run_cmd(
-            "kubectl get secret rabbmitmq-creds -o=go-template='{{index .data \"rabbitmq_erlang_cookie\"}}' | base64 -d"
+            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-erlang-cookie\"}}' | base64 -d"
         )
 
     else:
