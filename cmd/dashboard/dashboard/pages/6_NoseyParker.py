@@ -64,14 +64,24 @@ if st.session_state["authentication_status"]:
                     st.divider()
                     for ruleMatch in results["hits"]["hits"][i]["_source"]["noseyparker"]["ruleMatches"]:
                         for match in ruleMatch["matches"]:
-                            rule_name = match["ruleName"]
-                            before = match["snippet"]["before"].replace("\n\t", " ")
-                            matching = match["snippet"]["matching"]
-                            after = match["snippet"]["after"].replace("\n\t", " ")
+                            if "matching" in match["snippet"]:
+                                rule_name = match["ruleName"]
 
-                            st.write(f"<b>Rule</b>: {rule_name}", unsafe_allow_html=True)
-                            annotated_text(annotation(before, "context", color="#8ef"), annotation(matching, "match"), annotation(after, "context", color="#8ef"))
-                            st.divider()
+                                if "before" in match["snippet"]:
+                                    before = match["snippet"]["before"].replace("\n\t", " ")
+                                else:
+                                    before = ""
+
+                                matching = match["snippet"]["matching"]
+
+                                if "after" in match["snippet"]:
+                                    after = match["snippet"]["after"].replace("\n\t", " ")
+                                else:
+                                    after = ""
+
+                                st.write(f"<b>Rule</b>: {rule_name}", unsafe_allow_html=True)
+                                annotated_text(annotation(before, "context", color="#8ef"), annotation(matching, "match"), annotation(after, "context", color="#8ef"))
+                                st.divider()
 
             # pagination
             if total_hits > page_size:
