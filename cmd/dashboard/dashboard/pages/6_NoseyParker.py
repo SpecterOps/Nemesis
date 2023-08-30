@@ -11,8 +11,7 @@ from annotated_text import annotated_text, annotation
 utils.header()
 
 page_size = int(os.environ["PAGE_SIZE"])
-nemesis_http_server = os.environ.get("NEMESIS_HTTP_SERVER") or ""
-
+NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
 
 if st.session_state["authentication_status"]:
     with st.expander("About NoseyParker Search"):
@@ -45,16 +44,29 @@ if st.session_state["authentication_status"]:
             st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
 
             for i in range(num_results):
+                # http://172.16.111.187:8080/api/download/bd48a461-a1a5-42a9-8e87-07ce62408303?name=nosey_parker_google.config
                 object_id = results["hits"]["hits"][i]["_source"]["objectId"]
-                download_url = f"{nemesis_http_server}/api/download/{object_id}"
+                file_name = results["hits"]["hits"][i]["_source"]["name"]
+                download_url = f"{NEMESIS_HTTP_SERVER}/api/download/{object_id}?name={file_name}"
+                kibana_link = f"{NEMESIS_HTTP_SERVER}/kibana/app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
                 path = results["hits"]["hits"][i]["_source"]["path"]
+                sha1 = results["hits"]["hits"][i]["_source"]["hashes"]["sha1"]
                 source = ""
                 if "metadata" in results["hits"]["hits"][i]["_source"] and "source" in results["hits"]["hits"][i]["_source"]["metadata"]:
                     source = results["hits"]["hits"][i]["_source"]["metadata"]["source"]
 
-                with st.expander(f"{source} : {path}"):
+                if source:
+                    expander_text = f"{source} : **{path}** (SHA1: {sha1})"
+                else:
+                    expander_text = f"**{path}** (SHA1: {sha1})"
+
+                with st.expander(expander_text):
                     st.write(
                         f"""
+                        <a href="{kibana_link}">
+                            File in Kibana
+                        </a>
+                        &nbsp; &nbsp; &nbsp;
                         <a href="{download_url}">
                             Download File
                         </a>
