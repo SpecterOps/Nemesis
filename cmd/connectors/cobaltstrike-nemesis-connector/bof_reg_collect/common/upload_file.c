@@ -6,7 +6,7 @@
 #define CHUNK_SIZE 0xe1000
 
 // https://github.com/helpsystems/nanodump/blob/3262e14d2652e21a9e7efc3960a796128c410f18/source/utils.c#L630-L728
-BOOL UploadFile(LPCSTR fileName, char fileData[], ULONG32 fileLength) {
+BOOL uplaod_file(LPCSTR fileName, char fileData[], ULONG32 fileLength) {
   int fileNameLength = MSVCRT$strnlen(fileName, 256);
 
   // intializes the random number generator

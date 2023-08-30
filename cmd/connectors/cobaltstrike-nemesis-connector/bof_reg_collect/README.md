@@ -15,6 +15,8 @@ bof_reg_collect <HKCR|HKCU|HKLM|HKU|HKCC> <path>
 
 3. Parse output with `nemesis_reg_collect_parser.py`
 
+Note: To download a full hive, use an empty string as the path. Ex `bof_reg_collect HKLM ""`
+
 ```
 python3 nemesis_reg_collect_parser.py <input.txt> <output.json>
 ```
