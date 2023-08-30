@@ -1,7 +1,7 @@
-import struct
-from typing import Tuple, NamedTuple, Union, List
-import sys
 import json
+import struct
+import sys
+from typing import List, NamedTuple, Tuple, Union
 
 REG_NONE = 0
 REG_SZ = 1
@@ -69,7 +69,7 @@ def read_key(data: bytes) -> Tuple[RegKey, bytes]:
     elif type_ == REG_DWORD:
         _, data = read_unsigned_int(data)
         value, data = read_unsigned_long(data)
-    elif type_ in [REG_BINARY, REG_RESOURCE_LIST, REG_FULL_RESOURCE_DESCRIPTOR, REG_LINK]
+    elif type_ in [REG_BINARY, REG_RESOURCE_LIST, REG_FULL_RESOURCE_DESCRIPTOR, REG_LINK]:
         value, value_length, data = read_string(data)
         value = list(value)
     elif type_ == REG_DWORD_BIG_ENDIAN:
