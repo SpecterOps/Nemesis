@@ -550,8 +550,10 @@ class FileProcessor(TaskInterface):
         # Check if the office document was encrypted
         doc_is_encrypted = file_data.parsed_data.is_encrypted
 
-        # If the file extension indicates that plaintext can be extracted through Tika
-        if (tika_compatible or not file_is_binary) and not doc_is_encrypted:
+        # If the file is known to be tika compatible, or is not a binary file
+        #   and is also not known source code, and is not an encrypted word doc,
+        #   then try to extract text and index is
+        if (tika_compatible or not file_is_binary) and not is_source_code and not doc_is_encrypted:
             try:
                 # use Tika to extract to a new local UUID that references the uploaded Nemesis file text
                 plaintext_file_id = await self.extract_text(file_path_on_disk)
