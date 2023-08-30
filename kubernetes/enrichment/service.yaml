@@ -69,6 +69,10 @@ spec:
       port: 9920
       targetPort: 9920
       nodePort: 30809
+    - name: "8000"
+      port: 8000
+      targetPort: 8000
+      nodePort: 31693
   selector:
     app: enrichment
 status:

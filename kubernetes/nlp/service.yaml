@@ -12,6 +12,10 @@ spec:
       port: 9803
       targetPort: 9803
       nodePort: 31803
+    - name: "8000"
+      port: 8000
+      targetPort: 8000
+      nodePort: 31692
   selector:
     app: nlp
 status:

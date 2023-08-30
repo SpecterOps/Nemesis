@@ -669,14 +669,11 @@ data:
           target_label: kubernetes_name
 
       # service metrics
-      - job_name: 'nemesis-services'
+
+      - job_name: 'elasticsearch'
         scrape_interval: 5s
         static_configs:
-        - targets: ['dotnet.default.svc.cluster.local:9801']
-        - targets: ['es-connector.default.svc.cluster.local:8000']
-        - targets: ['file-processor.default.svc.cluster.local:8000']
-        - targets: ['generate-crack-list.default.svc.cluster.local:9901']
-        - targets: ['ml-models.default.svc.cluster.local:5001']
+        - targets: ['elasticsearch-exporter.default.svc.cluster.local:9108']
 
       - job_name: 'gotenberg'
         scrape_interval: 5s
@@ -684,15 +681,49 @@ data:
         - targets: ['gotenberg.default.svc.cluster.local:3000']
         metrics_path: /prometheus/metrics
 
-      - job_name: 'elasticsearch'
+      - job_name: 'passwordcracker'
         scrape_interval: 5s
         static_configs:
-        - targets: ['elasticsearch-exporter.default.svc.cluster.local:9108']
+        - targets: ['passwordcracker.default.svc.cluster.local:9090']
 
       - job_name: 'postgres'
         scrape_interval: 5s
         static_configs:
         - targets: ['postgres-exporter.default.svc.cluster.local:9187']
+
+      - job_name: 'nlp'
+        scrape_interval: 5s
+        static_configs:
+        - targets: ['nlp.default.svc.cluster.local:8000']
+
+      - job_name: 'enrichment'
+        scrape_interval: 5s
+        static_configs:
+        - targets: ['enrichment-webapi.default.svc.cluster.local:8000']
+
+      # # TODO: implement metrics export in our source
+      # - job_name: 'dashboard'
+      #   scrape_interval: 5s
+      #   static_configs:
+      #   - targets: ['dashboard.default.svc.cluster.local:8601']
+
+      # # TODO: implement metrics export in our source
+      # - job_name: 'dotnet'
+      #   scrape_interval: 5s
+      #   static_configs:
+      #   - targets: ['dotnet.default.svc.cluster.local:9800']
+
+      # # TODO: is it possible to implement a metrics export ?
+      # - job_name: 'tensorflow-serving'
+      #   scrape_interval: 5s
+      #   static_configs:
+      #   - targets: ['tensorflow-serving.default.svc.cluster.local:8501']
+
+      # # TODO: is it possible to implement a metrics export ?
+      # - job_name: 'tika'
+      #   scrape_interval: 5s
+      #   static_configs:
+      #   - targets: ['tika.default.svc.cluster.local:9998']
 ---
 apiVersion: apps/v1
 kind: Deployment
