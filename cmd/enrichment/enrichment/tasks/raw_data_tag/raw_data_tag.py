@@ -9,15 +9,15 @@ import enrichment.lib.nemesis_db as db
 import nemesispb.nemesis_pb2 as pb
 import structlog
 from enrichment.lib.nemesis_db import NemesisDb
-from enrichment.tasks.raw_data_tag.bof_reg_collect_parser import BofRegCollect
-from enrichment.tasks.raw_data_tag.dpapi_domain_backupkey import dpapi_domain_backupkey
+from enrichment.lib.registry import include_registry_value
+from enrichment.tasks.raw_data_tag.bof_reg_collect_parser import \
+    parse_serialized_reg_data
+from enrichment.tasks.raw_data_tag.dpapi_domain_backupkey import \
+    dpapi_domain_backupkey
 from enrichment.tasks.raw_data_tag.seatbelt_json import seatbelt_json
 from google.protobuf.json_format import ParseDict
-from nemesiscommon.messaging import (
-    MessageQueueConsumerInterface,
-    MessageQueueProducerInterface,
-)
-from enrichment.lib.registry import include_registry_value
+from nemesiscommon.messaging import (MessageQueueConsumerInterface,
+                                     MessageQueueProducerInterface)
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio
@@ -143,7 +143,7 @@ class RawDataTag(TaskInterface):
 
             keys = [
                 {"key": key.path, "value_name": key.key, "value": str(key.value), "value_kind": key.type_}
-                for key in BofRegCollect.from_file(temp_file.name).parse()
+                for key in parse_serialized_reg_data(temp_file.name)
                 if include_registry_value(key=key.path, value_name=key.key, value_kind=key.type_, value=key.value)
             ]
             for key in keys:
