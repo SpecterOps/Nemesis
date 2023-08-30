@@ -699,7 +699,7 @@ data:
       - job_name: 'enrichment'
         scrape_interval: 5s
         static_configs:
-        - targets: ['enrichment-webapi.default.svc.cluster.local:8000']
+        - targets: ['enrichment-monitoring.default.svc.cluster.local:8000']
 
       # # TODO: implement metrics export in our source
       # - job_name: 'dashboard'

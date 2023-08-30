@@ -109,6 +109,11 @@ data:
             severity: critical
           group_wait: 30s
           repeat_interval: 20m
+        - receiver: slack_alert
+          match:
+            severity: warning
+          group_wait: 30s
+          repeat_interval: 20m
     receivers:
     - name: 'default'
     - name: slack_alert

@@ -69,6 +69,21 @@ spec:
       port: 9920
       targetPort: 9920
       nodePort: 30809
+  selector:
+    app: enrichment
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: enrichment
+    component: enrichment-monitoring
+  name: enrichment-monitoring
+spec:
+  type: NodePort
+  ports:
     - name: "8000"
       port: 8000
       targetPort: 8000
