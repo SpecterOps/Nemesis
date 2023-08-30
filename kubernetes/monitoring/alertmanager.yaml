@@ -106,7 +106,7 @@ data:
       routes:
         - receiver: slack_alert
           match:
-            severity: slack
+            severity: critical
           group_wait: 30s
           repeat_interval: 20m
     receivers:
