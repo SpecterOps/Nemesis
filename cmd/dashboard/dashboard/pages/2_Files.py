@@ -428,11 +428,18 @@ if st.session_state["authentication_status"]:
                                                     mui.TableCell("Path", size="small", sx=identifier_style)
                                                     mui.TableCell(file["path"], width="100%")
                                                 with mui.TableRow(hover=True, padding="none"):
-                                                    mui.TableCell("Source / Timestamp", size="small", sx=identifier_style)
-                                                    mui.TableCell(f"{file['source']} @ {file['timestamp']}", size="small")
+                                                    if file['source']:
+                                                        mui.TableCell("Source / Timestamp", size="small", sx=identifier_style)
+                                                        mui.TableCell(f"{file['source']} @ {file['timestamp']}", size="small")
+                                                    else:
+                                                        mui.TableCell("Timestamp", size="small", sx=identifier_style)
+                                                        mui.TableCell(f"{file['timestamp']}", size="small")
                                                 with mui.TableRow(hover=True, padding="none"):
-                                                    mui.TableCell("Nemesis Filetype", sx=identifier_style)
-                                                    mui.TableCell(file["nemesis_file_type"])
+                                                    mui.TableCell("Size", sx=identifier_style)
+                                                    mui.TableCell(file["size"])
+                                                with mui.TableRow(hover=True, padding="none"):
+                                                    mui.TableCell("SHA1 hash", sx=identifier_style)
+                                                    mui.TableCell(file["sha1"])
                                                 with mui.TableRow(hover=True, padding="none"):
                                                     mui.TableCell("Magic Type", sx=identifier_style)
                                                     mui.TableCell(file["magic_type"])
