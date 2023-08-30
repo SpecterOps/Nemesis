@@ -17,13 +17,13 @@ typedef struct _queue {
 } queue, *Pqueue;
 
 int _size(Pqueue q) {
-    int retval = 0;
-    Pitem i = q->head;
-    while (i != NULL) {
-        retval++;
-        i = i->next;
-    }
-    return retval;
+  int retval = 0;
+  Pitem i = q->head;
+  while (i != NULL) {
+    retval++;
+    i = i->next;
+  }
+  return retval;
 }
 void _push(Pqueue q, void *v) {
   Pitem i = (Pitem)intAlloc(sizeof(item));

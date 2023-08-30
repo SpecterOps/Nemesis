@@ -1,0 +1,5 @@
+build/nemesis_bof.x64.o
+build/nemesis_bof.x86.o
+build/reg_collect.x64.o
+build/reg_collect.x86.o
+.mypy_cache
