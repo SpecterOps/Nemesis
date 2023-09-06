@@ -114,7 +114,6 @@ if st.session_state["authentication_status"]:
 
                 tabs = [
                     stx.TabBarItemData(id="basic_file_info", title="Basic File Info", description="Basic File Information"),
-                    stx.TabBarItemData(id="elasticsearch_info", title="Elasticsearch Info", description="Elasticsearch Information Dump")
                 ]
 
                 es_results = utils.elastic_file_search(object_id)
@@ -123,10 +122,7 @@ if st.session_state["authentication_status"]:
                     if "noseyparker" in es_results["hits"]["hits"][0]["_source"]:
                         tabs.append(stx.TabBarItemData(id="noseyparker_results", title="Noseyparker Results", description="Noseyparker Results"))
 
-                if pdf_download_url:
-                    tabs.append(stx.TabBarItemData(id="pdf_viewer", title="PDF Viewer", description="PDF View of the File"))
-                if is_ascii:
-                    tabs.append(stx.TabBarItemData(id="file_view", title="File View", description="View of File Data"))
+                tabs.append(stx.TabBarItemData(id="elasticsearch_info", title="Elasticsearch Info", description="Elasticsearch Information Dump"))
 
                 chosen_tab = stx.tab_bar(
                     data=tabs,
@@ -137,6 +133,7 @@ if st.session_state["authentication_status"]:
                     layout = [
                         # Grid layout parameters: element_identifier, x_pos, y_pos, width, height, [item properties...]
                         dashboard.Item("1", 0, 0, 10, 2.5, isDraggable=False, isResizable=False, sx={"height": "100%"}),
+                        dashboard.Item("2", 0, 0, 10, 5, isDraggable=False, isResizable=False, sx={"height": "100%"}),
                     ]
                     with elements("dashboard"):
                         with dashboard.Grid(layout=layout):
@@ -240,6 +237,84 @@ if st.session_state["authentication_status"]:
                                             InputProps={"endAdornment": end},
                                         )
 
+                            if is_ascii:
+                                # Monaco editor display for ascii files
+                                with mui.Card(
+                                    key="2",
+                                    sx={
+                                        "display": "flex",
+                                        "flexDirection": "column",
+                                        "borderRadius": 2,
+                                        "overflow": "auto",
+                                        "overflowY": "auto",
+                                        "m": "10",
+                                        "gap": "10px",
+                                    },
+                                    padding=1,
+                                    elevation=1,
+                                    spacing=10,
+                                ):
+                                    response = requests.get(download_url)
+                                    if response.status_code != 200:
+                                        st.error(f"Error retrieving text data from {download_url}, status code: {response.status_code}", icon="🚨")
+                                    else:
+                                        with mui.Card(
+                                            sx={
+                                                "display": "flex",
+                                                "overflow": "auto",
+                                                "overflowY": "auto",
+                                            },
+                                            padding=1,
+                                            elevation=1,
+                                            spacing=10,
+                                        ):
+                                            editor.Monaco(
+                                                height="64vh",
+                                                defaultValue=response.content.decode('utf-8'),
+                                                language=utils.map_extension_to_monaco_language(extension)
+                                            )
+                            elif pdf_download_url:
+                                # Inline PDF file file display, if PDF is present
+                                with mui.Card(
+                                    key="2",
+                                    sx={
+                                        "display": "flex",
+                                        "flexDirection": "column",
+                                        "borderRadius": 2,
+                                        "overflow": "auto",
+                                        "overflowY": "auto",
+                                        "m": "10",
+                                        "gap": "10px",
+                                    },
+                                    padding=1,
+                                    elevation=1,
+                                    spacing=10,
+                                ):
+                                    try:
+                                        response = requests.get(pdf_download_url)
+                                        if response.status_code != 200:
+                                            st.error(f"Error retrieving PDF data from {pdf_download_url}, status code: {response.status_code}", icon="🚨")
+                                        else:
+                                            with mui.Card(
+                                                sx={
+                                                    "display": "flex",
+                                                    "overflow": "auto",
+                                                    "overflowY": "auto",
+                                                },
+                                                padding=1,
+                                                elevation=1,
+                                                spacing=10,
+                                            ):
+                                                b64_data = base64.b64encode(response.content).decode('utf-8')
+                                                html.iframe(
+                                                    src=f"data:application/pdf;base64,{b64_data}",
+                                                    height=785,
+                                                    width="100%",
+                                                    type="application/pdf"
+                                                )
+                                    except Exception as e:
+                                        st.error(f"Error retrieving PDF data from {pdf_download_url} : {e}", icon="🚨")
+
                 elif chosen_tab == "noseyparker_results":
                     if es_results != {}:
                         total_hits = es_results["hits"]["total"]["value"]
@@ -281,55 +356,6 @@ if st.session_state["authentication_status"]:
                                             st.write(f"<b>Rule</b>: {rule_name}", unsafe_allow_html=True)
                                             annotated_text(annotation(before, "context", color="#8ef"), annotation(matching, "match"), annotation(after, "context", color="#8ef"))
                                             st.divider()
-
-                elif chosen_tab == "file_view":
-                    with elements("file_view"):
-                        response = requests.get(download_url)
-                        if response.status_code != 200:
-                            st.error(f"Error retrieving text data from {download_url}, status code: {response.status_code}", icon="🚨")
-                        else:
-                            with mui.Card(
-                                sx={
-                                    "display": "flex",
-                                    "overflow": "auto",
-                                    "overflowY": "auto",
-                                },
-                                padding=1,
-                                elevation=1,
-                                spacing=10,
-                            ):
-                                editor.Monaco(
-                                    height=600,
-                                    defaultValue=response.content.decode('utf-8'),
-                                    language=utils.map_extension_to_monaco_language(extension)
-                                )
-
-                elif chosen_tab == "pdf_viewer":
-                    with elements("pdf_viewer"):
-                        try:
-                            response = requests.get(pdf_download_url)
-                            if response.status_code != 200:
-                                st.error(f"Error retrieving PDF data from {pdf_download_url}, status code: {response.status_code}", icon="🚨")
-                            else:
-                                with mui.Card(
-                                    sx={
-                                        "display": "flex",
-                                        "overflow": "auto",
-                                        "overflowY": "auto",
-                                    },
-                                    padding=1,
-                                    elevation=1,
-                                    spacing=10,
-                                ):
-                                    b64_data = base64.b64encode(response.content).decode('utf-8')
-                                    html.iframe(
-                                        src=f"data:application/pdf;base64,{b64_data}",
-                                        height="700",
-                                        width="100%",
-                                        type="application/pdf"
-                                    )
-                        except Exception as e:
-                            st.error(f"Error retrieving PDF data from {pdf_download_url} : {e}", icon="🚨")
 
                 elif chosen_tab == "elasticsearch_info":
                     if es_results != {}:
