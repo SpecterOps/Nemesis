@@ -49,7 +49,7 @@ class NemesisAlerter(AlerterInterface):
         text = f"\n{text}" if text else ""
 
         full_nemesis_url = f"{self.nemesis_url}File_Viewer?object_id={file_data.object_id}"
-        nemesis_footer = f"\n<{full_nemesis_url}|*File in Nemesis*>"
+        nemesis_footer = f"\n<{full_nemesis_url}|*View File in Nemesis*>"
 
         try:
             metadata_dict = MessageToDict(metadata, preserving_proto_field_name=True)
