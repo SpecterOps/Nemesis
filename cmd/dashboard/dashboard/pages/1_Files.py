@@ -1,8 +1,8 @@
 # Standard Libraries
 import datetime
+import ntpath
 import os
 import re
-import ntpath
 import urllib.parse
 from typing import List
 
@@ -341,7 +341,7 @@ if st.session_state["authentication_status"]:
                             # replace - with _ since streamlit doesn't support -'s in session state
                             unique_db_id = file["unique_db_id"].replace("-", "_")
 
-                            kibana_link = f"{NEMESIS_HTTP_SERVER}/kibana/app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
+                            dashboard_link = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={object_id}"
 
                             url_enc_file_name = urllib.parse.quote(file["name"])
 
@@ -382,9 +382,9 @@ if st.session_state["authentication_status"]:
                                         with mui.Tooltip(title="Download the file"):
                                             with html.span:
                                                 mui.IconButton(mui.icon.Download, href=base_file_url)
-                                        with mui.Tooltip(title="View the file in Kibana"):
+                                        with mui.Tooltip(title="View file details in Nemesis"):
                                             with html.span:
-                                                mui.IconButton(mui.icon.Search, href=kibana_link, target="_blank")
+                                                mui.IconButton(mui.icon.Search, href=dashboard_link, target="_blank")
                                         with mui.Tooltip(title="View the file in browser"):
                                             with html.span:
                                                 mui.IconButton(mui.icon.TextSnippet, href=view_download_url, target="_blank")

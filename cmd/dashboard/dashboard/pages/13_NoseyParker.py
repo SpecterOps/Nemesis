@@ -44,7 +44,6 @@ if st.session_state["authentication_status"]:
             st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
 
             for i in range(num_results):
-                # http://172.16.111.187:8080/api/download/bd48a461-a1a5-42a9-8e87-07ce62408303?name=nosey_parker_google.config
                 object_id = results["hits"]["hits"][i]["_source"]["objectId"]
                 file_name = results["hits"]["hits"][i]["_source"]["name"]
                 download_url = f"{NEMESIS_HTTP_SERVER}/api/download/{object_id}?name={file_name}"

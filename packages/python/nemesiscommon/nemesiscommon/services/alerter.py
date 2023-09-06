@@ -28,11 +28,11 @@ class AlerterInterface:
 
 class NemesisAlerter(AlerterInterface):
     alert_queue: NemesisRabbitMQProducer
-    kibana_url: str
+    nemesis_url: str
 
-    def __init__(self, alert_queue: NemesisRabbitMQProducer, kibana_url: str):
+    def __init__(self, alert_queue: NemesisRabbitMQProducer, nemesis_url: str):
         self.alert_queue = alert_queue
-        self.kibana_url = kibana_url
+        self.nemesis_url = nemesis_url
 
     async def alert(self, text: str) -> None:
         alert_msg = pb.Alert()
@@ -48,15 +48,15 @@ class NemesisAlerter(AlerterInterface):
         header = f"*{title}*\n" if title else ""
         text = f"\n{text}" if text else ""
 
-        full_kibana_url = f"{self.kibana_url}app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{file_data.object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
-        kibana_footer = f"\n<{full_kibana_url}|*File in Kibana*>"
+        full_nemesis_url = f"{self.nemesis_url}File_Viewer?object_id={file_data.object_id}"
+        nemesis_footer = f"\n<{full_nemesis_url}|*File in Nemesis*>"
 
         try:
             metadata_dict = MessageToDict(metadata, preserving_proto_field_name=True)
             timestamp = metadata_dict["timestamp"]
             agent_type = metadata_dict["agent_type"]
             agent_id = metadata_dict["agent_id"]
-            message = f"{header}*File:* {file_name}\n*SHA1:* {sha1_hash}\n*Downloaded:* {timestamp}\n*Agent:* {agent_id} (type: {agent_type}){text}{kibana_footer}"
+            message = f"{header}*File:* {file_name}\n*SHA1:* {sha1_hash}\n*Downloaded:* {timestamp}\n*Agent:* {agent_id} (type: {agent_type}){text}{nemesis_footer}"
 
             await self.alert(text=message)
 

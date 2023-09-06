@@ -53,6 +53,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     elasticsearch_password: str
     elasticsearch_url: HttpUrlWithSlash
     web_api_url: HttpUrlWithSlash
+    public_nemesis_url: HttpUrlWithSlash
     public_kibana_url: HttpUrlWithSlash
     slack_webhook_url: Optional[str]
     slack_username: str
