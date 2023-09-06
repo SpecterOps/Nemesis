@@ -474,6 +474,66 @@ def postgres_count_masterkeys(show_all=True, show_dec=True, key_type=""):
         return -1
 
 
+def get_file_information(object_id: str):
+    """Gets information from Postgres about a specific file."""
+
+    if not re.match(r"^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$", object_id):
+        raise Exception(f"object_id '{object_id}' supplied to get_file_information() is not a proper UUID")
+
+    try:
+        with engine.connect() as conn:
+            params = {
+                "object_id": object_id,
+            }
+
+            query = """
+                    SELECT  file_data_enriched.project_id as project_id,
+                            file_data_enriched.source as source,
+                            file_data_enriched.timestamp as timestamp,
+                            file_data_enriched.unique_db_id::varchar,
+                            file_data_enriched.agent_id as agent_id,
+                            file_data_enriched.object_id::varchar as object_id,
+                            file_data_enriched.path as path,
+                            file_data_enriched.name as name,
+                            file_data_enriched.size as size,
+                            file_data_enriched.md5 as md5,
+                            file_data_enriched.sha1 as sha1,
+                            file_data_enriched.sha256 as sha256,
+                            file_data_enriched.nemesis_file_type as nemesis_file_type,
+                            file_data_enriched.magic_type as magic_type,
+                            file_data_enriched.converted_pdf_id::varchar as converted_pdf_id,
+                            file_data_enriched.extracted_plaintext_id::varchar as extracted_plaintext_id,
+                            file_data_enriched.extracted_source_id::varchar as extracted_source_id,
+                            file_data_enriched.tags as tags,
+                            file_data_enriched.originating_object_id as originating_object_id,
+                            triage.value as triage,
+                            triage.unique_db_id as triage_unique_db_id,
+                            notes.value as notes
+
+                    FROM file_data_enriched
+
+                    LEFT JOIN triage
+                        ON file_data_enriched.unique_db_id = triage.unique_db_id
+
+                    LEFT JOIN notes
+                        ON file_data_enriched.unique_db_id = notes.unique_db_id
+
+                    WHERE object_id = :object_id
+                """
+
+            df = pd.read_sql_query(sql_text(query), conn, params=params)
+            if len(df) == 0:
+                st.error(f"object_id '{object_id}' not found")
+            elif len(df) == 1:
+                return df.iloc[0]
+            else:
+                st.error(f"Too many results for object_id '{object_id}' : {len(df)}", icon="🚨")
+
+    except Exception as e:
+        st.error(f"Error retrieving `file_data_enriched` from the database: {e}", icon="🚨")
+        return None
+
+
 def postgres_file_search(
     start: datetime.datetime,
     end: datetime.datetime,
@@ -699,7 +759,6 @@ def authenticate_header() -> str:
 #
 ######################################################
 
-
 def simplify_es_text_result(result: dict) -> dict:
     """Simplifies an elastic result into the three parts we want to use."""
     res = result["_source"]
@@ -742,6 +801,23 @@ def get_elastic_total_indexed_documents(index_name="file_data_plaintext", query=
             return es_client.count(index=index_name)["count"]
     except Exception as e:
         return 0
+
+
+def elastic_file_search(object_id: str) -> dict:
+    """
+    Searches the 'file_data_enriched' index in Elasticsearch for
+    the matching document, returning all fields.
+    """
+    try:
+        es_client = wait_for_elasticsearch()
+        query = {"term": {"objectId.keyword": object_id}}
+        return es_client.search(index="file_data_enriched", query=query)
+    except Exception as e:
+        if "index_not_found_exception" in f"{e}":
+            st.error("Elastic index 'file_data_enriched' doesn't yet exist!", icon="🚨")
+        else:
+            st.error(f"Exception querying Elastic: {e}", icon="🚨")
+        return {}
 
 
 def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
@@ -830,6 +906,60 @@ def elastic_np_search(from_i: int, size: int) -> dict:
 # Misc. Helpers
 #
 ######################################################
+
+def map_extension_to_monaco_language(extension: str) -> str:
+    """
+    Maps a file extension to a source code language for Monaco.
+
+    Ref: https://microsoft.github.io/monaco-editor/
+    """
+
+    language_mappings = {
+        "bat": "batch",
+        "c": "c",
+        "cpp": "cpp",
+        "cs": "csharp",
+        "css": "css",
+        "cypher": "cypher",
+        "dockerfile": "dockerfile",
+        "fs": "fsharp",
+        "go": "go",
+        "gql": "graphql",
+        "graphql": "graphql",
+        "html": "html",
+        "ini": "ini",
+        "java": "java",
+        "js": "javascript",
+        "lua": "lua",
+        "md": "markdown",
+        "mysql": "mysql",
+        "php": "php",
+        "php3": "php",
+        "php4": "php",
+        "php5": "php",
+        "pl": "perl",
+        "ps1": "powershell",
+        "psd1": "powershell",
+        "psm1": "powershell",
+        "proto": "proto",
+        "py": "python",
+        "r": "r",
+        "rb": "ruby",
+        "rs": "rust",
+        "shell": "shell",
+        "sh": "shell",
+        "sql": "sql",
+        "swift": "swift",
+        "ts": "typescript",
+        "ts": "typescript",
+        "vb": "vb",
+        "wgsl": "wgsl",
+        "xml": "xml",
+        "yaml": "yaml",
+        "json": "json"
+    }
+    return language_mappings.get(extension.lower(), "plaintext")
+
 
 def is_valid_chromium_file_path(file_path: str) -> bool:
     """Returns true if the supplied path is a valid Chromium file path."""

@@ -9,13 +9,12 @@ import nemesispb.nemesis_pb2 as pb
 import passwordcracker.settings as settings
 from dependency_injector import containers, providers
 from nemesiscommon.constants import NemesisQueue
-from nemesiscommon.messaging_rabbitmq import (
-    NemesisRabbitMQConsumer,
-    NemesisRabbitMQProducer,
-)
+from nemesiscommon.messaging_rabbitmq import (NemesisRabbitMQConsumer,
+                                              NemesisRabbitMQProducer)
 from nemesiscommon.services.alerter import NemesisAlerter
 from nemesiscommon.tasking import TaskDispatcher
-from passwordcracker.services.john_the_ripper_cracker import JohnTheRipperCracker
+from passwordcracker.services.john_the_ripper_cracker import \
+    JohnTheRipperCracker
 from passwordcracker.settings import PasswordCrackerSettings
 from passwordcracker.tasks.password_cracker import PasswordCracker
 
@@ -76,7 +75,7 @@ class Container(containers.DeclarativeContainer):
     alerting_service = providers.Factory(
         NemesisAlerter,
         outputq_alert,
-        config.public_kibana_url,
+        config.public_nemesis_url,
     )
     cracker_service = providers.Factory(
         JohnTheRipperCracker,

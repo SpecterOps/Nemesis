@@ -907,7 +907,7 @@ def is_pe_extension(file_path: str) -> bool:
 
 def is_source_code(file_path: str) -> bool:
     """Returns True if the supplied file_path matches a number of supported source code file extensions."""
-    source_code_regex = "^.*\\.(aspx|c|cpp|cs|go|groovy|java|jsp|js|lua|php|php3" "|php4|php5|ps1|psd1|psm1|py|rb|rs|sql|sh|swift|vb|vbs)$"
+    source_code_regex = "^.*\\.(aspx|c|cpp|cs|go|groovy|java|jsp|js|lua|php|php3|php4|php5|ps1|psd1|psm1|py|rb|rs|sql|sh|swift|vb|vbs)$"
     return re.match(source_code_regex, file_path, re.IGNORECASE) is not None
 
 

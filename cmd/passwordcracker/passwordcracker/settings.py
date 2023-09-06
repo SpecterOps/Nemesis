@@ -13,7 +13,7 @@ class CrackWordlistSize(IntEnum):
 
 class PasswordCrackerSettings(NemesisServiceSettings):  # type: ignore
     rabbitmq_connection_uri: AnyUrl
-    public_kibana_url: HttpUrlWithSlash
+    public_nemesis_url: HttpUrlWithSlash
     data_download_dir: str
     crack_wordlist_top_words: CrackWordlistSize  # either 10000 or 100000 for now
 

@@ -421,7 +421,7 @@ class Container(containers.DeclarativeContainer):
     #
     # Services
     #
-    alerter_service = providers.Factory(NemesisAlerter, outputq_alert, config.public_kibana_url)
+    alerter_service = providers.Factory(NemesisAlerter, outputq_alert, config.public_nemesis_url)
 
     elasticsearch_client = providers.Factory(
         AsyncElasticsearch,
