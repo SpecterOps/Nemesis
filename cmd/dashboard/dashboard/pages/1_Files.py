@@ -108,8 +108,8 @@ if st.session_state["authentication_status"]:
                 st.session_state.file_hash = para["file_hash"][0]
                 set_search_params["file_hash"] = st.session_state.file_hash
             case "file_order_desc_timestamp":
-                st.session_state.order_desc_timestamp = para["file_order_desc_timestamp"][0]
-                set_search_params["file_order_desc_timestamp"] = st.session_state.order_desc_timestamp
+                st.session_state.file_order_desc_timestamp = para["file_order_desc_timestamp"][0]
+                set_search_params["file_order_desc_timestamp"] = st.session_state.file_order_desc_timestamp
 
     if "file_download_page" not in st.session_state:
         st.session_state.file_download_page = None
