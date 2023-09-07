@@ -79,7 +79,7 @@ NEMESIS_CREDS = os.environ.get("NEMESIS_CREDS") or ""
 ELASTICSEARCH_URL = f"{NEMESIS_HTTP_SERVER}/elastic"
 ELASTICSEARCH_USER = os.environ.get("ELASTICSEARCH_USER") or ""
 ELASTICSEARCH_PASSWORD = os.environ.get("ELASTICSEARCH_PASSWORD") or ""
-KIBANA_URL = f"{NEMESIS_HTTP_SERVER}/kibana"
+DASHBOARD_URL = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer"
 
 
 @dataclass
@@ -417,32 +417,31 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
                     if "extractedPlaintextURL" in file_metadata and file_metadata["extractedPlaintextURL"]:
                         file_metadata_display["Extracted Plaintext (Elastic)"] = file_metadata["extractedPlaintextURL"]
 
-                    # TODO: fixate the index ID
-                    kibana_file_link = f"{KIBANA_URL}/app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{nemesis_file_id}')))))&_g=(time:(from:now-1y%2Fd,to:now))"
+                    dashboard_file_link = f"{DASHBOARD_URL}?object_id={nemesis_file_id}"
 
                     # update the comment for the file in Mythic to indicate it was processed
                     await mythic.update_file_comment(mythic_instance, file_uuid=mythic_file_id, comment="Processed by Nemesis 😈")
 
                     # add a basic metadata Mythic tag
-                    await add_mythic_tag(mythic_instance, "file_metadata", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=json.dumps(file_metadata_display))
+                    await add_mythic_tag(mythic_instance, "file_metadata", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=json.dumps(file_metadata_display))
 
                     # custom tags
                     if ("containsDpapi" in file_metadata) and (file_metadata["containsDpapi"]):
-                        await add_mythic_tag(mythic_instance, "contains_dpapi", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
+                        await add_mythic_tag(mythic_instance, "contains_dpapi", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
 
                     if ("parsedData" in file_metadata) and ("hasParsedCredentials" in file_metadata["parsedData"]) and file_metadata["parsedData"]["hasParsedCredentials"]:
-                        await add_mythic_tag(mythic_instance, "parsed_credentials", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
+                        await add_mythic_tag(mythic_instance, "parsed_credentials", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
 
                     if ("analysis" in file_metadata) and ("dotnetDeserialization" in file_metadata["analysis"]) and (file_metadata["analysis"]["dotnetDeserialization"]["hasDeserialization"] == 1):
-                        await add_mythic_tag(mythic_instance, "deserialization", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
+                        await add_mythic_tag(mythic_instance, "deserialization", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
 
                     if ("parsedData" in file_metadata) and ("isEncrypted" in file_metadata["parsedData"]) and file_metadata["parsedData"]["isEncrypted"]:
-                        await add_mythic_tag(mythic_instance, "encrypted", filemeta_id=file_id, task_id=task_id, url=kibana_file_link)
+                        await add_mythic_tag(mythic_instance, "encrypted", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
 
                     if ("yaraMatches" in file_metadata) and (file_metadata["yaraMatches"]):
                         rule_names = ", ".join(file_metadata["yaraMatches"])
                         data = json.dumps({"rule_names": rule_names})
-                        await add_mythic_tag(mythic_instance, "yara_matches", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=data)
+                        await add_mythic_tag(mythic_instance, "yara_matches", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=data)
 
                     if ("noseyparker" in file_metadata) and (file_metadata["noseyparker"]):
                         rule_names_dict = {}
@@ -450,7 +449,7 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
                             rule_names_dict[match["ruleName"]] = True
                         rule_names = ", ".join(rule_names_dict.keys())
                         data = json.dumps({"rule_names": rule_names})
-                        await add_mythic_tag(mythic_instance, "noseyparker", filemeta_id=file_id, task_id=task_id, url=kibana_file_link, data=data)
+                        await add_mythic_tag(mythic_instance, "noseyparker", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=data)
 
         except Exception:
             mythic_sync_log.exception(

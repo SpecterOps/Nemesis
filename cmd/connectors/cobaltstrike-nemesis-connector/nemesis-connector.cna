@@ -274,7 +274,7 @@ sub nemesis::ProcessFile {
 
 sub nemesis::DisplayFileResults {
     local('$1 $2 $BID $results $path $size $sha1 $magicType $objectId $messageId $contains_dpapi $has_parsed_credentials')
-    local('$has_deserialization $encrypted $message $kibana_link $file_message $has_noseyparker_results')
+    local('$has_deserialization $encrypted $message $kibana_link $file_message $has_noseyparker_results $dashboard_link')
 
     $BID = $1;
     $results = $2;
@@ -341,7 +341,8 @@ sub nemesis::DisplayFileResults {
     $file_message .= "    sha1                  : " . $sha1 . "\n";
     $file_message .= "    magic                 : " . $magicType . "\n";
 
-    # $kibana_link = %nemesis::Settings['KibanaUrl'] . "app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'" . $objectId . "')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))";
+    $dashboard_link = %nemesis::Settings['NemesisDashboardUrl'] . "?object_id=". $objectId;
+    $file_message .= "    file in dashboard     : " . $dashboard_link . "\n";
 
     if ($contains_dpapi) {
         $file_message .= "    contains_dpapi        : True\n";
@@ -752,8 +753,8 @@ sub nemesis::Initialize {
 
     %nemesis::Settings['NemesisApiUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "api/";
     %nemesis::Settings['NemesisYaraUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "yara/";
+    %nemesis::Settings['NemesisDashboardUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "dashboard/File_Viewer";
     %nemesis::Settings['ElasticsearchUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "elastic/";
-    %nemesis::Settings['KibanaUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "kibana/";
 
     if(!%nemesis::Settings['NemesisCreds']) {
         logger::WriteError("The environment variables NEMESIS_CREDS is not set. Quiting...");
@@ -881,8 +882,8 @@ on event_private {
                 %nemesis::Settings['NemesisBaseUrl'] = substr($message, 19);
                 %nemesis::Settings['NemesisApiUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "api/";
                 %nemesis::Settings['NemesisYaraUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "yara/";
+                %nemesis::Settings['NemesisDashboardUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "dashboard/File_Viewer";
                 %nemesis::Settings['ElasticsearchUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "elastic/";
-                %nemesis::Settings['KibanaUrl'] = %nemesis::Settings['NemesisBaseUrl'] . "kibana.";
             }
             if($message ismatch "SET NemesisCreds .*") {
                 %nemesis::Settings['NemesisCreds'] = substr($message, 17);
