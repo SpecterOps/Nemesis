@@ -95,7 +95,10 @@ NEMESIS_TAGS = {
     "file_metadata": NemesisTag("file_metadata", "Metadata for the processed file.", "#16a4d8"),
     "contains_dpapi": NemesisTag("contains_dpapi", "The file contains some type of DPAPI data.", "#9b5fe0"),
     "parsed_credentials": NemesisTag("parsed_credentials", "Credentials have been parsed from a known file type.", "#60dbe8"),
-    "deserialization": NemesisTag("deserialization", "The binary has a potential deserialization issue.", "#f9a52c"),
+    "deserialization": NemesisTag("deserialization", "This assembly has a potential deserialization issue.", "#f9a52c"),
+    "cmd_execution": NemesisTag("cmd_execution", "This assembly has potential command execution.", "#f9a52c"),
+    "remoting": NemesisTag("remoting", "This assembly has potential remoting issues.", "#f9a52c"),
+    "file_canary": NemesisTag("file_canary", "This file may have file canaries.", "#ec1091"),
     "encrypted": NemesisTag("encrypted", "The file is encrypted.", "#8bd346"),
     "yara_matches": NemesisTag("yara_matches", "The file has known Yara matches.", "#efdf48"),
     "noseyparker": NemesisTag("noseyparker", "The file has extracted NoseyParker results.", "#d64e12"),
@@ -213,16 +216,17 @@ async def get_processed_file_metadata(message_id: int):
         "convertedPdf",
         "yaraMatches",
         "isBinary",
+        "canaries",
         "isOfficeDoc",
         "containsDpapi",
         "parsedData.hasParsedCredentials",
         "parsedData.isEncrypted",
         "hashes.md5",
         "metadata.messageId",
-        "objectIdURL",          # link to directly download the file
-        "extractedSourceURL",   # if .NET, link to download the decompiled source
-        "convertedPdfURL",      # if converted to PDF, link to display that file
-        "extractedPlaintextURL" # if text was extracted, link to that in elastic
+        "objectIdURL",           # link to directly download the file
+        "extractedSourceURL",    # if .NET, link to download the decompiled source
+        "convertedPdfURL",       # if converted to PDF, link to display that file
+        "extractedPlaintextURL"  # if text was extracted, link to that in elastic
     ]
 
     attempts = 30
@@ -302,6 +306,11 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
                 }
                 id
             }
+            tags {
+                tagtype {
+                    name
+                }
+            }
             chunk_size
             chunks_received
         }
@@ -312,151 +321,183 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
 
     mythic_sync_log.info(f"Starting subscription for file data, start_id: {start_id}")
     async for data in mythic.subscribe_custom_query(mythic=mythic_instance, query=nemesis_file_subscription):
-        try:
-            file_meta = data["filemeta_stream"][0]
-            mythic_file_id = file_meta["agent_file_id"]
-            file_id = file_meta["id"]
-            task_id = file_meta["task"]["id"]
-
-            chunk_size = int(file_meta["chunk_size"])
-            chunks_received = int(file_meta["chunks_received"])
-            est_file_size = chunk_size * chunks_received
-
-            redis_key = f"filemeta{mythic_file_id}"
-
+        for file_meta in data["filemeta_stream"]:
             try:
-                redis_entry_id = rconn.get(redis_key)
-            except:
-                redis_entry_id = None
+                mythic_file_id = file_meta["agent_file_id"]
+                full_path = base64.b64decode(file_meta["full_remote_path_text"]).decode("utf-8").replace("\\", "/")
+                file_id = file_meta["id"]
+                task_id = file_meta["task"]["id"]
 
-            if not redis_entry_id:
+                chunk_size = int(file_meta["chunk_size"])
+                chunks_received = int(file_meta["chunks_received"])
+                est_file_size = chunk_size * chunks_received
 
-                mythic_sync_log.info(f"New file download with id '{mythic_file_id}'")
+                redis_key = f"filemeta{mythic_file_id}"
 
-                # TODO: depending on file size, determine if we want to hold this in memory
-                #   Is there some other option that lets us stream to disk instead?
+                try:
+                    redis_entry_id = rconn.get(redis_key)
+                except:
+                    redis_entry_id = None
 
-                if est_file_size > MAX_FILE_SIZE:
-                    await add_mythic_tag(mythic_instance, "above_size_limit", filemeta_id=file_id, task_id=task_id)
-                    raise Exception(f"File is over {MAX_FILE_SIZE} bytes, not processing")
+                if not redis_entry_id:
 
-                # download the file bytes from Mythic
-                #   TODO: chunking to get around the size limit?
-                file_bytes = await mythic.download_file(mythic=mythic_instance, file_uuid=mythic_file_id)
-                file_size = len(file_bytes)
+                    mythic_sync_log.info(f"New file download with id '{mythic_file_id}'")
 
-                # upload the file to Nemesis and get a new file UUID back for reference
-                nemesis_file_id = nemesis_post_file(file_bytes)
-                mythic_sync_log.info(f"File posted to Nemesis, nemesis_file_id: {nemesis_file_id}")
+                    existing_tags = {}
 
-                if not nemesis_file_id:
-                    raise Exception("No nemesis_file_id returned from file upload")
+                    if "tags" in file_meta:
+                        for tag in file_meta["tags"]:
+                            tag_name = tag["tagtype"]["name"]
+                            existing_tags[tag_name] = ""
 
-                del file_bytes
+                    # TODO: depending on file size, determine if we want to hold this in memory
+                    #   Is there some other option that lets us stream to disk instead?
 
-                metadata = {}
-                metadata["agent_id"] = file_meta["task"]["callback"]["agent_callback_id"]
-                metadata["agent_type"] = "mythic"
-                metadata["automated"] = True
-                metadata["data_type"] = "file_data"
-                metadata["expiration"] = convert_timestamp(file_meta["timestamp"], EXPIRATION_DAYS)
-                # metadata["source"] = file_meta["host"]
-                metadata["project"] = file_meta["task"]["callback"]["operation"]["name"]
-                metadata["timestamp"] = convert_timestamp(file_meta["timestamp"])
+                    if est_file_size > MAX_FILE_SIZE:
+                        if "above_size_limit" not in existing_tags:
+                            await add_mythic_tag(mythic_instance, "above_size_limit", filemeta_id=file_id, task_id=task_id)
+                            raise Exception(f"File is over {MAX_FILE_SIZE} bytes, not processing")
 
-                file_data = {}
-                file_data["path"] = base64.b64decode(file_meta["full_remote_path_text"]).decode("utf-8").replace("\\", "/")
-                # filename_text = base64.b64decode(file_meta["filename_text"]).decode("utf-8")
-                file_data["size"] = file_size
-                file_data["object_id"] = nemesis_file_id
+                    # download the file bytes from Mythic
+                    #   TODO: chunking to get around the size limit?
+                    file_bytes = await mythic.download_file(mythic=mythic_instance, file_uuid=mythic_file_id)
+                    file_size = len(file_bytes)
 
-                # post to the Nemesis data API (`data` needs to be an array of dictionaries!)
-                resp = nemesis_post_data({"metadata": metadata, "data": [file_data]})
+                    # upload the file to Nemesis and get a new file UUID back for reference
+                    nemesis_file_id = nemesis_post_file(file_bytes)
+                    mythic_sync_log.info(f"File posted to Nemesis, nemesis_file_id: {nemesis_file_id}")
 
-                # if the post works we get JSON/non-none
-                if resp:
-                    message_id = resp["object_id"]
-                    mythic_sync_log.info(f"Nemesis message_id for submitted file_data: {message_id}")
+                    if not nemesis_file_id:
+                        raise Exception("No nemesis_file_id returned from file upload")
 
-                    # mark this file as processed in Redis now that it was submitted
-                    rconn.mset({redis_key: 1})
+                    del file_bytes
 
-                    # mark this Mythic ID as the last processed file ID
-                    last_file_id = rconn.get("last_file_id")
-                    if file_id > last_file_id:
-                        rconn.mset({"last_file_id": file_id})
+                    metadata = {}
+                    metadata["agent_id"] = file_meta["task"]["callback"]["agent_callback_id"]
+                    metadata["agent_type"] = "mythic"
+                    metadata["automated"] = True
+                    metadata["data_type"] = "file_data"
+                    metadata["expiration"] = convert_timestamp(file_meta["timestamp"], EXPIRATION_DAYS)
+                    # metadata["source"] = file_meta["host"]
+                    metadata["project"] = file_meta["task"]["callback"]["operation"]["name"]
+                    metadata["timestamp"] = convert_timestamp(file_meta["timestamp"])
 
-                    # get the metadata for the processed file from Elasticsearch
-                    file_metadata = await get_processed_file_metadata(message_id)
+                    file_data = {}
+                    file_data["path"] = base64.b64decode(file_meta["full_remote_path_text"]).decode("utf-8").replace("\\", "/")
+                    # filename_text = base64.b64decode(file_meta["filename_text"]).decode("utf-8")
+                    file_data["size"] = file_size
+                    file_data["object_id"] = nemesis_file_id
 
-                    if not file_metadata:
-                        mythic_sync_log.error("Couldn't retrieve metadata for processed file!")
-                        continue
+                    # post to the Nemesis data API (`data` needs to be an array of dictionaries!)
+                    resp = nemesis_post_data({"metadata": metadata, "data": [file_data]})
 
-                    mythic_sync_log.debug(f"File metadata for {message_id} retrieved from Elastic")
+                    # if the post works we get JSON/non-none
+                    if resp:
+                        message_id = resp["object_id"]
+                        mythic_sync_log.info(f"Nemesis message_id for submitted file_data: {message_id}")
 
-                    # this is any metadata that we're doing to display as JSON for the "file_metadata" tag
-                    file_metadata_display = {}
-                    if "size" in file_metadata and file_metadata["size"]:
-                        file_metadata_display["size"] = file_metadata["size"]
-                    if "isBinary" in file_metadata and file_metadata["isBinary"]:
-                        file_metadata_display["is_binary"] = "true"
-                    if "isOfficeDoc" in file_metadata and file_metadata["isOfficeDoc"]:
-                        file_metadata_display["is_office_doc"] = "true"
-                    if "magicType" in file_metadata and file_metadata["magicType"]:
-                        file_metadata_display["magic_type"] = file_metadata["magicType"]
-                    if "nemesisFileType" in file_metadata and file_metadata["nemesisFileType"]:
-                        file_metadata_display["nemesis_file_type"] = file_metadata["nemesisFileType"]
+                        # mark this file as processed in Redis now that it was submitted
+                        rconn.mset({redis_key: 1})
 
-                    if "objectIdURL" in file_metadata and file_metadata["objectIdURL"]:
-                        file_metadata_display["Download File"] = file_metadata["objectIdURL"]
-                    if "extractedSourceURL" in file_metadata and file_metadata["extractedSourceURL"]:
-                        file_metadata_display["Download Decompiled Source"] = file_metadata["extractedSourceURL"]
-                    if "convertedPdfURL" in file_metadata and file_metadata["convertedPdfURL"]:
-                        file_metadata_display["View Converted PDF"] = file_metadata["convertedPdfURL"]
-                    if "extractedPlaintextURL" in file_metadata and file_metadata["extractedPlaintextURL"]:
-                        file_metadata_display["Extracted Plaintext (Elastic)"] = file_metadata["extractedPlaintextURL"]
+                        # mark this Mythic ID as the last processed file ID
+                        last_file_id = rconn.get("last_file_id")
+                        if file_id > last_file_id:
+                            rconn.mset({"last_file_id": file_id})
 
-                    dashboard_file_link = f"{DASHBOARD_URL}?object_id={nemesis_file_id}"
+                        # get the metadata for the processed file from Elasticsearch
+                        file_metadata = await get_processed_file_metadata(message_id)
 
-                    # update the comment for the file in Mythic to indicate it was processed
-                    await mythic.update_file_comment(mythic_instance, file_uuid=mythic_file_id, comment="Processed by Nemesis 😈")
+                        if not file_metadata:
+                            mythic_sync_log.error("Couldn't retrieve metadata for processed file!")
+                            continue
 
-                    # add a basic metadata Mythic tag
-                    await add_mythic_tag(mythic_instance, "file_metadata", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=json.dumps(file_metadata_display))
+                        # mythic_sync_log.debug(f"File metadata for {message_id} retrieved from Elastic")
 
-                    # custom tags
-                    if ("containsDpapi" in file_metadata) and (file_metadata["containsDpapi"]):
-                        await add_mythic_tag(mythic_instance, "contains_dpapi", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+                        # this is any metadata that we're doing to display as JSON for the "file_metadata" tag
+                        file_metadata_display = {}
 
-                    if ("parsedData" in file_metadata) and ("hasParsedCredentials" in file_metadata["parsedData"]) and file_metadata["parsedData"]["hasParsedCredentials"]:
-                        await add_mythic_tag(mythic_instance, "parsed_credentials", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+                        # print(f"file_metadata: {file_metadata}")
 
-                    if ("analysis" in file_metadata) and ("dotnetDeserialization" in file_metadata["analysis"]) and (file_metadata["analysis"]["dotnetDeserialization"]["hasDeserialization"] == 1):
-                        await add_mythic_tag(mythic_instance, "deserialization", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+                        if "size" in file_metadata and file_metadata["size"]:
+                            file_metadata_display["size"] = file_metadata["size"]
+                        if "isBinary" in file_metadata and file_metadata["isBinary"]:
+                            file_metadata_display["is_binary"] = "true"
+                        if "isOfficeDoc" in file_metadata and file_metadata["isOfficeDoc"]:
+                            file_metadata_display["is_office_doc"] = "true"
+                        if "magicType" in file_metadata and file_metadata["magicType"]:
+                            file_metadata_display["magic_type"] = file_metadata["magicType"]
+                        if "nemesisFileType" in file_metadata and file_metadata["nemesisFileType"]:
+                            file_metadata_display["nemesis_file_type"] = file_metadata["nemesisFileType"]
 
-                    if ("parsedData" in file_metadata) and ("isEncrypted" in file_metadata["parsedData"]) and file_metadata["parsedData"]["isEncrypted"]:
-                        await add_mythic_tag(mythic_instance, "encrypted", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+                        if "objectIdURL" in file_metadata and file_metadata["objectIdURL"]:
+                            file_metadata_display["Download File"] = file_metadata["objectIdURL"]
+                        if "extractedSourceURL" in file_metadata and file_metadata["extractedSourceURL"]:
+                            file_metadata_display["Download Decompiled Source"] = file_metadata["extractedSourceURL"]
+                        if "convertedPdfURL" in file_metadata and file_metadata["convertedPdfURL"]:
+                            file_metadata_display["View Converted PDF"] = file_metadata["convertedPdfURL"]
+                        if "extractedPlaintextURL" in file_metadata and file_metadata["extractedPlaintextURL"]:
+                            file_metadata_display["Extracted Plaintext (Elastic)"] = file_metadata["extractedPlaintextURL"]
 
-                    if ("yaraMatches" in file_metadata) and (file_metadata["yaraMatches"]):
-                        rule_names = ", ".join(file_metadata["yaraMatches"])
-                        data = json.dumps({"rule_names": rule_names})
-                        await add_mythic_tag(mythic_instance, "yara_matches", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=data)
+                        dashboard_file_link = f"{DASHBOARD_URL}?object_id={nemesis_file_id}"
 
-                    if ("noseyparker" in file_metadata) and (file_metadata["noseyparker"]):
-                        rule_names_dict = {}
-                        for match in file_metadata["noseyparker"]["ruleMatches"]:
-                            rule_names_dict[match["ruleName"]] = True
-                        rule_names = ", ".join(rule_names_dict.keys())
-                        data = json.dumps({"rule_names": rule_names})
-                        await add_mythic_tag(mythic_instance, "noseyparker", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=data)
+                        # update the comment for the file in Mythic to indicate it was processed
+                        await mythic.update_file_comment(mythic_instance, file_uuid=mythic_file_id, comment="Processed by Nemesis 😈")
 
-        except Exception:
-            mythic_sync_log.exception(
-                "Encountered an exception! Data returned by Mythic: %s",
-                data,
-            )
-            continue
+                        # add a basic metadata Mythic tag
+                        if "file_metadata" not in existing_tags:
+                            await add_mythic_tag(mythic_instance, "file_metadata", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=json.dumps(file_metadata_display))
+
+                        # custom tags
+                        if ("containsDpapi" in file_metadata) and (file_metadata["containsDpapi"]):
+                            if "contains_dpapi" not in existing_tags:
+                                await add_mythic_tag(mythic_instance, "contains_dpapi", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+
+                        if ("parsedData" in file_metadata) and ("hasParsedCredentials" in file_metadata["parsedData"]) and file_metadata["parsedData"]["hasParsedCredentials"]:
+                            if "parsed_credentials" not in existing_tags:
+                                await add_mythic_tag(mythic_instance, "parsed_credentials", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+
+                        if ("analysis" in file_metadata):
+                            if ("dotnetAnalysis" in file_metadata["analysis"]) and ("hasDeserialization" in file_metadata["analysis"]["dotnetAnalysis"]) and (file_metadata["analysis"]["dotnetAnalysis"]["hasDeserialization"] == 1):
+                                if "deserialization" not in existing_tags:
+                                    await add_mythic_tag(mythic_instance, "deserialization", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+
+                            if ("dotnetAnalysis" in file_metadata["analysis"]) and ("hasCmdExecution" in file_metadata["analysis"]["dotnetAnalysis"]) and (file_metadata["analysis"]["dotnetAnalysis"]["hasCmdExecution"] == 1):
+                                if "cmd_execution" not in existing_tags:
+                                    await add_mythic_tag(mythic_instance, "cmd_execution", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+
+                            if ("dotnetAnalysis" in file_metadata["analysis"]) and ("hasRemoting" in file_metadata["analysis"]["dotnetAnalysis"]) and (file_metadata["analysis"]["dotnetAnalysis"]["hasRemoting"] == 1):
+                                if "remoting" not in existing_tags:
+                                    await add_mythic_tag(mythic_instance, "remoting", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+
+                        if ("canaries" in file_metadata) and ("canariesPresent" in file_metadata["canaries"]) and (file_metadata["canaries"]["canariesPresent"] == 1):
+                            if "file_canary" not in existing_tags:
+                                await add_mythic_tag(mythic_instance, "file_canary", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+
+                        if ("parsedData" in file_metadata) and ("isEncrypted" in file_metadata["parsedData"]) and file_metadata["parsedData"]["isEncrypted"]:
+                            if "encrypted" not in existing_tags:
+                                await add_mythic_tag(mythic_instance, "encrypted", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link)
+
+                        if ("yaraMatches" in file_metadata) and (file_metadata["yaraMatches"]):
+                            rule_names = ", ".join(file_metadata["yaraMatches"])
+                            data = json.dumps({"rule_names": rule_names})
+                            if "yara_matches" not in existing_tags:
+                                await add_mythic_tag(mythic_instance, "yara_matches", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=data)
+
+                        if ("noseyparker" in file_metadata) and (file_metadata["noseyparker"]):
+                            rule_names_dict = {}
+                            for match in file_metadata["noseyparker"]["ruleMatches"]:
+                                rule_names_dict[match["ruleName"]] = True
+                            rule_names = ", ".join(rule_names_dict.keys())
+                            data = json.dumps({"rule_names": rule_names})
+                            if "noseyparker" not in existing_tags:
+                                await add_mythic_tag(mythic_instance, "noseyparker", filemeta_id=file_id, task_id=task_id, url=dashboard_file_link, data=data)
+
+            except Exception:
+                mythic_sync_log.exception(
+                    "Encountered an exception! Data returned by Mythic: %s",
+                    data,
+                )
+                continue
 
 
 async def handle_filebrowser(mythic_instance: mythic_classes.Mythic) -> None:
@@ -756,23 +797,8 @@ async def handle_process(mythic_instance: mythic_classes.Mythic, chunk_size: int
                     await asyncio.gather(*tag_calls)
 
 
-async def add_mythic_tag(mythic_instance: mythic_classes.Mythic, tag_name: str, source: str = "Nemesis", filemeta_id: int = -1, mythictree_id: int = -1, task_id: int = -1, url: str = "", data: str = ""):
+async def add_mythic_tag(mythic_instance: mythic_classes.Mythic, tag_name: str, source: str = "Nemesis", filemeta_id: int = None, mythictree_id: int = None, task_id: int = None, url: str = "", data: str = ""):
     """Adds a file or process tag to Mythic from an existing created tag type."""
-
-    if filemeta_id != -1:
-        filemeta_ids = [filemeta_id]
-    else:
-        filemeta_ids = None
-
-    if mythictree_id != -1:
-        mythictree_ids = [mythictree_id]
-    else:
-        mythictree_ids = None
-
-    if task_id != -1:
-        task_ids = [task_id]
-    else:
-        task_ids = None
 
     if tag_name not in NEMESIS_TAGS:
         mythic_sync_log.warning(f"Tag name '{tag_name}' not in the existing tag set.")
@@ -780,7 +806,7 @@ async def add_mythic_tag(mythic_instance: mythic_classes.Mythic, tag_name: str, 
         if NEMESIS_TAGS[tag_name].id == -1:
             mythic_sync_log.warning(f"Tag name '{tag_name}' not initialized properly.")
         else:
-            await mythic.create_tag(mythic=mythic_instance, tag_type_id=NEMESIS_TAGS[tag_name].id, filemeta_ids=filemeta_ids, mythictree_ids=mythictree_ids, task_ids=task_ids, source=source, url=url, data=data)
+            await mythic.create_tag_for_multiple_objects(mythic=mythic_instance, tag_type_id=NEMESIS_TAGS[tag_name].id, filemeta_id=filemeta_id, mythictree_id=mythictree_id, task_id=task_id, source=source, url=url, data=data)
 
 
 async def create_tag_types(mythic_instance: mythic_classes.Mythic):
