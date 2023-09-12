@@ -239,7 +239,7 @@ if st.session_state["authentication_status"]:
 
                             if is_text:
                                 if file['size'] > 20000000:
-                                    st.warningst.warning("File is over 20MB, not displaying in Monaco")
+                                    st.warning("File is over 20MB, not displaying in Monaco")
                                 else:
                                     # Monaco editor display for ascii files
                                     with mui.Card(
