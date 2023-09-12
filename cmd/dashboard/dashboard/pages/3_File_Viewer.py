@@ -100,11 +100,11 @@ if st.session_state["authentication_status"]:
                 download_url = f"http://enrichment-webapi:9910/download/{object_id}"
                 pdf_download_url = ""
                 extracted_source_download_url = ""
-                is_ascii = False
+                is_text = False
                 public_download_url = f"{NEMESIS_HTTP_SERVER}/api/download/{object_id}?name={url_enc_file_name}&action=download"
 
-                if "magic_type" in file and file["magic_type"] and ("ASCII text" in file["magic_type"] or "Unicode text" in file["magic_type"]):
-                    is_ascii = True
+                if "magic_type" in file and file["magic_type"] and ("ASCII text" in file["magic_type"] or "UTF-8 Unicode" in file["magic_type"]):
+                    is_text = True
                 if "converted_pdf_id" in file and file["converted_pdf_id"] != "00000000-0000-0000-0000-000000000000":
                     pdf_download_url = f"http://enrichment-webapi:9910/download/{file['converted_pdf_id']}"
                 if "extracted_source_id" in file and file["extracted_source_id"] != "00000000-0000-0000-0000-000000000000":
@@ -237,7 +237,7 @@ if st.session_state["authentication_status"]:
                                             InputProps={"endAdornment": end},
                                         )
 
-                            if is_ascii:
+                            if is_text:
                                 # Monaco editor display for ascii files
                                 with mui.Card(
                                     key="2",
@@ -268,11 +268,14 @@ if st.session_state["authentication_status"]:
                                             elevation=1,
                                             spacing=10,
                                         ):
-                                            editor.Monaco(
-                                                height="64vh",
-                                                defaultValue=response.content.decode('utf-8'),
-                                                language=utils.map_extension_to_monaco_language(extension)
-                                            )
+                                            try:
+                                                editor.Monaco(
+                                                    height="64vh",
+                                                    defaultValue=response.content.decode('utf-8'),
+                                                    language=utils.map_extension_to_monaco_language(extension)
+                                                )
+                                            except Exception as e:
+                                                st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
                             elif pdf_download_url:
                                 # Inline PDF file file display, if PDF is present
                                 with mui.Card(

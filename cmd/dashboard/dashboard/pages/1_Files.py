@@ -18,7 +18,7 @@ from streamlit_toggle import st_toggle_switch
 
 POSTGRES_CONNECTION_URI = os.environ.get("POSTGRES_CONNECTION_URI") or ""
 DB_ITERATION_SIZE = os.environ.get("DB_ITERATION_SIZE") or "1000"
-NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER").rstrip("/")
 PAGE_SIZE = 8
 
 
