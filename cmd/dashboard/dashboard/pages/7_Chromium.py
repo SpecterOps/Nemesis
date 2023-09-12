@@ -7,14 +7,8 @@ from typing import List
 import extra_streamlit_components as stx
 import streamlit as st
 import utils
-from st_aggrid import (
-    AgGrid,
-    ColumnsAutoSizeMode,
-    DataReturnMode,
-    GridOptionsBuilder,
-    GridUpdateMode,
-    JsCode,
-)
+from st_aggrid import (AgGrid, ColumnsAutoSizeMode, DataReturnMode,
+                       GridOptionsBuilder, GridUpdateMode, JsCode)
 from streamlit_searchbox import st_searchbox
 from streamlit_toggle import st_toggle_switch
 
@@ -191,6 +185,8 @@ if "authentication_status" in st.session_state and st.session_state["authenticat
                     df_cookies_download = df_cookies_download.drop("source", axis=1)
                     df_cookies_download = df_cookies_download.drop("username", axis=1)
                     df_cookies_download = df_cookies_download.drop("browser", axis=1)
+                    df_cookies_download = df_cookies_download.drop("unique_db_id", axis=1)
+                    df_cookies_download = df_cookies_download.drop("notes", axis=1)
                     df_cookies_download["hostOnly"] = False
                     df_cookies_download["httpOnly"] = False
                     df_cookies_download["secure"] = True

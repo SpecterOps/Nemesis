@@ -147,6 +147,11 @@ def convert_chromium_timestamp_to_datetime(timestamp: int) -> datetime.datetime:
     return datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=timestamp)
 
 
+def convert_epoch_seconds_to_datetime(timestamp: float) -> datetime.datetime:
+    """Converts epoch seconds to a datetime."""
+    return datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=timestamp)
+
+
 async def process_chromium_history(
     object_id: str,
     file_path: str,
@@ -289,6 +294,24 @@ async def process_chromium_logins(
             await chromium_logins_q.Send(chromium_login_message.SerializeToString())
 
 
+async def is_chromium_cookie_json(file_path: str) -> bool:
+    """
+    Helper that downloads the specified file and tries to load it as a json,
+    checking various fields to see if it's likely a Chromium cookie json dump.
+    """
+    try:
+        with open(file_path, "r") as f:
+            file_json = json.loads(f.read())
+            if type(file_json) == list and len(file_json) > 0:
+                if type(file_json[0]) == dict and len(file_json[0]) > 10 and len(file_json[0]) < 20:
+                    fields = list(file_json[0].keys())
+                    if "name" in fields and "domain" in fields and "sameSite" in fields and "httpOnly" in fields:
+                        return True
+            return False
+    except:
+        return False
+
+
 async def process_chromium_cookies(
     object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_cookies_q: MessageQueueProducerInterface
 ) -> None:
@@ -368,6 +391,75 @@ async def process_chromium_cookies(
                 chromium_cookie_message.data.append(cookie)
 
             await chromium_cookies_q.Send(chromium_cookie_message.SerializeToString())
+
+
+async def process_cookies_json(
+    object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_cookies_q: MessageQueueProducerInterface
+) -> None:
+    """
+    Helper that parses out the appropriate data from a (likely Chromium) cookies JSON, builds
+    the appropriate protobuf messages, and publishes them to the passed queue.
+    """
+
+    try:
+        with open(file_path, "r") as f:
+            cookie_json_all = json.loads(f.read())
+
+        cookie_message = pb.ChromiumCookieMessage()
+        cookie_message.metadata.CopyFrom(metadata)
+
+        for cookie_json in cookie_json_all:
+            try:
+                cookie = pb.ChromiumCookie()
+
+                # user_data_directory is not known here
+
+                cookie.originating_object_id = object_id
+                cookie.host_key = cookie_json["domain"].lower()
+                cookie.path = cookie_json["path"]
+                cookie.name = cookie_json["name"]
+                cookie.is_decrypted = True
+                cookie.value_dec = cookie_json["value"]
+
+                expires_raw = 0
+                if "expires" in cookie_json:
+                    expires_raw = cookie_json["expires"]
+                elif "expirationDate" in cookie_json:
+                    expires_raw = cookie_json["expirationDate"]
+                expires_dt = convert_epoch_seconds_to_datetime(expires_raw)
+                cookie.expires.FromDatetime(expires_dt)
+
+                if "httpOnly" in cookie_json:
+                    cookie.is_httponly = cookie_json["httpOnly"]
+
+                if "sameSite" in cookie_json:
+                    if cookie_json["sameSite"].upper() == "NONE":
+                        cookie.samesite = "NONE"
+                    elif cookie_json["sameSite"].upper() == "LAX":
+                        cookie.samesite = "LAX"
+                    elif cookie_json["sameSite"].upper() == "STRICT":
+                        cookie.samesite = "STRICT"
+                    else:
+                        cookie.samesite = "UNKNOWN"
+
+                if "session" in cookie_json:
+                    cookie.is_session = cookie_json["session"]
+
+                if "secure" in cookie_json:
+                    cookie.is_secure = cookie_json["secure"]
+
+                if "sourcePort" in cookie_json:
+                    cookie.source_port = cookie_json["sourcePort"]
+
+                cookie_message.data.append(cookie)
+
+            except Exception as e:
+                await logger.awarning(f"Error parsing a specific cookie in process_chromium_cookies_json: {e}")
+
+        await chromium_cookies_q.Send(cookie_message.SerializeToString())
+
+    except Exception as e:
+        await logger.aerror(f"Error in process_chromium_cookies_json: {e}")
 
 
 ##################################################

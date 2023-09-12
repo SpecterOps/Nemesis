@@ -455,6 +455,13 @@ class FileProcessor(TaskInterface):
             await logger.ainfo("Detected Chromium state file, emitting ChromiumStateFileMessage")
             await self.out_q_chromiumstatefile.Send(chromium_state_file_message.SerializeToString())
 
+        # we have a likely JSON Chromium cookie dump
+        elif file_data.magic_type == "JSON data" and (await helpers.is_chromium_cookie_json(file_path_on_disk)):
+            await logger.ainfo("Detected Chromium cookies JSON file, processing")
+            await helpers.process_cookies_json(
+                file_data.object_id, file_path_on_disk, metadata, file_data.parsed_data, self.out_q_chromiumcookies
+            )
+
         # if this file is Seatbelt data, emit a raw_data message so the data is properly processed
         elif file_data.magic_type == "JSON data" and helpers.scan_with_yara(file_path_on_disk, "seatbelt_json"):
             skip_dpapi_carve = True
