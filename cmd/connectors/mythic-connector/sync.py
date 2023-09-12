@@ -66,6 +66,14 @@ try:
 except:
     pass
 
+# if we want to manually set at which specific ID (including 0) each file type processing starts
+# processed files
+REDIS_LAST_FILE_ID = os.environ.get("REDIS_LAST_FILE_ID")
+# listed files
+REDIS_LAST_FILEBROWSER_ID = os.environ.get("REDIS_LAST_FILEBROWSER_ID")
+# process listings
+REDIS_LAST_PROCESS_ID = os.environ.get("REDIS_LAST_PROCESS_ID")
+
 # Redis connector
 rconn = None
 
@@ -862,6 +870,13 @@ async def wait_for_redis() -> None:
                 await asyncio.sleep(30)
                 for key in rconn.keys('*'):
                     rconn.delete(key)
+            # set starting points if they're specified
+            if REDIS_LAST_FILE_ID:
+                rconn.mset({"last_file_id": int(REDIS_LAST_FILE_ID)})
+            if REDIS_LAST_FILEBROWSER_ID:
+                rconn.mset({"last_filebrowser_id": int(REDIS_LAST_FILEBROWSER_ID)})
+            if REDIS_LAST_PROCESS_ID:
+                rconn.mset({"last_process_id": int(REDIS_LAST_PROCESS_ID)})
             return True
         except Exception:
             mythic_sync_log.exception(

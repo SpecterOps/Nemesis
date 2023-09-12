@@ -45,6 +45,46 @@ Ensure the host where `mythic_nemesis_sync` is running has network access to the
 
 The container uses Redis to keep a persistent store of Mythic data that's been submitted to Nemesis. If you want to reprocess data, set `CLEAR_REDIS=True` in settings.env to clear the Redis database. There will be a 30 second pause on startup with a warning message indicating aborting the standup will avoid clearing the database.
 
+## Fixing Processing Starting Points
+
+If the Redis database is wiped and you don't want to reprocess all existing data again, you can set the Mythic ID starting points (0 being starting from the beginning, i.e. reprocessing) for syncing of files, file listings, and processes by adding the following to settings.env:
+
+```
+REDIS_LAST_FILE_ID=123
+REDIS_LAST_FILEBROWSER_ID=456
+REDIS_LAST_PROCESS_ID=789
+```
+
+You can find the last processed file ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+
+```
+query MyQuery {
+  filemeta(order_by: {id: desc}, limit: 1, where: {is_download_from_agent: {_eq: true}, complete: {_eq: true}, is_screenshot: {_eq: false}}) {
+    id
+  }
+}
+```
+
+You can find the last processed file listing ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+
+```
+query MyQuery {
+  mythictree(order_by: {id: desc}, limit: 1, where: {tree_type: {_eq: "file"}}) {
+    id
+  }
+}
+```
+
+You can find the last processed processing listing ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+
+```
+query MyQuery {
+  mythictree(order_by: {id: desc}, limit: 1, where: {tree_type: {_eq: "process"}}) {
+    id
+  }
+}
+```
+
 ## References
 
 - [Mythic](https://github.com/its-a-feature/Mythic) - Multi-platform C2 Framework
