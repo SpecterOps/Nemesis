@@ -399,18 +399,28 @@ if st.session_state["authentication_status"]:
 
                                         mui.Box(sx={"flexGrow": 1})
 
+                                        thumbs_up_color = "default"
+                                        thumbs_down_color = "default"
+                                        question_color = "default"
+                                        match file["triage"]:
+                                            case "useful":
+                                                thumbs_up_color = "success"
+                                            case "notuseful":
+                                                thumbs_down_color = "error"
+                                            case "unknown":
+                                                question_color = "warning"
+
+                                        with html.span:
+                                            mui.Typography("Triage")
                                         with mui.Tooltip(title="Mark file as useful"):
                                             with html.span:
-                                                mui.IconButton(mui.icon.ThumbUpOffAlt, onClick=sync(f"triage_{unique_db_id}_useful"))
+                                                mui.IconButton(mui.icon.ThumbUpOffAlt, color=thumbs_up_color, onClick=sync(f"triage_{unique_db_id}_useful"))
                                         with mui.Tooltip(title="Mark file as not useful"):
                                             with html.span:
-                                                mui.IconButton(mui.icon.ThumbDownOffAlt, onClick=sync(f"triage_{unique_db_id}_notuseful"))
+                                                mui.IconButton(mui.icon.ThumbDownOffAlt, color=thumbs_down_color, onClick=sync(f"triage_{unique_db_id}_notuseful"))
                                         with mui.Tooltip(title="Mark file as needing additional investigation"):
                                             with html.span:
-                                                mui.IconButton(mui.icon.QuestionMark, onClick=sync(f"triage_{unique_db_id}_unknown"))
-                                        if file["triage"]:
-                                            with html.span:
-                                                mui.Typography("triage")
+                                                mui.IconButton(mui.icon.QuestionMark, color=question_color, onClick=sync(f"triage_{unique_db_id}_unknown"))
 
                                 # Information table
                                 with mui.CardContent(sx={"flex": 1}):
