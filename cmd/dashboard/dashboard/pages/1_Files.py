@@ -423,8 +423,8 @@ if st.session_state["authentication_status"]:
                                                 mui.IconButton(mui.icon.QuestionMark, color=question_color, onClick=sync(f"triage_{unique_db_id}_unknown"))
 
                                 # Information table
-                                with mui.CardContent(sx={"flex": 1}):
-                                    with mui.TableContainer(sx={"maxHeight": 200}):
+                                with mui.CardContent(sx={"flex": 1, "overflow": "hidden"}):
+                                    with mui.TableContainer(sx={"maxHeight": 250, "overflow": "hidden"}):
                                         with mui.Table(size="small", overflowX="hidden", whiteSpace="nowrap"):
                                             with mui.TableBody():
                                                 identifier_style = {
