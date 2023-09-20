@@ -251,44 +251,35 @@ if st.session_state["authentication_status"]:
                                 if file['size'] > 20000000:
                                     st.warning("File is over 20MB, not displaying in Monaco")
                                 else:
-                                    # Monaco editor display for ascii files
-                                    with mui.Card(
-                                        key="2",
-                                        sx={
-                                            "display": "flex",
-                                            "flexDirection": "column",
-                                            "borderRadius": 2,
-                                            "overflow": "auto",
-                                            "overflowY": "auto",
-                                            "m": "10",
-                                            "gap": "10px",
-                                        },
-                                        padding=1,
-                                        elevation=1,
-                                        spacing=10,
-                                    ):
-                                        response = requests.get(download_url)
-                                        if response.status_code != 200:
-                                            st.error(f"Error retrieving text data from {download_url}, status code: {response.status_code}", icon="🚨")
-                                        else:
-                                            with mui.Card(
-                                                sx={
-                                                    "display": "flex",
-                                                    "overflow": "auto",
-                                                    "overflowY": "auto",
-                                                },
-                                                padding=1,
-                                                elevation=1,
-                                                spacing=10,
-                                            ):
-                                                try:
-                                                    editor.Monaco(
-                                                        height="64vh",
-                                                        defaultValue=response.content.decode('utf-8'),
-                                                        language=utils.map_extension_to_monaco_language(extension)
-                                                    )
-                                                except Exception as e:
-                                                    st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
+                                    response = requests.get(download_url)
+                                    if response.status_code != 200:
+                                        st.error(f"Error retrieving text data from {download_url}, status code: {response.status_code}", icon="🚨")
+                                    else:
+                                        # Monaco editor display for ascii files
+                                        with mui.Card(
+                                            key="2",
+                                            sx={
+                                                "display": "flex",
+                                                "flexDirection": "column",
+                                                "borderRadius": 2,
+                                                "overflow": "auto",
+                                                "overflowY": "auto",
+                                                "m": "10",
+                                                "gap": "10px",
+                                            },
+                                            padding=1,
+                                            elevation=1,
+                                            spacing=10,
+                                        ):
+                                            try:
+                                                editor.Monaco(
+                                                    height="64vh",
+                                                    defaultValue=response.content.decode('utf-8'),
+                                                    language=utils.map_extension_to_monaco_language(extension)
+                                                )
+                                            except Exception as e:
+                                                st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
+
                             elif pdf_download_url:
                                 # Inline PDF file file display, if PDF is present
                                 with mui.Card(
