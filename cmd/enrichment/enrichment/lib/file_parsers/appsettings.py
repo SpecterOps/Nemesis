@@ -40,7 +40,7 @@ class appsettings(Meta.FileType):
         """
         Returns True if the internal File path matches our target criteria.
         """
-        regex_string = ".*/.*(appsettings).*\\.json"
+        regex_string = "(.*/)?.*(appsettings).*\\.json"
         return re.search(regex_string, self.file_data.path, re.IGNORECASE) is not None
 
     def check_content(self) -> bool:

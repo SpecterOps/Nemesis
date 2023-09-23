@@ -72,7 +72,7 @@ sudo install minikube-linux-amd64 /usr/local/bin/minikube
 
 Configure the cluster with at a minimum of 3 CPUs and 10Gb of memory:
 ```
-minikube config set memory 14336
+minikube config set memory 12288
 minikube config set cpus 3
 ```
 

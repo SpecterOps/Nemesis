@@ -40,7 +40,7 @@ class web_config(Meta.FileType):
         """
         Returns True if the internal File path matches our target criteria.
         """
-        regex_string = r".*/.*(web|app).*\.config"
+        regex_string = r"(.*/|^)?.*(web|app).*\.config"
         return re.search(regex_string, self.file_data.path, re.IGNORECASE) is not None
 
     def check_content(self) -> bool:

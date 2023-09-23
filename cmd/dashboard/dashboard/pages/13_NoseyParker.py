@@ -1,6 +1,5 @@
 # Standard Libraries
 import os
-import urllib
 
 # 3rd Party Libraries
 import streamlit as st
@@ -8,12 +7,11 @@ import templates
 import utils
 from annotated_text import annotated_text, annotation
 
-utils.header()
-
 page_size = int(os.environ["PAGE_SIZE"])
 NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
 
-if st.session_state["authentication_status"]:
+
+def render_page(username: str):
     with st.expander("About NoseyParker Search"):
         st.markdown(
             """
@@ -47,7 +45,7 @@ if st.session_state["authentication_status"]:
                 object_id = results["hits"]["hits"][i]["_source"]["objectId"]
                 file_name = results["hits"]["hits"][i]["_source"]["name"]
                 download_url = f"{NEMESIS_HTTP_SERVER}/api/download/{object_id}?name={file_name}"
-                kibana_link = f"{NEMESIS_HTTP_SERVER}/kibana/app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
+                kibana_link = f"{NEMESIS_HTTP_SERVER}dashboard/File_Viewer?object_id={object_id}"
                 path = results["hits"]["hits"][i]["_source"]["path"]
                 sha1 = results["hits"]["hits"][i]["_source"]["hashes"]["sha1"]
                 source = ""
@@ -63,7 +61,7 @@ if st.session_state["authentication_status"]:
                     st.write(
                         f"""
                         <a href="{kibana_link}">
-                            File in Kibana
+                            View File Details
                         </a>
                         &nbsp; &nbsp; &nbsp;
                         <a href="{download_url}">
@@ -101,3 +99,6 @@ if st.session_state["authentication_status"]:
                 st.write(pagination_html, unsafe_allow_html=True)
         else:
             st.write(templates.no_result_html(), unsafe_allow_html=True)
+
+
+utils.render_nemesis_page(render_page)

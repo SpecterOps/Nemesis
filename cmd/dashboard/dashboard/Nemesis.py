@@ -4,13 +4,14 @@
 import requests
 import streamlit as st
 import utils
+from streamlit.web.server.app_static_file_handler import SAFE_APP_STATIC_FILE_EXTENSIONS
+
+SAFE_APP_STATIC_FILE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
 
 NEMESIS_API_URL = "http://enrichment-webapi:9910/"
 
-current_user = utils.header()
 
-if st.session_state["authentication_status"]:
-
+def build_page(username: str):
     if "reprocess_button" not in st.session_state:
         st.session_state["reprocess_button"] = False
 
@@ -23,6 +24,7 @@ if st.session_state["authentication_status"]:
     if "clearing" not in st.session_state:
         st.session_state["clearing"] = False
 
+    st.title("Nemesis Overview")
 
     # st.subheader("Operation Information")
     # cols = st.columns(4)
@@ -34,7 +36,7 @@ if st.session_state["authentication_status"]:
     #     st.metric("Total Agents", num_agents)
     # st.divider()
 
-    st.subheader("File Information")
+    st.subheader("Files")
     cols = st.columns(5)
     with cols[0]:
         num_plaintext_documents = utils.get_elastic_total_indexed_documents("file_data_plaintext")
@@ -53,7 +55,7 @@ if st.session_state["authentication_status"]:
         st.metric("Authentication Data", num_hashes)
     st.divider()
 
-    st.subheader("Chromium Information")
+    st.subheader("Chromium")
     cols = st.columns(4)
     with cols[0]:
         num_cookies = utils.postgres_count_entries("chromium_cookies")
@@ -110,7 +112,7 @@ if st.session_state["authentication_status"]:
                     except Exception as e:
                         st.warning(f"Error posting to Nemesis URL {NEMESIS_API_URL}reset : {e}", icon="⚠️")
 
-    footer="""<style>
+    footer = """<style>
 .footer {
 position: fixed;
 left: 0;
@@ -124,3 +126,6 @@ text-align: center;
 </div>
 """
     st.markdown(footer, unsafe_allow_html=True)
+
+
+utils.render_nemesis_page(build_page)

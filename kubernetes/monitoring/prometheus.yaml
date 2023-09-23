@@ -235,14 +235,14 @@ data:
           summary: Elasticsearch Cluster Red (instance {{ $labels.instance }})
           description: "Elastic Cluster Red status\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
 
-      - alert: ElasticsearchClusterYellow
-        expr: elasticsearch_cluster_health_status{color="yellow"} == 1
-        for: 0m
-        labels:
-          severity: warning
-        annotations:
-          summary: Elasticsearch Cluster Yellow (instance {{ $labels.instance }})
-          description: "Elastic Cluster Yellow status\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+      # - alert: ElasticsearchClusterYellow
+      #   expr: elasticsearch_cluster_health_status{color="yellow"} == 1
+      #   for: 0m
+      #   labels:
+      #     severity: warning
+      #   annotations:
+      #     summary: Elasticsearch Cluster Yellow (instance {{ $labels.instance }})
+      #     description: "Elastic Cluster Yellow status\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
 
       - alert: ElasticsearchRelocatingShards
         expr: elasticsearch_cluster_health_relocating_shards > 0

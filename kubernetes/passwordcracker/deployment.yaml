@@ -47,7 +47,7 @@ spec:
             - name: PROMETHEUS_PORT
               value: "9090"
             - name: PUBLIC_NEMESIS_URL
-              value: "$(NEMESIS_HTTP_SERVER)/dashboard/"
+              value: "$(NEMESIS_HTTP_SERVER)dashboard/"
             - name: RABBITMQ_CONNECTION_URI
               valueFrom:
                 secretKeyRef:

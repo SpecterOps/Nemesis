@@ -386,8 +386,7 @@ data:
             uri TEXT,
             username TEXT,
             notes TEXT,
-            originating_object_id UUID,                             -- Nemesis file UUID if the auth data was carved from a file
-            UNIQUE (agent_id, type, uri, username, data)
+            originating_object_id UUID                             -- Nemesis file UUID if the auth data was carved from a file
         ) INHERITS (project_data);
 
 

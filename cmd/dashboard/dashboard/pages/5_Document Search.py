@@ -8,11 +8,10 @@ import streamlit as st
 import templates
 import utils
 
-utils.header()
-
 PAGE_SIZE = int(os.environ["PAGE_SIZE"])
 
-if st.session_state["authentication_status"]:
+
+def build_about_expander():
     with st.expander("About Document Search"):
         st.markdown(
             """
@@ -26,6 +25,10 @@ if st.session_state["authentication_status"]:
         closest to the input.
         """
         )
+
+
+def build_page(username: str):
+    build_about_expander()
 
     # default values
     if "text_search" not in st.session_state:
@@ -44,15 +47,9 @@ if st.session_state["authentication_status"]:
 
     chosen_tab = stx.tab_bar(
         data=[
-            stx.TabBarItemData(
-                id="text_search", title="Text Search", description="Search text extracted from downloaded files"
-            ),
-            stx.TabBarItemData(
-                id="source_code_search", title="Source Code Search", description="Search downloaded source code files"
-            ),
-            stx.TabBarItemData(
-                id="semantic_search", title="Semantic Search", description="Semantic search over extracted text"
-            ),
+            stx.TabBarItemData(id="text_search", title="Text Search", description="Search text extracted from downloaded files"),
+            stx.TabBarItemData(id="source_code_search", title="Source Code Search", description="Search downloaded source code files"),
+            stx.TabBarItemData(id="semantic_search", title="Semantic Search", description="Semantic search over extracted text"),
         ],
         default="text_search",
     )
@@ -63,58 +60,65 @@ if st.session_state["authentication_status"]:
         else:
             search_term = st.text_input("Enter search term(s):", st.session_state.text_search)
 
-        if search_term != "":
-            st.session_state.text_search = search_term
-            from_i = (st.session_state.text_page - 1) * PAGE_SIZE
-            results = utils.elastic_text_search(search_term, from_i, PAGE_SIZE)
-            if results != {}:
-                total_hits = results["hits"]["total"]["value"]
-                num_results = len(results["hits"]["hits"])
+        if not search_term:
+            return
 
-                if total_hits > 0:
-                    st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
+        st.session_state.text_search = search_term
+        from_i = (st.session_state.text_page - 1) * PAGE_SIZE
 
-                    for i in range(num_results):
-                        res = utils.simplify_es_text_result(results["hits"]["hits"][i])
-                        originatingObjectPath = res["originatingObjectPath"]
-                        originatingObjectId = res["originatingObjectId"]
-                        originatingObjectURL = res["originatingObjectURL"]
-                        if "originatingObjectConvertedPdfUrl" in res:
-                            originatingObjectConvertedPdfUrl = res["originatingObjectConvertedPdfUrl"]
-                            pdf_url = f"{originatingObjectConvertedPdfUrl}&action=view"
-                        else:
-                            pdf_url = ""
+        results = utils.elastic_text_search(search_term, from_i, PAGE_SIZE)
+        if not results:
+            st.write(templates.no_result_html(), unsafe_allow_html=True)
+            return
 
-                        highlights = res["highlights"]
-                        source = ""
-                        if "metadata" in res and "source" in res["metadata"]:
-                            source = res["metadata"]["source"]
-                        if "wordCount" in res:
-                            length = res["wordCount"]
-                        else:
-                            length = "-1"
+        total_hits = results["hits"]["total"]["value"]
+        num_results = len(results["hits"]["hits"])
 
-                        (header, highlights, footer) = templates.text_search_result(
-                                                            i=i,
-                                                            url=originatingObjectURL,
-                                                            pdf_url=pdf_url,
-                                                            source=source,
-                                                            path=originatingObjectPath,
-                                                            highlights=highlights,
-                                                            length=length,
-                                                            originating_object_id=originatingObjectId,
-                                                        )
-                        st.write(header, unsafe_allow_html=True)
-                        st.markdown(highlights)
-                        st.write(footer, unsafe_allow_html=True)
+        if total_hits <= 0:
+            return
 
-                    # pagination
-                    if total_hits > PAGE_SIZE:
-                        total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
-                        pagination_html = templates.text_pagination(total_pages, search_term, st.session_state.text_page)
-                        st.write(pagination_html, unsafe_allow_html=True)
-                else:
-                    st.write(templates.no_result_html(), unsafe_allow_html=True)
+        st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
+
+        for i in range(num_results):
+            res = utils.simplify_es_text_result(results["hits"]["hits"][i])
+
+            originatingObjectPath = res["originatingObjectPath"]
+            originatingObjectId = res["originatingObjectId"]
+            originatingObjectURL = res["originatingObjectURL"]
+            if "originatingObjectConvertedPdfUrl" in res:
+                originatingObjectConvertedPdfUrl = res["originatingObjectConvertedPdfUrl"]
+                pdf_url = f"{originatingObjectConvertedPdfUrl}&action=view"
+            else:
+                pdf_url = ""
+
+            highlights = res["highlights"]
+            source = ""
+            if "metadata" in res and "source" in res["metadata"]:
+                source = res["metadata"]["source"]
+            if "wordCount" in res:
+                length = res["wordCount"]
+            else:
+                length = "-1"
+
+            (header, highlights, footer) = templates.text_search_result(
+                i=i,
+                url=originatingObjectURL,
+                pdf_url=pdf_url,
+                source=source,
+                path=originatingObjectPath,
+                highlights=highlights,
+                length=length,
+                originating_object_id=originatingObjectId,
+            )
+            st.write(header, unsafe_allow_html=True)
+            st.markdown(highlights)
+            st.write(footer, unsafe_allow_html=True)
+
+        # pagination
+        if total_hits > PAGE_SIZE:
+            total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
+            pagination_html = templates.text_pagination(total_pages, search_term, st.session_state.text_page)
+            st.write(pagination_html, unsafe_allow_html=True)
 
     elif chosen_tab == "source_code_search":
         if st.session_state.text_search is None:
@@ -137,7 +141,7 @@ if st.session_state["authentication_status"]:
                         res = utils.simplify_es_text_result(results["hits"]["hits"][i])
                         path = res["path"]
                         download_url = res["downloadURL"]
-                        elastic_url = res["fileObjectURL"]
+                        object_id = res["objectId"]
                         # extension = res["extension"]
                         language = res["language"]
                         name = res["name"]
@@ -149,16 +153,16 @@ if st.session_state["authentication_status"]:
                             source = res["metadata"]["source"]
 
                         (header, highlights, footer) = templates.sourcecode_search_result(
-                                                                    i=i,
-                                                                    elastic_url=elastic_url,
-                                                                    download_url=download_url,
-                                                                    source=source,
-                                                                    path=path,
-                                                                    name=name,
-                                                                    language=language,
-                                                                    highlights=highlights,
-                                                                    size=size,
-                                                                )
+                            i=i,
+                            object_id=object_id,
+                            download_url=download_url,
+                            source=source,
+                            path=path,
+                            name=name,
+                            language=language,
+                            highlights=highlights,
+                            size=size,
+                        )
                         st.write(header, unsafe_allow_html=True)
                         st.code(highlights, language=language.lower())
                         st.write(footer, unsafe_allow_html=True)
@@ -198,3 +202,5 @@ if st.session_state["authentication_status"]:
             except Exception as e:
                 st.error(f"Exception: {e}")
 
+
+utils.render_nemesis_page(build_page)
