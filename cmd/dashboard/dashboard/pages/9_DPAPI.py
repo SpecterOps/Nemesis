@@ -25,14 +25,14 @@ PAGE_SIZE = int(PAGE_SIZE)
 #
 ####################################################
 
-current_user = utils.header()
 
 # Get the Elasticsearch client
 logging.getLogger("elasticsearch").setLevel(logging.ERROR)
 es_client = utils.wait_for_elasticsearch()
 
+
 # only execute the main functionality if the user is authenticated
-if st.session_state["authentication_status"]:
+def render_page(username: str):
     cookies = CookieManager()
     if not cookies.ready():
         st.stop()
@@ -137,12 +137,15 @@ if st.session_state["authentication_status"]:
         cookies.save()
 
         if (
-            "nemesus_project" in cookies and cookies["nemesus_project"] != ""
-            and "nemesis_operator" in cookies and cookies["nemesis_operator"] != ""
-            and "nemesis_source" in cookies and cookies["nemesis_source"] != ""
-            and "nemesis_expiration_days" in cookies and cookies["nemesis_expiration_days"] != ""
+            "nemesus_project" in cookies
+            and cookies["nemesus_project"] != ""
+            and "nemesis_operator" in cookies
+            and cookies["nemesis_operator"] != ""
+            and "nemesis_source" in cookies
+            and cookies["nemesis_source"] != ""
+            and "nemesis_expiration_days" in cookies
+            and cookies["nemesis_expiration_days"] != ""
         ):
-
             authentication_data = {}
             submission_id = ""
 
@@ -156,37 +159,27 @@ if st.session_state["authentication_status"]:
                         else:
                             i = plaintext_password.find(":")
                             username = plaintext_password[:i]
-                            password = plaintext_password[i + 1:]
+                            password = plaintext_password[i + 1 :]
                             cred_type = "password"
 
                             if re.match("[a-zA-Z0-9]{32}$", password):
                                 cred_type = "ntlm_hash"
 
-                            authentication_data = {
-                                "type": cred_type,
-                                "username": username,
-                                "data": password
-                            }
+                            authentication_data = {"type": cred_type, "username": username, "data": password}
                 with cols[1]:
                     dpapi_system = st.text_input("DPAPI_SYSTEM", placeholder="DPAPI_SYSTEM LSA secret")
                     if dpapi_system:
                         if not re.match("^(([a-fA-F0-9]{40})|([a-fA-F0-9]{80}))$", dpapi_system):
                             st.error("Valid format for DPAPI_SYSTEM is 40 or 80 alphanumeric characters")
                         else:
-                            authentication_data = {
-                                "type": "dpapi_system",
-                                "data": dpapi_system
-                            }
+                            authentication_data = {"type": "dpapi_system", "data": dpapi_system}
                 with cols[2]:
                     dec_masterkey = st.text_input("Plaintext Masterkey", placeholder="GUID:SHA1")
                     if dec_masterkey:
                         if not re.match("^\{?([0-9a-fA-F]){8}-(?:[0-9a-fA-F]){4}-(?:[0-9a-fA-F]){4}-(?:[0-9a-fA-F]){4}-(?:[0-9a-fA-F]){12}\}?:([a-fA-F0-9]{40})$", dec_masterkey):
                             st.error("The required format is `GUID:SHA1`")
                         else:
-                            authentication_data = {
-                                "type": "dpapi_masterkey",
-                                "data": dec_masterkey
-                            }
+                            authentication_data = {"type": "dpapi_masterkey", "data": dec_masterkey}
 
                 submitted = st.form_submit_button(label="Submit")
 
@@ -221,4 +214,8 @@ if st.session_state["authentication_status"]:
             width="100%",
             update_mode=GridUpdateMode.SELECTION_CHANGED,
             fit_columns_on_grid_load=True,
+            custom_css={"#gridToolBar": {"padding-bottom": "0px !important"}},  # See https://github.com/PablocFonseca/streamlit-aggrid/issues/231#issuecomment-1696943095
         )
+
+
+utils.render_nemesis_page(render_page)

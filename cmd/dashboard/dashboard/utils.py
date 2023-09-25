@@ -6,15 +6,15 @@ import time
 from typing import List, Tuple
 
 # 3rd Party Libraries
-import bcrypt
+import auth
 import pandas as pd
 import psycopg
 import requests
 import streamlit as st
-import streamlit_authenticator as stauth
 from elasticsearch import Elasticsearch
 from sqlalchemy import create_engine
 from sqlalchemy import text as sql_text
+from streamlit_extras.app_logo import add_logo
 
 # pull in and check all of our required environment variables
 WAIT_TIMEOUT = 5
@@ -71,6 +71,7 @@ def semantic_search(search_phrase: str, num_results: int = 4) -> dict:
 #
 ######################################################
 
+
 def get_unique_sources(table: str):
     """
     Given a table name return all of the unique sources for that table.
@@ -115,33 +116,47 @@ def get_browsers_for_source_username(table: str, source: str, username: str) -> 
     """
     with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                f"SELECT DISTINCT browser FROM nemesis.chromium_{table} WHERE source ILIKE %s AND username ILIKE %s", (source, username)
-            )
+            cur.execute(f"SELECT DISTINCT browser FROM nemesis.chromium_{table} WHERE source ILIKE %s AND username ILIKE %s", (source, username))
             return ["all"] + [x[0] for x in cur.fetchall()]
 
 
-def get_cookie_df(
-    source: str, username: str, browser: str, site: str, name: str, show_encrypted: bool, show_expired: bool
-) -> pd.DataFrame:
+def get_cookie_df(source: str, username: str, browser: str, site: str, name: str, show_encrypted: bool, show_expired: bool) -> pd.DataFrame:
     """Return a cookies dataframe based on the query parameters."""
 
     query = """
-        SELECT chromium_cookies.source AS source, chromium_cookies.username AS username, chromium_cookies.browser AS browser, chromium_cookies.host_key AS domain, chromium_cookies.name AS name, chromium_cookies.path AS path, chromium_cookies.value_dec AS value, chromium_cookies.expires_utc AS expires_utc, chromium_cookies.unique_db_id::varchar AS unique_db_id, notes.value as notes
+SELECT
+    chromium_cookies.source AS source,
+    chromium_cookies.username AS username,
+    chromium_cookies.browser AS browser,
+    chromium_cookies.host_key AS domain,
+    chromium_cookies.name AS name,
+    chromium_cookies.path AS path,
+    chromium_cookies.value_dec AS value,
+    chromium_cookies.expires_utc AS expires_utc,
+    chromium_cookies.unique_db_id::varchar AS unique_db_id,
+    chromium_cookies.user_data_directory AS user_data_directory,
+    notes.value as notes
 
-        FROM chromium_cookies
+FROM chromium_cookies
 
-        LEFT JOIN notes
-        ON chromium_cookies.unique_db_id = notes.unique_db_id
+LEFT JOIN notes
+ON chromium_cookies.unique_db_id = notes.unique_db_id
 
-        WHERE source ILIKE :source AND username ILIKE :username AND browser ILIKE :browser AND host_key ILIKE :host_key AND name ILIKE :name
-    """
+WHERE
+    source ILIKE :source
+    AND username ILIKE :username
+    AND browser ILIKE :browser
+    AND host_key ILIKE :host_key
+    AND name ILIKE :name
+"""
 
     if not show_encrypted:
-        query += " AND is_decrypted = True"
+        query += "\n    AND is_decrypted = True"
 
     if not show_expired:
-        query += " AND expires_utc > now() at time zone 'utc'"
+        query += "\n    AND expires_utc > now() at time zone 'utc'"
+
+    query += "\n    ORDER BY chromium_cookies.timestamp DESC"
 
     try:
         with engine.connect() as conn:
@@ -152,26 +167,42 @@ def get_cookie_df(
         print(f"Exception: {e}")
 
 
-def get_login_df(
-    source: str, username: str, browser: str, url: str, login_username: str, show_encrypted: bool, show_blank: bool
-) -> pd.DataFrame:
+def get_login_df(source: str, username: str, browser: str, url: str, login_username: str, show_encrypted: bool, show_blank: bool) -> pd.DataFrame:
     """Return a logins dataframe based on the query parameters."""
 
     query = """
-        SELECT chromium_logins.source AS source, chromium_logins.username AS username, chromium_logins.browser AS browser, chromium_logins.origin_url AS url, chromium_logins.username_value AS username_value, chromium_logins.password_value_dec AS password, chromium_logins.date_last_used AS last_used, chromium_logins.times_used AS used, chromium_logins.unique_db_id::varchar AS unique_db_id, notes.value as notes
+SELECT
+    chromium_logins.source AS source,
+    chromium_logins.username AS username,
+    chromium_logins.browser AS browser,
+    chromium_logins.origin_url AS url,
+    chromium_logins.username_value AS username_value,
+    chromium_logins.password_value_dec AS password,
+    chromium_logins.date_last_used AS last_used,
+    chromium_logins.is_decrypted AS is_decrypted,
+    chromium_logins.times_used AS used,
+    chromium_logins.unique_db_id::varchar AS unique_db_id,
+    notes.value as notes
 
-        FROM chromium_logins
+FROM chromium_logins
 
-        LEFT JOIN notes
-        ON chromium_logins.unique_db_id = notes.unique_db_id
+LEFT JOIN notes
+ON chromium_logins.unique_db_id = notes.unique_db_id
 
-        WHERE source ILIKE :source AND username ILIKE :username AND browser ILIKE :browser AND origin_url ILIKE :url AND username_value ILIKE :login_username
-    """
+WHERE
+    source ILIKE :source
+    AND username ILIKE :username
+    AND browser ILIKE :browser
+    AND origin_url ILIKE :url
+    AND username_value ILIKE :login_username
+"""
 
     if not show_encrypted:
-        query += " AND is_decrypted = True"
+        query += "\n    AND is_decrypted = True"
     if show_blank:
-        query += " AND length(password_value_dec) > 0"
+        query += "\n    AND length(password_value_dec) > 0"
+
+    query += "\n    ORDER BY chromium_logins.timestamp DESC"
 
     try:
         with engine.connect() as conn:
@@ -185,15 +216,32 @@ def get_history_df(source: str, username: str, browser: str, url: str, title: st
     """Return a history dataframe based on the query parameters."""
 
     query = """
-        SELECT chromium_history.source AS source, chromium_history.username AS username, chromium_history.browser AS browser, chromium_history.url AS url, chromium_history.title AS title, chromium_history.visit_count AS visits, chromium_history.last_visit_time AS last_visit_time, chromium_history.unique_db_id::varchar AS unique_db_id, notes.value as notes
+SELECT
+    chromium_history.source AS source,
+    chromium_history.originating_object_id::varchar AS originating_object_id,
+    chromium_history.username AS username,
+    chromium_history.browser AS browser,
+    chromium_history.url AS url,
+    chromium_history.title AS title,
+    chromium_history.visit_count AS visits,
+    chromium_history.last_visit_time AS last_visit_time,
+    chromium_history.unique_db_id::varchar AS unique_db_id,
+    notes.value as notes
 
-        FROM chromium_history
+FROM chromium_history
 
-        LEFT JOIN notes
-        ON chromium_history.unique_db_id = notes.unique_db_id
+LEFT JOIN notes
+ON chromium_history.unique_db_id = notes.unique_db_id
 
-        WHERE chromium_history.source ILIKE :source AND chromium_history.username ILIKE :username AND chromium_history.browser ILIKE :browser AND chromium_history.url ILIKE :url AND chromium_history.title ILIKE :title
-    """
+WHERE
+    chromium_history.source ILIKE :source
+    AND chromium_history.username ILIKE :username
+    AND chromium_history.browser ILIKE :browser
+    AND chromium_history.url ILIKE :url
+    AND chromium_history.title ILIKE :title
+
+ORDER BY chromium_history.timestamp DESC
+"""
     try:
         with engine.connect() as conn:
             params = {"source": source, "username": username, "browser": browser, "url": url, "title": title}
@@ -206,15 +254,30 @@ def get_download_df(source: str, username: str, browser: str, url: str, download
     """Return a downloads dataframe based on the query parameters."""
 
     query = """
-        SELECT chromium_downloads.source AS source, chromium_downloads.username AS username, chromium_downloads.browser AS browser, chromium_downloads.url AS url, chromium_downloads.download_path as download_path, chromium_downloads.end_time as timestamp, chromium_downloads.danger_type as danger_type, chromium_downloads.unique_db_id::varchar AS unique_db_id, notes.value as notes
+SELECT
+    chromium_downloads.source AS source,
+    chromium_downloads.username AS username,
+    chromium_downloads.browser AS browser,
+    chromium_downloads.url AS url,
+    chromium_downloads.download_path as download_path,
+    chromium_downloads.end_time as timestamp,
+    chromium_downloads.danger_type as danger_type,
+    chromium_downloads.unique_db_id::varchar AS unique_db_id, notes.value as notes
 
-        FROM chromium_downloads
+FROM chromium_downloads
 
-        LEFT JOIN notes
-        ON chromium_downloads.unique_db_id = notes.unique_db_id
+LEFT JOIN notes
+ON chromium_downloads.unique_db_id = notes.unique_db_id
 
-        WHERE chromium_downloads.source ILIKE :source AND chromium_downloads.username ILIKE :username AND chromium_downloads.browser ILIKE :browser AND chromium_downloads.url ILIKE :url AND chromium_downloads.download_path ILIKE :download_path
-    """
+WHERE
+    chromium_downloads.source ILIKE :source
+    AND chromium_downloads.username ILIKE :username
+    AND chromium_downloads.browser ILIKE :browser
+    AND chromium_downloads.url ILIKE :url
+    AND chromium_downloads.download_path ILIKE :download_path
+
+ORDER BY chromium_downloads.timestamp DESC
+"""
     try:
         with engine.connect() as conn:
             params = {"source": source, "username": username, "browser": browser, "url": url, "download_path": download_path}
@@ -535,8 +598,8 @@ def get_file_information(object_id: str):
 
 
 def postgres_file_search(
-    start: datetime.datetime,
-    end: datetime.datetime,
+    startdate: datetime.datetime,
+    enddate: datetime.datetime,
     from_i: int = 0,
     size: int = 8,
     source: str = "%",
@@ -552,87 +615,68 @@ def postgres_file_search(
     """
     Searches the nemesis.file_data_enriched table for paginated results given
     the supplied search parameters.
-
-    TODO: timestamp filtering?
     """
 
-    # query for our count, based in the filters
-    query_count = """
-        SELECT COUNT(*)
+    query = """SELECT
+    file_data_enriched.project_id as project_id,
+    file_data_enriched.source as source,
+    file_data_enriched.timestamp as "timestamp",
+    file_data_enriched.unique_db_id::varchar,
+    file_data_enriched.agent_id as agent_id,
+    file_data_enriched.object_id::varchar as object_id,
+    file_data_enriched.path as path,
+    file_data_enriched.name as name,
+    file_data_enriched.size as size,
+    file_data_enriched.md5 as md5,
+    file_data_enriched.sha1 as sha1,
+    file_data_enriched.sha256 as sha256,
+    file_data_enriched.nemesis_file_type as nemesis_file_type,
+    file_data_enriched.magic_type as magic_type,
+    file_data_enriched.converted_pdf_id::varchar as converted_pdf_id,
+    file_data_enriched.extracted_plaintext_id::varchar as extracted_plaintext_id,
+    file_data_enriched.extracted_source_id::varchar as extracted_source_id,
+    file_data_enriched.tags as tags,
+    file_data_enriched.originating_object_id as originating_object_id,
+    triage.value as triage,
+    triage.unique_db_id as triage_unique_db_id,
+    notes.value as notes
 
-        FROM file_data_enriched
+FROM file_data_enriched
 
-        LEFT JOIN triage
-            ON file_data_enriched.unique_db_id = triage.unique_db_id
+LEFT JOIN triage
+    ON file_data_enriched.unique_db_id = triage.unique_db_id
 
-        LEFT JOIN notes
-            ON file_data_enriched.unique_db_id = notes.unique_db_id
-            AND notes.value ILIKE :notes
+LEFT JOIN notes
+    ON file_data_enriched.unique_db_id = notes.unique_db_id
+    AND notes.value ILIKE :notes
 
-        WHERE file_data_enriched.source ILIKE :source
-          AND file_data_enriched.project_id ILIKE :project_id
-    """
+WHERE source ILIKE :source
+    AND project_id ILIKE :project_id
+    AND "timestamp" >= :startdate
+    AND "timestamp" <= :enddate
+"""
 
-    # actual data query
-    query = """
-        SELECT  file_data_enriched.project_id as project_id,
-                file_data_enriched.source as source,
-                file_data_enriched.timestamp as timestamp,
-                file_data_enriched.unique_db_id::varchar,
-                file_data_enriched.agent_id as agent_id,
-                file_data_enriched.object_id::varchar as object_id,
-                file_data_enriched.path as path,
-                file_data_enriched.name as name,
-                file_data_enriched.size as size,
-                file_data_enriched.md5 as md5,
-                file_data_enriched.sha1 as sha1,
-                file_data_enriched.sha256 as sha256,
-                file_data_enriched.nemesis_file_type as nemesis_file_type,
-                file_data_enriched.magic_type as magic_type,
-                file_data_enriched.converted_pdf_id::varchar as converted_pdf_id,
-                file_data_enriched.extracted_plaintext_id::varchar as extracted_plaintext_id,
-                file_data_enriched.extracted_source_id::varchar as extracted_source_id,
-                file_data_enriched.tags as tags,
-                file_data_enriched.originating_object_id as originating_object_id,
-                triage.value as triage,
-                triage.unique_db_id as triage_unique_db_id,
-                notes.value as notes
-
-        FROM file_data_enriched
-
-        LEFT JOIN triage
-            ON file_data_enriched.unique_db_id = triage.unique_db_id
-
-        LEFT JOIN notes
-            ON file_data_enriched.unique_db_id = notes.unique_db_id
-            AND notes.value ILIKE :notes
-
-        WHERE source ILIKE :source
-          AND project_id ILIKE :project_id
-          AND timestamp >= :start AND timestamp < :end
-    """
     if path_pattern:
-        query_count += "\n          AND path ILIKE :path"
-        query += "\n          AND path ILIKE :path"
+        query += "\n    AND path ILIKE :path"
+
     if file_hash:
-        query_count += "\n          AND (file_data_enriched.md5 ILIKE :md5 OR file_data_enriched.sha1 ILIKE :sha1 OR file_data_enriched.sha256 ILIKE :sha256)"
-        query += "\n          AND (md5 ILIKE :md5 OR sha1 ILIKE :sha1 OR sha256 ILIKE :sha256)"
+        query += "\n    AND (md5 ILIKE :md5 OR sha1 ILIKE :sha1 OR sha256 ILIKE :sha256)"
+
     if tags:
         for i in range(len(tags)):
-            query_count += f"\n          AND :tag_{i} = ANY(file_data_enriched.tags)"
-            query += f"\n          AND :tag_{i} = ANY(file_data_enriched.tags)"
+            query += f"\n    AND :tag_{i} = ANY(file_data_enriched.tags)"
     if not show_triaged:
-        query_count += "\n          AND triage.value IS NULL"
-        query += "\n          AND triage.value IS NULL"
+        query += "\n    AND (triage.value IS NULL OR triage.value = 'unknown')"
     if not show_archive_originated:
-        query_count += "\n          AND originating_object_id = '00000000-0000-0000-0000-000000000000'"
-        query += "\n          AND originating_object_id = '00000000-0000-0000-0000-000000000000'"
+        query += "\n    AND originating_object_id = '00000000-0000-0000-0000-000000000000'"
     if notes_pattern:
-        query_count += "\n          AND notes.value ILIKE :notes"
-        query += "\n          AND notes.value ILIKE :notes"
+        query += "\n    AND notes.value ILIKE :notes"
 
     if order_desc_timestamp:
-        query += "\n        ORDER BY timestamp DESC"
+        query += '\n    ORDER BY "timestamp" DESC'
+
+    # Build the COUNT query *before* any pagination
+    count_query = f"SELECT COUNT(*) FROM ({query}) AS s"
 
     # add in the pagination
     query += "\n        LIMIT :size OFFSET :from_i"
@@ -640,8 +684,8 @@ def postgres_file_search(
     try:
         with engine.connect() as conn:
             params = {
-                "start": start,
-                "end": end,
+                "startdate": startdate,
+                "enddate": enddate,
                 "source": source,
                 "project_id": project_id,
                 "path": path_pattern,
@@ -658,9 +702,10 @@ def postgres_file_search(
             for i in range(len(tags)):
                 params[f"tag_{i}"] = tags[i]
 
-            total_hits = pd.read_sql_query(sql_text(query_count), conn, params=params)["count"].iloc[0]
+            total_hits = pd.read_sql_query(sql_text(count_query), conn, params=params)["count"][0].item()
             df = pd.read_sql_query(sql_text(query), conn, params=params)
             return (total_hits, df)
+
     except Exception as e:
         st.error(f"Error retrieving `file_data_enriched` from the database: {e}", icon="🚨")
         return (None, None)
@@ -671,86 +716,35 @@ def postgres_file_search(
 # Common Authentication/Header Helpers
 #
 ######################################################
+def header() -> None:
+    pass
 
 
-# cache the data so we don't have to bcrypt every time
-@st.cache_data
-def get_credentials() -> dict:
-    """Returns the credential dictionary needed by stauth.Authenticate()"""
-    hashed_password = bcrypt.hashpw(DASHBOARD_PASSWORD.encode(), bcrypt.gensalt()).decode()
-    credentials = {
-        "usernames": {DASHBOARD_USER: {"email": f"{DASHBOARD_USER}@nemesis.local", "name": DASHBOARD_USER, "password": hashed_password}}
-    }
-    return credentials
-
-
-def header() -> str:
+def render_nemesis_page(render_func):
     """Writes out the logo/auth header/etc. for all pages."""
 
-    st.set_page_config(
-        layout="wide",
-        page_title="Nemesis",
-        page_icon="😈",
-        menu_items={
-            "Get Help": "https://www.github.com/SpecterOps/Nemesis"
-        }
-    )
+    st.set_page_config(layout="wide", page_title="Nemesis", page_icon="img/favicon.png", menu_items={"Get Help": "https://www.github.com/SpecterOps/Nemesis"})
 
     st.markdown(
-        """
-            <style>
-                .css-18e3th9 {
-                        padding-top: 0rem;
-                        padding-bottom: 10rem;
-                        padding-left: 5rem;
-                        padding-right: 5rem;
-                    }
-                .css-1d391kg {
-                        padding-top: 2.5rem;
-                        padding-right: 1rem;
-                        padding-bottom: 2.5rem;
-                        padding-left: 1rem;
-                    }
-            </style>
-            """,
         unsafe_allow_html=True,
+        body="""
+<style>
+    .block-container {
+            padding-top: 0rem;
+            padding-bottom: 10rem;
+            padding-left: 5rem;
+            padding-right: 5rem;
+        }
+
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+</style>
+""",
     )
 
-    st.image("./img/nemesis_logo.png", width=300)
+    auth.authenticate(render_func)
 
-    # hack to hide the default Streamlit footer
-    hide_streamlit_style = """
-                <style>
-                #MainMenu {visibility: hidden;}
-                footer {visibility: hidden;}
-                </style>
-                """
-    st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-    # force authentication
-    return authenticate_header()
-
-
-def authenticate_header() -> str:
-    """
-    Reads in the necessary authentication information and checks the state
-    versus the current user's cookies. Used at the top of every page.
-    """
-
-    authenticator = stauth.Authenticate(get_credentials(), "nemesis", "nemesis", 30)
-
-    name, authentication_status, username = authenticator.login("Login", "main")
-
-    if st.session_state["authentication_status"]:
-        # st.write(f"Welcome *{name}*  :smiling_imp:")
-        # authenticator.logout("Logout", "main")
-        return name
-    elif st.session_state["authentication_status"] is False:
-        st.error("Username/password is incorrect")
-        return ""
-    elif st.session_state["authentication_status"] is None:
-        st.warning("Please enter your username and password")
-        return ""
+    add_logo("./img/logo.png", height=160)
 
 
 ######################################################
@@ -758,6 +752,7 @@ def authenticate_header() -> str:
 # Elasticsearch Helpers
 #
 ######################################################
+
 
 def simplify_es_text_result(result: dict) -> dict:
     """Simplifies an elastic result into the three parts we want to use."""
@@ -839,15 +834,14 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
             "wordCount",
             "metadata.source",
         ]
-        return es_client.search(
-            index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields
-        )
+        result = es_client.search(index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields)
+        return result
     except Exception as e:
         if "index_not_found_exception" in f"{e}":
             st.error("Elastic index 'file_data_plaintext' doesn't yet exist - no text data has been extracted yet!", icon="🚨")
         else:
             st.error(f"Exception querying Elastic: {e}", icon="🚨")
-        return {}
+        return None
 
 
 def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
@@ -870,10 +864,9 @@ def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
             "path",
             "size",
             "metadata.source",
+            "objectId",
         ]
-        return es_client.search(
-            index="file_data_sourcecode", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields
-        )
+        return es_client.search(index="file_data_sourcecode", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields)
     except Exception as e:
         if "index_not_found_exception" in f"{e}":
             st.error("Elastic index 'file_data_sourcecode' doesn't yet exist - no source code files have been downloaded yet!", icon="🚨")
@@ -907,6 +900,24 @@ def elastic_np_search(from_i: int, size: int) -> dict:
 #
 ######################################################
 
+
+def get_single_valued_param(name: str) -> None | str:
+    """
+    Obtains the value of a URL parameter. Ensures that the URL parameter only has a single value.
+    If the URL parameter does not exist, the return value is None
+    """
+    params = st.experimental_get_query_params()
+
+    if name not in params:
+        return None
+
+    if len(params[name]) != 1:
+        raise Exception(f"More than one value was provided for the parameter '{name}'")
+
+    object_id = params[name][0]
+    return object_id
+
+
 def map_extension_to_monaco_language(extension: str) -> str:
     """
     Maps a file extension to a source code language for Monaco.
@@ -917,6 +928,7 @@ def map_extension_to_monaco_language(extension: str) -> str:
     language_mappings = {
         "bat": "batch",
         "c": "c",
+        "config": "xml",
         "cpp": "cpp",
         "cs": "csharp",
         "css": "css",
@@ -956,7 +968,7 @@ def map_extension_to_monaco_language(extension: str) -> str:
         "wgsl": "wgsl",
         "xml": "xml",
         "yaml": "yaml",
-        "json": "json"
+        "json": "json",
     }
     return language_mappings.get(extension.lower(), "plaintext")
 
@@ -965,16 +977,12 @@ def is_valid_chromium_file_path(file_path: str) -> bool:
     """Returns true if the supplied path is a valid Chromium file path."""
 
     if re.search(
-        ".*/(?P<username>.*)/AppData/Local/(Google|Microsoft|BraveSoftware)/(?P<browser>Chrome|Edge|Brave-Browser)/User Data/(?P<type>Local State|Default/History|Default/Login Data|Default/Cookies|Default/Network/Cookies)$",
+        ".*/(?P<username>.*)/AppData/Local/(Google|Microsoft|BraveSoftware)/(?P<browser>Chrome|Edge|Brave-Browser)/User Data/(?P<type>Local State|.+/History|.+/Login Data|.+/Cookies|.+/Network/Cookies)$",
         file_path,
-        re.IGNORECASE
+        re.IGNORECASE,
     ):
         return True
-    elif re.search(
-        ".*/(?P<username>.*)/AppData/Roaming/Opera Software/Opera Stable/(?P<type>Local State|History|Login Data|Cookies|Network/Cookies)$",
-        file_path,
-        re.IGNORECASE
-    ):
+    elif re.search(".*/(?P<username>.*)/AppData/Roaming/Opera Software/Opera Stable/(?P<type>Local State|History|Login Data|Cookies|Network/Cookies)$", file_path, re.IGNORECASE):
         return True
     else:
         return False

@@ -81,11 +81,11 @@ spec:
                   name: operation-config
                   key: nemesis-http-server
             - name: PUBLIC_NEMESIS_URL
-              value: "$(NEMESIS_HTTP_SERVER)/dashboard/"
+              value: "$(NEMESIS_HTTP_SERVER)dashboard/"
             - name: PUBLIC_KIBANA_URL
-              value: "$(NEMESIS_HTTP_SERVER)/kibana/"
+              value: "$(NEMESIS_HTTP_SERVER)kibana/"
             - name: WEB_API_URL
-              value: "$(NEMESIS_HTTP_SERVER)/api/"
+              value: "$(NEMESIS_HTTP_SERVER)api/"
 
             - name: POSTGRES_SERVER
               value: postgres

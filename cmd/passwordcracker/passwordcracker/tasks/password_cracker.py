@@ -103,26 +103,38 @@ class PasswordCracker(TaskInterface):
                 plaintext = jtr_pot_line
                 extracted_hash.plaintext_value = plaintext
 
-                kibana_hash_url = await self.get_kibana_hash_url(extracted_hash_msg.metadata.message_id)
-
-                if extracted_hash.originating_object_id != "":
-                    kibana_file_url = await self.get_kibana_file_url(extracted_hash.originating_object_id)
-
-                    await self.alerter.alert(
-                        f"*Hash Cracked*\n"
-                        f"Hash of type *{extracted_hash.hash_type}* extracted from file *{extracted_hash.originating_object_id}* has been successfully cracked against the top {self.cfg.crack_wordlist_top_words} words in JohnTheRipper\n"
-                        f"<{kibana_hash_url}|*Cracked hash in Kibana*>\n<{kibana_file_url}|*Originating file in Kibana*>"
-                    )
-                else:
-                    await self.alerter.alert(
-                        f"*Hash Cracked*\nHash of type *{extracted_hash.hash_type}* has been successfully cracked against the top {self.cfg.crack_wordlist_top_words} words in JohnTheRipper<{kibana_hash_url}|*Cracked hash in Kibana*>\n"
-                    )
+                await self.send_hash_cracked_alert(extracted_hash, extracted_hash_msg.metadata.message_id)
 
             # publish the extracted hash out to the extracted_hash_q_out queue
             await self.extracted_hash_q_out.Send(extracted_hash_msg.SerializeToString())
 
-    async def get_kibana_file_url(self, file_uuid: str):
-        return f"{self.cfg.public_kibana_url}app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{file_uuid}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
+    async def send_hash_cracked_alert(self, extracted_hash: pb.ExtractedHash, message_id: str):
+        if extracted_hash.originating_object_id:
+            hash_url = await self.get_hashes_url(extracted_hash.originating_object_id)
+            view_file_url = await self.get_view_file_url(extracted_hash.originating_object_id)
+
+            await self.alerter.alert(
+                f"""
+*Hash Cracked*
+Hash of type *{extracted_hash.hash_type}* extracted from file *{extracted_hash.originating_object_id}* has been successfully cracked against the top {self.cfg.crack_wordlist_top_words} words in JohnTheRipper
+<{hash_url}|*View Cracked Hash*>
+<{view_file_url}|*View Originating File*>
+"""
+            )
+        else:
+            kibana_url = await self.get_kibana_hash_url(message_id)
+            await self.alerter.alert(
+                f"""
+*Hash Cracked*
+Hash of type *{extracted_hash.hash_type}* has been successfully cracked against the top {self.cfg.crack_wordlist_top_words} words in JohnTheRipper
+<{kibana_url}|*Cracked hash in Kibana*>"""
+            )
+
+    async def get_view_file_url(self, file_uuid: str):
+        return f"{self.cfg.public_nemesis_url}File_Viewer?object_id={file_uuid}"
+
+    async def get_hashes_url(self, file_uuid: str):
+        return f"{self.cfg.public_nemesis_url}Hashes?object_id={file_uuid}"
 
     async def get_kibana_hash_url(self, message_uuid: str):
-        return f"{self.cfg.public_kibana_url}app/discover#/?_a=(filters:!((query:(match_phrase:(metadata.messageId:'{message_uuid}')))),index:'d884e1d0-c7a2-11ed-99da-e7509f36608c')&_g=(time:(from:now-1y%2Fd,to:now))"
+        return f"{self.cfg.public_nemesis_url}../kibana/app/discover#/?_a=(filters:!((query:(match_phrase:(metadata.messageId:'{message_uuid}')))),index:'d884e1d0-c7a2-11ed-99da-e7509f36608c')&_g=(time:(from:now-1y%2Fd,to:now))"

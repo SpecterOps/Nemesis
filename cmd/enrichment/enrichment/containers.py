@@ -228,7 +228,7 @@ class Container(containers.DeclarativeContainer):
         constants.Q_CHROMIUM_COOKIE,
         pb.ChromiumCookieMessage,
         "postgresconnector",
-        num_events=500,
+        num_events=100,
     )
     inputq_chromiumdownloads_postgresconnector = providers.Resource(
         create_consumer,
@@ -236,7 +236,7 @@ class Container(containers.DeclarativeContainer):
         constants.Q_CHROMIUM_DOWNLOAD,
         pb.ChromiumDownloadMessage,
         "postgresconnector",
-        num_events=500,
+        num_events=100,
     )
     inputq_chromiumhistory_postgresconnector = providers.Resource(
         create_consumer,
@@ -244,7 +244,7 @@ class Container(containers.DeclarativeContainer):
         constants.Q_CHROMIUM_HISTORY,
         pb.ChromiumHistoryMessage,
         "postgresconnector",
-        num_events=500,
+        num_events=100,
     )
     inputq_chromiumlogin_postgresconnector = providers.Resource(
         create_consumer,
@@ -260,7 +260,7 @@ class Container(containers.DeclarativeContainer):
         constants.Q_CHROMIUM_STATE_FILE_PROCESSED,
         pb.ChromiumStateFileMessage,
         "postgresconnector",
-        num_events=500,
+        num_events=100,
     )
     inputq_dpapiblobprocessed_postgresconnector = providers.Resource(
         create_consumer,

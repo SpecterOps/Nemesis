@@ -13,7 +13,7 @@ ENV PYTHONUNBUFFERED=true
 FROM debcommon AS dependencies-os
 
 # install our necessary dependencies
-RUN apt-get update -y
+# RUN apt-get update -y
 
 
 ####################################

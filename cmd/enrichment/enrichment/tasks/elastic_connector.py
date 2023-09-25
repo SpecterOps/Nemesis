@@ -234,24 +234,17 @@ class ElasticConnector(TaskInterface):
                     await logger.aerror("Nemesis object_id over 100MB limit")
                 else:
                     # index the text of the source code file
-                    with open(temp_file.name, "r") as f:
-                        data["text"] = f.read()
+                    with open(temp_file.name, "rb") as f:
+                        data["text"] = f.read().decode(encoding="utf-8", errors="ignore")
                         object_id = data["objectId"]
                         data["downloadURL"] = f"{self.web_api_url}download/{object_id}"
-                        data[
-                            "fileObjectURL"
-                        ] = f"{self.public_kibana_url}app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
+                        data["fileObjectURL"] = f"{self.public_kibana_url}app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
                         await self.send_to_elastic(constants.ES_INDEX_FILE_DATA_SOURCECODE, data)
 
     @aio.time(Summary("elastic_send_without_processing", "Time spent submitting process_enriched messages to Elastic/Postgres"))  # type: ignore
     async def send_without_processing(
         self,
-        q_msg: pb.AuthenticationDataIngestionMessage
-        | pb.FileInformationIngestionMessage
-        | pb.ProcessEnrichedMessage
-        | pb.RegistryValueIngestionMessage
-        | pb.ServiceEnrichedMessage
-        | pb.ExtractedHashMessage,
+        q_msg: pb.AuthenticationDataIngestionMessage | pb.FileInformationIngestionMessage | pb.ProcessEnrichedMessage | pb.RegistryValueIngestionMessage | pb.ServiceEnrichedMessage | pb.ExtractedHashMessage,
         index: ElasticIndex,
     ):
         metadata = MessageToDict(q_msg.metadata)

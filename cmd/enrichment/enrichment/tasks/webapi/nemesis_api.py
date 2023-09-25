@@ -17,7 +17,9 @@ import uvicorn
 from aio_pika import connect_robust
 from elasticsearch import AsyncElasticsearch
 from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
-    map_unordered, return_args_and_exceptions)
+    map_unordered,
+    return_args_and_exceptions,
+)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
 from fastapi import FastAPI, Request
@@ -25,6 +27,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi_class.decorators import get, post
 from fastapi_class.routable import Routable
 from google.protobuf.json_format import Parse
+
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
 from nemesiscommon.constants import ALL_ES_INDICIES, NemesisQueue
 from nemesiscommon.messaging import MessageQueueProducerInterface
@@ -189,6 +192,7 @@ class DownloadFileTypes(StrEnum):
 class DownloadAction(StrEnum):
     DOWNLOAD = "download"
     VIEW = "view"
+    VIEW_RAW = "view_raw"
 
 
 class NemesisApiRoutes(Routable):
@@ -306,9 +310,7 @@ class NemesisApiRoutes(Routable):
         await logger.ainfo("Resubmitting all existing messages for processing")
 
         try:
-            async for result in map_unordered(
-                wrapped_reprocess_post_data, self.db.get_api_data_messages(), limit=self.reprocessing_workers
-            ):
+            async for result in map_unordered(wrapped_reprocess_post_data, self.db.get_api_data_messages(), limit=self.reprocessing_workers):
                 total_file_count += 1
         except Exception as e:
             await logger.awarn("Error reprocessing message", e=e)
@@ -361,9 +363,7 @@ class NemesisApiRoutes(Routable):
             i = 0
             while i < len(obj.data):
                 # check if we want this registry value to be emitted to the pipeline
-                tags = await include_registry_value(
-                    key=obj.data[i].key, value_name=obj.data[i].value_name, value_kind=obj.data[0].value_kind, value=obj.data[0].value
-                )
+                tags = await include_registry_value(key=obj.data[i].key, value_name=obj.data[i].value_name, value_kind=obj.data[0].value_kind, value=obj.data[0].value)
                 if tags:
                     obj.data[i].tags = tags
                     i += 1
@@ -415,25 +415,28 @@ class NemesisApiRoutes(Routable):
         else:
             content_disposition = f'inline; filename="{filename}"'
 
-        match filetype:
-            case DownloadFileTypes.BMP:
-                content_type = "image/bmp"
-            case DownloadFileTypes.ICO:
-                content_type = "image/vnd.microsoft.icon"
-            case DownloadFileTypes.JPEG:
-                content_type = "image/jpeg"
-            case DownloadFileTypes.JPG:
-                content_type = "image/jpeg"
-            case DownloadFileTypes.PDF:
-                content_type = "application/pdf"
-            case DownloadFileTypes.PNG:
-                content_type = "image/png"
-            case DownloadFileTypes.SVG:
-                content_type = "image/svg+xml"
-            case DownloadFileTypes.TXT:
-                content_type = "text/plain"
-            case _:
-                content_type = "text/plain"
+        if action == DownloadAction.VIEW_RAW:
+            content_type = "text/plain"
+        else:
+            match filetype:
+                case DownloadFileTypes.BMP:
+                    content_type = "image/bmp"
+                case DownloadFileTypes.ICO:
+                    content_type = "image/vnd.microsoft.icon"
+                case DownloadFileTypes.JPEG:
+                    content_type = "image/jpeg"
+                case DownloadFileTypes.JPG:
+                    content_type = "image/jpeg"
+                case DownloadFileTypes.PDF:
+                    content_type = "application/pdf"
+                case DownloadFileTypes.PNG:
+                    content_type = "image/png"
+                case DownloadFileTypes.SVG:
+                    content_type = "image/svg+xml"
+                case DownloadFileTypes.TXT:
+                    content_type = "text/plain"
+                case _:
+                    content_type = "text/plain"
 
         headers = {
             "X-Content-Type-Options": "nosniff",
