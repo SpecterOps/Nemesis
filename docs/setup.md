@@ -45,16 +45,7 @@ Kubectl
 
 **Purpose:** CLI tool to interact with Kubernetes.
 Instructions found here: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
-```bash
-sudo apt-get update
-sudo apt-get install -y apt-transport-https curl --yes
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes.gpg
-curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-archive-keyring.gpg
-sudo apt-get update
-sudo apt-get install -y kubectl
-```
-**Validation:** `kubectl` should display the tool's usage. Once a Kubernetes cluster is running, `kubectl get pods -A` should show some kubernetes-related pods running.
+**Validation:** `kubectl` should display the tool's usage. Once a Kubernetes cluster is running/configured, `kubectl get pods -A` should show some kubernetes-related pods running.
 </details>
 
 <details>
@@ -130,6 +121,9 @@ Skaffold
 # For Linux x86_64 (amd64)
 curl -Lo skaffold "https://storage.googleapis.com/skaffold/releases/v2.2.0/skaffold-linux-amd64" && chmod +x skaffold && sudo mv skaffold /usr/local/bin
 
+# (Optional) Disable anonymous metrics collection
+skaffold config set --global collect-metrics false
+
 ```
 **Validation:** Running `skaffold` should print skaffold's help.
 </details>
@@ -163,6 +157,8 @@ eval "$(pyenv virtualenv-init -)"
  pyenv global 3.11.2
 ```
 
+**Validation:** Running `python3 --version` should show version 3.11.2.
+
 ## Install Poetry
 **Purpose:** Python package and dependency management tool.
 ```bash
@@ -171,10 +167,10 @@ python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.p
 
 Add the following to `~/.bashrc`:
 ```bash
-PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Restart your shell
+Restart your shell.
 
 ## Install Poetry Environment for Artifact Submission
 **Purpose:** Install the Poetry environment for ./scripts/submit_to_nemesis.sh

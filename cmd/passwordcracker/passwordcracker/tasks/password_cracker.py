@@ -137,4 +137,4 @@ Hash of type *{extracted_hash.hash_type}* has been successfully cracked against 
         return f"{self.cfg.public_nemesis_url}Hashes?object_id={file_uuid}"
 
     async def get_kibana_hash_url(self, message_uuid: str):
-        return f"{self.cfg.public_nemesis_url}../kibana/app/discover#/?_a=(filters:!((query:(match_phrase:(metadata.messageId:'{message_uuid}')))),index:'d884e1d0-c7a2-11ed-99da-e7509f36608c')&_g=(time:(from:now-1y%2Fd,to:now))"
+        return f"{self.cfg.public_kibana_url}/app/discover#/?_a=(filters:!((query:(match_phrase:(metadata.messageId:'{message_uuid}')))),index:'d884e1d0-c7a2-11ed-99da-e7509f36608c')&_g=(time:(from:now-1y%2Fd,to:now))"
