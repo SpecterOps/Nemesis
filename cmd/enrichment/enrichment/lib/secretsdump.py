@@ -49,64 +49,103 @@
 #   - https://www.exploit-db.com/docs/english/18244-active-domain-offline-hash-dump-&-forensic-analysis.pdf
 #   - https://www.passcape.com/index.php?section=blog&cmd=details&id=15
 #
-from __future__ import division
-from __future__ import print_function
+from __future__ import division, print_function
+
+# Standard Libraries
+import base64
 import codecs
-import json
 import hashlib
+import json
 import logging
 import ntpath
 import os
-import re
 import random
+import re
 import string
 import time
-import base64
-from binascii import unhexlify, hexlify
+from binascii import hexlify, unhexlify
 from collections import OrderedDict
 from datetime import datetime, timedelta
-from struct import unpack, pack
-from six import b, PY2
+from struct import pack, unpack
 
-from impacket import LOG
-from impacket import system_errors
-from impacket import winregistry, ntlm
-from impacket.ldap.ldap import SimplePagedResultsControl, LDAPSearchError
-from impacket.ldap.ldapasn1 import SearchResultEntry
-from impacket.dcerpc.v5 import transport, rrp, scmr, wkst, samr, epm, drsuapi
-from impacket.dcerpc.v5.dtypes import NULL
-from impacket.dcerpc.v5.rpcrt import RPC_C_AUTHN_LEVEL_PKT_PRIVACY, DCERPCException, RPC_C_AUTHN_GSS_NEGOTIATE
-from impacket.dcerpc.v5.dcom import wmi
-from impacket.dcerpc.v5.dcom.oaut import IID_IDispatch, IDispatch, DISPPARAMS, DISPATCH_PROPERTYGET, \
-    VARIANT, VARENUM, DISPATCH_METHOD
-from impacket.dcerpc.v5.dcomrt import DCOMConnection, OBJREF, FLAGS_OBJREF_CUSTOM, OBJREF_CUSTOM, OBJREF_HANDLER, \
-    OBJREF_EXTENDED, OBJREF_STANDARD, FLAGS_OBJREF_HANDLER, FLAGS_OBJREF_STANDARD, FLAGS_OBJREF_EXTENDED, \
-    IRemUnknown2, INTERFACE
-from impacket.ese import ESENT_DB, getUnixTime
-from impacket.dpapi import DPAPI_SYSTEM
-from impacket.smb3structs import FILE_READ_DATA, FILE_SHARE_READ
-from impacket.nt_errors import STATUS_MORE_ENTRIES
-from impacket.structure import Structure
-from impacket.structure import hexdump
-from impacket.uuid import string_to_bin
+# 3rd Party Libraries
+from impacket import LOG, ntlm, system_errors, winregistry
 from impacket.crypto import transformKey
+from impacket.dcerpc.v5 import drsuapi, epm, rrp, samr, scmr, transport, wkst
+from impacket.dcerpc.v5.dcom import wmi
+from impacket.dcerpc.v5.dcom.oaut import (
+    DISPATCH_METHOD,
+    DISPATCH_PROPERTYGET,
+    DISPPARAMS,
+    VARENUM,
+    VARIANT,
+    IDispatch,
+    IID_IDispatch,
+)
+from impacket.dcerpc.v5.dcomrt import (
+    FLAGS_OBJREF_CUSTOM,
+    FLAGS_OBJREF_EXTENDED,
+    FLAGS_OBJREF_HANDLER,
+    FLAGS_OBJREF_STANDARD,
+    INTERFACE,
+    OBJREF,
+    OBJREF_CUSTOM,
+    OBJREF_EXTENDED,
+    OBJREF_HANDLER,
+    OBJREF_STANDARD,
+    DCOMConnection,
+    IRemUnknown2,
+)
+from impacket.dcerpc.v5.dtypes import NULL
+from impacket.dcerpc.v5.rpcrt import (
+    RPC_C_AUTHN_GSS_NEGOTIATE,
+    RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
+    DCERPCException,
+)
+from impacket.dpapi import DPAPI_SYSTEM
+from impacket.ese import ESENT_DB, getUnixTime
 from impacket.krb5 import constants
-from impacket.krb5.asn1 import Ticket as TicketAsn1, EncTicketPart, AP_REQ, seq_set, Authenticator, TGS_REQ, \
-    seq_set_iter, TGS_REP, EncTGSRepPart, KERB_KEY_LIST_REP
-from impacket.krb5.constants import ProtocolVersionNumber, TicketFlags, PrincipalNameType, encodeFlags, EncryptionTypes
-from impacket.krb5.crypto import string_to_key, Key, _enctype_table
+from impacket.krb5.asn1 import (
+    AP_REQ,
+    KERB_KEY_LIST_REP,
+    TGS_REP,
+    TGS_REQ,
+    Authenticator,
+    EncTGSRepPart,
+    EncTicketPart,
+)
+from impacket.krb5.asn1 import Ticket as TicketAsn1
+from impacket.krb5.asn1 import seq_set, seq_set_iter
+from impacket.krb5.constants import (
+    EncryptionTypes,
+    PrincipalNameType,
+    ProtocolVersionNumber,
+    TicketFlags,
+    encodeFlags,
+)
+from impacket.krb5.crypto import Key, _enctype_table, string_to_key
 from impacket.krb5.kerberosv5 import sendReceive
 from impacket.krb5.types import KerberosTime, Principal, Ticket
+from impacket.ldap.ldap import LDAPSearchError, SimplePagedResultsControl
+from impacket.ldap.ldapasn1 import SearchResultEntry
+from impacket.nt_errors import STATUS_MORE_ENTRIES
+from impacket.smb3structs import FILE_READ_DATA, FILE_SHARE_READ
+from impacket.structure import Structure, hexdump
+from impacket.uuid import string_to_bin
+from six import PY2, b
+
 try:
-    from Cryptodome.Cipher import DES, ARC4, AES
+    # 3rd Party Libraries
+    from Cryptodome.Cipher import AES, ARC4, DES
     from Cryptodome.Hash import HMAC, MD4, MD5
 except ImportError:
     LOG.critical("Warning: You don't have any crypto installed. You need pycryptodomex")
     LOG.critical("See https://pypi.org/project/pycryptodomex/")
 try:
+    # 3rd Party Libraries
     import pyasn1
-    from pyasn1.type.univ import noValue, SequenceOf, Integer
-    from pyasn1.codec.der import encoder, decoder
+    from pyasn1.codec.der import decoder, encoder
+    from pyasn1.type.univ import Integer, SequenceOf, noValue
 except ImportError:
     LOG.critical('This module needs pyasn1 installed')
 
@@ -2140,7 +2179,6 @@ class LSASecrets(OfflineRegistry):
                 valueTypeList.append('OldVal')
 
             for valueType in valueTypeList:
-                # print('\\Policy\\Secrets\\{}\\{}\\default'.format(key,valueType))
                 value = self.getValue('\\Policy\\Secrets\\{}\\{}\\default'.format(key,valueType))
                 if value is not None and value[1] != 0:
                     if self.__vistaStyle is True:
@@ -2149,7 +2187,6 @@ class LSASecrets(OfflineRegistry):
                         plainText = self.__cryptoCommon.decryptAES(tmpKey, record['EncryptedData'][32:])
                         record = LSA_SECRET_BLOB(plainText)
                         secret = record['Secret']
-                        # print(f"{key} : {secret.hex()}\n")
                     else:
                         secret = self.__decryptSecret(self.__LSAKey, value[1])
 
@@ -3220,7 +3257,6 @@ class KeyListSecrets:
             fullTGT = self.getFullTGT(targetUserName, partialTGT, sessionKey)
             if fullTGT is not None:
                 key = self.getKey(fullTGT, sessionKey)
-                print(self.__domain + "\\" + targetUser + ":" + key[2:])
 
     def createPartialTGT(self, userName):
         # We need the ticket template

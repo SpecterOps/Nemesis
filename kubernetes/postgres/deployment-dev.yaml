@@ -44,39 +44,6 @@ spec:
             name: postgres-nemesis-schema
 
         # Persistence
-        # Have data persist across runs (for prod)
+        # Option 1) Use to have the DB wiped on each reboot (for dev)
         - name: postgredb
-          persistentVolumeClaim:
-            claimName: postgres-pv-claim
----
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: postgres-pv-volume
-  labels:
-    type: local
-    app: postgres
-spec:
-  storageClassName: manual
-  capacity:
-    storage: 15Gi
-  accessModes:
-    - ReadWriteMany
-  hostPath:
-    path: "/mnt/data/postgres/"
-    # path: "/postgres-data/"
----
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: postgres-pv-claim
-  labels:
-    app: postgres
-spec:
-  storageClassName: manual
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 15Gi
-  volumeName: postgres-pv-volume
+          emptyDir: {}

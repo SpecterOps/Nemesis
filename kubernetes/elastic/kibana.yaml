@@ -20,12 +20,21 @@ spec:
       containers:
       - name: kibana
         env:
-        - name: SERVER_BASEPATH
-          value: "/kibana"
+        # - name: "SERVER_REWRITEBASEPATH"
+        #   value: "true"
         - name: ELASTIC_URL
           value: http://nemesis-es-http.default.svc.cluster.local:9200
         - name: KIBANA_URL
           value: http://nemesis-kb-http.default.svc.cluster.local:5601
+        - name: NEMESIS_HTTP_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: operation-config
+              key: nemesis-http-server
+        - name: SERVER_BASEPATH
+          value: "/kibana"
+        - name: SERVER_PUBLICBASEURL
+          value: "$(NEMESIS_HTTP_SERVER)kibana"
         - name: ELASTICSEARCH_USER
           valueFrom:
             secretKeyRef:
@@ -36,6 +45,16 @@ spec:
             secretKeyRef:
               name: elasticsearch-users
               key: password
+        # readinessProbe:
+        #   failureThreshold: 3
+        #   httpGet:
+        #     path: /kibana/status
+        #     port: 5601
+        #     scheme: HTTP
+        #   initialDelaySeconds: 10
+        #   periodSeconds: 10
+        #   successThreshold: 1
+        #   timeoutSeconds: 5
 ---
 # Reference: https://github.com/sjbavier/Reference/blob/2b19339f007a82c180d73b7edb662bfe5b6fb9ee/google-cloud/examples/click-to-deploy/k8s/elastic-gke-logging/chart/elastic-gke-logging/templates/kibana-manifests.yaml
 apiVersion: batch/v1
@@ -56,19 +75,18 @@ spec:
               echo "Waiting for Kibana..."
 
               COUNTER=1
+              URL="${KIBANA_URL}/api/status"
               until curl --silent --user "${ELASTICSEARCH_USER}:${ELASTICSEARCH_PASSWORD}" --insecure --max-time 5 \
-                ${KIBANA_URL}/api/status \
+                $URL \
                 | jq '.status.overall.level' \
                 | grep "available" > /dev/null; do
-                echo "Retry ${COUNTER}: Waiting for Kibana at ${KIBANA_URL}..."
+                echo "Retry ${COUNTER}: Waiting for Kibana at ${URL}..."
                 COUNTER=`expr ${COUNTER} + 1`
                 sleep 5
               done
 
               echo "Kibana available."
           env:
-            - name: KIBANA_URL
-              value: http://nemesis-kb-http.default.svc.cluster.local:5601
             - name: ELASTICSEARCH_USER
               valueFrom:
                 secretKeyRef:
@@ -79,6 +97,8 @@ spec:
                 secretKeyRef:
                   name: elasticsearch-users
                   key: password
+            - name: KIBANA_URL
+              value: http://nemesis-kb-http.default.svc.cluster.local:5601
       containers:
         - name: kibana-init
           image: alpine:3.17.0

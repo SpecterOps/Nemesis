@@ -7,15 +7,13 @@ metadata:
     nginx.ingress.kubernetes.io/auth-secret: basic-auth
     nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
     ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      proxy_set_header   Authorization $http_authorization;
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
           - path: /rabbitmq/
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: nemesis-rabbitmq-svc

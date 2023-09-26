@@ -14,7 +14,7 @@ spec:
     - http:
         paths:
           - path: /minio(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: minio

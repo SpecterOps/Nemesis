@@ -15,28 +15,28 @@ spec:
     - http:
         paths:
           - path: /crack-list(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: enrichment-cracklist
                 port:
                   number: 9900
           - path: /yara(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: enrichment-yara
                 port:
                   number: 9700
           - path: /api(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: enrichment-webapi
                 port:
                   number: 9910
           - path: /
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: enrichment-landingpage

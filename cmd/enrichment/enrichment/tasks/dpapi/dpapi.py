@@ -9,17 +9,18 @@ import nemesispb.nemesis_pb2 as pb
 import structlog
 from Cryptodome.Cipher import AES, PKCS1_v1_5
 from Cryptodome.Hash import HMAC, MD4, SHA1
-from enrichment.lib.nemesis_db import (DpapiDomainBackupkey, DpapiMasterkey,
-                                       NemesisDb)
+from enrichment.lib.nemesis_db import DpapiDomainBackupkey, DpapiMasterkey, NemesisDb
 from enrichment.tasks.dpapi.dpapi_blob import DPAPI_BLOB
 from enrichment.tasks.dpapi.masterkey import MasterKey
+
 # from enrichment.tasks.dpapi.masterkey import MasterKey
 from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY  # MasterKey,
-from impacket.dpapi import (PRIVATE_KEY_BLOB, PVK_FILE_HDR,
-                            privatekeyblob_to_pkcs1)
+from impacket.dpapi import PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
 from impacket.uuid import bin_to_string
-from nemesiscommon.messaging import (MessageQueueConsumerInterface,
-                                     MessageQueueProducerInterface)
+from nemesiscommon.messaging import (
+    MessageQueueConsumerInterface,
+    MessageQueueProducerInterface,
+)
 from nemesiscommon.nemesis_tempfile import TempFile
 from nemesiscommon.services.alerter import AlerterInterface
 from nemesiscommon.storage import StorageInterface
@@ -170,9 +171,7 @@ class Dpapi(TaskInterface):
                 else:
                     if masterkey.domain_backupkey_guid and masterkey.domainkey_pb_secret:
                         # if there's a linked domain backup key, try to decrypt this masterkey
-                        results = await self.decrypt_dpapi_domain_masterkey(
-                            masterkey.domainkey_pb_secret, domain_backupkey_guid=masterkey.domain_backupkey_guid
-                        )
+                        results = await self.decrypt_dpapi_domain_masterkey(masterkey.domainkey_pb_secret, domain_backupkey_guid=masterkey.domain_backupkey_guid)
 
                         if results:
                             await logger.adebug("Decrypted masterkey with domain backup key", masterkey_guid=masterkey.masterkey_guid)
@@ -186,9 +185,7 @@ class Dpapi(TaskInterface):
                         plaintext_passwords = await self.db.get_plaintext_passwords(masterkey.username)
                         ntlm_hashes = await self.db.get_ntlm_hashes(masterkey.username)
                         if plaintext_passwords or ntlm_hashes:
-                            results = await self.decrypt_dpapi_masterkey(
-                                masterkey.masterkey_bytes, masterkey.user_sid, plaintext_passwords, ntlm_hashes
-                            )
+                            results = await self.decrypt_dpapi_masterkey(masterkey.masterkey_bytes, masterkey.user_sid, plaintext_passwords, ntlm_hashes)
                             if results:
                                 await logger.adebug("Decrypted masterkey with existing plaintext password or ntlm hash")
                                 # update this object with the decrypted values
@@ -256,9 +253,7 @@ class Dpapi(TaskInterface):
             await self.db.add_dpapi_domain_backupkey(obj)
 
             # alert to Slack
-            await self.alerter.alert(
-                f"*DPAPI Domain Backup Key Added*\nAdded domain backupkey (GUID: *{domain_backupkey_guid}*) to the database"
-            )
+            await self.alerter.alert(f"*DPAPI Domain Backup Key Added*\nAdded domain backupkey (GUID: *{domain_backupkey_guid}*) to the database")
 
             await logger.adebug("Added domain backupkey to the database", domain_backupkey_guid=domain_backupkey_guid)
 
@@ -275,13 +270,7 @@ class Dpapi(TaskInterface):
         """
 
         # get all of the unique masterkey GUIDs off the bat so we can retrieve them just once
-        masterkey_guids_uniq = set(
-            [
-                entry.masterkey_guid
-                for entry in event.data
-                if (entry.encryption_type == "dpapi" and entry.masterkey_guid != "00000000-0000-0000-0000-000000000000")
-            ]
-        )
+        masterkey_guids_uniq = set([entry.masterkey_guid for entry in event.data if (entry.encryption_type == "dpapi" and entry.masterkey_guid != "00000000-0000-0000-0000-000000000000")])
         masterkeys = {}
         for mk_guid in masterkey_guids_uniq:
             results = await self.db.get_decrypted_dpapi_masterkey(mk_guid)
@@ -340,9 +329,7 @@ class Dpapi(TaskInterface):
         """
 
         # get all of the unique masterkey GUIDs off the bat so we can retrieve them just once
-        masterkey_guids_uniq = set(
-            [entry.masterkey_guid for entry in event.data if entry.masterkey_guid != "00000000-0000-0000-0000-000000000000"]
-        )
+        masterkey_guids_uniq = set([entry.masterkey_guid for entry in event.data if entry.masterkey_guid != "00000000-0000-0000-0000-000000000000"])
         masterkeys = {}
         for mk_guid in masterkey_guids_uniq:
             results = await self.db.get_decrypted_dpapi_masterkey(mk_guid)
@@ -412,7 +399,6 @@ class Dpapi(TaskInterface):
 
             elif data.type and data.type == "ntlm_hash":
                 await self.decrypt_existing_dpapi_masterkeys_with_user_key(data.username, "ntlm_hash", data.data)
-
 
     ###################################################
     #
@@ -562,7 +548,7 @@ class Dpapi(TaskInterface):
         encrypted_masterkeys = await self.db.get_encrypted_dpapi_masterkeys_from_username(username)
 
         if not encrypted_masterkeys:
-            await logger.ainfo("No masterkeys found in the DB matching the username", username=username)
+            await logger.adebug("No masterkeys found in the DB matching the username", username=username)
             return
         else:
             await logger.ainfo(
@@ -571,7 +557,6 @@ class Dpapi(TaskInterface):
                 count=len(encrypted_masterkeys),
             )
 
-        # await self.decrypt_dpapi_masterkey()
         decrypted_masterkeys = 0
         for masterkey in encrypted_masterkeys:
             masterkey_guid = masterkey[0]
@@ -597,9 +582,7 @@ class Dpapi(TaskInterface):
                 # decrypt existing Chromium data
                 await self.decrypt_existing_chromium_data(masterkey_guid)
 
-                await logger.adebug(
-                    "Decrypted any existing blobs protected by the newly decrypted GUID master key", masterkey_guid=masterkey_guid
-                )
+                await logger.adebug("Decrypted any existing blobs protected by the newly decrypted GUID master key", masterkey_guid=masterkey_guid)
             else:
                 await logger.aerror(
                     "Failed to decrypt DPAPI masterkey supplied password/NTLM hash",
@@ -658,9 +641,7 @@ class Dpapi(TaskInterface):
                 # decrypt existing Chromium data
                 await self.decrypt_existing_chromium_data(masterkey_guid)
 
-                await logger.adebug(
-                    "Decrypted any existing blobs protected by the newly decrypted GUID master key", masterkey_guid=masterkey_guid
-                )
+                await logger.adebug("Decrypted any existing blobs protected by the newly decrypted GUID master key", masterkey_guid=masterkey_guid)
             else:
                 await logger.aerror(
                     "Failed to decrypt DPAPI masterkey with domain backupkey",
@@ -773,9 +754,7 @@ class Dpapi(TaskInterface):
                         await self.db.update_decrypted_chromium_login(unique_db_id, plaintext)
 
                 if decrypted_logins_count > 0:
-                    await logger.adebug(
-                        "Decrypted existing Chromium logins with newly Chromium state key", decrypted_logins_count=decrypted_logins_count
-                    )
+                    await logger.adebug("Decrypted existing Chromium logins with newly Chromium state key", decrypted_logins_count=decrypted_logins_count)
 
                 decrypted_cookies_count = 0
                 for cookie in await self.db.get_aes_encrypted_chromium_cookies(source, user_data_directory):
@@ -796,9 +775,7 @@ class Dpapi(TaskInterface):
                         )
 
                 if decrypted_cookies_count > 0:
-                    await logger.adebug(
-                        "Decrypted existing Chromium cookies with newly Chromium state key", decrypted_cookies_count=decrypted_cookies_count
-                    )
+                    await logger.adebug("Decrypted existing Chromium cookies with newly Chromium state key", decrypted_cookies_count=decrypted_cookies_count)
 
             # then try for any DPAPI protected Logins
             for login in await self.db.get_dpapi_encrypted_chromium_logins(masterkey_guid):
