@@ -15,7 +15,7 @@ spec:
     - http:
         paths:
           - path: /dashboard(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: dashboard

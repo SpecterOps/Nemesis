@@ -723,7 +723,12 @@ def header() -> None:
 def render_nemesis_page(render_func):
     """Writes out the logo/auth header/etc. for all pages."""
 
-    st.set_page_config(layout="wide", page_title="Nemesis", page_icon="img/favicon.png", menu_items={"Get Help": "https://www.github.com/SpecterOps/Nemesis"})
+    st.set_page_config(
+        layout="wide",
+        page_title="Nemesis",
+        page_icon="img/favicon.png",
+        menu_items={"Get Help": "https://www.github.com/SpecterOps/Nemesis"},
+    )
 
     st.markdown(
         unsafe_allow_html=True,

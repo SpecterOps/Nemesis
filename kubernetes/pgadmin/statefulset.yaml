@@ -21,7 +21,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: pgadmin
-          image: dpage/pgadmin4:7.3
+          image: dpage/pgadmin4:7.7
           imagePullPolicy: Always
           env:
             - name: PGADMIN_DEFAULT_EMAIL
@@ -34,6 +34,8 @@ spec:
                 secretKeyRef:
                   name: postgres-creds
                   key: pgadmin-password
+            - name: SCRIPT_NAME
+              value: /pgadmin/
           ports:
             - name: http
               containerPort: 80

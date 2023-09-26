@@ -29,10 +29,20 @@ build:
 
 manifests:
   rawYaml:
-    - &k8s-elastic kubernetes/elastic/*
+    - &k8s-elastic-elasticsearch kubernetes/elastic/elasticsearch.yaml
+    - &k8s-elastic-ingress kubernetes/elastic/ingress.yaml
+    - &k8s-elastic-kibana kubernetes/elastic/kibana.yaml
 
 deploy:
   kubectl: {}
+
+profiles:
+ - name: dev
+   manifests:
+    rawYaml:
+    - kubernetes/elastic/elasticsearch-dev.yaml
+    - kubernetes/elastic/ingress.yaml
+    - kubernetes/elastic/kibana.yaml
 
 portForward:
   - &portForward-ingress
@@ -98,12 +108,27 @@ manifests:
     # Static infra
     - &k8s-rabbitmq kubernetes/rabbitmq/*
     - &k8s-gotenberg kubernetes/gotenberg/*
-    - &k8s-postgres kubernetes/postgres/*
+    - &k8s-postgres-configmap kubernetes/postgres/configmap.yaml
+    - &k8s-postgres-deployment kubernetes/postgres/deployment.yaml
+    - &k8s-postgres-service kubernetes/postgres/service.yaml
     - &k8s-pgadmin kubernetes/pgadmin/*
     - &k8s-tika kubernetes/tika/*
 
 deploy:
   kubectl: {}
+
+profiles:
+ - name: dev
+   manifests:
+    rawYaml:
+    # Static infra
+    - kubernetes/rabbitmq/*
+    - kubernetes/gotenberg/*
+    - kubernetes/postgres/configmap.yaml
+    - kubernetes/postgres/deployment-dev.yaml
+    - kubernetes/postgres/service.yaml
+    - kubernetes/pgadmin/*
+    - kubernetes/tika/*
 
 portForward:
   - &portForward-minios

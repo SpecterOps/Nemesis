@@ -48,6 +48,8 @@ spec:
               value: "9090"
             - name: PUBLIC_NEMESIS_URL
               value: "$(NEMESIS_HTTP_SERVER)dashboard/"
+            - name: PUBLIC_KIBANA_URL
+              value: "$(NEMESIS_HTTP_SERVER)kibana/"
             - name: RABBITMQ_CONNECTION_URI
               valueFrom:
                 secretKeyRef:
