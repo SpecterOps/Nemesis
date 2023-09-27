@@ -8,8 +8,6 @@
 Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `nemesis_http_server` nemesis-cli option) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage the results of Nemesis's processing. Instead of manually uploading files/data via the Dashboard, teams can/should [setup Nemeis's C2 Connectors](#nemesis-c2-connector-setup) to auto-ingest C2 data into Nemesis.
 
 # Nemesis C2 Connector Setup
-## C2 Connectors
-
 In order for Nemesis to perform data enrichment, data first needs to be ingested into the platform. The `./cmd/connectors/` folder contains the following connectors for various C2 platforms:
 
 - Cobalt Strike
@@ -119,4 +117,4 @@ skaffold run  --port-forward  # Kick things off
 ```
 
 ## Need additional help?
-Please [file an issue](https://github.com/SpecterOps/Nemesis/issues) or feel free to ask questions in the `#nemesis-chat` channel in the [Bloodhound Slack](https://bloodhoundhq.slack.com/archives/C05KN15CCGP) ([click here to join](https://ghst.ly/BHSlack)).
+Please [file an issue](https://github.com/SpecterOps/Nemesis/issues) or feel free to ask questions in the [#nemesis-chat` channel](https://bloodhoundhq.slack.com/archives/C05KN15CCGP) in the Bloodhound Slack ([click here to join](https://ghst.ly/BHSlack)).
