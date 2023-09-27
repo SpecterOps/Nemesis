@@ -174,6 +174,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 Restart your shell.
 
+**Validation:** Running `poetry --version` from the shell should output the current version.
+
 ## Install Poetry Environment for Artifact Submission
 **Purpose:** Install the Poetry environment for ./scripts/submit_to_nemesis.sh
 
@@ -182,7 +184,6 @@ Restart your shell.
 ```
 poetry -C ./cmd/enrichment/ install
 ```
-
 </details>
 
 
