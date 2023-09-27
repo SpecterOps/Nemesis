@@ -446,14 +446,24 @@ def validate_config_values(config_keys):
 
     if not v.get("force"):
         for config_key in config_keys:
-            not_required_args = ["basic_auth_password", "data_expiration_days", "log_level", "pgadmin_email"]
+            not_required_args = [
+                "basic_auth_password",
+                "data_expiration_days",
+                "log_level",
+                "pgadmin_email",
+                "disable_slack_alerting",
+                "rabbitmq_erlang_cookie",
+            ]
             if config_key not in not_required_args:
+                if config_key.startswith("slack_") and str(v.get("disable_slack_alerting")).lower() == "true":
+                    continue
+
                 if not v.get(config_key):
                     # set the value for to config key if it already exists in Kubectl
                     config_value = get_kubectl_value(config_key)
                     if not config_value:
                         # otherwise prompt
-                        config_value = input(f"\n[*] Please enter a value for '{config_key}' : ")
+                        config_value = input(f"\n[*] Please enter a value for '{config_key}' or <enter> for the default: ")
                     v.set(config_key, config_value)
 
     if not v.get("log_level") or v.get("log_level") == "<no value>":
