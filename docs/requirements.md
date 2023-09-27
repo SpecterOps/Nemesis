@@ -75,6 +75,7 @@ minikube start
 **Validation:**
 * `minikube status` should show that the Kubernetes services are running
 * `minikube version` should show at least a version greater than v1.26.1
+* Run `minikube ssh` and then run `ping -c 1.1.1.1` to test internet connectivity and `nslookup google.com` to test DNS.
 
 
 **Note 1 - (Optional) Authenticating to a docker registry**
