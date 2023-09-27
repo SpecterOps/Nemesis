@@ -192,21 +192,10 @@ def build_page(username: str):
         extension = pathlib.Path(file["name"]).suffix.strip(".").lower()
 
         download_url_internal = f"http://enrichment-webapi:9910/download/{object_id}"
-        download_url_public = f"{NEMESIS_HTTP_SERVER}/api/download/{object_id}"
-        is_text = False
-
-        if "magic_type" in file and file["magic_type"] and ("ASCII text" in file["magic_type"] or "UTF-8 Unicode" in file["magic_type"]):
-            is_text = True
-        if "converted_pdf_id" in file and file["converted_pdf_id"] != "00000000-0000-0000-0000-000000000000":
-            pdf_download_url_public = f"{NEMESIS_HTTP_SERVER}/api/download/{file['converted_pdf_id']}?action=view&name=test.pdf"
-
-        if file["name"].endswith(".pdf"):
-            pdf_download_url_public = f"{download_url_public}?action=view&name=test.pdf"
 
         tabs = [stx.TabBarItemData(id=1, title="Basic File Info", description="Basic File Information"), stx.TabBarItemData(id=3, title="Elasticsearch Info", description="Elasticsearch Information Dump")]
 
         es_results = utils.elastic_file_search(object_id)
-        has_np_results = False
         if es_results and es_results["hits"]["total"]["value"] == 1:
             if "noseyparker" in es_results["hits"]["hits"][0]["_source"]:
                 tabs.append(stx.TabBarItemData(id=2, title="Noseyparker Results", description="Noseyparker Results"))
@@ -273,35 +262,6 @@ def build_page(username: str):
                                 except Exception as e:
                                     st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
 
-                    # elif pdf_download_url_public:
-                    #     # Inline PDF file file display, if PDF is present
-                    #     with mui.Card(
-                    #                 key="2",
-                    #                 sx={
-                    #                     "display": "flex",
-                    #                     "flexDirection": "column",
-                    #                     "borderRadius": 2,
-                    #                     "overflow": "auto",
-                    #                     "overflowY": "auto",
-                    #                     "m": "10",
-                    #                     "gap": "10px",
-                    #                 },
-                    #                 padding=1,
-                    #                 elevation=1,
-                    #                 spacing=10,
-                    #                 src=pdf_download_url_public
-                    #             ):
-                    #             # TODO: Iframe and embed tags and base64 blobs no longer work. This is due to the "sandbox" property on the streamlit MUI component's iframe
-                    #             # Would be nice to use something like PDF.js, but streamlit makes hosting static HTLM/JS files a pain
-                    #              # See https://github.com/whatwg/html/issues/3958
-                    #             html.iframe(
-                    #                 src=f"{pdf_download_url_public}",
-                    #                 height=785,
-                    #                 width="100%",
-                    #                 type="application/pdf"
-                    #             )
-                    #             pass
-
         elif chosen_tab == str(2):  # noseyparker_results
             if es_results != {}:
                 total_hits = es_results["hits"]["total"]["value"]
@@ -311,17 +271,6 @@ def build_page(username: str):
                         object_id = es_results["hits"]["hits"][i]["_source"]["objectId"]
                         file_name = es_results["hits"]["hits"][i]["_source"]["name"]
                         download_url_internal = f"{NEMESIS_HTTP_SERVER}/api/download/{object_id}?name={file_name}"
-                        kibana_link = f"{NEMESIS_HTTP_SERVER}/kibana/app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
-                        path = es_results["hits"]["hits"][i]["_source"]["path"]
-                        sha1 = es_results["hits"]["hits"][i]["_source"]["hashes"]["sha1"]
-                        source = ""
-                        if "metadata" in es_results["hits"]["hits"][i]["_source"] and "source" in es_results["hits"]["hits"][i]["_source"]["metadata"]:
-                            source = es_results["hits"]["hits"][i]["_source"]["metadata"]["source"]
-
-                        if source:
-                            expander_text = f"{source} : **{path}** (SHA1: {sha1})"
-                        else:
-                            expander_text = f"**{path}** (SHA1: {sha1})"
 
                         for ruleMatch in es_results["hits"]["hits"][i]["_source"]["noseyparker"]["ruleMatches"]:
                             for match in ruleMatch["matches"]:

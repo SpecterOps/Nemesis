@@ -59,6 +59,8 @@ FROM extracted_hashes
     if object_id:
         query += " WHERE originating_object_id = :object_id"
         params["object_id"] = object_id
+
+        st.write("Filters are currently applied.")
         if st.button("Clear Filters"):
             st.experimental_set_query_params()
 
