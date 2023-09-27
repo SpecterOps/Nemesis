@@ -80,7 +80,7 @@ minikube start
 
 **Note 1 - (Optional) Authenticating to a docker registry**
 
-Because Minikube's docker daemon runs on a different machine, you may want to configure it to authenticate to a docker registry (for example, to avoid [docker hub API limits](https://docs.docker.com/docker-hub/download-rate-limit/)). If you've authenticated to a docker registry on your local machine (e.g., [using an access token with dockerhub](https://docs.docker.com/docker-hub/access-tokens/)), you add the credential to Minikube using the following command and it will pull images using that cred:
+Because Minikube's docker daemon runs on a different machine, you may want to configure it to authenticate to a docker registry (for example, to avoid [docker hub API limits](https://docs.docker.com/docker-hub/download-rate-limit/)). If you've authenticated to a docker registry on the minikube host machine (e.g., [using an access token with dockerhub](https://docs.docker.com/docker-hub/access-tokens/)), you add the credential to Minikube using the following command and it will pull images using that cred:
 
 ```bash
 kubectl create secret generic regcred --from-file=.dockerconfigjson=$(realpath ~/.docker/config.json) --type=kubernetes.io/dockerconfigjson
