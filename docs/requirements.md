@@ -45,6 +45,7 @@ Kubectl
 
 **Purpose:** CLI tool to interact with Kubernetes.
 Instructions found here: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+
 **Validation:** `kubectl` should display the tool's usage. Once a Kubernetes cluster is running/configured, `kubectl get pods -A` should show some kubernetes-related pods running.
 </details>
 
