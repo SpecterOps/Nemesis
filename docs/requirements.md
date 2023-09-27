@@ -45,6 +45,7 @@ Kubectl
 
 **Purpose:** CLI tool to interact with Kubernetes.
 Instructions found here: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+
 **Validation:** `kubectl` should display the tool's usage. Once a Kubernetes cluster is running/configured, `kubectl get pods -A` should show some kubernetes-related pods running.
 </details>
 
@@ -74,11 +75,12 @@ minikube start
 **Validation:**
 * `minikube status` should show that the Kubernetes services are running
 * `minikube version` should show at least a version greater than v1.26.1
+* Run `minikube ssh` and then run `ping -c 1.1.1.1` to test internet connectivity and `nslookup google.com` to test DNS.
 
 
 **Note 1 - (Optional) Authenticating to a docker registry**
 
-Because Minikube's docker daemon runs on a different machine, you may want to configure it to authenticate to a docker registry (for example, to avoid [docker hub API limits](https://docs.docker.com/docker-hub/download-rate-limit/)). If you've authenticated to a docker registry on your local machine (e.g., [using an access token with dockerhub](https://docs.docker.com/docker-hub/access-tokens/)), you add the credential to Minikube using the following command and it will pull images using that cred:
+Because Minikube's docker daemon runs on a different machine, you may want to configure it to authenticate to a docker registry (for example, to avoid [docker hub API limits](https://docs.docker.com/docker-hub/download-rate-limit/)). If you've authenticated to a docker registry on the minikube host machine (e.g., [using an access token with dockerhub](https://docs.docker.com/docker-hub/access-tokens/)), you add the credential to Minikube using the following command and it will pull images using that cred:
 
 ```bash
 kubectl create secret generic regcred --from-file=.dockerconfigjson=$(realpath ~/.docker/config.json) --type=kubernetes.io/dockerconfigjson
@@ -132,7 +134,7 @@ skaffold config set --global collect-metrics false
 <summary>
 Python, Pyenv, and Poetry
 </summary>
-To get Nemesis running, Python 3.11.2 is needed in order to run `nemesis-cli.py` (which configures Nemesis's k8s environment). It is not _required_ to install Pyenv/Poetry. However, Pyenv makes global python version management easy and Poetry is required if using the `submit_to_nemesis` CLI tool.
+To get Nemesis running, Python 3.11.2 is needed in order to run nemesis-cli.py (which configures Nemesis's k8s environment). It is not required to install Pyenv/Poetry. However, Pyenv makes global python version management easy and Poetry is required if using the submit_to_nemesis CLI tool.
 
 ## Install Pyenv
 **Purpose:** Manages python environments in a sane way.
@@ -173,6 +175,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 Restart your shell.
 
+**Validation:** Running `poetry --version` from the shell should output the current version.
+
 ## Install Poetry Environment for Artifact Submission
 **Purpose:** Install the Poetry environment for ./scripts/submit_to_nemesis.sh
 
@@ -181,7 +185,6 @@ Restart your shell.
 ```
 poetry -C ./cmd/enrichment/ install
 ```
-
 </details>
 
 

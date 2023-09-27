@@ -43,6 +43,15 @@ If a required configuration value is not supplied, nemesis-cli will check if it 
 | RABBITMQ_ADMIN_PASSWORD   | rabbitmq_admin_password | --rabbitmq_admin_password | Password for the RabbitMQ interface (default: random 24 characters)                                                                                                                      |
 | RABBITMQ_ERLANG_COOKIE    | rabbitmq_erlang_cookie  | --rabbitmq_erlang_cookie  | Password to allow RabbitMQ nodes to communicate (default: random 24 characters)                                                                                                          |
 
+# Example: Specifying Nemesis options using a configuration file
+1. In the root of the repo, copy the example config to another file:
+```
+cd /path/to/Nemesis
+cp nemesis.config.example nemesis.config
+```
+2. Edit the options in `my.nemesis.config` to you desired values
+3. Setup the Kubernetes environment by running `python3 nemesis-cli.py -c my.nemesis.config`
+
 # Example: Specifying Nemesis options using the CLI arguments
 The following configures Nemesis using CLI arguments, setting all services to use the same username and password. In this case `192.168.230.42` is the IP address the VM running minikube.
 ```
