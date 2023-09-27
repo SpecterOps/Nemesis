@@ -12,11 +12,11 @@ Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in
 
 In order for Nemesis to perform data enrichment, data first needs to be ingested into the platform. The `./cmd/connectors/` folder contains the following connectors for various C2 platforms:
 
-- Cobalt Strike
-- Metasploit
-- Mythic
-- OST Stage1
-- Sliver
+- [Cobalt Strike](../cmd/connectors/cobaltstrike-nemesis-connector/README.md)
+- [Mythic](../cmd/connectors/mythic-connector/README.md)
+- [Sliver](../cmd/connectors/sliver-connector/README.md)
+- [OST Stage1](../cmd/connectors/stage1-connector/README.md)
+- [Metasploit](../cmd/connectors/metasploit-connector/README.md)
 
 See each applicable subfolder for more information on configuration.
 
