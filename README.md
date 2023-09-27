@@ -39,7 +39,7 @@ See the [setup instructions](docs/setup.md).
 # Contributing / Development Environment Setup
 See [development.md](./docs/development.md)
 
-## Nemesis Blog Posts:
+## Further Reading
 
 | Post Name                                   | Publication Date | Link                                                                               |
 |---------------------------------------------|------------------|------------------------------------------------------------------------------------|

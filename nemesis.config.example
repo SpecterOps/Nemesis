@@ -1,6 +1,6 @@
 # General options
 # The nemesis_http_server must match the port of the ingress-nginx-controller service in skaffold.yaml (port 8080 by default)
-nemesis_http_server: http://IP_of_k8s_host:8080/
+nemesis_http_server: http://IP_of_k8s_host:8080
 assessment_id: ASSESS-TEST
 data_expiration_days: 100
 log_level: INFO
@@ -8,7 +8,7 @@ log_level: INFO
 # Slack Alerting
 disable_slack_alerting: True
 slack_channel: "#test"
-slack_webhook: https://path.to.web.hook
+slack_webhook: https://path.to.web.hook/
 
 # OPTIONAL: Keep your sanity by setting the same password for some commonly accessed services
 # basic_auth_password: PASSWORD

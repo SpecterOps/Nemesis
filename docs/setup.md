@@ -20,10 +20,6 @@ See each applicable subfolder for more information on configuration.
 
 ***Note: not all connectors have the same level of completeness! We intended to show the range of connectors possible, but there is not yet feature parity.***
 
-
-# Deleting Running Pods
-Run `skaffold delete` at the root of the repo to remove running pods.
-
 # Nemesis Service Endpoints
 
 All Nemesis services are exposed through a single HTTP endpoint (defined in the NEMESIS_HTTP_SERVER environment variable) protected by HTTP basic auth credentials configured through the `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` settings.
@@ -69,6 +65,8 @@ The ingress port for Nemesis is **8080**, which routes access for all services. 
 
 The only other publicly forwarded port is **9001** if minio is used for storage (the default).
 
+# (Optional) Deleting Running Pods
+Run `skaffold delete` at the root of the repo to remove running pods. There currently is not a way to remove all the Kubernetes objects created by `nemesis-cli.py` without deleting the cluster (e.g., `minikube delete`).
 
 # Troubleshooting & Common Errors
 ## "CONTAINER can't be pulled" error
