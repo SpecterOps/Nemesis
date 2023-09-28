@@ -14,7 +14,12 @@ sub file::ReadAllBytes {
 	$handle = openf($path);
 	throw checkError($error);
 
-	$bytes = readb($handle, -1);
+    try {
+	    $bytes = readb($handle, -1);
+    } catch $message {
+        println("ERROR! " . $message);
+    }
+
 	closef($handle);
 
 	return $bytes;
