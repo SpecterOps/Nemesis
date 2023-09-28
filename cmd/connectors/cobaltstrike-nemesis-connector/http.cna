@@ -119,7 +119,7 @@ sub http::YaraFile {
     [$con setRequestProperty: "User-Agent", "NemesisCobaltStrikeConnector"];
     # make sure we set the GUID that defines our boundary
     [$con setRequestProperty: "Content-Type", "multipart/form-data; boundary=" . $guid];
-    $auth_header = "Basic " . base64_encode("nemesis:Password123!");
+    $auth_header = "Basic " . base64_encode(%nemesis::Settings['NemesisCreds']);
     [$con setRequestProperty: "Authorization", $auth_header];
     [$con setRequestMethod: "POST"];
     [$con setDoOutput: true];
