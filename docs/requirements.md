@@ -118,15 +118,21 @@ Skaffold
 
 **Purpose:** Development tool used to auto deploy containers to a Kubernetes cluster anytime the code changes.
 
-[Install Skaffold v1.39.2 with this command](https://github.com/GoogleContainerTools/skaffold/releases/tag/v1.39.2):
+[Install Skaffold v2.7.1 with this command](https://github.com/GoogleContainerTools/skaffold/releases/tag/v2.7.1):
 ```
 # For Linux x86_64 (amd64)
-curl -Lo skaffold "https://storage.googleapis.com/skaffold/releases/v2.2.0/skaffold-linux-amd64" && chmod +x skaffold && sudo mv skaffold /usr/local/bin
-
-# (Optional) Disable anonymous metrics collection
-skaffold config set --global collect-metrics false
-
+curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.7.1/skaffold-linux-amd64 && chmod +x skaffold && sudo mv skaffold /usr/local/bin
 ```
+Optional settings:
+* Disable anonymous metrics collection:
+```
+skaffold config set --global collect-metrics false
+```
+* Disable the update check on each run (especially needed in offline installs) by setting the `SKAFFOLD_UPDATE_CHECK` to `false` before running skaffold. For example, you can add the following to your `~/.bashrc` file to disable the update check anytime your user account runs skaffold:
+```
+export SKAFFOLD_UPDATE_CHECK=false
+```
+
 **Validation:** Running `skaffold` should print skaffold's help.
 </details>
 

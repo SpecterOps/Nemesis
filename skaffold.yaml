@@ -1,4 +1,4 @@
-apiVersion: skaffold/v4beta3
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: nemesis
@@ -14,7 +14,7 @@ requires:
 #  - Nginx ingress controller - API routes
 #  - Elasticsearch/kibana - Used by Nemesis and Fluentd for logging
 #############################################################################
-apiVersion: skaffold/v4beta2
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: infra-core
@@ -177,7 +177,7 @@ portForward:
 #########################################################################################
 # nemesis-services - deploys API/enrichment services (common things that change during dev)
 #########################################################################################
-apiVersion: skaffold/v4beta3
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: services
@@ -236,7 +236,7 @@ deploy:
 #     port: 8501
 #     address: 0.0.0.0
 ---
-apiVersion: skaffold/v4beta3
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: enrichment
@@ -273,7 +273,7 @@ deploy:
 #     port: 9910
 #     address: 0.0.0.0
 ---
-apiVersion: skaffold/v4beta3
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: dashboard
