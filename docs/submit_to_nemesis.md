@@ -17,7 +17,7 @@ Once configured, in the root Nemesis directory run
 ***Note: On the first run of the script Poetry will install all needed dependencies.***
 
 Below are some example usage scenarios:
-* Submit all files in a folder
+* Submit all files in a folder:
 ```
 ./scripts/submit_to_nemesis.sh --folder ./sample_files:
 ```
@@ -30,4 +30,9 @@ Below are some example usage scenarios:
 * Monitor a folder for new files and automatically submit them to Nemesis:
 ```
 ./scripts/submit_to_nemesis.sh --monitor /path/to/folder/
+```
+
+* Stress test the Nemesis installation by submitting a folder of files 100 times with 30 workers:
+```
+./scripts/submit_to_nemesis.sh --folder sample_files/ -w 30 -r 100
 ```
