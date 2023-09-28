@@ -11,7 +11,7 @@ Usage:
 poetry run python -m enrichment.cli.submit_to_nemesis [OPTIONS]
 ```
 
-Example: Submit all files to the folder (use the absolute path):
+Example: Submit all files in a folder
 ```
 poetry run python -m enrichment.cli.submit_to_nemesis --folder /code/ods/sample_files
 ```

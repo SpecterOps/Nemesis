@@ -5,9 +5,18 @@
 
 3. Start all of Nemesis's services with `skaffold run --port-forward`.
 
-Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `nemesis_http_server` nemesis-cli option) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage the results of Nemesis's processing. Instead of manually uploading files/data via the Dashboard, teams can/should [setup Nemeis's C2 Connectors](#nemesis-c2-connector-setup) to auto-ingest C2 data into Nemesis.
+   Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `nemesis_http_server` nemesis-cli option) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
 
-# Nemesis C2 Connector Setup
+4. [Ingest data into Nemesis.](#data-ingestion)
+
+# Data Ingestion
+Data can be ingested into Nemesis in a muliple ways, including
+* [Auto-ingesting data from C2 platorms.](#nemesis-c2-connector-setup)
+* Manually uploading files on the "File Upload" page in the Nemesis's Dashboard UI.
+* Using the [submit_to_nemsis](./submit_to_nemesis.md) CLI tool to submit files.
+* Writing custom tools to interact with Nemesis's API.
+
+## Nemesis C2 Connector Setup
 In order for Nemesis to perform data enrichment, data first needs to be ingested into the platform. The `./cmd/connectors/` folder contains the following connectors for various C2 platforms:
 
 - [Cobalt Strike](../cmd/connectors/cobaltstrike-nemesis-connector/README.md)
@@ -16,9 +25,9 @@ In order for Nemesis to perform data enrichment, data first needs to be ingested
 - [OST Stage1](../cmd/connectors/stage1-connector/README.md)
 - [Metasploit](../cmd/connectors/metasploit-connector/README.md)
 
-See each applicable subfolder for more information on configuration.
-
 ***Note: not all connectors have the same level of completeness! We intended to show the range of connectors possible, but there is not yet feature parity.***
+
+If you'd like to ingest data from another platform, see the documentation for [adding a new connector](./new_connector.md).
 
 # Nemesis Service Endpoints
 
@@ -68,7 +77,7 @@ The only other publicly forwarded port is **9001** if minio is used for storage 
 # (Optional) Deleting Running Pods
 Run `skaffold delete` at the root of the repo to remove running pods. There currently is not a way to remove all the Kubernetes objects created by `nemesis-cli.py` without deleting the cluster (e.g., `minikube delete`).
 
-# Troubleshooting & Common Errors
+# Troubleshooting, Common Errors, and Support
 ## "CONTAINER can't be pulled" error
 When running skaffold, you may encounter an error stating:
 > deployment/______ failed. Error: container _____ is waiting to start: _______ can't be pulled
@@ -115,4 +124,4 @@ skaffold run  --port-forward  # Kick things off
 ```
 
 ## Need additional help?
-Please [file an issue](https://github.com/SpecterOps/Nemesis/issues) or feel free to ask questions in the [#nemesis-chat` channel](https://bloodhoundhq.slack.com/archives/C05KN15CCGP) in the Bloodhound Slack ([click here to join](https://ghst.ly/BHSlack)).
+Please [file an issue](https://github.com/SpecterOps/Nemesis/issues) or feel free to ask questions in the [#nemesis-chat channel](https://bloodhoundhq.slack.com/archives/C05KN15CCGP) in the Bloodhound Slack ([click here to join](https://ghst.ly/BHSlack)).
