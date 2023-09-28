@@ -92,10 +92,10 @@ async def get_all_rabbit_mq_queues(rabbit_mq_api_url: str) -> List[str]:
             if r.status_code == 200:
                 return [queue["name"] for queue in r.json()]
             else:
-                logger.aerror("Error retrieving RabbitMQ queues from the API", status=r.status_code)
+                await logger.aerror("Error retrieving RabbitMQ queues from the API", status=r.status_code)
                 return []
         except Exception as e:
-            logger.aerror("Error retrieving RabbitMQ queues from the API", exception=e)
+            await logger.aerror("Error retrieving RabbitMQ queues from the API", exception=e)
             return []
 
 
@@ -453,5 +453,5 @@ class NemesisApiRoutes(Routable):
                 #   ref - https://github.com/tiangolo/fastapi/issues/2152#issuecomment-889282903
                 return FileResponse(file.name, background=BackgroundTask(os.remove, file.name), media_type=content_type, headers=headers)
         except Exception as e:
-            logger.aexception(e, message="Failed to download file", file_uuid=id)
+            await logger.aerror(message="Failed to download file", file_uuid=id, exception=e)
             return Response(status_code=404, content="File not found")

@@ -20,6 +20,7 @@ import requests
 import structlog
 import urllib3
 import yaml
+from enrichment.cli.submit_to_nemesis.file_monitoring import monitor_directory
 from nemesiscommon.apiclient import FileUploadRequest, NemesisApiClient
 from nemesiscommon.logging import configure_logger
 from structlog.typing import FilteringBoundLogger
@@ -39,6 +40,7 @@ async def get_config() -> dict[str, str]:
     parser = argparse.ArgumentParser(description="Submit file(s) to Nemesis.", prog="submit_to_nemesis")
     parser.add_argument("-f", "--file", type=str, nargs="+", help="File(s) to submit to Nemesis")
     parser.add_argument("--folder", type=str, nargs="+", help="Folders(s) to submit to Nemesis")
+    parser.add_argument("-m", "--monitor", type=str, nargs="?", help="Folder to monitor for new files")
     parser.add_argument("-s", "--sec_between_files", type=float, nargs="?", default=0, help="Seconds between file submissions (default 0). If > 0, it cannot be used with the --workers argument.")
     parser.add_argument("-w", "--workers", type=int, nargs="?", default=10, help="Number of workers to use (default 10). If --sec_between_files argument is set, value will be 1")
     parser.add_argument("-r", "--repeat", type=int, default=0, help="Times to repeat the submission (for stress testing)")
@@ -115,6 +117,7 @@ async def get_config() -> dict[str, str]:
 
     config["file"] = args.file
     config["folder"] = args.folder
+    config["monitor"] = args.monitor
     config["sec_between_files"] = args.sec_between_files
     config["repeat"] = args.repeat
     config["timeout"] = args.timeout
@@ -263,18 +266,21 @@ async def submit_random_cookies(config, num_cookies=1000) -> uuid.UUID | None:
     for i in range(num_cookies):
         if i % 100 == 0:
             domain = f"{'-'.join(random.choices(words, k=2))}.com"
-        cookie_data.append({"user_data_directory": "C:/Users/harmj0y/AppData/Local/Google/Chrome/User Data/Default/Cookies",
-                            "domain": domain,
-                            "path": "/",
-                            "name": f"VALUE_{i}",
-                            "value": f"{random.choice(words)}_{random.randint(1, 10000000)}",
-                            "expires": "2030-01-01T01:01:01.000Z",
-                            "secure": True,
-                            "http_only": True,
-                            "session": False,
-                            "samesite": "lax",
-                            "source_port": 443
-                            })
+        cookie_data.append(
+            {
+                "user_data_directory": "C:/Users/harmj0y/AppData/Local/Google/Chrome/User Data/Default/Cookies",
+                "domain": domain,
+                "path": "/",
+                "name": f"VALUE_{i}",
+                "value": f"{random.choice(words)}_{random.randint(1, 10000000)}",
+                "expires": "2030-01-01T01:01:01.000Z",
+                "secure": True,
+                "http_only": True,
+                "session": False,
+                "samesite": "lax",
+                "source_port": 443,
+            }
+        )
 
     resp = await nemesis_post_data(config, {"metadata": metadata, "data": cookie_data})
     return uuid.UUID(resp["object_id"]) if resp else None
@@ -286,7 +292,7 @@ async def process_file(config, file_path) -> uuid.UUID | None:
     then posting the file_data message.
     """
 
-    if "services_api.json" in file_path:  # NOTE: This must not conflict with the example Seatbelt services either
+    if re.match(r".*services_api.*\.json$", file_path):  # NOTE: This must not conflict with the example Seatbelt services either
         with open(file_path, "r") as f:
             services_json_raw = f.read()
             services_json = json.loads(services_json_raw)
@@ -536,6 +542,10 @@ def return_args_and_exceptions(func, exception_handler: Callable) -> Callable:
     return functools.partial(_return_args_and_exceptions, func)
 
 
+def exception_handler(e, args):
+    logger.exception("Error processing file", args=args)
+
+
 async def submit_paths_concurrently(config, paths: List[str], workers: int, delay: float = 0) -> AsyncIterator[Tuple[str, uuid.UUID]]:
     """Submits files to Nemesis concurrently.
 
@@ -598,9 +608,6 @@ async def submit_paths_concurrently(config, paths: List[str], workers: int, dela
 
         return file_uuid
 
-    def exception_handler(e, args):
-        logger.exception("Error processing file", args=args)
-
     wrapped_process_file = return_args_and_exceptions(process_file_local, exception_handler)
 
     try:
@@ -611,6 +618,82 @@ async def submit_paths_concurrently(config, paths: List[str], workers: int, dela
         logger.warn("Cancelled file uploads")
 
     logger.info(f"Completed processing {result_count} files out of {total_file_count} total files")
+
+
+async def wait_for_stable_size(file_path, delay=1.0, retries=600):
+    logger.debug("Waiting for file size to stabilize", path=file_path)
+
+    previous_size = -1
+    current_size = 0
+    tries = 0
+    while tries < retries:
+        try:
+            current_size = os.path.getsize(file_path)
+            if current_size == previous_size:
+                return True
+            previous_size = current_size
+            await asyncio.sleep(delay)
+            tries += 1
+        except Exception as e:
+            logger.error("Error accessing a newly create file", path=file_path, exception=e)
+            return False
+    return False
+
+
+async def monitor_submit_paths_concurrently(config, path_iter: AsyncIterator, workers: int, delay: float = 0) -> AsyncIterator[Tuple[str, uuid.UUID]]:
+    """Submits files to Nemesis concurrently.
+
+    Args:
+        config (_type_): submit_to_nemesis configuration object.
+        paths (List[str]): List of file or folder paths to submit to Nemesis.
+        workers (int): Number of concurrent tasks that can run at once.
+        delay (float, optional): Time delay between each submission. Defaults to 0.
+
+    Returns:
+        AsyncIterator[Tuple[str, uuid.UUID]]: _description_
+
+    Yields:
+        Iterator[AsyncIterator[Tuple[str, uuid.UUID]]]: _description_
+    """
+    result_count = 0
+
+    async def monitor_process_file_local(file_path) -> uuid.UUID | None:
+        global logger
+
+        structlog.contextvars.bind_contextvars(
+            file_path=file_path,
+        )
+
+        logger.info("Processing file")
+
+        if not await wait_for_stable_size(file_path):
+            logger.error("An error occurred while waiting for the file. File did not process.", path=file_path)
+            return
+
+        file_uuid = await process_file(config, file_path)
+
+        logger.info(
+            f"Done processing file {result_count+1}",
+            file_uuid=str(file_uuid),
+            total_completed=result_count + 1,
+        )
+        structlog.contextvars.clear_contextvars()
+
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+        return file_uuid
+
+    wrapped_process_file = return_args_and_exceptions(monitor_process_file_local, exception_handler)
+
+    try:
+        async for result in map_unordered(wrapped_process_file, path_iter, limit=workers):
+            result_count += 1
+            yield result
+    except asyncio.CancelledError:
+        logger.warn("Cancelled file uploads")
+
+    logger.info(f"Completed processing {result_count} total files")
 
 
 async def is_file_processed(es_client, message_id: int):
@@ -628,9 +711,47 @@ async def is_file_processed(es_client, message_id: int):
         return False
 
 
-async def amain():
+async def submit_files_and_folders(config: dict[str, str]):
     paths_to_process = []
     processed_file_uuids = []
+
+    logger.info("Submitting files/folders to Nemesis")
+    if config["file"]:
+        for f in config["file"]:
+            paths_to_process.append(f)
+
+    if config["folder"]:
+        for f in config["folder"]:
+            paths_to_process.append(f)
+
+    for i in range(config["repeat"] + 1):
+        logger.info("Waiting for tasks to complete")
+        async for result in submit_paths_concurrently(config, paths_to_process, config["workers"], config["sec_between_files"]):
+            path, file_uuid = result
+            processed_file_uuids.append(file_uuid)
+
+
+async def monitor_and_submit_folder_files(config: dict[str, str], loop):
+    processed_file_uuids = []
+
+    path = os.path.abspath(config["monitor"])
+
+    if not os.path.exists(path):
+        logger.error("Path does not exist", path=path)
+        return
+
+    if os.path.isfile(path):
+        logger.error("The monitor path is a file, not a folder", path=path)
+
+    logger.info("Monitoring a folder for new files to submit", path=path)
+
+    iter = monitor_directory(path, loop)
+    async for result in monitor_submit_paths_concurrently(config, iter, config["workers"], config["sec_between_files"]):
+        path, file_uuid = result
+        processed_file_uuids.append(file_uuid)
+
+
+async def amain(loop):
     config = await get_config()
     if not config:
         return
@@ -638,20 +759,11 @@ async def amain():
     try:
         if config["cookies"]:
             await submit_random_cookies(config, config["cookies"])
-        else:
-            if config["file"]:
-                for f in config["file"]:
-                    paths_to_process.append(f)
+        elif config["file"] or config["folder"]:
+            await submit_files_and_folders(config)
+        elif config["monitor"]:
+            await monitor_and_submit_folder_files(config, loop)
 
-            if config["folder"]:
-                for f in config["folder"]:
-                    paths_to_process.append(f)
-
-            for i in range(config["repeat"] + 1):
-                logger.info("Waiting for tasks to complete")
-                async for result in submit_paths_concurrently(config, paths_to_process, config["workers"], config["sec_between_files"]):
-                    path, file_uuid = result
-                    processed_file_uuids.append(file_uuid)
     except asyncio.CancelledError:
         pass
 

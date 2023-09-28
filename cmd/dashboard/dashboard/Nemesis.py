@@ -39,11 +39,11 @@ def build_page(username: str):
     st.subheader("Files")
     cols = st.columns(5)
     with cols[0]:
-        num_plaintext_documents = utils.get_elastic_total_indexed_documents("file_data_plaintext")
-        st.metric("Indexed Documents", num_plaintext_documents)
-    with cols[1]:
         num_enriched_documents = utils.get_elastic_total_indexed_documents("file_data_enriched")
         st.metric("Processed Files", num_enriched_documents)
+    with cols[1]:
+        num_plaintext_documents = utils.get_elastic_total_indexed_documents("file_data_plaintext")
+        st.metric("Indexed Documents", num_plaintext_documents)
     with cols[2]:
         num_np_matches = utils.get_elastic_total_indexed_documents("file_data_enriched", query={"exists": {"field": "noseyparker"}})
         st.metric("NoseyParker Matches", num_np_matches)
