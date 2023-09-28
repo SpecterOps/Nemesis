@@ -13,7 +13,7 @@
 Data can be ingested into Nemesis in a muliple ways, including
 * [Auto-ingesting data from C2 platorms.](#nemesis-c2-connector-setup)
 * Manually uploading files on the "File Upload" page in the Nemesis's Dashboard UI.
-* Using the [submit_to_nemsis](./submit_to_nemesis.md) CLI tool to submit files.
+* Using the [submit_to_nemesis](./submit_to_nemesis.md) CLI tool to submit files.
 * Writing custom tools to interact with Nemesis's API.
 
 ## Nemesis C2 Connector Setup
