@@ -19,7 +19,7 @@ Once configured, in the root Nemesis directory run
 Below are some example usage scenarios:
 * Submit all files in a folder:
 ```
-./scripts/submit_to_nemesis.sh --folder ./sample_files:
+./scripts/submit_to_nemesis.sh --folder ./sample_files/
 ```
 
 * Submit multiple individual files with debug logging:
