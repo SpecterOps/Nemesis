@@ -55,6 +55,26 @@
                 "--folder",
                 "${workspaceFolder}/../../sample_files"
             ]
+        },
+        {
+            "name": "submit_to_nemesis.py - Monitor",
+            "type": "python",
+            "request": "launch",
+            "module": "enrichment.cli.submit_to_nemesis",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false,
+            "env": {
+                // "PYTHONASYNCIODEBUG": "1",
+                "BETTER_EXCEPTIONS": "1",
+                "FORCE_COLOR": "1",
+            },
+            "args": [
+                "--monitor",
+                "/tmp/mon",
+                // "-l",
+                // "DEBUG"
+            ]
         }
     ]
 }

@@ -27,7 +27,7 @@
         "agent_id": "339429212",
         "agent_type": "beacon",
         "automated": false,
-        "data_type": "services",
+        "data_type": "service",
         "expiration": "2024-04-03T10:08:40.000Z",
         "source": "DC",
         "project": "ASSESS-X",
