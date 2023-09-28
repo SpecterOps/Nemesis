@@ -14,7 +14,7 @@ Once configured, in the root Nemesis directory run
  ```
  to execute `submit_to_nemesis` and view its help.
 
-***Note: On the first run of the script Poetry will install install all needed dependencies.***
+***Note: On the first run of the script Poetry will install all needed dependencies.***
 
 Below are some example usage scenarios:
 * Submit all files in a folder
