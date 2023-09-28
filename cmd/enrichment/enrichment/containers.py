@@ -19,17 +19,15 @@ from enrichment.tasks.dpapi.dpapi import Dpapi
 from enrichment.tasks.elastic_connector import ElasticConnector
 from enrichment.tasks.file_processor import FileProcessor
 from enrichment.tasks.postgres_connector.postgres_connector import (
-    PostgresConnector, RegistryWatcher)
-from enrichment.tasks.process_categorizer.categorizer import \
-    CsvProcessCategorizer
-from enrichment.tasks.process_categorizer.process_categorizer import \
-    ProcessCategorizer
+    PostgresConnector,
+    RegistryWatcher,
+)
+from enrichment.tasks.process_categorizer.categorizer import CsvProcessCategorizer
+from enrichment.tasks.process_categorizer.process_categorizer import ProcessCategorizer
 from enrichment.tasks.raw_data_tag.raw_data_tag import RawDataTag
 from enrichment.tasks.registry_hive import RegistryHive
-from enrichment.tasks.service_categorizer.categorizer import \
-    TsvServiceCategorizer
-from enrichment.tasks.service_categorizer.service_categorizer import \
-    ServiceCategorizer
+from enrichment.tasks.service_categorizer.categorizer import TsvServiceCategorizer
+from enrichment.tasks.service_categorizer.service_categorizer import ServiceCategorizer
 from enrichment.tasks.slack_webhook_alerter import SlackWebHookAlerter
 from enrichment.tasks.webapi.crack_list.cracklist_api import CrackListApi
 from enrichment.tasks.webapi.landingpage import LandingPageApi
@@ -37,8 +35,10 @@ from enrichment.tasks.webapi.ml_models_api import MlModelsApi
 from enrichment.tasks.webapi.nemesis_api import NemesisApi
 from enrichment.tasks.webapi.yara_api import YaraApi
 from nemesiscommon.constants import NemesisQueue
-from nemesiscommon.messaging_rabbitmq import (NemesisRabbitMQConsumer,
-                                              NemesisRabbitMQProducer)
+from nemesiscommon.messaging_rabbitmq import (
+    NemesisRabbitMQConsumer,
+    NemesisRabbitMQProducer,
+)
 from nemesiscommon.services.alerter import NemesisAlerter
 from nemesiscommon.storage_minio import StorageMinio
 from nemesiscommon.storage_s3 import StorageS3
@@ -109,21 +109,11 @@ class Container(containers.DeclarativeContainer):
     # Input Queues
     # Format: inputq_<queueName>_<taskWithNoUnderscores>
     #
-    inputq_alert_slackwebhookalert = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_ALERT, pb.Alert, "slackwebhookalert"
-    )
-    inputq_filedata_fileprocessor = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_FILE_DATA, pb.FileDataIngestionMessage, "fileprocessor"
-    )
-    inputq_filedataenriched_fileprocessor = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_FILE_DATA_ENRICHED, pb.FileDataEnrichedMessage, "fileprocessor"
-    )
-    inputq_process_processcategorizer = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_PROCESS, pb.ProcessIngestionMessage, "processcategorizer"
-    )
-    inputq_service_servicecategorizer = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_SERVICE, pb.ServiceIngestionMessage, "servicecategorizer"
-    )
+    inputq_alert_slackwebhookalert = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_ALERT, pb.Alert, "slackwebhookalert")
+    inputq_filedata_fileprocessor = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_FILE_DATA, pb.FileDataIngestionMessage, "fileprocessor")
+    inputq_filedataenriched_fileprocessor = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_FILE_DATA_ENRICHED, pb.FileDataEnrichedMessage, "fileprocessor")
+    inputq_process_processcategorizer = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_PROCESS, pb.ProcessIngestionMessage, "processcategorizer")
+    inputq_service_servicecategorizer = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_SERVICE, pb.ServiceIngestionMessage, "servicecategorizer")
 
     inputq_authdata_elasticconnector = providers.Resource(
         create_consumer,
@@ -302,9 +292,7 @@ class Container(containers.DeclarativeContainer):
         "postgresconnector",
         num_events=500,
     )
-    inputq_rawdata_rawdatatagtask = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_RAW_DATA, pb.RawDataIngestionMessage, "rawdatatag", num_events=100
-    )
+    inputq_rawdata_rawdatatagtask = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_RAW_DATA, pb.RawDataIngestionMessage, "rawdatatag", num_events=100)
     inputq_registryvalue_postgresconnector = providers.Resource(
         create_consumer,
         config.rabbitmq_connection_uri,
@@ -338,28 +326,14 @@ class Container(containers.DeclarativeContainer):
         num_events=500,
     )
 
-    inputq_dpapiblob_dpapitask = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_DPAPI_BLOB, pb.DpapiBlobMessage, "dpapi"
-    )
-    inputq_chromiumlogin_dpapitask = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_LOGIN, pb.ChromiumLoginMessage, "dpapi"
-    )
-    inputq_chromiumstatefile_dpapitask = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_STATE_FILE, pb.ChromiumStateFileMessage, "dpapi"
-    )
-    inputq_dpapidomainbackupkey_dpapitask = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_DPAPI_DOMAIN_BACKUPKEY, pb.DpapiDomainBackupkeyMessage, "dpapi"
-    )
-    inputq_dpapimasterkey_dpapitask = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_DPAPI_MASTERKEY, pb.DpapiMasterkeyMessage, "dpapi"
-    )
-    inputq_authenticationdata_dpapitask = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_AUTHENTICATION_DATA, pb.AuthenticationDataIngestionMessage, "dpapi"
-    )
+    inputq_dpapiblob_dpapitask = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_DPAPI_BLOB, pb.DpapiBlobMessage, "dpapi")
+    inputq_chromiumlogin_dpapitask = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_LOGIN, pb.ChromiumLoginMessage, "dpapi")
+    inputq_chromiumstatefile_dpapitask = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_STATE_FILE, pb.ChromiumStateFileMessage, "dpapi")
+    inputq_dpapidomainbackupkey_dpapitask = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_DPAPI_DOMAIN_BACKUPKEY, pb.DpapiDomainBackupkeyMessage, "dpapi")
+    inputq_dpapimasterkey_dpapitask = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_DPAPI_MASTERKEY, pb.DpapiMasterkeyMessage, "dpapi")
+    inputq_authenticationdata_dpapitask = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_AUTHENTICATION_DATA, pb.AuthenticationDataIngestionMessage, "dpapi")
 
-    inputq_cookie_chromiumcookie = providers.Resource(
-        create_consumer, config.rabbitmq_connection_uri, constants.Q_COOKIE, pb.CookieIngestionMessage, "chromiumcookie", num_events=500
-    )
+    inputq_cookie_chromiumcookie = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_COOKIE, pb.CookieIngestionMessage, "chromiumcookie", num_events=500)
     inputq_chromiumcookie_chromiumcookie = providers.Resource(
         create_consumer,
         config.rabbitmq_connection_uri,
@@ -384,26 +358,18 @@ class Container(containers.DeclarativeContainer):
     outputq_alert = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_ALERT)
     outputq_authdata = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_AUTHENTICATION_DATA)
     outputq_chromiumcookies = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_COOKIE)
-    outputq_chromiumcookiesprocessed = providers.Resource(
-        create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_COOKIE_PROCESSED
-    )
+    outputq_chromiumcookiesprocessed = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_COOKIE_PROCESSED)
     outputq_chromiumdownload = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_DOWNLOAD)
     outputq_chromiumhistory = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_HISTORY)
     outputq_chromiumlogin = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_LOGIN)
-    outputq_chromiumloginprocessed = providers.Resource(
-        create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_LOGIN_PROCESSED
-    )
+    outputq_chromiumloginprocessed = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_LOGIN_PROCESSED)
     outputq_chromiumstatefile = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_STATE_FILE)
-    outputq_chromiumstatefileprocessed = providers.Resource(
-        create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_STATE_FILE_PROCESSED
-    )
+    outputq_chromiumstatefileprocessed = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_CHROMIUM_STATE_FILE_PROCESSED)
     outputq_dpapiblob = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_DPAPI_BLOB)
     outputq_dpapiblobprocessed = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_DPAPI_BLOB_PROCESSED)
     outputq_dpapidomainbackupkey = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_DPAPI_DOMAIN_BACKUPKEY)
     outputq_dpapimasterkey = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_DPAPI_MASTERKEY)
-    outputq_dpapimasterkeyprocessed = providers.Resource(
-        create_producer, config.rabbitmq_connection_uri, constants.Q_DPAPI_MASTERKEY_PROCESSED
-    )
+    outputq_dpapimasterkeyprocessed = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_DPAPI_MASTERKEY_PROCESSED)
     outputq_filedata = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_FILE_DATA)
     outputq_filedataenriched = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_FILE_DATA_ENRICHED)
     outputq_filedataplaintext = providers.Resource(create_producer, config.rabbitmq_connection_uri, constants.Q_FILE_DATA_PLAINTEXT)
@@ -587,9 +553,7 @@ class Container(containers.DeclarativeContainer):
         inputq_networkconnection_postgresconnector,
     )
 
-    task_processcategorizer = providers.Factory(
-        ProcessCategorizer, inputq_process_processcategorizer, outputq_processenriched, process_categorizer
-    )
+    task_processcategorizer = providers.Factory(ProcessCategorizer, inputq_process_processcategorizer, outputq_processenriched, process_categorizer)
 
     task_rawdatatag = providers.Factory(
         RawDataTag,
@@ -612,15 +576,9 @@ class Container(containers.DeclarativeContainer):
         outputq_registryvalue,
     )
 
-    task_servicecategorizer = providers.Factory(
-        ServiceCategorizer, inputq_service_servicecategorizer, outputq_serviceenriched, service_categorizer
-    )
+    task_servicecategorizer = providers.Factory(ServiceCategorizer, inputq_service_servicecategorizer, outputq_serviceenriched, service_categorizer)
 
-    task_dataexpunge = providers.Factory(
-        DataExpunge,
-        elasticsearch_client,
-        database
-    )
+    task_dataexpunge = providers.Factory(DataExpunge, elasticsearch_client, database)
 
     #
     # Web APIs (alphabetical order)
