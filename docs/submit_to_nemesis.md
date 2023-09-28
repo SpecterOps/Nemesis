@@ -8,7 +8,11 @@ Ensure Python and Poetry are installed, as explained in the [requirements docume
 To use `submit_to_nemesis`, one must edit the YAML configuration file found in `cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml` ([link to YAML file](../cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml)). This config file includes the credentials to authenticate to Nemesis, the location of the Nemesis server, and information about the operation that Nemesis will tag each uploaded file with (operator name, project, network, etc.).
 
 # Usage
-Once configured, in the root Nemesis directory run the `./scripts/submit_to_nemesis.sh -h` script to execute `submit_to_nemesis` and view its help.
+Once configured, in the root Nemesis directory run
+ ```
+ ./scripts/submit_to_nemesis.sh -h
+ ```
+ to execute `submit_to_nemesis` and view its help.
 
 ***Note: On the first run of the script Poetry will install install all needed dependencies.***
 
