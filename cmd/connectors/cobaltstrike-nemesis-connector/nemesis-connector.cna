@@ -38,14 +38,14 @@ global('%nemesis::Settings %EventHandlerMap');
 
 # The directory where teamserver synced files are written to on this host
 #   overwritten by the NEMESIS_COBALTSTRIKE_DOWNLOADS_DIR environment variable if present
-%nemesis::Settings['DownloadsDir'] = $null;
+%nemesis::Settings['DownloadsDir'] = [System getProperty: "java.io.tmpdir"] . [System getProperty: "file.separator"];
 
 # The Nemesis server URL, http://<host>:<PORT>/ format
 # Used when constructing the URL to web api, elastic, kibana, etc (e.g., NEMESIS_BASE_URL + "/kibana")
 #   overwritten by the NEMESIS_BASE_URL environment variable if present
 %nemesis::Settings['NemesisBaseUrl'] = $null;
 
-# The Nemesis web-api HTTP basic auth credentials
+# The Nemesis web-api HTTP basic auth credentials in the form <user>:<pass>
 #   overwritten by the NEMESIS_CREDS environment variable if present
 %nemesis::Settings['NemesisCreds'] = $null;
 
@@ -249,7 +249,7 @@ sub nemesis::ProcessFile {
         # 30 retries, 3 second sleep between each
         $Results = http::GetFileResults($MessageID, 30, 3);
         if(%nemesis::Settings['DebugJson']) {
-            println("Elastic file results: " . $Results);
+            logger::WriteVerbose("Elastic file results: " . $Results);
         }
 
         if($Results) {
@@ -369,7 +369,7 @@ sub nemesis::DisplayFileResults {
 sub nemesis::ReprocessDownloads {
     local('$download $BID $TimeStamp $TargetFileFolder $TargetFileName $TargetFileName $TargetFileSize $TeamServerPath $LastIndex $Filename $LocalFilePath');
 
-    println("[Nemesis] Reprocessing Nemesis downloads!");
+    logger::WriteVerbose("[Nemesis] Reprocessing Nemesis downloads!");
 
     # @(%(date => '1659127565809', fid => '9', path => 'C:\Temp\', size => '8', lpath => '/home/user/cobaltstrike/downloads/f11a87fd6', host => '192.168.50.86', name => 'out.txt', rcvd => '8', id => '4bac4c1d-3986-446f-93e2-d3090581d589', bid => '339429212'))
     foreach $download (downloads())
@@ -523,7 +523,7 @@ sub Handle_beacon_output_ps {
 
 
 sub Handle_downloads {
-    # [+] Undocumented event: downloads
+    # [+] event: downloads
     # @(%(date => '1659127565809', fid => '9', path => 'C:\Temp\', size => '8', lpath => '/home/user/cobaltstrike/downloads/f11a87fd6', host => '192.168.50.86', name => 'out.txt', rcvd => '8', id => '4bac4c1d-3986-446f-93e2-d3090581d589', bid => '339429212'))
     local('$1 %Args $BID $TimeStamp $TargetFileFolder $TargetFileName $TargetFileSize $LastIndex $LocalFilePath $Filename $TeamServerPath $response $Filename');
 
@@ -595,7 +595,7 @@ sub Handle_beacon_output {
             # upload the file to Nemesis and get a Nemesis UUID back
             $FileID = http::UploadFile($RandomName);
             if(%nemesis::Settings['DebugJson']) {
-                println("Domain BackupKey RandomName: " . $RandomName . ", Nemesis UUID: " . $FileID);
+                logger::WriteVerbose("Domain BackupKey RandomName: " . $RandomName . ", Nemesis UUID: " . $FileID);
             }
 
             deleteFile($OutFile);
@@ -811,7 +811,7 @@ sub nemesis::SyncFromServer {
 }
 
 on ready {
-    println("IsHeadlessClient: $IsHeadlessClient");
+    logger::WriteVerbose("IsHeadlessClient: $IsHeadlessClient");
     if(!$IsHeadlessClient) {
         fork(&nemesis::SyncFromServer);
     }
