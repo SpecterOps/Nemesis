@@ -10,14 +10,14 @@
 4. [Ingest data into Nemesis.](#data-ingestion)
 
 # Data Ingestion
-Data can be ingested into Nemesis in a muliple ways, including
+Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in muliple ways, including
 * [Auto-ingesting data from C2 platorms.](#nemesis-c2-connector-setup)
 * Manually uploading files on the "File Upload" page in the Nemesis's Dashboard UI.
 * Using the [submit_to_nemesis](./submit_to_nemesis.md) CLI tool to submit files.
 * Writing custom tools to interact with Nemesis's API.
 
 ## Nemesis C2 Connector Setup
-In order for Nemesis to perform data enrichment, data first needs to be ingested into the platform. The `./cmd/connectors/` folder contains the following connectors for various C2 platforms:
+Nemesis includes connectors for various C2 platorms. The connectors hook into the C2 platforms and transfer data automatically into Nemesis. The `./cmd/connectors/` folder contains the following C2 connectors:
 
 - [Cobalt Strike](../cmd/connectors/cobaltstrike-nemesis-connector/README.md)
 - [Mythic](../cmd/connectors/mythic-connector/README.md)

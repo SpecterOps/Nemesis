@@ -2,7 +2,7 @@
 `submit_to_nemesis` is a CLI tool used to upload files to Nemesis. Its targeted audience is operators who want to upload files using the CLI and Nemesis developers who want to quickly test sample files.
 
 # Requirements
-Ensure Python and Poetry are installed, as explained in the [requirements document](#requirements).
+Ensure Python and Poetry are installed, as explained in the [requirements document](./requirements.md).
 
 # Configuring
 To use `submit_to_nemesis`, one must edit the YAML configuration file found in `cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml` ([link to YAML file](../cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml)). This config file includes the credentials to authenticate to Nemesis, the location of the Nemesis server, and information about the operation that Nemesis will tag each uploaded file with (operator name, project, network, etc.).
