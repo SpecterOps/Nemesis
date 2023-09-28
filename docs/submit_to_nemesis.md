@@ -10,7 +10,7 @@ To use `submit_to_nemesis`, one must edit the YAML configuration file found in `
 # Usage
 Once configured, in the root Nemesis directory run the `./scripts/submit_to_nemesis.sh -h` script to execute `submit_to_nemesis` and view its help.
 
-***Note: On the first run of the script, Poetry will install install all needed dependencies. Subsequent invocations***
+***Note: On the first run of the script Poetry will install install all needed dependencies.***
 
 Below are some example usage scenarios:
 * Submit all files in a folder
