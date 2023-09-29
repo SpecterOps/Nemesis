@@ -25,6 +25,10 @@ r = requests.request("POST", f"{NEMESIS_URL}/file", auth=basic, data=file_bytes,
 json_result = r.json()
 nemesis_file_id = json_result["object_id"]
 ```
+The equivalent `curl` command:
+```bash
+curl -H "Content-Type: application/octet-stream" -v --user 'nemesis:Qwerty12345' --data-binary @/etc/issue http://192.168.230.42:8080/api/file
+```
 
 The `nemesis_file_id` is used in the `file_data` message in Step 2 below. This UUID is the unique reference for the file in Nemesis.
 
