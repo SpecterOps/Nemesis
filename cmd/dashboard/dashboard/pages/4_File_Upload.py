@@ -115,7 +115,7 @@ def build_page(authenticate_user: str):
         | Property            | Value |
         | ------------------- | ----------- |
         | __Submission ID__   | {submission_id} |
-        | __Nemesis File ID__ | [{nemesis_file_id}]({NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={nemesis_file_id}) |
+        | __Nemesis File ID__ | [{nemesis_file_id}]({NEMESIS_HTTP_SERVER}dashboard/File_Viewer?object_id={nemesis_file_id}) |
         | __Project__         | {cookies["nemesus_project"]} |
         | __Source__          | {cookies["nemesis_source"]} |
         | __Agent ID__        | {cookies["nemesis_operator"]} |
