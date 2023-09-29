@@ -290,7 +290,6 @@ def build_page(username: str):
                                         after = ""
 
                                     st.subheader(f"Rule: {rule_name}", divider="red")
-                                    # annotated_text(before, matching, after)
                                     st.write("Matching text:")
                                     st.code(matching)
                                     st.write("Context:")

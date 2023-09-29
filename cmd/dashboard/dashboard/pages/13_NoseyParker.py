@@ -45,7 +45,7 @@ def render_page(username: str):
                 object_id = results["hits"]["hits"][i]["_source"]["objectId"]
                 file_name = results["hits"]["hits"][i]["_source"]["name"]
                 download_url = f"{NEMESIS_HTTP_SERVER}/api/download/{object_id}?name={file_name}"
-                kibana_link = f"{NEMESIS_HTTP_SERVER}dashboard/File_Viewer?object_id={object_id}"
+                view_file_url = f"{NEMESIS_HTTP_SERVER}dashboard/File_Viewer?object_id={object_id}"
                 path = results["hits"]["hits"][i]["_source"]["path"]
                 sha1 = results["hits"]["hits"][i]["_source"]["hashes"]["sha1"]
                 source = ""
@@ -58,19 +58,6 @@ def render_page(username: str):
                     expander_text = f"**{path}** (SHA1: {sha1})"
 
                 with st.expander(expander_text):
-                    st.write(
-                        f"""
-                        <a href="{kibana_link}">
-                            View File Details
-                        </a>
-                        &nbsp; &nbsp; &nbsp;
-                        <a href="{download_url}">
-                            Download File
-                        </a>
-                    """,
-                        unsafe_allow_html=True,
-                    )
-                    st.divider()
                     for ruleMatch in results["hits"]["hits"][i]["_source"]["noseyparker"]["ruleMatches"]:
                         for match in ruleMatch["matches"]:
                             if "matching" in match["snippet"]:
@@ -88,8 +75,23 @@ def render_page(username: str):
                                 else:
                                     after = ""
 
-                                st.write(f"<b>Rule</b>: {rule_name}", unsafe_allow_html=True)
-                                annotated_text(annotation(before, "context", color="#8ef"), annotation(matching, "match"), annotation(after, "context", color="#8ef"))
+                                st.subheader(f"Rule: {rule_name}", divider="red")
+                                st.write(
+                                    f"""
+                                    <a href="{view_file_url}">
+                                        View File Details
+                                    </a>
+                                    &nbsp; &nbsp; &nbsp;
+                                    <a href="{download_url}">
+                                        Download File
+                                    </a>
+                                """,
+                                    unsafe_allow_html=True,
+                                )
+                                st.write("Matching text:")
+                                st.code(matching)
+                                st.write("Context:")
+                                st.code(before + matching + after)
                                 st.divider()
 
             # pagination
