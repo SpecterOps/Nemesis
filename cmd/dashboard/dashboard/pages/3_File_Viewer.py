@@ -289,8 +289,12 @@ def build_page(username: str):
                                     else:
                                         after = ""
 
-                                    st.write(f"<b>Rule</b>: {rule_name}", unsafe_allow_html=True)
-                                    annotated_text(annotation(before, "context", color="#8ef"), annotation(matching, "match"), annotation(after, "context", color="#8ef"))
+                                    st.subheader(f"Rule: {rule_name}", divider="red")
+                                    # annotated_text(before, matching, after)
+                                    st.write("Matching text:")
+                                    st.code(matching)
+                                    st.write("Context:")
+                                    st.code(before + matching + after)
                                     st.divider()
 
         elif chosen_tab == str(3):  # "elasticsearch_info"
