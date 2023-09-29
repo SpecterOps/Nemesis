@@ -25,12 +25,12 @@ Docker and docker-compose
  Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on your machine or [install docker/docker-compose with the following commands:](https://docs.docker.com/engine/install/ubuntu/#install-using-the-convenience-script):
 ```bash
 sudo apt-get update
-sudo apt-get install curl
+sudo apt-get install -y curl
 sudo mkdir /etc/apt/keyrings/ 2>/dev/null
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
 
-sudo apt-get install docker-compose
+sudo apt-get install -y docker-compose
 
 # Allow your user to run docker w/o being root, and then logout and back in
 sudo usermod -aG docker <user>
@@ -106,7 +106,7 @@ Helm
 curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
 sudo apt-get update
-sudo apt-get install helm
+sudo apt-get install -y helm
 ```
 **Validation:** `helm list` should work and not list any installed packages.
 </details>

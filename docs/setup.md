@@ -74,6 +74,11 @@ The ingress port for Nemesis is **8080**, which routes access for all services. 
 
 The only other publicly forwarded port is **9001** if minio is used for storage (the default).
 
+Underneath, Skaffold manages all of Nemesis's port forwards using `kubectl`. If you'd like `kubectl` to be able to bind to lower ports without being root, you can run the following:
+```bash
+sudo setcap CAP_NET_BIND_SERVICE=+eip /path/to/kubectl
+```
+
 # (Optional) Deleting Running Pods
 Run `skaffold delete` at the root of the repo to remove running pods. There currently is not a way to remove all the Kubernetes objects created by `nemesis-cli.py` without deleting the cluster (e.g., `minikube delete`).
 
