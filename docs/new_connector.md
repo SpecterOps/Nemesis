@@ -69,3 +69,8 @@ For other types of structured data, only a single message needs to be posted to 
 Note that the "data" section of the message is an array of dictionaries, i.e., multiple instances of a datatype can be posted in a single message. For example, multiple process messages can exist in the single post.
 
 As an example, see the `handle_process()` function in the [mythic-connector](../cmd/connectors/mythic-connector/sync.py).
+
+Example of many of the structured datatypes can be found in the `./sample_files/structured/` folder. Example of using these to submit process data:
+```bash
+curl -H "Content-Type: application/octet-stream" -v --user 'nemesis:Qwerty12345' --data-binary @./sample_files/structured/process_data.json http://192.168.230.42:8080/api/data
+```
