@@ -4,6 +4,7 @@ nemesis_http_server: http://IP_of_k8s_host:8080
 assessment_id: ASSESS-TEST
 data_expiration_days: 100
 log_level: INFO
+environment: development
 
 # Slack Alerting
 disable_slack_alerting: True

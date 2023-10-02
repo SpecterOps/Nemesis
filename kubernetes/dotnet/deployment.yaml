@@ -27,7 +27,10 @@ spec:
             - name: DATA_DOWNLOAD_DIR
               value: "/tmp"
             - name: ENVIRONMENT
-              value: development
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: environment
             - name: PROMETHEUS_DISABLE_CREATED_SERIES
               value: "True"
             # - name: PROMETHEUS_PORT

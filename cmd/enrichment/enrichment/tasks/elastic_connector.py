@@ -257,7 +257,7 @@ class ElasticConnector(TaskInterface):
 
     @aio.time(Summary("send_to_elastic", "Time spent submitting data directly to Elastic"))  # type: ignore
     async def send_to_elastic(self, index: ElasticIndex, data: dict[str, Any]):
-        await logger.adebug("Submitting document to the Elastic", index=index)
+        await logger.adebug("Submitting document to Elastic", index=index)
 
         # try:
         #     resp = await self.es_client.index(index=index, document=data)

@@ -40,7 +40,10 @@ spec:
             - name: DATA_DOWNLOAD_DIR
               value: "/tmp"
             - name: ENVIRONMENT
-              value: development
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: environment
 
             - name: CRACK_WORDLIST_TOP_WORDS
               value: "10000" # either 10,000 or 100,000

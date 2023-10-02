@@ -22,6 +22,7 @@ If a required configuration value is not supplied, nemesis-cli will check if it 
 | STORAGE_PROVIDER          | storage_provider        | --storage_provider        | Storage provider to use, either `minio` (default) or `aws`                                                                                                                               |
 | ASSESSMENT_ID             | assessment_id           | --assessment_id           | An ID for the assessment                                                                                                                                                                 |
 | NEMESIS_HTTP_SERVER       | nemesis_http_server     | --nemesis_http_server     | The public HTTP server of the Nemesis server (for link creation). The port used here must match the port of the ingress-nginx-controller service in skaffold.yaml (port 8080 by default) |
+| ENVIRONMENT               | environment             | --environment             | The environment Nemesis is running in. Possible value: development,production,testing. Production results in JSON-structured logs. Other environments result in human-readable logs.     |
 | LOG_LEVEL                 | log_level               | --log_level               | (optional) Python logging level. Possible values: DEBUG, INFO, WARNING, ERROR, CRITICAL                                                                                                  |
 | DATA_EXPIRATION_DAYS      | data_expiration_days    | --data_expiration_days    | The number of days to set for data expiration (default 100)                                                                                                                              |
 | DISABLE_SLACK_ALERTING    | disable_slack_alerting  | --disable_slack_alerting  | Should slack alerting be disabled? Possible values: True/False                                                                                                                           |
@@ -44,10 +45,10 @@ If a required configuration value is not supplied, nemesis-cli will check if it 
 | RABBITMQ_ERLANG_COOKIE    | rabbitmq_erlang_cookie  | --rabbitmq_erlang_cookie  | Password to allow RabbitMQ nodes to communicate (default: random 24 characters)                                                                                                          |
 
 # Example: Specifying Nemesis options using a configuration file
-1. In the root of the repo, copy the example config to another file:
+1. In the root of the repo, copy the example config `nemesis.config.example` to another file:
 ```
 cd /path/to/Nemesis
-cp nemesis.config.example nemesis.config
+cp nemesis.config.example my.nemesis.config
 ```
 2. Edit the options in `my.nemesis.config` to you desired values
 3. Setup the Kubernetes environment by running `python3 nemesis-cli.py -c my.nemesis.config`
@@ -58,6 +59,7 @@ The following configures Nemesis using CLI arguments, setting all services to us
 python3 nemesis-cli.py \
     --assessment_id ASSESS-TEST \
     --nemesis_http_server http://192.168.230.42:8080/ \
+    --environment development \
     --disable_slack_alerting True \
     --basic_auth_password PASSWORD \
     --basic_auth_user nemesis \

@@ -175,7 +175,9 @@ class NemesisRabbitMQConsumer(MessageQueueConsumerInterface, Generic[T]):
                     # If an unhandled exception happens, err on the side of not losing data and resubmit to queue
                     # This could lead to a loop where the same troublesome message keeps getting resubmitted due to
                     # it never parsing correctly
-                    await message.reject(requeue=True)
+                    # await message.reject(requeue=True)
+
+                    await message.ack()
 
         await logger.adebug("Waiting for messages", queue=self.__queue.name)
         await self.__queue.consume(callback=on_message, no_ack=False)
