@@ -6,11 +6,10 @@ from typing import Any, Optional
 # 3rd Party Libraries
 import structlog
 from nemesiscommon.logging import configure_logger
-
 from nlp.app import App
 from nlp.settings import config
 
-configure_logger(False, config.log_level, config.environment.value)
+configure_logger(config.environment, config.log_level, config.log_color_enabled)
 logger = structlog.get_logger(module=__name__)
 
 
@@ -31,9 +30,7 @@ def main():
     loop.run_until_complete(task)
 
 
-async def shutdown(
-    loop: asyncio.AbstractEventLoop, signal: Optional[signal.Signals] = None
-):
+async def shutdown(loop: asyncio.AbstractEventLoop, signal: Optional[signal.Signals] = None):
     """Cleanup tasks tied to the service's shutdown."""
 
     if signal:

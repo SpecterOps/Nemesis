@@ -20,7 +20,10 @@ spec:
       containers:
         - env:
             - name: ENVIRONMENT
-              value: development
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: environment
             - name: LOG_LEVEL
               valueFrom:
                 configMapKeyRef:

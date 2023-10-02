@@ -69,12 +69,13 @@ def validate_task_names(input_tasks: List[str], all_tasks: List[str]):
 
 
 @inject
-def main(container: Container, config=Provide[Container.config]):
-    configure_logger(False, config["log_level"], config["environment"].value)
+def main(container: Container, config: EnrichmentSettings = Provide[Container.config2]):
+    configure_logger(config.environment, config.log_level, config.log_color_enabled)
+
     logger = structlog.get_logger(module=__name__)
     loop = asyncio.get_event_loop()
 
-    if config["environment"].is_development():
+    if config.environment.is_development():
         # loop.set_debug(True)
         loop.slow_callback_duration = 1
 
