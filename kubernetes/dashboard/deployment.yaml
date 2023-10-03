@@ -28,8 +28,10 @@ spec:
                   name: operation-config
                   key: log-level
             - name: ENVIRONMENT
-              value: development
-
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: environment
             - name: DASHBOARD_USER
               valueFrom:
                 secretKeyRef:
