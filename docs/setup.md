@@ -24,6 +24,7 @@ Nemesis includes connectors for various C2 platorms. The connectors hook into th
 - [Sliver](../cmd/connectors/sliver-connector/README.md)
 - [OST Stage1](../cmd/connectors/stage1-connector/README.md)
 - [Metasploit](../cmd/connectors/metasploit-connector/README.md)
+- [Chrome Extension](../cmd/connectors/chrome-extension/README.md)
 
 ***Note: not all connectors have the same level of completeness! We intended to show the range of connectors possible, but there is not yet feature parity.***
 
