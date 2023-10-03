@@ -59,12 +59,10 @@ spec:
           effect: NoSchedule
       initContainers:
         - name: fluentd-elasticsearch-waiter
-          image: alpine:3.17.0
+          image: nemesis-waiter
           command: ["/bin/sh", "-c"]
           args:
             - |
-              apk --update add curl
-
               echo "Waiting for Elasticsearch to come online..."
 
               COUNTER=1
