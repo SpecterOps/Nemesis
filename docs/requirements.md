@@ -150,14 +150,11 @@ To get Nemesis running, Python 3.11.2 is needed in order to run nemesis-cli.py (
 ```bash
 curl https://pyenv.run | bash
 ```
-3. After running the install script, add the following to `~/.bashrc`:
+3. After running the install script, add the following to `~/.bashrc` (after pyenv finishes installing, it prints a message telling you to add this):
 ```bash
 export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-if command -v pyenv 1>/dev/null 2>&1; then
- eval "$(pyenv init --path)"
-fi
-eval "$(pyenv virtualenv-init -)"
+command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
 ```
 4. Restart your shell
 5. Install a version of Python and configure the version of Python to use globally on your machine
