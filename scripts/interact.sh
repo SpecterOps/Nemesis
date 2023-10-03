@@ -6,7 +6,7 @@ then
     echo "    interact.sh pgadmin"
     echo "    interact.sh pgadmin -c pgadmin -- /bin/sh"
 else
-    POD_NAME=$(kubectl get pod -A | grep $1 | awk '{print $2}')
+    POD_NAME=$(kubectl get pod -A | grep -v Terminating | grep $1 | awk '{print $2}')
 
     # check for more than two arguments
     if [ $# -gt 2 ]
