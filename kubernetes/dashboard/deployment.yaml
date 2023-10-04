@@ -95,6 +95,7 @@ spec:
                   key: password
 
           image: dashboard
+          imagePullPolicy: IfNotPresent
           name: dashboard
           ports:
             - containerPort: 8601

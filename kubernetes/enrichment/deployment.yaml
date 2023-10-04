@@ -26,6 +26,7 @@ spec:
       initContainers:
         - name: noseyparker
           image: ghcr.io/praetorian-inc/noseyparker:v0.13.0
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "cp /usr/local/bin/noseyparker /opt/noseyparker/"]
           volumeMounts:
             - name: noseyparker
@@ -204,6 +205,7 @@ spec:
               value: "5"
 
           image: enrichment
+          imagePullPolicy: IfNotPresent
           name: enrichment
           ports:
             - containerPort: 9700

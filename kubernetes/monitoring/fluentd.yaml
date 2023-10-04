@@ -60,6 +60,7 @@ spec:
       initContainers:
         - name: fluentd-elasticsearch-waiter
           image: nemesis-waiter
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -93,6 +94,7 @@ spec:
       containers:
         - name: fluentd
           image: fluent/fluentd-kubernetes-daemonset:v1.15.3-debian-elasticsearch7-1.0
+          imagePullPolicy: IfNotPresent
           env:
             - name: FLUENT_ELASTICSEARCH_HOST
               value: "nemesis-es-http.default.svc.cluster.local"

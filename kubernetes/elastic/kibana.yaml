@@ -19,6 +19,7 @@ spec:
     spec:
       containers:
       - name: kibana
+        imagePullPolicy: IfNotPresent
         env:
         # - name: "SERVER_REWRITEBASEPATH"
         #   value: "true"
@@ -67,6 +68,7 @@ spec:
       initContainers:
         - name: kibana-waiter
           image: nemesis-waiter
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -100,6 +102,7 @@ spec:
       containers:
         - name: kibana-init
           image: nemesis-waiter
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |

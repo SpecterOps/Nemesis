@@ -50,7 +50,7 @@ spec:
               key: rabbitmq-admin-password
               name: rabbitmq-creds
         image: rabbitmq:3.11.7
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         lifecycle:
           postStart:
             exec:
@@ -132,7 +132,7 @@ spec:
               key: rabbitmq-erlang-cookie
               name: rabbitmq-creds
         image: debian:11
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: copy-rabbitmq-config
         resources: {}
         terminationMessagePath: /dev/termination-log

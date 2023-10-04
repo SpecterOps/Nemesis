@@ -82,6 +82,7 @@ spec:
                   key: minio_root_password
 
           image: nemesis-dotnet
+          imagePullPolicy: IfNotPresent
           name: nemesis-dotnet
           ports:
             - containerPort: 9800

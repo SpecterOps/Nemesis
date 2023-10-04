@@ -27,22 +27,10 @@ build:
     useBuildkit: true
     concurrency: 0
   artifacts:
-    - &build-dotnet
-      image: nemesis-dotnet
+    - &build-waiter
+      image: nemesis-waiter
       docker:
-        dockerfile: dockerfiles/dotnet.Dockerfile
-    - &build-nlp
-      image: nemesis-nlp
-      docker:
-        dockerfile: dockerfiles/nlp.Dockerfile
-    - &build-passwordcracker
-      image: nemesis-passwordcracker
-      docker:
-        dockerfile: dockerfiles/passwordcracker.Dockerfile
-    - &build-tensorflow-serving
-      image: tensorflow-serving
-      docker:
-        dockerfile: dockerfiles/tensorflow-serving.Dockerfile
+        dockerfile: dockerfiles/waiter.Dockerfile
 
 manifests:
   rawYaml:
@@ -93,6 +81,7 @@ build:
     tryImportMissing: true
     useBuildkit: true
     concurrency: 0
+  artifacts: []
 
 manifests:
   rawYaml:
@@ -220,7 +209,7 @@ build:
       docker:
         dockerfile: dockerfiles/passwordcracker.Dockerfile
     - &build-tensorflow-serving
-      image: tensorflow-serving
+      image: nemesis-tensorflow-serving
       docker:
         dockerfile: dockerfiles/tensorflow-serving.Dockerfile
 
