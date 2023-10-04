@@ -21,6 +21,7 @@ streamlit-searchbox = "^0.1.3"
 requests = "^2.30.0"
 streamlit-elements = "^0.1.0"
 humanize = "^4.8.0"
+pillow = "^10.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
