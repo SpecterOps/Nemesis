@@ -74,6 +74,7 @@ spec:
               value: ":smiling_imp:"
 
           image: nemesis-passwordcracker
+          imagePullPolicy: IfNotPresent
           name: nemesis-passwordcracker
           ports:
             - containerPort: 9090

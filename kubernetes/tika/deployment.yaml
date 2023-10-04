@@ -22,6 +22,7 @@ spec:
       containers:
         - env: []
           image: apache/tika:2.8.0.0-full
+          imagePullPolicy: IfNotPresent
           name: tika
           # command: [ "/bin/sh", "-c", "exec java -cp \"/tika-server-standard-2.8.0.jar:/tika-extras/*\" org.apache.tika.server.core.TikaServerCli -h 0.0.0.0 -c /tika-config.xml"]
           # volumeMounts:

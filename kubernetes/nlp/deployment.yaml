@@ -107,6 +107,7 @@ spec:
               value: "http://$(ELASTICSEARCH_USER):$(ELASTICSEARCH_PASSWORD)@nemesis-es-internal-http:9200"
 
           image: nemesis-nlp
+          imagePullPolicy: IfNotPresent
           name: nemesis-nlp
           ports:
             - containerPort: 9803

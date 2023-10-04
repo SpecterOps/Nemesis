@@ -59,12 +59,11 @@ spec:
           effect: NoSchedule
       initContainers:
         - name: fluentd-elasticsearch-waiter
-          image: alpine:3.17.0
+          image: nemesis-waiter
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |
-              apk --update add curl
-
               echo "Waiting for Elasticsearch to come online..."
 
               COUNTER=1
@@ -95,6 +94,7 @@ spec:
       containers:
         - name: fluentd
           image: fluent/fluentd-kubernetes-daemonset:v1.15.3-debian-elasticsearch7-1.0
+          imagePullPolicy: IfNotPresent
           env:
             - name: FLUENT_ELASTICSEARCH_HOST
               value: "nemesis-es-http.default.svc.cluster.local"

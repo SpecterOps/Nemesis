@@ -19,6 +19,7 @@ spec:
     spec:
       containers:
       - name: kibana
+        imagePullPolicy: IfNotPresent
         env:
         # - name: "SERVER_REWRITEBASEPATH"
         #   value: "true"
@@ -66,12 +67,11 @@ spec:
     spec:
       initContainers:
         - name: kibana-waiter
-          image: alpine:3.17.0
+          image: nemesis-waiter
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |
-              apk --update add jq curl
-
               echo "Waiting for Kibana..."
 
               COUNTER=1
@@ -101,12 +101,11 @@ spec:
               value: http://nemesis-kb-http.default.svc.cluster.local:5601
       containers:
         - name: kibana-init
-          image: alpine:3.17.0
+          image: nemesis-waiter
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
             - |
-              apk --update add curl
-
               curl "${KIBANA_URL}/api/saved_objects/_import?overwrite=true" \
                   --form file=@/etc/kibana-config/saved-objects.ndjson \
                   --insecure \

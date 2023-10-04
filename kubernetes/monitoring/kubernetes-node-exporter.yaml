@@ -45,6 +45,7 @@ spec:
             - --collector.netclass.ignored-devices=^(veth.*)$
           name: node-exporter
           image: prom/node-exporter:v1.5.0
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 9100
               protocol: TCP

@@ -22,7 +22,7 @@ spec:
       containers:
         - name: pgadmin
           image: dpage/pgadmin4:7.7
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           env:
             - name: PGADMIN_DEFAULT_EMAIL
               valueFrom:

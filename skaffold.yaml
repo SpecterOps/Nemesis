@@ -26,6 +26,11 @@ build:
     tryImportMissing: true
     useBuildkit: true
     concurrency: 0
+  artifacts:
+    - &build-waiter
+      image: nemesis-waiter
+      docker:
+        dockerfile: dockerfiles/waiter.Dockerfile
 
 manifests:
   rawYaml:
@@ -76,6 +81,7 @@ build:
     tryImportMissing: true
     useBuildkit: true
     concurrency: 0
+  artifacts: []
 
 manifests:
   rawYaml:
@@ -203,7 +209,7 @@ build:
       docker:
         dockerfile: dockerfiles/passwordcracker.Dockerfile
     - &build-tensorflow-serving
-      image: tensorflow-serving
+      image: nemesis-tensorflow-serving
       docker:
         dockerfile: dockerfiles/tensorflow-serving.Dockerfile
 
