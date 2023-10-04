@@ -24,6 +24,7 @@ fastapi-class = "^2.0.0"
 aioboto3 = "^10.4.0"
 structlog = "^23.1.0"
 rich = "^13.3.3"
+py = "^1.11.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
