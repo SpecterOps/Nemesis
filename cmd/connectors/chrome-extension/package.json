@@ -34,6 +34,7 @@
         "ipaddr.js": "^2.1.0"
     },
     "devDependencies": {
+	"extension-cli": "^1.2.4",
         "autoprefixer": "^10.4.14",
         "flowbite-typography": "^1.0.3",
         "postcss-cli": "^10.1.0",
