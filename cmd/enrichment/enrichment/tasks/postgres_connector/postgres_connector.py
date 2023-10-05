@@ -144,7 +144,10 @@ class PostgresConnector(TaskInterface):
             if i.originating_object_id:
                 data.originating_object_id = uuid.UUID(i.originating_object_id)
 
-            await self.db.add_chromium_history_entry(data)
+            try:
+                await self.db.add_chromium_history_entry(data)
+            except Exception as e:
+                logger.exception(e, message="Error adding chrome history entry", data=data)
 
     @aio.time(Summary("process_chromium_download", "Time spent processing a chromium_download queue"))  # type: ignore
     async def process_chromium_download(self, event: pb.ChromiumDownloadMessage):

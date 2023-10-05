@@ -5,27 +5,48 @@ debug(debug() | 34);    # 34 = "throw" all errors flagged for use with &checkErr
 #debug(debug() | 64);   # 64 =	DEBUGGING: trace all predicate decisions (follow program logic)
 
 
-import java.net.*;
-import java.io.DataOutputStream;
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStreamReader;
+import java.net.*;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 
-# have to add this to the -Dclass path in the `agscript` binary >_<
-import SSLUtils;
+global('%nemesis::Settings %nemesis::Buffer');
+%nemesis::Buffer = ('A' x 65568);
+%nemesis::Buffer = cast(%nemesis::Buffer, "b");
 
-global('%nemesis::Settings');
+sub http::DisableCertificateValidation {
+	local('$sslutils_path $url $loader $class $method $result');
 
+    $sslutils_path = script_resource('SSLUtils.jar');
+
+	if (!-exists $sslutils_path) {
+		println('[http] Could not find ' . $sslutils_path);
+		exit();
+	}
+
+	$url = [new java.net.URL: 'file://' . $sslutils_path];
+	$loader = [new URLClassLoader: @($url)];
+    $class = [Class forName: 'SSLUtils', false, $loader];
+    $method = [$class getMethod: 'ignoreSsl', $null];
+    $result = [$method invoke: $null, $null];
+}
+http::DisableCertificateValidation();
 
 sub http::UploadFile {
     # Uploads a file to the http://nemesis/file endpoint, returning a object_id UUID
 
-    local('$1 $filepath @parts $filename $auth_header $guid $file_bytes $in $url $urlobj $con $wr $responseCode $message $inputLine $message2 $date $url $urlobj $con');
+    local('$1 $filepath @parts $filename $auth_header $guid $file $fileStream $bufferedInputStream $fileLength $buffer $bytesRead $in $url $urlobj $con $wr $responseCode $message $inputLine $message2 $date $url $urlobj $con');
 
     $filepath = $1;
     @parts = split('/', $filepath);
     $filename = @parts[-1];
-    $file_bytes = file::ReadAllBytes($filepath);
+
+
 
     # POST to http://nemesis/file
     $url = %nemesis::Settings['NemesisApiUrl']. 'file';
@@ -41,13 +62,35 @@ sub http::UploadFile {
     [$con setDoOutput: true];
     [$con setConnectTimeout: 5000];
 
+    $file = [new java.io.File: $filepath];
+    $fileLength = [$file length];
+
+    [$con setFixedLengthStreamingMode: $fileLength];
+
     # TODO: handle very large files!
     try {
-        [$con connect];
+        # [$con setRequestProperty: "Content-Length", $fileLength];
+        $fileStream = [new java.io.FileInputStream: $filepath];
+        $bufferedInputStream  = [new java.io.BufferedInputStream: $fileStream];
         $wr = [new DataOutputStream: [$con getOutputStream]];
-        [$wr writeBytes: $file_bytes];
+
+        $bytesRead = 0;
+
+        while($bytesRead != -1) {
+            $buffer = %nemesis::Buffer;
+            $bytesRead = [$bufferedInputStream read: $buffer];
+            if($bytesRead > 0) {
+                # println("[UploadFile] bytesRead: " . $bytesRead);
+                # println("[UploadFile] Read: " . $buffer);
+                [$wr write: $buffer, 0, $bytesRead];
+            }
+        }
+
         [$wr flush];
         [$wr close];
+        [$bufferedInputStream close];
+        [$bufferedInputStream close];
+        [$fileStream close];
 
         $responseCode = 0;
         try {
@@ -111,7 +154,6 @@ sub http::YaraFile {
     $footer = "\r\n--" . $guid . "\r\n";
 
     $url = %nemesis::Settings['NemesisYaraUrl'] . 'file';
-    println("url: " . $url);
     $urlobj = [new URL: $url];
     $con = [$urlobj openConnection];
 
@@ -119,7 +161,7 @@ sub http::YaraFile {
     [$con setRequestProperty: "User-Agent", "NemesisCobaltStrikeConnector"];
     # make sure we set the GUID that defines our boundary
     [$con setRequestProperty: "Content-Type", "multipart/form-data; boundary=" . $guid];
-    $auth_header = "Basic " . base64_encode("nemesis:Password123!");
+    $auth_header = "Basic " . base64_encode(%nemesis::Settings['NemesisCreds']);
     [$con setRequestProperty: "Authorization", $auth_header];
     [$con setRequestMethod: "POST"];
     [$con setDoOutput: true];
@@ -143,27 +185,27 @@ sub http::YaraFile {
             println("[UploadFile] " . $message);
         }
 
-        if($responseCode == 200) {
 
-            try {
-                $in = [new BufferedReader: [new InputStreamReader: [$con getInputStream]]];
+        try {
+            $in = [new BufferedReader: [new InputStreamReader: [$con getInputStream]]];
 
+            $inputLine = [$in readLine];
+            if($inputLine eq "") {
                 $inputLine = [$in readLine];
-                if($inputLine eq "") {
-                    $inputLine = [$in readLine];
-                }
-
-                [$in close];
-
-                return $inputLine;
             }
-            catch $message {
-                println("[UploadFile] Error in parsing upload response: " . $message);
-                return $null;
-            }
+
+            [$in close];
+        }
+        catch $message {
+            println("[UploadFile] Error in parsing upload response: " . $message);
+            return $null;
+        }
+
+        if($responseCode == 200) {
+            return $inputLine;
         }
         else {
-            println("[UploadFile] Response code from Nemesis server: " . $responseCode);
+            println("[UploadFile] Response code from Nemesis server: " . $responseCode . ". Response: " . $inputLine);
         }
     }
     catch $message2
@@ -278,9 +320,6 @@ sub http::GetFileData {
     $urlobj = [new URL: $url];
 
     $con = $null;
-
-    $SSL = [new SSLUtils];
-    [SSLUtils ignoreSsl];
 
     $con = [$urlobj openConnection];
 
@@ -427,10 +466,6 @@ sub http::GetProcessData {
     $urlobj = [new URL: $url];
 
     $con = $null;
-
-    $SSL = [new SSLUtils];
-    [SSLUtils ignoreSsl];
-
     $con = [$urlobj openConnection];
 
     [$con setRequestProperty: "User-Agent", "NemesisCobaltStrikeConnector"];

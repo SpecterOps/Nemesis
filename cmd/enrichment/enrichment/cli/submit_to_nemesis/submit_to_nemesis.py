@@ -20,8 +20,10 @@ import requests
 import structlog
 import urllib3
 import yaml
+from enrichment.cli.submit_to_nemesis.file_monitoring import monitor_directory
 from nemesiscommon.apiclient import FileUploadRequest, NemesisApiClient
 from nemesiscommon.logging import configure_logger
+from nemesiscommon.settings import EnvironmentSettings
 from structlog.typing import FilteringBoundLogger
 
 urllib3.disable_warnings()
@@ -39,6 +41,7 @@ async def get_config() -> dict[str, str]:
     parser = argparse.ArgumentParser(description="Submit file(s) to Nemesis.", prog="submit_to_nemesis")
     parser.add_argument("-f", "--file", type=str, nargs="+", help="File(s) to submit to Nemesis")
     parser.add_argument("--folder", type=str, nargs="+", help="Folders(s) to submit to Nemesis")
+    parser.add_argument("-m", "--monitor", type=str, nargs="?", help="Folder to monitor for new files")
     parser.add_argument("-s", "--sec_between_files", type=float, nargs="?", default=0, help="Seconds between file submissions (default 0). If > 0, it cannot be used with the --workers argument.")
     parser.add_argument("-w", "--workers", type=int, nargs="?", default=10, help="Number of workers to use (default 10). If --sec_between_files argument is set, value will be 1")
     parser.add_argument("-r", "--repeat", type=int, default=0, help="Times to repeat the submission (for stress testing)")
@@ -115,13 +118,14 @@ async def get_config() -> dict[str, str]:
 
     config["file"] = args.file
     config["folder"] = args.folder
+    config["monitor"] = args.monitor
     config["sec_between_files"] = args.sec_between_files
     config["repeat"] = args.repeat
     config["timeout"] = args.timeout
     config["log_level"] = args.log_level
     config["cookies"] = args.cookies
 
-    configure_logger(False, config["log_level"])
+    configure_logger(EnvironmentSettings.DEVELOPMENT, config["log_level"], True)
     global logger
     logger = structlog.getLogger()
     logger.debug("Config", config=config)
@@ -145,7 +149,7 @@ async def get_timestamp(days_to_add=0):
     return dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-async def get_metadata(config, data_type="file_data"):
+async def get_metadata(config: dict[str, str], data_type: str):
     metadata = {}
     metadata["agent_id"] = config["operator_name"]
     metadata["agent_type"] = "submit_to_nemesis"
@@ -181,7 +185,7 @@ async def get_nemesis_api_client(config) -> httpx.AsyncClient:
     return api_client
 
 
-async def nemesis_post_file(config: Dict[str, str], file_path: str):
+async def nemesis_post_file(config: dict[str, str], file_path: str):
     """
     Takes a series of raw file bytes and POSTs it to the NEMESIS /file API endpoint.
 
@@ -223,7 +227,7 @@ async def nemesis_post_file(config: Dict[str, str], file_path: str):
         return resp.object_id
 
 
-async def nemesis_post_data(config, data):
+async def nemesis_post_data(config: dict[str, str], data):
     """
     Takes a json blob and POSTs it to the NEMESIS /data API endpoint.
 
@@ -263,166 +267,132 @@ async def submit_random_cookies(config, num_cookies=1000) -> uuid.UUID | None:
     for i in range(num_cookies):
         if i % 100 == 0:
             domain = f"{'-'.join(random.choices(words, k=2))}.com"
-        cookie_data.append({"user_data_directory": "C:/Users/harmj0y/AppData/Local/Google/Chrome/User Data/Default/Cookies",
-                            "domain": domain,
-                            "path": "/",
-                            "name": f"VALUE_{i}",
-                            "value": f"{random.choice(words)}_{random.randint(1, 10000000)}",
-                            "expires": "2030-01-01T01:01:01.000Z",
-                            "secure": True,
-                            "http_only": True,
-                            "session": False,
-                            "samesite": "lax",
-                            "source_port": 443
-                            })
+        cookie_data.append(
+            {
+                "user_data_directory": "C:/Users/harmj0y/AppData/Local/Google/Chrome/User Data/Default/Cookies",
+                "domain": domain,
+                "path": "/",
+                "name": f"VALUE_{i}",
+                "value": f"{random.choice(words)}_{random.randint(1, 10000000)}",
+                "expires": "2030-01-01T01:01:01.000Z",
+                "secure": True,
+                "http_only": True,
+                "session": False,
+                "samesite": "lax",
+                "source_port": 443,
+            }
+        )
 
     resp = await nemesis_post_data(config, {"metadata": metadata, "data": cookie_data})
     return uuid.UUID(resp["object_id"]) if resp else None
 
 
-async def process_file(config, file_path) -> uuid.UUID | None:
+def string_matches_regexes(regexes: list[str], file_path: str) -> bool:
     """
-    Takes a configuration dictionary and file path and uploads the file to Nemesis,
-    then posting the file_data message.
+    Returns True if the regex, False otherwise.
     """
 
-    if "services_api.json" in file_path:  # NOTE: This must not conflict with the example Seatbelt services either
-        with open(file_path, "r") as f:
-            services_json_raw = f.read()
-            services_json = json.loads(services_json_raw)
-            resp = await nemesis_post_data(config, services_json)
-            return uuid.UUID(resp["object_id"]) if resp else None
+    for matcher in regexes:
+        if re.match(matcher, file_path):
+            return True
 
-    elif re.match(r".*file_information.*\.json$", file_path):
-        with open(file_path, "r") as f:
-            file_information = f.read()
-            file_information_json = json.loads(file_information)
-            resp = await nemesis_post_data(config, file_information_json)
-            return uuid.UUID(resp["object_id"]) if resp else None
+    return False
 
-    elif re.match(r".*registry_value.*\.json$", file_path):
-        with open(file_path, "r") as f:
-            registry_value = f.read()
-            registry_value_json = json.loads(registry_value)
-            resp = await nemesis_post_data(config, registry_value_json)
-            return uuid.UUID(resp["object_id"]) if resp else None
 
-    elif re.match(r".*authentication_data.*\.json$", file_path):
-        with open(file_path, "r") as f:
-            authentication_data = f.read()
-            authentication_data_json = json.loads(authentication_data)
-            resp = await nemesis_post_data(config, authentication_data_json)
-            return uuid.UUID(resp["object_id"]) if resp else None
+async def post_json_to_api(config: dict[str, str], file_path: str) -> uuid.UUID | None:
+    with open(file_path, "r") as f:
+        services_json_raw = f.read()
+        services_json = json.loads(services_json_raw)
+        resp = await nemesis_post_data(config, services_json)
 
-    elif re.match(r".*cookies.*\.json$", file_path):
-        with open(file_path, "r") as f:
-            cookie = f.read()
-            cookie_json = json.loads(cookie)
-            resp = await nemesis_post_data(config, cookie_json)
-            return uuid.UUID(resp["object_id"]) if resp else None
-
-    elif re.match(r".*named_pipes.*\.json$", file_path):
-        with open(file_path, "r") as f:
-            named_pipes = f.read()
-            named_pipes_json = json.loads(named_pipes)
-            resp = await nemesis_post_data(config, named_pipes_json)
-            return uuid.UUID(resp["object_id"]) if resp else None
-
-    elif re.match(r".*network_connections.*\.json$", file_path):
-        with open(file_path, "r") as f:
-            network_connections = f.read()
-            network_connections_json = json.loads(network_connections)
-            resp = await nemesis_post_data(config, network_connections_json)
-            return uuid.UUID(resp["object_id"]) if resp else None
-
-    elif "bof_reg_collect.nemesis" in file_path:
-        object_id = await nemesis_post_file(config, file_path)
-        if not object_id:
-            logger.error("No nemesis_file_id returned when uploading bof_reg_collect.nemesis")
-            return None
-        else:
-            logger.debug("bof_reg_collect.nemesis uploaded to Nemesis", file_uuid=object_id)
-
-        metadata = await get_metadata(config, "raw_data")
-
-        raw_data = {}
-        raw_data["tags"] = ["bof_reg_collect"]
-        raw_data["data"] = object_id
-        raw_data["is_file"] = True
-
-        resp = await nemesis_post_data(config, {"metadata": metadata, "data": [raw_data]})
         if resp:
-            logger.debug("bof_reg_collect.nemesis data sent to Nemesis", file_uuid=resp["object_id"])
+            logger.debug("File data sent to Nemesis", message_uuid=resp["object_id"], file_path=file_path)
             return uuid.UUID(resp["object_id"])
         else:
             return None
 
-    elif "dpapi_domain_backupkey.json" in file_path:
-        object_id = await nemesis_post_file(config, file_path)
-        if not object_id:
-            logger.error("No nemesis_file_id returned when uploading DPAPI domain backup key")
-            return None
-        else:
-            logger.debug("DPAPI domain backup key file uploaded to Nemesis", file_uuid=object_id)
 
-        metadata = await get_metadata(config, "raw_data")
-
-        raw_data = {}
-        raw_data["tags"] = ["dpapi_domain_backupkey"]
-        raw_data["data"] = object_id
-        raw_data["is_file"] = True
-
-        resp = await nemesis_post_data(config, {"metadata": metadata, "data": [raw_data]})
-        if resp:
-            logger.debug("DPAPI backupkey file data sent to Nemesis", file_uuid=resp["object_id"])
-            return uuid.UUID(resp["object_id"])
-        else:
-            return None
-
-    elif "seatbelt" in file_path:
-        object_id = await nemesis_post_file(config, file_path)
-        if not object_id:
-            logger.error("No nemesis_file_id returned from seatbelt file upload", file_path=file_path)
-            return None
-        else:
-            logger.debug("Seatbelt file uploaded to Nemesis", file_uuid=object_id, file_path=file_path)
-
-        metadata = await get_metadata(config, "raw_data")
-
-        raw_data = {}
-        raw_data["tags"] = ["seatbelt_json"]
-        raw_data["data"] = object_id
-        raw_data["is_file"] = True
-
-        resp = await nemesis_post_data(config, {"metadata": metadata, "data": [raw_data]})
-        if resp:
-            logger.debug("Seatbelt NDJSON file data sent to Nemesis", file_uuid=resp["object_id"])
-            return uuid.UUID(resp["object_id"])
-        else:
-            return None
+async def submit_file_with_raw_data_tag(config: dict[str, str], file_path: str, tags: List[str]) -> uuid.UUID | None:
+    object_id = await nemesis_post_file(config, file_path)
+    if not object_id:
+        logger.error("No nemesis_file_id returned when uploading raw_data file", tags=tags, file_path=file_path)
+        return None
     else:
-        file_data = {}
-        file_path = os.path.abspath(file_path)
-        file_data["path"] = file_path
+        logger.debug("raw_data file uploaded to Nemesis", file_uuid=object_id, file_path=file_path)
 
-        file_data["size"] = os.path.getsize(file_path)
+    metadata = await get_metadata(config, "raw_data")
 
-        object_id = await nemesis_post_file(config, file_path)
-        if not object_id:
-            return
-        else:
-            logger.debug("File uploaded to Nemesis", file_uuid=object_id, file_path=file_path)
+    raw_data = {}
+    raw_data["tags"] = tags
+    raw_data["data"] = object_id
+    raw_data["is_file"] = True
 
-        file_data["object_id"] = object_id
-        metadata = await get_metadata(config)
+    resp = await nemesis_post_data(config, {"metadata": metadata, "data": [raw_data]})
+    if resp:
+        logger.debug("raw_data file data sent to Nemesis", message_uuid=resp["object_id"], file_path=file_path, tags=tags)
+        return uuid.UUID(resp["object_id"])
+    else:
+        return None
 
-        # post to the Nemesis data API (`data` needs to be an array of dictionaries!)
-        resp = await nemesis_post_data(config, {"metadata": metadata, "data": [file_data]})
-        if resp:
-            logger.debug("File data submitted to Nemesis", file_uuid=resp["object_id"], path=file_path)
-            return uuid.UUID(resp["object_id"])
-        else:
-            return None
+
+async def submit_file(config: dict[str, str], file_path: str) -> uuid.UUID | None:
+    file_data = {}
+    file_path = os.path.abspath(file_path)
+    file_data["path"] = file_path
+
+    file_data["size"] = os.path.getsize(file_path)
+
+    object_id = await nemesis_post_file(config, file_path)
+    if not object_id:
+        return
+    else:
+        logger.debug("File uploaded to Nemesis", file_uuid=object_id, file_path=file_path)
+
+    file_data["object_id"] = object_id
+    metadata = await get_metadata(config, "file_data")
+
+    # post to the Nemesis data API (`data` needs to be an array of dictionaries!)
+    resp = await nemesis_post_data(config, {"metadata": metadata, "data": [file_data]})
+    if resp:
+        logger.debug("File data submitted to Nemesis", file_uuid=resp["object_id"], path=file_path)
+        return uuid.UUID(resp["object_id"])
+    else:
+        return None
+
+
+async def process_file(config: dict[str, str], file_path: str) -> uuid.UUID | None:
+    """
+    Takes a configuration dictionary and file path, and uploads the file to Nemesis depending on what the filename is.
+    """
+    api_json_regexes = [
+        r".*authentication_data.*\.json$",
+        r".*cookies.*\.json$",
+        # r".*file_data.*\.json$",          # Removing for now since normal file uploads use this
+        r".*file_information.*\.json$",
+        r".*named_pipes.*\.json$",
+        r".*network_connections.*\.json$",
+        r".*path_list.*\.json$",
+        r".*process_data.*\.json$",
+        r".*registry_value.*\.json$",
+        r".*services_api.*\.json$",  # NOTE: This must not conflict with the example Seatbelt services either
+    ]
+
+    dpapi_domain_backupkey_regex = r".*dpapi_domain_backupkey.*\.json$"
+    seatbelt_json_regex = r".*seatbelt.*\.json$"
+    bof_reg_collect_regex = r".*bof_reg_collect.*\.nemesis$"
+
+    # Process files differently depending on how they're named
+    if string_matches_regexes(api_json_regexes, file_path):
+        return await post_json_to_api(config, file_path)
+    elif string_matches_regexes([dpapi_domain_backupkey_regex], file_path):
+        return await submit_file_with_raw_data_tag(config, file_path, ["dpapi_domain_backupkey_json"])
+    elif string_matches_regexes([seatbelt_json_regex], file_path):
+        return await submit_file_with_raw_data_tag(config, file_path, ["seatbelt_json"])
+    elif string_matches_regexes([bof_reg_collect_regex], file_path):
+        return await submit_file_with_raw_data_tag(config, file_path, ["bof_reg_collect"])
+    else:
+        # Default case: just upload the file
+        return await submit_file(config, file_path)
 
 
 async def process_folder(config, folder_path) -> AsyncIterator:
@@ -536,7 +506,11 @@ def return_args_and_exceptions(func, exception_handler: Callable) -> Callable:
     return functools.partial(_return_args_and_exceptions, func)
 
 
-async def submit_paths_concurrently(config, paths: List[str], workers: int, delay: float = 0) -> AsyncIterator[Tuple[str, uuid.UUID]]:
+def exception_handler(e, args):
+    logger.exception("Error processing file", args=args)
+
+
+async def submit_paths_concurrently(config: dict[str, str], paths: List[str], workers: int, delay: float = 0) -> AsyncIterator[Tuple[str, uuid.UUID]]:
     """Submits files to Nemesis concurrently.
 
     Args:
@@ -598,9 +572,6 @@ async def submit_paths_concurrently(config, paths: List[str], workers: int, dela
 
         return file_uuid
 
-    def exception_handler(e, args):
-        logger.exception("Error processing file", args=args)
-
     wrapped_process_file = return_args_and_exceptions(process_file_local, exception_handler)
 
     try:
@@ -611,6 +582,82 @@ async def submit_paths_concurrently(config, paths: List[str], workers: int, dela
         logger.warn("Cancelled file uploads")
 
     logger.info(f"Completed processing {result_count} files out of {total_file_count} total files")
+
+
+async def wait_for_stable_size(file_path, delay=1.0, retries=600):
+    logger.debug("Waiting for file size to stabilize", path=file_path)
+
+    previous_size = -1
+    current_size = 0
+    tries = 0
+    while tries < retries:
+        try:
+            current_size = os.path.getsize(file_path)
+            if current_size == previous_size:
+                return True
+            previous_size = current_size
+            await asyncio.sleep(delay)
+            tries += 1
+        except Exception as e:
+            logger.error("Error accessing a newly create file", path=file_path, exception=e)
+            return False
+    return False
+
+
+async def monitor_submit_paths_concurrently(config, path_iter: AsyncIterator, workers: int, delay: float = 0) -> AsyncIterator[Tuple[str, uuid.UUID]]:
+    """Submits files to Nemesis concurrently.
+
+    Args:
+        config (_type_): submit_to_nemesis configuration object.
+        paths (List[str]): List of file or folder paths to submit to Nemesis.
+        workers (int): Number of concurrent tasks that can run at once.
+        delay (float, optional): Time delay between each submission. Defaults to 0.
+
+    Returns:
+        AsyncIterator[Tuple[str, uuid.UUID]]: _description_
+
+    Yields:
+        Iterator[AsyncIterator[Tuple[str, uuid.UUID]]]: _description_
+    """
+    result_count = 0
+
+    async def monitor_process_file_local(file_path) -> uuid.UUID | None:
+        global logger
+
+        structlog.contextvars.bind_contextvars(
+            file_path=file_path,
+        )
+
+        logger.info("Processing file")
+
+        if not await wait_for_stable_size(file_path):
+            logger.error("An error occurred while waiting for the file. File did not process.", path=file_path)
+            return
+
+        file_uuid = await process_file(config, file_path)
+
+        logger.info(
+            f"Done processing file {result_count+1}",
+            file_uuid=str(file_uuid),
+            total_completed=result_count + 1,
+        )
+        structlog.contextvars.clear_contextvars()
+
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+        return file_uuid
+
+    wrapped_process_file = return_args_and_exceptions(monitor_process_file_local, exception_handler)
+
+    try:
+        async for result in map_unordered(wrapped_process_file, path_iter, limit=workers):
+            result_count += 1
+            yield result
+    except asyncio.CancelledError:
+        logger.warn("Cancelled file uploads")
+
+    logger.info(f"Completed processing {result_count} total files")
 
 
 async def is_file_processed(es_client, message_id: int):
@@ -628,9 +675,47 @@ async def is_file_processed(es_client, message_id: int):
         return False
 
 
-async def amain():
+async def submit_files_and_folders(config: dict[str, str]):
     paths_to_process = []
     processed_file_uuids = []
+
+    logger.info("Submitting files/folders to Nemesis")
+    if config["file"]:
+        for f in config["file"]:
+            paths_to_process.append(f)
+
+    if config["folder"]:
+        for f in config["folder"]:
+            paths_to_process.append(f)
+
+    for i in range(config["repeat"] + 1):
+        logger.info("Waiting for tasks to complete")
+        async for result in submit_paths_concurrently(config, paths_to_process, config["workers"], config["sec_between_files"]):
+            path, file_uuid = result
+            processed_file_uuids.append(file_uuid)
+
+
+async def monitor_and_submit_folder_files(config: dict[str, str], loop):
+    processed_file_uuids = []
+
+    path = os.path.abspath(config["monitor"])
+
+    if not os.path.exists(path):
+        logger.error("Path does not exist", path=path)
+        return
+
+    if os.path.isfile(path):
+        logger.error("The monitor path is a file, not a folder", path=path)
+
+    logger.info("Monitoring a folder for new files to submit", path=path)
+
+    iter = monitor_directory(path, loop)
+    async for result in monitor_submit_paths_concurrently(config, iter, config["workers"], config["sec_between_files"]):
+        path, file_uuid = result
+        processed_file_uuids.append(file_uuid)
+
+
+async def amain(loop):
     config = await get_config()
     if not config:
         return
@@ -638,20 +723,11 @@ async def amain():
     try:
         if config["cookies"]:
             await submit_random_cookies(config, config["cookies"])
-        else:
-            if config["file"]:
-                for f in config["file"]:
-                    paths_to_process.append(f)
+        elif config["file"] or config["folder"]:
+            await submit_files_and_folders(config)
+        elif config["monitor"]:
+            await monitor_and_submit_folder_files(config, loop)
 
-            if config["folder"]:
-                for f in config["folder"]:
-                    paths_to_process.append(f)
-
-            for i in range(config["repeat"] + 1):
-                logger.info("Waiting for tasks to complete")
-                async for result in submit_paths_concurrently(config, paths_to_process, config["workers"], config["sec_between_files"]):
-                    path, file_uuid = result
-                    processed_file_uuids.append(file_uuid)
     except asyncio.CancelledError:
         pass
 

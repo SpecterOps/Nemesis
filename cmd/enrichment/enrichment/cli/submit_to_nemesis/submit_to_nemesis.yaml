@@ -1,10 +1,7 @@
-elasticsearch_creds: nemesis:Qwerty12345
-elasticsearch_url: http://127.0.0.1:8080/elastic/
-expiration_days: 100
-# nemesis_url: http://127.0.0.1:8080/api/
 nemesis_url: http://127.0.0.1:8080/api/
-nemesis_creds: nemesis:Qwerty12345
-network_name: 'test'
-operator_name: WILL
+nemesis_creds: n:Qwerty12345
+expiration_days: 100
+network_name: 'ACMECORP'
+operator_name: operator_bob
 project_name: ASSESS-TEST
 log_level: INFO

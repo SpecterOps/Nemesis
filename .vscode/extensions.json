@@ -8,6 +8,7 @@
         "ms-python.isort",
         "ms-python.python",
         "ms-python.vscode-pylance",
+        "tamasfe.even-better-toml",
         "zxh404.vscode-proto3",
     ]
 }

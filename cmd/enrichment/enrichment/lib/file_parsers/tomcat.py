@@ -22,7 +22,7 @@ class tomcat(Meta.FileType):
         """
         Returns True if the internal File path matches our target criteria.
         """
-        regex_string = ".*/tomcat-users\\.xml$"
+        regex_string = "(.*/|^)tomcat-users\\.xml$"
         return re.search(regex_string, self.file_data.path, re.IGNORECASE) is not None
 
     def check_content(self) -> bool:
@@ -46,7 +46,6 @@ class tomcat(Meta.FileType):
             auth_data_msg.metadata.CopyFrom(self.metadata)
 
             with open(self.file_path, "rb") as f:
-
                 data = f.read()
 
                 try:

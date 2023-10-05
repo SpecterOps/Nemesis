@@ -26,6 +26,7 @@ spec:
       initContainers:
         - name: noseyparker
           image: ghcr.io/praetorian-inc/noseyparker:v0.13.0
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "cp /usr/local/bin/noseyparker /opt/noseyparker/"]
           volumeMounts:
             - name: noseyparker
@@ -40,7 +41,10 @@ spec:
             - name: DATA_DOWNLOAD_DIR
               value: "/tmp"
             - name: ENVIRONMENT
-              value: development
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: environment
 
             - name: CRACK_WORDLIST_TOP_WORDS
               value: "10000" # either 10,000 or 100,000
@@ -81,11 +85,11 @@ spec:
                   name: operation-config
                   key: nemesis-http-server
             - name: PUBLIC_NEMESIS_URL
-              value: "$(NEMESIS_HTTP_SERVER)/dashboard/"
+              value: "$(NEMESIS_HTTP_SERVER)dashboard/"
             - name: PUBLIC_KIBANA_URL
-              value: "$(NEMESIS_HTTP_SERVER)/kibana/"
+              value: "$(NEMESIS_HTTP_SERVER)kibana/"
             - name: WEB_API_URL
-              value: "$(NEMESIS_HTTP_SERVER)/api/"
+              value: "$(NEMESIS_HTTP_SERVER)api/"
 
             - name: POSTGRES_SERVER
               value: postgres
@@ -201,6 +205,7 @@ spec:
               value: "5"
 
           image: enrichment
+          imagePullPolicy: IfNotPresent
           name: enrichment
           ports:
             - containerPort: 9700

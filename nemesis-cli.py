@@ -14,7 +14,7 @@ logger.setLevel(logging.INFO)
 ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
 
-formatter = logging.Formatter('[{levelname}] {message}', style='{')
+formatter = logging.Formatter("[{levelname}] {message}", style="{")
 ch.setFormatter(formatter)
 
 logger.addHandler(ch)
@@ -29,7 +29,7 @@ try:
     import boto3
     from passlib.hash import apr_md5_crypt
     from vyper import v
-except:
+except ModuleNotFoundError:
     logger.error("Please run `pip3 install boto3 vyper-config passlib`")
     sys.exit(1)
 
@@ -102,22 +102,16 @@ def get_kubectl_value(key):
         return run_cmd("kubectl get configmaps aws-config -o=go-template='{{index .data \"aws-kms-key-alias\"}}'")
 
     elif key == "aws_access_key_id":
-        return run_cmd(
-            "kubectl get secret aws-creds -o=go-template='{{index .data \"aws_access_key_id\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret aws-creds -o=go-template='{{index .data \"aws_access_key_id\"}}' | base64 -d")
 
     elif key == "aws_secret_key":
         return run_cmd("kubectl get secret aws-creds -o=go-template='{{index .data \"aws_secret_key\"}}' | base64 -d")
 
     elif key == "minio_root_user":
-        return run_cmd(
-            "kubectl get secret minio-creds -o=go-template='{{index .data \"minio_root_user\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret minio-creds -o=go-template='{{index .data \"minio_root_user\"}}' | base64 -d")
 
     elif key == "minio_root_password":
-        return run_cmd(
-            "kubectl get secret minio-creds -o=go-template='{{index .data \"minio_root_password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret minio-creds -o=go-template='{{index .data \"minio_root_password\"}}' | base64 -d")
 
     elif key == "minio_storage_size":
         return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"minio_storage_size\"}}'")
@@ -132,115 +126,76 @@ def get_kubectl_value(key):
         return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"log-level\"}}'")
 
     elif key == "data_expiration_days":
-        return run_cmd(
-            "kubectl get configmaps operation-config -o=go-template='{{index .data \"data-expiration-days\"}}'"
-        )
-
-    elif key == "disable_slack_alerting":
-        return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"disable-slack-alerting\"}}'")
+        return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"data-expiration-days\"}}'")
 
     elif key == "nemesis_http_server":
         return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"nemesis-http-server\"}}'")
 
+    elif key == "environment":
+        return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"environment\"}}'")
+
+    elif key == "disable_slack_alerting":
+        return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"disable-slack-alerting\"}}'")
+
     elif key == "slack_channel":
-        return run_cmd(
-            "kubectl get configmaps operation-config -o=go-template='{{index .data \"slack-alert-channel\"}}'"
-        )
+        return run_cmd("kubectl get configmaps operation-config -o=go-template='{{index .data \"slack-alert-channel\"}}'")
 
     elif key == "slack_webhook":
-        return run_cmd(
-            "kubectl get secret operation-creds -o=go-template='{{index .data \"slack_web_hook\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret operation-creds -o=go-template='{{index .data \"slack_web_hook\"}}' | base64 -d")
 
     elif key == "basic_auth_password":
-        return run_cmd(
-            "kubectl get secret operation-creds -o=go-template='{{index .data \"basic-auth-password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret operation-creds -o=go-template='{{index .data \"basic-auth-password\"}}' | base64 -d")
 
     elif key == "basic_auth_user":
-        return run_cmd(
-            "kubectl get secret operation-creds -o=go-template='{{index .data \"basic-auth-user\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret operation-creds -o=go-template='{{index .data \"basic-auth-user\"}}' | base64 -d")
 
     elif key == "elasticsearch_password":
-        return run_cmd(
-            "kubectl get secret elasticsearch-users -o=go-template='{{index .data \"password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret elasticsearch-users -o=go-template='{{index .data \"password\"}}' | base64 -d")
 
     elif key == "elasticsearch_user":
-        return run_cmd(
-            "kubectl get secret elasticsearch-users -o=go-template='{{index .data \"username\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret elasticsearch-users -o=go-template='{{index .data \"username\"}}' | base64 -d")
 
     elif key == "grafana_password":
-        return run_cmd(
-            "kubectl get secret grafana-creds --namespace=monitoring -o=go-template='{{index .data \"username\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret grafana-creds --namespace=monitoring -o=go-template='{{index .data \"username\"}}' | base64 -d")
 
     elif key == "grafana_user":
-        return run_cmd(
-            "kubectl get secret grafana-creds --namespace=monitoring -o=go-template='{{index .data \"password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret grafana-creds --namespace=monitoring -o=go-template='{{index .data \"password\"}}' | base64 -d")
 
     elif key == "postgres_user":
-        return run_cmd(
-            "kubectl get secret postgres-creds -o=go-template='{{index .data \"postgres-user\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret postgres-creds -o=go-template='{{index .data \"postgres-user\"}}' | base64 -d")
 
     elif key == "postgres_password":
-        return run_cmd(
-            "kubectl get secret postgres-creds -o=go-template='{{index .data \"postgres-password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret postgres-creds -o=go-template='{{index .data \"postgres-password\"}}' | base64 -d")
 
     elif key == "dashboard_user":
-        return run_cmd(
-            "kubectl get secret dashboard-creds -o=go-template='{{index .data \"dashboard-user\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret dashboard-creds -o=go-template='{{index .data \"dashboard-user\"}}' | base64 -d")
 
     elif key == "dashboard_password":
-        return run_cmd(
-            "kubectl get secret dashboard-creds -o=go-template='{{index .data \"dashboard-password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret dashboard-creds -o=go-template='{{index .data \"dashboard-password\"}}' | base64 -d")
 
     elif key == "dashboard_user":
-        return run_cmd(
-            "kubectl get secret dashboard-creds -o=go-template='{{index .data \"dashboard-user\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret dashboard-creds -o=go-template='{{index .data \"dashboard-user\"}}' | base64 -d")
 
     elif key == "dashboard_password":
-        return run_cmd(
-            "kubectl get secret dashboard-creds -o=go-template='{{index .data \"dashboard-password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret dashboard-creds -o=go-template='{{index .data \"dashboard-password\"}}' | base64 -d")
 
     elif key == "pgadmin_email":
-        return run_cmd(
-            "kubectl get secret postgres-creds -o=go-template='{{index .data \"pgadmin-email\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret postgres-creds -o=go-template='{{index .data \"pgadmin-email\"}}' | base64 -d")
 
     elif key == "pgadmin_password":
-        return run_cmd(
-            "kubectl get secret postgres-creds -o=go-template='{{index .data \"pgadmin-password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret postgres-creds -o=go-template='{{index .data \"pgadmin-password\"}}' | base64 -d")
 
     elif key == "rabbitmq_admin_user":
-        return run_cmd(
-            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-admin-user\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-admin-user\"}}' | base64 -d")
 
     elif key == "rabbitmq_admin_password":
-        return run_cmd(
-            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-admin-password\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-admin-password\"}}' | base64 -d")
 
     elif key == "rabbitmq_connectionuri":
-        return run_cmd(
-            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-connectionuri\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-connectionuri\"}}' | base64 -d")
 
     elif key == "rabbitmq_erlang_cookie":
-        return run_cmd(
-            "kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-erlang-cookie\"}}' | base64 -d"
-        )
+        return run_cmd("kubectl get secret rabbitmq-creds -o=go-template='{{index .data \"rabbitmq-erlang-cookie\"}}' | base64 -d")
 
     else:
         logger.error(f"Invalid config key: {key}")
@@ -269,26 +224,19 @@ def set_config_values(config_values):
         if continue_set_values:
             run_cmd("kubectl delete configmap aws-config")
             run_cmd(
-                "kubectl create configmap aws-config"
-                + f" --from-literal=aws-bucket={v.get('aws_bucket')}"
-                + f" --from-literal=aws-default-region={v.get('aws_region')}"
-                + f" --from-literal=aws-kms-key-alias={v.get('aws_kms_key_alias')}",
+                "kubectl create configmap aws-config" + f" --from-literal=aws-bucket={v.get('aws_bucket')}" + f" --from-literal=aws-default-region={v.get('aws_region')}" + f" --from-literal=aws-kms-key-alias={v.get('aws_kms_key_alias')}",
                 True,
             )
 
             run_cmd("kubectl delete secret aws-creds")
             run_cmd(
-                "kubectl create secret generic aws-creds"
-                + f" --from-literal=aws_access_key_id={v.get('aws_access_key_id')}"
-                + f" --from-literal=aws_secret_key={v.get('aws_secret_key')}",
+                "kubectl create secret generic aws-creds" + f" --from-literal=aws_access_key_id={v.get('aws_access_key_id')}" + f" --from-literal=aws_secret_key={v.get('aws_secret_key')}",
                 True,
             )
 
             run_cmd("kubectl delete secret minio-creds")
             run_cmd(
-                "kubectl create secret generic minio-creds"
-                + f" --from-literal=minio_root_user={v.get('minio_root_user')}"
-                + f" --from-literal=minio_root_password={v.get('minio_root_password')}",
+                "kubectl create secret generic minio-creds" + f" --from-literal=minio_root_user={v.get('minio_root_user')}" + f" --from-literal=minio_root_password={v.get('minio_root_password')}",
                 True,
             )
 
@@ -302,6 +250,7 @@ def set_config_values(config_values):
                 + f" --from-literal=storage_provider={v.get('storage_provider')}"
                 + f" --from-literal=minio_storage_size={v.get('minio_storage_size')}"
                 + f" --from-literal=nemesis-http-server={v.get('nemesis_http_server')}"
+                + f" --from-literal=environment={v.get('environment')}"
                 + f" --from-literal=data-expiration-days={v.get('data_expiration_days')}",
                 True,
             )
@@ -312,11 +261,13 @@ def set_config_values(config_values):
             run_cmd(
                 "kubectl create configmap operation-config --namespace=monitoring"
                 + f" --from-literal=slack-alert-channel={v.get('slack_channel')}"
+                + f" --from-literal=disable-slack-alerting={v.get('disable_slack_alerting')}"
                 + f" --from-literal=log-level={v.get('log_level')}"
                 + f" --from-literal=assessment-id={v.get('assessment_id')}"
                 + f" --from-literal=storage_provider={v.get('storage_provider')}"
                 + f" --from-literal=minio_storage_size={v.get('minio_storage_size')}"
                 + f" --from-literal=nemesis-http-server={v.get('nemesis_http_server')}"
+                + f" --from-literal=environment={v.get('environment')}"
                 + f" --from-literal=data-expiration-days={v.get('data_expiration_days')}",
                 True,
             )
@@ -331,15 +282,9 @@ def set_config_values(config_values):
 
             run_cmd("kubectl delete secret basic-auth")
             encrypted = apr_md5_crypt.hash(v.get("basic_auth_password"))
-            run_cmd(
-                "kubectl create secret generic basic-auth"
-                + f" --from-literal=auth='{v.get('basic_auth_user')}:{encrypted}'"
-            )
+            run_cmd("kubectl create secret generic basic-auth" + f" --from-literal=auth='{v.get('basic_auth_user')}:{encrypted}'")
             run_cmd("kubectl delete secret basic-auth -n monitoring")
-            run_cmd(
-                "kubectl create secret generic basic-auth -n monitoring"
-                + f" --from-literal=auth='{v.get('basic_auth_user')}:{encrypted}'"
-            )
+            run_cmd("kubectl create secret generic basic-auth -n monitoring" + f" --from-literal=auth='{v.get('basic_auth_user')}:{encrypted}'")
 
             run_cmd("kubectl delete secret operation-creds --namespace=monitoring")
             run_cmd(
@@ -350,19 +295,10 @@ def set_config_values(config_values):
             )
 
             run_cmd("kubectl delete secret grafana-creds --namespace=monitoring")
-            run_cmd(
-                "kubectl create secret generic grafana-creds --namespace=monitoring"
-                + f" --from-literal=username={v.get('grafana_user')}"
-                + f" --from-literal=password={v.get('grafana_password')}"
-            )
+            run_cmd("kubectl create secret generic grafana-creds --namespace=monitoring" + f" --from-literal=username={v.get('grafana_user')}" + f" --from-literal=password={v.get('grafana_password')}")
 
             run_cmd("kubectl delete secret elasticsearch-users")
-            run_cmd(
-                "kubectl create secret generic elasticsearch-users"
-                + f" --from-literal=username={v.get('elasticsearch_user')}"
-                + f" --from-literal=password={v.get('elasticsearch_password')}"
-                + f" --from-literal=roles=superuser"
-            )
+            run_cmd("kubectl create secret generic elasticsearch-users" + f" --from-literal=username={v.get('elasticsearch_user')}" + f" --from-literal=password={v.get('elasticsearch_password')}" + f" --from-literal=roles=superuser")
 
             run_cmd("kubectl delete secret postgres-creds")
             run_cmd(
@@ -374,11 +310,7 @@ def set_config_values(config_values):
             )
 
             run_cmd("kubectl delete secret dashboard-creds")
-            run_cmd(
-                "kubectl create secret generic dashboard-creds"
-                + f" --from-literal=dashboard-user={v.get('dashboard_user')}"
-                + f" --from-literal=dashboard-password={v.get('dashboard_password')}"
-            )
+            run_cmd("kubectl create secret generic dashboard-creds" + f" --from-literal=dashboard-user={v.get('dashboard_user')}" + f" --from-literal=dashboard-password={v.get('dashboard_password')}")
 
             run_cmd("kubectl delete secret fluentd-creds --namespace=kube-system")
             run_cmd(
@@ -413,6 +345,7 @@ def ensure_command(command: str):
     if exitcode == 127:
         logger.error(f"'{command}' command not found. Please install 'kubectl' and try again.")
         sys.exit(1)
+
 
 def validate_kubernetes():
     """Checks if kubernetes is running, and start minikube it if it's not."""
@@ -474,6 +407,12 @@ def validate_config_values(config_keys):
     in case we're overwriting just one value.
     """
 
+    # Ensure that nemesis_http_server ends with a "/"
+    if v.get("nemesis_http_server") and v.get("nemesis_http_server") != "<no value>":
+        nemesis_http_server = v.get("nemesis_http_server")
+        if not nemesis_http_server.endswith("/"):
+            v.set("nemesis_http_server", f"{nemesis_http_server}/")
+
     # if a storage provider is not set, assume minio
     if not v.get("storage_provider") or v.get("storage_provider") == "<no value>":
         storage_provider = get_kubectl_value("storage_provider")
@@ -519,14 +458,24 @@ def validate_config_values(config_keys):
 
     if not v.get("force"):
         for config_key in config_keys:
-            not_required_args = ["basic_auth_password", "data_expiration_days", "log_level", "pgadmin_email"]
+            not_required_args = [
+                "basic_auth_password",
+                "data_expiration_days",
+                "log_level",
+                "pgadmin_email",
+                "disable_slack_alerting",
+                "rabbitmq_erlang_cookie",
+            ]
             if config_key not in not_required_args:
+                if config_key.startswith("slack_") and str(v.get("disable_slack_alerting")).lower() == "true":
+                    continue
+
                 if not v.get(config_key):
                     # set the value for to config key if it already exists in Kubectl
                     config_value = get_kubectl_value(config_key)
                     if not config_value:
                         # otherwise prompt
-                        config_value = input(f"\n[*] Please enter a value for '{config_key}' : ")
+                        config_value = input(f"\n[*] Please enter a value for '{config_key}' or <enter> for the default: ")
                     v.set(config_key, config_value)
 
     if not v.get("log_level") or v.get("log_level") == "<no value>":
@@ -656,7 +605,10 @@ def validate_config_values(config_keys):
             # set a uri from provided user/pass
             rabbitmq_user = v.get("rabbitmq_admin_user")
             rabbitmq_password = v.get("rabbitmq_admin_password")
-            v.set("rabbitmq_connectionuri", f"amqp://{rabbitmq_user}:{rabbitmq_password}@nemesis-rabbitmq-svc:5672/")
+            v.set(
+                "rabbitmq_connectionuri",
+                f"amqp://{rabbitmq_user}:{rabbitmq_password}@nemesis-rabbitmq-svc:5672/",
+            )
 
     if not v.get("rabbitmq_erlang_cookie") or v.get("rabbitmq_erlang_cookie") == "<no value>":
         rabbitmq_erlang_cookie_kubectl = get_kubectl_value("rabbitmq_erlang_cookie")
@@ -672,7 +624,7 @@ def validate_config_values(config_keys):
             disable_slack_alerting = bool(disable_slack_alerting)
             v.set("disable_slack_alerting", disable_slack_alerting)
         else:
-            v.set("disable_slack_alerting", "True")
+            v.set("disable_slack_alerting", "False")
     disable_slack_alerting = str(v.get("disable_slack_alerting"))
     if disable_slack_alerting.lower() not in ["true", "false"]:
         logger.error(f"The disable_slack_alerting argument must be either 'True' or 'False'. Supplied value: {disable_slack_alerting}")
@@ -844,7 +796,6 @@ def validate_aws_resources():
 
 
 def create_ingress_controller():
-
     # Some jank to check if the nginx controller is installed in Kubernetes
     exitcode, output = subprocess.getstatusoutput("kubectl get --raw /apis/admissionregistration.k8s.io/v1/validatingwebhookconfigurations  | grep 'validate.nginx.ingress.kubernetes.io'")
     if exitcode == 0:
@@ -860,7 +811,7 @@ def create_ingress_controller():
     run_cmd("kubectl create secret tls nemesis-ingress-tls --cert=/tmp/tls.crt --key=/tmp/tls.key")
     run_cmd("kubectl create secret tls nemesis-ingress-tls --cert=/tmp/tls.crt --key=/tmp/tls.key -n monitoring")
 
-    logger.info(f"Installing ingress-nginx controller using helm")
+    logger.info("Installing ingress-nginx controller using helm")
     run_cmd(
         "helm upgrade --install ingress-nginx ingress-nginx"
         " --repo https://kubernetes.github.io/ingress-nginx"
@@ -868,7 +819,7 @@ def create_ingress_controller():
         " --create-namespace"
         " --set prometheus.create=true"
         " --set prometheus.port=9113"
-        f" --set tcp.5044=\"default/nemesis-ls-beats:5044\"",
+        ' --set tcp.5044="default/nemesis-ls-beats:5044"',
         show_error=True,
     )
 
@@ -896,9 +847,11 @@ def create_minio():
         "--set 'extraEnvVars[0].name=MINIO_BROWSER_LOGIN_ANIMATION' --set 'extraEnvVars[0].value=\"off\"' "
         f"--set persistence.size={minio_storage_size} "
         f"--set auth.rootUser={minio_root_user} "
-        f"--set auth.rootPassword='{minio_root_password}' ")
-        # "--set 'extraEnvVars[0].name=MINIO_CONSOLE_SUBPATH' --set 'extraEnvVars[0].value=\"/minio/\"' "
-        # f"--set 'extraEnvVars[1].name=MINIO_BROWSER_REDIRECT_URL' --set 'extraEnvVars[1].value=\"{nemesis_http_server}/minio/\"'",)
+        f"--set auth.rootPassword='{minio_root_password}' "
+    )
+    # "--set 'extraEnvVars[0].name=MINIO_CONSOLE_SUBPATH' --set 'extraEnvVars[0].value=\"/minio/\"' "
+    # f"--set 'extraEnvVars[1].name=MINIO_BROWSER_REDIRECT_URL' --set 'extraEnvVars[1].value=\"{nemesis_http_server}/minio/\"'",)
+
 
 def create_elastic_operator():
     # Check if the elastic operator is already installed
@@ -911,12 +864,7 @@ def create_elastic_operator():
     run_cmd("helm repo add elastic https://helm.elastic.co")
     run_cmd("helm repo update")
 
-    run_cmd(
-        "helm install elastic-operator elastic/eck-operator"
-        " --namespace elastic-system"
-        " --create-namespace"
-        " --set managedNamespaces='{default}'"
-    )
+    run_cmd("helm install elastic-operator elastic/eck-operator" " --namespace elastic-system" " --create-namespace" " --set managedNamespaces='{default}'")
 
 
 def create_metrics_server():
@@ -947,6 +895,7 @@ if __name__ == "__main__":
         "storage_provider",
         "assessment_id",
         "nemesis_http_server",
+        "environment",
         "data_expiration_days",
         "log_level",
         "disable_slack_alerting",
@@ -981,43 +930,141 @@ if __name__ == "__main__":
 
     # args specific to this program
     parser.add_argument(
-        "--config", "-c", default="nemesis.config", type=str, help="Nemesis config (default: nemesis.config)"
+        "--config",
+        "-c",
+        default="nemesis.config",
+        type=str,
+        help="Nemesis config (default: nemesis.config)",
     )
-    parser.add_argument("--force", "-f", action=argparse.BooleanOptionalAction, help="Don't prompt for any input")
+    parser.add_argument(
+        "--force",
+        "-f",
+        action=argparse.BooleanOptionalAction,
+        help="Don't prompt for any input",
+    )
 
     # aws configs
-    parser.add_argument("--aws_region", "--aws-region", "--region", type=str, help="AWS region (default: us-east-1)")
-    parser.add_argument("--aws_bucket", "--aws-bucket", "--bucket", type=str, help="AWS S3 bucket name")
-    parser.add_argument("--aws_kms_key_alias", "--aws-kms-key-alias", "--kms", type=str, help="AWS KMS key alias")
     parser.add_argument(
-        "--aws_access_key_id", "--aws-access-key-id", "--key_id", "--key-id", type=str, help="AWS access key ID"
+        "--aws_region",
+        "--aws-region",
+        "--region",
+        type=str,
+        help="AWS region (default: us-east-1)",
+    )
+    parser.add_argument("--aws_bucket", "--aws-bucket", "--bucket", type=str, help="AWS S3 bucket name")
+    parser.add_argument(
+        "--aws_kms_key_alias",
+        "--aws-kms-key-alias",
+        "--kms",
+        type=str,
+        help="AWS KMS key alias",
     )
     parser.add_argument(
-        "--aws_secret_key", "--aws-secret-key", "--secret_key", "--secret-key", type=str, help="AWS secret key value"
+        "--aws_access_key_id",
+        "--aws-access-key-id",
+        "--key_id",
+        "--key-id",
+        type=str,
+        help="AWS access key ID",
+    )
+    parser.add_argument(
+        "--aws_secret_key",
+        "--aws-secret-key",
+        "--secret_key",
+        "--secret-key",
+        type=str,
+        help="AWS secret key value",
     )
 
     # minio configs
     parser.add_argument("--minio_root_user", "--minio-root-user", type=str, help="Minio root user")
-    parser.add_argument("--minio_root_password", "--minio-root-password", type=str, help="Minio root password")
-    parser.add_argument("--minio_storage_size", "--minio-storage-size", type=str, help="Size of Minio persistent storage")
-    parser.add_argument("--storage_provider", "--storage-provider", type=str, choices=["s3", "mimio"], help="Storage provider to use")
+    parser.add_argument(
+        "--minio_root_password",
+        "--minio-root-password",
+        type=str,
+        help="Minio root password",
+    )
+    parser.add_argument(
+        "--minio_storage_size",
+        "--minio-storage-size",
+        type=str,
+        help="Size of Minio persistent storage",
+    )
+    parser.add_argument(
+        "--storage_provider",
+        "--storage-provider",
+        type=str,
+        choices=["s3", "mimio"],
+        help="Storage provider to use",
+    )
 
     # operation configs
     parser.add_argument("--assessment_id", "--assessment-id", type=str, help="Asessment ID")
-    parser.add_argument("--nemesis_http_server", "--ip", type=str, help="Nemesis frontend HTTP server endpoint. Format: http://<SERVER>:<PORT>")
     parser.add_argument(
-        "--data_expiration_days", "--exp", type=int, help="Days after ingestion to set data to expire (default: 100)"
+        "--nemesis_http_server",
+        "--ip",
+        type=str,
+        help="Nemesis frontend HTTP server endpoint. Format: http://<SERVER>:<PORT>",
+    )
+    parser.add_argument(
+        "--environment",
+        "--env",
+        type=str,
+        help="Environment the application is running in (default: development)",
+        default="production",
+        choices=["development", "production", "testing"],
+    )
+    parser.add_argument(
+        "--data_expiration_days",
+        "--exp",
+        type=int,
+        help="Days after ingestion to set data to expire (default: 100)",
     )
     parser.add_argument("--log_level", "--log", type=str, help="Level of logging (default: info)")
-    parser.add_argument("--disable_slack_alerting", type=str, help="Should slack alerting be disabled? Values: True/False", required=False)
-    parser.add_argument("--slack_channel", "--channel", type=str, help="Slack channel name for alerting.", required=False)
-    parser.add_argument("--slack_webhook", "--webhook", type=str, help="Slack https://... webhook for alerting.", required=False)
-    parser.add_argument("--basic_auth_user", "--user", type=str, help="User to use for basic auth to the web-api")
     parser.add_argument(
-        "--basic_auth_password", "--password", type=str, help="Password to use for basic auth to the web-api"
+        "--disable_slack_alerting",
+        type=str,
+        help="Should slack alerting be disabled? Values: True/False",
+        required=False,
     )
-    parser.add_argument("--elasticsearch_user", "--es_user", type=str, help="Username for Elasticsearch/Kibana")
-    parser.add_argument("--elasticsearch_password", "--es_password", type=str, help="Password for Elasticsearch/Kibana")
+    parser.add_argument(
+        "--slack_channel",
+        "--channel",
+        type=str,
+        help="Slack channel name for alerting.",
+        required=False,
+    )
+    parser.add_argument(
+        "--slack_webhook",
+        "--webhook",
+        type=str,
+        help="Slack https://... webhook for alerting.",
+        required=False,
+    )
+    parser.add_argument(
+        "--basic_auth_user",
+        "--user",
+        type=str,
+        help="User to use for basic auth to the web-api",
+    )
+    parser.add_argument(
+        "--basic_auth_password",
+        "--password",
+        type=str,
+        help="Password to use for basic auth to the web-api",
+    )
+    parser.add_argument(
+        "--elasticsearch_user",
+        "--es_user",
+        type=str,
+        help="Username for Elasticsearch/Kibana",
+    )
+    parser.add_argument(
+        "--elasticsearch_password",
+        "--es_password",
+        type=str,
+        help="Password for Elasticsearch/Kibana",
+    )
     parser.add_argument("--postgres_user", "--pg_user", type=str, help="Username for Postgres")
     parser.add_argument("--postgres_password", "--pg_password", type=str, help="Password for Postgres")
     parser.add_argument("--dashboard_user", type=str, help="Username for the Nemesis dashboard")
@@ -1027,8 +1074,18 @@ if __name__ == "__main__":
     parser.add_argument("--grafana_user", "--guser", type=str, help="Username for Grafana")
     parser.add_argument("--grafana_password", "--gpassword", type=str, help="Password for Grafana")
     parser.add_argument("--rabbitmq_admin_user", "--ruser", type=str, help="Admin username for RabbitMQ")
-    parser.add_argument("--rabbitmq_admin_password", "--rpassword", type=str, help="Admin password for RabbitMQ")
-    parser.add_argument("--rabbitmq_erlang_cookie", "--rcookie", type=str, help="Erlang cookie for RabbitMQ clusters")
+    parser.add_argument(
+        "--rabbitmq_admin_password",
+        "--rpassword",
+        type=str,
+        help="Admin password for RabbitMQ",
+    )
+    parser.add_argument(
+        "--rabbitmq_erlang_cookie",
+        "--rcookie",
+        type=str,
+        help="Erlang cookie for RabbitMQ clusters",
+    )
 
     args = parser.parse_args()
 
@@ -1064,17 +1121,9 @@ if __name__ == "__main__":
 
     logger.info("Configuration set")
 
-    logger.info(
-        f"Nemesis basic auth credentials: `{get_kubectl_value('basic_auth_user')}:{get_kubectl_value('basic_auth_password')}`"
-    )
+    logger.info(f"Nemesis basic auth credentials: `{get_kubectl_value('basic_auth_user')}:{get_kubectl_value('basic_auth_password')}`")
 
     logger.info("If settings were changed, you may need to restart minikube with: `minikube stop && minikube start`")
-    logger.info(
-        "You can start the backend infrastructure in development mode with `./scripts/infra_start.sh`"
-    )
-    logger.info(
-        "You can start the main processing services in development mode with `./scripts/services_start.sh`"
-    )
-    logger.info(
-        "For non-development execution, run `skaffold run --port-forward`\n"
-    )
+    logger.info("You can start the backend infrastructure in development mode with `./scripts/infra_start.sh`")
+    logger.info("You can start the main processing services in development mode with `./scripts/services_start.sh`")
+    logger.info("For non-development execution, run `skaffold run --port-forward`\n")

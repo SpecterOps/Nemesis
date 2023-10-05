@@ -3,18 +3,22 @@ import logging
 
 # 3rd Party Libraries
 import structlog
+from nemesiscommon.settings import EnvironmentSettings
 from rich.console import Console
 from rich.traceback import Traceback
 
 
 # TODO: Figure out how to use structlog with uvicorn's logging
-def configure_logger(enable_json_logs: bool = False, log_level: str = "INFO", environment: str = "development"):
+def configure_logger(environment: EnvironmentSettings, log_level: str, log_color_enabled: bool):
     level: int = logging.getLevelName(log_level)
 
-    if environment == "production":
+    if environment == EnvironmentSettings.PRODUCTION:
         configure_prod_logger(level)
     else:
-        configure_dev_logger(level)
+        if log_color_enabled:
+            configure_dev_logger(level, log_color_enabled)
+        else:
+            configure_dev_logger(level, log_color_enabled)
 
 
 def rich_traceback(sio, exc_info) -> None:
@@ -36,7 +40,7 @@ def rich_traceback(sio, exc_info) -> None:
     )
 
 
-def configure_dev_logger(level: int):
+def configure_dev_logger(level: int, colored_logging_enabled: bool):
     # timestamper = structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S")
 
     wrapper = structlog.make_filtering_bound_logger(level)
@@ -48,7 +52,7 @@ def configure_dev_logger(level: int):
             structlog.processors.StackInfoRenderer(),
             # structlog.dev.set_exc_info,
             structlog.dev.ConsoleRenderer(
-                colors=True,
+                colors=colored_logging_enabled,
                 exception_formatter=rich_traceback,
             ),
         ],

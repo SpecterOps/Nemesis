@@ -18,7 +18,8 @@
                     "image": "enrichment",
                     "sourceFileMap": {
                         "${workspaceFolder}/cmd/enrichment": "/app/cmd/enrichment"
-                    }
+                    },
+                    "justMyCode": false
                 }
             ]
         },
@@ -41,8 +42,10 @@
                     "sourceFileMap": {
                         "${workspaceFolder}/cmd/dashboard": "/app/cmd/dashboard"
                     },
+                    "justMyCode": false
                 }
-            ]
-        },
+            ],
+            "imageRegistry": "docker.io"
+        }
     ]
 }

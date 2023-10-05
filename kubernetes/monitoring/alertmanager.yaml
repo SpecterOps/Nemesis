@@ -37,6 +37,7 @@ spec:
             - -c
             - cat /config.yml | envsubst > /etc/alertmanager/config.yml
           image: bhgedigital/envsubst
+          imagePullPolicy: IfNotPresent
           name: envsubst
           env:
             - name: SLACK_ALERT_CHANNEL
@@ -58,6 +59,7 @@ spec:
       containers:
         - name: alertmanager
           image: prom/alertmanager:v0.24.0
+          imagePullPolicy: IfNotPresent
           args:
             - "--config.file=/alertmanager/config.yml"
             - "--storage.path=/alertmanager"

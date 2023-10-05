@@ -1,4 +1,4 @@
-apiVersion: skaffold/v4beta3
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: nemesis
@@ -14,7 +14,7 @@ requires:
 #  - Nginx ingress controller - API routes
 #  - Elasticsearch/kibana - Used by Nemesis and Fluentd for logging
 #############################################################################
-apiVersion: skaffold/v4beta2
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: infra-core
@@ -26,13 +26,28 @@ build:
     tryImportMissing: true
     useBuildkit: true
     concurrency: 0
+  artifacts:
+    - &build-waiter
+      image: nemesis-waiter
+      docker:
+        dockerfile: dockerfiles/waiter.Dockerfile
 
 manifests:
   rawYaml:
-    - &k8s-elastic kubernetes/elastic/*
+    - &k8s-elastic-elasticsearch kubernetes/elastic/elasticsearch.yaml
+    - &k8s-elastic-ingress kubernetes/elastic/ingress.yaml
+    - &k8s-elastic-kibana kubernetes/elastic/kibana.yaml
 
 deploy:
   kubectl: {}
+
+profiles:
+ - name: dev
+   manifests:
+    rawYaml:
+    - kubernetes/elastic/elasticsearch-dev.yaml
+    - kubernetes/elastic/ingress.yaml
+    - kubernetes/elastic/kibana.yaml
 
 portForward:
   - &portForward-ingress
@@ -66,6 +81,7 @@ build:
     tryImportMissing: true
     useBuildkit: true
     concurrency: 0
+  artifacts: []
 
 manifests:
   rawYaml:
@@ -98,12 +114,27 @@ manifests:
     # Static infra
     - &k8s-rabbitmq kubernetes/rabbitmq/*
     - &k8s-gotenberg kubernetes/gotenberg/*
-    - &k8s-postgres kubernetes/postgres/*
+    - &k8s-postgres-configmap kubernetes/postgres/configmap.yaml
+    - &k8s-postgres-deployment kubernetes/postgres/deployment.yaml
+    - &k8s-postgres-service kubernetes/postgres/service.yaml
     - &k8s-pgadmin kubernetes/pgadmin/*
     - &k8s-tika kubernetes/tika/*
 
 deploy:
   kubectl: {}
+
+profiles:
+ - name: dev
+   manifests:
+    rawYaml:
+    # Static infra
+    - kubernetes/rabbitmq/*
+    - kubernetes/gotenberg/*
+    - kubernetes/postgres/configmap.yaml
+    - kubernetes/postgres/deployment-dev.yaml
+    - kubernetes/postgres/service.yaml
+    - kubernetes/pgadmin/*
+    - kubernetes/tika/*
 
 portForward:
   - &portForward-minios
@@ -152,7 +183,7 @@ portForward:
 #########################################################################################
 # nemesis-services - deploys API/enrichment services (common things that change during dev)
 #########################################################################################
-apiVersion: skaffold/v4beta3
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: services
@@ -178,7 +209,7 @@ build:
       docker:
         dockerfile: dockerfiles/passwordcracker.Dockerfile
     - &build-tensorflow-serving
-      image: tensorflow-serving
+      image: nemesis-tensorflow-serving
       docker:
         dockerfile: dockerfiles/tensorflow-serving.Dockerfile
 
@@ -211,7 +242,7 @@ deploy:
 #     port: 8501
 #     address: 0.0.0.0
 ---
-apiVersion: skaffold/v4beta3
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: enrichment
@@ -248,7 +279,7 @@ deploy:
 #     port: 9910
 #     address: 0.0.0.0
 ---
-apiVersion: skaffold/v4beta3
+apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: dashboard

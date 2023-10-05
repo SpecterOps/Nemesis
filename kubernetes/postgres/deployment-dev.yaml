@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres # Sets Deployment name
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15.1-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432 # Exposes container port
+          env:
+            - name: POSTGRES_DB
+              value: nemesis
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                    name: postgres-creds
+                    key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                    name: postgres-creds
+                    key: postgres-password
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgredb
+            - name: postgres-nemesis-schema
+              mountPath: /docker-entrypoint-initdb.d/nemesis.sql
+              subPath: nemesis.sql
+              readOnly: true
+      volumes:
+        - name: postgres-nemesis-schema
+          configMap:
+            name: postgres-nemesis-schema
+
+        # Persistence
+        # Option 1) Use to have the DB wiped on each reboot (for dev)
+        - name: postgredb
+          emptyDir: {}

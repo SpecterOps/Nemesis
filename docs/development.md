@@ -13,6 +13,7 @@ Install the Protobuf Compiler
 ```bash
 # Install the protobuf compiler
 wget https://github.com/protocolbuffers/protobuf/releases/download/v21.5/protoc-21.5-linux-x86_64.zip
+sudo apt-get install -y zip
 sudo unzip protoc-21.5-linux-x86_64.zip -d /usr/local/
 ```
 </details>

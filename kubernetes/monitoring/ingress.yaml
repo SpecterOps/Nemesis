@@ -16,21 +16,21 @@ spec:
       # host: monitoring.localhost
         paths:
           - path: /grafana(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: grafana
                 port:
                   number: 3000
           - path: /alertmanager(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: alertmanager
                 port:
                   number: 9093
           - path: /prometheus(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: prometheus-service

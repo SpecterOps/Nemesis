@@ -128,7 +128,7 @@ class group_policy_preferences(Meta.FileType):
         """
         Returns True if the internal File path matches our target criteria.
         """
-        regex_string = ".*/(Groups|Services|Scheduledtasks|DataSources|Printers|Drives)\\.xml$"
+        regex_string = "(.*/)?(Groups|Services|Scheduledtasks|DataSources|Printers|Drives)\\.xml$"
         return re.search(regex_string, self.file_data.path, re.IGNORECASE) is not None
 
     def check_content(self) -> bool:

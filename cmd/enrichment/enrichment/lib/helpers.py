@@ -28,8 +28,7 @@ import py7zr
 import structlog
 import yara
 from google.protobuf.json_format import ParseDict
-from impacket.dpapi import (DPAPI_BLOB, CredHist, DomainKey, MasterKey,
-                            MasterKeyFile)
+from impacket.dpapi import DPAPI_BLOB, CredHist, DomainKey, MasterKey, MasterKeyFile
 from impacket.uuid import bin_to_string
 from nemesiscommon.messaging import MessageQueueProducerInterface
 
@@ -87,9 +86,7 @@ def parse_chromium_file_path(file_path: str) -> ChromiumFilePath:
 
     chromium_file_path = ChromiumFilePath(file_path)
 
-    regex1 = re.compile(
-        ".*/(?P<username>.*)/AppData/Local/(Google|Microsoft|BraveSoftware)/(?P<browser>Chrome|Edge|Brave-Browser)/User Data/(?P<type>Local State|Default/History|Default/Login Data|Default/Cookies|Default/Network/Cookies)$"
-    )
+    regex1 = re.compile(".*/(?P<username>.*)/AppData/Local/(Google|Microsoft|BraveSoftware)/(?P<browser>Chrome|Edge|Brave-Browser)/User Data/(?P<profile>.+/)?(?P<type>Local State|History|Login Data|Cookies|Network/Cookies)$")
     matches1 = regex1.search(file_path, re.IGNORECASE)
 
     if matches1:
@@ -104,19 +101,17 @@ def parse_chromium_file_path(file_path: str) -> ChromiumFilePath:
         match matches1.group("type"):
             case "Local State":
                 chromium_file_path.file_type = "state"
-            case "Default/History":
+            case "History":
                 chromium_file_path.file_type = "history"
-            case "Default/Login Data":
+            case "Login Data":
                 chromium_file_path.file_type = "logins"
-            case "Default/Cookies":
+            case "Cookies":
                 chromium_file_path.file_type = "cookies"
-            case "Default/Network/Cookies":
+            case "Network/Cookies":
                 chromium_file_path.file_type = "cookies"
     else:
         # stupid Opera being a special case
-        regex2 = re.compile(
-            ".*/(?P<username>.*)/AppData/Roaming/Opera Software/Opera Stable/(?P<type>Local State|History|Login Data|Cookies|Network/Cookies)$"
-        )
+        regex2 = re.compile(".*/(?P<username>.*)/AppData/Roaming/Opera Software/Opera Stable/(?P<type>Local State|History|Login Data|Cookies|Network/Cookies)$")
         matches2 = regex2.search(file_path)
 
         if matches2:
@@ -230,9 +225,7 @@ async def process_chromium_history(
             await chromium_downloads_q.Send(chromium_download_message.SerializeToString())
 
 
-async def process_chromium_logins(
-    object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_logins_q: MessageQueueProducerInterface
-) -> None:
+async def process_chromium_logins(object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_logins_q: MessageQueueProducerInterface) -> None:
     """
     Helper that parses out the appropriate data from the "logins" table from a
     Chromium `Login Data` file, builds the appropriate protobuf messages, and publishes
@@ -240,9 +233,7 @@ async def process_chromium_logins(
     """
     async with aiosqlite.connect(file_path) as db:
         # first parse out all of the url entries and emit one or more ChromiumLoginMessage protobufs
-        async with db.execute(
-            "SELECT origin_url,username_value,CAST(password_value as BLOB),signon_realm,date_created,date_last_used,date_password_modified,times_used FROM logins"
-        ) as cursor:
+        async with db.execute("SELECT origin_url,username_value,CAST(password_value as BLOB),signon_realm,date_created,date_last_used,date_password_modified,times_used FROM logins") as cursor:
             chromium_login_message = pb.ChromiumLoginMessage()
             chromium_login_message.metadata.CopyFrom(metadata)
 
@@ -312,9 +303,7 @@ async def is_chromium_cookie_json(file_path: str) -> bool:
         return False
 
 
-async def process_chromium_cookies(
-    object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_cookies_q: MessageQueueProducerInterface
-) -> None:
+async def process_chromium_cookies(object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_cookies_q: MessageQueueProducerInterface) -> None:
     """
     Helper that parses out the appropriate data from the "cookies" table from a
     Chromium `Login Data` file, builds the appropriate protobuf messages, and publishes
@@ -322,9 +311,7 @@ async def process_chromium_cookies(
     """
     async with aiosqlite.connect(file_path) as db:
         # first parse out all of the url entries and emit one or more ChromiumLoginMessage protobufs
-        async with db.execute(
-            "SELECT host_key,name,path,creation_utc,expires_utc,last_access_utc,last_update_utc,is_secure,is_httponly,is_persistent,samesite,source_port,CAST(encrypted_value as BLOB) FROM cookies"
-        ) as cursor:
+        async with db.execute("SELECT host_key,name,path,creation_utc,expires_utc,last_access_utc,last_update_utc,is_secure,is_httponly,is_persistent,samesite,source_port,CAST(encrypted_value as BLOB) FROM cookies") as cursor:
             chromium_cookie_message = pb.ChromiumCookieMessage()
             chromium_cookie_message.metadata.CopyFrom(metadata)
 
@@ -393,9 +380,7 @@ async def process_chromium_cookies(
             await chromium_cookies_q.Send(chromium_cookie_message.SerializeToString())
 
 
-async def process_cookies_json(
-    object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_cookies_q: MessageQueueProducerInterface
-) -> None:
+async def process_cookies_json(object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_cookies_q: MessageQueueProducerInterface) -> None:
     """
     Helper that parses out the appropriate data from a (likely Chromium) cookies JSON, builds
     the appropriate protobuf messages, and publishes them to the passed queue.
@@ -480,7 +465,9 @@ def parse_masterkey_file_path(file_path_orig: str) -> dict:
     If the file does not match a masterkey path, "None" is returned.
     """
 
-    user_masterkey_regex = ".*/(?P<username>[\w\. -]+)/AppData/Roaming/Microsoft/Protect/(?P<sid>S-1-[0-59]-\d{2}-\d{8,10}-\d{8,10}-\d{8,10}-[1-9]\d{3})/.*(?P<guid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+    user_masterkey_regex = (
+        ".*/(?P<username>[\w\. -]+)/AppData/Roaming/Microsoft/Protect/(?P<sid>S-1-[0-59]-\d{2}-\d{8,10}-\d{8,10}-\d{8,10}-[1-9]\d{3})/.*(?P<guid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+    )
     machine_masterkey_regex = ".*/System32/Microsoft/Protect/(?P<sid>S-1-[0-59]-[0-9\-]+)/.*(?P<guid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
 
     user_pattern = re.compile(user_masterkey_regex)
@@ -676,7 +663,7 @@ async def carve_dpapi_blobs_from_bytes_helper(raw_bytes: bytes, file_name: str =
                 try:
                     dpapi_blob_raw = base64.b64decode(raw_bytes[loc:end_loc])
                     blob = await parse_dpapi_blob(dpapi_blob_raw)
-                    current_pos += (end_loc - loc)
+                    current_pos += end_loc - loc
                     if not blob.success:
                         await logger.awarning("carve_dpapi_blobs: blob.rawData is None", file_name=file_name, nemesis_uuid=nemesis_uuid)
                     elif blob.dpapi_data:
@@ -709,9 +696,7 @@ async def carve_dpapi_blobs_from_file_helper(file_name: str, nemesis_uuid: str) 
     return dpapi_blobs
 
 
-async def carve_dpapi_blobs_from_file(
-    file_name: str, nemesis_uuid: str, metadata: pb.Metadata
-) -> Optional[tuple[list[str], list[pb.DpapiBlobMessage]]]:
+async def carve_dpapi_blobs_from_file(file_name: str, nemesis_uuid: str, metadata: pb.Metadata) -> Optional[tuple[list[str], list[pb.DpapiBlobMessage]]]:
     """Carves dpapi blobs from a binary file.
 
     Searches the specified file_name for any DPAPI blobs, extracting
@@ -757,15 +742,11 @@ async def carve_dpapi_blobs_from_file(
 
         return (dpapi_blob_ids, dpapi_blob_messages)
     else:
-        await logger.awarning(
-            f"Number of DPAPI blobs in file '{file_name}' (nemesis_uuid {nemesis_uuid}) ({len(dpapi_blobs)}) exceeds the {blob_limit} limit"
-        )
+        await logger.awarning(f"Number of DPAPI blobs in file '{file_name}' (nemesis_uuid {nemesis_uuid}) ({len(dpapi_blobs)}) exceeds the {blob_limit} limit")
         return None
 
 
-async def carve_dpapi_blobs_from_reg_key(
-    raw_bytes: bytes, originating_registry_id: str, metadata: pb.Metadata
-) -> Optional[tuple[list[str], list[pb.DpapiBlobMessage]]]:
+async def carve_dpapi_blobs_from_reg_key(raw_bytes: bytes, originating_registry_id: str, metadata: pb.Metadata) -> Optional[tuple[list[str], list[pb.DpapiBlobMessage]]]:
     """Carves dpapi blobs from a binary blob.
 
     Searches the specified file_name for any DPAPI blobs, extracting
@@ -811,9 +792,7 @@ async def carve_dpapi_blobs_from_reg_key(
 
         return (dpapi_blob_ids, dpapi_blob_messages)
     else:
-        await logger.awarning(
-            f"Number of DPAPI blobs in blob (originating_registry_id {originating_registry_id}) ({len(dpapi_blobs)}) exceeds the {blob_limit} limit"
-        )
+        await logger.awarning(f"Number of DPAPI blobs in blob (originating_registry_id {originating_registry_id}) ({len(dpapi_blobs)}) exceeds the {blob_limit} limit")
         return None
 
 
@@ -822,6 +801,7 @@ async def carve_dpapi_blobs_from_reg_key(
 # Misc helpers
 #
 ##################################################
+
 
 def extract_binary_path(raw_file_path: str) -> Optional[str]:
     """

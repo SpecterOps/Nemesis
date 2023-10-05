@@ -47,6 +47,7 @@ class EnvironmentSettings(StrEnum):
 class NemesisServiceSettings(BaseSettings):
     environment: EnvironmentSettings
     log_level: str
+    log_color_enabled: bool = Field(True)
     prometheus_port: int = Field(None, ge=0, le=65535)
     assessment_id: str
 

@@ -27,7 +27,10 @@ spec:
             - name: DATA_DOWNLOAD_DIR
               value: "/tmp"
             - name: ENVIRONMENT
-              value: development
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: environment
             - name: PROMETHEUS_DISABLE_CREATED_SERIES
               value: "True"
             # - name: PROMETHEUS_PORT
@@ -79,6 +82,7 @@ spec:
                   key: minio_root_password
 
           image: nemesis-dotnet
+          imagePullPolicy: IfNotPresent
           name: nemesis-dotnet
           ports:
             - containerPort: 9800

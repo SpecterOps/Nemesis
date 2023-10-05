@@ -12,7 +12,6 @@ from Cryptodome.Cipher import AES
 from nemesiscommon.nemesis_tempfile import TempFile
 from nemesiscommon.storage import StorageInterface
 
-
 logger = structlog.get_logger(module=__name__)
 
 
@@ -129,7 +128,7 @@ class StorageS3(StorageInterface):
 
             # now encrypt and write out the data
             while not finished:
-                chunk = in_file.read(1024 * self.block_size)
+                chunk = in_file.read(8196 * self.block_size)
                 if len(chunk) == 0 or len(chunk) % self.block_size != 0:
                     # final block/chunk is padded before encryption
                     padding_length = (self.block_size - len(chunk) % self.block_size) or self.block_size
@@ -167,7 +166,7 @@ class StorageS3(StorageInterface):
                 finished = False
 
                 while not finished:
-                    chunk, next_chunk = next_chunk, cipher.decrypt(in_file.read(1024 * self.block_size))
+                    chunk, next_chunk = next_chunk, cipher.decrypt(in_file.read(8196 * self.block_size))
                     if len(next_chunk) == 0:
                         padding_length = chunk[-1]
                         chunk = chunk[:-padding_length]

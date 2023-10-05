@@ -20,7 +20,8 @@ spec:
         - env:
             - name: model_config_file
               value: /app/cmd/tensorflow-serving/models/models.config
-          image: tensorflow-serving
+          image: nemesis-tensorflow-serving
+          imagePullPolicy: IfNotPresent
           name: tensorflow-serving
           ports:
             - containerPort: 8501

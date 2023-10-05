@@ -2,27 +2,15 @@
 	"folders": [
 		{
 			"path": "..",
-			"name": "ods"
+			"name": "nemesis"
 		},
 		{
-			"path": "../cmd/dashboard",
-			"name": "dashboard"
+			"path": "../dockerfiles",
+			"name": "nemesis/dockerfiles"
 		},
 		{
-			"path": "../cmd/dotnet",
-			"name": "dotnet"
-		},
-		{
-			"path": "../cmd/enrichment",
-			"name": "enrichment"
-		},
-		{
-			"path": "../cmd/nlp",
-			"name": "nlp"
-		},
-		{
-			"path": "../cmd/passwordcracker",
-			"name": "passwordcracker"
+			"path": "../kubernetes",
+			"name": "nemesis/kubernetes"
 		},
 		{
 			"path": "../packages/python/nemesiscommon",
@@ -32,6 +20,27 @@
 			"path": "../packages/python/nemesispb",
 			"name": "packages/nemesispb"
 		},
+		{
+			"path": "../cmd/dashboard",
+			"name": "tasks/dashboard"
+		},
+		{
+			"path": "../cmd/dotnet",
+			"name": "tasks/dotnet"
+		},
+		{
+			"path": "../cmd/enrichment",
+			"name": "tasks/enrichment"
+		},
+		{
+			"path": "../cmd/nlp",
+			"name": "tasks/nlp"
+		},
+		{
+			"path": "../cmd/passwordcracker",
+			"name": "tasks/passwordcracker"
+		},
+
 	],
 	"settings": {
 		"files.exclude": {
@@ -49,7 +58,8 @@
 		"[python]": {
 			"diffEditor.ignoreTrimWhitespace": false,
 			"editor.wordBasedSuggestions": false,
-			"editor.formatOnSave": true
+			"editor.formatOnSave": true,
+			"editor.defaultFormatter": "ms-python.black-formatter"
 		},
 	}
 }

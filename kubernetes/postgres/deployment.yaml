@@ -15,7 +15,7 @@ spec:
       containers:
         - name: postgres
           image: postgres:15.1-alpine
-          imagePullPolicy: "IfNotPresent"
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5432 # Exposes container port
           env:
@@ -44,12 +44,7 @@ spec:
             name: postgres-nemesis-schema
 
         # Persistence
-
-        # # Option 1) Use to have the DB wiped on each reboot (for dev)
-        # - name: postgredb
-        #   emptyDir: {}
-
-        # # Option 2) Uncomment everything below including the PersistentVolume(Claim) to have data persist across runs (for prod)
+        # Have data persist across runs (for prod)
         - name: postgredb
           persistentVolumeClaim:
             claimName: postgres-pv-claim

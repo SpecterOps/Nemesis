@@ -105,7 +105,7 @@ class office_doc_new(Meta.FileType):
         """
         Returns True if the internal File path matches our target criteria.
         """
-        regex_string = "^.*\\.(docx|pptx|xlsx)$"
+        regex_string = "\\.(docx|pptx|xlsx)$"
         return re.match(regex_string, self.file_data.path, re.IGNORECASE) is not None
 
     def check_content(self) -> bool:

@@ -44,7 +44,7 @@ def main():
     loop.set_exception_handler(handle_exception)
 
     try:
-        task = loop.create_task(amain())
+        task = loop.create_task(amain(loop))
         loop.run_until_complete(task)
     finally:
         loop.close()

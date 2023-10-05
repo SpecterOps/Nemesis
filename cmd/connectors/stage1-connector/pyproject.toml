@@ -14,7 +14,7 @@ dynaconf = "^3.1.12"
 pydantic = "^1.10.7"
 
 [tool.poetry.dev-dependencies]
-outflank-stage1 = {path = "../../../lib/outflank_stage1"}
+#outflank-stage1 = {path = "../../../lib/outflank_stage1"}
 pytest = "^7.1.2"
 black = "^22.6.0"
 flake8 = "^5.0.4"

@@ -173,7 +173,7 @@ class mcafee_sitelist(Meta.FileType):
         """
         Returns True if the internal File path matches our target criteria.
         """
-        regex_string = ".*/SiteList\\.xml$"
+        regex_string = "(.*/)?SiteList\\.xml$"
         return re.search(regex_string, self.file_data.path, re.IGNORECASE) is not None
 
     def check_content(self) -> bool:
