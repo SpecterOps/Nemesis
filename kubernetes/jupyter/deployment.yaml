@@ -18,7 +18,11 @@ spec:
       containers:
         - env:
             - name: JUPYTER_TOKEN
-              value: Qwerty12345
+              valueFrom:
+                secretKeyRef:
+                  name: dashboard-creds
+                  key: dashboard-password
+
             - name: JUPYTER_PORT
               value: "8888"
             - name: NOTEBOOK_ARGS
