@@ -1,0 +1,18 @@
+{
+    "data": [
+        {
+            "name": "manual_srvsvc"
+        }
+    ],
+    "metadata": {
+        "agent_id": "bob",
+        "agent_type": "manual",
+        "automated": false,
+        "data_type": "named_pipe",
+        "operation": "add",
+        "source": "MANUALCOMP",
+        "expiration": "2024-04-03T11:11:40.000Z",
+        "project": "ASSESS-X",
+        "timestamp": "2023-04-03T11:11:40.000Z"
+    }
+}

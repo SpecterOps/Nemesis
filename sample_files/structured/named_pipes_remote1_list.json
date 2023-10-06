@@ -1,0 +1,27 @@
+{
+    "data": [
+        {
+            "name": "remote_SearchTextHarvester"
+        },
+        {
+            "name": "remote_1234567812345678123412345678123456781234",
+            "server_process_name": "ServiceHub.RoslynCodeAnalysisService32",
+            "server_process_id": "1176",
+            "server_process_path": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/Common7/ServiceHub/Hosts/ServiceHub.Host.CLR.x86/ServiceHub.RoslynCodeAnalysisService32.exe"
+        },
+        {
+            "name": "remote_mojo.1234.1234.12345678123456781234"
+        }
+    ],
+    "metadata": {
+        "agent_id": "1234512345",
+        "agent_type": "beacon",
+        "automated": true,
+        "data_type": "named_pipe",
+        "operation": "list",
+        "source": "REMOTECOMP",
+        "expiration": "2024-04-03T10:10:40.000Z",
+        "project": "ASSESS-X",
+        "timestamp": "2023-04-03T10:10:40.000Z"
+    }
+}
