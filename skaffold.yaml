@@ -166,18 +166,51 @@ portForward:
 #     port: 5672
 #     localPort: 5672
 #     address: 0.0.0.0
-#   - &portForward-gotenberg
-#     resourceType: service
-#     resourceName: gotenberg
-#     namespace: default
-#     port: 3000
-#     address: 0.0.0.0
-#   - &portForward-tika
-#     resourceType: service
-#     resourceName: tika
-#     namespace: default
-#     port: 9998
-#     address: 0.0.0.0
+
+---
+#############################################################################
+#
+# Jupyter - Deploys an instance of Jupyter Notebooks
+#
+# Usage: skaffold dev -f skaffold.yaml -m jupyter -p jupyter
+#############################################################################
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: jupyter
+build:
+  tagPolicy:
+    inputDigest: {}
+  local:
+    push: false
+    tryImportMissing: true
+    useBuildkit: true
+    concurrency: 0
+  artifacts:
+    - &build-jupyter
+      image: nemesis-jupyter
+      docker:
+        dockerfile: dockerfiles/jupyter.Dockerfile
+
+manifests:
+  rawYaml: []
+
+deploy:
+  kubectl: {}
+
+profiles:
+ - name: jupyter
+   manifests:
+    rawYaml:
+    -  kubernetes/jupyter/*
+
+portForward:
+  - &portForward-jupyter
+    resourceType: service
+    resourceName: jupyter
+    namespace: default
+    port: 8888
+    address: 0.0.0.0
 
 ---
 #########################################################################################
@@ -222,25 +255,6 @@ manifests:
 deploy:
   kubectl: {}
 
-# portForward:
-#   - &portForward-dotnet
-#     resourceType: service
-#     resourceName: dotnet
-#     namespace: default
-#     port: 9800
-#     address: 0.0.0.0
-#   - &portForward-nlp
-#     resourceType: service
-#     resourceName: nlp
-#     namespace: default
-#     port: 9803
-#     address: 0.0.0.0
-#   - &portForward-tensorflow-serving
-#     resourceType: service
-#     resourceName: tensorflow-serving
-#     namespace: default
-#     port: 8501
-#     address: 0.0.0.0
 ---
 apiVersion: skaffold/v4beta6
 kind: Config
@@ -270,14 +284,6 @@ manifests:
     - &k8s-enrichment kubernetes/enrichment/*
 deploy:
   kubectl: {}
-
-# portForward:
-#   - &portForward-dotnet
-#     resourceType: service
-#     resourceName: enrichment-webapi
-#     namespace: default
-#     port: 9910
-#     address: 0.0.0.0
 ---
 apiVersion: skaffold/v4beta6
 kind: Config
