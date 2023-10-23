@@ -10,14 +10,14 @@ import nemesispb.nemesis_pb2 as pb
 import structlog
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
-from enrichment.tasks.raw_data_tag.bof_reg_collect_parser import \
-    parse_serialized_reg_data
-from enrichment.tasks.raw_data_tag.dpapi_domain_backupkey import \
-    dpapi_domain_backupkey
+from enrichment.tasks.raw_data_tag.bof_reg_collect_parser import parse_serialized_reg_data
+from enrichment.tasks.raw_data_tag.dpapi_domain_backupkey import dpapi_domain_backupkey
 from enrichment.tasks.raw_data_tag.seatbelt_json import seatbelt_json
 from google.protobuf.json_format import ParseDict
-from nemesiscommon.messaging import (MessageQueueConsumerInterface,
-                                     MessageQueueProducerInterface)
+from nemesiscommon.messaging import (
+    MessageQueueConsumerInterface,
+    MessageQueueProducerInterface,
+)
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio
@@ -60,6 +60,7 @@ class RawDataTag(TaskInterface):
             "bof_reg_collect": self.process_bof_reg_collect,
             "seatbelt_json": self.process_seatbelt_raw_data,
             "dpapi_domain_backupkey": self.process_dpapi_domain_backupkey,
+            "host_data_json": self.process_host_data_json,
         }
         self.storage = storage
         self.db = db
@@ -119,7 +120,7 @@ class RawDataTag(TaskInterface):
             metadata.timestamp.ToDatetime(),
             metadata.expiration.ToDatetime(),
         )
-        await self.db.add_project(p)
+        await self.db.register_project(p)
 
     @aio.time(Summary("process_bof_reg_collect", "Time spent processing bof_reg_collect"))  # type: ignore
     async def process_bof_reg_collect(self, event: pb.RawDataIngestion, metadata: pb.Metadata):
@@ -185,3 +186,12 @@ class RawDataTag(TaskInterface):
             storage=self.storage,
         )
         await dpapi.process(event, metadata)
+
+    async def process_host_data_json(self, event: pb.RawDataIngestion, metadata: pb.Metadata):
+        """Processes a raw_data message associated with a host_data.json file.
+
+        Args:
+            event (pb.RawDataIngestion): RawDataIngestion event to process.
+            metadata (pb.Metadata): Metadata for the event.
+        """
+        pass

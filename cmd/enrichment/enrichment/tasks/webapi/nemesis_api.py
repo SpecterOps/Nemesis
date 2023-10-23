@@ -343,10 +343,10 @@ class NemesisApiRoutes(Routable):
 
         data_type = json_data["metadata"]["data_type"]
         if data_type not in MAP:
-            return Response(status_code=400, content="Invalid metadata data_type")
+            return Response(status_code=400, content=f"Invalid metadata data_type '{data_type}'")
 
         try:
-            obj = Parse(body_bytes, MAP[data_type]())
+            obj = self.parse_message_bytes(body_bytes, data_type)
         except:
             return Response(status_code=400, content=f"Invalid {data_type} message")
 
@@ -356,14 +356,22 @@ class NemesisApiRoutes(Routable):
         except:
             return Response(status_code=400, content="Invalid expiration value in metadata field")
 
-        await logger.ainfo("Received data message", data_type=obj.metadata.data_type)
+        await logger.ainfo("Received data message", data_type=obj.metadata.data_type, message_id=obj.metadata.message_id)
+
+        # save off the raw POST message for possible replay later
+        await self.db.add_api_data_message(obj.metadata.message_id, body_bytes, obj.metadata.expiration)
 
         # make sure we filter out registry values we're not currently supporting
         if data_type == "registry_value":
             i = 0
             while i < len(obj.data):
                 # check if we want this registry value to be emitted to the pipeline
-                tags = await include_registry_value(key=obj.data[i].key, value_name=obj.data[i].value_name, value_kind=obj.data[0].value_kind, value=obj.data[0].value)
+                tags = await include_registry_value(
+                    key=obj.data[i].key,
+                    value_name=obj.data[i].value_name,
+                    value_kind=obj.data[0].value_kind,
+                    value=obj.data[0].value,
+                )
                 if tags:
                     obj.data[i].tags = tags
                     i += 1
@@ -380,7 +388,15 @@ class NemesisApiRoutes(Routable):
             producer = self.producers[obj.metadata.data_type]
             await producer.Send(obj.SerializeToString())
 
-        return {"object_id": id_}
+        return {"object_id": obj.metadata.message_id}
+
+    def parse_message_bytes(self, message_bytes: bytes, data_type: str):
+        obj = Parse(message_bytes, MAP[data_type]())
+        obj.metadata.message_id = self.generate_message_id()
+        return obj
+
+    def generate_message_id(self) -> str:
+        return str(uuid.uuid4())
 
     @aio.time(Summary("post_file", "POST file"))  # type: ignore
     @post("/file")

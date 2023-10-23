@@ -546,11 +546,11 @@ class Container(containers.DeclarativeContainer):
         inputq_extractedhash_postgresconnector,
         inputq_filedataenriched_postgresconnector,
         inputq_fileinfo_postgresconnector,
+        inputq_namedpipe_postgresconnector,
+        inputq_networkconnection_postgresconnector,
         inputq_pathlist_postgresconnector,
         inputq_registryvalue_postgresconnector,
-        inputq_namedpipe_postgresconnector,
         inputq_serviceenriched_postgresconnector,
-        inputq_networkconnection_postgresconnector,
     )
 
     task_processcategorizer = providers.Factory(ProcessCategorizer, inputq_process_processcategorizer, outputq_processenriched, process_categorizer)

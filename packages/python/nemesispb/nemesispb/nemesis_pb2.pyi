@@ -126,6 +126,7 @@ class Metadata(google.protobuf.message.Message):
     AUTOMATED_FIELD_NUMBER: builtins.int
     DATA_TYPE_FIELD_NUMBER: builtins.int
     SOURCE_FIELD_NUMBER: builtins.int
+    OPERATION_FIELD_NUMBER: builtins.int
     PROJECT_FIELD_NUMBER: builtins.int
     TIMESTAMP_FIELD_NUMBER: builtins.int
     EXPIRATION_FIELD_NUMBER: builtins.int
@@ -143,6 +144,13 @@ class Metadata(google.protobuf.message.Message):
      For host-related data_types, this is the hostname
      For network-related data_types, this is the network name
      For AD-related data_types, this is the full qualified domain name
+    """
+    operation: builtins.str
+    """For certain data types (e.g., host data) this must be set, specifying the type of data operation.
+    Possible values:
+    1) list - the data is a complete listing of the resource (e.g., a full directory listing)
+    2) add - the data is an addition to the data we've already collected (e.g., a partial file listing or a file upload)
+    3) remove - the data should be removed from the data we've already collected (e.g., a file delete)
     """
     project: builtins.str
     """Name or unique identifier for a project"""
@@ -162,13 +170,15 @@ class Metadata(google.protobuf.message.Message):
         automated: builtins.bool = ...,
         data_type: builtins.str = ...,
         source: builtins.str = ...,
+        operation: builtins.str | None = ...,
         project: builtins.str = ...,
         timestamp: google.protobuf.timestamp_pb2.Timestamp | None = ...,
         expiration: google.protobuf.timestamp_pb2.Timestamp | None = ...,
         message_id: builtins.str = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["expiration", b"expiration", "timestamp", b"timestamp"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["agent_id", b"agent_id", "agent_type", b"agent_type", "automated", b"automated", "data_type", b"data_type", "expiration", b"expiration", "message_id", b"message_id", "project", b"project", "source", b"source", "timestamp", b"timestamp"]) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["_operation", b"_operation", "expiration", b"expiration", "operation", b"operation", "timestamp", b"timestamp"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["_operation", b"_operation", "agent_id", b"agent_id", "agent_type", b"agent_type", "automated", b"automated", "data_type", b"data_type", "expiration", b"expiration", "message_id", b"message_id", "operation", b"operation", "project", b"project", "source", b"source", "timestamp", b"timestamp"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_operation", b"_operation"]) -> typing_extensions.Literal["operation"] | None: ...
 
 global___Metadata = Metadata
 
@@ -891,30 +901,63 @@ class NamedPipeIngestion(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     NAME_FIELD_NUMBER: builtins.int
-    SERVER_PROCESS_NAME_FIELD_NUMBER: builtins.int
+    PROCESS_ID_FIELD_NUMBER: builtins.int
+    PROCESS_NAME_FIELD_NUMBER: builtins.int
+    PROCESS_PATH_FIELD_NUMBER: builtins.int
     SERVER_PROCESS_ID_FIELD_NUMBER: builtins.int
+    SERVER_PROCESS_NAME_FIELD_NUMBER: builtins.int
     SERVER_PROCESS_PATH_FIELD_NUMBER: builtins.int
+    SERVER_PROCESS_SESSION_ID_FIELD_NUMBER: builtins.int
     SDDL_FIELD_NUMBER: builtins.int
     name: builtins.str
     """Case sensitive name."""
-    server_process_name: builtins.str
-    """Name of the server process that for named pipe, if known"""
+    process_id: builtins.int
+    """PID of the process that created the named pipe, if known"""
+    process_name: builtins.str
+    """Name of the process that created the named pipe, if known"""
+    process_path: builtins.str
+    """Path of the process that created the named pipe, if known"""
     server_process_id: builtins.int
     """PID of the server process that for named pipe, if known"""
+    server_process_name: builtins.str
+    """Name of the server process that for named pipe, if known"""
     server_process_path: builtins.str
     """Path of the server process that for named pipe, if known"""
+    server_process_session_id: builtins.int
+    """Windows session ID associated with the server process, if known"""
     sddl: builtins.str
     """Case sensitive Windows permission string"""
     def __init__(
         self,
         *,
         name: builtins.str = ...,
-        server_process_name: builtins.str = ...,
-        server_process_id: builtins.int = ...,
-        server_process_path: builtins.str = ...,
-        sddl: builtins.str = ...,
+        process_id: builtins.int | None = ...,
+        process_name: builtins.str | None = ...,
+        process_path: builtins.str | None = ...,
+        server_process_id: builtins.int | None = ...,
+        server_process_name: builtins.str | None = ...,
+        server_process_path: builtins.str | None = ...,
+        server_process_session_id: builtins.int | None = ...,
+        sddl: builtins.str | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["name", b"name", "sddl", b"sddl", "server_process_id", b"server_process_id", "server_process_name", b"server_process_name", "server_process_path", b"server_process_path"]) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["_process_id", b"_process_id", "_process_name", b"_process_name", "_process_path", b"_process_path", "_sddl", b"_sddl", "_server_process_id", b"_server_process_id", "_server_process_name", b"_server_process_name", "_server_process_path", b"_server_process_path", "_server_process_session_id", b"_server_process_session_id", "process_id", b"process_id", "process_name", b"process_name", "process_path", b"process_path", "sddl", b"sddl", "server_process_id", b"server_process_id", "server_process_name", b"server_process_name", "server_process_path", b"server_process_path", "server_process_session_id", b"server_process_session_id"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["_process_id", b"_process_id", "_process_name", b"_process_name", "_process_path", b"_process_path", "_sddl", b"_sddl", "_server_process_id", b"_server_process_id", "_server_process_name", b"_server_process_name", "_server_process_path", b"_server_process_path", "_server_process_session_id", b"_server_process_session_id", "name", b"name", "process_id", b"process_id", "process_name", b"process_name", "process_path", b"process_path", "sddl", b"sddl", "server_process_id", b"server_process_id", "server_process_name", b"server_process_name", "server_process_path", b"server_process_path", "server_process_session_id", b"server_process_session_id"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_process_id", b"_process_id"]) -> typing_extensions.Literal["process_id"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_process_name", b"_process_name"]) -> typing_extensions.Literal["process_name"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_process_path", b"_process_path"]) -> typing_extensions.Literal["process_path"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_sddl", b"_sddl"]) -> typing_extensions.Literal["sddl"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_server_process_id", b"_server_process_id"]) -> typing_extensions.Literal["server_process_id"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_server_process_name", b"_server_process_name"]) -> typing_extensions.Literal["server_process_name"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_server_process_path", b"_server_process_path"]) -> typing_extensions.Literal["server_process_path"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_server_process_session_id", b"_server_process_session_id"]) -> typing_extensions.Literal["server_process_session_id"] | None: ...
 
 global___NamedPipeIngestion = NamedPipeIngestion
 

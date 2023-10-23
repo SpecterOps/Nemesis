@@ -602,9 +602,11 @@ data:
 
         -- All incoming data POST messages are stored in their raw form so
         --  we can replay them later for reprocessing.
+        -- TODO: Add expiration
         CREATE TABLE api_data_messages (
             message_id TEXT PRIMARY KEY,    -- the unique message ID of the posted data message
-            message_bytes BYTEA NOT NULL    -- raw bytes of an incoming message
+            message_bytes BYTEA NOT NULL,   -- raw bytes of an incoming message
+            expiration TIMESTAMP NOT NULL
         );
 
         COMMIT;

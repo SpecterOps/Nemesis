@@ -9,7 +9,7 @@ import nemesispb.nemesis_pb2 as pb
 import structlog
 from Cryptodome.Cipher import AES, PKCS1_v1_5
 from Cryptodome.Hash import HMAC, MD4, SHA1
-from enrichment.lib.nemesis_db import DpapiDomainBackupkey, DpapiMasterkey, NemesisDb
+from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.tasks.dpapi.dpapi_blob import DPAPI_BLOB
 from enrichment.tasks.dpapi.masterkey import MasterKey
 
@@ -543,19 +543,19 @@ class Dpapi(TaskInterface):
         This is "retroactive" masterkey decryption with a password/hash.
         """
 
-        await logger.adebug("Decrypt masterkeys protected a password/NTLM hash", username=username, key_type=key_type, key=key)
+        await logger.adebug("Checking if the password/NTLM hash can decrypt any masterkeys", username=username, key_type=key_type)
 
         encrypted_masterkeys = await self.db.get_encrypted_dpapi_masterkeys_from_username(username)
 
         if not encrypted_masterkeys:
             await logger.adebug("No masterkeys found in the DB matching the username", username=username)
             return
-        else:
-            await logger.ainfo(
-                "Found masterkeys in the DB matching the username",
-                username=username,
-                count=len(encrypted_masterkeys),
-            )
+
+        await logger.adebug(
+            "Found masterkeys in the DB matching the username",
+            username=username,
+            count=len(encrypted_masterkeys),
+        )
 
         decrypted_masterkeys = 0
         for masterkey in encrypted_masterkeys:

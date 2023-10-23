@@ -59,17 +59,24 @@ message Metadata {
   //  For AD-related data_types, this is the full qualified domain name
   string source = 5;
 
+  // For certain data types (e.g., host data) this must be set, specifying the type of data operation.
+  // Possible values:
+  // 1) list - the data is a complete listing of the resource (e.g., a full directory listing)
+  // 2) add - the data is an addition to the data we've already collected (e.g., a partial file listing or a file upload)
+  // 3) remove - the data should be removed from the data we've already collected (e.g., a file delete)
+  optional string operation = 6;
+
   // Name or unique identifier for a project
-  string project = 6;
+  string project = 7;
 
   // Time the C2 platform sent the data to the ODS
-  google.protobuf.Timestamp timestamp = 7;
+  google.protobuf.Timestamp timestamp = 8;
 
   // Time the data should be removed from the ODS
-  google.protobuf.Timestamp expiration = 8;
+  google.protobuf.Timestamp expiration = 9;
 
   // Name or unique identifier for a message
-  string message_id = 9;
+  string message_id = 10;
 }
 message MetadataHeader {
   Metadata metadata = 1;
@@ -399,17 +406,29 @@ message NamedPipeIngestion {
   // Case sensitive name.
   string name = 1;
 
-  // Name of the server process that for named pipe, if known
-  string server_process_name = 2;
+  // PID of the process that created the named pipe, if known
+  optional int32 process_id = 2;
+
+  // Name of the process that created the named pipe, if known
+  optional string process_name = 3;
+
+  // Path of the process that created the named pipe, if known
+  optional string process_path = 4;
 
   // PID of the server process that for named pipe, if known
-  int32 server_process_id = 3;
+  optional int32 server_process_id = 5;
+
+  // Name of the server process that for named pipe, if known
+  optional string server_process_name = 6;
 
   // Path of the server process that for named pipe, if known
-  string server_process_path = 4;
+  optional string server_process_path = 7;
+
+  // Windows session ID associated with the server process, if known
+  optional int32 server_process_session_id = 8;
 
   // Case sensitive Windows permission string
-  string sddl = 5;
+  optional string sddl = 9;
 }
 message NamedPipeIngestionMessage {
   Metadata metadata = 1;
