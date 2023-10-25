@@ -38,6 +38,17 @@ pip3 install -r requirements.txt
 python3 -m sliver_service
 ```
 
+
+## Troubleshooting
+
+- If you experience SSL errors, you'll need to install grpcio with the following command:
+
+```
+pip3 install -U grpcio==1.37 --force --no-binary=grpcio
+```
+
+For reference, see [here](https://github.com/moloch--/sliver-py#kali-linux--fix-openssl-errors) and [here](https://github.com/grpc/grpc/issues/24252#issuecomment-823092600)
+
 # TODO
 
 - See if you can pull agent ID. Doesn't seem possible from RPC endpoint
