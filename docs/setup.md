@@ -3,7 +3,7 @@
 
 2. Run `python3 nemesis-cli.py` to configure Nemesis's kubernetes environment. Examples and detailed usage info [can be found here](./nemesis-cli.md).
 
-3. Start all of Nemesis's services with `skaffold run --port-forward`.
+3. Start all of Nemesis's services with `skaffold run --port-forward=user`.
 
    Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `nemesis_http_server` nemesis-cli option) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
 
