@@ -7,5 +7,5 @@ cd $SCRIPT_DIR/../
 if [ $# -gt 0 ]; then
     skaffold --update-check=false --interactive=false dev -m services -m dashboard --port-forward
 else
-    skaffold --update-check=false --interactive=false dev -m services -m dashboard -m enrichment --port-forward
+    skaffold --update-check=false --interactive=false dev -f skaffold-dev.yaml -m services -m dashboard -m enrichment --port-forward
 fi
