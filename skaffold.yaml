@@ -8,6 +8,7 @@ requires:
   - configs: ["monitoring"]
   - configs: ["services"]
   - configs: ["enrichment"]
+  - configs: ["dashboard"]
 ---
 #############################################################################
 # infra-core - Deploys core infra (used by several services)
@@ -41,6 +42,14 @@ manifests:
 deploy:
   kubectl: {}
 
+profiles:
+ - name: dev
+   manifests:
+    rawYaml:
+    - kubernetes/elastic/elasticsearch-dev.yaml
+    - kubernetes/elastic/ingress.yaml
+    - kubernetes/elastic/kibana.yaml
+
 portForward:
   - &portForward-ingress
     resourceType: service
@@ -49,13 +58,6 @@ portForward:
     port: 80
     localPort: 8080
     address: 0.0.0.0
-  # - &portForward-elastic
-  #   resourceType: service
-  #   resourceName: nemesis-es-http
-  #   namespace: default
-  #   port: 9200
-  #   localPort: 8834 # publicly expose elastic on 8834
-  #   address: 0.0.0.0
 
 ---
 #############################################################################
@@ -115,6 +117,19 @@ manifests:
 deploy:
   kubectl: {}
 
+profiles:
+ - name: dev
+   manifests:
+    rawYaml:
+    # Static infra
+    - kubernetes/rabbitmq/*
+    - kubernetes/gotenberg/*
+    - kubernetes/postgres/configmap.yaml
+    - kubernetes/postgres/deployment-dev.yaml
+    - kubernetes/postgres/service.yaml
+    - kubernetes/pgadmin/*
+    - kubernetes/tika/*
+
 portForward:
   - &portForward-minios
     resourceType: service
@@ -145,6 +160,46 @@ portForward:
 #     port: 5672
 #     localPort: 5672
 #     address: 0.0.0.0
+
+---
+#############################################################################
+#
+# Jupyter - Deploys an instance of Jupyter Notebooks
+#
+# Usage: skaffold dev -f skaffold.yaml -m jupyter -p jupyter
+#############################################################################
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: jupyter
+build:
+  tagPolicy:
+    inputDigest: {}
+  local:
+    push: false
+    tryImportMissing: true
+    useBuildkit: true
+    concurrency: 0
+  artifacts:
+    - &build-jupyter
+      image: nemesis-jupyter
+      docker:
+        dockerfile: dockerfiles/jupyter.Dockerfile
+
+manifests:
+    rawYaml:
+    -  kubernetes/jupyter/*
+
+deploy:
+  kubectl: {}
+
+portForward:
+  - &portForward-jupyter
+    resourceType: service
+    resourceName: jupyter
+    namespace: default
+    port: 8888
+    address: 0.0.0.0
 
 ---
 #########################################################################################
