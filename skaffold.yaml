@@ -130,14 +130,6 @@ profiles:
     - kubernetes/pgadmin/*
     - kubernetes/tika/*
 
-portForward:
-  - &portForward-minios
-    resourceType: service
-    resourceName: minio
-    namespace: default
-    port: 9001
-    address: 0.0.0.0
-
 # portForward:
 #   - &portForward-postgres
 #     resourceType: service
@@ -160,6 +152,12 @@ portForward:
 #     port: 5672
 #     localPort: 5672
 #     address: 0.0.0.0
+#  - &portForward-minios
+#    resourceType: service
+#    resourceName: minio
+#    namespace: default
+#    port: 9001
+#    address: 0.0.0.0
 
 ---
 #############################################################################
