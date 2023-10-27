@@ -1126,4 +1126,4 @@ if __name__ == "__main__":
     logger.info("If settings were changed, you may need to restart minikube with: `minikube stop && minikube start`")
     logger.info("You can start the backend infrastructure in development mode with `./scripts/infra_start.sh`")
     logger.info("You can start the main processing services in development mode with `./scripts/services_start.sh`")
-    logger.info("For non-development execution, run `skaffold run --port-forward`\n")
+    logger.info("For non-development execution, run `skaffold run -m nemesis --port-forward=user`\n")

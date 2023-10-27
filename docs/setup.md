@@ -3,7 +3,7 @@
 
 2. Run `python3 nemesis-cli.py` to configure Nemesis's kubernetes environment. Examples and detailed usage info [can be found here](./nemesis-cli.md).
 
-3. Start all of Nemesis's services with `skaffold run --port-forward=user`.
+3. Start all of Nemesis's services with `skaffold run -m nemesis --port-forward=user`.
 
    Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `nemesis_http_server` nemesis-cli option) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
 
@@ -126,7 +126,7 @@ python3 nemesis-cli.py  # Setup Nemesis configuration again
 ./scripts/pull_images.sh  # Avoid any potential skaffold timeouts that may occur from image pulling taking a long time
 skaffold build            # Manually build everything
 
-skaffold run  --port-forward  # Kick things off
+skaffold run -m nemesis --port-forward=user  # Kick things off
 ```
 
 ## Need additional help?
