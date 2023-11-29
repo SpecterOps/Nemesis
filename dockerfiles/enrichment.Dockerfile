@@ -18,6 +18,10 @@ RUN apt-get update -y && apt-get install yara -y && apt-get install git -y && ap
 # build JTR so we build get various X-2john binaries for file hash extraction
 RUN cd /opt/ && git clone https://github.com/openwall/john && cd john/src && ./configure && make
 
+# first we have to pip3 install this *normally* so the _fastpbkdf2.abi3.so properly builds (because Poetry no like)
+RUN pip3 install msfastpbkdf2
+
+
 ####################################
 # Python dependencies
 ####################################
@@ -62,8 +66,9 @@ COPY packages/python/nemesiscommon/ /app/packages/python/nemesiscommon/
 # use Poetry to install the local packages
 RUN poetry install $(if [ "${ENVIRONMENT}" = 'production' ]; then echo "--without dev"; fi;) --no-root --no-interaction --no-ansi -vvv
 
-# this is a stupid exception, otherwise the .so isn't compiled correctly
+# this is a stupid exception - becuase the _fastpbkdf2.abi3.so isn't compiled correctly with Poetry so we have to copy it in from the *normal* build location
 RUN poetry run pip3 install msfastpbkdf2
+RUN cp /usr/local/lib/python3.11/site-packages/msfastpbkdf2/_fastpbkdf2.abi3.so /app/cmd/enrichment/.venv/lib/python3.11/site-packages/msfastpbkdf2/_fastpbkdf2.abi3.so
 
 # install stuff for sumy
 RUN poetry run python3 -c "import nltk; nltk.download('punkt')"
