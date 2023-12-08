@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 if [ -z "$1" ]
 then
