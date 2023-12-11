@@ -159,8 +159,8 @@ eval "$(pyenv init -)"
 4. Restart your shell
 5. Install a version of Python and configure the version of Python to use globally on your machine
 ```bash
- pyenv install 3.11.2
- pyenv global 3.11.2
+pyenv install 3.11.2
+pyenv global 3.11.2
 ```
 
 **Validation:** Running `python3 --version` should show version 3.11.2.
