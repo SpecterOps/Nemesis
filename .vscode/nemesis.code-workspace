@@ -57,7 +57,7 @@
 		},
 		"[python]": {
 			"diffEditor.ignoreTrimWhitespace": false,
-			"editor.wordBasedSuggestions": false,
+			"editor.wordBasedSuggestions": "off",
 			"editor.formatOnSave": true,
 			"editor.defaultFormatter": "ms-python.black-formatter"
 		},

@@ -17,9 +17,7 @@ import uvicorn
 from aio_pika import connect_robust
 from elasticsearch import AsyncElasticsearch
 from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
-    map_unordered,
-    return_args_and_exceptions,
-)
+    map_unordered, return_args_and_exceptions)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
 from fastapi import FastAPI, Request
@@ -27,7 +25,6 @@ from fastapi.responses import FileResponse, Response
 from fastapi_class.decorators import get, post
 from fastapi_class.routable import Routable
 from google.protobuf.json_format import Parse
-
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
 from nemesiscommon.constants import ALL_ES_INDICIES, NemesisQueue
 from nemesiscommon.messaging import MessageQueueProducerInterface
@@ -359,7 +356,8 @@ class NemesisApiRoutes(Routable):
         await logger.ainfo("Received data message", data_type=obj.metadata.data_type, message_id=obj.metadata.message_id)
 
         # save off the raw POST message for possible replay later
-        await self.db.add_api_data_message(obj.metadata.message_id, body_bytes, obj.metadata.expiration)
+        await self.db.add_api_data_message(obj.metadata.message_id, body_bytes, obj.metadata.expiration.ToDatetime())
+
 
         # make sure we filter out registry values we're not currently supporting
         if data_type == "registry_value":
