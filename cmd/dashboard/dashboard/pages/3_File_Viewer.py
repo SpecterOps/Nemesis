@@ -11,7 +11,9 @@ import requests
 import streamlit as st
 import utils
 from annotated_text import annotated_text, annotation
-from streamlit_elements import dashboard, editor, elements, html, lazy, mui, sync
+from streamlit_elements import (dashboard, editor, elements, html, lazy, mui,
+                                sync)
+from streamlit_toggle import st_toggle_switch
 
 NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
 
@@ -258,7 +260,14 @@ def build_page(username: str):
                                 try:
                                     textcontent = response.content.decode(encoding="utf-8", errors="ignore")
 
-                                    editor.Monaco(height="64vh", defaultValue=textcontent, language=utils.map_extension_to_monaco_language(extension), theme="vs-dark")
+                                    word_wrap = st_toggle_switch(
+                                        label="Text Word Wrap",
+                                        key="word_wrap",
+                                        label_after=False,
+                                    )
+
+                                    editor.Monaco(height="64vh", options={"readOnly": True, "wordWrap": word_wrap}, defaultValue=textcontent, language=utils.map_extension_to_monaco_language(extension), theme="vs-dark")
+
                                 except Exception as e:
                                     st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
 
