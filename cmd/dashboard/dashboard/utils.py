@@ -923,59 +923,253 @@ def get_single_valued_param(name: str) -> None | str:
     return object_id
 
 
+def get_monaco_languages() -> List[str]:
+    """
+    All languages supported by Monaco.
+
+    Ref: https://github.com/microsoft/monaco-editor/tree/d8144cfa0eb66cf9d3cc0507df1ad33bc8fc65c5/src/basic-languages
+    """
+    return ["plaintext", "abap", "aes", "apex", "azcli", "bat", "bicep", "c", "cameligo", "clojure", "coffeescript",
+            "cpp", "csharp", "csp", "css", "cypher", "dart", "dockerfile", "ecl", "elixir", "flow9",
+            "freemarker2", "freemarker2.tag-angle.interpolation-bracket", "freemarker2.tag-angle.interpolation-dollar",
+            "freemarker2.tag-auto.interpolation-bracket", "freemarker2.tag-auto.interpolation-dollar",
+            "freemarker2.tag-bracket.interpolation-bracket", "freemarker2.tag-bracket.interpolation-dollar", "fsharp",
+            "go", "graphql", "handlebars", "hcl", "html", "ini", "java", "javascript", "julia", "kotlin", "less", "lexon",
+            "liquid", "lua", "m3", "markdown", "mdx", "mips", "msdax", "mysql", "objective-c", "pascal", "pascaligo",
+            "perl", "pgsql", "php", "pla", "postiats", "powerquery", "powershell", "proto", "pug", "python", "qsharp", "r",
+            "razor", "redis", "redshift", "restructuredtext", "ruby", "rust", "sb", "scala", "scheme", "scss", "shell",
+            "sol", "sparql", "sql", "st", "swift", "systemverilog", "tcl", "twig", "typescript", "vb", "verilog", "wgsl",
+            "xml", "yaml"]
+
+
 def map_extension_to_monaco_language(extension: str) -> str:
     """
     Maps a file extension to a source code language for Monaco.
 
-    Ref: https://microsoft.github.io/monaco-editor/
+    Ref: https://github.com/microsoft/monaco-editor/tree/d8144cfa0eb66cf9d3cc0507df1ad33bc8fc65c5/src/basic-languages
+
+        $mappings = gci *contribution.ts -Recurse | gc | select-string -Pattern "\tid: " -Context 0,1 | % {
+            $match = $_
+            $lang = $match.Line.split("'")[1]
+            $ext = $match.Context.PostContext.split("'") | ?{$_.startswith(".")}
+            [PSCustomObject]@{
+                language = $lang
+                extension = $ext
+            }
+        }
+
+        foreach($mapping in $mappings) {
+            $lang = $mapping.language.tolower()
+            foreach($ext in $mapping.extension) {
+                $ext = $ext.trim(".").tolower()
+                Write-Host "        `"$ext`": `"$lang`","
+            }
+        }
+
+    swift and xml done manually (exceptions)
     """
 
-    language_mappings = {
-        "bat": "batch",
-        "c": "c",
+    ext_to_lang_mappings = {
+        "abap": "abap",
+        "ascx": "xml",
+        "cls": "apex",
+        "azcli": "azcli",
+        "bat": "bat",
+        "cmd": "bat",
+        "bicep": "bicep",
+        "mligo": "cameligo",
+        "clj": "clojure",
+        "cljs": "clojure",
+        "cljc": "clojure",
+        "csprog": "xml",
         "config": "xml",
+        "edn": "clojure",
+        "coffee": "coffeescript",
+        "c": "c",
+        "h": "c",
         "cpp": "cpp",
+        "cc": "cpp",
+        "cxx": "cpp",
+        "hpp": "cpp",
+        "hh": "cpp",
+        "hxx": "cpp",
         "cs": "csharp",
+        "csx": "csharp",
+        "cake": "csharp",
         "css": "css",
         "cypher": "cypher",
+        "cyp": "cypher",
+        "dart": "dart",
         "dockerfile": "dockerfile",
+        "dtd": "xml",
+        "ecl": "ecl",
+        "ex": "elixir",
+        "exs": "elixir",
+        "flow": "flow9",
+        "ftl": "freemarker2",
+        "ftlh": "freemarker2",
+        "ftlx": "freemarker2",
         "fs": "fsharp",
+        "fsi": "fsharp",
+        "ml": "fsharp",
+        "mli": "fsharp",
+        "fsx": "fsharp",
+        "fsscript": "fsharp",
         "go": "go",
-        "gql": "graphql",
         "graphql": "graphql",
+        "gql": "graphql",
+        "handlebars": "handlebars",
+        "hbs": "handlebars",
+        "tf": "hcl",
+        "tfvars": "hcl",
+        "hcl": "hcl",
         "html": "html",
+        "htm": "html",
+        "shtml": "html",
+        "xhtml": "html",
+        "mdoc": "html",
+        "jsp": "html",
+        "asp": "html",
+        "aspx": "html",
+        "jshtm": "html",
         "ini": "ini",
+        "properties": "ini",
+        "gitconfig": "ini",
         "java": "java",
+        "jav": "java",
         "js": "javascript",
+        "es6": "javascript",
+        "jsx": "javascript",
+        "mjs": "javascript",
+        "cjs": "javascript",
+        "jl": "julia",
+        "kt": "kotlin",
+        "kts": "kotlin",
+        "less": "less",
+        "lex": "lexon",
+        "liquid": "liquid",
+        "html.liquid": "liquid",
         "lua": "lua",
+        "m3": "m3",
+        "i3": "m3",
+        "mg": "m3",
+        "ig": "m3",
         "md": "markdown",
-        "mysql": "mysql",
+        "markdown": "markdown",
+        "mdown": "markdown",
+        "mkdn": "markdown",
+        "mkd": "markdown",
+        "mdwn": "markdown",
+        "mdtxt": "markdown",
+        "mdtext": "markdown",
+        "mdx": "mdx",
+        "s": "mips",
+        "dax": "msdax",
+        "msdax": "msdax",
+        "m": "objective-c",
+        "pas": "pascal",
+        "p": "pascal",
+        "pp": "pascal",
+        "ligo": "pascaligo",
+        "pl": "perl",
+        "pm": "perl",
         "php": "php",
-        "php3": "php",
         "php4": "php",
         "php5": "php",
-        "pl": "perl",
+        "phtml": "php",
+        "props": "xml",
+        "ctp": "php",
+        "pla": "pla",
+        "dats": "postiats",
+        "sats": "postiats",
+        "hats": "postiats",
+        "pq": "powerquery",
+        "pqm": "powerquery",
         "ps1": "powershell",
-        "psd1": "powershell",
         "psm1": "powershell",
+        "psd1": "powershell",
         "proto": "proto",
+        "jade": "pug",
+        "pug": "pug",
         "py": "python",
+        "rpy": "python",
+        "pyw": "python",
+        "cpy": "python",
+        "gyp": "python",
+        "gypi": "python",
+        "qs": "qsharp",
         "r": "r",
+        "rhistory": "r",
+        "rmd": "r",
+        "rprofile": "r",
+        "rt": "r",
+        "cshtml": "razor",
+        "redis": "redis",
+        "rst": "restructuredtext",
         "rb": "ruby",
+        "rbx": "ruby",
+        "rjs": "ruby",
+        "gemspec": "ruby",
         "rs": "rust",
-        "shell": "shell",
-        "sh": "shell",
-        "sql": "sql",
+        "rlib": "rust",
+        "sb": "sb",
+        "scala": "scala",
+        "sc": "scala",
+        "sbt": "scala",
+        "scm": "scheme",
+        "ss": "scheme",
+        "sch": "scheme",
         "swift": "swift",
+        "rkt": "scheme",
+        "scss": "scss",
+        "sh": "shell",
+        "bash": "shell",
+        "sol": "sol",
+        "aes": "aes",
+        "rq": "sparql",
+        "sql": "sql",
+        "st": "st",
+        "iecst": "st",
+        "iecplc": "st",
+        "lc3lib": "st",
+        "targets": "xml",
+        "tcpou": "st",
+        "tcdut": "st",
+        "tcgvl": "st",
+        "tcio": "st",
+        "sv": "systemverilog",
+        "svh": "systemverilog",
+        "v": "verilog",
+        "vh": "verilog",
+        "tcl": "tcl",
+        "twig": "twig",
         "ts": "typescript",
-        "ts": "typescript",
+        "tsx": "typescript",
+        "cts": "typescript",
+        "mts": "typescript",
         "vb": "vb",
         "wgsl": "wgsl",
+        "wxi": "xml",
+        "wxl": "xml",
+        "wxs": "xml",
+        "xaml": "xml",
         "xml": "xml",
+        "xsd": "xml",
+        "xsl": "xml",
         "yaml": "yaml",
-        "json": "json",
+        "yml": "yaml",
     }
-    return language_mappings.get(extension.lower(), "plaintext")
+    return ext_to_lang_mappings.get(extension.lower(), "plaintext")
+
+
+# def map_guesslang_to_monaco_language(file_magic: str) -> str:
+#     """
+#     Uses guesslang to map unknown text content to a monaco language.
+
+#     NEEDS TENSORFLOW TO RUN!
+
+#     Ref: https://github.com/yoeo/guesslang/blob/master/guesslang/data/languages.json
+#     """
 
 
 def is_valid_chromium_file_path(file_path: str) -> bool:

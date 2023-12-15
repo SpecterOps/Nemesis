@@ -23,6 +23,8 @@ streamlit-elements = "^0.1.0"
 humanize = "^4.8.0"
 pillow = "^10.0.1"
 urllib3 = "1.26.17"
+binaryornot = "^0.4.4"
+simple-hexdump = "^0.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
