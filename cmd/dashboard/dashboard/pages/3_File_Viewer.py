@@ -282,7 +282,7 @@ def build_page(username: str):
                                             if "xml" in file.magic_type.lower():
                                                 language = "xml"
                                             if "json" in file.magic_type.lower():
-                                                language = "json"
+                                                language = "python"
 
                                         if language in langauges:
                                             language_index = langauges.index(language)

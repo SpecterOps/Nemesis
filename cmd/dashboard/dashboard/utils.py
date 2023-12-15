@@ -1029,6 +1029,7 @@ def map_extension_to_monaco_language(extension: str) -> str:
         "xhtml": "html",
         "mdoc": "html",
         "jsp": "html",
+        "json": "python",
         "asp": "html",
         "aspx": "html",
         "jshtm": "html",
