@@ -5,7 +5,7 @@ cd $SCRIPT_DIR/../
 
 # If any additional args are passed, start only the services module (no enrichment)
 if [ $# -gt 0 ]; then
-    skaffold --update-check=false --interactive=false dev -m services -m dashboard --port-forward
+    skaffold --update-check=false --interactive=false dev -m services -m dashboard --port-forward=user
 else
-    skaffold --update-check=false --interactive=false dev -m services -m enrichment -m dashboard --port-forward
+    skaffold --update-check=false --interactive=false dev -m services -m enrichment -m dashboard --port-forward=user
 fi
