@@ -1,4 +1,5 @@
 # Standard Libraries
+import json
 import os
 import pathlib
 import re
@@ -200,9 +201,13 @@ def build_page(username: str):
         tabs = [stx.TabBarItemData(id=1, title="Basic File Info", description="Basic File Information"), stx.TabBarItemData(id=3, title="Elasticsearch Info", description="Elasticsearch Information Dump")]
 
         es_results = utils.elastic_file_search(object_id)
+        archive_contents_json = None
         if es_results and es_results["hits"]["total"]["value"] == 1:
-            if "noseyparker" in es_results["hits"]["hits"][0]["_source"]:
+            es_result = es_results["hits"]["hits"][0]["_source"]
+            if "noseyparker" in es_result:
                 tabs.append(stx.TabBarItemData(id=2, title="Noseyparker Results", description="Noseyparker Results"))
+            if "parsedData" in es_result and "archive" in es_result["parsedData"] and "entries" in es_result["parsedData"]["archive"]:
+                archive_contents_json = es_result["parsedData"]["archive"]["entries"]
 
         chosen_tab = stx.tab_bar(
             data=tabs,
@@ -266,7 +271,9 @@ def build_page(username: str):
                                     if file_is_binary:
                                         textcontent = str(hexdump(response.content))
                                         language = "plaintext"
-                                        language_index = 0
+                                    if archive_contents_json:
+                                        textcontent = json.dumps(archive_contents_json, indent=2)
+                                        language = "python"
                                     else:
                                         try:
                                             textcontent = response.content.decode(encoding="ascii")
@@ -276,18 +283,19 @@ def build_page(username: str):
                                             except:
                                                 textcontent = response.content.decode(encoding="utf-16", errors="ignore")
 
-                                        language = utils.map_extension_to_monaco_language(extension)
+                                        if not language:
+                                            language = utils.map_extension_to_monaco_language(extension)
 
-                                        if language == "plaintext":
-                                            if "xml" in file.magic_type.lower():
-                                                language = "xml"
-                                            if "json" in file.magic_type.lower():
-                                                language = "python"
+                                            if language == "plaintext":
+                                                if "xml" in file.magic_type.lower():
+                                                    language = "xml"
+                                                if "json" in file.magic_type.lower():
+                                                    language = "python"
 
-                                        if language in langauges:
-                                            language_index = langauges.index(language)
-                                        else:
-                                            language_index = 0  # plaintext
+                                    if language in langauges:
+                                        language_index = langauges.index(language)
+                                    else:
+                                        language_index = 0  # plaintext
 
                                     col1, col2, col3, col4 = st.columns(4)
 
