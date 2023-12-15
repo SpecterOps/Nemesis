@@ -266,7 +266,13 @@ def build_page(username: str):
                                         label_after=False,
                                     )
 
-                                    editor.Monaco(height="64vh", options={"readOnly": True, "wordWrap": word_wrap}, defaultValue=textcontent, language=utils.map_extension_to_monaco_language(extension), theme="vs-dark")
+                                    language = "plaintext"
+                                    if "XML" in file.magic_type.upper():
+                                        language = "xml"
+                                    else:
+                                        language = utils.map_extension_to_monaco_language(extension)
+
+                                    editor.Monaco(height="64vh", options={"readOnly": True, "wordWrap": word_wrap}, defaultValue=textcontent, language=language, theme="vs-dark")
 
                                 except Exception as e:
                                     st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
