@@ -57,7 +57,7 @@ message Metadata {
   //  For host-related data_types, this is the hostname
   //  For network-related data_types, this is the network name
   //  For AD-related data_types, this is the full qualified domain name
-  string source = 5;
+  optional string source = 5;
 
   // For certain data types (e.g., host data) this must be set, specifying the type of data operation.
   // Possible values:

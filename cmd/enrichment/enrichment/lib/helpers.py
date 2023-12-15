@@ -28,7 +28,8 @@ import py7zr
 import structlog
 import yara
 from google.protobuf.json_format import ParseDict
-from impacket.dpapi import DPAPI_BLOB, CredHist, DomainKey, MasterKey, MasterKeyFile
+from impacket.dpapi import (DPAPI_BLOB, CredHist, DomainKey, MasterKey,
+                            MasterKeyFile)
 from impacket.uuid import bin_to_string
 from nemesiscommon.messaging import MessageQueueProducerInterface
 
@@ -1242,3 +1243,11 @@ def get_username_from_slack_file_path(file_path: str) -> str:
         return matches.group("username").lower()
     else:
         return ""
+
+
+def pb_has_field(pb_message, field_name: str) -> bool:
+    """Returns True if the supplied protobuf has the specified field."""
+    try:
+        return pb_message.HasField(field_name)
+    except ValueError:
+        return False

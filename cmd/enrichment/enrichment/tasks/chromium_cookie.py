@@ -3,20 +3,19 @@ import asyncio
 from base64 import b64decode
 from typing import Dict
 
-# 3rd Party Libraries
-import enrichment.lib.helpers as helpers
 import nemesispb.nemesis_pb2 as pb
 import structlog
 from Cryptodome.Cipher import AES
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.tasks.dpapi.dpapi_blob import DPAPI_BLOB
-from nemesiscommon.messaging import (
-    MessageQueueConsumerInterface,
-    MessageQueueProducerInterface,
-)
+from nemesiscommon.messaging import (MessageQueueConsumerInterface,
+                                     MessageQueueProducerInterface)
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio
 from prometheus_client import Summary
+
+# 3rd Party Libraries
+
 
 logger = structlog.get_logger(module=__name__)
 

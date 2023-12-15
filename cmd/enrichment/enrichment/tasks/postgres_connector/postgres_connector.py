@@ -10,15 +10,11 @@ from typing import Any, Optional, Self, Tuple
 import nemesiscommon.constants as constants
 import nemesispb.nemesis_pb2 as pb
 import structlog
+from enrichment.lib.helpers import pb_has_field
 from enrichment.lib.nemesis_db import (  # AuthenticationData,; ChromiumCookie,; ChromiumDownload,; ChromiumHistoryEntry,; ChromiumLogin,; ChromiumStateFile,; DpapiBlob,; ExtractedHash,; FileDataEnriched,; FileInfo,; FileInfoDataEnriched,; NetworkConnection,
-    Agent,
-    HostAgent,
-    NamedPipe,
-    NemesisDb,
-    OperationType,
-    Project,
-)
-from enrichment.tasks.postgres_connector.registry_watcher import RegistryWatcher
+    Agent, HostAgent, NamedPipe, NemesisDb, OperationType, Project)
+from enrichment.tasks.postgres_connector.registry_watcher import \
+    RegistryWatcher
 from google.protobuf.json_format import MessageToDict
 from nemesiscommon.messaging import MessageQueueConsumerInterface
 from nemesiscommon.tasking import TaskInterface
@@ -631,7 +627,7 @@ class PostgresConnector(TaskInterface):
             bool: True if the message is contains data about a remote host, False if the message is reporting data about the host the agent is running on.
         """
         if metadata.automated:
-            if metadata.HasField("source"):
+            if pb_has_field(metadata, "source"):
                 if metadata.source.isspace():
                     raise ValueError("Automated message's 'source' field cannot be empty")
 
@@ -642,7 +638,7 @@ class PostgresConnector(TaskInterface):
                 # Rule 2) Automated + No source = Local Data
                 return False
         else:
-            if metadata.HasField("source"):
+            if pb_has_field(metadata, "source"):
                 if metadata.source.isspace():
                     raise ValueError("Manually submitted 'source' field cannot be empty")
 
@@ -719,7 +715,7 @@ class PostgresConnector(TaskInterface):
         """Registers a host and agent in the database"""
 
         if metadata.automated:
-            if metadata.HasField("source"):
+            if pb_has_field(metadata, "source"):
                 if metadata.source.isspace():
                     raise ValueError("Automated message's 'source' field cannot be empty")
 
@@ -778,11 +774,11 @@ class PostgresConnector(TaskInterface):
                 hostagents_row_id=host_row_id,
                 is_data_remote=is_remote,
                 name=i.name,
-                server_process_id=i.server_process_id if i.HasField("server_process_id") else None,
-                server_process_name=i.server_process_name if i.HasField("server_process_name") else None,
-                server_process_path=i.server_process_path if i.HasField("server_process_path") else None,
-                server_process_session_id=i.server_process_session_id if i.HasField("server_process_session_id") else None,
-                sddl=i.sddl if i.HasField("sddl") else None,
+                server_process_id=i.server_process_id if pb_has_field(i, "server_process_id") else None,
+                server_process_name=i.server_process_name if pb_has_field(i, "server_process_name") else None,
+                server_process_path=i.server_process_path if pb_has_field(i, "server_process_path") else None,
+                server_process_session_id=i.server_process_session_id if pb_has_field(i, "server_process_session_id") else None,
+                sddl=i.sddl if pb_has_field(i, "sddl") else None,
             )
 
             await self.db.add_named_pipe(data)

@@ -1104,7 +1104,7 @@ class FileProcessor(TaskInterface):
         message.
         """
 
-        if not file_data.HasField("extracted_plaintext"):
+        if not helpers.pb_has_field(file_data, "extracted_plaintext"):
             return False
 
         # file UUID of the extracted plaintext file

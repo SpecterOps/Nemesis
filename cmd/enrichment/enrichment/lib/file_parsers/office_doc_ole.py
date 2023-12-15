@@ -140,7 +140,7 @@ class office_doc_ole(Meta.FileType):
         auth_data_msg = pb.AuthenticationDataIngestionMessage()
         parsed_data = get_office_ole_metadata(self.file_path)
 
-        if parsed_data.office_doc_ole.HasField("encryption_hash"):
+        if helpers.pb_has_field(parsed_data.office_doc_ole, "encryption_hash"):
             auth_data_msg.metadata.CopyFrom(self.metadata)
             auth_data = auth_data_msg.data.add()
             auth_data.data = parsed_data.office_doc_ole.encryption_hash
