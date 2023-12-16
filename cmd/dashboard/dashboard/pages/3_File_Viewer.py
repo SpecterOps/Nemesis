@@ -5,15 +5,19 @@ import pathlib
 import re
 import urllib.parse
 import uuid
+from io import StringIO
 
-# 3rd Party Libraries
 import extra_streamlit_components as stx
+# 3rd Party Libraries
+import pandas as pd
 import requests
 import streamlit as st
 import utils
 from annotated_text import annotated_text, annotation
 from binaryornot.helpers import is_binary_string
 from hexdump import hexdump
+from st_aggrid import AgGrid
+from st_aggrid.grid_options_builder import GridOptionsBuilder
 from streamlit_elements import (dashboard, editor, elements, html, lazy, mui,
                                 sync)
 from streamlit_toggle import st_toggle_switch
@@ -221,6 +225,10 @@ def build_page(username: str):
                 dashboard.Item("2", 0, 0, 10, 5, isDraggable=False, isResizable=False, sx={"height": "100%"}),
             ]
 
+            # have to do this if we want to use non elements/MUI display _after_ the main card
+            selected_language = None
+            textcontent = None
+
             with elements("dashboard"):
                 with dashboard.Grid(layout=layout):
                     with mui.Card(
@@ -248,81 +256,102 @@ def build_page(username: str):
                         if response.status_code != 200:
                             st.error(f"Error retrieving text data from {download_url_internal}, status code: {response.status_code}", icon="🚨")
                         else:
-                            # Monaco editor display for ascii files
-                            with mui.Card(
-                                key="2",
-                                sx={
-                                    "display": "flex",
-                                    "flexDirection": "column",
-                                    "borderRadius": 2,
-                                    "overflow": "auto",
-                                    "overflowY": "auto",
-                                    "m": "10",
-                                    "gap": "10px",
-                                },
-                                padding=1,
-                                elevation=1,
-                                spacing=10,
-                            ):
+
+                            langauges = utils.get_monaco_languages()
+                            language = None
+                            file_is_binary = is_binary_string(response.content[:1024])
+
+                            if file_is_binary:
+                                textcontent = str(hexdump(response.content))
+                                language = "plaintext"
+                            elif archive_contents_json:
+                                textcontent = json.dumps(archive_contents_json, indent=2)
+                                language = "python"
+                            else:
                                 try:
-                                    langauges = utils.get_monaco_languages()
-                                    file_is_binary = is_binary_string(response.content[:1024])
+                                    textcontent = response.content.decode(encoding="ascii")
+                                except:
+                                    try:
+                                        textcontent = response.content.decode(encoding="utf-8")
+                                    except:
+                                        textcontent = response.content.decode(encoding="utf-16", errors="ignore")
 
-                                    if file_is_binary:
-                                        textcontent = str(hexdump(response.content))
-                                        language = "plaintext"
-                                    if archive_contents_json:
-                                        textcontent = json.dumps(archive_contents_json, indent=2)
-                                        language = "python"
-                                    else:
-                                        try:
-                                            textcontent = response.content.decode(encoding="ascii")
-                                        except:
-                                            try:
-                                                textcontent = response.content.decode(encoding="utf-8")
-                                            except:
-                                                textcontent = response.content.decode(encoding="utf-16", errors="ignore")
+                                if not language:
+                                    language = utils.map_extension_to_monaco_language(extension)
 
-                                        if not language:
-                                            language = utils.map_extension_to_monaco_language(extension)
+                                    if language == "plaintext":
+                                        if "xml" in file.magic_type.lower():
+                                            language = "xml"
+                                        if "json" in file.magic_type.lower():
+                                            language = "python"
+                                        if "csv" in file.magic_type.lower():
+                                            language = "csv"
 
-                                            if language == "plaintext":
-                                                if "xml" in file.magic_type.lower():
-                                                    language = "xml"
-                                                if "json" in file.magic_type.lower():
-                                                    language = "python"
+                            if language in langauges:
+                                language_index = langauges.index(language)
+                            else:
+                                language_index = 0  # plaintext
 
-                                    if language in langauges:
-                                        language_index = langauges.index(language)
-                                    else:
-                                        language_index = 0  # plaintext
+                            col1, col2, col3, col4 = st.columns(4)
 
-                                    col1, col2, col3, col4 = st.columns(4)
+                            with col3:
+                                selected_language = st.selectbox(
+                                    'Language',
+                                    langauges,
+                                    language_index
+                                )
 
-                                    with col3:
-                                        selected_language = st.selectbox(
-                                            'Language',
-                                            langauges,
-                                            language_index
+                            with col4:
+                                word_wrap = st_toggle_switch(
+                                    label="Text Word Wrap",
+                                    key="word_wrap",
+                                    label_after=False,
+                                )
+
+                            if selected_language != "csv":
+                                # Monaco editor display for ascii files
+                                with mui.Card(
+                                    key="2",
+                                    sx={
+                                        "display": "flex",
+                                        "flexDirection": "column",
+                                        "borderRadius": 2,
+                                        "overflow": "auto",
+                                        "overflowY": "auto",
+                                        "m": "10",
+                                        "gap": "10px",
+                                    },
+                                    padding=1,
+                                    elevation=1,
+                                    spacing=10,
+                                ):
+                                    try:
+                                        editor.Monaco(
+                                            height="64vh",
+                                            options={"readOnly": True, "wordWrap": word_wrap},
+                                            defaultValue=textcontent,
+                                            language=selected_language,
+                                            theme="vs-dark"
                                         )
 
-                                    with col4:
-                                        word_wrap = st_toggle_switch(
-                                            label="Text Word Wrap",
-                                            key="word_wrap",
-                                            label_after=False,
-                                        )
+                                    except Exception as e:
+                                        st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
 
-                                    editor.Monaco(
-                                        height="64vh",
-                                        options={"readOnly": True, "wordWrap": word_wrap},
-                                        defaultValue=textcontent,
-                                        language=selected_language,
-                                        theme="vs-dark"
-                                    )
+            if selected_language == "csv" and textcontent and len(textcontent) > 0:
+                csvStringIO = StringIO(textcontent)
+                df = pd.read_csv(csvStringIO)
+                gb = GridOptionsBuilder.from_dataframe(df)
+                gb.configure_default_column(enablePivot=True, enableValue=True, enableRowGroup=True)
+                gb.configure_selection(selection_mode="multiple", use_checkbox=True)
+                gb.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=20)
+                gb.configure_side_bar()
 
-                                except Exception as e:
-                                    st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
+                grid = AgGrid(
+                    df,
+                    gridOptions=gb.build(),
+                    width="100%",
+                    fit_columns_on_grid_load=False,
+                )
 
         elif chosen_tab == str(2):  # noseyparker_results
             if es_results != {}:
