@@ -25,7 +25,7 @@ spec:
             name: noseyparker-rules
       initContainers:
         - name: noseyparker
-          image: ghcr.io/praetorian-inc/noseyparker:v0.16.0
+          image: ghcr.io/praetorian-inc/noseyparker:v0.13.0
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "cp /usr/local/bin/noseyparker /opt/noseyparker/"]
           volumeMounts:
