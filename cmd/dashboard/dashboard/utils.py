@@ -724,9 +724,18 @@ def header() -> None:
 def render_nemesis_page(render_func):
     """Writes out the logo/auth header/etc. for all pages."""
 
+    if "ENVIRONMENT" in os.environ and os.environ["ENVIRONMENT"].lower() == "development":
+        page_title = "Nemesis (DEV)"
+    else:
+        page_title = "Nemesis"
+
+    if "ASSESSMENT_ID" in os.environ:
+        page_title += f" - {os.environ['ASSESSMENT_ID']}"
+        a = 1
+
     st.set_page_config(
         layout="wide",
-        page_title="Nemesis",
+        page_title=page_title,
         page_icon="img/favicon.png",
         menu_items={"Get Help": "https://www.github.com/SpecterOps/Nemesis"},
     )

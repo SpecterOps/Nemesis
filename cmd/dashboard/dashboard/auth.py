@@ -25,9 +25,6 @@ def authenticate(function):
     versus the current user's cookies. Used at the top of every page.
     """
 
-    if "ENVIRONMENT" in os.environ and os.environ["ENVIRONMENT"].lower() == "development":
-        st.divider()
-        st.markdown("### ***Development Environment***")
     st.divider()
     function("nemesis")
 
