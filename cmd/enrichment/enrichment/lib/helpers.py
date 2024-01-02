@@ -28,7 +28,8 @@ import py7zr
 import structlog
 import yara
 from google.protobuf.json_format import ParseDict
-from impacket.dpapi import DPAPI_BLOB, CredHist, DomainKey, MasterKey, MasterKeyFile
+from impacket.dpapi import (DPAPI_BLOB, CredHist, DomainKey, MasterKey,
+                            MasterKeyFile)
 from impacket.uuid import bin_to_string
 from nemesiscommon.messaging import MessageQueueProducerInterface
 
@@ -1165,7 +1166,7 @@ def run_noseyparker(path: str) -> Optional[pb.NoseyParker]:
             "scan",
             "--datastore",
             temp_dir,
-            "-r",
+            "--rules",
             "/opt/noseyparker/noseyparker.rules",
             path,
         ],

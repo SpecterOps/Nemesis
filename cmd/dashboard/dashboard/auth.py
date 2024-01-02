@@ -1,9 +1,9 @@
-
 import os
-import streamlit as st
-from streamlit_cookies_manager import CookieManager
-import streamlit_authenticator as stauth
+
 import bcrypt
+import streamlit as st
+import streamlit_authenticator as stauth
+from streamlit_cookies_manager import CookieManager
 
 DASHBOARD_USER = os.environ.get("DASHBOARD_USER")
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
@@ -25,15 +25,23 @@ def authenticate(function):
     versus the current user's cookies. Used at the top of every page.
     """
 
-    authenticator = stauth.Authenticate(get_credentials(), "nemesis", "nemesis", 30)
+    if "ENVIRONMENT" in os.environ and os.environ["ENVIRONMENT"].lower() == "development":
+        st.divider()
+        st.markdown("### ***Development Environment***")
+    st.divider()
+    function("nemesis")
 
-    name, authentication_status, username = authenticator.login("Login", "main")
+    # disabling explicit auth for now
 
-    if authentication_status:
-        function(username)
-    elif authentication_status is False:
-        st.error("Username/password is incorrect")
-        return None
-    elif authentication_status is None:
-        st.warning("Please enter your username and password")
-        return None
+    # authenticator = stauth.Authenticate(get_credentials(), "nemesis", "nemesis", 30)
+
+    # name, authentication_status, username = authenticator.login("Login", "main")
+
+    # if authentication_status:
+    #     function(username)
+    # elif authentication_status is False:
+    #     st.error("Username/password is incorrect")
+    #     return None
+    # elif authentication_status is None:
+    #     st.warning("Please enter your username and password")
+    #     return None

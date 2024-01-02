@@ -4,7 +4,6 @@ import os
 import pathlib
 import re
 import urllib.parse
-import uuid
 from io import StringIO
 
 import extra_streamlit_components as stx
@@ -13,7 +12,6 @@ import pandas as pd
 import requests
 import streamlit as st
 import utils
-from annotated_text import annotated_text, annotation
 from binaryornot.helpers import is_binary_string
 from hexdump import hexdump
 from st_aggrid import AgGrid
@@ -26,14 +24,6 @@ NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
 
 triage_pattern = re.compile(r"^triage_(?P<db_id>[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12})_(?P<triage_value>.*)")
 notes_pattern = re.compile(r"^file_notes_(?P<db_id>[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12})$")
-
-
-def is_uuid(str_uuid: str):
-    try:
-        uuid.UUID(str_uuid)
-        return True
-    except:
-        return False
 
 
 def create_file_info_toolbar(object_id, file):
@@ -176,7 +166,7 @@ def build_page(username: str):
     if not object_id:  # No URL param and nothing from text input
         return
 
-    if not is_uuid(object_id):
+    if not utils.is_uuid(object_id):
         st.error(f"'{object_id}' is not a valid UUID", icon="🚨")
         return
 
@@ -346,7 +336,7 @@ def build_page(username: str):
                 gb.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=20)
                 gb.configure_side_bar()
 
-                grid = AgGrid(
+                AgGrid(
                     df,
                     gridOptions=gb.build(),
                     width="100%",

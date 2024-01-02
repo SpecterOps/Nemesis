@@ -3,6 +3,7 @@ import datetime
 import os
 import re
 import time
+import uuid
 from typing import List, Tuple
 
 # 3rd Party Libraries
@@ -904,6 +905,14 @@ def elastic_np_search(from_i: int, size: int) -> dict:
 # Misc. Helpers
 #
 ######################################################
+
+
+def is_uuid(str_uuid: str):
+    try:
+        uuid.UUID(str_uuid)
+        return True
+    except:
+        return False
 
 
 def get_single_valued_param(name: str) -> None | str:
