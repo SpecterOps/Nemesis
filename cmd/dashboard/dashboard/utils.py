@@ -731,7 +731,6 @@ def render_nemesis_page(render_func):
 
     if "ASSESSMENT_ID" in os.environ:
         page_title += f" - {os.environ['ASSESSMENT_ID']}"
-        a = 1
 
     st.set_page_config(
         layout="wide",
