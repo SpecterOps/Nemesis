@@ -3,6 +3,7 @@ import datetime
 import os
 import re
 import time
+import uuid
 from typing import List, Tuple
 
 # 3rd Party Libraries
@@ -723,9 +724,17 @@ def header() -> None:
 def render_nemesis_page(render_func):
     """Writes out the logo/auth header/etc. for all pages."""
 
+    if "ENVIRONMENT" in os.environ and os.environ["ENVIRONMENT"].lower() == "development":
+        page_title = "Nemesis (DEV)"
+    else:
+        page_title = "Nemesis"
+
+    if "ASSESSMENT_ID" in os.environ:
+        page_title += f" - {os.environ['ASSESSMENT_ID']}"
+
     st.set_page_config(
         layout="wide",
-        page_title="Nemesis",
+        page_title=page_title,
         page_icon="img/favicon.png",
         menu_items={"Get Help": "https://www.github.com/SpecterOps/Nemesis"},
     )
@@ -906,6 +915,14 @@ def elastic_np_search(from_i: int, size: int) -> dict:
 ######################################################
 
 
+def is_uuid(str_uuid: str):
+    try:
+        uuid.UUID(str_uuid)
+        return True
+    except:
+        return False
+
+
 def get_single_valued_param(name: str) -> None | str:
     """
     Obtains the value of a URL parameter. Ensures that the URL parameter only has a single value.
@@ -929,7 +946,7 @@ def get_monaco_languages() -> List[str]:
 
     Ref: https://github.com/microsoft/monaco-editor/tree/d8144cfa0eb66cf9d3cc0507df1ad33bc8fc65c5/src/basic-languages
     """
-    return ["plaintext", "abap", "aes", "apex", "azcli", "bat", "bicep", "c", "cameligo", "clojure", "coffeescript",
+    return ["plaintext", "abap", "aes", "apex", "azcli", "bat", "bicep", "c", "csv", "cameligo", "clojure", "coffeescript",
             "cpp", "csharp", "csp", "css", "cypher", "dart", "dockerfile", "ecl", "elixir", "flow9",
             "freemarker2", "freemarker2.tag-angle.interpolation-bracket", "freemarker2.tag-angle.interpolation-dollar",
             "freemarker2.tag-auto.interpolation-bracket", "freemarker2.tag-auto.interpolation-dollar",

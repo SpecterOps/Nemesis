@@ -32,6 +32,11 @@ spec:
                 configMapKeyRef:
                   name: operation-config
                   key: environment
+            - name: ASSESSMENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: assessment-id
             - name: DASHBOARD_USER
               valueFrom:
                 secretKeyRef:

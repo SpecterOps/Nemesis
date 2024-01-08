@@ -11,7 +11,7 @@ if [[ -z "${VIRTUAL_ENV}" ]]; then
     poetry run "$SCRIPT"
 else
     echo "[*] Building protobufs..."
-    protoc --python_out=./nemesispb/ --mypy_out=./nemesispb/ -I../../protobufs/ ../../protobufs/*.proto
+    protoc --experimental_allow_proto3_optional --python_out=./nemesispb/ --mypy_out=./nemesispb/ -I../../protobufs/ ../../protobufs/*.proto
     echo "[+] Python protobufs built!"
 fi
 

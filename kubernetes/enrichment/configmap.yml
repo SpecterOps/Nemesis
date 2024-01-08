@@ -7,6 +7,7 @@ data:
     rules:
 
     - name: sha256crypt Hash
+      id: custom.sha256crypt
       pattern: '(\$5\$(?:rounds=\d+\$)?[\./A-Za-z0-9]{1,16}\$(?:(?:[\./A-Za-z0-9]{43})))'
       references:
       - https://akkadia.org/drepper/SHA-crypt.txt
@@ -20,6 +21,7 @@ data:
 
 
     - name: sha512crypt Hash
+      id: custom.sha512crypt
       pattern: '(\$6\$(?:rounds=\d+\$)?[\./A-Za-z0-9]{1,16}\$(?:(?:[\./A-Za-z0-9]{43})))'
       references:
       - https://akkadia.org/drepper/SHA-crypt.txt
@@ -73,6 +75,7 @@ data:
 
     # TODO: should the MSSQL hashes also include lower case?
     - name: MSSQL 2000 Hash
+      id: custom.mssql2000
       pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(0x0100[0-9aA-Z]{88})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
       references:
       - https://passlib.readthedocs.io/en/stable/lib/passlib.hash.mssql2000.html#format-algorithm
@@ -84,6 +87,7 @@ data:
 
 
     - name: MSSQL 2012/2014 Hash
+      id: custom.mssql2012.2014
       pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(0x0200[0-9aA-Z]{136})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
       references:
       - https://hashcat.net/forum/thread-1474.html
@@ -94,6 +98,7 @@ data:
 
 
     - name: CISCO-IOS Type 8 Hash
+      id: custom.cisco.type8
       pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(\$8\$[0-9a-zA-Z\./]{14}\$[0-9a-zA-Z\./]{43})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
       references:
       - https://foss.heptapod.net/python-libs/passlib/-/issues/87
@@ -103,6 +108,7 @@ data:
 
 
     - name: CISCO-IOS Type 9 Hash
+      id: custom.cisco.type9
       pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(\$9\$[0-9a-zA-Z\./]{14}\$[0-9a-zA-Z\./]{43})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
       references:
       - https://foss.heptapod.net/python-libs/passlib/-/issues/87
