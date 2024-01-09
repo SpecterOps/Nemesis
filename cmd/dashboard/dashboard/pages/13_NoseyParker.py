@@ -5,7 +5,6 @@ import os
 import streamlit as st
 import templates
 import utils
-from annotated_text import annotated_text, annotation
 
 page_size = int(os.environ["PAGE_SIZE"])
 NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
