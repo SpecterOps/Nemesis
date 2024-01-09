@@ -15,3 +15,9 @@ To use temporary storage that is wiped on every Skaffold run, check out the `Opt
 ## pgAdmin
 
 A pgAdmin interface is exposed at `NEMESIS_URL/pgadmin` with the credentials (PGADMIN_EMAIL/PGADMIN_PASSWORD) set in the common config.
+
+# Port Forwarding
+Command to temporarily forward the postgres service's port outside of the cluster:
+```
+kubectl port-forward service/postgres 5432:5432 --address=0.0.0.0
+```
