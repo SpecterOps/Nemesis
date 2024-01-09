@@ -10,8 +10,8 @@
         "automated": true,
         "data_type": "named_pipe",
         "operation": "add",
-        "expiration": "2024-04-03T10:01:01.001Z",
+        "expiration": "2024-04-03T10:01:01.000Z",
         "project": "ASSESS-X",
-        "timestamp": "2023-04-03T10:01:01.000Z"
+        "timestamp": "2023-04-03T10:01:02.000Z"
     }
 }
