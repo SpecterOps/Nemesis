@@ -110,7 +110,7 @@ def render_page(username: str):
                                 """,
                                     unsafe_allow_html=True,
                                 )
-                                st.write("Matching text:")
+                                st.write(f"Matching text (line {match_line}):")
                                 st.code(matching)
                                 st.write("Context:")
                                 st.code(before + matching + after)
