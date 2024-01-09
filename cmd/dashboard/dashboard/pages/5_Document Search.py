@@ -55,7 +55,7 @@ def build_page(username: str):
     )
 
     if chosen_tab == "text_search":
-        search_term = st.text_input("Enter search term(s):")
+        search_term = st.text_input("Enter search term (wildcard == *):")
 
         if not search_term:
             return
@@ -118,7 +118,7 @@ def build_page(username: str):
             st.write(pagination_html, unsafe_allow_html=True)
 
     elif chosen_tab == "source_code_search":
-        search_term = st.text_input("Enter search term(s):")
+        search_term = st.text_input("Enter search term (wildcard == *):")
         if search_term != "":
             st.session_state.text_search = search_term
             from_i = (st.session_state.text_page - 1) * PAGE_SIZE
@@ -173,10 +173,7 @@ def build_page(username: str):
         with cols[1]:
             num_results = st.slider("Select the number of results to return", min_value=0, max_value=10, value=4, step=1)
 
-        if st.session_state.text_search is None:
-            search_term = st.text_input("Enter search term(s):")
-        else:
-            search_term = st.text_input("Enter search term(s):", st.session_state.text_search)
+        search_term = st.text_input("Enter search term(s):")
 
         if search_term != "":
             st.session_state.text_search = search_term
