@@ -11,8 +11,8 @@
         "data_type": "named_pipe",
         "operation": "remove",
         "source": "MANUALCOMP",
-        "expiration": "2024-04-03T12:12:40.000Z",
+        "expiration": "2024-04-03T10:02:02.000Z",
         "project": "ASSESS-X",
-        "timestamp": "2023-04-03T12:12:40.000Z"
+        "timestamp": "2023-04-03T10:02:02.000Z"
     }
 }

@@ -20,7 +20,7 @@ from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
     map_unordered, return_args_and_exceptions)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from fastapi_class.decorators import get, post
 from fastapi_class.routable import Routable
@@ -333,25 +333,25 @@ class NemesisApiRoutes(Routable):
             body_string = body_bytes.decode("utf-8")
             json_data = json.loads(body_string)
         except:
-            return Response(status_code=400, content="Invalid message")
+            raise HTTPException(status_code=400, detail="Invalid message")
 
         if "metadata" not in json_data or "data_type" not in json_data["metadata"]:
-            return Response(status_code=400, content="Invalid metadata")
+            raise HTTPException(status_code=400, detail="Invalid metadata")
 
         data_type = json_data["metadata"]["data_type"]
         if data_type not in MAP:
-            return Response(status_code=400, content=f"Invalid metadata data_type '{data_type}'")
+            raise HTTPException(status_code=400, detail=f"Invalid metadata data_type '{data_type}'")
 
         try:
             obj = self.parse_message_bytes(body_bytes, data_type)
         except:
-            return Response(status_code=400, content=f"Invalid {data_type} message")
+            raise HTTPException(status_code=400, detail=f"Invalid {data_type} message")
 
         try:
             expiration_string = json_data["metadata"]["expiration"]
             expiration = datetime.strptime(expiration_string, "%Y-%m-%dT%H:%M:%S.000Z")
         except:
-            return Response(status_code=400, content="Invalid expiration value in metadata field")
+            raise HTTPException(status_code=400, detail="Invalid metadata expiration")
 
         await logger.ainfo("Received data message", data_type=obj.metadata.data_type, message_id=obj.metadata.message_id)
 
@@ -468,4 +468,4 @@ class NemesisApiRoutes(Routable):
                 return FileResponse(file.name, background=BackgroundTask(os.remove, file.name), media_type=content_type, headers=headers)
         except Exception as e:
             await logger.aerror(message="Failed to download file", file_uuid=id, exception=e)
-            return Response(status_code=404, content="File not found")
+            raise HTTPException(status_code=404, detail="File not found")
