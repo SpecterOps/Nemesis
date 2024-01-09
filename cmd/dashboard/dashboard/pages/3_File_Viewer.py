@@ -256,80 +256,85 @@ def build_page(username: str):
                                 file_is_binary = is_binary_string(response.content[:1024])
 
                                 if archive_contents_json:
-                                    textcontent = json.dumps(archive_contents_json, indent=2)
-                                    language = "python"
-                                elif file_is_binary:
-                                    textcontent = str(hexdump(response.content))
-                                    language = "plaintext"
+                                    language = "archive_json"
                                 else:
-                                    try:
-                                        textcontent = response.content.decode(encoding="ascii")
-                                    except:
+                                    if file_is_binary:
+                                        textcontent = str(hexdump(response.content))
+                                        language = "plaintext"
+                                    else:
                                         try:
-                                            textcontent = response.content.decode(encoding="utf-8")
+                                            textcontent = response.content.decode(encoding="ascii")
                                         except:
-                                            textcontent = response.content.decode(encoding="utf-16", errors="ignore")
+                                            try:
+                                                textcontent = response.content.decode(encoding="utf-8")
+                                            except:
+                                                textcontent = response.content.decode(encoding="utf-16", errors="ignore")
 
-                                    if not language:
-                                        language = utils.map_extension_to_monaco_language(extension)
+                                        if not language:
+                                            language = utils.map_extension_to_monaco_language(extension)
 
-                                        if language == "plaintext":
-                                            if "xml" in file.magic_type.lower():
-                                                language = "xml"
-                                            if "json" in file.magic_type.lower():
-                                                language = "python"
-                                            if "csv" in file.magic_type.lower():
-                                                language = "csv"
+                                            if language == "plaintext":
+                                                if "xml" in file.magic_type.lower():
+                                                    language = "xml"
+                                                if "json" in file.magic_type.lower():
+                                                    language = "python"
+                                                if "csv" in file.magic_type.lower():
+                                                    language = "csv"
 
-                                if language in langauges:
-                                    language_index = langauges.index(language)
-                                else:
-                                    language_index = 0  # plaintext
+                                    if language in langauges:
+                                        language_index = langauges.index(language)
+                                    else:
+                                        language_index = 0  # plaintext
 
-                                col1, col2, col3, col4 = st.columns(4)
+                                    col1, col2, col3, col4 = st.columns(4)
 
-                                with col3:
-                                    selected_language = st.selectbox(
-                                        'Language',
-                                        langauges,
-                                        language_index
-                                    )
+                                    with col3:
+                                        selected_language = st.selectbox(
+                                            'Language',
+                                            langauges,
+                                            language_index
+                                        )
 
-                                with col4:
-                                    word_wrap = st_toggle_switch(
-                                        label="Text Word Wrap",
-                                        key="word_wrap",
-                                        label_after=False,
-                                    )
+                                    with col4:
+                                        word_wrap = st_toggle_switch(
+                                            label="Text Word Wrap",
+                                            key="word_wrap",
+                                            label_after=False,
+                                        )
 
-                                if selected_language != "csv":
-                                    # Monaco editor display for ascii files
-                                    with mui.Card(
-                                        key="2",
-                                        sx={
-                                            "display": "flex",
-                                            "flexDirection": "column",
-                                            "borderRadius": 2,
-                                            "overflow": "auto",
-                                            "overflowY": "auto",
-                                            "m": "10",
-                                            "gap": "10px",
-                                        },
-                                        padding=1,
-                                        elevation=1,
-                                        spacing=10,
-                                    ):
-                                        try:
-                                            editor.Monaco(
-                                                height="64vh",
-                                                options={"readOnly": True, "wordWrap": word_wrap},
-                                                defaultValue=textcontent,
-                                                language=selected_language,
-                                                theme="vs-dark"
-                                            )
+                                    if selected_language != "csv":
+                                        # Monaco editor display for ascii files
+                                        with mui.Card(
+                                            key="2",
+                                            sx={
+                                                "display": "flex",
+                                                "flexDirection": "column",
+                                                "borderRadius": 2,
+                                                "overflow": "auto",
+                                                "overflowY": "auto",
+                                                "m": "10",
+                                                "gap": "10px",
+                                            },
+                                            padding=1,
+                                            elevation=1,
+                                            spacing=10,
+                                        ):
+                                            try:
+                                                editor.Monaco(
+                                                    height="64vh",
+                                                    options={"readOnly": True, "wordWrap": word_wrap},
+                                                    defaultValue=textcontent,
+                                                    language=selected_language,
+                                                    theme="vs-dark"
+                                                )
 
-                                        except Exception as e:
-                                            st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
+                                            except Exception as e:
+                                                st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
+
+            if archive_contents_json:
+                st.subheader("Archive Contents:")
+                expand = st.toggle("Expand Entire JSON", False)
+                st.json(utils.reorder_archive_file_listing(archive_contents_json), expanded=expand)
 
             if selected_language and selected_language == "csv" and textcontent and len(textcontent) > 0:
                 csvStringIO = StringIO(textcontent)

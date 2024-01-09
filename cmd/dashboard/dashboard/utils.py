@@ -929,6 +929,53 @@ def is_uuid(str_uuid: str):
         return False
 
 
+def reorder_archive_file_listing(file_listing):
+    """
+    Reorders a file listing for an archive into a nested dict format.
+    """
+
+    total_entries = {}
+    for entry in file_listing:
+        path = entry["name"]
+        path_parts = [p for p in path.replace('\\', '/').split('/') if p]
+        num_paths = len(path_parts)
+        is_file = True if "uncompressSize" in entry else False
+        lastModified = entry["lastModified"] if "lastModified" in entry else ""
+        current_entry = None
+
+        for i in range(num_paths):
+
+            # handle the first entry in the path list
+            if i == 0:
+                if is_file and (i == (num_paths - 1)):
+                    uncompressSize = entry["uncompressSize"]
+                    temp = f"{path_parts[i]} ({lastModified} - {uncompressSize} bytes)"
+                    total_entries[temp] = "file"
+                else:
+                    path_part = f"{path_parts[i]}/"
+                    if path_part not in total_entries:
+                        total_entries[path_part] = {}
+                    current_entry = total_entries[path_part]
+            # handle the last entry in the path list
+            elif i == num_paths - 1:
+                if is_file:
+                    uncompressSize = entry["uncompressSize"]
+                    # path_part = path_parts[i]
+                    temp = f"{path_parts[i]} ({lastModified} - {uncompressSize} bytes)"
+                    current_entry[temp] = "file"
+                else:
+                    path_part = f"{path_parts[i]}/"
+                    current_entry[path_part] = {}
+            # handle middle folder entries
+            else:
+                path_part = f"{path_parts[i]}/"
+                if path_part not in current_entry:
+                    current_entry[path_part] = {}
+                current_entry = current_entry[path_part]
+
+    return total_entries
+
+
 def get_single_valued_param(name: str) -> None | str:
     """
     Obtains the value of a URL parameter. Ensures that the URL parameter only has a single value.
