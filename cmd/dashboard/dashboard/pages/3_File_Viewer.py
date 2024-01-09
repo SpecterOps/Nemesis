@@ -255,12 +255,12 @@ def build_page(username: str):
                                 language = None
                                 file_is_binary = is_binary_string(response.content[:1024])
 
-                                if file_is_binary:
-                                    textcontent = str(hexdump(response.content))
-                                    language = "plaintext"
-                                elif archive_contents_json:
+                                if archive_contents_json:
                                     textcontent = json.dumps(archive_contents_json, indent=2)
                                     language = "python"
+                                elif file_is_binary:
+                                    textcontent = str(hexdump(response.content))
+                                    language = "plaintext"
                                 else:
                                     try:
                                         textcontent = response.content.decode(encoding="ascii")
