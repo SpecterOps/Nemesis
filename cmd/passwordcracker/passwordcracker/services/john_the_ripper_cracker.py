@@ -40,7 +40,7 @@ class JohnTheRipperCracker(PasswordCrackerInterface):
                 # TODO: convert this to using asyncio's subprocess functions
                 result = subprocess.run(
                     [
-                        "/opt/john/run/john",
+                        "/john/run/john",
                         f"--format={format}",
                         f"--wordlist={wordlist_file_path}",
                         "--no-log",
@@ -53,7 +53,7 @@ class JohnTheRipperCracker(PasswordCrackerInterface):
             else:
                 result = subprocess.run(
                     [
-                        "/opt/john/run/john",
+                        "/john/run/john",
                         f"--wordlist={wordlist_file_path}",
                         "--no-log",
                         f"--pot={pot_file.name}",
