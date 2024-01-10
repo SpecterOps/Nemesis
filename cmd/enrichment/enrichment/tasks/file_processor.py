@@ -582,7 +582,9 @@ class FileProcessor(TaskInterface):
             os.rename(orig_filename, temp_filename)
 
             try:
-                pdf_uuid = await self.convert_to_pdf(temp_filename)
+                # render Excel docs in landscape
+                landscape = re.match("^.*\\.(xls|xlsx|xlsm)$", file_data.path, re.IGNORECASE) is not None
+                pdf_uuid = await self.convert_to_pdf(temp_filename, landscape)
                 enrichments_success.append(constants.E_PDF_CONVERSION)
 
                 if pdf_uuid:
@@ -947,14 +949,17 @@ class FileProcessor(TaskInterface):
             extractedtext_file_uuid = await self.storage.upload(plaintext_file.name)
             return extractedtext_file_uuid
 
-    async def convert_to_pdf(self, file_path: str) -> Optional[uuid.UUID]:
+    async def convert_to_pdf(self, file_path: str, landscape: bool = False) -> Optional[uuid.UUID]:
         """Calls self.gotenberg_uri to convert the supplied document to a PDF.
 
         The PDF is written to a new UUID, uploaded to S3, and the UUID is returned.
         """
 
         with open(file_path, "rb") as file:
-            files = {"file": file}
+            if landscape:
+                files = {"file": file, "landscape": "true"}
+            else:
+                files = {"file": file}
             url = f"{self.gotenberg_uri}forms/libreoffice/convert"
 
             async with aiohttp.ClientSession() as session:
