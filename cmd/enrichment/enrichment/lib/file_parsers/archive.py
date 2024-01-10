@@ -26,7 +26,7 @@ class archive(Meta.FileType):
         Returns True if the internal File path matches our target criteria.
         """
 
-        if re.match(".*\.(zip|tar\.gz|7z)$", self.file_data.path):
+        if re.match(".*\\.(zip|tar\\.gz|7z)$", self.file_data.path):
             return True
         else:
             return False

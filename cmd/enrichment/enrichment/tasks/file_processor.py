@@ -601,29 +601,30 @@ class FileProcessor(TaskInterface):
         ###########################################################
 
         # check the file for canaries :smiling_imp:
-        if file_data.parsed_data.WhichOneof("data_type") == "office_doc_new":
-            canaries = await canary_helpers.get_office_document_canaries(file_path_on_disk)
-            file_data.canaries.CopyFrom(canaries)
-        else:
-            canaries = await canary_helpers.get_file_canaries(file_path_on_disk)
-            file_data.canaries.CopyFrom(canaries)
+        if not doc_is_encrypted:
+            if file_data.parsed_data.WhichOneof("data_type") == "office_doc_new":
+                canaries = await canary_helpers.get_office_document_canaries(file_path_on_disk)
+                file_data.canaries.CopyFrom(canaries)
+            else:
+                canaries = await canary_helpers.get_file_canaries(file_path_on_disk)
+                file_data.canaries.CopyFrom(canaries)
 
-        if file_data.canaries.canaries_present:
-            text = ""
+            if file_data.canaries.canaries_present:
+                text = ""
 
-            for canary in file_data.canaries.canaries:
-                rule = canary.type
-                urls = ", ".join(canary.data)
-                urls = urls.replace(".", "[.]")
-                text += f"*Rule {rule} :* {urls}\n"
+                for canary in file_data.canaries.canaries:
+                    rule = canary.type
+                    urls = ", ".join(canary.data)
+                    urls = urls.replace(".", "[.]")
+                    text += f"*Rule {rule} :* {urls}\n"
 
-            if not file_previously_processed:
-                await self.alerter.file_data_alert(
-                    file_data=file_data,
-                    metadata=metadata,
-                    title="Possible canaries detected",
-                    text=text,
-                )
+                if not file_previously_processed:
+                    await self.alerter.file_data_alert(
+                        file_data=file_data,
+                        metadata=metadata,
+                        title="Possible canaries detected",
+                        text=text,
+                    )
 
         # run Yara on the file
         yara_results = await self.yara_opsec_scan(file_path_on_disk)
