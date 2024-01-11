@@ -8,8 +8,7 @@ import streamlit as st
 import templates
 import utils
 
-PAGE_SIZE = int(os.environ["PAGE_SIZE"])
-
+PAGE_SIZE = 10
 
 def build_about_expander():
     with st.expander("About Document Search"):
@@ -37,13 +36,10 @@ def build_page(username: str):
         st.session_state.text_page = 1
 
     # get parameters in url
-    para = st.experimental_get_query_params()
-    if "text_search" in para:
-        st.experimental_set_query_params()
-        st.session_state.text_search = urllib.parse.unquote(para["text_search"][0])
-    if "text_page" in para:
-        st.experimental_set_query_params()
-        st.session_state.text_page = int(para["text_page"][0])
+    if "text_search" in st.query_params:
+        st.session_state.text_search = urllib.parse.unquote(st.query_params["text_search"])
+    if "text_page" in st.query_params:
+        st.session_state.text_page = int(st.query_params["text_page"])
 
     chosen_tab = stx.tab_bar(
         data=[
@@ -55,7 +51,7 @@ def build_page(username: str):
     )
 
     if chosen_tab == "text_search":
-        search_term = st.text_input("Enter search term (wildcard == *):")
+        search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.text_search)
 
         if not search_term:
             return
@@ -98,7 +94,7 @@ def build_page(username: str):
                 length = "-1"
 
             (header, highlights, footer) = templates.text_search_result(
-                i=i,
+                i=(from_i + i),
                 url=originatingObjectURL,
                 pdf_url=pdf_url,
                 source=source,
