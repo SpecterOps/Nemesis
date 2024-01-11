@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -572,29 +573,37 @@ class FileProcessor(TaskInterface):
                 await logger.aexception(e, message="Exception in running extract_text()")
                 enrichments_failure.append(constants.E_TEXT_EXTRACTED)
 
-        # If we can convert the document to a PDF with Gotenberg and the document isn't an encrypted office doc
+        # If we can convert the document to a PDF with Gotenberg and the document isn't an encrypted office doc, and it's < 25 megs
         if can_convert_to_pdf and not doc_is_encrypted:
             # use Gotenberg to convert the document to a new local UUID that references the uploaded Nemesis file text
             #   Gotenberg requires an extension, so we have to temporarily rename the file to its original extension
+            pdf_size_limit = 25000000
+            if (file_data.size > pdf_size_limit):
+                await logger.awarning(
+                    f"file '{file_data.name}' is over the conversion size limit of  {pdf_size_limit} bytes"
+                )
+            else:
+                orig_filename = file_path_on_disk
+                temp_filename = f"{orig_filename}.{file_data.extension}"
+                os.rename(orig_filename, temp_filename)
 
-            orig_filename = file_path_on_disk
-            temp_filename = f"{orig_filename}.{file_data.extension}"
-            os.rename(orig_filename, temp_filename)
+                try:
+                    # render Excel docs in landscape
+                    landscape = re.match("^.*\\.(xls|xlsx|xlsm)$", file_data.path, re.IGNORECASE) is not None
+                    start = time.time()
+                    pdf_uuid = await self.convert_to_pdf(temp_filename, landscape)
+                    end = time.time()
+                    await logger.ainfo(f"Document converted to PDF in {(end - start):.2f} seconds", object_id=file_data.object_id)
+                    enrichments_success.append(constants.E_PDF_CONVERSION)
 
-            try:
-                # render Excel docs in landscape
-                landscape = re.match("^.*\\.(xls|xlsx|xlsm)$", file_data.path, re.IGNORECASE) is not None
-                pdf_uuid = await self.convert_to_pdf(temp_filename, landscape)
-                enrichments_success.append(constants.E_PDF_CONVERSION)
+                    if pdf_uuid:
+                        file_data.converted_pdf = str(pdf_uuid)
+                except Exception as e:
+                    await logger.aexception(e, message="Could not convert file to PDF", file_uuid=file_uuid_str)
+                    enrichments_failure.append(constants.E_PDF_CONVERSION)
 
-                if pdf_uuid:
-                    file_data.converted_pdf = str(pdf_uuid)
-            except Exception as e:
-                await logger.aexception(e, message="Could not convert file to PDF", file_uuid=file_uuid_str)
-                enrichments_failure.append(constants.E_PDF_CONVERSION)
-
-            # restore the original file name
-            os.rename(temp_filename, orig_filename)
+                # restore the original file name
+                os.rename(temp_filename, orig_filename)
 
         ###########################################################
         #
@@ -962,7 +971,8 @@ class FileProcessor(TaskInterface):
                 files = {"file": file}
             url = f"{self.gotenberg_uri}forms/libreoffice/convert"
 
-            async with aiohttp.ClientSession() as session:
+            session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=(60*3), sock_read=(60*3))
+            async with aiohttp.ClientSession(timeout=session_timeout) as session:
                 async with TempFile(self.data_download_dir) as temp_file:
                     async with session.post(url, data=files) as resp:
                         resp.raise_for_status()
