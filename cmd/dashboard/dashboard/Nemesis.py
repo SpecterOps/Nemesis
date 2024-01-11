@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# from streamlit_chat import message
+
 # 3rd Party Libraries
 import pandas as pd
 import requests
@@ -41,13 +41,13 @@ def build_page(username: str):
 
     df = pd.DataFrame(
         [
-            {"Stat": "Processed Files", "value": num_processed_files},
-            {"Stat": "Triaged Files", "value": num_triaged_filess},
-            {"Stat": "Untriaged Files", "value": num_untriaged_files},
-            {"Stat": "Plaintext Documents", "value": num_plaintext_documents},
-            {"Stat": "NoseyParker Matches", "value": num_np_matches},
-            {"Stat": "Extracted Hashes", "value": num_hashes},
-            {"Stat": "Extracted Credentials", "value": auth_data},
+            {"Stat": "Processed Files", "Value": num_processed_files},
+            {"Stat": "Triaged Files", "Value": num_triaged_filess},
+            {"Stat": "Untriaged Files", "Value": num_untriaged_files},
+            {"Stat": "Plaintext Documents", "Value": num_plaintext_documents},
+            {"Stat": "NoseyParker Matches", "Value": num_np_matches},
+            {"Stat": "Extracted Hashes", "Value": num_hashes},
+            {"Stat": "Extracted Credentials", "Value": auth_data},
         ]
     )
 

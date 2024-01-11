@@ -999,11 +999,7 @@ def get_single_valued_param(name: str) -> None | str:
     if name not in params:
         return None
 
-    if len(params[name]) != 1:
-        raise Exception(f"More than one value was provided for the parameter '{name}'")
-
-    object_id = params[name][0]
-    return object_id
+    return params[name]
 
 
 def get_monaco_languages() -> List[str]:

@@ -52,38 +52,38 @@ def search_projects(search_term: str) -> List[str]:
 
 def get_search_filters_from_session():
     search_filters = {}
-    para = st.experimental_get_query_params()
+    para = st.query_params
 
     for key in para.keys():
         match key:
             case "file_download_page":
-                st.session_state.file_download_page = int(para["file_download_page"][0])
+                st.session_state.file_download_page = int(para["file_download_page"])
             case "file_show_triaged":
-                st.session_state.file_show_triaged = bool(para["file_show_triaged"][0])
+                st.session_state.file_show_triaged = bool(para["file_show_triaged"])
                 search_filters["file_show_triaged"] = st.session_state.file_show_triaged
             case "file_show_archive_originated":
-                st.session_state.file_show_archive_originated = bool(para["file_show_archive_originated"][0])
+                st.session_state.file_show_archive_originated = bool(para["file_show_archive_originated"])
                 search_filters["file_show_archive_originated"] = st.session_state.file_show_archive_originated
             case "file_path_pattern":
-                st.session_state.file_path_pattern = para["file_path_pattern"][0]
+                st.session_state.file_path_pattern = para["file_path_pattern"]
                 search_filters["file_path_pattern"] = st.session_state.file_path_pattern
             case "file_notes_pattern":
-                st.session_state.file_notes_pattern = para["file_notes_pattern"][0]
+                st.session_state.file_notes_pattern = para["file_notes_pattern"]
                 search_filters["file_notes_pattern"] = st.session_state.file_notes_pattern
             case "file_source_selection":
-                st.session_state.file_source_selection = para["file_source_selection"][0]
+                st.session_state.file_source_selection = para["file_source_selection"]
                 search_filters["file_source_selection"] = st.session_state.file_source_selection
             case "file_project_selection":
-                st.session_state.file_project_selection = para["file_project_selection"][0]
+                st.session_state.file_project_selection = para["file_project_selection"]
                 search_filters["file_project_selection"] = st.session_state.file_project_selection
             case "file_filter_tags":
-                st.session_state.file_filter_tags = para["file_filter_tags"][0]
+                st.session_state.file_filter_tags = para["file_filter_tags"]
                 search_filters["file_filter_tags"] = st.session_state.file_filter_tags
             case "file_hash":
-                st.session_state.file_hash = para["file_hash"][0]
+                st.session_state.file_hash = para["file_hash"]
                 search_filters["file_hash"] = st.session_state.file_hash
             case "file_order_desc_timestamp":
-                st.session_state.file_order_desc_timestamp = para["file_order_desc_timestamp"][0]
+                st.session_state.file_order_desc_timestamp = para["file_order_desc_timestamp"]
                 search_filters["file_order_desc_timestamp"] = st.session_state.file_order_desc_timestamp
 
     return search_filters
