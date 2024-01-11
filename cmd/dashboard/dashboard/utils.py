@@ -449,6 +449,19 @@ def postgres_count_entries(table_name: str) -> int:
         return -1
 
 
+def postgres_count_triaged_files() -> int:
+    """
+    Returns the number of triaged files.
+    """
+    try:
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM nemesis.triage WHERE \"table_name\" = 'file_data_enriched'")
+                return cur.fetchone()[0]
+    except Exception as e:
+        return -1
+
+
 def postgres_count_dpapi_blobs(show_all=True, show_dec=True, masterkey_guid=""):
     """
     Count the number of dpapi_blobs matching specific criteria.
@@ -981,7 +994,7 @@ def get_single_valued_param(name: str) -> None | str:
     Obtains the value of a URL parameter. Ensures that the URL parameter only has a single value.
     If the URL parameter does not exist, the return value is None
     """
-    params = st.experimental_get_query_params()
+    params = st.query_params
 
     if name not in params:
         return None
