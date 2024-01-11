@@ -15,6 +15,7 @@ from outflank_stage1.bot import BaseBot
 from outflank_stage1.implant import Implant
 from outflank_stage1.services.implant_service import ImplantService
 from outflank_stage1.task import BaseTask
+
 # 3rd Party Libraries
 from pip._internal import main as pipmain
 
@@ -29,9 +30,13 @@ from pip._internal import main as pipmain
 # Ugly hack so we don't have to customize stage1's docker container
 # Assumes the docker container has internet access so it can install pip packages
 packages = ["httpx", "dynaconf", "pydantic"]
-res = pipmain(["--disable-pip-version-check", "install", "--root-user-action=ignore"] + packages)
+res = pipmain(
+    ["--disable-pip-version-check", "install", "--root-user-action=ignore"] + packages
+)
 if res != 0:
-    raise Exception("NemesisConnector was unable to install pip dependencies. Exiting...")
+    raise Exception(
+        "NemesisConnector was unable to install pip dependencies. Exiting..."
+    )
 
 # 3rd Party Libraries
 import httpx  # noqa
@@ -58,7 +63,11 @@ def is_uri(value: str) -> bool:
 # set environment variables
 validators = [
     Validator("URL", "USERNAME", "PASSWORD", must_exist=True),
-    Validator("url", condition=is_uri, messages={"condition": "Invalid/missing protocol scheme and/or hostname"})
+    Validator(
+        "url",
+        condition=is_uri,
+        messages={"condition": "Invalid/missing protocol scheme and/or hostname"},
+    ),
 ]
 settings: Settings = Dynaconf(envvar_prefix="NEMESIS", validators=validators)  # type: ignore
 settings.validators.validate()
@@ -164,7 +173,12 @@ class NemesisApiClient:
     FILE_ENDPOINT = "/file"
     DATA_ENDPOINT = "/data"
 
-    def __init__(self, url: str, auth: Optional[httpx.Auth] = None, transport: Optional[httpx.BaseTransport] = httpx.HTTPTransport(retries=5)) -> None:
+    def __init__(
+        self,
+        url: str,
+        auth: Optional[httpx.Auth] = None,
+        transport: Optional[httpx.BaseTransport] = httpx.HTTPTransport(retries=5),
+    ) -> None:
         """Create a new Nemesis API HTTP client.
 
         Args:
@@ -309,7 +323,9 @@ class NemesisConnector(BaseBot):
         self._implant_service = ImplantService()
         self._logger.info("Nemesis Connector is running")
 
-    def get_download_disk_filepath(self, path: str, timestamp: datetime) -> Optional[str]:
+    def get_download_disk_filepath(
+        self, path: str, timestamp: datetime
+    ) -> Optional[str]:
         """Returns the path to the downloaded file on disk.
 
         Args:
@@ -326,18 +342,26 @@ class NemesisConnector(BaseBot):
         resp = httpx.get(Config.URL_API + "/api/downloads")
 
         if resp.status_code != 200:
-            raise Exception(f"Unexpected status code {resp.status_code} when getting downloads")
+            raise Exception(
+                f"Unexpected status code {resp.status_code} when getting downloads"
+            )
 
         timestampStr = timestamp.isoformat()
         downloads = resp.json()
-        download = [x for x in downloads if x["path"] == path and x["timestamp"] == timestampStr]
+        download = [
+            x for x in downloads if x["path"] == path and x["timestamp"] == timestampStr
+        ]
 
         if len(download) == 0:
-            self._logger.error(f"No download found for str path '{path}' and timestamp '{timestampStr}'")
+            self._logger.error(
+                f"No download found for str path '{path}' and timestamp '{timestampStr}'"
+            )
             return None
 
         if len(download) > 1:
-            raise Exception(f"More than one download found for the path '{path} and timestamp '{timestampStr}'")
+            raise Exception(
+                f"More than one download found for the path '{path} and timestamp '{timestampStr}'"
+            )
 
         return Config.PATH_SHARED + "/downloads/" + download[0]["uid"]
 
@@ -386,14 +410,20 @@ class NemesisConnector(BaseBot):
         # Now process the response
         download = self.get_download_disk_filepath(filename, timestamp)
         if not download:
-            self._logger.error(f"No download found for the filename '{filename}' and timestamp '{timestamp}'")
+            self._logger.error(
+                f"No download found for the filename '{filename}' and timestamp '{timestamp}'"
+            )
             return
 
         try:
-            client = NemesisApiClient(cfg.url, httpx.BasicAuth(cfg.username, cfg.password))
+            client = NemesisApiClient(
+                cfg.url, httpx.BasicAuth(cfg.username, cfg.password)
+            )
             fileUploadResp = client.send_file(FileUploadRequest(download))
 
-            self._logger.info(f"Uploaded file '{filename}' to nemesis! File ID: {fileUploadResp.object_id}. Sending file data message...")
+            self._logger.info(
+                f"Uploaded file '{filename}' to nemesis! File ID: {fileUploadResp.object_id}. Sending file data message..."
+            )
 
             m = Metadata(
                 agent_id=implant_uid,
@@ -406,15 +436,21 @@ class NemesisConnector(BaseBot):
                 timestamp=response_timestamp,
             )
 
-            file_data = FileData(path=filename, size=file_size, object_id=fileUploadResp.object_id)
+            file_data = FileData(
+                path=filename, size=file_size, object_id=fileUploadResp.object_id
+            )
             fdReq = FileDataRequest(metadata=m, data=[file_data])
 
             fdResp = client.send_file_data(fdReq)
 
-            self._logger.info(f"Sent file_data message to nemesis! Message ID: {fdResp.object_id}")
+            self._logger.info(
+                f"Sent file_data message to nemesis! Message ID: {fdResp.object_id}"
+            )
 
         except httpx.HTTPStatusError as e:
-            self._logger.exception(f"Error sending file data message. Response body: {e.response.text} Exception: {e}")
+            self._logger.exception(
+                f"Error sending file data message. Response body: {e.response.text} Exception: {e}"
+            )
 
     def on_new_implant(self, implant: Implant):
         self._logger.info(f"New implant: {implant.get_hostname()} ({implant.get_ip()})")

@@ -13,6 +13,30 @@
 			"name": "nemesis/kubernetes"
 		},
 		{
+			"path": "../cmd/connectors/chrome-extension",
+			"name": "connectors/chrome-extension"
+		},
+		{
+			"path": "../cmd/connectors/cobaltstrike-nemesis-connector",
+			"name": "connectors/cobaltstrike-nemesis-connector"
+		},
+		{
+			"path": "../cmd/connectors/metasploit-connector",
+			"name": "connectors/metasploit-connector"
+		},
+		{
+			"path": "../cmd/connectors/mythic-connector",
+			"name": "connectors/mythic-connector"
+		},
+		{
+			"path": "../cmd/connectors/sliver-connector",
+			"name": "connectors/sliver-connector"
+		},
+		{
+			"path": "../cmd/connectors/stage1-connector",
+			"name": "connectors/stage1-connector"
+		},
+		{
 			"path": "../packages/python/nemesiscommon",
 			"name": "packages/nemesiscommon"
 		},

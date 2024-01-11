@@ -1,0 +1,30 @@
+{
+    "data": [
+        {
+            "name": "chrome.exe",
+            "command_line": "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --type=crashpad-handler \"--user-data-dir=C:\\Users\\itadmin\\AppData\\Local\\Google\\Chrome\\User Data\" /prefetch:7 --monitor-self-annotation=ptype=crashpad-handler \"--database=C:\\Users\\itadmin\\AppData\\Local\\Google\\Chrome\\User Data\\Crashpad\" --url=https://clients2.google.com/cr/report --annotation=channel= --annotation=plat=Win64 --annotation=prod=Chrome --annotation=ver=120.0.6099.200 --initial-client-data=0xAF8,0x253,0x145,0x164,0x114,0x7ffecd94a370,0x7ffeddf4a47c,0x7fffcd94a788",
+            "file_name": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+            "memory": 20907,
+            "process_id": 2028,
+            "parent_process_id": 15088,
+            "start_time": "2023-01-20T03:06:00.157393Z",
+            "arch": "x64",
+            "token": {
+                "user": {
+                    "name": "CORP.LOCAL\\itadmin"
+                },
+                "session": 1
+            }
+        }
+    ],
+    "metadata": {
+        "agent_id": "1234512345",
+        "agent_type": "beacon",
+        "automated": true,
+        "data_type": "process",
+        "operation": "remove",
+        "expiration": "2024-01-20T03:10:00.157393Z",
+        "project": "ASSESS-X",
+        "timestamp": "2023-01-20T03:10:00.157393Z"
+    }
+}
