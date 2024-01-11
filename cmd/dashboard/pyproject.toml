@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11.2"
-streamlit = "^1.21.0"
+streamlit = "^1.30.0"
 streamlit-authenticator = "^0.2.1"
 streamlit-extras = "^0.2.7"
 sqlalchemy = "^2.0.9"
