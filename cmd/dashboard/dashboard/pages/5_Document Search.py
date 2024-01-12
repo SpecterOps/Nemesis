@@ -67,12 +67,24 @@ def build_page(username: str):
 
     if st.query_params["current_tab"] == "text_search":
         st.subheader("Document Search")
+
+        if "code_search" in st.query_params:
+            del st.query_params["code_search"]
+        if "code_page" in st.query_params:
+            del st.query_params["code_page"]
+
         text_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.text_search)
 
         if not text_search_term:
             return
 
-        st.session_state.text_search = text_search_term
+        # if we get a different term, it means a new search was initiated
+        if text_search_term != st.session_state.text_search:
+            st.session_state.text_search = text_search_term
+            st.session_state.text_page = 1
+            st.query_params["text_search"] = st.session_state.text_search
+            st.query_params["text_page"] = st.session_state.text_page
+
         from_i = (st.session_state.text_page - 1) * PAGE_SIZE
 
         results = utils.elastic_text_search(text_search_term, from_i, PAGE_SIZE)
@@ -132,12 +144,24 @@ def build_page(username: str):
 
     elif chosen_tab == "source_code_search":
         st.subheader("Source Code Search")
+
+        if "text_search" in st.query_params:
+            del st.query_params["text_search"]
+        if "text_page" in st.query_params:
+            del st.query_params["text_page"]
+
         code_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.code_search)
 
         if not code_search_term:
             return
 
-        st.session_state.code_search = code_search_term
+        # if we get a different term, it means a new search was initiated
+        if code_search_term != st.session_state.code_search:
+            st.session_state.code_search = code_search_term
+            st.session_state.code_page = 1
+            st.query_params["code_search"] = st.session_state.code_search
+            st.query_params["code_page"] = st.session_state.code_page
+
         from_i = (st.session_state.code_page - 1) * PAGE_SIZE
 
         results = utils.elastic_sourcecode_search(code_search_term, from_i, PAGE_SIZE)
@@ -191,6 +215,16 @@ def build_page(username: str):
 
     elif chosen_tab == "semantic_search":
         st.subheader("Semantic Search")
+
+        if "text_search" in st.query_params:
+            del st.query_params["text_search"]
+        if "text_page" in st.query_params:
+            del st.query_params["text_page"]
+        if "code_search" in st.query_params:
+            del st.query_params["code_search"]
+        if "code_page" in st.query_params:
+            del st.query_params["code_page"]
+
         cols = st.columns(2)
         with cols[1]:
             num_results = st.slider("Select the number of results to return", min_value=0, max_value=10, value=4, step=1)
