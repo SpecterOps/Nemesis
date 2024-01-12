@@ -76,6 +76,8 @@ def text_pagination(total_pages: int, search: str, current_page: int, current_ta
     if current_page != total_pages:
         hrefs.append(f'<a href="{params}&{page_term}={current_page + 1}" target="_self">Next&gt</a>')
 
+    hrefs.append(f'<a href="{params}&{page_term}={total_pages}" target="_self">Last&gt&gt</a>')
+
     return "<div>" + "&emsp;".join(hrefs) + "</div>"
 
 
@@ -105,6 +107,7 @@ def file_pagination(total_pages: int, current_page: int, search_params: dict) ->
         hrefs.append(f'<a href="?{params}&file_download_page={current_page + 1}" target="_self">Next&gt</a>')
 
     hrefs.insert(0, f'<a href="?{params}&file_download_page={current_page}" target="_self">Current Page Link</a>')
+    hrefs.append(f'<a href="?{params}&file_download_page={total_pages}" target="_self">Last&gt&gt</a>')
 
     return "<div>" + "&emsp;".join(hrefs) + "</div>"
 
@@ -131,6 +134,8 @@ def np_pagination(total_pages: int, current_page: int) -> str:
 
     if current_page != total_pages:
         hrefs.append(f'<a href="?np_page={current_page + 1}" target="_self">Next&gt</a>')
+
+    hrefs.append(f'<a href="?np_page={total_pages}" target="_self">Last&gt&gt</a>')
 
     return "<div>" + "&emsp;".join(hrefs) + "</div>"
 
