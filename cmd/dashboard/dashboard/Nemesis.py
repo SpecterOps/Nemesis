@@ -1,10 +1,13 @@
 #!/usr/bin/python3
-# from streamlit_chat import message
+
 # 3rd Party Libraries
+import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 import utils
-from streamlit.web.server.app_static_file_handler import SAFE_APP_STATIC_FILE_EXTENSIONS
+from streamlit.web.server.app_static_file_handler import \
+    SAFE_APP_STATIC_FILE_EXTENSIONS
 
 SAFE_APP_STATIC_FILE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp")
 
@@ -26,50 +29,56 @@ def build_page(username: str):
 
     st.title("Nemesis Overview")
 
-    # st.subheader("Operation Information")
-    # cols = st.columns(4)
-    # with cols[0]:
-    #     num_hosts = utils.postgres_count_entries("hosts")
-    #     st.metric("Total Hosts", num_hosts)
-    # with cols[1]:
-    #     num_agents = utils.postgres_count_entries("agents")
-    #     st.metric("Total Agents", num_agents)
-    # st.divider()
-
     st.subheader("Files")
-    cols = st.columns(5)
-    with cols[0]:
-        num_enriched_documents = utils.get_elastic_total_indexed_documents("file_data_enriched")
-        st.metric("Processed Files", num_enriched_documents)
-    with cols[1]:
-        num_plaintext_documents = utils.get_elastic_total_indexed_documents("file_data_plaintext")
-        st.metric("Indexed Documents", num_plaintext_documents)
-    with cols[2]:
-        num_np_matches = utils.get_elastic_total_indexed_documents("file_data_enriched", query={"exists": {"field": "noseyparker"}})
-        st.metric("NoseyParker Matches", num_np_matches)
-    with cols[3]:
-        num_hashes = utils.postgres_count_entries("extracted_hashes")
-        st.metric("Extracted Hashes", num_hashes)
-    with cols[4]:
-        num_hashes = utils.postgres_count_entries("extracted_hashes")
-        st.metric("Authentication Data", num_hashes)
+
+    num_processed_files = utils.get_elastic_total_indexed_documents("file_data_enriched")
+    num_triaged_filess = utils.postgres_count_triaged_files()
+    num_untriaged_files = num_processed_files - num_triaged_filess
+    num_plaintext_documents = utils.get_elastic_total_indexed_documents("file_data_plaintext")
+    num_np_matches = utils.get_elastic_total_indexed_documents("file_data_enriched", query={"exists": {"field": "noseyparker"}})
+    num_hashes = utils.postgres_count_entries("extracted_hashes")
+    auth_data = utils.postgres_count_entries("authentication_data")
+
+    df = pd.DataFrame(
+        [
+            {"Stat": "Processed Files", "Value": num_processed_files},
+            {"Stat": "Triaged Files", "Value": num_triaged_filess},
+            {"Stat": "Untriaged Files", "Value": num_untriaged_files},
+            {"Stat": "Plaintext Documents", "Value": num_plaintext_documents},
+            {"Stat": "NoseyParker Matches", "Value": num_np_matches},
+            {"Stat": "Extracted Hashes", "Value": num_hashes},
+            {"Stat": "Extracted Credentials", "Value": auth_data},
+        ]
+    )
+
+    st.dataframe(
+        data=df,
+        hide_index=True,
+        width=500
+    )
     st.divider()
 
     st.subheader("Chromium")
-    cols = st.columns(4)
-    with cols[0]:
-        num_cookies = utils.postgres_count_entries("chromium_cookies")
-        st.metric("Cookies", num_cookies)
-    with cols[1]:
-        num_logins = utils.postgres_count_entries("chromium_logins")
-        st.metric("Logins", num_logins)
-    with cols[2]:
-        num_history = utils.postgres_count_entries("chromium_history")
-        st.metric("History Entries", num_history)
-    with cols[3]:
-        num_downloads = utils.postgres_count_entries("chromium_downloads")
-        st.metric("Downloads", num_downloads)
 
+    num_cookies = utils.postgres_count_entries("chromium_cookies")
+    num_logins = utils.postgres_count_entries("chromium_logins")
+    num_history = utils.postgres_count_entries("chromium_history")
+    num_downloads = utils.postgres_count_entries("chromium_downloads")
+
+    df2 = pd.DataFrame(
+        [
+            {"Stat": "Cookies", "value": num_cookies},
+            {"Stat": "Logins", "value": num_logins},
+            {"Stat": "History Entries", "value": num_history},
+            {"Stat": "Extracted Hashes", "value": num_downloads},
+        ]
+    )
+
+    st.dataframe(
+        data=df2,
+        hide_index=True,
+        width=500
+    )
     st.divider()
 
     cols = st.columns(4)

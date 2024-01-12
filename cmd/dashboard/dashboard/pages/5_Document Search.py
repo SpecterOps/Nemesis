@@ -8,8 +8,7 @@ import streamlit as st
 import templates
 import utils
 
-PAGE_SIZE = int(os.environ["PAGE_SIZE"])
-
+PAGE_SIZE = 10
 
 def build_about_expander():
     with st.expander("About Document Search"):
@@ -35,15 +34,24 @@ def build_page(username: str):
         st.session_state.text_search = None
     if "text_page" not in st.session_state:
         st.session_state.text_page = 1
+    if "code_search" not in st.session_state:
+        st.session_state.code_search = None
+    if "code_page" not in st.session_state:
+        st.session_state.code_page = 1
+    if "current_tab" not in st.session_state:
+        st.session_state.current_tab = "text_search"
 
     # get parameters in url
-    para = st.experimental_get_query_params()
-    if "text_search" in para:
-        st.experimental_set_query_params()
-        st.session_state.text_search = urllib.parse.unquote(para["text_search"][0])
-    if "text_page" in para:
-        st.experimental_set_query_params()
-        st.session_state.text_page = int(para["text_page"][0])
+    if "text_search" in st.query_params:
+        st.session_state.text_search = urllib.parse.unquote(st.query_params["text_search"])
+    if "text_page" in st.query_params:
+        st.session_state.text_page = int(st.query_params["text_page"])
+    if "code_search" in st.query_params:
+        st.session_state.code_search = urllib.parse.unquote(st.query_params["code_search"])
+    if "code_page" in st.query_params:
+        st.session_state.code_page = int(st.query_params["code_page"])
+    if "current_tab" in st.query_params:
+        st.session_state.current_tab = st.query_params["current_tab"]
 
     chosen_tab = stx.tab_bar(
         data=[
@@ -51,19 +59,35 @@ def build_page(username: str):
             stx.TabBarItemData(id="source_code_search", title="Source Code Search", description="Search downloaded source code files"),
             stx.TabBarItemData(id="semantic_search", title="Semantic Search", description="Semantic search over extracted text"),
         ],
-        default="text_search",
+        default=st.session_state.current_tab
     )
 
-    if chosen_tab == "text_search":
-        search_term = st.text_input("Enter search term (wildcard == *):")
+    st.session_state.current_tab = chosen_tab
+    st.query_params["current_tab"] = chosen_tab
 
-        if not search_term:
+    if st.query_params["current_tab"] == "text_search":
+        st.subheader("Document Search")
+
+        if "code_search" in st.query_params:
+            del st.query_params["code_search"]
+        if "code_page" in st.query_params:
+            del st.query_params["code_page"]
+
+        text_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.text_search)
+
+        if not text_search_term:
             return
 
-        st.session_state.text_search = search_term
+        # if we get a different term, it means a new search was initiated
+        if text_search_term != st.session_state.text_search:
+            st.session_state.text_search = text_search_term
+            st.session_state.text_page = 1
+            st.query_params["text_search"] = st.session_state.text_search
+            st.query_params["text_page"] = st.session_state.text_page
+
         from_i = (st.session_state.text_page - 1) * PAGE_SIZE
 
-        results = utils.elastic_text_search(search_term, from_i, PAGE_SIZE)
+        results = utils.elastic_text_search(text_search_term, from_i, PAGE_SIZE)
         if not results:
             st.write(templates.no_result_html(), unsafe_allow_html=True)
             return
@@ -72,6 +96,7 @@ def build_page(username: str):
         num_results = len(results["hits"]["hits"])
 
         if total_hits <= 0:
+            st.warning("No document results!")
             return
 
         st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
@@ -98,7 +123,7 @@ def build_page(username: str):
                 length = "-1"
 
             (header, highlights, footer) = templates.text_search_result(
-                i=i,
+                i=(from_i + i),
                 url=originatingObjectURL,
                 pdf_url=pdf_url,
                 source=source,
@@ -114,61 +139,92 @@ def build_page(username: str):
         # pagination
         if total_hits > PAGE_SIZE:
             total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
-            pagination_html = templates.text_pagination(total_pages, search_term, st.session_state.text_page)
+            pagination_html = templates.text_pagination(total_pages, text_search_term, st.session_state.text_page, "text_search")
             st.write(pagination_html, unsafe_allow_html=True)
 
     elif chosen_tab == "source_code_search":
-        search_term = st.text_input("Enter search term (wildcard == *):")
-        if search_term != "":
-            st.session_state.text_search = search_term
-            from_i = (st.session_state.text_page - 1) * PAGE_SIZE
-            results = utils.elastic_sourcecode_search(search_term, from_i, PAGE_SIZE)
-            if results != {}:
-                total_hits = results["hits"]["total"]["value"]
-                num_results = len(results["hits"]["hits"])
+        st.subheader("Source Code Search")
 
-                if total_hits > 0:
-                    st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
+        if "text_search" in st.query_params:
+            del st.query_params["text_search"]
+        if "text_page" in st.query_params:
+            del st.query_params["text_page"]
 
-                    for i in range(num_results):
-                        res = utils.simplify_es_text_result(results["hits"]["hits"][i])
-                        path = res["path"]
-                        download_url = res["downloadURL"]
-                        object_id = res["objectId"]
-                        # extension = res["extension"]
-                        language = res["language"]
-                        name = res["name"]
-                        path = res["path"]
-                        size = res["size"]
-                        highlights = res["highlights"]
-                        source = ""
-                        if "metadata" in res and "source" in res["metadata"]:
-                            source = res["metadata"]["source"]
+        code_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.code_search)
 
-                        (header, highlights, footer) = templates.sourcecode_search_result(
-                            i=i,
-                            object_id=object_id,
-                            download_url=download_url,
-                            source=source,
-                            path=path,
-                            name=name,
-                            language=language,
-                            highlights=highlights,
-                            size=size,
-                        )
-                        st.write(header, unsafe_allow_html=True)
-                        st.code(highlights, language=language.lower())
-                        st.write(footer, unsafe_allow_html=True)
+        if not code_search_term:
+            return
 
-                    # pagination
-                    if total_hits > PAGE_SIZE:
-                        total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
-                        pagination_html = templates.text_pagination(total_pages, search_term, st.session_state.text_page)
-                        st.write(pagination_html, unsafe_allow_html=True)
-                else:
-                    st.write(templates.no_result_html(), unsafe_allow_html=True)
+        # if we get a different term, it means a new search was initiated
+        if code_search_term != st.session_state.code_search:
+            st.session_state.code_search = code_search_term
+            st.session_state.code_page = 1
+            st.query_params["code_search"] = st.session_state.code_search
+            st.query_params["code_page"] = st.session_state.code_page
+
+        from_i = (st.session_state.code_page - 1) * PAGE_SIZE
+
+        results = utils.elastic_sourcecode_search(code_search_term, from_i, PAGE_SIZE)
+        if not results:
+            st.write(templates.no_result_html(), unsafe_allow_html=True)
+            return
+
+        total_hits = results["hits"]["total"]["value"]
+        num_results = len(results["hits"]["hits"])
+
+        if total_hits <= 0:
+            st.warning("No source code results!")
+            return
+
+        st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
+
+        for i in range(num_results):
+            res = utils.simplify_es_text_result(results["hits"]["hits"][i])
+            path = res["path"]
+            download_url = res["downloadURL"]
+            object_id = res["objectId"]
+            language = res["language"]
+            name = res["name"]
+            path = res["path"]
+            size = res["size"]
+            highlights = res["highlights"]
+            source = ""
+            if "metadata" in res and "source" in res["metadata"]:
+                source = res["metadata"]["source"]
+
+            (header, highlights, footer) = templates.sourcecode_search_result(
+                i=(from_i + i),
+                object_id=object_id,
+                download_url=download_url,
+                source=source,
+                path=path,
+                name=name,
+                language=language,
+                highlights=highlights,
+                size=size,
+            )
+            st.write(header, unsafe_allow_html=True)
+            st.code(highlights, language=language.lower())
+            st.write(footer, unsafe_allow_html=True)
+
+        # pagination
+        if total_hits > PAGE_SIZE:
+            total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
+            pagination_html = templates.text_pagination(total_pages, code_search_term, st.session_state.code_page, "source_code_search")
+            st.write(pagination_html, unsafe_allow_html=True)
 
     elif chosen_tab == "semantic_search":
+        st.subheader("Semantic Search")
+
+        if "text_search" in st.query_params:
+            del st.query_params["text_search"]
+        if "text_page" in st.query_params:
+            del st.query_params["text_page"]
+        if "code_search" in st.query_params:
+            del st.query_params["code_search"]
+        if "code_page" in st.query_params:
+            del st.query_params["code_page"]
+
         cols = st.columns(2)
         with cols[1]:
             num_results = st.slider("Select the number of results to return", min_value=0, max_value=10, value=4, step=1)
@@ -188,7 +244,6 @@ def build_page(username: str):
                         st.write(header, unsafe_allow_html=True)
                         st.write(text, unsafe_allow_html=False)
                         st.write(footer, unsafe_allow_html=True)
-                        # st.divider()
             except Exception as e:
                 st.error(f"Exception: {e}")
 

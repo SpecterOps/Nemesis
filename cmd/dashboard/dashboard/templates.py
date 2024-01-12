@@ -41,11 +41,20 @@ def number_of_results(total_hits: int, duration: float = -1.0) -> str:
         """
 
 
-def text_pagination(total_pages: int, search: str, current_page: int) -> str:
+def text_pagination(total_pages: int, search: str, current_page: int, current_tab: str) -> str:
     """Create and return html for text search pagination."""
 
-    # search words
-    params = f"?text_search={urllib.parse.quote(search)}"
+    if current_tab == "text_search":
+        search_term = "text_search"
+        page_term = "text_page"
+    elif current_tab == "source_code_search":
+        search_term = "code_search"
+        page_term = "code_page"
+    else:
+        print(f"Error: current_tab '{current_tab}' not valid!")
+        return ""
+
+    params = f"?current_tab={current_tab}&{search_term}={urllib.parse.quote(search)}"
 
     # avoid invalid page number (<=0)
     if (current_page - 5) > 0:
@@ -55,17 +64,17 @@ def text_pagination(total_pages: int, search: str, current_page: int) -> str:
 
     hrefs = []
     if current_page != 1:
-        hrefs.append(f'<a href="{params}&text_page={1}" target="_self">&lt&ltFirst</a>')
-        hrefs.append(f'<a href="{params}&text_page={current_page - 1}" target="_self">&ltPrevious</a>')
+        hrefs.append(f'<a href="{params}&{page_term}={1}" target="_self">&lt&ltFirst</a>')
+        hrefs.append(f'<a href="{params}&{page_term}={current_page - 1}" target="_self">&ltPrevious</a>')
 
     for i in range(start_from, min(total_pages + 1, start_from + 10)):
         if i == current_page:
             hrefs.append(f"{current_page}")
         else:
-            hrefs.append(f'<a href="{params}&text_page={i}" target="_self">{i}</a>')
+            hrefs.append(f'<a href="{params}&{page_term}={i}" target="_self">{i}</a>')
 
     if current_page != total_pages:
-        hrefs.append(f'<a href="{params}&text_page={current_page + 1}" target="_self">Next&gt</a>')
+        hrefs.append(f'<a href="{params}&{page_term}={current_page + 1}" target="_self">Next&gt</a>')
 
     return "<div>" + "&emsp;".join(hrefs) + "</div>"
 

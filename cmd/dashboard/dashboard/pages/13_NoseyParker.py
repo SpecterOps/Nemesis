@@ -6,7 +6,8 @@ import streamlit as st
 import templates
 import utils
 
-page_size = int(os.environ["PAGE_SIZE"])
+# page_size = int(os.environ["PAGE_SIZE"])
+page_size = 10
 NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
 
 
@@ -25,10 +26,9 @@ def render_page(username: str):
         st.session_state.np_page = 1
 
     # get parameters in url
-    para = st.experimental_get_query_params()
+    para = st.query_params
     if "np_page" in para:
-        st.experimental_set_query_params()
-        st.session_state.np_page = int(para["np_page"][0])
+        st.session_state.np_page = int(para["np_page"])
 
     from_i = (st.session_state.np_page - 1) * page_size
     results = utils.elastic_np_search(from_i, page_size)
