@@ -851,8 +851,12 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
     try:
         es_client = wait_for_elasticsearch()
         query = {
-            # "match": {"text": search_term}
-            "wildcard": {"text": {"value": search_term}}
+            "wildcard": {
+                "text": {
+                    "value": search_term,
+                    "case_insensitive": True
+                }
+            }
         }
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
@@ -883,8 +887,12 @@ def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
     try:
         es_client = wait_for_elasticsearch()
         query = {
-            #"match": {"text": search_term}
-            "wildcard": {"text": {"value": search_term}}
+            "wildcard": {
+                "text": {
+                    "value": search_term,
+                    "case_insensitive": True
+                }
+            }
         }
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
