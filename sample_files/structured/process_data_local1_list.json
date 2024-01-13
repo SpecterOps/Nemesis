@@ -7,7 +7,7 @@
             "memory": 98304,
             "process_id": 4,
             "parent_process_id": null,
-            "start_time": "2022-06-20T03:00:00.157393Z",
+            "start_time": "2022-06-20T03:00:00.000Z",
             "arch": "x64",
             "token": {
                 "user": {
@@ -23,7 +23,7 @@
             "memory": 28304,
             "process_id": 1412,
             "parent_process_id": 864,
-            "start_time": "2023-01-20T03:01:00.157393Z",
+            "start_time": "2023-01-20T03:01:00.000Z",
             "arch": "x64",
             "token": {
                 "user": {
@@ -39,7 +39,7 @@
             "memory": 48304,
             "process_id": 1412,
             "parent_process_id": 6528,
-            "start_time": "2023-01-20T03:02:00.157393Z",
+            "start_time": "2023-01-20T03:02:00.000Z",
             "arch": "x64",
             "token": {
                 "user": {
@@ -55,7 +55,7 @@
             "memory": 38304,
             "process_id": 1484,
             "parent_process_id": 1412,
-            "start_time": "2023-01-20T03:03:00.157393Z",
+            "start_time": "2023-01-20T03:03:00.000Z",
             "arch": "x64",
             "token": {
                 "user": {
@@ -66,13 +66,13 @@
         }
     ],
     "metadata": {
-        "agent_id": "12345123452",
+        "agent_id": "1234512345",
         "agent_type": "beacon",
         "automated": true,
         "data_type": "process",
         "operation": "list",
-        "expiration": "2024-01-20T03:04:00.157393Z",
+        "expiration": "2024-01-20T03:04:00.000Z",
         "project": "ASSESS-X",
-        "timestamp": "2023-01-20T03:04:00.157393Z"
+        "timestamp": "2023-01-20T03:04:00.000Z"
     }
 }

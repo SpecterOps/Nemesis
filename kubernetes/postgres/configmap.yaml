@@ -95,6 +95,8 @@ data:
 
         COMMENT ON COLUMN nemesis.collected_host_data.is_data_remote IS 'Is the data for a remote host? Or was it enumerated locally on the current machine?';
 
+
+        -- Named Pipes
         CREATE TABLE nemesis.namedpipes (
             name text NOT NULL,
             server_process_id integer,
@@ -119,7 +121,38 @@ data:
 
 
         -- Create an index on the timestamp_column
-        CREATE INDEX idx_named_pipes_timestamp ON namedpipes (collection_timestamp);
+        CREATE INDEX idx_namedpipes_timestamp ON namedpipes (collection_timestamp);
+
+
+        -- Processes
+        CREATE TABLE nemesis.processes (
+            name text,
+            command_line text,
+            file_name text,
+            process_id integer,
+            parent_process_id integer,
+            arch text,
+            username text,
+            category text,
+            description text,
+            CONSTRAINT fk_collection_data_projects FOREIGN KEY (project_id) REFERENCES nemesis.projects(id),
+            CONSTRAINT fk_collection_data_agents FOREIGN KEY (agent_id) REFERENCES nemesis.agents(id),
+            CONSTRAINT fk_agents_hosts FOREIGN KEY (hostagents_row_id) REFERENCES nemesis.host_agents(row_id)
+        ) INHERITS (collected_host_data);
+
+        COMMENT ON COLUMN nemesis.processes.name IS 'The process''s name';
+        COMMENT ON COLUMN nemesis.processes.command_line IS 'Process command line';
+        COMMENT ON COLUMN nemesis.processes.file_name IS 'Path to the file';
+        COMMENT ON COLUMN nemesis.processes.process_id IS 'Process ID';
+        COMMENT ON COLUMN nemesis.processes.parent_process_id IS 'Parent process''s PID';
+        COMMENT ON COLUMN nemesis.processes.arch IS 'Process''s architecture';
+        COMMENT ON COLUMN nemesis.processes.username IS 'The process''s username';
+        COMMENT ON COLUMN nemesis.processes.category IS 'Enriched category of the process';
+        COMMENT ON COLUMN nemesis.processes.description IS 'Enriched category''s description';
+
+
+        -- Create an index on the timestamp_column
+        CREATE INDEX idx_processes_timestamp ON processes (collection_timestamp);
 
 
         -----------------------------------------------

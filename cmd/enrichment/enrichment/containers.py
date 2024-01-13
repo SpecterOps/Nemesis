@@ -292,7 +292,22 @@ class Container(containers.DeclarativeContainer):
         "postgresconnector",
         num_events=500,
     )
-    inputq_rawdata_rawdatatagtask = providers.Resource(create_consumer, config.rabbitmq_connection_uri, constants.Q_RAW_DATA, pb.RawDataIngestionMessage, "rawdatatag", num_events=100)
+    inputq_processenriched_postgresconnector = providers.Resource(
+        create_consumer,
+        config.rabbitmq_connection_uri,
+        constants.Q_PROCESS_ENRICHED,
+        pb.ProcessEnrichedMessage,
+        "postgresconnector",
+        num_events=500,
+    )
+    inputq_rawdata_rawdatatagtask = providers.Resource(
+        create_consumer,
+        config.rabbitmq_connection_uri,
+        constants.Q_RAW_DATA,
+        pb.RawDataIngestionMessage,
+        "rawdatatag",
+        num_events=100,
+    )
     inputq_registryvalue_postgresconnector = providers.Resource(
         create_consumer,
         config.rabbitmq_connection_uri,
@@ -549,6 +564,7 @@ class Container(containers.DeclarativeContainer):
         inputq_namedpipe_postgresconnector,
         inputq_networkconnection_postgresconnector,
         inputq_pathlist_postgresconnector,
+        inputq_processenriched_postgresconnector,
         inputq_registryvalue_postgresconnector,
         inputq_serviceenriched_postgresconnector,
     )

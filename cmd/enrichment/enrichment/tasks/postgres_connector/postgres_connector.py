@@ -12,9 +12,15 @@ import nemesispb.nemesis_pb2 as pb
 import structlog
 from enrichment.lib.helpers import pb_has_field
 from enrichment.lib.nemesis_db import (  # AuthenticationData,; ChromiumCookie,; ChromiumDownload,; ChromiumHistoryEntry,; ChromiumLogin,; ChromiumStateFile,; DpapiBlob,; ExtractedHash,; FileDataEnriched,; FileInfo,; FileInfoDataEnriched,; NetworkConnection,
-    Agent, HostAgent, NamedPipe, NemesisDb, OperationType, Project)
-from enrichment.tasks.postgres_connector.registry_watcher import \
-    RegistryWatcher
+    Agent,
+    HostAgent,
+    NamedPipe,
+    NemesisDb,
+    OperationType,
+    ProcessEnriched,
+    Project,
+)
+from enrichment.tasks.postgres_connector.registry_watcher import RegistryWatcher
 from google.protobuf.json_format import MessageToDict
 from nemesiscommon.messaging import MessageQueueConsumerInterface
 from nemesiscommon.tasking import TaskInterface
@@ -80,6 +86,7 @@ class PostgresConnector(TaskInterface):
     named_pipe_q: MessageQueueConsumerInterface
     network_connection_q: MessageQueueConsumerInterface
     path_list_q: MessageQueueConsumerInterface
+    process_enriched_q: MessageQueueConsumerInterface
     registry_value_q: MessageQueueConsumerInterface
     service_enriched_q: MessageQueueConsumerInterface
 
@@ -100,6 +107,7 @@ class PostgresConnector(TaskInterface):
         named_pipe_q: MessageQueueConsumerInterface,
         network_connection_q: MessageQueueConsumerInterface,
         path_list_q: MessageQueueConsumerInterface,
+        process_enriched_q: MessageQueueConsumerInterface,
         registry_value_q: MessageQueueConsumerInterface,
         service_enriched_q: MessageQueueConsumerInterface,
     ):
@@ -119,6 +127,7 @@ class PostgresConnector(TaskInterface):
         self.named_pipe_q = named_pipe_q
         self.network_connection_q = network_connection_q
         self.path_list_q = path_list_q
+        self.process_enriched_q = process_enriched_q
         self.registry_value_q = registry_value_q
         self.service_enriched_q = service_enriched_q
 
@@ -136,9 +145,10 @@ class PostgresConnector(TaskInterface):
             # self.extracted_hash_q.Read(self.process_extracted_hash),  # type: ignore
             # self.file_data_enriched_q.Read(self.process_file_data_enriched),  # type: ignore
             # self.file_info_q.Read(self.process_file_info),  # type: ignore
-            # self.path_list_q.Read(self.process_path_list),  # type: ignore
-            # self.registry_value_q.Read(self.process_registry_value),  # type: ignore
             self.named_pipe_q.Read(self.process_named_pipe),  # type: ignore
+            # self.path_list_q.Read(self.process_path_list),  # type: ignore
+            self.process_enriched_q.Read(self.process_processenriched),  # type: ignore
+            # self.registry_value_q.Read(self.process_registry_value),  # type: ignore
             # self.service_enriched_q.Read(self.process_service),  # type: ignore
             # self.network_connection_q.Read(self.process_network_connection),  # type: ignore
         )
@@ -469,6 +479,49 @@ class PostgresConnector(TaskInterface):
     #         #     # TODO: remote file path
     #         #     pass
 
+    @aio.time(Summary("process_processenriched", "Time spent processing a process_enriched message"))  # type: ignore
+    async def process_processenriched(self, event: pb.ProcessEnrichedMessage):
+        """Adds a process to the database anytime a new one is added and enriched in Nemesis.
+
+        Args:
+            event (pb.ProcessEnrichedMessage): The message containing the process(es) to add.
+        """
+        m = event.metadata
+        project_id, is_remote, host_row_id, agent_id = await self.process_host_metadata(m)
+
+        for i in event.data:
+            origin = i.origin
+
+            # Obtain token's principal's username, if it exists
+            username = None
+            if pb_has_field(origin, "token"):
+                if pb_has_field(origin.token, "user"):
+                    if pb_has_field(origin.token.user, "name"):
+                        username = origin.token.user.name
+
+            data = ProcessEnriched(
+                project_id=project_id,
+                collection_timestamp=m.timestamp.ToDatetime(),
+                expiration_date=m.expiration.ToDatetime(),
+                agent_id=agent_id,
+                message_id=uuid.UUID(m.message_id),
+                operation=OperationType(m.operation),
+                hostagents_row_id=host_row_id,
+                is_data_remote=is_remote,
+                #
+                name=origin.name if pb_has_field(origin, "name") else None,
+                command_line=origin.command_line if pb_has_field(origin, "command_line") else None,
+                file_name=origin.file_name if pb_has_field(origin, "file_name") else None,
+                process_id=origin.process_id if pb_has_field(origin, "process_id") else None,
+                parent_process_id=origin.parent_process_id if pb_has_field(origin, "parent_process_id") else None,
+                arch=origin.arch if pb_has_field(origin, "arch") else None,
+                username=username,
+                category=i.category.category if pb_has_field(i.category, "category") else None,
+                description=i.category.description if pb_has_field(i.category, "description") else None,
+            )
+
+            await self.db.add_process(data)
+
     # @aio.time(Summary("process_file_info", "Time spent processing a file_info message"))  # type: ignore
     # async def process_file_info(self, event: pb.FileInformationIngestionMessage):
     #     """Adds file information to the database anytime a new one is added to Nemesis.
@@ -726,8 +779,6 @@ class PostgresConnector(TaskInterface):
         else:
             return await self.add_manual_agent_host(metadata, project_id)
 
-        raise RuntimeError("Should never get here")
-
     async def register_agent(self, metadata: pb.Metadata, host_mapping_data: Optional[HostMappingData]) -> Agent:
         if host_mapping_data:
             host = await self.db.add_host(
@@ -746,12 +797,7 @@ class PostgresConnector(TaskInterface):
         else:
             pass
 
-    @aio.time(Summary("process_named_pipe", "Time spent processing an named_pipe queue"))  # type: ignore
-    async def process_named_pipe(self, event: pb.NamedPipeIngestionMessage):
-        """Main function to process named_pipe queue."""
-
-        m = event.metadata
-
+    async def process_host_metadata(self, m: pb.Metadata):
         project_id = await self.db.register_project(
             Project(
                 m.project,
@@ -760,8 +806,17 @@ class PostgresConnector(TaskInterface):
             )
         )
 
-        is_remote = self.is_remote_host(event.metadata)
-        host_row_id, agent_id = await self.register_host(event.metadata, project_id, is_remote)
+        is_remote = self.is_remote_host(m)
+        host_row_id, agent_id = await self.register_host(m, project_id, is_remote)
+
+        return project_id, is_remote, host_row_id, agent_id
+
+    @aio.time(Summary("process_named_pipe", "Time spent processing an named_pipe queue"))  # type: ignore
+    async def process_named_pipe(self, event: pb.NamedPipeIngestionMessage):
+        """Main function to process named_pipe queue."""
+
+        m = event.metadata
+        project_id, is_remote, host_row_id, agent_id = await self.process_host_metadata(m)
 
         for i in event.data:
             data = NamedPipe(

@@ -84,6 +84,19 @@ class NamedPipe(CollectedHostData):
 
 
 @dataclass
+class ProcessEnriched(CollectedHostData):
+    name: Optional[str]
+    command_line: Optional[str]
+    file_name: Optional[str]
+    process_id: Optional[int]
+    parent_process_id: Optional[int]
+    arch: Optional[str]
+    username: Optional[str]
+    category: Optional[str]
+    description: Optional[str]
+
+
+@dataclass
 class Metadata:
     agent_id: str
     project_id: str
@@ -1337,6 +1350,57 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 named_pipe.server_process_path,
                 named_pipe.server_process_session_id,
                 named_pipe.sddl,
+            )
+
+    async def add_process(self, process: ProcessEnriched) -> None:
+        """Adds a new `nemesis.processes` entry from a ProcessEnriched class object."""
+
+        query = """
+INSERT INTO nemesis.processes as t(
+    project_id,
+    collection_timestamp,
+    expiration_date,
+    agent_id,
+    message_id,
+    operation,
+    hostagents_row_id,
+    is_data_remote,
+    name,
+    command_line,
+    file_name,
+    process_id,
+    parent_process_id,
+    arch,
+    username,
+    category,
+    description
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+"""
+
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                # ProjectData
+                process.project_id,
+                process.collection_timestamp,
+                process.expiration_date,
+                # HostData
+                process.agent_id,
+                process.message_id,
+                process.operation,
+                process.hostagents_row_id,
+                process.is_data_remote,
+                # Process Data
+                process.name,
+                process.command_line,
+                process.file_name,
+                process.process_id,
+                process.parent_process_id,
+                process.arch,
+                process.username,
+                process.category,
+                process.description,
             )
 
     # async def add_network_connection(self, network_connection: NetworkConnection) -> None:

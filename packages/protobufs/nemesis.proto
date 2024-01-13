@@ -202,10 +202,10 @@ message FileInformationIngestionMessage {
 // Used in ProcessIngestion
 message Principal {
   // Security identifier, if known
-  string sid = 1;
+  optional string sid = 1;
 
   // Name of the principal, if known. The format should be the Down-Level Logon Name (e.g., DOMAIN\user)
-  string name = 2;
+  optional string name = 2;
 }
 message Token {
   message TokenPrivilege {
@@ -228,17 +228,17 @@ message Token {
     IMPERSONATIONLEVEL_DELEGATION = 4;
   }
 
-  Principal user = 1;
+  optional Principal user = 1;
 
   repeated Principal groups = 2;
 
   repeated TokenPrivilege privileges = 3;
 
-  TokenType type = 4;
+  optional TokenType type = 4;
 
-  ImpersonationLevel impersonation_level = 5;
+  optional ImpersonationLevel impersonation_level = 5;
 
-  uint32 session = 6;
+  optional uint32 session = 6;
 }
 
 
@@ -252,31 +252,31 @@ message Token {
 // parameters are expected to be from the Unix epoch.
 message ProcessIngestion {
   // The name of the process
-  string name = 1;
+  optional string name = 1;
 
   // The current command line information
-  string command_line = 2;
+  optional string command_line = 2;
 
   // If known, the file that was executed
-  string file_name = 3;
+  optional string file_name = 3;
 
   // Process id
-  int32 process_id = 4;
+  optional int32 process_id = 4;
 
   // Parent process id
-  int32 parent_process_id = 5;
+  optional int32 parent_process_id = 5;
 
   // Architecture of the process
-  string arch = 6;
+  optional string arch = 6;
 
   // When the process was started
-  google.protobuf.Timestamp start_time = 7;
+  optional google.protobuf.Timestamp start_time = 7;
 
   // The amount of memory used by the process, in bytes
-  int64 memory = 8;
+  optional int64 memory = 8;
 
   // If present, Windows token information
-  Token token = 9;
+  optional Token token = 9;
 }
 message ProcessIngestionMessage {
   Metadata metadata = 1;

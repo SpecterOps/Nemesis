@@ -7,7 +7,7 @@
             "memory": 20907,
             "process_id": 2028,
             "parent_process_id": 15088,
-            "start_time": "2023-01-20T03:06:00.157393Z",
+            "start_time": "2023-01-20T03:06:00.000Z",
             "arch": "x64",
             "token": {
                 "user": {
@@ -23,8 +23,8 @@
         "automated": true,
         "data_type": "process",
         "operation": "remove",
-        "expiration": "2024-01-20T03:10:00.157393Z",
+        "expiration": "2024-01-20T03:10:00.000Z",
         "project": "ASSESS-X",
-        "timestamp": "2023-01-20T03:10:00.157393Z"
+        "timestamp": "2023-01-20T03:10:00.000Z"
     }
 }

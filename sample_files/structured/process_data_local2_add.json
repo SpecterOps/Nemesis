@@ -7,7 +7,7 @@
             "memory": 28309,
             "process_id": 12452,
             "parent_process_id": 12400,
-            "start_time": "2023-01-20T03:04:00.157393Z",
+            "start_time": "2023-01-20T03:04:00.000Z",
             "arch": "x64",
             "token": {
                 "user": {
@@ -23,7 +23,7 @@
             "memory": 240908,
             "process_id": 15088,
             "parent_process_id": 12452,
-            "start_time": "2023-01-20T03:05:00.157393Z",
+            "start_time": "2023-01-20T03:05:00.000Z",
             "arch": "x64",
             "token": {
                 "user": {
@@ -39,7 +39,7 @@
             "memory": 20907,
             "process_id": 2028,
             "parent_process_id": 15088,
-            "start_time": "2023-01-20T03:06:00.157393Z",
+            "start_time": "2023-01-20T03:06:00.000Z",
             "arch": "x64",
             "token": {
                 "user": {
@@ -55,8 +55,8 @@
         "automated": true,
         "data_type": "process",
         "operation": "add",
-        "expiration": "2024-01-20T03:07:00.157393Z",
+        "expiration": "2024-01-20T03:07:00.000Z",
         "project": "ASSESS-X",
-        "timestamp": "2023-01-20T03:07:00.157393Z"
+        "timestamp": "2023-01-20T03:07:00.000Z"
     }
 }
