@@ -18,7 +18,7 @@
         }
     ],
     "metadata": {
-        "agent_id": "12345123452",
+        "agent_id": "1234512345",
         "agent_type": "beacon",
         "automated": true,
         "data_type": "named_pipe",
