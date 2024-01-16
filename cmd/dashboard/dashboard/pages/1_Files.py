@@ -392,7 +392,20 @@ def build_file_listing():
                                                 with mui.TableCell():
                                                     # Tags
                                                     for tag in file["tags"]:
-                                                        mui.Chip(label=tag, color="primary")
+                                                        link_uri = ""
+                                                        if tag == "parsed_creds":
+                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/Credentials"
+                                                        elif tag == "noseyparker_results":
+                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/NoseyParker"
+                                                        if link_uri:
+                                                            mui.Chip(   label=tag,
+                                                                        href=link_uri,
+                                                                        component="a",
+                                                                        target="_blank",
+                                                                        clickable=True,
+                                                                        color="info")
+                                                        else:
+                                                            mui.Chip(label=tag, color="primary")
                             # Notes
                             mui.Typography("Comments:")
                             with mui.Box(sx={"flexGrow": 1}):
