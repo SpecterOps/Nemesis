@@ -239,7 +239,7 @@ data:
             download_path TEXT,                         -- extracted from the Chromium DB `target_path` field
             start_time TIMESTAMP WITH TIME ZONE,        -- extracted from the Chromium DB
             end_time TIMESTAMP WITH TIME ZONE,          -- extracted from the Chromium DB
-            total_bytes INTEGER,                        -- extracted from the Chromium DB
+            total_bytes BIGINT,                         -- extracted from the Chromium DB
             danger_type TEXT,                           -- extracted from the Chromium DB, converted from int
             -- to deal with length limits for the UNIQUE constraint:
             index_md5_hash UUID GENERATED ALWAYS AS (MD5(user_data_directory || download_path)::uuid) STORED,

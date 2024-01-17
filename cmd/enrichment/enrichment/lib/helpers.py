@@ -215,6 +215,10 @@ async def process_chromium_history(
         async with db.execute("SELECT tab_url,target_path,start_time,end_time,total_bytes,danger_type FROM downloads") as cursor:
             chromium_download_message = pb.ChromiumDownloadMessage()
             chromium_download_message.metadata.CopyFrom(metadata)
+            page_size = 1000
+            total_downloads = 0
+            counter = 0
+            start = time.time()
 
             async for row in cursor:
                 download = pb.ChromiumDownload()
@@ -241,8 +245,22 @@ async def process_chromium_history(
                 download.danger_type = DangerType(danger_type).name
 
                 chromium_download_message.data.append(download)
+                counter += 1
+                total_downloads += 1
 
-            await chromium_downloads_q.Send(chromium_download_message.SerializeToString())
+                if counter >= page_size:
+                    # send the existing 1000 packaged entries
+                    await chromium_downloads_q.Send(chromium_download_message.SerializeToString())
+                    # clear out the data field
+                    chromium_download_message.ClearField('data')
+                    counter = 0
+
+            if len(chromium_history_message.data) > 0:
+                # send any leftovers
+                await chromium_downloads_q.Send(chromium_download_message.SerializeToString())
+
+            end = time.time()
+            await logger.ainfo(f"{total_downloads} Chromium downloads processed in in {(end - start):.2f} seconds", object_id=object_id)
 
 
 async def process_chromium_logins(object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_logins_q: MessageQueueProducerInterface) -> None:
