@@ -11,6 +11,7 @@ import struct
 import subprocess
 import sys
 import tarfile
+import time
 import uuid
 import zipfile
 import zlib
@@ -168,6 +169,10 @@ async def process_chromium_history(
         async with db.execute("SELECT url,title,visit_count,typed_count,last_visit_time FROM urls") as cursor:
             chromium_history_message = pb.ChromiumHistoryMessage()
             chromium_history_message.metadata.CopyFrom(metadata)
+            page_size = 1000
+            total_history_urls = 0
+            counter = 0
+            start = time.time()
 
             async for row in cursor:
                 history_entry = pb.ChromiumHistoryEntry()
@@ -189,8 +194,22 @@ async def process_chromium_history(
                 history_entry.last_visit_time.FromDatetime(last_visit_time_dt)
 
                 chromium_history_message.data.append(history_entry)
+                counter += 1
+                total_history_urls += 1
 
+                if counter >= page_size:
+                    # send the existing 1000 packaged entries
+                    await chromium_history_q.Send(chromium_history_message.SerializeToString())
+                    # clear out the data field
+                    chromium_history_message.ClearField('data')
+                    counter = 0
+
+            if len(chromium_history_message.data) > 0:
+                # send any leftovers
                 await chromium_history_q.Send(chromium_history_message.SerializeToString())
+
+            end = time.time()
+            await logger.ainfo(f"{total_history_urls} Chromium history URLs processed in in {(end - start):.2f} seconds", object_id=object_id)
 
         # first parse out all of the downloads and emit one or more ChromiumDownloadMessage protobufs
         async with db.execute("SELECT tab_url,target_path,start_time,end_time,total_bytes,danger_type FROM downloads") as cursor:
