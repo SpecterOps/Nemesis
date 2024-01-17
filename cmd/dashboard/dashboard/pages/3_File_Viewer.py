@@ -21,7 +21,7 @@ from streamlit_elements import (dashboard, editor, elements, html, lazy, mui,
                                 sync)
 from streamlit_toggle import st_toggle_switch
 
-NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER").rstrip("/")
 
 triage_pattern = re.compile(r"^triage_(?P<db_id>[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12})_(?P<triage_value>.*)")
 notes_pattern = re.compile(r"^file_notes_(?P<db_id>[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12})$")
@@ -133,9 +133,24 @@ def create_file_info_table(file):
                         with mui.TableRow(hover=True, padding="none"):
                             mui.TableCell("Tags", sx=identifier_style)
                             with mui.TableCell():
+                                object_id = file["object_id"]
                                 # Tags
                                 for tag in file["tags"]:
-                                    mui.Chip(label=tag, color="primary")
+                                    link_uri = ""
+                                    if tag == "parsed_creds":
+                                        link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/Credentials?object_id={object_id}"
+                                    elif tag == "noseyparker_results":
+                                        link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/NoseyParker"
+                                    if link_uri:
+                                        mui.Chip(   label=tag,
+                                                    href=link_uri,
+                                                    component="a",
+                                                    target="_blank",
+                                                    clickable=True,
+                                                    color="info")
+                                    else:
+                                        mui.Chip(label=tag, color="primary")
+
         # Notes
         unique_db_id = file["unique_db_id"].replace("-", "_")
 

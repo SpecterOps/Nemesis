@@ -394,7 +394,7 @@ def build_file_listing():
                                                     for tag in file["tags"]:
                                                         link_uri = ""
                                                         if tag == "parsed_creds":
-                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/Credentials"
+                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/Credentials?object_id={object_id}"
                                                         elif tag == "noseyparker_results":
                                                             link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/NoseyParker"
                                                         if link_uri:

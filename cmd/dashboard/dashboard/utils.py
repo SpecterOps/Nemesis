@@ -319,7 +319,7 @@ def get_masterkeys() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=1000, show_spinner="Fetching fresh data from the database...")
-def get_password_data() -> pd.DataFrame:
+def get_password_data(originating_object_id: str = "") -> pd.DataFrame:
     """Performs the main database query for passwords so the data can be cached on reruns."""
 
     # query the `nemesis.authentication_data` table for entries of type "password"
@@ -337,6 +337,9 @@ def get_password_data() -> pd.DataFrame:
 
         WHERE authentication_data.type = 'password'
     """
+
+    if originating_object_id:
+        query += f"\n            AND authentication_data.originating_object_id = '{originating_object_id}'"
 
     try:
         with engine.connect() as conn:
