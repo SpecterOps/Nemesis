@@ -175,6 +175,10 @@ def create_file_info_table(file):
 def build_page(username: str):
     object_id = utils.get_single_valued_param("object_id")
 
+    # pull our specified tab from the query parameters, otherwise use "basic_file_info" as the default
+    if "tab" not in st.query_params or not st.query_params["tab"]:
+        st.query_params["tab"] = "basic_file_info"
+
     # Prompt for the object ID if there isn't one
     if not object_id:
         object_id = st.text_input("Enter file's unique identifier (UUID):")
@@ -208,23 +212,28 @@ def build_page(username: str):
 
         download_url_internal = f"http://enrichment-webapi:9910/download/{object_id}"
 
-        tabs = [stx.TabBarItemData(id=1, title="Basic File Info", description="Basic File Information"), stx.TabBarItemData(id=3, title="Elasticsearch Info", description="Elasticsearch Information Dump")]
+        tabs = [
+            stx.TabBarItemData(id="basic_file_info", title="Basic File Info", description="Basic File Information"),
+            stx.TabBarItemData(id="elasticsearch_info", title="Elasticsearch Info", description="Elasticsearch Information Dump")
+        ]
 
         es_results = utils.elastic_file_search(object_id)
         archive_contents_json = None
         if es_results and es_results["hits"]["total"]["value"] == 1:
             es_result = es_results["hits"]["hits"][0]["_source"]
             if "noseyparker" in es_result:
-                tabs.append(stx.TabBarItemData(id=2, title="Noseyparker Results", description="Noseyparker Results"))
+                tabs.insert(1, stx.TabBarItemData(id="noseyparker_results", title="Noseyparker Results", description="Noseyparker Results"))
+            if "yaraMatches" in es_result:
+                tabs.insert(1, stx.TabBarItemData(id="yara_matches", title="Yara Matches", description="Yara Matches"))
             if "parsedData" in es_result and "archive" in es_result["parsedData"] and "entries" in es_result["parsedData"]["archive"]:
                 archive_contents_json = es_result["parsedData"]["archive"]["entries"]
 
         chosen_tab = stx.tab_bar(
             data=tabs,
-            default=1,
+            default=st.query_params["tab"]
         )
 
-        if chosen_tab == str(1):  # "basic_file_info":
+        if chosen_tab == "basic_file_info":
             layout = [
                 # Grid layout parameters: element_identifier, x_pos, y_pos, width, height, [item properties...]
                 dashboard.Item("1", 0, 0, 10, 2.5, isDraggable=False, isResizable=False, sx={"height": "100%"}),
@@ -370,7 +379,7 @@ def build_page(username: str):
             if image_content:
                 st.image(image_content)
 
-        elif chosen_tab == str(2):  # noseyparker_results
+        elif chosen_tab == "noseyparker_results":
             if es_results != {}:
                 total_hits = es_results["hits"]["total"]["value"]
                 num_results = len(es_results["hits"]["hits"])
@@ -426,7 +435,10 @@ def build_page(username: str):
                                     st.code(before + matching + after)
                                     st.divider()
 
-        elif chosen_tab == str(3):  # "elasticsearch_info"
+        elif chosen_tab == "yara_matches":
+            st.json(es_result["yaraMatches"]["yaraMatches"])
+
+        elif chosen_tab == "elasticsearch_info":
             if es_results != {}:
                 total_hits = es_results["hits"]["total"]["value"]
                 if total_hits == 0:
