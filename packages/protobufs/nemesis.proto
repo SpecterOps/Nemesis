@@ -1474,6 +1474,17 @@ message NoseyParker {
 }
 
 
+message YaraMatches {
+  message YaraMatch {
+    string rule_file = 1;
+    string rule_title = 2;
+    string rule_name = 3;
+    string rule_description = 4;
+    repeated string strings = 5;
+  }
+  bool yara_matches_present = 1;
+  repeated YaraMatch yara_matches = 2;
+}
 message Canaries {
   message Canary {
     string type = 1;
@@ -1551,7 +1562,7 @@ message FileDataEnriched {
   NoseyParker noseyparker = 29;
 
   // any Yara rule matches
-  repeated string yara_matches = 31;
+  YaraMatches yara_matches = 31;
 
   // possible document canaries
   Canaries canaries = 33;

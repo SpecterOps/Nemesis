@@ -638,18 +638,16 @@ class FileProcessor(TaskInterface):
                     )
 
         # run Yara on the file
-        yara_results = await self.yara_opsec_scan(file_path_on_disk)
-        if "error" in yara_results:
-            error_text = yara_results["error"]
+        yara_matches = await self.yara_opsec_scan(file_path_on_disk)
+        if isinstance(yara_matches, pb.Error):
             enrichments_failure.append(constants.E_YARA_SCAN)
-            await logger.aerror(f"Error in yara_opsec_scan: {error_text}")
+            await logger.aerror(f"Error in yara_opsec_scan: {yara_matches.error}")
         else:
             enrichments_success.append(constants.E_YARA_SCAN)
-            if "yara_matches" in yara_results and len(yara_results["yara_matches"]) > 0:
-                rule_matches = yara_results["yara_matches"]
-                file_data.yara_matches.extend(rule_matches)
+            if yara_matches.yara_matches_present and len(yara_matches.yara_matches) > 0:
+                file_data.yara_matches.CopyFrom(yara_matches)
 
-                alert_rules = [rule for rule in rule_matches if rule not in constants.EXCLUDED_YARA_RULES]
+                alert_rules = [t.rule_title for t in yara_matches.yara_matches if t.rule_title not in constants.EXCLUDED_YARA_RULES]
 
                 if alert_rules:
                     rule_matches_str = ", ".join(alert_rules)
@@ -922,25 +920,45 @@ class FileProcessor(TaskInterface):
         download it the Nemesis datastore.
         """
 
+        yara_matches = pb.YaraMatches()
+
+        def mycallback(data):
+            if(data["matches"]):
+                yara_matches.yara_matches_present = True
+                yara_match = pb.YaraMatches.YaraMatch()
+                yara_match.rule_file = data["namespace"]
+                yara_match.rule_title = data["rule"]
+                if "name" in data["meta"]:
+                    yara_match.rule_name = data["meta"]["name"]
+                if "description" in data["meta"]:
+                    yara_match.rule_description = data["meta"]["description"]
+                yara_match.rule_title = data["rule"]
+                if "strings" in data:
+                    yara_match.strings.extend([f"{m}" for m in data["strings"]])
+                yara_matches.yara_matches.extend([yara_match])
+            return yara.CALLBACK_CONTINUE
+
         if os.path.exists(file_path):
             try:
-                return {"yara_matches": [f"{match}" for match in self.yara_rules.match(file_path)]}
+                self.yara_rules.match(file_path, callback=mycallback, which_callbacks=yara.CALLBACK_MATCHES)
             except Exception as e:
+                yara_matches = helpers.nemesis_error(f"yara_scan_file error for {file_path} : {e}")
                 await logger.aexception(e, message="yara_scan_file error", file_path=file_path)
-                return {"error": f"yara_scan_file error for {file_path} : {e}"}
         else:
             try:
                 # try to download the file from the nemesis API
                 file_uuid = uuid.UUID(file_path)
                 with await self.storage.download(file_uuid) as temp_file:
-                    return {"yara_matches": [f"{match}" for match in self.yara_rules.match(temp_file.name)]}
+                    self.yara_rules.match(temp_file.name, callback=mycallback, which_callbacks=yara.CALLBACK_MATCHES)
             except Exception as e:
+                yara_matches = helpers.nemesis_error(f"yara_scan_file error for {file_path} : {e}")
                 await logger.aexception(e, message="yara_scan_file error", file_path=file_path)
-                return {"error": f"yara_scan_file error for {file_path} : {e}"}
             finally:
                 # clean up the local file if it exists
                 if os.path.exists(file_path):
                     os.remove(file_path)
+
+        return yara_matches
 
     async def extract_text(self, file_path: str) -> Optional[uuid.UUID]:
         """Extracts text from a file, and if there's text, returns a Nemesis File UUID."""
