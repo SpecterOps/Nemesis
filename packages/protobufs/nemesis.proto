@@ -1475,12 +1475,21 @@ message NoseyParker {
 
 
 message YaraMatches {
+  message YaraStringMatchInstance {
+    string matched_string = 1;
+    uint64 offset = 2;
+    uint64 length = 3;
+  }
+  message YaraStringMatch {
+    string identifier = 1;
+    repeated YaraStringMatchInstance yara_string_match_instances = 2;
+  }
   message YaraMatch {
     string rule_file = 1;
-    string rule_title = 2;
-    string rule_name = 3;
-    string rule_description = 4;
-    repeated string strings = 5;
+    string rule_name = 2;
+    string rule_description = 3;
+    string rule_text = 4;
+    repeated YaraStringMatch rule_string_matches = 5;
   }
   bool yara_matches_present = 1;
   repeated YaraMatch yara_matches = 2;

@@ -18,6 +18,7 @@ import enrichment.lib.canaries as canary_helpers
 import enrichment.lib.helpers as helpers
 import nemesiscommon.constants as constants
 import nemesispb.nemesis_pb2 as pb
+import plyara
 import structlog
 import yara
 from binaryornot.check import is_binary
@@ -29,6 +30,7 @@ from nemesiscommon.nemesis_tempfile import TempFile
 from nemesiscommon.services.alerter import AlerterInterface
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
+from plyara import utils as plyara_utils
 from prometheus_async import aio
 from prometheus_client import Summary
 from sumy.nlp.tokenizers import Tokenizer
@@ -165,7 +167,24 @@ class FileProcessor(TaskInterface):
             except:
                 continue
 
+        # compile all the rules
         self.yara_rules = yara.compile(filepaths=yara_files)
+
+        # save off the rule definitions in a readable way
+        self.yara_rule_definitions = {}
+        yara_rule_definitions_raw = list()
+        parser = plyara.Plyara()
+        for file_path in yara_file_paths:
+            with open(file_path, 'r') as fh:
+                try:
+                    parsed_yara_rules = parser.parse_string(fh.read())
+                    yara_rule_definitions_raw += parsed_yara_rules
+                except Exception as e:
+                    logger.error(f"Error parsing yara file '{file_path}' : {e}")
+            parser.clear()
+        pass
+        for rule_def in yara_rule_definitions_raw:
+            self.yara_rule_definitions[rule_def['rule_name']] = plyara_utils.rebuild_yara_rule(rule_def)
 
     async def run(self) -> None:
         await logger.ainfo("Starting the File Processor")
@@ -245,7 +264,7 @@ class FileProcessor(TaskInterface):
             file_data.hashes.CopyFrom(file_hashes)
         else:
             enrichments_failure.append(constants.E_FILE_HASHES)
-            await logger.aerror("Hash enrichment: Failed to hash file")
+            await logger.aerror(f"Hash enrichment: Failed to hash file: {file_path_on_disk}")
 
         # now get its magic type from the first 2048 bytes using python-magic
         file_magic_type = helpers.get_magic_type(file_path_on_disk)
@@ -637,7 +656,7 @@ class FileProcessor(TaskInterface):
                         text=text,
                     )
 
-        # run Yara on the file
+        # run Yara OPSEC rules on the file
         yara_matches = await self.yara_opsec_scan(file_path_on_disk)
         if isinstance(yara_matches, pb.Error):
             enrichments_failure.append(constants.E_YARA_SCAN)
@@ -922,25 +941,29 @@ class FileProcessor(TaskInterface):
 
         yara_matches = pb.YaraMatches()
 
-        def mycallback(data):
-            if(data["matches"]):
-                yara_matches.yara_matches_present = True
-                yara_match = pb.YaraMatches.YaraMatch()
-                yara_match.rule_file = data["namespace"]
-                yara_match.rule_title = data["rule"]
-                if "name" in data["meta"]:
-                    yara_match.rule_name = data["meta"]["name"]
-                if "description" in data["meta"]:
-                    yara_match.rule_description = data["meta"]["description"]
-                yara_match.rule_title = data["rule"]
-                if "strings" in data:
-                    yara_match.strings.extend([f"{m}" for m in data["strings"]])
-                yara_matches.yara_matches.extend([yara_match])
-            return yara.CALLBACK_CONTINUE
-
         if os.path.exists(file_path):
             try:
-                self.yara_rules.match(file_path, callback=mycallback, which_callbacks=yara.CALLBACK_MATCHES)
+                for match in self.yara_rules.match(file_path):
+                    yara_matches.yara_matches_present = True
+                    yara_match = pb.YaraMatches.YaraMatch()
+                    yara_match.rule_file = match.namespace
+                    yara_match.rule_name = match.rule
+                    if yara_match.rule_name in self.yara_rule_definitions:
+                        yara_match.rule_text = self.yara_rule_definitions[yara_match.rule_name]
+                    if hasattr(match, 'meta') and "description" in match.meta:
+                        yara_match.rule_description = match.meta["description"]
+                    if hasattr(match, 'strings'):
+                        for yara_string in match.strings:
+                            yara_string_match = pb.YaraMatches.YaraStringMatch()
+                            yara_string_match.identifier = yara_string.identifier
+                            for instance in yara_string.instances:
+                                yara_string_match_instance = pb.YaraMatches.YaraStringMatchInstance()
+                                yara_string_match_instance.matched_string = f"{instance}"
+                                yara_string_match_instance.offset = instance.offset
+                                yara_string_match_instance.length = instance.matched_length
+                                yara_string_match.yara_string_match_instances.extend([yara_string_match_instance])
+                            yara_match.rule_string_matches.extend([yara_string_match])
+                    yara_matches.yara_matches.extend([yara_match])
             except Exception as e:
                 yara_matches = helpers.nemesis_error(f"yara_scan_file error for {file_path} : {e}")
                 await logger.aexception(e, message="yara_scan_file error", file_path=file_path)
@@ -949,7 +972,7 @@ class FileProcessor(TaskInterface):
                 # try to download the file from the nemesis API
                 file_uuid = uuid.UUID(file_path)
                 with await self.storage.download(file_uuid) as temp_file:
-                    self.yara_rules.match(temp_file.name, callback=mycallback, which_callbacks=yara.CALLBACK_MATCHES)
+                    self.yara_rules.match(temp_file.name)
             except Exception as e:
                 yara_matches = helpers.nemesis_error(f"yara_scan_file error for {file_path} : {e}")
                 await logger.aexception(e, message="yara_scan_file error", file_path=file_path)
