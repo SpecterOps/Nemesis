@@ -436,7 +436,36 @@ def build_page(username: str):
                                     st.divider()
 
         elif chosen_tab == "yara_matches":
-            st.json(es_result["yaraMatches"]["yaraMatches"])
+            matches = es_result["yaraMatches"]["yaraMatches"]
+            for match in matches:
+                rule_file = match["ruleFile"]
+                rule_name = match["ruleName"]
+                rule_description = match["ruleDescription"] if "ruleDescription" in match else ""
+                rule_text = match["ruleText"] if "ruleText" in match else ""
+
+                st.subheader(f"{rule_name} ({rule_file})", divider="red")
+                if rule_description:
+                    st.markdown(f"**Description:** $~~~~~~$ {rule_description}")
+                if match["ruleStringMatches"]:
+                    string_matches = []
+                    for rule_string_match in match["ruleStringMatches"]:
+                        identifier = rule_string_match["identifier"]
+                        for rule_string_match_instance in rule_string_match["yaraStringMatchInstances"]:
+                            matched_string = rule_string_match_instance["matchedString"]
+                            offset = rule_string_match_instance["offset"]
+                            length = rule_string_match_instance["length"]
+                            string_matches.append((identifier, matched_string, offset, length))
+                    if len(string_matches) > 0:
+                        string_data = []
+                        st.markdown("**String Matches:**")
+                        for string_match in string_matches:
+                            string_data.append([string_match[0], string_match[1], string_match[2], string_match[3]])
+                        df = pd.DataFrame(string_data, columns=['Identifier', 'Matched String', 'Offset', 'Length'])
+                        st.table(df)
+                if rule_text:
+                    with st.expander(f"###### Rule Definition"):
+                        st.code(rule_text, language="yaml")
+
 
         elif chosen_tab == "elasticsearch_info":
             if es_results != {}:

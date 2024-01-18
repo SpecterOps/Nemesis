@@ -666,7 +666,7 @@ class FileProcessor(TaskInterface):
             if yara_matches.yara_matches_present and len(yara_matches.yara_matches) > 0:
                 file_data.yara_matches.CopyFrom(yara_matches)
 
-                alert_rules = [t.rule_title for t in yara_matches.yara_matches if t.rule_title not in constants.EXCLUDED_YARA_RULES]
+                alert_rules = [t.rule_name for t in yara_matches.yara_matches if t.rule_name not in constants.EXCLUDED_YARA_RULES]
 
                 if alert_rules:
                     rule_matches_str = ", ".join(alert_rules)
