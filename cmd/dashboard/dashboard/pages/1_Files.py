@@ -395,8 +395,10 @@ def build_file_listing():
                                                         link_uri = ""
                                                         if tag == "parsed_creds":
                                                             link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/Credentials?object_id={object_id}"
-                                                        if tag == "yara_matches":
+                                                        elif tag == "yara_matches":
                                                             link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={object_id}&tab=yara_matches"
+                                                        elif tag == "file_canary":
+                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={object_id}&tab=canaries"
                                                         elif tag == "noseyparker_results":
                                                             link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/NoseyParker"
                                                         if link_uri:

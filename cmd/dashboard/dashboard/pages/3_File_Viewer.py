@@ -226,6 +226,8 @@ def build_page(username: str):
                 tabs.insert(1, stx.TabBarItemData(id="noseyparker_results", title="Noseyparker Results", description="Noseyparker Results"))
             if "yaraMatches" in es_result:
                 tabs.insert(1, stx.TabBarItemData(id="yara_matches", title="Yara Matches", description="Yara Matches"))
+            if "canaries" in es_result:
+                tabs.insert(1, stx.TabBarItemData(id="canaries", title="Canaries", description="Canary Matches"))
             if "parsedData" in es_result and "archive" in es_result["parsedData"] and "entries" in es_result["parsedData"]["archive"]:
                 archive_contents_json = es_result["parsedData"]["archive"]["entries"]
 
@@ -436,6 +438,18 @@ def build_page(username: str):
                                     st.code(before + matching + after)
                                     st.divider()
 
+        elif chosen_tab == "canaries":
+            if not es_result["canaries"]["canariesPresent"]:
+                st.warning("No canaries actually present!")
+            else:
+                for canary in es_result["canaries"]["canaries"]:
+                    canary_type = canary["type"]
+                    matches = canary["data"]
+                    st.subheader(f"Canary Rule: {canary_type}", divider="red")
+                    st.markdown("#### Canary Rule String Matches")
+                    for match in matches:
+                        st.markdown(f"- {match}")
+
         elif chosen_tab == "yara_matches":
             matches = es_result["yaraMatches"]["yaraMatches"]
             for match in matches:
@@ -477,7 +491,6 @@ def build_page(username: str):
                 if rule_text:
                     with st.expander(f"###### Rule Definition"):
                         st.code(rule_text, language="yaml")
-
 
         elif chosen_tab == "elasticsearch_info":
             if es_results != {}:
