@@ -3887,20 +3887,21 @@ class YaraMatches(google.protobuf.message.Message):
     class YaraStringMatchInstance(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        MATCHED_STRING_FIELD_NUMBER: builtins.int
+        MATCHED_DATA_FIELD_NUMBER: builtins.int
         OFFSET_FIELD_NUMBER: builtins.int
         LENGTH_FIELD_NUMBER: builtins.int
-        matched_string: builtins.str
+        matched_data: builtins.bytes
+        """bytes so we can decode UTF8/UTF16 as appropriate later"""
         offset: builtins.int
         length: builtins.int
         def __init__(
             self,
             *,
-            matched_string: builtins.str = ...,
+            matched_data: builtins.bytes = ...,
             offset: builtins.int = ...,
             length: builtins.int = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["length", b"length", "matched_string", b"matched_string", "offset", b"offset"]) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["length", b"length", "matched_data", b"matched_data", "offset", b"offset"]) -> None: ...
 
     @typing_extensions.final
     class YaraStringMatch(google.protobuf.message.Message):

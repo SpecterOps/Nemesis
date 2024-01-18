@@ -958,7 +958,7 @@ class FileProcessor(TaskInterface):
                             yara_string_match.identifier = yara_string.identifier
                             for instance in yara_string.instances:
                                 yara_string_match_instance = pb.YaraMatches.YaraStringMatchInstance()
-                                yara_string_match_instance.matched_string = f"{instance}"
+                                yara_string_match_instance.matched_data = bytes(instance.matched_data)
                                 yara_string_match_instance.offset = instance.offset
                                 yara_string_match_instance.length = instance.matched_length
                                 yara_string_match.yara_string_match_instances.extend([yara_string_match_instance])

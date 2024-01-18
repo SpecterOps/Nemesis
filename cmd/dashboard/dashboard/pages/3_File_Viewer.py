@@ -1,4 +1,5 @@
 # Standard Libraries
+import base64
 import json
 import os
 import pathlib
@@ -451,10 +452,21 @@ def build_page(username: str):
                     for rule_string_match in match["ruleStringMatches"]:
                         identifier = rule_string_match["identifier"]
                         for rule_string_match_instance in rule_string_match["yaraStringMatchInstances"]:
-                            matched_string = rule_string_match_instance["matchedString"]
-                            offset = rule_string_match_instance["offset"]
-                            length = rule_string_match_instance["length"]
-                            string_matches.append((identifier, matched_string, offset, length))
+                            try:
+                                matched_data = base64.b64decode(rule_string_match_instance["matchedData"])
+                                try:
+                                    matched_string = matched_data.decode(encoding="ascii")
+                                except:
+                                    try:
+                                        matched_string = matched_data.decode(encoding="utf-8")
+                                    except:
+                                        matched_string = matched_data.decode(encoding="utf-16", errors="ignore")
+                                offset = rule_string_match_instance["offset"]
+                                length = rule_string_match_instance["length"]
+                                string_matches.append((identifier, matched_string, offset, length))
+                            except Exception as e:
+                                a = rule_string_match["yaraStringMatchInstances"]
+                                print(f"Exception processing string match '{a}' : {e}")
                     if len(string_matches) > 0:
                         string_data = []
                         st.markdown("**String Matches:**")

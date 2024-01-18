@@ -1476,7 +1476,7 @@ message NoseyParker {
 
 message YaraMatches {
   message YaraStringMatchInstance {
-    string matched_string = 1;
+    bytes matched_data = 1; // bytes so we can decode UTF8/UTF16 as appropriate later
     uint64 offset = 2;
     uint64 length = 3;
   }
