@@ -3884,30 +3884,66 @@ class YaraMatches(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     @typing_extensions.final
+    class YaraStringMatchInstance(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MATCHED_STRING_FIELD_NUMBER: builtins.int
+        OFFSET_FIELD_NUMBER: builtins.int
+        LENGTH_FIELD_NUMBER: builtins.int
+        matched_string: builtins.str
+        offset: builtins.int
+        length: builtins.int
+        def __init__(
+            self,
+            *,
+            matched_string: builtins.str = ...,
+            offset: builtins.int = ...,
+            length: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["length", b"length", "matched_string", b"matched_string", "offset", b"offset"]) -> None: ...
+
+    @typing_extensions.final
+    class YaraStringMatch(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IDENTIFIER_FIELD_NUMBER: builtins.int
+        YARA_STRING_MATCH_INSTANCES_FIELD_NUMBER: builtins.int
+        identifier: builtins.str
+        @property
+        def yara_string_match_instances(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___YaraMatches.YaraStringMatchInstance]: ...
+        def __init__(
+            self,
+            *,
+            identifier: builtins.str = ...,
+            yara_string_match_instances: collections.abc.Iterable[global___YaraMatches.YaraStringMatchInstance] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["identifier", b"identifier", "yara_string_match_instances", b"yara_string_match_instances"]) -> None: ...
+
+    @typing_extensions.final
     class YaraMatch(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         RULE_FILE_FIELD_NUMBER: builtins.int
-        RULE_TITLE_FIELD_NUMBER: builtins.int
         RULE_NAME_FIELD_NUMBER: builtins.int
         RULE_DESCRIPTION_FIELD_NUMBER: builtins.int
-        STRINGS_FIELD_NUMBER: builtins.int
+        RULE_TEXT_FIELD_NUMBER: builtins.int
+        RULE_STRING_MATCHES_FIELD_NUMBER: builtins.int
         rule_file: builtins.str
-        rule_title: builtins.str
         rule_name: builtins.str
         rule_description: builtins.str
+        rule_text: builtins.str
         @property
-        def strings(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+        def rule_string_matches(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___YaraMatches.YaraStringMatch]: ...
         def __init__(
             self,
             *,
             rule_file: builtins.str = ...,
-            rule_title: builtins.str = ...,
             rule_name: builtins.str = ...,
             rule_description: builtins.str = ...,
-            strings: collections.abc.Iterable[builtins.str] | None = ...,
+            rule_text: builtins.str = ...,
+            rule_string_matches: collections.abc.Iterable[global___YaraMatches.YaraStringMatch] | None = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["rule_description", b"rule_description", "rule_file", b"rule_file", "rule_name", b"rule_name", "rule_title", b"rule_title", "strings", b"strings"]) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["rule_description", b"rule_description", "rule_file", b"rule_file", "rule_name", b"rule_name", "rule_string_matches", b"rule_string_matches", "rule_text", b"rule_text"]) -> None: ...
 
     YARA_MATCHES_PRESENT_FIELD_NUMBER: builtins.int
     YARA_MATCHES_FIELD_NUMBER: builtins.int
