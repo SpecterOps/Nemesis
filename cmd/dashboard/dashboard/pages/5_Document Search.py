@@ -236,14 +236,27 @@ def build_page(username: str):
 
             try:
                 json_results = utils.semantic_search(search_term, num_results)
-                if not json_results or "results" not in json_results:
+                if json_results and "error" in json_results:
+                    error = json_results["error"]
+                    if "index_not_found_exception" in error:
+                        st.warning("No text has been indexed!")
+                    else:
+                        st.error(f"Error from NLP service: {error}")
+                elif not json_results or "results" not in json_results:
                     st.warning("No results retrieved from semantic search, service might be busy")
                 else:
-                    for result in json_results["results"]:
-                        (header, text, footer) = templates.semantic_search_result(result)
-                        st.write(header, unsafe_allow_html=True)
-                        st.write(text, unsafe_allow_html=False)
-                        st.write(footer, unsafe_allow_html=True)
+                    if len(json_results) > 0:
+                        for result in json_results["results"]:
+                            header = templates.semantic_search_result(result)
+                            st.subheader("", divider="red")
+                            st.markdown(header, unsafe_allow_html=True)
+                            st.markdown("")
+                            st.code(result["text"], None)
+                        st.subheader("", divider="red")
+                    else:
+                        st.warning("No results retrieved from semantic search")
+
+
             except Exception as e:
                 st.error(f"Exception: {e}")
 

@@ -196,7 +196,7 @@ def sourcecode_search_result(i: int, object_id: str, download_url: str, source: 
     )
 
 
-def semantic_search_result(result) -> Tuple[str, str, str]:
+def semantic_search_result(result) ->str:
     """HTML scripts to display a semantic search json result."""
 
     text = result["text"]
@@ -220,23 +220,12 @@ def semantic_search_result(result) -> Tuple[str, str, str]:
         else None
     )
 
-    return (
-        f"""
+    return f"""
     <div style="font-size:120%;">
         <a href="{view_file_url}">
             {originating_object_path}
         </a>
     </div>
-    <div style="font-size:95%;">
-        <div style="color:grey;font-size:95%;">
-            Score: {score}
-            &nbsp;
-            {f"Source: {source}" if source else ""}
-            {pdf_html}
-        </div>
-        <pre>""",
-        text,
-        """</pre>
-    </div>
-    """,
-    )
+    <div style="color:grey;font-size:95%;">
+        Score: {score}<br>{f"Source: {source}" if source else ""}<br>{pdf_html}
+    """
