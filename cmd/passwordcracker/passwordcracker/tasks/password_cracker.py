@@ -5,13 +5,12 @@ import os
 # 3rd Party Libraries
 import nemesispb.nemesis_pb2 as pb
 import structlog
-from nemesiscommon.messaging import (
-    MessageQueueConsumerInterface,
-    MessageQueueProducerInterface,
-)
+from nemesiscommon.messaging import (MessageQueueConsumerInterface,
+                                     MessageQueueProducerInterface)
 from nemesiscommon.services.alerter import AlerterInterface
 from nemesiscommon.tasking import TaskInterface
-from passwordcracker.services.john_the_ripper_cracker import PasswordCrackerInterface
+from passwordcracker.services.john_the_ripper_cracker import \
+    PasswordCrackerInterface
 from passwordcracker.settings import PasswordCrackerSettings
 from prometheus_async import aio
 from prometheus_client import Summary
@@ -54,7 +53,7 @@ class PasswordCracker(TaskInterface):
         self.semaphore = asyncio.Semaphore()
 
     async def run(self) -> None:
-        await logger.ainfo("Starting the Auth Data service")
+        await logger.ainfo("Starting the password cracking service")
 
         await asyncio.gather(
             self.auth_data_q_in.Read(self.handle_auth_data),  # type: ignore
@@ -84,6 +83,9 @@ class PasswordCracker(TaskInterface):
             # TODO: formatting for Hashcat/JTR formats
             extracted_hash.jtr_formatted_value = data.data
 
+            # send the message _uncracked_ so it can be displayed ASAP
+            await self.extracted_hash_q_out.Send(extracted_hash_msg.SerializeToString())
+
             async with self.semaphore:
                 match extracted_hash.hash_type:
                     # handle specific hash types that need the type specified
@@ -97,12 +99,10 @@ class PasswordCracker(TaskInterface):
             if jtr_pot_line:
                 extracted_hash.jtr_pot_line = jtr_pot_line
                 extracted_hash.is_cracked = True
-
-                # regarding spltting on the :
-                #   yes this is stupid, but don't see another way to do this
                 plaintext = jtr_pot_line
                 extracted_hash.plaintext_value = plaintext
 
+                await logger.ainfo(f"Hash cracked: {extracted_hash}")
                 await self.send_hash_cracked_alert(extracted_hash, extracted_hash_msg.metadata.message_id)
 
             # publish the extracted hash out to the extracted_hash_q_out queue

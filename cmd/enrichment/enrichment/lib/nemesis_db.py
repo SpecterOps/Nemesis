@@ -824,6 +824,20 @@ class NemesisDb(NemesisDbInterface):
                 auth_data.plaintext_value,
             )
 
+        if auth_data.is_cracked:
+            # update any values in the table where the hash matches this cracked value
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE nemesis.extracted_hashes
+                    SET is_cracked = True, plaintext_value = $1
+                    WHERE is_cracked= False AND hash_value = $2
+                    """,
+                    auth_data.plaintext_value,
+                    auth_data.hash_value
+                )
+
+
     async def add_dpapi_blob(self, dpapi_blob: DpapiBlob) -> None:
         """Adds a new `nemesis.dpapi_blobs` entry from a DpapiBlob class object."""
 
