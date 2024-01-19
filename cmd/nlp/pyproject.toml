@@ -10,7 +10,6 @@ app = "nlp.__main__:main"
 
 [tool.poetry.dependencies]
 python = "^3.11.2"
-langchain = "^0.0.163"
 typing-extensions = "^4.5.0"
 fastapi = "^0.82.0"
 fastapi-class = "^2.0.0"
@@ -20,9 +19,10 @@ aiohttp = "^3.8.4"
 nemesiscommon = { path = "../../packages/python/nemesiscommon", develop = true }
 nemesispb = { path = "../../packages/python/nemesispb", develop = true }
 elasticsearch = "^8.7.0"
-torch = {version = "^2.0.1+cpu", source = "torch"}
+torch = {version = "^2.1.2+cpu", source = "torch"}
 sentence-transformers = "^2.2.2"
-tiktoken = "^0.4.0"
+langchain = "^0.1.1"
+tiktoken = "^0.5.2"
 certifi = "^2023.7.22"
 
 [tool.poetry.dev-dependencies]
@@ -34,8 +34,7 @@ mypy = "^0.971"
 [[tool.poetry.source]]
 name = "torch"
 url = "https://download.pytorch.org/whl/cpu"
-default = false
-secondary = true
+priority = "primary"
 
 
 [tool.poetry.group.dev.dependencies]
