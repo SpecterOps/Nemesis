@@ -80,6 +80,15 @@ class PasswordCracker(TaskInterface):
             else:
                 return None
 
+    async def check_if_unsuccessful_crack(self, hash_value: str):
+        """Returns True if we already tried to crack this value and failed to do so."""
+
+        async with self.db_pool.acquire() as conn:
+            return await conn.fetchval(
+                "SELECT EXISTS (SELECT unique_db_id FROM nemesis.extracted_hashes WHERE is_cracked = False AND checked_against_top_passwords = False AND hash_value = $1 LIMIT 1)",
+                hash_value,
+            )
+
     @aio.time(Summary("process_auth_data", "Time spent processing an Auth Data event"))  # type: ignore
     async def process_auth_data(self, event: pb.AuthenticationDataIngestionMessage):
         """Main function to process authentication data events."""
@@ -100,32 +109,40 @@ class PasswordCracker(TaskInterface):
             # TODO: formatting for Hashcat/JTR formats
             extracted_hash.jtr_formatted_value = data.data
 
-            cracked_hash_value = await self.get_cracked_hash_value(data.data)
-            if cracked_hash_value:
-                # this means the hash is already cracked, so don't just JTR
-                extracted_hash.is_cracked = True
-                extracted_hash.plaintext_value = cracked_hash_value
-                await logger.ainfo("Hash is already cracked using existing value.")
+            # check if we attempted to crack this value but failed
+            unsuccessful_crack = await self.check_if_unsuccessful_crack(data.data)
+            if unsuccessful_crack:
+                extracted_hash.is_cracked = False
+                extracted_hash.checked_against_top_passwords = True
+                await logger.ainfo("Hash was previously unsuccessfully cracked, skipping cracking.")
             else:
-                # send the message before using JTR so it can be displayed ASAP
-                await self.extracted_hash_q_out.Send(extracted_hash_msg.SerializeToString())
-
-                async with self.semaphore:
-                    match extracted_hash.hash_type:
-                        # handle specific hash types that need the type specified
-                        case "hash_crypt":
-                            jtr_pot_line = await self.cracker.crack(data.data, self.wordlist_path, "crypt")
-                        case _:
-                            jtr_pot_line = await self.cracker.crack(data.data, self.wordlist_path)
-
-                    extracted_hash.checked_against_top_passwords = True
-
-                if jtr_pot_line:
-                    extracted_hash.jtr_pot_line = jtr_pot_line
+                # check if this value was already successfully cracked
+                cracked_hash_value = await self.get_cracked_hash_value(data.data)
+                if cracked_hash_value:
+                    # this means the hash is already cracked, so don't crack
                     extracted_hash.is_cracked = True
-                    plaintext = jtr_pot_line
-                    extracted_hash.plaintext_value = plaintext
-                    await self.send_hash_cracked_alert(extracted_hash, extracted_hash_msg.metadata.message_id)
+                    extracted_hash.plaintext_value = cracked_hash_value
+                    await logger.ainfo("Hash is already cracked, using existing value and skipping cracking.")
+                else:
+                    # send the message before using cracking so it can be displayed ASAP
+                    await self.extracted_hash_q_out.Send(extracted_hash_msg.SerializeToString())
+
+                    async with self.semaphore:
+                        match extracted_hash.hash_type:
+                            # handle specific hash types that need the type specified
+                            case "hash_crypt":
+                                jtr_pot_line = await self.cracker.crack(data.data, self.wordlist_path, "crypt")
+                            case _:
+                                jtr_pot_line = await self.cracker.crack(data.data, self.wordlist_path)
+
+                        extracted_hash.checked_against_top_passwords = True
+
+                    if jtr_pot_line:
+                        extracted_hash.jtr_pot_line = jtr_pot_line
+                        extracted_hash.is_cracked = True
+                        plaintext = jtr_pot_line
+                        extracted_hash.plaintext_value = plaintext
+                        await self.send_hash_cracked_alert(extracted_hash, extracted_hash_msg.metadata.message_id)
 
             # publish the extracted hash out to the extracted_hash_q_out queue
             await self.extracted_hash_q_out.Send(extracted_hash_msg.SerializeToString())
