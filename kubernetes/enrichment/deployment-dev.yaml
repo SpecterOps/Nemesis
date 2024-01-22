@@ -19,8 +19,7 @@ spec:
     spec:
       volumes:
         - name: cracklist
-          persistentVolumeClaim:
-            claimName: cracklist-pv-claim
+          emptyDir: {}
         - name: noseyparker
           emptyDir: {}
         - name: noseyparker-rules
@@ -233,34 +232,3 @@ spec:
             failureThreshold: 10
       restartPolicy: Always
 status: {}
----
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: cracklist-pv-volume
-  labels:
-    type: local
-    app: enrichment
-spec:
-  storageClassName: manual
-  capacity:
-    storage: 1Gi
-  accessModes:
-    - ReadWriteMany
-  hostPath:
-    path: "/mnt/data/cracklist/"
----
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: cracklist-pv-claim
-  labels:
-    app: enrichment
-spec:
-  storageClassName: manual
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 1Gi
-  volumeName: cracklist-pv-volume

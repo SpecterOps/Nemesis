@@ -268,9 +268,23 @@ build:
 
 manifests:
   rawYaml:
-    - &k8s-enrichment kubernetes/enrichment/*
+    - &k8s-enrichment-enrichment kubernetes/enrichment/deployment-dev.yaml
+    - &k8s-enrichment-config kubernetes/enrichment/configmap.yml
+    - &k8s-enrichment-ingress kubernetes/enrichment/ingress.yaml
+    - &k8s-enrichment-service kubernetes/enrichment/service.yaml
+
 deploy:
   kubectl: {}
+
+profiles:
+ - name: dev
+   manifests:
+    rawYaml:
+    - kubernetes/enrichment/deployment.yaml # no idea why the dev profile is misbehaving, swapped this with the above to get the correct behavior
+    - kubernetes/enrichment/configmap.yml
+    - kubernetes/enrichment/ingress.yaml
+    - kubernetes/enrichment/service.yaml
+
 ---
 apiVersion: skaffold/v4beta6
 kind: Config

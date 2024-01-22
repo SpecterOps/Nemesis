@@ -27,6 +27,7 @@ DASHBOARD_USER = os.environ.get("DASHBOARD_USER")
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
 NLP_URL = os.environ.get("NLP_URL")
 NEMESIS_API_URL = "http://enrichment-webapi:9910/"
+CRACKLIST_URL = "http://enrichment-cracklist:9900/"
 
 if not all(
     var is not None and var != ""
@@ -944,6 +945,21 @@ def elastic_np_search(from_i: int, size: int) -> dict:
 #
 ######################################################
 
+def get_custom_crack_list(assessment_id: str, count: int = 10) -> dict:
+    """
+    Calls {CRACKLIST_URL}/client/{assessment_id}/{count} to return the custom
+    cracking list extracted from downloaded documents.
+    """
+
+    try:
+        url = f"{CRACKLIST_URL}client/{assessment_id}/{count}"
+        result = requests.get(url)
+        if result:
+            return result.text
+        else:
+            return ""
+    except Exception as e:
+        return {"error": f"Error calling get_custom_crack_list with assessment_id '{assessment_id}' : {e}"}
 
 def is_uuid(str_uuid: str):
     try:

@@ -21,11 +21,15 @@ class ClientWordlists:
 
         if not os.path.isdir(base_path):
             raise ValueError(f"Base path {base_path} is not a directory")
+        else:
+            logger.info(f"Storing client wordlists in: {base_path}")
 
         for client_wordlist in os.listdir(base_path):
             client_id = client_wordlist.split(".")[0]
             with open(os.path.join(base_path, client_wordlist), "r") as f:
-                self.clients[client_id] = Wordlist.from_json(f.read())
+                data = Wordlist.from_json(f.read())
+                if data:
+                    self.clients[client_id] = data
 
     def _save_client(self, client_id: str) -> None:
         if self.base_path is None:
@@ -42,8 +46,14 @@ class ClientWordlists:
         self._save_client(client_id)
 
     def get(self, client_id: str, count: Optional[int] = None) -> List[str]:
-        return self.clients[client_id].get(count=count)
+        if client_id in self.clients:
+            return self.clients[client_id].get(count=count)
+        else:
+            return []
 
     def get_as_file(self, client_id: str, count: Optional[int] = None) -> str:
-        words = self.clients[client_id].get(count=count)
-        return "\n".join(words)
+        if client_id in self.clients:
+            words = self.clients[client_id].get(count=count)
+            return "\n".join(words)
+        else:
+            return ""
