@@ -112,6 +112,7 @@ manifests:
     - &k8s-postgres-deployment kubernetes/postgres/deployment.yaml
     - &k8s-postgres-service kubernetes/postgres/service.yaml
     - &k8s-pgadmin kubernetes/pgadmin/*
+    - &k8s-hasura kubernetes/hasura/*
     - &k8s-tika kubernetes/tika/*
 
 deploy:
@@ -128,6 +129,7 @@ profiles:
     - kubernetes/postgres/deployment-dev.yaml
     - kubernetes/postgres/service.yaml
     - kubernetes/pgadmin/*
+    - kubernetes/hasura/*
     - kubernetes/tika/*
 
 # portForward:
