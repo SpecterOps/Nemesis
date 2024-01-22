@@ -7,9 +7,9 @@ import uuid
 # 3rd Party Libraries
 import nemesispb.nemesis_pb2 as pb
 import structlog
-from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import (RecursiveCharacterTextSplitter,
                                      TokenTextSplitter)
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.elasticsearch import ElasticsearchStore
 from nemesiscommon.messaging import MessageQueueConsumerInterface
 from nemesiscommon.messaging_rabbitmq import SingleQueueRabbitMQWorker

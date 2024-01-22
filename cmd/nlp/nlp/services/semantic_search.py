@@ -8,9 +8,9 @@ import structlog
 from fastapi.responses import Response
 from fastapi_class.decorators import get, post
 from fastapi_class.routable import Routable
-from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import (RecursiveCharacterTextSplitter,
                                      TokenTextSplitter)
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.elasticsearch import ElasticsearchStore
 from nlp.settings import NLPSettings
 from prometheus_async import aio
