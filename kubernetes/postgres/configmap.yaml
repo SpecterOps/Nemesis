@@ -381,7 +381,9 @@ data:
             is_submitted_to_cracker BOOLEAN,                        -- True if the hash has submitted to a longer-run cracking job
             cracker_submission_time TIMESTAMP WITH TIME ZONE,       -- Time the hash was submitted to a longer-run cracking job
             cracker_cracked_time TIMESTAMP WITH TIME ZONE,          -- Time the hash was cracked by a longer-run cracking job
-            plaintext_value TEXT                                    -- The data value if the hash has been cracked
+            plaintext_value TEXT,                                   -- The data value if the hash has been cracked
+            hash_value_md5_hash UUID GENERATED ALWAYS AS (MD5(hash_value)::uuid) STORED,    -- used in case the hash value is vvv longboi
+            UNIQUE (timestamp, originating_object_id, hash_value_md5_hash)
         ) INHERITS (project_data);
 
 

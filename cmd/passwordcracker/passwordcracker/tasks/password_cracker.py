@@ -3,15 +3,15 @@ import asyncio
 import os
 
 # 3rd Party Libraries
+import asyncpg
 import nemesispb.nemesis_pb2 as pb
 import structlog
-from nemesiscommon.messaging import (
-    MessageQueueConsumerInterface,
-    MessageQueueProducerInterface,
-)
+from nemesiscommon.messaging import (MessageQueueConsumerInterface,
+                                     MessageQueueProducerInterface)
 from nemesiscommon.services.alerter import AlerterInterface
 from nemesiscommon.tasking import TaskInterface
-from passwordcracker.services.john_the_ripper_cracker import PasswordCrackerInterface
+from passwordcracker.services.john_the_ripper_cracker import \
+    PasswordCrackerInterface
 from passwordcracker.settings import PasswordCrackerSettings
 from prometheus_async import aio
 from prometheus_client import Summary
@@ -22,6 +22,7 @@ logger = structlog.get_logger(module=__name__)
 class PasswordCracker(TaskInterface):
     cfg: PasswordCrackerSettings
     alerter: AlerterInterface
+    db_pool: asyncpg.pool.Pool
     cracker: PasswordCrackerInterface
     semaphore: asyncio.Semaphore
 
@@ -33,12 +34,14 @@ class PasswordCracker(TaskInterface):
         self,
         cfg: PasswordCrackerSettings,
         alerter: AlerterInterface,
+        db_pool: asyncpg.pool.Pool,
         cracker: PasswordCrackerInterface,
         auth_data_q_in: MessageQueueConsumerInterface,
         extracted_hash_q_out: MessageQueueProducerInterface,
     ):
         self.cfg = cfg
         self.alerter = alerter
+        self.db_pool = db_pool
         self.cracker = cracker
         self.auth_data_q_in = auth_data_q_in
         self.extracted_hash_q_out = extracted_hash_q_out
@@ -54,7 +57,7 @@ class PasswordCracker(TaskInterface):
         self.semaphore = asyncio.Semaphore()
 
     async def run(self) -> None:
-        await logger.ainfo("Starting the Auth Data service")
+        await logger.ainfo("Starting the password cracking service")
 
         await asyncio.gather(
             self.auth_data_q_in.Read(self.handle_auth_data),  # type: ignore
@@ -63,6 +66,19 @@ class PasswordCracker(TaskInterface):
 
     async def handle_auth_data(self, q_msg: pb.AuthenticationDataIngestionMessage) -> None:
         await self.process_auth_data(q_msg)
+
+    async def get_cracked_hash_value(self, hash_value: str):
+        """Returns the plaintext value for a hash if it's already cracked."""
+
+        async with self.db_pool.acquire() as conn:
+            results = await conn.fetch(
+                "SELECT plaintext_value FROM nemesis.extracted_hashes WHERE is_cracked = True AND hash_value = $1",
+                hash_value,
+            )
+            if results:
+                return results[0][0]
+            else:
+                return None
 
     @aio.time(Summary("process_auth_data", "Time spent processing an Auth Data event"))  # type: ignore
     async def process_auth_data(self, event: pb.AuthenticationDataIngestionMessage):
@@ -84,26 +100,32 @@ class PasswordCracker(TaskInterface):
             # TODO: formatting for Hashcat/JTR formats
             extracted_hash.jtr_formatted_value = data.data
 
-            async with self.semaphore:
-                match extracted_hash.hash_type:
-                    # handle specific hash types that need the type specified
-                    case "hash_crypt":
-                        jtr_pot_line = await self.cracker.crack(data.data, self.wordlist_path, "crypt")
-                    case _:
-                        jtr_pot_line = await self.cracker.crack(data.data, self.wordlist_path)
-
-                extracted_hash.checked_against_top_passwords = True
-
-            if jtr_pot_line:
-                extracted_hash.jtr_pot_line = jtr_pot_line
+            cracked_hash_value = await self.get_cracked_hash_value(data.data)
+            if cracked_hash_value:
+                # this means the hash is already cracked, so don't just JTR
                 extracted_hash.is_cracked = True
+                extracted_hash.plaintext_value = cracked_hash_value
+                await logger.ainfo("Hash is already cracked using existing value.")
+            else:
+                # send the message before using JTR so it can be displayed ASAP
+                await self.extracted_hash_q_out.Send(extracted_hash_msg.SerializeToString())
 
-                # regarding spltting on the :
-                #   yes this is stupid, but don't see another way to do this
-                plaintext = jtr_pot_line
-                extracted_hash.plaintext_value = plaintext
+                async with self.semaphore:
+                    match extracted_hash.hash_type:
+                        # handle specific hash types that need the type specified
+                        case "hash_crypt":
+                            jtr_pot_line = await self.cracker.crack(data.data, self.wordlist_path, "crypt")
+                        case _:
+                            jtr_pot_line = await self.cracker.crack(data.data, self.wordlist_path)
 
-                await self.send_hash_cracked_alert(extracted_hash, extracted_hash_msg.metadata.message_id)
+                    extracted_hash.checked_against_top_passwords = True
+
+                if jtr_pot_line:
+                    extracted_hash.jtr_pot_line = jtr_pot_line
+                    extracted_hash.is_cracked = True
+                    plaintext = jtr_pot_line
+                    extracted_hash.plaintext_value = plaintext
+                    await self.send_hash_cracked_alert(extracted_hash, extracted_hash_msg.metadata.message_id)
 
             # publish the extracted hash out to the extracted_hash_q_out queue
             await self.extracted_hash_q_out.Send(extracted_hash_msg.SerializeToString())
