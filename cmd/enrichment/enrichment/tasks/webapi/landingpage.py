@@ -47,8 +47,8 @@ class LandingPageRoutes(Routable):
 
         <h2>Main Services</h2>
         <a href="/dashboard/" target="_blank"">Dashboard</a><br>
+        <a href="/hasura/" target="_blank">Hasura (API)</a><br>
         <a href="/kibana/" target="_blank">Kibana</a><br>
-        <a href="/pgadmin/" target="_blank">pgAdmin (Postgres)</a><br>
         <a href="/rabbitmq/" target="_blank">RabbitMQ Management UI</a><br>
 
         <h2>Monitoring</h2>
