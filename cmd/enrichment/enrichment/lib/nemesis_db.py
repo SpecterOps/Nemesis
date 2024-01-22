@@ -1270,7 +1270,7 @@ class NemesisDb(NemesisDbInterface):
 
         async with self.pool.acquire() as conn:
             results = await conn.fetch(
-                "SELECT data from nemesis.authentication_data WHERE type = 'password' AND username ILIKE $1",
+                "SELECT data FROM nemesis.authentication_data WHERE type = 'password' AND username ILIKE $1",
                 username,
             )
             return [result[0] for result in results]
@@ -1283,7 +1283,7 @@ class NemesisDb(NemesisDbInterface):
 
         async with self.pool.acquire() as conn:
             results = await conn.fetch(
-                "SELECT data from nemesis.authentication_data WHERE type = 'ntlm_hash' AND username ILIKE $1",
+                "SELECT data FROM nemesis.authentication_data WHERE type = 'ntlm_hash' AND username ILIKE $1",
                 username,
             )
         return [result[0] for result in results]
@@ -1293,10 +1293,23 @@ class NemesisDb(NemesisDbInterface):
 
         async with self.pool.acquire() as conn:
             results = await conn.fetch(
-                "SELECT plaintext_value from nemesis.authentication_data is_cracked = True AND username ILIKE $1",
+                "SELECT plaintext_value FROM nemesis.extracted_hashes WHERE is_cracked = True AND username ILIKE $1",
                 username,
             )
             return [result[0] for result in results]
+
+    async def get_cracked_hash_value(self, hash_value: str):
+        """Returns the plaintext value for a hash if it's already cracked."""
+
+        async with self.pool.acquire() as conn:
+            results = await conn.fetch(
+                "SELECT plaintext_value FROM nemesis.extracted_hashes WHERE is_cracked = True AND hash_value = $1",
+                hash_value,
+            )
+            if results:
+                return results[0][0]
+            else:
+                return None
 
     async def get_encrypted_dpapi_masterkeys(self, username: str = "%", machine: bool = False):
         """Gets encrypted DPAPI masterkeys linked to a specific domain backupkey guid.

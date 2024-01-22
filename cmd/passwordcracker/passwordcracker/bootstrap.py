@@ -88,13 +88,13 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: dict[str, Any]):
 
 async def wait_for_services(config: PasswordCrackerSettings) -> None:
     rabbitUri = urlparse(config.rabbitmq_connection_uri)
+    postgresUri = urlparse(config.postgres_connection_uri)
 
-    if rabbitUri.hostname is None:
+    if rabbitUri.hostname is None or postgresUri.hostname is None:
         raise Exception("Invalid connection URI")
     if rabbitUri.port is None:
         raise Exception("Invalid connection URI")
 
-    # TODO: Check that JohnTheRipper is installed
-
     SocketWaiter(rabbitUri.hostname, rabbitUri.port).wait()
+    SocketWaiter(postgresUri.hostname, postgresUri.port).wait()
     await logger.ainfo("All services are online!")
