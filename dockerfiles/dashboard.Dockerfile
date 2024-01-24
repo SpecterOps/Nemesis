@@ -50,4 +50,4 @@ ENV PATH="/app/cmd/dashboard/.venv/bin:$PATH"
 
 WORKDIR /app/cmd/dashboard/dashboard/
 
-CMD [ "python3", "-m", "streamlit", "run", "/app/cmd/dashboard/dashboard/Nemesis.py"]
+CMD [ "python3", "-m", "streamlit", "run", "--server.fileWatcherType=poll", "/app/cmd/dashboard/dashboard/Nemesis.py"]
