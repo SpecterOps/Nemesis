@@ -3,6 +3,7 @@ import asyncio
 import os
 import urllib.parse
 import uuid
+from collections.abc import Iterable
 from typing import Any, Coroutine, List
 
 # 3rd Party Libraries
@@ -31,14 +32,15 @@ class ElasticConnector(TaskInterface):
     # Queues
     auth_data_q: MessageQueueConsumerInterface
     extracted_hash_q: MessageQueueConsumerInterface
-    file_info_q: MessageQueueConsumerInterface
     file_data_enriched_q: MessageQueueConsumerInterface
     file_data_plaintext_q: MessageQueueConsumerInterface
-    process_enriched_q: MessageQueueConsumerInterface
-    service_enriched_q: MessageQueueConsumerInterface
-    registry_value_q: MessageQueueConsumerInterface
+    file_info_q: MessageQueueConsumerInterface
+    host_info_q: MessageQueueConsumerInterface
     named_pipe_q: MessageQueueConsumerInterface
     network_connection_q: MessageQueueConsumerInterface
+    process_enriched_q: MessageQueueConsumerInterface
+    registry_value_q: MessageQueueConsumerInterface
+    service_enriched_q: MessageQueueConsumerInterface
     tasks_set = set()
     es_submit_queue = asyncio.Queue()
 
@@ -54,11 +56,12 @@ class ElasticConnector(TaskInterface):
         file_data_plaintext_q: MessageQueueConsumerInterface,
         file_data_sourcecode_q: MessageQueueConsumerInterface,
         file_info_q: MessageQueueConsumerInterface,
+        host_info_q: MessageQueueConsumerInterface,
+        named_pipe_q: MessageQueueConsumerInterface,
+        network_connection_q: MessageQueueConsumerInterface,
         process_enriched_q: MessageQueueConsumerInterface,
         registry_value_q: MessageQueueConsumerInterface,
         service_enriched_q: MessageQueueConsumerInterface,
-        named_pipe_q: MessageQueueConsumerInterface,
-        network_connection_q: MessageQueueConsumerInterface,
     ):
         self.storage = storage
         self.es_client = es_client
@@ -71,11 +74,12 @@ class ElasticConnector(TaskInterface):
         self.file_data_plaintext_q = file_data_plaintext_q
         self.file_data_sourcecode_q = file_data_sourcecode_q
         self.file_info_q = file_info_q
+        self.host_info_q = host_info_q
+        self.named_pipe_q = named_pipe_q
+        self.network_connection_q = network_connection_q
         self.process_enriched_q = process_enriched_q
         self.registry_value_q = registry_value_q
         self.service_enriched_q = service_enriched_q
-        self.named_pipe_q = named_pipe_q
-        self.network_connection_q = network_connection_q
 
     async def create_task(self, func: Coroutine) -> None:
         task = asyncio.create_task(func)
@@ -88,15 +92,16 @@ class ElasticConnector(TaskInterface):
         tasks = [
             self.auth_data_q.Read(self.send_authentication_data),  # type: ignore
             self.extracted_hash_q.Read(self.send_extracted_hash),  # type: ignore
-            self.file_info_q.Read(self.send_file_info),  # type: ignore
             self.file_data_enriched_q.Read(self.send_file_data_enriched),  # type: ignore
             self.file_data_plaintext_q.Read(self.send_file_data_plaintext),  # type: ignore
             self.file_data_sourcecode_q.Read(self.send_file_data_sourcecode),  # type: ignore
-            self.process_enriched_q.Read(self.send_process_enriched),  # type: ignore
-            self.service_enriched_q.Read(self.send_service_enriched),  # type: ignore
-            self.registry_value_q.Read(self.send_registry_value),  # type: ignore
+            self.file_info_q.Read(self.send_file_info),  # type: ignore
+            self.host_info_q.Read(self.send_host_info),  # type: ignore
             self.named_pipe_q.Read(self.send_named_pipe),  # type: ignore
             self.network_connection_q.Read(self.send_network_connection),  # type: ignore
+            self.process_enriched_q.Read(self.send_process_enriched),  # type: ignore
+            self.registry_value_q.Read(self.send_registry_value),  # type: ignore
+            self.service_enriched_q.Read(self.send_service_enriched),  # type: ignore
             self.consumer(),
         ]
 
@@ -113,6 +118,9 @@ class ElasticConnector(TaskInterface):
 
     async def send_file_info(self, q_msg: pb.FileInformationIngestionMessage) -> None:
         await self.send_without_processing(q_msg, constants.ES_INDEX_FILE_INFORMATION)
+
+    async def send_host_info(self, q_msg: pb.HostInformationIngestionMessage) -> None:
+        await self.send_without_processing(q_msg, constants.ES_INDEX_HOST_INFORMATION)
 
     async def send_file_data_enriched(self, q_msg: pb.FileDataEnrichedMessage) -> None:
         await self.process_file_data_enriched(q_msg)
@@ -244,14 +252,26 @@ class ElasticConnector(TaskInterface):
     @aio.time(Summary("elastic_send_without_processing", "Time spent submitting process_enriched messages to Elastic/Postgres"))  # type: ignore
     async def send_without_processing(
         self,
-        q_msg: pb.AuthenticationDataIngestionMessage | pb.FileInformationIngestionMessage | pb.ProcessEnrichedMessage | pb.RegistryValueIngestionMessage | pb.ServiceEnrichedMessage | pb.ExtractedHashMessage,
+        q_msg: pb.AuthenticationDataIngestionMessage
+        | pb.FileInformationIngestionMessage
+        | pb.HostInformationIngestionMessage
+        | pb.ProcessEnrichedMessage
+        | pb.RegistryValueIngestionMessage
+        | pb.ServiceEnrichedMessage
+        | pb.ExtractedHashMessage,
         index: ElasticIndex,
     ):
         metadata = MessageToDict(q_msg.metadata)
 
-        for i in range(len(q_msg.data)):
-            # grab the data entry for this iteration and merge it with the parent metadata
-            data = MessageToDict(q_msg.data[i])
+        # Check if q_msg.data is Iterable
+        if isinstance(q_msg.data, Iterable):
+            for d in q_msg.data:
+                # grab the data entry for this iteration and merge it with the parent metadata
+                data = MessageToDict(d)
+                data["metadata"] = metadata
+                await self.send_to_elastic(index, data)
+        else:
+            data = MessageToDict(q_msg.data)
             data["metadata"] = metadata
             await self.send_to_elastic(index, data)
 

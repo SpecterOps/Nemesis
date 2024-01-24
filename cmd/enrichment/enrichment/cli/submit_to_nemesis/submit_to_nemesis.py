@@ -12,8 +12,7 @@ import re
 import sys
 import uuid
 from datetime import datetime, timedelta
-from typing import (Any, AsyncIterator, Callable, Dict, Iterator, List,
-                    Optional, Tuple)
+from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional, Tuple
 
 # 3rd Party Libraries
 import httpx
@@ -370,6 +369,7 @@ async def process_file(config: dict[str, str], file_path: str) -> uuid.UUID | No
         r".*cookies.*\.json$",
         # r".*file_data.*\.json$",          # Removing for now since normal file uploads use this
         r".*file_information.*\.json$",
+        r".*host_information.*\.json$",
         r".*named_pipes.*\.json$",
         r".*network_connections.*\.json$",
         r".*path_list.*\.json$",

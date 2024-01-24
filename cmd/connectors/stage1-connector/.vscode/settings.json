@@ -49,14 +49,6 @@
         "240"
     ],
     "python.analysis.useLibraryCodeForTypes": true, // Pyright
-    "python.linting.enabled": true,
-    "python.linting.flake8Args": [
-        "--max-line-length=240",
-        "--ignore=E203,E722,W503",
-    ],
-    "python.linting.flake8Enabled": true,
-    "python.linting.lintOnSave": true,
-    "python.linting.pylintEnabled": false,
     "python.testing.pytestArgs": [
         "tests"
     ],

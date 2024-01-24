@@ -1,51 +1,25 @@
 # Format: <program.exe>,<product> - <description>
-# Ref https://github.com/GhostPack/Seatbelt/blob/72dd355102324f6f319c88f03be6d2a62cf38ace/Seatbelt/Commands/Windows/InterestingProcessesCommand.cs#L30-L709
-mcshield.exe,McAfee
-windefend.exe,Windows Defender AV
-msascui.exe,Windows Defender AV
-msascuil.exe,Windows Defender AV
-msmpeng.exe,Windows Defender AV
-msmpsvc.exe,Windows Defender AV
-wrsa.exe,WebRoot AV
-savservice.exe,Sophos AV
-tmccsf.exe,Trend Micro AV
-symantec antivirus.exe,Symantec
-aexnsagent.exe,Symantec
-ccsvchst.exe,Symantec
-sisidsservice.exe,Symantec IDS
-sisipsservice.exe,Symantec IPS
-sisipsutil.exe,Symantec IPS
-kvoop.exe,Symantec DLP
-brkrprcs64.exe,Symantec DLP
-edpa.exe,Symantec DLP
-mbae.exe,MalwareBytes Anti-Exploit
-parity.exe,Bit9 application whitelisting
-cb.exe,Carbon Black behavioral analysis
-repux.exe,Carbon Black Defense
-repmgr.exe,Carbon Black Defense
-reputils.exe,Carbon Black Defense
-repwsc.exe,Carbon Black Defense
-cylancesvc.exe,Cylance Protect
-cylanceui.exe,Cylance Protect
-bds-vision.exe,BDS Vision behavioral analysis
-triumfant.exe,Triumfant behavioral analysis
-csfalcon.exe,CrowdStrike Falcon EDR
-csfalconcontainer.exe,CrowdStrike Falcon EDR
-csfalconservice.exe,CrowdStrike Falcon EDR
-ossec.exe,OSSEC intrusion detection
-tmpfw.exe,Trend Micro firewall
-dgagent.exe,Verdasys Digital Guardian DLP
+# References
+# - https://github.com/GhostPack/Seatbelt/blob/72dd355102324f6f319c88f03be6d2a62cf38ace/Seatbelt/Commands/Windows/InterestingProcessesCommand.cs#L30-L709
+# - https://github.com/BishopFox/sliver/blob/49a095de446c0a3b39376183c6f80ce7201f52a8/client/command/processes/ps.go#L42-L98
+_avp32.exe,UNKNOWN
+_avpcc.exe,UNKNOWN
+_avpm.exe,UNKNOWN
 aawtray.exe,UNKNOWN
 ackwin32.exe,UNKNOWN
 ad-aware.exe,UNKNOWN
 adaware.exe,UNKNOWN
 advxdwin.exe,UNKNOWN
+aexnsagent.exe,Symantec
 agentsvr.exe,UNKNOWN
 agentw.exe,UNKNOWN
 alertsvc.exe,UNKNOWN
 alevir.exe,UNKNOWN
 alogserv.exe,UNKNOWN
+alunotify.exe,Symantec - Live Update
+aluschedulersvc.exe,Symantec - Live Update
 amon9x.exe,UNKNOWN
+amsvc.exe,Cybereason ActiveProbe
 anti-trojan.exe,UNKNOWN
 antivirus.exe,UNKNOWN
 ants.exe,UNKNOWN
@@ -76,9 +50,9 @@ avgrsx.exe,UNKNOWN
 avgserv.exe,UNKNOWN
 avgserv9.exe,UNKNOWN
 avguard.exe,UNKNOWN
-avgwdsvc.exe,UNKNOWN
 avgui.exe,UNKNOWN
 avgw.exe,UNKNOWN
+avgwdsvc.exe,UNKNOWN
 avkpop.exe,UNKNOWN
 avkserv.exe,UNKNOWN
 avkservice.exe,UNKNOWN
@@ -106,6 +80,10 @@ avxquar.exe,UNKNOWN
 backweb.exe,UNKNOWN
 bargains.exe,UNKNOWN
 bd_professional.exe,UNKNOWN
+bdagent.exe,Bitdefender (Total Security)
+bdredline.exe,Bitdefender Redline Update Service
+bds-vision.exe,BDS Vision behavioral analysis
+bdservicehost.exe,Bitdefender (Total Security)
 beagle.exe,UNKNOWN
 belt.exe,UNKNOWN
 besclient.exe,IBM BigFix
@@ -123,12 +101,15 @@ bootwarn.exe,UNKNOWN
 borg2.exe,UNKNOWN
 bpc.exe,UNKNOWN
 brasil.exe,UNKNOWN
+brkrprcs64.exe,Symantec DLP
 bs120.exe,UNKNOWN
 bundle.exe,UNKNOWN
 bvt.exe,UNKNOWN
-ccapp.exe,UNKNOWN
-ccevtmgr.exe,UNKNOWN
-ccpxysvc.exe,UNKNOWN
+cb.exe,Carbon Black
+ccapp.exe,Symantec
+ccevtmgr.exe,Symantec - Event Manager Service
+ccpxysvc.exe,Symantec - Norton Internet Security Proxy Service
+ccsvchst.exe,Symantec Endpoint Protection (SEP)
 cdp.exe,UNKNOWN
 cfd.exe,UNKNOWN
 cfgwiz.exe,UNKNOWN
@@ -148,28 +129,41 @@ cmdagent.exe,UNKNOWN
 cmesys.exe,UNKNOWN
 cmgrdian.exe,UNKNOWN
 cmon016.exe,UNKNOWN
+collector.exe,Rapid 7 Insight Platform Collector
 connectionmonitor.exe,UNKNOWN
+coreframeworkhost.exe,TrendMicro Anti-malware scan process
+coreserviceshell.exe,TrendMicro Anti-malware scan process
 cpd.exe,UNKNOWN
 cpf9x206.exe,UNKNOWN
 cpfnt206.exe,UNKNOWN
+cramtray.exe,Cybereason ActiveProbe
+crssvc.exe,Cybereason ActiveProbe
+csfalcon.exe,CrowdStrike Falcon EDR
+csfalconcontainer.exe,CrowdStrike Falcon
+csfalconservice.exe,Crowdstrike Falcon
 ctrl.exe,UNKNOWN
 cv.exe,UNKNOWN
 cwnb181.exe,UNKNOWN
 cwntdwmo.exe,UNKNOWN
+cybereasonav.exe,Cybereason ActiveProbe
+cylancesvc.exe,Cylance
+cylanceui.exe,Cylance
 cyprotect.exe,UNKNOWN
-cyupdate.exe,UNKNOWN
 cyserver.exe,UNKNOWN
 cytray.exe,UNKNOWN
+cyupdate.exe,UNKNOWN
 cyveraservice.exe,UNKNOWN
 datemanager.exe,UNKNOWN
 dcomx.exe,UNKNOWN
+deep security manager.exe,TM Deep Security Manager
 defalert.exe,UNKNOWN
 defscangui.exe,UNKNOWN
-defwatch.exe,UNKNOWN
+defwatch.exe,Symantec
 deputy.exe,UNKNOWN
-divx.exe,UNKNOWN
+dgagent.exe,Verdasys Digital Guardian DLP
 dgprompt.exe,UNKNOWN
 dgservice.exe,UNKNOWN
+divx.exe,UNKNOWN
 dllcache.exe,UNKNOWN
 dllreg.exe,UNKNOWN
 doors.exe,UNKNOWN
@@ -179,19 +173,25 @@ dpps2.exe,UNKNOWN
 drwatson.exe,UNKNOWN
 drweb32.exe,UNKNOWN
 drwebupw.exe,UNKNOWN
+ds_monitor.exe,TM Deep Security Monitor
+ds_nuagent.exe,TM Advanced TLS traffic inspection
+dsa.exe,TM Agent's main process
 dssagent.exe,UNKNOWN
 dumpcap.exe,UNKNOWN
-dvp95.exe,UNKNOWN
 dvp95_0.exe,UNKNOWN
+dvp95.exe,UNKNOWN
 ecengine.exe,UNKNOWN
+edpa.exe,Symantec DLP
 efpeadm.exe,UNKNOWN
+efwd.exe,ESET Internet Security
 egui.exe,UNKNOWN
-ekrn.exe,UNKNOWN
-enstart64.exe,Encase (Forensics tool)
+eguiproxy.exe,ESET Internet Security
+ekrn.exe,ESET Internet Security
 emet_agent.exe,UNKNOWN
 emet_service.exe,UNKNOWN
 emsw.exe,UNKNOWN
 engineserver.exe,UNKNOWN
+enstart64.exe,Encase (Forensics tool)
 ent.exe,UNKNOWN
 esafe.exe,UNKNOWN
 escanhnt.exe,UNKNOWN
@@ -210,17 +210,17 @@ f-prot95.exe,UNKNOWN
 f-stopw.exe,UNKNOWN
 fameh32.exe,UNKNOWN
 fast.exe,UNKNOWN
-fch32.exe,UNKNOWN
-fcagswd.exe,McAfee DLP Agent
 fcags.exe,McAfee DLP Agent
+fcagswd.exe,McAfee DLP Agent
+fch32.exe,UNKNOWN
 fih32.exe,UNKNOWN
 findviru.exe,UNKNOWN
 firesvc.exe,McAfee Host Intrusion Prevention
 firetray.exe,UNKNOWN
 firewall.exe,UNKNOWN
 fnrb32.exe,UNKNOWN
-fp-win.exe,UNKNOWN
 fp-win_trial.exe,UNKNOWN
+fp-win.exe,UNKNOWN
 fprot.exe,UNKNOWN
 frameworkservice.exe,UNKNOWN
 frminst.exe,UNKNOWN
@@ -245,9 +245,10 @@ guarddog.exe,UNKNOWN
 hacktracersetup.exe,UNKNOWN
 hbinst.exe,UNKNOWN
 hbsrv.exe,UNKNOWN
+healthservice.exe,Microsoft Monitoring Agent
 hijackthis.exe,UNKNOWN
-hipsvc.exe,UNKNOWN
 hipmgmt.exe,McAfee Host Intrusion Protection
+hipsvc.exe,UNKNOWN
 hotactio.exe,UNKNOWN
 hotpatch.exe,UNKNOWN
 htlog.exe,UNKNOWN
@@ -277,6 +278,7 @@ init.exe,UNKNOWN
 intdel.exe,UNKNOWN
 intren.exe,UNKNOWN
 iomon98.exe,UNKNOWN
+ir_agent.exe,Rapid 7 Insight Agent
 istsvc.exe,UNKNOWN
 jammer.exe,UNKNOWN
 jdbgmrg.exe,UNKNOWN
@@ -292,6 +294,7 @@ kerio-wrp-421-en-win.exe,UNKNOWN
 kernel32.exe,UNKNOWN
 keypass.exe,UNKNOWN
 killprocesssetup161.exe,UNKNOWN
+kvoop.exe,Symantec DLP
 launcher.exe,UNKNOWN
 ldnetmon.exe,UNKNOWN
 ldpro.exe,UNKNOWN
@@ -310,21 +313,18 @@ luau.exe,UNKNOWN
 lucomserver.exe,UNKNOWN
 luinit.exe,UNKNOWN
 luspt.exe,UNKNOWN
-mapisvc32.exe,UNKNOWN
 macmnsvc.exe,McAfee
 macompatsvc.exe,McAfee
+mapisvc32.exe,UNKNOWN
 masvc.exe,McAfee
-mfeesp.exe,McAfee
-mfemactl.exe,McAfee
-mfetp.exe,McAfee
-mfecanary.exe,McAfee
-mfemms.exe,McAfee
+mbae.exe,MalwareBytes Anti-Exploit
 mbamservice.exe,UNKNOWN
 mcafeefire.exe,UNKNOWN
 mcagent.exe,UNKNOWN
 mcmnhdlr.exe,UNKNOWN
-mcscript.exe,UNKNOWN
 mcscript_inuse.exe,UNKNOWN
+mcscript.exe,UNKNOWN
+mcshield.exe,McAfee
 mctool.exe,UNKNOWN
 mctray.exe,UNKNOWN
 mcupdate.exe,UNKNOWN
@@ -332,6 +332,11 @@ mcvsrte.exe,UNKNOWN
 mcvsshld.exe,UNKNOWN
 md.exe,UNKNOWN
 mfeann.exe,McAfee VirusScan Enterprise
+mfecanary.exe,McAfee
+mfeesp.exe,McAfee
+mfemactl.exe,McAfee
+mfemms.exe,McAfee
+mfetp.exe,McAfee
 mfevtps.exe,UNKNOWN
 mfin32.exe,UNKNOWN
 mfw2en.exe,UNKNOWN
@@ -344,13 +349,17 @@ minilog.exe,UNKNOWN
 minionhost.exe,Cyberreason
 mmod.exe,UNKNOWN
 monitor.exe,UNKNOWN
+monitoringhost.exe,Microsoft Monitoring Agent
 moolive.exe,UNKNOWN
 mostat.exe,UNKNOWN
+mpcmdrun.exe,Windows Defender Command-line
 mpfagent.exe,UNKNOWN
 mpfservice.exe,UNKNOWN
 mpftray.exe,UNKNOWN
 mrflux.exe,UNKNOWN
 msapp.exe,UNKNOWN
+msascui.exe,Windows Defender AV
+msascuil.exe,Windows Defender AV
 msbb.exe,UNKNOWN
 msblast.exe,UNKNOWN
 mscache.exe,UNKNOWN
@@ -363,9 +372,10 @@ msiexec16.exe,UNKNOWN
 msinfo32.exe,UNKNOWN
 mslaugh.exe,UNKNOWN
 msmgt.exe,UNKNOWN
+msmpeng.exe,Windows Defender AV
+msmpsvc.exe,Windows Defender AV
 msmsgri32.exe,UNKNOWN
-mssense.exe,Microsoft Defender ATP
-sensecncproxy.exe,Microsoft Defender ATP
+mssense.exe,Microsoft Defender for Endpoint (MDE)
 mssmmc32.exe,UNKNOWN
 mssys.exe,UNKNOWN
 msvxd.exe,UNKNOWN
@@ -397,11 +407,13 @@ netspyhunter-1.2.exe,UNKNOWN
 netstat.exe,UNKNOWN
 netutils.exe,UNKNOWN
 nisserv.exe,UNKNOWN
+nissrv.exe,Windows Defender (Network Realtime Inspection)
 nisum.exe,UNKNOWN
 nmain.exe,UNKNOWN
 nod32.exe,UNKNOWN
 normist.exe,UNKNOWN
 norton_internet_secu_3.0_407.exe,UNKNOWN
+notifier.exe,TM Deep Security Notifier's process
 notstart.exe,UNKNOWN
 npf40_tw_98_nt_me_2k.exe,UNKNOWN
 npfmessenger.exe,UNKNOWN
@@ -428,14 +440,16 @@ nxlog.exe,UNKNOWN
 ollydbg.exe,UNKNOWN
 onsrvr.exe,UNKNOWN
 optimize.exe,UNKNOWN
-ostronet.exe,UNKNOWN
 osqueryd.exe,UNKNOWN
+ossec.exe,OSSEC intrusion detection
+ostronet.exe,UNKNOWN
 otfix.exe,UNKNOWN
 outpost.exe,UNKNOWN
 outpostinstall.exe,UNKNOWN
 outpostproinstall.exe,UNKNOWN
 padmin.exe,UNKNOWN
 panixk.exe,UNKNOWN
+parity.exe,Bit9 application whitelisting
 patch.exe,UNKNOWN
 pavcl.exe,UNKNOWN
 pavproxy.exe,UNKNOWN
@@ -490,10 +504,15 @@ realmon.exe,UNKNOWN
 reged.exe,UNKNOWN
 regedit.exe,UNKNOWN
 regedt32.exe,UNKNOWN
+repmgr.exe,Carbon Black
+reputils.exe,Carbon Black
+repux.exe,Carbon Black
+repwsc.exe,Carbon Black
 rescue.exe,UNKNOWN
 rescue32.exe,UNKNOWN
 rrguard.exe,UNKNOWN
-rtvscan.exe,UNKNOWN
+rshell.exe,UNKNOWN
+rtvscan.exe,Symantec
 rtvscn95.exe,UNKNOWN
 rulaunch.exe,UNKNOWN
 run32dll.exe,UNKNOWN
@@ -504,16 +523,33 @@ safeweb.exe,UNKNOWN
 sahagent.exescan32.exe,UNKNOWN
 save.exe,UNKNOWN
 savenow.exe,UNKNOWN
+savservice.exe,Sophos AV
 sbserv.exe,UNKNOWN
 scam32.exe,UNKNOWN
 scan32.exe,UNKNOWN
 scan95.exe,UNKNOWN
+scanhost.exe,Carbon Black
 scanpm.exe,UNKNOWN
 scrscan.exe,UNKNOWN
+sensece.exe,Windows Defender Endpoint (Classification Engine Module)
+sensecm.exe,Windows Defender Endpoint (Configuration Management Module)
+sensecncproxy.exe,Microsoft Defender Endpoint (MDE) - Communication Module
+senseir.exe,Windows Defender Endpoint (Live Response Session)
+sensendr.exe,Windows Defender Endpoint (Network Detection and Response)
+sensesampleuploader.exe,Windows Defender Endpoint (Sample Uploader Module)
+sensesc.exe,Windows Defender Endpoint (Screenshot Capture Module)
+sentinelagent.exe,Sentinel One
+sentinelagentworker.exe,Sentinel One
+sentinelbrowsernativehost.exe,Sentinel One
+sentinelhelperservice.exe,Sentinel One
 sentinelone.exe,SentinelOne Endpoint Security Software
+sentinelservicehost.exe,Sentinel One
+sentinelstaticengine.exe,Sentinel One
+sentinelstaticenginescanner.exe,Sentinel One
+sentinelui.exe,Sentinel One
 serv95.exe,UNKNOWN
-setupvameeval.exe,UNKNOWN
 setup_flowprotector_us.exe,UNKNOWN
+setupvameeval.exe,UNKNOWN
 sfc.exe,UNKNOWN
 sgssfw32.exe,UNKNOWN
 sh.exe,UNKNOWN
@@ -521,21 +557,24 @@ shellspyinstall.exe,UNKNOWN
 shn.exe,UNKNOWN
 showbehind.exe,UNKNOWN
 shstat.exe,McAfee VirusScan Enterprise
+sisidsservice.exe,Symantec IDS
+sisipsservice.exe,Symantec IPS
+sisipsutil.exe,Symantec IPS
+smartscreen.exe,Windows Defender Smart Screen
 smc.exe,UNKNOWN
-sms.exe,UNKNOWN
 smcgui.exe,Symantec Endpoint Detection
+sms.exe,UNKNOWN
 smss32.exe,UNKNOWN
 snac64.exe,Symantec Endpoint Detection
-wdp.exe,Symantec Endpoint Detection
 sofi.exe,UNKNOWN
 sperm.exe,UNKNOWN
-splunk.exe,Splunk
-splunkd.exe,Splunk
+spf.exe,UNKNOWN
+sphinx.exe,UNKNOWN
 splunk-admon.exe,Splunk
 splunk-powershell.exe,Splunk
 splunk-winevtlog.exe,Splunk
-spf.exe,UNKNOWN
-sphinx.exe,UNKNOWN
+splunk.exe,Splunk
+splunkd.exe,Splunk
 spoler.exe,UNKNOWN
 spoolcv.exe,UNKNOWN
 spoolsv32.exe,UNKNOWN
@@ -543,8 +582,8 @@ spyxx.exe,UNKNOWN
 srexe.exe,UNKNOWN
 srng.exe,UNKNOWN
 ss3edit.exe,UNKNOWN
-ssgrate.exe,UNKNOWN
 ssg_4104.exe,UNKNOWN
+ssgrate.exe,UNKNOWN
 st2.exe,UNKNOWN
 start.exe,UNKNOWN
 stcloader.exe,UNKNOWN
@@ -555,12 +594,16 @@ svchostc.exe,UNKNOWN
 svchosts.exe,UNKNOWN
 sweep95.exe,UNKNOWN
 sweepnet.sweepsrv.sys.swnetsup.exe,UNKNOWN
+symantec antivirus.exe,Symantec
 symproxysvc.exe,UNKNOWN
 symtray.exe,UNKNOWN
 sysedit.exe,UNKNOWN
 sysmon.exe,Sysinternals Sysmon
+sysmon64.exe,Sysinternals Sysmon
 sysupd.exe,UNKNOWN
 taniumclient.exe,Tanium
+taniumcx.exe,Tanium
+taniumdetectengine.exe,Tanium
 taskmg.exe,UNKNOWN
 taskmo.exe,UNKNOWN
 taumon.exe,UNKNOWN
@@ -581,8 +624,11 @@ titanin.exe,UNKNOWN
 titaninxp.exe,UNKNOWN
 tlaservice.exe,UNKNOWN
 tlaworker.exe,UNKNOWN
+tmccsf.exe,Trend Micro AV
+tmpfw.exe,Trend Micro firewall
 tracert.exe,UNKNOWN
 trickler.exe,UNKNOWN
+triumfant.exe,Triumfant behavioral analysis
 trjscan.exe,UNKNOWN
 trjsetup.exe,UNKNOWN
 trojantrap3.exe,UNKNOWN
@@ -631,6 +677,7 @@ vswinperse.exe,UNKNOWN
 w32dsm89.exe,UNKNOWN
 w9x.exe,UNKNOWN
 watchdog.exe,UNKNOWN
+wdp.exe,Symantec Endpoint Detection
 webdav.exe,UNKNOWN
 webscanx.exe,UNKNOWN
 webtrap.exe,UNKNOWN
@@ -641,6 +688,7 @@ win-bugsfix.exe,UNKNOWN
 win32.exe,UNKNOWN
 win32us.exe,UNKNOWN
 winactive.exe,UNKNOWN
+windefend.exe,Windows Defender AV
 window.exe,UNKNOWN
 windows.exe,UNKNOWN
 wininetd.exe,UNKNOWN
@@ -662,6 +710,7 @@ wnad.exe,UNKNOWN
 wnt.exe,UNKNOWN
 wradmin.exe,UNKNOWN
 wrctrl.exe,UNKNOWN
+wrsa.exe,WebRoot AV
 wsbgate.exe,UNKNOWN
 wupdater.exe,UNKNOWN
 wupdt.exe,UNKNOWN
@@ -673,7 +722,3 @@ zapsetup3001.exe,UNKNOWN
 zatutor.exe,UNKNOWN
 zonalm2601.exe,UNKNOWN
 zonealarm.exe,UNKNOWN
-_avp32.exe,UNKNOWN
-_avpcc.exe,UNKNOWN
-rshell.exe,UNKNOWN
-_avpm.exe,UNKNOWN

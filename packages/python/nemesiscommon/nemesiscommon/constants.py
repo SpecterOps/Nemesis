@@ -37,6 +37,7 @@ Q_FILE_DATA_PLAINTEXT: NemesisQueue = "file_data_plaintext"
 Q_FILE_DATA_SOURCECODE: NemesisQueue = "file_data_sourcecode"
 Q_FILE_DATA: NemesisQueue = "file_data"
 Q_FILE_INFORMATION: NemesisQueue = "file_information"
+Q_HOST_INFORMATION: NemesisQueue = "host_information"
 Q_NAMED_PIPE: NemesisQueue = "named_pipe"
 Q_NETWORK_CONNECTION: NemesisQueue = "network_connection"
 Q_PATH_LIST: NemesisQueue = "path_list"
@@ -70,6 +71,7 @@ ALL_QUEUES: List[NemesisQueue] = [
     Q_FILE_DATA_SOURCECODE,
     Q_FILE_DATA,
     Q_FILE_INFORMATION,
+    Q_HOST_INFORMATION,
     Q_PATH_LIST,
     Q_PROCESS_ENRICHED,
     Q_PROCESS,
@@ -100,6 +102,7 @@ ES_INDEX_FILE_DATA_ENRICHED: ElasticIndex = "file_data_enriched"
 ES_INDEX_FILE_DATA_PLAINTEXT: ElasticIndex = "file_data_plaintext"
 ES_INDEX_FILE_DATA_SOURCECODE: ElasticIndex = "file_data_sourcecode"
 ES_INDEX_FILE_INFORMATION: ElasticIndex = "file_information"
+ES_INDEX_HOST_INFORMATION: ElasticIndex = "host_information"
 ES_INDEX_PROCESS_CATEGORY: ElasticIndex = "process_category"
 ES_INDEX_REGISTRY_VALUE: ElasticIndex = "registry_value"
 ES_INDEX_SERVICE_ENRICHED: ElasticIndex = "service_enriched"
@@ -113,11 +116,12 @@ ALL_ES_INDICIES: List[ElasticIndex] = [
     ES_INDEX_FILE_DATA_PLAINTEXT,
     ES_INDEX_FILE_DATA_SOURCECODE,
     ES_INDEX_FILE_INFORMATION,
+    ES_INDEX_HOST_INFORMATION,
     ES_INDEX_PROCESS_CATEGORY,
     ES_INDEX_REGISTRY_VALUE,
     ES_INDEX_SERVICE_ENRICHED,
     ES_INDEX_NAMED_PIPE,
-    ES_INDEX_NETWORK_CONNECTION
+    ES_INDEX_NETWORK_CONNECTION,
 ]
 
 NemesisEnrichment = str
@@ -160,7 +164,7 @@ E_TAG_FILE_CANARY: NemesisEnrichmentTag = "file_canary"
 EXCLUDED_YARA_RULES = [
     "ConventionEngine_Keyword_Driver",
     "ConventionEngine_Keyword_Client",
-    "ConventionEngine_Keyword_Hook"
+    "ConventionEngine_Keyword_Hook",
 ]
 
 

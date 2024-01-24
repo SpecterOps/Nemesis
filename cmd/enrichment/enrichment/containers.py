@@ -179,6 +179,14 @@ class Container(containers.DeclarativeContainer):
         "elasticconnector",
         num_events=500,
     )
+    inputq_hostinfo_elasticconnector = providers.Resource(
+        create_consumer,
+        config.rabbitmq_connection_uri,
+        constants.Q_HOST_INFORMATION,
+        pb.HostInformationIngestionMessage,
+        "elasticconnector",
+        num_events=500,
+    )
     inputq_registryvalue_elasticconnector = providers.Resource(
         create_consumer,
         config.rabbitmq_connection_uri,
@@ -504,11 +512,12 @@ class Container(containers.DeclarativeContainer):
         inputq_filedataplaintext_elasticconnector,
         inputq_filedatasourcecode_elasticconnector,
         inputq_fileinfo_elasticconnector,
+        inputq_hostinfo_elasticconnector,
+        inputq_namedpipe_elasticconnector,
+        inputq_networkconnection_elasticconnector,
         inputq_processenriched_elasticconnector,
         inputq_registryvalue_elasticconnector,
         inputq_serviceenriched_elasticconnector,
-        inputq_namedpipe_elasticconnector,
-        inputq_networkconnection_elasticconnector,
     )
 
     task_fileprocessor = providers.Factory(

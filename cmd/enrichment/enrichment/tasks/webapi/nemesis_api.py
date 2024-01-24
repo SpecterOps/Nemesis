@@ -17,7 +17,9 @@ import uvicorn
 from aio_pika import connect_robust
 from elasticsearch import AsyncElasticsearch
 from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
-    map_unordered, return_args_and_exceptions)
+    map_unordered,
+    return_args_and_exceptions,
+)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
 from fastapi import FastAPI, HTTPException, Request
@@ -25,6 +27,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi_class.decorators import get, post
 from fastapi_class.routable import Routable
 from google.protobuf.json_format import Parse
+
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
 from nemesiscommon.constants import ALL_ES_INDICIES, NemesisQueue
 from nemesiscommon.messaging import MessageQueueProducerInterface
@@ -41,9 +44,13 @@ logger = structlog.get_logger(module=__name__)
 
 MAP = {
     "authentication_data": pb.AuthenticationDataIngestionMessage,
+    "cookie": pb.CookieIngestionMessage,
     "file_data": pb.FileDataIngestionMessage,
     "file_information": pb.FileInformationIngestionMessage,
+    "host_information": pb.HostInformationIngestionMessage,
+    "named_pipe": pb.NamedPipeIngestionMessage,
     "network_address": pb.NetworkAddressIngestionMessage,
+    "network_conection": pb.NetworkConnectionIngestionMessage,
     "network_connection": pb.NetworkConnectionIngestionMessage,
     "path_list": pb.PathListIngestionMessage,
     "process_enriched": pb.ProcessEnrichedMessage,
@@ -51,11 +58,8 @@ MAP = {
     "raw_data": pb.RawDataIngestionMessage,
     "registry_value": pb.RegistryValueIngestionMessage,
     "route": pb.RouteDataIngestionMessage,
-    "time": pb.TimeDataIngestionMessage,
     "service": pb.ServiceIngestionMessage,
-    "cookie": pb.CookieIngestionMessage,
-    "named_pipe": pb.NamedPipeIngestionMessage,
-    "network_conection": pb.NetworkConnectionIngestionMessage,
+    "time": pb.TimeDataIngestionMessage,
     # DpapiBlobMessage
     # DpapiDomainBackupkeyMessage
     # DpapiMasterkeyMessage

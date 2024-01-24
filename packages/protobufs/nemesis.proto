@@ -488,6 +488,25 @@ message CookieIngestionMessage {
 }
 
 
+// Basic information used for identifying a host.
+// This includes a host's shortname
+//
+message HostInformationIngestion {
+  // Short name of the host (e.g., NetBIOS name or linux hostname)
+  optional string short_name = 1;
+
+  // Long name of the host (e.g., FQDN)
+  optional string long_name = 2;
+
+  // IP addresses associated with the host
+  repeated string ip_addresses = 3;
+}
+message HostInformationIngestionMessage {
+  Metadata metadata = 1;
+  HostInformationIngestion data = 2;
+}
+
+
 // Connections between the host the agent is running with itself or another
 // host. These could also be listening ports (i.e., netstat output)
 // Addresses are expected to conform to the public standard for the address
@@ -530,7 +549,6 @@ message NetworkConnectionIngestionMessage {
   Metadata metadata = 1;
   repeated NetworkConnectionIngestion data = 2;
 }
-
 
 ////////////////////////////////////////////////////
 //

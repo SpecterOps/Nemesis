@@ -1115,6 +1115,61 @@ class CookieIngestionMessage(google.protobuf.message.Message):
 global___CookieIngestionMessage = CookieIngestionMessage
 
 @typing_extensions.final
+class HostInformationIngestion(google.protobuf.message.Message):
+    """Basic information used for identifying a host.
+    This includes a host's shortname
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHORT_NAME_FIELD_NUMBER: builtins.int
+    LONG_NAME_FIELD_NUMBER: builtins.int
+    IP_ADDRESSES_FIELD_NUMBER: builtins.int
+    short_name: builtins.str
+    """Short name of the host (e.g., NetBIOS name or linux hostname)"""
+    long_name: builtins.str
+    """Long name of the host (e.g., FQDN)"""
+    @property
+    def ip_addresses(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """IP addresses associated with the host"""
+    def __init__(
+        self,
+        *,
+        short_name: builtins.str | None = ...,
+        long_name: builtins.str | None = ...,
+        ip_addresses: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["_long_name", b"_long_name", "_short_name", b"_short_name", "long_name", b"long_name", "short_name", b"short_name"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["_long_name", b"_long_name", "_short_name", b"_short_name", "ip_addresses", b"ip_addresses", "long_name", b"long_name", "short_name", b"short_name"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_long_name", b"_long_name"]) -> typing_extensions.Literal["long_name"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["_short_name", b"_short_name"]) -> typing_extensions.Literal["short_name"] | None: ...
+
+global___HostInformationIngestion = HostInformationIngestion
+
+@typing_extensions.final
+class HostInformationIngestionMessage(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    METADATA_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    @property
+    def metadata(self) -> global___Metadata: ...
+    @property
+    def data(self) -> global___HostInformationIngestion: ...
+    def __init__(
+        self,
+        *,
+        metadata: global___Metadata | None = ...,
+        data: global___HostInformationIngestion | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["data", b"data", "metadata", b"metadata"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["data", b"data", "metadata", b"metadata"]) -> None: ...
+
+global___HostInformationIngestionMessage = HostInformationIngestionMessage
+
+@typing_extensions.final
 class NetworkConnectionIngestion(google.protobuf.message.Message):
     """Connections between the host the agent is running with itself or another
     host. These could also be listening ports (i.e., netstat output)
