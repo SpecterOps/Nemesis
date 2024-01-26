@@ -5,6 +5,7 @@ import os
 import requests
 import ntpath
 import re
+import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
 from enum import Enum
@@ -24,14 +25,14 @@ from outflank_stage1.services.task_service import TaskService
 # 3rd Party Libraries
 from pip._internal import main as pipmain
 
-# Hard code creds if you don't want to bother editing OST's docker-compose file
-os.environ["NEMESIS_URL"] = "http://192.168.80.128:8080/api/"
-os.environ["NEMESIS_USERNAME"] = "nemesis"
-os.environ["NEMESIS_PASSWORD"] = "Qwerty12345"
-os.environ["NEMESIS_PROJECT"] = "ASSESS-TEST"
-os.environ["NEMESIS_EXPIRATION_DAYS"] = "365"
-os.environ["NEMESIS_LOG_LEVEL"] = "DEBUG"
-# os.environ["CLEAR_REDIS"] = "True" # true if you want to clear the redis backend DB for reprocessing
+# # Hard code creds if you don't want to bother editing OST's docker-compose file
+# os.environ["NEMESIS_URL"] = "http://192.168.80.128:8080/api/"
+# os.environ["NEMESIS_USERNAME"] = "nemesis"
+# os.environ["NEMESIS_PASSWORD"] = "Qwerty12345"
+# os.environ["NEMESIS_PROJECT"] = "ASSESS-TEST"
+# os.environ["NEMESIS_EXPIRATION_DAYS"] = "365"
+# os.environ["NEMESIS_LOG_LEVEL"] = "DEBUG"
+# # os.environ["CLEAR_REDIS"] = "True" # true if you want to clear the redis backend DB for reprocessing
 
 # Ugly hack so we don't have to customize stage1's docker container
 # Assumes the docker container has internet access so it can install pip packages
@@ -443,6 +444,8 @@ class NemesisConnector(BaseBot):
         self._task_service = TaskService()
 
         self._current_working_directories = {}
+        self._logger.info("Sleeping until services startup...")
+        time.sleep(15)
 
         implants = self._implant_service.get_all_implants()
         for implant in implants:
@@ -602,6 +605,43 @@ class NemesisConnector(BaseBot):
 
         return Config.PATH_SHARED + "/downloads/" + download[0]["uid"]
 
+    def handle_cwd_response(self, task: BaseTask):
+        # Obtain/validate required fields
+        task_uid = task.get_uid()
+        if not task_uid:
+            self._logger.error(f"No task_uid found for in cwd response")
+            return
+        rconn.set(task_uid, 1)
+
+        response_timestamp = task.get_response_timestamp()
+        if not response_timestamp:
+            self._logger.error("No response timestamp in cwd response")
+            return
+
+        implant_uid = task.get_implant_uid()
+        if not implant_uid:
+            self._logger.error("No implant UID in cwd response")
+            return
+
+        cwd_output = task.get_response()
+        if not cwd_output:
+            self._logger.error("No data in cwd response")
+            return
+
+        timestamp = task.get_timestamp()
+        if not timestamp:
+            self._logger.error("No timestamp in cwd response")
+            return
+
+        implant = self._implant_service.get_by_uid(implant_uid)
+        if not implant:
+            self._logger.error(f"No implant found for UID '{implant_uid}'")
+            return
+
+        self._logger.info(f"Setting cwd for {implant_uid} to '{cwd_output}'")
+        self._current_working_directories[implant_uid] = cwd_output
+
+
     def handle_ls_response(self, task: BaseTask):
         # Obtain/validate required fields
 
@@ -639,6 +679,10 @@ class NemesisConnector(BaseBot):
         hostname = implant.get_hostname()
         if not hostname:
             self._logger.error(f"No hostname found for implant UID '{implant_uid}'")
+            return
+
+        if not implant_uid in self._current_working_directories:
+            self._logger.error(f"CWD not set for '{implant_uid}'")
             return
 
         if not ls_output.startswith("[Error"):
@@ -761,6 +805,8 @@ class NemesisConnector(BaseBot):
             self.handle_ls_response(task)
         elif task.get_name() == "download":
             self.handle_download_response(task)
+        elif task.get_name() == "pwd":
+            self.handle_cwd_response(task)
 
     def on_new_implant(self, implant: Implant):
         self._logger.info(f"New implant: {implant.get_hostname()} ({implant.get_ip()})")
