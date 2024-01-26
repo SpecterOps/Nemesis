@@ -19,6 +19,7 @@ from outflank_stage1.bot import BaseBot
 from outflank_stage1.implant import Implant
 from outflank_stage1.services.implant_service import ImplantService
 from outflank_stage1.task import BaseTask
+from outflank_stage1.task.tasks import PwdTask
 from outflank_stage1.services.task_service import TaskService
 # 3rd Party Libraries
 from pip._internal import main as pipmain
@@ -562,6 +563,10 @@ class NemesisConnector(BaseBot):
                                                 rconn.set(task_uid, 1)
                                         except httpx.HTTPStatusError as e:
                                             self._logger.exception(f"Error sending file data message. Response body: {e.response.text} Exception: {e}")
+
+                # if we get to this point and there hasn't been a PWD, task one up
+                if not self._current_working_directories[implant_uid]:
+                    self._task_service.schedule_task(implant_uid=implant.get_uid(), task=PwdTask())
 
         self._logger.info("Nemesis Connector is running")
 
