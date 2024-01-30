@@ -183,6 +183,8 @@ class DataResponse:
 @dataclass
 class FileInformation:
     type: str
+    creation_time: datetime
+    access_time: datetime
     modification_time: datetime
     size: int
     path: str
@@ -249,26 +251,27 @@ class NemesisApiClient:
 
         """
 
-        json = {
-            "metadata": {
-                "agent_id": data.metadata.agent_id,
-                "agent_type": data.metadata.agent_type,
-                "automated": data.metadata.automated,
-                "data_type": data.metadata.data_type.value,
-                "expiration": convert_to_nemesis_timestamp(data.metadata.expiration),
-                "source": data.metadata.source,
-                "project": data.metadata.project,
-                "timestamp": convert_to_nemesis_timestamp(data.metadata.timestamp),
-            },
-            "data": [asdict(d) for d in data.data],
-        }
+        if data.data and len(data.data) > 0:
+            json = {
+                "metadata": {
+                    "agent_id": data.metadata.agent_id,
+                    "agent_type": data.metadata.agent_type,
+                    "automated": data.metadata.automated,
+                    "data_type": data.metadata.data_type.value,
+                    "expiration": convert_to_nemesis_timestamp(data.metadata.expiration),
+                    "source": data.metadata.source,
+                    "project": data.metadata.project,
+                    "timestamp": convert_to_nemesis_timestamp(data.metadata.timestamp),
+                },
+                "data": [asdict(d) for d in data.data],
+            }
 
-        resp = self.client.post(self.DATA_ENDPOINT, json=json)
+            resp = self.client.post(self.DATA_ENDPOINT, json=json)
 
-        resp.raise_for_status()
-        obj = resp.json()
+            resp.raise_for_status()
+            obj = resp.json()
 
-        return DataResponse(NemesisMessageId(obj["object_id"]))
+            return DataResponse(NemesisMessageId(obj["object_id"]))
 
 
     def send_file_data(self, data: FileDataRequest) -> DataResponse:
@@ -379,7 +382,14 @@ def parse_ls_line(target_dir: str, line: str) -> FileInformation:
             nemesis_timestamp = datetime.strptime(timestamp, "%d/%m/%Y %H:%M").strftime("%Y-%m-%dT%H:%M:%S.000Z")
             path = f"{target_dir}{name}"
             if not (name == "." or name == ".."):
-                return FileInformation(type="folder", modification_time=nemesis_timestamp, size=0, path=path)
+                return FileInformation(
+                    type="folder",
+                    modification_time=nemesis_timestamp,
+                    creation_time=datetime(1970, 1, 1).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                    access_time=datetime(1970, 1, 1).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                    size=0,
+                    path=path
+                )
         else:
             parts = line.split("\t")
             timestamp = parts[0].strip()
@@ -388,10 +398,58 @@ def parse_ls_line(target_dir: str, line: str) -> FileInformation:
             name = parts[2].strip()
             path = f"{target_dir}{name}"
             nemesis_timestamp = datetime.strptime(timestamp, "%d/%m/%Y %H:%M").strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            return FileInformation(type="file", modification_time=nemesis_timestamp, size=parsed_size, path=path)
+            return FileInformation(
+                type="file",
+                modification_time=nemesis_timestamp,
+                creation_time=datetime(1970, 1, 1).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                access_time=datetime(1970, 1, 1).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                size=parsed_size,
+                path=path
+            )
     except Exception as e:
         print(f"Error parsing line '{line}' : {e}")
 
+def parse_ls_line2(target_dir: str, line: str) -> FileInformation:
+    """Converts a directory listing line to a FileInformation dataclass.
+
+    Args:
+        target_dir (str): The resolved target directory the object is in
+        line (str): The object (file/folder)
+
+    Returns:
+        FileInformation: The constructed file information dataclass
+    """
+    try:
+        parts = line.split("|")
+        if len(parts) == 5:
+            nemesis_created_timestamp = datetime.strptime(parts[0].strip(), "%m/%d/%Y %H:%M:%S").strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            nemesis_written_timestamp = datetime.strptime(parts[1].strip(), "%m/%d/%Y %H:%M:%S").strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            nemesis_accessed_timestamp = datetime.strptime(parts[2].strip(), "%m/%d/%Y %H:%M:%S").strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            name = parts[-1].strip()
+            path = f"{target_dir}{name}"
+
+            if "<dir>" in line or "<junction>" in line:
+                if not (name == "." or name == ".."):
+                    return FileInformation(
+                        type="folder",
+                        creation_time=nemesis_created_timestamp,
+                        access_time=nemesis_accessed_timestamp,
+                        modification_time=nemesis_written_timestamp,
+                        size=0,
+                        path=path
+                    )
+            else:
+                size = parts[3].strip()
+                return FileInformation(
+                    type="file",
+                    creation_time=nemesis_created_timestamp,
+                    access_time=nemesis_accessed_timestamp,
+                    modification_time=nemesis_written_timestamp,
+                    size=size,
+                    path=path
+                )
+    except Exception as e:
+        print(f"Error parsing line '{line}' : {e}")
 
 def parse_ls_output(cwd: str, text: str):
     """Converts a directory listing to an array of file FileInformation.
@@ -401,27 +459,45 @@ def parse_ls_output(cwd: str, text: str):
         text (str): The output of ls
     """
     target_dir = ""
+    ls_type = "1" # 1 is normal, 2 is customized
+
     for line in text.split("\n")[0:3]:
         if line.startswith("Directory of "):
             target_dir = line[13:]
+        if line.startswith("Contents of "):
+            target_dir = line[12:]
+            ls_type = "2"
 
-    if ntpath.isabs(target_dir):
-        target_dir = target_dir.replace("\\", "/")
+    if ls_type == "1":
+        if ntpath.isabs(target_dir):
+            target_dir = target_dir.replace("\\", "/")
+        else:
+            target_dir = ntpath.realpath(f"{cwd}\\{target_dir}").replace("\\", "/")
+
+        if not target_dir.endswith("/"):
+            target_dir = f"{target_dir}/"
+
+        listings = []
+        for line in text.split("\n"):
+            if len(line.split("\t")) == 3:
+                listing = parse_ls_line(target_dir, line)
+                if listing:
+                    listings.append(listing)
+
+        return listings
     else:
-        target_dir = ntpath.realpath(f"{cwd}\\{target_dir}").replace("\\", "/")
+        target_dir = target_dir.replace("\\", "/")
+        if not target_dir.endswith("/"):
+            target_dir = f"{target_dir}/"
 
-    if not target_dir.endswith("/"):
-        target_dir = f"{target_dir}/"
+        listings = []
+        for line in text.split("\n"):
+            if len(line.split("|")) == 5:
+                listing = parse_ls_line2(target_dir, line)
+                if listing:
+                    listings.append(listing)
 
-    listings = []
-    for line in text.split("\n"):
-        if len(line.split("\t")) == 3:
-            listing = parse_ls_line(target_dir, line)
-            if listing:
-                listings.append(listing)
-
-    return listings
-
+        return listings
 
 class NemesisConnector(BaseBot):
     _implant_service: ImplantService
@@ -561,7 +637,6 @@ class NemesisConnector(BaseBot):
                                                 file_information = parse_ls_output(ls_working_directory, ls_output)
                                                 fiReq = FileInformationRequest(metadata=m, data=file_information)
                                                 fiResp = client.send_file_information(fiReq)
-
                                                 self._logger.info(f"Sent file_data message to nemesis! Message ID: {fiResp}")
                                                 rconn.set(task_uid, 1)
                                         except httpx.HTTPStatusError as e:
@@ -716,7 +791,6 @@ class NemesisConnector(BaseBot):
                     file_information = parse_ls_output(ls_working_directory, ls_output)
                     fiReq = FileInformationRequest(metadata=m, data=file_information)
                     fiResp = client.send_file_information(fiReq)
-
                     self._logger.info(f"Sent file_data message to nemesis! Message ID: {fiResp}")
 
             except httpx.HTTPStatusError as e:
