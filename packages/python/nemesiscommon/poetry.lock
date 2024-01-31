@@ -786,13 +786,13 @@ files = [
 
 [[package]]
 name = "miniopy-async"
-version = "1.18"
+version = "1.19"
 description = "Asynchronous MinIO Client SDK for Python"
 optional = false
 python-versions = ">3.6"
 files = [
-    {file = "miniopy-async-1.18.tar.gz", hash = "sha256:cae2a4bede1b3663b41db66932887cc2325baa70dd327744c484ac50a791b17c"},
-    {file = "miniopy_async-1.18-py3-none-any.whl", hash = "sha256:f943abf45ebd1e5c34587361a1a05e11a5e92e89698e2d0c659d2016085c7122"},
+    {file = "miniopy-async-1.19.tar.gz", hash = "sha256:ffc1126a8bb48121a27ffa96cf03055f0dc7c4e0488841ea5eee61825d14a494"},
+    {file = "miniopy_async-1.19-py3-none-any.whl", hash = "sha256:8f31960e2b1378ec5ce14061318481462b466da6fe2830244cc25fcf91c9a29b"},
 ]
 
 [package.dependencies]
@@ -1715,4 +1715,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "29dc1c05545f462091e6027de8657c43d29dc1424d37b0bb3bd011958fa95bf8"
+content-hash = "d3c26dc0965f09f069e2ffb1cab05c32be44dae2899656acb50b37915085bada"
