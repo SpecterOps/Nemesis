@@ -9,8 +9,7 @@ import uuid
 import structlog
 from dotnet.settings import DotnetSettings
 from fastapi.responses import Response
-from fastapi_class.decorators import get, post
-from fastapi_class.routable import Routable
+from fastapi import APIRouter
 from nemesiscommon.storage import StorageInterface
 from prometheus_async import aio
 from prometheus_client import Summary
@@ -23,7 +22,7 @@ class ProcessRequest(BaseModel):
     object_id: uuid.UUID
 
 
-class DotnetAPI(Routable):
+class DotnetAPI():
     cfg: DotnetSettings
     storage: StorageInterface
 
@@ -31,12 +30,14 @@ class DotnetAPI(Routable):
         super().__init__()
         self.cfg = cfg
         self.storage = storage
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
+        self.router.add_api_route("/ready", self.ready, methods=["GET"])
+        self.router.add_api_route("/process", self.process, methods=["POST"])
 
-    @get("/")
     async def home(self):
         return Response()
 
-    @get("/ready")
     async def ready(self):
         """
         Used for readiness probes.
@@ -44,7 +45,6 @@ class DotnetAPI(Routable):
         return Response()
 
     @aio.time(Summary("process_file", "Time spent processing a file"))  # type: ignore
-    @post("/process")
     async def process(self, request: ProcessRequest):
         """
         Combines the /decompile and /analysis endpoints,
