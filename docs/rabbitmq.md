@@ -23,6 +23,10 @@ kubectl run perf-test -it --rm  --image=pivotalrabbitmq/perf-test -- --uri amqp:
 
 plumber read rabbit --address="amqp://nemesis:Qwerty12345@192.168.230.42:5672" --queue-name="file_data" --exchange-name="nemesis" --binding-key=" "  --queue-durable -f
 
+# Port forwarding to access the console
+```
+kubectl port-forward --address 0.0.0.0 service/nemesis-rabbitmq-svc 50050:15672
+```
 # References
 
 * https://blog.rabbitmq.com/posts/2020/08/deploying-rabbitmq-to-kubernetes-whats-involved/

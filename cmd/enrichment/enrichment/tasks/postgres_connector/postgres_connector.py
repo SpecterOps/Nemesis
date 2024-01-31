@@ -516,8 +516,8 @@ class PostgresConnector(TaskInterface):
                 parent_process_id=origin.parent_process_id if pb_has_field(origin, "parent_process_id") else None,
                 arch=origin.arch if pb_has_field(origin, "arch") else None,
                 username=username,
-                category=i.category.category if pb_has_field(i.category, "category") else None,
-                description=i.category.description if pb_has_field(i.category, "description") else None,
+                category=i.category.category,
+                description=i.category.description,
             )
 
             await self.db.add_process(data)

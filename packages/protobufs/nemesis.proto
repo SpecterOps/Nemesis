@@ -1416,7 +1416,7 @@ message ProcessCategory {
   string category = 1;
 
   // A description of process
-  optional string description = 2;
+  string description = 2;
 }
 
 message ProcessEnriched {

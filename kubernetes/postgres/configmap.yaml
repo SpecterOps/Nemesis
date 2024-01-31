@@ -96,64 +96,6 @@ data:
         COMMENT ON COLUMN nemesis.collected_host_data.is_data_remote IS 'Is the data for a remote host? Or was it enumerated locally on the current machine?';
 
 
-        -- Named Pipes
-        CREATE TABLE nemesis.namedpipes (
-            name text NOT NULL,
-            server_process_id integer,
-            server_process_name text,
-            server_process_path text,
-            server_process_session_id integer,
-            sddl text,
-            CONSTRAINT fk_collection_data_projects FOREIGN KEY (project_id) REFERENCES nemesis.projects(id),
-            CONSTRAINT fk_collection_data_agents FOREIGN KEY (agent_id) REFERENCES nemesis.agents(id),
-            CONSTRAINT fk_agents_hosts FOREIGN KEY (hostagents_row_id) REFERENCES nemesis.host_agents(row_id)
-        ) INHERITS (collected_host_data);
-
-        COMMENT ON COLUMN nemesis.namedpipes.name IS 'The pipe''s name';
-
-        COMMENT ON COLUMN nemesis.namedpipes.server_process_id IS 'Process ID that created the pipe';
-
-        COMMENT ON COLUMN nemesis.namedpipes.server_process_name IS 'Name of the process that created the pipe';
-
-        COMMENT ON COLUMN nemesis.namedpipes.server_process_path IS 'Full path to the process that created the pipe';
-
-        COMMENT ON COLUMN nemesis.namedpipes.server_process_session_id IS 'Session ID of the proces that created the pipe';
-
-
-        -- Create an index on the timestamp_column
-        CREATE INDEX idx_namedpipes_timestamp ON namedpipes (collection_timestamp);
-
-
-        -- Processes
-        CREATE TABLE nemesis.processes (
-            name text,
-            command_line text,
-            file_name text,
-            process_id integer,
-            parent_process_id integer,
-            arch text,
-            username text,
-            category text,
-            description text,
-            CONSTRAINT fk_collection_data_projects FOREIGN KEY (project_id) REFERENCES nemesis.projects(id),
-            CONSTRAINT fk_collection_data_agents FOREIGN KEY (agent_id) REFERENCES nemesis.agents(id),
-            CONSTRAINT fk_agents_hosts FOREIGN KEY (hostagents_row_id) REFERENCES nemesis.host_agents(row_id)
-        ) INHERITS (collected_host_data);
-
-        COMMENT ON COLUMN nemesis.processes.name IS 'The process''s name';
-        COMMENT ON COLUMN nemesis.processes.command_line IS 'Process command line';
-        COMMENT ON COLUMN nemesis.processes.file_name IS 'Path to the file';
-        COMMENT ON COLUMN nemesis.processes.process_id IS 'Process ID';
-        COMMENT ON COLUMN nemesis.processes.parent_process_id IS 'Parent process''s PID';
-        COMMENT ON COLUMN nemesis.processes.arch IS 'Process''s architecture';
-        COMMENT ON COLUMN nemesis.processes.username IS 'The process''s username';
-        COMMENT ON COLUMN nemesis.processes.category IS 'Enriched category of the process';
-        COMMENT ON COLUMN nemesis.processes.description IS 'Enriched category''s description';
-
-
-        -- Create an index on the timestamp_column
-        CREATE INDEX idx_processes_timestamp ON processes (collection_timestamp);
-
 
         -----------------------------------------------
         --
@@ -237,30 +179,95 @@ data:
         -- Processed Datatypes
         --
         -----------------------------------------------
-        -- CREATE TYPE filesystem_object_type AS ENUM ('file', 'folder');
+        -- Named Pipes
+        CREATE TABLE nemesis.namedpipes (
+            name text NOT NULL,
+            server_process_id integer,
+            server_process_name text,
+            server_process_path text,
+            server_process_session_id integer,
+            sddl text,
+            CONSTRAINT fk_collection_data_projects FOREIGN KEY (project_id) REFERENCES nemesis.projects(id),
+            CONSTRAINT fk_collection_data_agents FOREIGN KEY (agent_id) REFERENCES nemesis.agents(id),
+            CONSTRAINT fk_agents_hosts FOREIGN KEY (hostagents_row_id) REFERENCES nemesis.host_agents(row_id)
+        ) INHERITS (collected_host_data);
 
-        -- -- filesystem objects, whether through downloads or listings
-        -- CREATE TABLE filesystem_objects (
-        --     unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-        --     id BIGSERIAL PRIMARY KEY,           -- TODO: is this needed now that we have unique_db_id ?
-        --     agent_id TEXT NOT NULL,
-        --     path TEXT NOT NULL,
-        --     name TEXT,
-        --     extension TEXT,                 -- extracted from the path
-        --     type filesystem_object_type,
-        --     size BIGINT,
-        --     magic_type TEXT,
-        --     creation_time TIMESTAMP WITH TIME ZONE,        -- UTC
-        --     access_time TIMESTAMP WITH TIME ZONE,          -- UTC
-        --     modification_time TIMESTAMP WITH TIME ZONE,    -- UTC
-        --     access_mode INTEGER,            -- *nix permission number
-        --     file_group TEXT,                     -- *nix case sensitive file group membership
-        --     file_id TEXT,                   -- *nix string for an inode or file id
-        --     owner TEXT,                     -- Case sensitive owner (*nix and Windows)
-        --     sddl TEXT,
-        --     nemesis_file_id UUID,           -- Nemesis file UUID `object_id` if the file is uploaded
-        --     UNIQUE (project_id, source, path)
-        -- ) INHERITS (project_data);
+        COMMENT ON COLUMN nemesis.namedpipes.name IS 'The pipe''s name';
+
+        COMMENT ON COLUMN nemesis.namedpipes.server_process_id IS 'Process ID that created the pipe';
+
+        COMMENT ON COLUMN nemesis.namedpipes.server_process_name IS 'Name of the process that created the pipe';
+
+        COMMENT ON COLUMN nemesis.namedpipes.server_process_path IS 'Full path to the process that created the pipe';
+
+        COMMENT ON COLUMN nemesis.namedpipes.server_process_session_id IS 'Session ID of the proces that created the pipe';
+
+
+        -- Create an index on the timestamp_column
+        CREATE INDEX idx_namedpipes_timestamp ON namedpipes (collection_timestamp);
+
+
+        -- Processes
+        CREATE TABLE nemesis.processes (
+            name text,
+            command_line text,
+            file_name text,
+            process_id integer,
+            parent_process_id integer,
+            arch text,
+            username text,
+            category text,
+            description text,
+            CONSTRAINT fk_collection_data_projects FOREIGN KEY (project_id) REFERENCES nemesis.projects(id),
+            CONSTRAINT fk_collection_data_agents FOREIGN KEY (agent_id) REFERENCES nemesis.agents(id),
+            CONSTRAINT fk_agents_hosts FOREIGN KEY (hostagents_row_id) REFERENCES nemesis.host_agents(row_id)
+        ) INHERITS (collected_host_data);
+
+        COMMENT ON COLUMN nemesis.processes.name IS 'The process''s name';
+        COMMENT ON COLUMN nemesis.processes.command_line IS 'Process command line';
+        COMMENT ON COLUMN nemesis.processes.file_name IS 'Path to the file';
+        COMMENT ON COLUMN nemesis.processes.process_id IS 'Process ID';
+        COMMENT ON COLUMN nemesis.processes.parent_process_id IS 'Parent process''s PID';
+        COMMENT ON COLUMN nemesis.processes.arch IS 'Process''s architecture';
+        COMMENT ON COLUMN nemesis.processes.username IS 'The process''s username';
+        COMMENT ON COLUMN nemesis.processes.category IS 'Enriched category of the process';
+        COMMENT ON COLUMN nemesis.processes.description IS 'Enriched category''s description';
+
+
+        -- Create an index on the timestamp_column
+        CREATE INDEX idx_processes_timestamp ON processes (collection_timestamp);
+
+
+
+
+        CREATE TYPE filesystem_object_type AS ENUM ('file', 'folder');
+
+        -- filesystem objects, whether through downloads or listings
+        CREATE TABLE filesystem_objects (
+            unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+            id BIGSERIAL PRIMARY KEY,           -- TODO: is this needed now that we have unique_db_id ?
+            agent_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            name TEXT,
+            extension TEXT,                 -- extracted from the path
+            type filesystem_object_type,
+            size BIGINT,
+            magic_type TEXT,
+            creation_time TIMESTAMP WITH TIME ZONE,        -- UTC
+            access_time TIMESTAMP WITH TIME ZONE,          -- UTC
+            modification_time TIMESTAMP WITH TIME ZONE,    -- UTC
+            access_mode INTEGER,            -- *nix permission number
+            file_group TEXT,                     -- *nix case sensitive file group membership
+            file_id TEXT,                   -- *nix string for an inode or file id
+            owner TEXT,                     -- Case sensitive owner (*nix and Windows)
+            sddl TEXT,
+            nemesis_file_id UUID,           -- Nemesis file UUID `object_id` if the file is uploaded
+            CONSTRAINT fk_collection_data_projects FOREIGN KEY (project_id) REFERENCES nemesis.projects(id),
+            CONSTRAINT fk_collection_data_agents FOREIGN KEY (agent_id) REFERENCES nemesis.agents(id),
+            CONSTRAINT fk_agents_hosts FOREIGN KEY (hostagents_row_id) REFERENCES nemesis.host_agents(row_id)
+        ) INHERITS (collected_host_data);
+
+        CREATE INDEX idx_filesystem_objects_timestamp ON filesystem_objects (collection_timestamp);
 
         -- -- Trigram indexing for `filesystem_objects` path search speedup
         -- --  GIN is faster to read but slower to write. GiST is faster to write but slower to read and is smaller on disk.
