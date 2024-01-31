@@ -9,8 +9,7 @@ import uvicorn
 from enrichment.tasks.webapi.crack_list.client_wordlists import ClientWordlists
 from fastapi import FastAPI
 from fastapi.responses import Response
-from fastapi_class.decorators import get, post
-from fastapi_class.routable import Routable
+from fastapi import APIRouter
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio
@@ -43,7 +42,7 @@ class UploadRequest(BaseModel):
     client_id: str
 
 
-class CrackListApiRoutes(Routable):
+class CrackListApiRoutes():
     """Inherits from Routable."""
 
     storage: StorageInterface
@@ -53,12 +52,15 @@ class CrackListApiRoutes(Routable):
         super().__init__()
         self.storage = storage
         self.client_wordlists = ClientWordlists("/opt/cracklist/")
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
+        self.router.add_api_route("/ready", self.ready, methods=["GET"])
+        self.router.add_api_route("/add", self.root_post, methods=["POST"])
+        self.router.add_api_route("/client/{client_id}/{count}", self.root_get, methods=["GET"])
 
-    @get("/")
     async def home(self):
         return Response()
 
-    @get("/ready")
     async def ready(self):
         """
         Used for readiness probes.
@@ -66,7 +68,6 @@ class CrackListApiRoutes(Routable):
         return Response()
 
     @aio.time(Summary("wordlist_add", "Time spent adding a document to the wordlist"))  # type: ignore
-    @post("/add")
     async def root_post(self, request: UploadRequest, length_filter: bool = False):
         try:
             await logger.ainfo("crack-list ADD request", request=request)
@@ -77,7 +78,6 @@ class CrackListApiRoutes(Routable):
             return {"error": str(e)}
 
     @aio.time(Summary("wordlist_retrieve", "Time spent retrieving the wordlist"))  # type: ignore
-    @get("/client/{client_id}/{count}")
     async def root_get(self, client_id: str, count: str | None = None):
         if not count:
             count = 10

@@ -6,8 +6,7 @@ from typing import List
 # 3rd Party Libraries
 import structlog
 from fastapi.responses import Response
-from fastapi_class.decorators import get, post
-from fastapi_class.routable import Routable
+from fastapi import APIRouter
 from langchain.text_splitter import (RecursiveCharacterTextSplitter,
                                      TokenTextSplitter)
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -46,7 +45,7 @@ class SemanticSearchResults(BaseModel):
     results: List[SemanticSearchResult]
 
 
-class SemanticSearchAPI(Routable):
+class SemanticSearchAPI():
     cfg: NLPSettings
     embeddings: HuggingFaceEmbeddings
     vector_store: ElasticsearchStore
@@ -79,12 +78,16 @@ class SemanticSearchAPI(Routable):
             chunk_overlap=chunk_overlap
         )
 
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
+        self.router.add_api_route("/ready", self.ready, methods=["GET"])
+        self.router.add_api_route("/semantic_search", self.semantic_search, methods=["POST"])
+        self.router.add_api_route("/indexing", self.indexing, methods=["POST"])
 
-    @get("/")
+
     async def home(self):
         return Response()
 
-    @get("/ready")
     async def ready(self):
         """
         Used for readiness probes.
@@ -92,7 +95,6 @@ class SemanticSearchAPI(Routable):
         return Response()
 
     @aio.time(Summary("semantic_search", "Semantic search over indexed documents"))  # type: ignore
-    @post("/semantic_search")
     async def semantic_search(self, request: SemanticSearchRequest):
         try:
             if not self.vector_store.client.indices.exists(index=self.cfg.elastic_index_name):
@@ -122,7 +124,6 @@ class SemanticSearchAPI(Routable):
             return {"error": f"{e}"}
 
     @aio.time(Summary("indexing_request", "Indexing of document text"))  # type: ignore
-    @post("/indexing")
     async def indexing(self, request: IndexingRequest):
         try:
             if request.text.strip():
