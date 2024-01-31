@@ -22,7 +22,7 @@ yara-python = "^4.3.0"
 prometheus-async = {extras = ["aiohttp"], version = "^22.2.0"}
 winacl = "^0.1.7"
 miniopy-async = "^1.15"
-cryptography = "^41.0.4"
+cryptography = "^41.0.6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.2"
