@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -17,6 +18,7 @@ import enrichment.lib.canaries as canary_helpers
 import enrichment.lib.helpers as helpers
 import nemesiscommon.constants as constants
 import nemesispb.nemesis_pb2 as pb
+import plyara
 import structlog
 import yara
 from binaryornot.check import is_binary
@@ -28,6 +30,7 @@ from nemesiscommon.nemesis_tempfile import TempFile
 from nemesiscommon.services.alerter import AlerterInterface
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
+from plyara import utils as plyara_utils
 from prometheus_async import aio
 from prometheus_client import Summary
 from sumy.nlp.tokenizers import Tokenizer
@@ -164,7 +167,24 @@ class FileProcessor(TaskInterface):
             except:
                 continue
 
+        # compile all the rules
         self.yara_rules = yara.compile(filepaths=yara_files)
+
+        # save off the rule definitions in a readable way
+        self.yara_rule_definitions = {}
+        yara_rule_definitions_raw = list()
+        parser = plyara.Plyara()
+        for file_path in yara_file_paths:
+            with open(file_path, 'r') as fh:
+                try:
+                    parsed_yara_rules = parser.parse_string(fh.read())
+                    yara_rule_definitions_raw += parsed_yara_rules
+                except Exception as e:
+                    logger.error(f"Error parsing yara file '{file_path}' : {e}")
+            parser.clear()
+        pass
+        for rule_def in yara_rule_definitions_raw:
+            self.yara_rule_definitions[rule_def['rule_name']] = plyara_utils.rebuild_yara_rule(rule_def)
 
     async def run(self) -> None:
         await logger.ainfo("Starting the File Processor")
@@ -244,7 +264,7 @@ class FileProcessor(TaskInterface):
             file_data.hashes.CopyFrom(file_hashes)
         else:
             enrichments_failure.append(constants.E_FILE_HASHES)
-            await logger.aerror("Hash enrichment: Failed to hash file")
+            await logger.aerror(f"Hash enrichment: Failed to hash file: {file_path_on_disk}")
 
         # now get its magic type from the first 2048 bytes using python-magic
         file_magic_type = helpers.get_magic_type(file_path_on_disk)
@@ -572,27 +592,37 @@ class FileProcessor(TaskInterface):
                 await logger.aexception(e, message="Exception in running extract_text()")
                 enrichments_failure.append(constants.E_TEXT_EXTRACTED)
 
-        # If we can convert the document to a PDF with Gotenberg and the document isn't an encrypted office doc
+        # If we can convert the document to a PDF with Gotenberg and the document isn't an encrypted office doc, and it's < 25 megs
         if can_convert_to_pdf and not doc_is_encrypted:
             # use Gotenberg to convert the document to a new local UUID that references the uploaded Nemesis file text
             #   Gotenberg requires an extension, so we have to temporarily rename the file to its original extension
+            pdf_size_limit = 25000000
+            if (file_data.size > pdf_size_limit):
+                await logger.awarning(
+                    f"file '{file_data.name}' is over the conversion size limit of  {pdf_size_limit} bytes"
+                )
+            else:
+                orig_filename = file_path_on_disk
+                temp_filename = f"{orig_filename}.{file_data.extension}"
+                os.rename(orig_filename, temp_filename)
 
-            orig_filename = file_path_on_disk
-            temp_filename = f"{orig_filename}.{file_data.extension}"
-            os.rename(orig_filename, temp_filename)
+                try:
+                    # render Excel docs in landscape
+                    landscape = re.match("^.*\\.(xls|xlsx|xlsm)$", file_data.path, re.IGNORECASE) is not None
+                    start = time.time()
+                    pdf_uuid = await self.convert_to_pdf(temp_filename, landscape)
+                    end = time.time()
+                    await logger.ainfo(f"Document converted to PDF in {(end - start):.2f} seconds", object_id=file_data.object_id)
+                    enrichments_success.append(constants.E_PDF_CONVERSION)
 
-            try:
-                pdf_uuid = await self.convert_to_pdf(temp_filename)
-                enrichments_success.append(constants.E_PDF_CONVERSION)
+                    if pdf_uuid:
+                        file_data.converted_pdf = str(pdf_uuid)
+                except Exception as e:
+                    await logger.aexception(e, message="Could not convert file to PDF", file_uuid=file_uuid_str)
+                    enrichments_failure.append(constants.E_PDF_CONVERSION)
 
-                if pdf_uuid:
-                    file_data.converted_pdf = str(pdf_uuid)
-            except Exception as e:
-                await logger.aexception(e, message="Could not convert file to PDF", file_uuid=file_uuid_str)
-                enrichments_failure.append(constants.E_PDF_CONVERSION)
-
-            # restore the original file name
-            os.rename(temp_filename, orig_filename)
+                # restore the original file name
+                os.rename(temp_filename, orig_filename)
 
         ###########################################################
         #
@@ -601,43 +631,42 @@ class FileProcessor(TaskInterface):
         ###########################################################
 
         # check the file for canaries :smiling_imp:
-        if file_data.parsed_data.WhichOneof("data_type") == "office_doc_new":
-            canaries = await canary_helpers.get_office_document_canaries(file_path_on_disk)
-            file_data.canaries.CopyFrom(canaries)
-        else:
-            canaries = await canary_helpers.get_file_canaries(file_path_on_disk)
-            file_data.canaries.CopyFrom(canaries)
+        if not doc_is_encrypted:
+            if file_data.parsed_data.WhichOneof("data_type") == "office_doc_new":
+                canaries = await canary_helpers.get_office_document_canaries(file_path_on_disk)
+                file_data.canaries.CopyFrom(canaries)
+            else:
+                canaries = await canary_helpers.get_file_canaries(file_path_on_disk)
+                file_data.canaries.CopyFrom(canaries)
 
-        if file_data.canaries.canaries_present:
-            text = ""
+            if file_data.canaries.canaries_present:
+                text = ""
 
-            for canary in file_data.canaries.canaries:
-                rule = canary.type
-                urls = ", ".join(canary.data)
-                urls = urls.replace(".", "[.]")
-                text += f"*Rule {rule} :* {urls}\n"
+                for canary in file_data.canaries.canaries:
+                    rule = canary.type
+                    urls = ", ".join(canary.data)
+                    urls = urls.replace(".", "[.]")
+                    text += f"*Rule {rule} :* {urls}\n"
 
-            if not file_previously_processed:
-                await self.alerter.file_data_alert(
-                    file_data=file_data,
-                    metadata=metadata,
-                    title="Possible canaries detected",
-                    text=text,
-                )
+                if not file_previously_processed:
+                    await self.alerter.file_data_alert(
+                        file_data=file_data,
+                        metadata=metadata,
+                        title="Possible canaries detected",
+                        text=text,
+                    )
 
-        # run Yara on the file
-        yara_results = await self.yara_opsec_scan(file_path_on_disk)
-        if "error" in yara_results:
-            error_text = yara_results["error"]
+        # run Yara OPSEC rules on the file
+        yara_matches = await self.yara_opsec_scan(file_path_on_disk)
+        if isinstance(yara_matches, pb.Error):
             enrichments_failure.append(constants.E_YARA_SCAN)
-            await logger.aerror(f"Error in yara_opsec_scan: {error_text}")
+            await logger.aerror(f"Error in yara_opsec_scan: {yara_matches.error}")
         else:
             enrichments_success.append(constants.E_YARA_SCAN)
-            if "yara_matches" in yara_results and len(yara_results["yara_matches"]) > 0:
-                rule_matches = yara_results["yara_matches"]
-                file_data.yara_matches.extend(rule_matches)
+            if yara_matches.yara_matches_present and len(yara_matches.yara_matches) > 0:
+                file_data.yara_matches.CopyFrom(yara_matches)
 
-                alert_rules = [rule for rule in rule_matches if rule not in constants.EXCLUDED_YARA_RULES]
+                alert_rules = [t.rule_name for t in yara_matches.yara_matches if t.rule_name not in constants.EXCLUDED_YARA_RULES]
 
                 if alert_rules:
                     rule_matches_str = ", ".join(alert_rules)
@@ -910,25 +939,49 @@ class FileProcessor(TaskInterface):
         download it the Nemesis datastore.
         """
 
+        yara_matches = pb.YaraMatches()
+
         if os.path.exists(file_path):
             try:
-                return {"yara_matches": [f"{match}" for match in self.yara_rules.match(file_path)]}
+                for match in self.yara_rules.match(file_path):
+                    yara_matches.yara_matches_present = True
+                    yara_match = pb.YaraMatches.YaraMatch()
+                    yara_match.rule_file = match.namespace
+                    yara_match.rule_name = match.rule
+                    if yara_match.rule_name in self.yara_rule_definitions:
+                        yara_match.rule_text = self.yara_rule_definitions[yara_match.rule_name]
+                    if hasattr(match, 'meta') and "description" in match.meta:
+                        yara_match.rule_description = match.meta["description"]
+                    if hasattr(match, 'strings'):
+                        for yara_string in match.strings:
+                            yara_string_match = pb.YaraMatches.YaraStringMatch()
+                            yara_string_match.identifier = yara_string.identifier
+                            for instance in yara_string.instances:
+                                yara_string_match_instance = pb.YaraMatches.YaraStringMatchInstance()
+                                yara_string_match_instance.matched_data = bytes(instance.matched_data)
+                                yara_string_match_instance.offset = instance.offset
+                                yara_string_match_instance.length = instance.matched_length
+                                yara_string_match.yara_string_match_instances.extend([yara_string_match_instance])
+                            yara_match.rule_string_matches.extend([yara_string_match])
+                    yara_matches.yara_matches.extend([yara_match])
             except Exception as e:
+                yara_matches = helpers.nemesis_error(f"yara_scan_file error for {file_path} : {e}")
                 await logger.aexception(e, message="yara_scan_file error", file_path=file_path)
-                return {"error": f"yara_scan_file error for {file_path} : {e}"}
         else:
             try:
                 # try to download the file from the nemesis API
                 file_uuid = uuid.UUID(file_path)
                 with await self.storage.download(file_uuid) as temp_file:
-                    return {"yara_matches": [f"{match}" for match in self.yara_rules.match(temp_file.name)]}
+                    self.yara_rules.match(temp_file.name)
             except Exception as e:
+                yara_matches = helpers.nemesis_error(f"yara_scan_file error for {file_path} : {e}")
                 await logger.aexception(e, message="yara_scan_file error", file_path=file_path)
-                return {"error": f"yara_scan_file error for {file_path} : {e}"}
             finally:
                 # clean up the local file if it exists
                 if os.path.exists(file_path):
                     os.remove(file_path)
+
+        return yara_matches
 
     async def extract_text(self, file_path: str) -> Optional[uuid.UUID]:
         """Extracts text from a file, and if there's text, returns a Nemesis File UUID."""
@@ -946,17 +999,21 @@ class FileProcessor(TaskInterface):
             extractedtext_file_uuid = await self.storage.upload(plaintext_file.name)
             return extractedtext_file_uuid
 
-    async def convert_to_pdf(self, file_path: str) -> Optional[uuid.UUID]:
+    async def convert_to_pdf(self, file_path: str, landscape: bool = False) -> Optional[uuid.UUID]:
         """Calls self.gotenberg_uri to convert the supplied document to a PDF.
 
         The PDF is written to a new UUID, uploaded to S3, and the UUID is returned.
         """
 
         with open(file_path, "rb") as file:
-            files = {"file": file}
+            if landscape:
+                files = {"file": file, "landscape": "true"}
+            else:
+                files = {"file": file}
             url = f"{self.gotenberg_uri}forms/libreoffice/convert"
 
-            async with aiohttp.ClientSession() as session:
+            session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=(60*3), sock_read=(60*3))
+            async with aiohttp.ClientSession(timeout=session_timeout) as session:
                 async with TempFile(self.data_download_dir) as temp_file:
                     async with session.post(url, data=files) as resp:
                         resp.raise_for_status()

@@ -3902,10 +3902,33 @@ class NoseyParker(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["kind", b"kind", "path", b"path"]) -> None: ...
 
     @typing_extensions.final
+    class BlobMetadata(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        CHARSET_FIELD_NUMBER: builtins.int
+        ID_FIELD_NUMBER: builtins.int
+        MIME_ESSENCE_FIELD_NUMBER: builtins.int
+        NUM_BYTES_FIELD_NUMBER: builtins.int
+        charset: builtins.str
+        id: builtins.str
+        mime_essence: builtins.str
+        num_bytes: builtins.int
+        def __init__(
+            self,
+            *,
+            charset: builtins.str = ...,
+            id: builtins.str = ...,
+            mime_essence: builtins.str = ...,
+            num_bytes: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["charset", b"charset", "id", b"id", "mime_essence", b"mime_essence", "num_bytes", b"num_bytes"]) -> None: ...
+
+    @typing_extensions.final
     class Matches(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         BLOB_ID_FIELD_NUMBER: builtins.int
+        BLOB_METADATA_FIELD_NUMBER: builtins.int
         LOCATION_FIELD_NUMBER: builtins.int
         CAPTURE_GROUP_INDEX_FIELD_NUMBER: builtins.int
         MATCH_CONTENT_FIELD_NUMBER: builtins.int
@@ -3914,6 +3937,8 @@ class NoseyParker(google.protobuf.message.Message):
         PROVENANCE_FIELD_NUMBER: builtins.int
         blob_id: builtins.str
         @property
+        def blob_metadata(self) -> global___NoseyParker.BlobMetadata: ...
+        @property
         def location(self) -> global___NoseyParker.Location: ...
         capture_group_index: builtins.int
         match_content: builtins.str
@@ -3921,43 +3946,53 @@ class NoseyParker(google.protobuf.message.Message):
         def snippet(self) -> global___NoseyParker.Snippet: ...
         rule_name: builtins.str
         @property
-        def provenance(self) -> global___NoseyParker.Provenance: ...
+        def provenance(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NoseyParker.Provenance]: ...
         def __init__(
             self,
             *,
             blob_id: builtins.str = ...,
+            blob_metadata: global___NoseyParker.BlobMetadata | None = ...,
             location: global___NoseyParker.Location | None = ...,
             capture_group_index: builtins.int = ...,
             match_content: builtins.str = ...,
             snippet: global___NoseyParker.Snippet | None = ...,
             rule_name: builtins.str = ...,
-            provenance: global___NoseyParker.Provenance | None = ...,
+            provenance: collections.abc.Iterable[global___NoseyParker.Provenance] | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing_extensions.Literal["location", b"location", "provenance", b"provenance", "snippet", b"snippet"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing_extensions.Literal["blob_id", b"blob_id", "capture_group_index", b"capture_group_index", "location", b"location", "match_content", b"match_content", "provenance", b"provenance", "rule_name", b"rule_name", "snippet", b"snippet"]) -> None: ...
+        def HasField(self, field_name: typing_extensions.Literal["blob_metadata", b"blob_metadata", "location", b"location", "snippet", b"snippet"]) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["blob_id", b"blob_id", "blob_metadata", b"blob_metadata", "capture_group_index", b"capture_group_index", "location", b"location", "match_content", b"match_content", "provenance", b"provenance", "rule_name", b"rule_name", "snippet", b"snippet"]) -> None: ...
 
     @typing_extensions.final
     class RuleMatches(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         RULE_NAME_FIELD_NUMBER: builtins.int
-        MATCH_CONTENT_FIELD_NUMBER: builtins.int
         NUM_MATCHES_FIELD_NUMBER: builtins.int
+        COMMENT_FIELD_NUMBER: builtins.int
+        STATUS_FIELD_NUMBER: builtins.int
+        TYPE_FIELD_NUMBER: builtins.int
+        MATCH_CONTENT_FIELD_NUMBER: builtins.int
         MATCHES_FIELD_NUMBER: builtins.int
         rule_name: builtins.str
-        match_content: builtins.str
         num_matches: builtins.int
+        comment: builtins.str
+        status: builtins.str
+        type: builtins.str
+        match_content: builtins.str
         @property
         def matches(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NoseyParker.Matches]: ...
         def __init__(
             self,
             *,
             rule_name: builtins.str = ...,
-            match_content: builtins.str = ...,
             num_matches: builtins.int = ...,
+            comment: builtins.str = ...,
+            status: builtins.str = ...,
+            type: builtins.str = ...,
+            match_content: builtins.str = ...,
             matches: collections.abc.Iterable[global___NoseyParker.Matches] | None = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["match_content", b"match_content", "matches", b"matches", "num_matches", b"num_matches", "rule_name", b"rule_name"]) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["comment", b"comment", "match_content", b"match_content", "matches", b"matches", "num_matches", b"num_matches", "rule_name", b"rule_name", "status", b"status", "type", b"type"]) -> None: ...
 
     RULE_MATCHES_FIELD_NUMBER: builtins.int
     HAS_MATCHES_FIELD_NUMBER: builtins.int
@@ -3973,6 +4008,88 @@ class NoseyParker(google.protobuf.message.Message):
     def ClearField(self, field_name: typing_extensions.Literal["has_matches", b"has_matches", "rule_matches", b"rule_matches"]) -> None: ...
 
 global___NoseyParker = NoseyParker
+
+@typing_extensions.final
+class YaraMatches(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    @typing_extensions.final
+    class YaraStringMatchInstance(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MATCHED_DATA_FIELD_NUMBER: builtins.int
+        OFFSET_FIELD_NUMBER: builtins.int
+        LENGTH_FIELD_NUMBER: builtins.int
+        matched_data: builtins.bytes
+        """bytes so we can decode UTF8/UTF16 as appropriate later"""
+        offset: builtins.int
+        length: builtins.int
+        def __init__(
+            self,
+            *,
+            matched_data: builtins.bytes = ...,
+            offset: builtins.int = ...,
+            length: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["length", b"length", "matched_data", b"matched_data", "offset", b"offset"]) -> None: ...
+
+    @typing_extensions.final
+    class YaraStringMatch(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IDENTIFIER_FIELD_NUMBER: builtins.int
+        YARA_STRING_MATCH_INSTANCES_FIELD_NUMBER: builtins.int
+        identifier: builtins.str
+        @property
+        def yara_string_match_instances(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___YaraMatches.YaraStringMatchInstance]: ...
+        def __init__(
+            self,
+            *,
+            identifier: builtins.str = ...,
+            yara_string_match_instances: collections.abc.Iterable[global___YaraMatches.YaraStringMatchInstance] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["identifier", b"identifier", "yara_string_match_instances", b"yara_string_match_instances"]) -> None: ...
+
+    @typing_extensions.final
+    class YaraMatch(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RULE_FILE_FIELD_NUMBER: builtins.int
+        RULE_NAME_FIELD_NUMBER: builtins.int
+        RULE_DESCRIPTION_FIELD_NUMBER: builtins.int
+        RULE_TEXT_FIELD_NUMBER: builtins.int
+        RULE_STRING_MATCHES_FIELD_NUMBER: builtins.int
+        rule_file: builtins.str
+        rule_name: builtins.str
+        rule_description: builtins.str
+        rule_text: builtins.str
+        @property
+        def rule_string_matches(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___YaraMatches.YaraStringMatch]: ...
+        def __init__(
+            self,
+            *,
+            rule_file: builtins.str = ...,
+            rule_name: builtins.str = ...,
+            rule_description: builtins.str = ...,
+            rule_text: builtins.str = ...,
+            rule_string_matches: collections.abc.Iterable[global___YaraMatches.YaraStringMatch] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["rule_description", b"rule_description", "rule_file", b"rule_file", "rule_name", b"rule_name", "rule_string_matches", b"rule_string_matches", "rule_text", b"rule_text"]) -> None: ...
+
+    YARA_MATCHES_PRESENT_FIELD_NUMBER: builtins.int
+    YARA_MATCHES_FIELD_NUMBER: builtins.int
+    yara_matches_present: builtins.bool
+    @property
+    def yara_matches(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___YaraMatches.YaraMatch]: ...
+    def __init__(
+        self,
+        *,
+        yara_matches_present: builtins.bool = ...,
+        yara_matches: collections.abc.Iterable[global___YaraMatches.YaraMatch] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["yara_matches", b"yara_matches", "yara_matches_present", b"yara_matches_present"]) -> None: ...
+
+global___YaraMatches = YaraMatches
 
 @typing_extensions.final
 class Canaries(google.protobuf.message.Message):
@@ -4110,7 +4227,7 @@ class FileDataEnriched(google.protobuf.message.Message):
     def noseyparker(self) -> global___NoseyParker:
         """any NoseyParker results if this file wasn't binary"""
     @property
-    def yara_matches(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+    def yara_matches(self) -> global___YaraMatches:
         """any Yara rule matches"""
     @property
     def canaries(self) -> global___Canaries:
@@ -4143,12 +4260,12 @@ class FileDataEnriched(google.protobuf.message.Message):
         extracted_plaintext: builtins.str | None = ...,
         extracted_source: builtins.str = ...,
         noseyparker: global___NoseyParker | None = ...,
-        yara_matches: collections.abc.Iterable[builtins.str] | None = ...,
+        yara_matches: global___YaraMatches | None = ...,
         canaries: global___Canaries | None = ...,
         contains_dpapi: builtins.bool = ...,
         dpapi_blobs: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["_extracted_plaintext", b"_extracted_plaintext", "analysis", b"analysis", "canaries", b"canaries", "extracted_plaintext", b"extracted_plaintext", "hashes", b"hashes", "noseyparker", b"noseyparker", "parsed_data", b"parsed_data"]) -> builtins.bool: ...
+    def HasField(self, field_name: typing_extensions.Literal["_extracted_plaintext", b"_extracted_plaintext", "analysis", b"analysis", "canaries", b"canaries", "extracted_plaintext", b"extracted_plaintext", "hashes", b"hashes", "noseyparker", b"noseyparker", "parsed_data", b"parsed_data", "yara_matches", b"yara_matches"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing_extensions.Literal["_extracted_plaintext", b"_extracted_plaintext", "analysis", b"analysis", "canaries", b"canaries", "contains_dpapi", b"contains_dpapi", "converted_pdf", b"converted_pdf", "dpapi_blobs", b"dpapi_blobs", "enrichments_failure", b"enrichments_failure", "enrichments_success", b"enrichments_success", "extension", b"extension", "extracted_plaintext", b"extracted_plaintext", "extracted_source", b"extracted_source", "hashes", b"hashes", "is_binary", b"is_binary", "is_office_doc", b"is_office_doc", "is_source_code", b"is_source_code", "magic_type", b"magic_type", "name", b"name", "nemesis_file_type", b"nemesis_file_type", "noseyparker", b"noseyparker", "object_id", b"object_id", "originating_object_id", b"originating_object_id", "parsed_data", b"parsed_data", "path", b"path", "size", b"size", "yara_matches", b"yara_matches"]) -> None: ...
     def WhichOneof(self, oneof_group: typing_extensions.Literal["_extracted_plaintext", b"_extracted_plaintext"]) -> typing_extensions.Literal["extracted_plaintext"] | None: ...
 

@@ -3,8 +3,7 @@ import structlog
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from fastapi_class.decorators import get
-from fastapi_class.routable import Routable
+from fastapi import APIRouter
 from nemesiscommon.tasking import TaskInterface
 
 logger = structlog.get_logger(module=__name__)
@@ -31,11 +30,12 @@ class LandingPageApi(TaskInterface):
         await server.serve()
 
 
-class LandingPageRoutes(Routable):
+class LandingPageRoutes():
     def __init__(self) -> None:
         super().__init__()
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
 
-    @get("/", response_class=HTMLResponse)
     async def home(self):
         return """
 <html>
@@ -47,8 +47,8 @@ class LandingPageRoutes(Routable):
 
         <h2>Main Services</h2>
         <a href="/dashboard/" target="_blank"">Dashboard</a><br>
+        <a href="/hasura/" target="_blank">Hasura (API)</a><br>
         <a href="/kibana/" target="_blank">Kibana</a><br>
-        <a href="/pgadmin/" target="_blank">pgAdmin (Postgres)</a><br>
         <a href="/rabbitmq/" target="_blank">RabbitMQ Management UI</a><br>
 
         <h2>Monitoring</h2>

@@ -8,7 +8,7 @@ packages = [{include = "nemesis_connector"}]
 
 [tool.poetry.dependencies]
 python = "^3.10.10"
-requests = "^2.28.2"
+requests = "^2.31.0"
 httpx = "^0.23.3"
 dynaconf = "^3.1.12"
 pydantic = "^1.10.7"

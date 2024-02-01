@@ -13,8 +13,7 @@ import uvicorn
 from enrichment.settings import EnrichmentSettings
 from fastapi import FastAPI
 from fastapi.responses import Response
-from fastapi_class.decorators import get, post
-from fastapi_class.routable import Routable
+from fastapi import APIRouter
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio
@@ -160,7 +159,7 @@ class MlModelsApi(TaskInterface):
         await server.serve()
 
 
-class MlModelsApiRoutes(Routable):
+class MlModelsApiRoutes():
     """Inherits from Routable."""
 
     storage: StorageInterface
@@ -187,6 +186,11 @@ class MlModelsApiRoutes(Routable):
 
         # regex for 7-32 character mixed alphanumeric + special char
         self.password_regex = re.compile(r"^(?=.*[0-9])(?=.*[a-zA-Z])(?=.*[~!@#$%^&*_\-+=`|\()\{\}[\]:;\"'<>,.?\/])(?=.*\d).{7,32}$")
+
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
+        self.router.add_api_route("/ready", self.ready, methods=["GET"])
+        self.router.add_api_route("/passwords", self.root_post, methods=["POST"])
 
     @aio.time(Summary("process_document", "Time spent in process_document"))  # type: ignore
     async def process_document(self, file_path: str):
@@ -302,11 +306,9 @@ class MlModelsApiRoutes(Routable):
 
         return passwords
 
-    @get("/")
     async def home(self):
         return {}
 
-    @get("/ready")
     async def ready(self):
         """
         Used for readiness probes.
@@ -314,7 +316,6 @@ class MlModelsApiRoutes(Routable):
         return Response()
 
     @aio.time(Summary("passwords", "Time spent extracting passwords from a document."))  # type: ignore
-    @post("/passwords")
     async def root_post(self, request: UploadRequest, length_filter: bool = False):
         try:
             file_uuid = uuid.UUID(request.object_id)

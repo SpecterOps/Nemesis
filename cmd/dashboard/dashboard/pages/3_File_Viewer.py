@@ -1,30 +1,31 @@
 # Standard Libraries
+import base64
+import json
 import os
 import pathlib
 import re
 import urllib.parse
-import uuid
+from io import StringIO
 
-# 3rd Party Libraries
 import extra_streamlit_components as stx
+# 3rd Party Libraries
+import filetype
+import pandas as pd
 import requests
 import streamlit as st
 import utils
-from annotated_text import annotated_text, annotation
-from streamlit_elements import dashboard, editor, elements, html, lazy, mui, sync
+from binaryornot.helpers import is_binary_string
+from hexdump import hexdump
+from st_aggrid import AgGrid
+from st_aggrid.grid_options_builder import GridOptionsBuilder
+from streamlit_elements import (dashboard, editor, elements, html, lazy, mui,
+                                sync)
+from streamlit_toggle import st_toggle_switch
 
-NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER").rstrip("/")
 
 triage_pattern = re.compile(r"^triage_(?P<db_id>[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12})_(?P<triage_value>.*)")
 notes_pattern = re.compile(r"^file_notes_(?P<db_id>[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12})$")
-
-
-def is_uuid(str_uuid: str):
-    try:
-        uuid.UUID(str_uuid)
-        return True
-    except:
-        return False
 
 
 def create_file_info_toolbar(object_id, file):
@@ -133,9 +134,24 @@ def create_file_info_table(file):
                         with mui.TableRow(hover=True, padding="none"):
                             mui.TableCell("Tags", sx=identifier_style)
                             with mui.TableCell():
+                                object_id = file["object_id"]
                                 # Tags
                                 for tag in file["tags"]:
-                                    mui.Chip(label=tag, color="primary")
+                                    link_uri = ""
+                                    if tag == "parsed_creds":
+                                        link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/Credentials?object_id={object_id}"
+                                    elif tag == "noseyparker_results":
+                                        link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/NoseyParker"
+                                    if link_uri:
+                                        mui.Chip(   label=tag,
+                                                    href=link_uri,
+                                                    component="a",
+                                                    target="_blank",
+                                                    clickable=True,
+                                                    color="info")
+                                    else:
+                                        mui.Chip(label=tag, color="primary")
+
         # Notes
         unique_db_id = file["unique_db_id"].replace("-", "_")
 
@@ -160,6 +176,10 @@ def create_file_info_table(file):
 def build_page(username: str):
     object_id = utils.get_single_valued_param("object_id")
 
+    # pull our specified tab from the query parameters, otherwise use "basic_file_info" as the default
+    if "tab" not in st.query_params or not st.query_params["tab"]:
+        st.query_params["tab"] = "basic_file_info"
+
     # Prompt for the object ID if there isn't one
     if not object_id:
         object_id = st.text_input("Enter file's unique identifier (UUID):")
@@ -167,7 +187,7 @@ def build_page(username: str):
     if not object_id:  # No URL param and nothing from text input
         return
 
-    if not is_uuid(object_id):
+    if not utils.is_uuid(object_id):
         st.error(f"'{object_id}' is not a valid UUID", icon="🚨")
         return
 
@@ -193,24 +213,40 @@ def build_page(username: str):
 
         download_url_internal = f"http://enrichment-webapi:9910/download/{object_id}"
 
-        tabs = [stx.TabBarItemData(id=1, title="Basic File Info", description="Basic File Information"), stx.TabBarItemData(id=3, title="Elasticsearch Info", description="Elasticsearch Information Dump")]
+        tabs = [
+            stx.TabBarItemData(id="basic_file_info", title="Basic File Info", description="Basic File Information"),
+            stx.TabBarItemData(id="elasticsearch_info", title="Elasticsearch Info", description="Elasticsearch Information Dump")
+        ]
 
         es_results = utils.elastic_file_search(object_id)
+        archive_contents_json = None
         if es_results and es_results["hits"]["total"]["value"] == 1:
-            if "noseyparker" in es_results["hits"]["hits"][0]["_source"]:
-                tabs.append(stx.TabBarItemData(id=2, title="Noseyparker Results", description="Noseyparker Results"))
+            es_result = es_results["hits"]["hits"][0]["_source"]
+            if "noseyparker" in es_result:
+                tabs.insert(1, stx.TabBarItemData(id="noseyparker_results", title="Noseyparker Results", description="Noseyparker Results"))
+            if "yaraMatches" in es_result:
+                tabs.insert(1, stx.TabBarItemData(id="yara_matches", title="Yara Matches", description="Yara Matches"))
+            if "canaries" in es_result and es_result["canaries"] and es_result["canaries"]["canariesPresent"]:
+                tabs.insert(1, stx.TabBarItemData(id="canaries", title="Canaries", description="Canary Matches"))
+            if "parsedData" in es_result and "archive" in es_result["parsedData"] and "entries" in es_result["parsedData"]["archive"]:
+                archive_contents_json = es_result["parsedData"]["archive"]["entries"]
 
         chosen_tab = stx.tab_bar(
             data=tabs,
-            default=1,
+            default=st.query_params["tab"]
         )
 
-        if chosen_tab == str(1):  # "basic_file_info":
+        if chosen_tab == "basic_file_info":
             layout = [
                 # Grid layout parameters: element_identifier, x_pos, y_pos, width, height, [item properties...]
                 dashboard.Item("1", 0, 0, 10, 2.5, isDraggable=False, isResizable=False, sx={"height": "100%"}),
                 dashboard.Item("2", 0, 0, 10, 5, isDraggable=False, isResizable=False, sx={"height": "100%"}),
             ]
+
+            # have to do this if we want to use non elements/MUI display _after_ the main card
+            selected_language = None
+            textcontent = None
+            image_content = None
 
             with elements("dashboard"):
                 with dashboard.Grid(layout=layout):
@@ -239,30 +275,114 @@ def build_page(username: str):
                         if response.status_code != 200:
                             st.error(f"Error retrieving text data from {download_url_internal}, status code: {response.status_code}", icon="🚨")
                         else:
-                            # Monaco editor display for ascii files
-                            with mui.Card(
-                                key="2",
-                                sx={
-                                    "display": "flex",
-                                    "flexDirection": "column",
-                                    "borderRadius": 2,
-                                    "overflow": "auto",
-                                    "overflowY": "auto",
-                                    "m": "10",
-                                    "gap": "10px",
-                                },
-                                padding=1,
-                                elevation=1,
-                                spacing=10,
-                            ):
-                                try:
-                                    textcontent = response.content.decode(encoding="utf-8", errors="ignore")
+                            if filetype.is_image(response.content[:2048]):
+                                image_content = response.content
+                            else:
+                                langauges = utils.get_monaco_languages()
+                                language = None
+                                file_is_binary = is_binary_string(response.content[:1024])
 
-                                    editor.Monaco(height="64vh", defaultValue=textcontent, language=utils.map_extension_to_monaco_language(extension), theme="vs-dark")
-                                except Exception as e:
-                                    st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
+                                if archive_contents_json:
+                                    language = "archive_json"
+                                else:
+                                    if file_is_binary:
+                                        textcontent = str(hexdump(response.content))
+                                        language = "plaintext"
+                                    else:
+                                        try:
+                                            textcontent = response.content.decode(encoding="ascii")
+                                        except:
+                                            try:
+                                                textcontent = response.content.decode(encoding="utf-8")
+                                            except:
+                                                textcontent = response.content.decode(encoding="utf-16", errors="ignore")
 
-        elif chosen_tab == str(2):  # noseyparker_results
+                                        if not language:
+                                            language = utils.map_extension_to_monaco_language(extension)
+
+                                            if language == "plaintext":
+                                                if "xml" in file.magic_type.lower():
+                                                    language = "xml"
+                                                if "json" in file.magic_type.lower():
+                                                    language = "python"
+                                                if "csv" in file.magic_type.lower():
+                                                    language = "csv"
+
+                                    if language in langauges:
+                                        language_index = langauges.index(language)
+                                    else:
+                                        language_index = 0  # plaintext
+
+                                    col1, col2, col3, col4 = st.columns(4)
+
+                                    with col3:
+                                        selected_language = st.selectbox(
+                                            'Language',
+                                            langauges,
+                                            language_index
+                                        )
+
+                                    with col4:
+                                        word_wrap = st_toggle_switch(
+                                            label="Text Word Wrap",
+                                            key="word_wrap",
+                                            label_after=False,
+                                        )
+
+                                    if selected_language != "csv":
+                                        # Monaco editor display for ascii files
+                                        with mui.Card(
+                                            key="2",
+                                            sx={
+                                                "display": "flex",
+                                                "flexDirection": "column",
+                                                "borderRadius": 2,
+                                                "overflow": "auto",
+                                                "overflowY": "auto",
+                                                "m": "10",
+                                                "gap": "10px",
+                                            },
+                                            padding=1,
+                                            elevation=1,
+                                            spacing=10,
+                                        ):
+                                            try:
+                                                editor.Monaco(
+                                                    height="64vh",
+                                                    options={"readOnly": True, "wordWrap": word_wrap},
+                                                    defaultValue=textcontent,
+                                                    language=selected_language,
+                                                    theme="vs-dark"
+                                                )
+
+                                            except Exception as e:
+                                                st.error(f"Error displaying file in Monaco editor: {e}", icon="🚨")
+
+            if archive_contents_json:
+                st.subheader("Archive Contents:")
+                expand = st.toggle("Expand Entire JSON", False)
+                st.json(utils.reorder_archive_file_listing(archive_contents_json), expanded=expand)
+
+            if selected_language and selected_language == "csv" and textcontent and len(textcontent) > 0:
+                csvStringIO = StringIO(textcontent)
+                df = pd.read_csv(csvStringIO)
+                gb = GridOptionsBuilder.from_dataframe(df)
+                gb.configure_default_column(enablePivot=True, enableValue=True, enableRowGroup=True)
+                gb.configure_selection(selection_mode="multiple", use_checkbox=True)
+                gb.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=20)
+                gb.configure_side_bar()
+
+                AgGrid(
+                    df,
+                    gridOptions=gb.build(),
+                    width="100%",
+                    fit_columns_on_grid_load=False,
+                )
+
+            if image_content:
+                st.image(image_content)
+
+        elif chosen_tab == "noseyparker_results":
             if es_results != {}:
                 total_hits = es_results["hits"]["total"]["value"]
                 num_results = len(es_results["hits"]["hits"])
@@ -275,28 +395,105 @@ def build_page(username: str):
                         for ruleMatch in es_results["hits"]["hits"][i]["_source"]["noseyparker"]["ruleMatches"]:
                             for match in ruleMatch["matches"]:
                                 if "matching" in match["snippet"]:
+
                                     rule_name = match["ruleName"]
 
+                                    matching = match["snippet"]["matching"]
+                                    try:
+                                        match_line = int(match["location"]["sourceSpan"]["start"]["line"])
+                                        match_line_length = len(f"{match_line}") + 3
+                                        match_line_format = f"{{0:<{match_line_length}}}"
+                                    except:
+                                        match_line = -1
+                                        match_line_format = ""
+
                                     if "before" in match["snippet"]:
-                                        before = match["snippet"]["before"].replace("\n\t", " ")
+                                        before_lines = match["snippet"]["before"].replace("\n\t", " ").splitlines()
+                                        num_before_lines = len(before_lines)
+                                        before = ""
+                                        for i in range(len(before_lines)):
+                                            line = before_lines[i]
+                                            line_prefix = match_line_format.format(f"{(match_line - (num_before_lines - i) + 1)}:")
+                                            before += f"{line_prefix}{line}\n"
                                     else:
                                         before = ""
 
-                                    matching = match["snippet"]["matching"]
+                                    before = before.strip("\n")
 
+                                    after = ""
                                     if "after" in match["snippet"]:
-                                        after = match["snippet"]["after"].replace("\n\t", " ")
-                                    else:
-                                        after = ""
+                                        after_lines = match["snippet"]["after"].replace("\n\t", " ").splitlines()
+                                        if len(after_lines) > 0:
+                                            after = f"{after_lines[0]}\n"
+                                            for i in range(1, len(after_lines)):
+                                                line = after_lines[i]
+                                                line_prefix = match_line_format.format(f"{(match_line + i)}:")
+                                                after += f"{line_prefix}{line}\n"
 
+                                    after = after.strip("\n")
                                     st.subheader(f"Rule: {rule_name}", divider="red")
-                                    st.write("Matching text:")
+                                    st.write(f"Matching text (line {match_line}):")
                                     st.code(matching)
                                     st.write("Context:")
                                     st.code(before + matching + after)
                                     st.divider()
 
-        elif chosen_tab == str(3):  # "elasticsearch_info"
+        elif chosen_tab == "canaries":
+
+            if "canaries" not in es_result or not es_result["canaries"] or not es_result["canaries"]["canariesPresent"]:
+                st.warning("No canaries actually present!")
+            else:
+                for canary in es_result["canaries"]["canaries"]:
+                    canary_type = canary["type"]
+                    matches = canary["data"]
+                    st.subheader(f"Canary Rule: {canary_type}", divider="red")
+                    st.markdown("#### Canary Rule String Matches")
+                    for match in matches:
+                        st.markdown(f"- {match}")
+
+        elif chosen_tab == "yara_matches":
+            matches = es_result["yaraMatches"]["yaraMatches"]
+            for match in matches:
+                rule_file = match["ruleFile"]
+                rule_name = match["ruleName"]
+                rule_description = match["ruleDescription"] if "ruleDescription" in match else ""
+                rule_text = match["ruleText"] if "ruleText" in match else ""
+
+                st.subheader(f"{rule_name} ({rule_file})", divider="red")
+                if rule_description:
+                    st.markdown(f"**Description:** $~~~~~~$ {rule_description}")
+                if match["ruleStringMatches"]:
+                    string_matches = []
+                    for rule_string_match in match["ruleStringMatches"]:
+                        identifier = rule_string_match["identifier"]
+                        for rule_string_match_instance in rule_string_match["yaraStringMatchInstances"]:
+                            try:
+                                matched_data = base64.b64decode(rule_string_match_instance["matchedData"])
+                                try:
+                                    matched_string = matched_data.decode(encoding="ascii")
+                                except:
+                                    try:
+                                        matched_string = matched_data.decode(encoding="utf-8")
+                                    except:
+                                        matched_string = matched_data.decode(encoding="utf-16", errors="ignore")
+                                offset = rule_string_match_instance["offset"]
+                                length = rule_string_match_instance["length"]
+                                string_matches.append((identifier, matched_string, offset, length))
+                            except Exception as e:
+                                a = rule_string_match["yaraStringMatchInstances"]
+                                print(f"Exception processing string match '{a}' : {e}")
+                    if len(string_matches) > 0:
+                        string_data = []
+                        st.markdown("**String Matches:**")
+                        for string_match in string_matches:
+                            string_data.append([string_match[0], string_match[1], string_match[2], string_match[3]])
+                        df = pd.DataFrame(string_data, columns=['Identifier', 'Matched String', 'Offset', 'Length'])
+                        st.table(df)
+                if rule_text:
+                    with st.expander(f"###### Rule Definition"):
+                        st.code(rule_text, language="yaml")
+
+        elif chosen_tab == "elasticsearch_info":
             if es_results != {}:
                 total_hits = es_results["hits"]["total"]["value"]
                 if total_hits == 0:

@@ -25,7 +25,7 @@ class sqlite_sample(Meta.FileType):
         """
         Returns True if the internal File path matches our target criteria.
         """
-        if re.match(".*\.(sqlite)$", self.file_data.path):
+        if re.match(".*\\.(sqlite)$", self.file_data.path):
             return True
         else:
             return False

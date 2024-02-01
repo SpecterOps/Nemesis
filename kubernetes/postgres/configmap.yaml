@@ -402,90 +402,99 @@ data:
         --
         -----------------------------------------------
 
-        -- -- Entries from the "urls" table in a Chromium "History" database
-        -- CREATE TABLE chromium_history (
-        --     unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-        --     agent_id TEXT NOT NULL,
-        --     originating_object_id UUID,                 -- Nemesis file UUID if this entry originated from a file
-        --     user_data_directory TEXT,                   -- specific user Chromium data directory path, if applicable
-        --     username TEXT,                              -- username extracted from user_data_directory, if applicable
-        --     browser TEXT,                               -- browser name extracted from user_data_directory, if applicable
-        --     url TEXT,                                   -- extracted from the Chromium DB
-        --     title TEXT,                                 -- extracted from the Chromium DB
-        --     visit_count INTEGER,                        -- extracted from the Chromium DB
-        --     typed_count INTEGER,                        -- extracted from the Chromium DB
-        --     last_visit_time TIMESTAMP WITH TIME ZONE,   -- extracted from the Chromium DB
-        --     UNIQUE (source, agent_id, originating_object_id, user_data_directory, url)
-        -- ) INHERITS (project_data);
+        -- Entries from the "urls" table in a Chromium "History" database
+        --  NOTE: why to use UUID for md5 - https://dba.stackexchange.com/questions/115271/what-is-the-optimal-data-type-for-an-md5-field/115316#115316
+        CREATE TABLE chromium_history (
+            unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+            agent_id TEXT NOT NULL,
+            originating_object_id UUID,                 -- Nemesis file UUID if this entry originated from a file
+            user_data_directory TEXT,                   -- specific user Chromium data directory path, if applicable
+            username TEXT,                              -- username extracted from user_data_directory, if applicable
+            browser TEXT,                               -- browser name extracted from user_data_directory, if applicable
+            url TEXT,                                   -- extracted from the Chromium DB
+            title TEXT,                                 -- extracted from the Chromium DB
+            visit_count INTEGER,                        -- extracted from the Chromium DB
+            typed_count INTEGER,                        -- extracted from the Chromium DB
+            last_visit_time TIMESTAMP WITH TIME ZONE,   -- extracted from the Chromium DB
+            -- to deal with length limits for the UNIQUE constraint:
+            index_md5_hash UUID GENERATED ALWAYS AS (MD5(user_data_directory || url)::uuid) STORED,
+            UNIQUE (source, agent_id, originating_object_id, index_md5_hash)
+        ) INHERITS (project_data);
 
-        -- -- Entries from the "downloads" table in a Chromium "History" database
-        -- CREATE TABLE chromium_downloads (
-        --     unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-        --     agent_id TEXT NOT NULL,
-        --     originating_object_id UUID,                 -- Nemesis file UUID if this entry originated from a file
-        --     user_data_directory TEXT,                   -- specific user Chromium data directory path, if applicable
-        --     username TEXT,                              -- username extracted from user_data_directory, if applicable
-        --     browser TEXT,                               -- browser name extracted from user_data_directory, if applicable
-        --     url TEXT,                                   -- extracted from the Chromium DB `tab_url` field
-        --     download_path TEXT,                         -- extracted from the Chromium DB `target_path` field
-        --     start_time TIMESTAMP WITH TIME ZONE,        -- extracted from the Chromium DB
-        --     end_time TIMESTAMP WITH TIME ZONE,          -- extracted from the Chromium DB
-        --     total_bytes INTEGER,                        -- extracted from the Chromium DB
-        --     danger_type TEXT,                           -- extracted from the Chromium DB, converted from int
-        --     UNIQUE (source, agent_id, originating_object_id, user_data_directory, download_path)
-        -- ) INHERITS (project_data);
+        -- Entries from the "downloads" table in a Chromium "History" database
+        CREATE TABLE chromium_downloads (
+            unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+            agent_id TEXT NOT NULL,
+            originating_object_id UUID,                 -- Nemesis file UUID if this entry originated from a file
+            user_data_directory TEXT,                   -- specific user Chromium data directory path, if applicable
+            username TEXT,                              -- username extracted from user_data_directory, if applicable
+            browser TEXT,                               -- browser name extracted from user_data_directory, if applicable
+            url TEXT,                                   -- extracted from the Chromium DB `tab_url` field
+            download_path TEXT,                         -- extracted from the Chromium DB `target_path` field
+            start_time TIMESTAMP WITH TIME ZONE,        -- extracted from the Chromium DB
+            end_time TIMESTAMP WITH TIME ZONE,          -- extracted from the Chromium DB
+            total_bytes BIGINT,                         -- extracted from the Chromium DB
+            danger_type TEXT,                           -- extracted from the Chromium DB, converted from int
+            -- to deal with length limits for the UNIQUE constraint:
+            index_md5_hash UUID GENERATED ALWAYS AS (MD5(user_data_directory || download_path)::uuid) STORED,
+            UNIQUE (source, agent_id, originating_object_id, index_md5_hash)
+        ) INHERITS (project_data);
 
-        -- -- Entries from the saved "logins" table in a Chromium "Login Data" database
-        -- CREATE TABLE chromium_logins (
-        --     unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-        --     agent_id TEXT NOT NULL,
-        --     originating_object_id UUID,                         -- Nemesis file UUID if this entry originated from a file
-        --     user_data_directory TEXT,                           -- specific user Chromium data directory path, if applicable
-        --     username TEXT,                                      -- username extracted from user_data_directory, if applicable
-        --     browser TEXT,                                       -- browser name extracted from user_data_directory, if applicable
-        --     origin_url TEXT,                                    -- extracted from the Chromium DB
-        --     username_value TEXT,                                -- extracted from the Chromium DB
-        --     password_value_enc BYTEA,                           -- extracted from the Chromium DB `password_value` field
-        --     signon_realm TEXT,                                  -- extracted from the Chromium DB
-        --     date_created TIMESTAMP WITH TIME ZONE,              -- extracted from the Chromium DB
-        --     date_last_used TIMESTAMP WITH TIME ZONE,            -- extracted from the Chromium DB
-        --     date_password_modified TIMESTAMP WITH TIME ZONE,    -- extracted from the Chromium DB
-        --     times_used INTEGER,                                 -- extracted from the Chromium DB
-        --     encryption_type TEXT,                               -- carved from the `password_value_enc` bytes
-        --     masterkey_guid UUID,                                -- if encryption_type==dpapi, linked to `masterkey_guid` in dpapi_masterkeys
-        --     is_decrypted BOOLEAN,
-        --     password_value_dec TEXT,
-        --     UNIQUE (source, agent_id, originating_object_id, user_data_directory, origin_url, username_value, password_value_enc)
-        -- ) INHERITS (project_data);
+        -- Entries from the saved "logins" table in a Chromium "Login Data" database
+        CREATE TABLE chromium_logins (
+            unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+            agent_id TEXT NOT NULL,
+            originating_object_id UUID,                         -- Nemesis file UUID if this entry originated from a file
+            user_data_directory TEXT,                           -- specific user Chromium data directory path, if applicable
+            username TEXT,                                      -- username extracted from user_data_directory, if applicable
+            browser TEXT,                                       -- browser name extracted from user_data_directory, if applicable
+            origin_url TEXT,                                    -- extracted from the Chromium DB
+            username_value TEXT,                                -- extracted from the Chromium DB
+            password_value_enc BYTEA,                           -- extracted from the Chromium DB `password_value` field
+            signon_realm TEXT,                                  -- extracted from the Chromium DB
+            date_created TIMESTAMP WITH TIME ZONE,              -- extracted from the Chromium DB
+            date_last_used TIMESTAMP WITH TIME ZONE,            -- extracted from the Chromium DB
+            date_password_modified TIMESTAMP WITH TIME ZONE,    -- extracted from the Chromium DB
+            times_used INTEGER,                                 -- extracted from the Chromium DB
+            encryption_type TEXT,                               -- carved from the `password_value_enc` bytes
+            masterkey_guid UUID,                                -- if encryption_type==dpapi, linked to `masterkey_guid` in dpapi_masterkeys
+            is_decrypted BOOLEAN,
+            password_value_dec TEXT,
+            -- to deal with length limits for the UNIQUE constraint:
+            index_md5_hash UUID GENERATED ALWAYS AS (MD5(user_data_directory || origin_url || username_value)::uuid) STORED,
+            UNIQUE (source, agent_id, originating_object_id, index_md5_hash, password_value_enc)
+        ) INHERITS (project_data);
 
-        -- -- Entries from the "cookies" table in a Chromium "Cookies" database
-        -- -- https://chromium.googlesource.com/chromium/src/net/+/refs/heads/main/extras/sqlite/sqlite_persistent_cookie_store.cc#123
-        -- CREATE TABLE chromium_cookies (
-        --     unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-        --     agent_id TEXT NOT NULL,
-        --     originating_object_id UUID,                         -- Nemesis file UUID if this entry originated from a file
-        --     user_data_directory TEXT,                           -- specific user Chromium data directory path, if applicable
-        --     username TEXT,                                      -- username extracted from user_data_directory, if applicable
-        --     browser TEXT,                                       -- browser name extracted from user_data_directory, if applicable
-        --     host_key TEXT,                                      -- extracted from the Chromium DB
-        --     name TEXT,                                          -- extracted from the Chromium DB
-        --     path TEXT,                                          -- extracted from the Chromium DB
-        --     creation_utc TIMESTAMP WITH TIME ZONE,              -- extracted from the Chromium DB
-        --     expires_utc TIMESTAMP WITH TIME ZONE,               -- extracted from the Chromium DB
-        --     last_access_utc TIMESTAMP WITH TIME ZONE,           -- extracted from the Chromium DB
-        --     last_update_utc TIMESTAMP WITH TIME ZONE,           -- extracted from the Chromium DB
-        --     is_secure BOOLEAN,                                  -- extracted from the Chromium DB
-        --     is_httponly BOOLEAN,                                -- extracted from the Chromium DB
-        --     is_session BOOLEAN,                                 -- extracted from the Chromium DB
-        --     samesite TEXT,                                      -- extracted from the Chromium DB, translated from int
-        --     source_port INTEGER,                                -- extracted from the Chromium DB
-        --     value_enc BYTEA,                                    -- extracted from the Chromium DB `encrypted_value` field
-        --     encryption_type TEXT,                               -- carved from the `value_enc` bytes
-        --     masterkey_guid UUID,                                -- if encryption_type==dpapi, linked to `masterkey_guid` in dpapi_masterkeys
-        --     is_decrypted BOOLEAN,
-        --     value_dec TEXT,
-        --     UNIQUE (source, agent_id, originating_object_id, user_data_directory, host_key, name, path)
-        -- ) INHERITS (project_data);
+        -- Entries from the "cookies" table in a Chromium "Cookies" database
+        -- https://chromium.googlesource.com/chromium/src/net/+/refs/heads/main/extras/sqlite/sqlite_persistent_cookie_store.cc#123
+        CREATE TABLE chromium_cookies (
+            unique_db_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+            agent_id TEXT NOT NULL,
+            originating_object_id UUID,                         -- Nemesis file UUID if this entry originated from a file
+            user_data_directory TEXT,                           -- specific user Chromium data directory path, if applicable
+            username TEXT,                                      -- username extracted from user_data_directory, if applicable
+            browser TEXT,                                       -- browser name extracted from user_data_directory, if applicable
+            host_key TEXT,                                      -- extracted from the Chromium DB
+            name TEXT,                                          -- extracted from the Chromium DB
+            path TEXT,                                          -- extracted from the Chromium DB
+            creation_utc TIMESTAMP WITH TIME ZONE,              -- extracted from the Chromium DB
+            expires_utc TIMESTAMP WITH TIME ZONE,               -- extracted from the Chromium DB
+            last_access_utc TIMESTAMP WITH TIME ZONE,           -- extracted from the Chromium DB
+            last_update_utc TIMESTAMP WITH TIME ZONE,           -- extracted from the Chromium DB
+            is_secure BOOLEAN,                                  -- extracted from the Chromium DB
+            is_httponly BOOLEAN,                                -- extracted from the Chromium DB
+            is_session BOOLEAN,                                 -- extracted from the Chromium DB
+            samesite TEXT,                                      -- extracted from the Chromium DB, translated from int
+            source_port INTEGER,                                -- extracted from the Chromium DB
+            value_enc BYTEA,                                    -- extracted from the Chromium DB `encrypted_value` field
+            encryption_type TEXT,                               -- carved from the `value_enc` bytes
+            masterkey_guid UUID,                                -- if encryption_type==dpapi, linked to `masterkey_guid` in dpapi_masterkeys
+            is_decrypted BOOLEAN,
+            value_dec TEXT,
+            -- to deal with length limits for the UNIQUE constraint:
+            index_md5_hash UUID GENERATED ALWAYS AS (MD5(user_data_directory || host_key || name || path)::uuid) STORED,
+            UNIQUE (source, agent_id, originating_object_id, index_md5_hash)
+        ) INHERITS (project_data);
 
         -- -- Information/encrypted key from a Chromium "Local State" file
         -- --   The data["os_crypt"]["encrypted_key"] entry is used to encrypt new Chromium logins/cookies

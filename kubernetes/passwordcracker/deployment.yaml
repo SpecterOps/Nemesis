@@ -58,6 +58,26 @@ spec:
                 secretKeyRef:
                   name: rabbitmq-creds
                   key: rabbitmq-connectionuri
+
+            - name: POSTGRES_SERVER
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DATABASE
+              value: nemesis
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-creds
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-creds
+                  key: postgres-password
+            - name: POSTGRES_CONNECTION_URI
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
+
             - name: SLACK_CHANNEL
               valueFrom:
                 configMapKeyRef:

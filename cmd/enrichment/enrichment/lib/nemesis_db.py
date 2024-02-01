@@ -1044,6 +1044,19 @@ SELECT f_register_agent_host($1, $2, $3, $4, $5, $6, $7, $8)
     #             auth_data.plaintext_value,
     #         )
 
+    # if auth_data.is_cracked:
+    #     # update any values in the table where the hash matches this cracked value
+    #     async with self.pool.acquire() as conn:
+    #         await conn.execute(
+    #             """
+    #             UPDATE nemesis.extracted_hashes
+    #             SET is_cracked = True, plaintext_value = $1
+    #             WHERE is_cracked= False AND hash_value = $2
+    #             """,
+    #             auth_data.plaintext_value,
+    #             auth_data.hash_value
+    #         )
+
     # async def add_dpapi_blob(self, dpapi_blob: DpapiBlob) -> None:
     #     """Adds a new `nemesis.dpapi_blobs` entry from a DpapiBlob class object."""
 
@@ -1403,137 +1416,137 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
                 process.description,
             )
 
-    # async def add_network_connection(self, network_connection: NetworkConnection) -> None:
-    #     """Adds a new `nemesis.network_connections` entry from a NetworkConnection class object."""
+        # async def add_network_connection(self, network_connection: NetworkConnection) -> None:
+        #     """Adds a new `nemesis.network_connections` entry from a NetworkConnection class object."""
 
-    #     query = (
-    #         "INSERT INTO nemesis.network_connections as t(agent_id, project_id, source, timestamp, expiration, local_address, remote_address, protocol, state, process_id, process_name, service) "
-    #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) "
-    #     )
+        #     query = (
+        #         "INSERT INTO nemesis.network_connections as t(agent_id, project_id, source, timestamp, expiration, local_address, remote_address, protocol, state, process_id, process_name, service) "
+        #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) "
+        #     )
 
-    #     async with self.pool.acquire() as conn:
-    #         await conn.execute(
-    #             query,
-    #             network_connection.agent_id,
-    #             network_connection.project_id,
-    #             network_connection.source,
-    #             network_connection.timestamp,
-    #             network_connection.expiration,
-    #             network_connection.local_address,
-    #             network_connection.remote_address,
-    #             network_connection.protocol,
-    #             network_connection.state,
-    #             network_connection.process_id,
-    #             network_connection.process_name,
-    #             network_connection.service,
-    #         )
+        #     async with self.pool.acquire() as conn:
+        #         await conn.execute(
+        #             query,
+        #             network_connection.agent_id,
+        #             network_connection.project_id,
+        #             network_connection.source,
+        #             network_connection.timestamp,
+        #             network_connection.expiration,
+        #             network_connection.local_address,
+        #             network_connection.remote_address,
+        #             network_connection.protocol,
+        #             network_connection.state,
+        #             network_connection.process_id,
+        #             network_connection.process_name,
+        #             network_connection.service,
+        #         )
 
-    # async def add_filesystem_object(self, file_info: FileInfo) -> None:
-    #     """Adds a new `nemesis.filesystem_objects` entry from a FileInfo class object."""
+        # async def add_filesystem_object(self, file_info: FileInfo) -> None:
+        #     """Adds a new `nemesis.filesystem_objects` entry from a FileInfo class object."""
 
-    #     # NOTE: size, access_time, creation_time, modification_time, and SDDL are the first in
-    #     #   COALESCE to ensure we update the accurate most recent value
-    #     query = (
-    #         "INSERT INTO nemesis.filesystem_objects as t(agent_id, project_id, source, timestamp, expiration, path, name, extension, type, size, access_time, creation_time, modification_time, owner, sddl) "
-    #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) "
-    #         "ON CONFLICT (project_id, source, path) "
-    #         "DO UPDATE SET "
-    #         "  name = COALESCE(t.name, excluded.name),"
-    #         "  extension = COALESCE(t.extension, excluded.extension),"
-    #         "  type = COALESCE(t.type, excluded.type),"
-    #         "  size = COALESCE(excluded.size, t.size),"
-    #         "  access_time = COALESCE(excluded.access_time, t.access_time),"
-    #         "  creation_time = COALESCE(excluded.creation_time, t.creation_time),"
-    #         "  modification_time = COALESCE(excluded.modification_time, t.modification_time),"
-    #         "  sddl = COALESCE(excluded.sddl, t.sddl)"
-    #     )
+        #     # NOTE: size, access_time, creation_time, modification_time, and SDDL are the first in
+        #     #   COALESCE to ensure we update the accurate most recent value
+        #     query = (
+        #         "INSERT INTO nemesis.filesystem_objects as t(agent_id, project_id, source, timestamp, expiration, path, name, extension, type, size, access_time, creation_time, modification_time, owner, sddl) "
+        #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) "
+        #         "ON CONFLICT (project_id, source, path) "
+        #         "DO UPDATE SET "
+        #         "  name = COALESCE(t.name, excluded.name),"
+        #         "  extension = COALESCE(t.extension, excluded.extension),"
+        #         "  type = COALESCE(t.type, excluded.type),"
+        #         "  size = COALESCE(excluded.size, t.size),"
+        #         "  access_time = COALESCE(excluded.access_time, t.access_time),"
+        #         "  creation_time = COALESCE(excluded.creation_time, t.creation_time),"
+        #         "  modification_time = COALESCE(excluded.modification_time, t.modification_time),"
+        #         "  sddl = COALESCE(excluded.sddl, t.sddl)"
+        #     )
 
-    #     async with self.pool.acquire() as conn:
-    #         await conn.execute(
-    #             query,
-    #             file_info.agent_id,
-    #             file_info.project_id,
-    #             file_info.source,
-    #             file_info.timestamp,
-    #             file_info.expiration,
-    #             file_info.path,
-    #             file_info.name,
-    #             file_info.extension,
-    #             file_info.type,
-    #             file_info.size,
-    #             file_info.access_time,
-    #             file_info.creation_time,
-    #             file_info.modification_time,
-    #             file_info.owner,
-    #             file_info.sddl,
-    #         )
+        #     async with self.pool.acquire() as conn:
+        #         await conn.execute(
+        #             query,
+        #             file_info.agent_id,
+        #             file_info.project_id,
+        #             file_info.source,
+        #             file_info.timestamp,
+        #             file_info.expiration,
+        #             file_info.path,
+        #             file_info.name,
+        #             file_info.extension,
+        #             file_info.type,
+        #             file_info.size,
+        #             file_info.access_time,
+        #             file_info.creation_time,
+        #             file_info.modification_time,
+        #             file_info.owner,
+        #             file_info.sddl,
+        #         )
 
-    # async def add_filesystem_object_from_enriched(self, file_data_enriched: FileInfoDataEnriched) -> None:
-    #     """Adds a new `nemesis.filesystem_objects` entry from a FileInfoDataEnriched class object."""
+        # async def add_filesystem_object_from_enriched(self, file_data_enriched: FileInfoDataEnriched) -> None:
+        #     """Adds a new `nemesis.filesystem_objects` entry from a FileInfoDataEnriched class object."""
 
-    #     # NOTE: size, magic_type, nemesis_file_id are the first in
-    #     #   COALESCE to ensure we update the accurate most recent value
-    #     query = (
-    #         "INSERT INTO nemesis.filesystem_objects as t(agent_id, project_id, source, timestamp, expiration, path, name, extension, type, size, magic_type, nemesis_file_id) "
-    #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) "
-    #         "ON CONFLICT (project_id, source, path) "
-    #         "DO UPDATE SET "
-    #         "  name = COALESCE(t.name, excluded.name),"
-    #         "  extension = COALESCE(t.extension, excluded.extension),"
-    #         "  size = COALESCE(excluded.size, t.size),"
-    #         "  magic_type = COALESCE(excluded.magic_type, t.magic_type),"
-    #         "  nemesis_file_id = COALESCE(excluded.nemesis_file_id, t.nemesis_file_id)"
-    #     )
+        #     # NOTE: size, magic_type, nemesis_file_id are the first in
+        #     #   COALESCE to ensure we update the accurate most recent value
+        #     query = (
+        #         "INSERT INTO nemesis.filesystem_objects as t(agent_id, project_id, source, timestamp, expiration, path, name, extension, type, size, magic_type, nemesis_file_id) "
+        #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) "
+        #         "ON CONFLICT (project_id, source, path) "
+        #         "DO UPDATE SET "
+        #         "  name = COALESCE(t.name, excluded.name),"
+        #         "  extension = COALESCE(t.extension, excluded.extension),"
+        #         "  size = COALESCE(excluded.size, t.size),"
+        #         "  magic_type = COALESCE(excluded.magic_type, t.magic_type),"
+        #         "  nemesis_file_id = COALESCE(excluded.nemesis_file_id, t.nemesis_file_id)"
+        #     )
 
-    #     async with self.pool.acquire() as conn:
-    #         await conn.execute(
-    #             query,
-    #             file_data_enriched.agent_id,
-    #             file_data_enriched.project_id,
-    #             file_data_enriched.source,
-    #             file_data_enriched.timestamp,
-    #             file_data_enriched.expiration,
-    #             file_data_enriched.path,
-    #             file_data_enriched.name,
-    #             file_data_enriched.extension,
-    #             "file",
-    #             file_data_enriched.size,
-    #             file_data_enriched.magic_type,
-    #             file_data_enriched.nemesis_file_id,
-    #         )
+        #     async with self.pool.acquire() as conn:
+        #         await conn.execute(
+        #             query,
+        #             file_data_enriched.agent_id,
+        #             file_data_enriched.project_id,
+        #             file_data_enriched.source,
+        #             file_data_enriched.timestamp,
+        #             file_data_enriched.expiration,
+        #             file_data_enriched.path,
+        #             file_data_enriched.name,
+        #             file_data_enriched.extension,
+        #             "file",
+        #             file_data_enriched.size,
+        #             file_data_enriched.magic_type,
+        #             file_data_enriched.nemesis_file_id,
+        #         )
 
-    # async def add_file_data_enriched(self, file_data_enriched: FileDataEnriched) -> None:
-    #     """Adds a new `nemesis.file_data_enriched` entry from a FileDataEnriched class object."""
+        # async def add_file_data_enriched(self, file_data_enriched: FileDataEnriched) -> None:
+        #     """Adds a new `nemesis.file_data_enriched` entry from a FileDataEnriched class object."""
 
-    #     query = (
-    #         "INSERT INTO nemesis.file_data_enriched as t(agent_id, project_id, source, timestamp, expiration, object_id, originating_object_id, path, name, size, md5, sha1, sha256, nemesis_file_type, magic_type, converted_pdf_id, extracted_plaintext_id, extracted_source_id, tags) "
-    #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) "
-    #         " ON CONFLICT DO NOTHING"
-    #     )
+        #     query = (
+        #         "INSERT INTO nemesis.file_data_enriched as t(agent_id, project_id, source, timestamp, expiration, object_id, originating_object_id, path, name, size, md5, sha1, sha256, nemesis_file_type, magic_type, converted_pdf_id, extracted_plaintext_id, extracted_source_id, tags) "
+        #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) "
+        #         " ON CONFLICT DO NOTHING"
+        #     )
 
-    #     async with self.pool.acquire() as conn:
-    #         await conn.execute(
-    #             query,
-    #             file_data_enriched.agent_id,
-    #             file_data_enriched.project_id,
-    #             file_data_enriched.source,
-    #             file_data_enriched.timestamp,
-    #             file_data_enriched.expiration,
-    #             file_data_enriched.object_id,
-    #             file_data_enriched.originating_object_id,
-    #             file_data_enriched.path,
-    #             file_data_enriched.name,
-    #             file_data_enriched.size,
-    #             file_data_enriched.md5,
-    #             file_data_enriched.sha1,
-    #             file_data_enriched.sha256,
-    #             file_data_enriched.nemesis_file_type,
-    #             file_data_enriched.magic_type,
-    #             file_data_enriched.converted_pdf_id,
-    #             file_data_enriched.extracted_plaintext_id,
-    #             file_data_enriched.extracted_source_id,
-    #             file_data_enriched.tags,
-    #         )
+        #     async with self.pool.acquire() as conn:
+        #         await conn.execute(
+        #             query,
+        #             file_data_enriched.agent_id,
+        #             file_data_enriched.project_id,
+        #             file_data_enriched.source,
+        #             file_data_enriched.timestamp,
+        #             file_data_enriched.expiration,
+        #             file_data_enriched.object_id,
+        #             file_data_enriched.originating_object_id,
+        #             file_data_enriched.path,
+        #             file_data_enriched.name,
+        #             file_data_enriched.size,
+        #             file_data_enriched.md5,
+        #             file_data_enriched.sha1,
+        #             file_data_enriched.sha256,
+        #             file_data_enriched.nemesis_file_type,
+        #             file_data_enriched.magic_type,
+        #             file_data_enriched.converted_pdf_id,
+        #             file_data_enriched.extracted_plaintext_id,
+        #             file_data_enriched.extracted_source_id,
+        #             file_data_enriched.tags,
+        #         )
 
     # async def get_plaintext_passwords(self, username: str = "%"):
     #     """
@@ -1543,7 +1556,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
 
     #     async with self.pool.acquire() as conn:
     #         results = await conn.fetch(
-    #             "SELECT data from nemesis.authentication_data WHERE type = 'password' AND username ILIKE $1",
+    #             "SELECT data FROM nemesis.authentication_data WHERE type = 'password' AND username ILIKE $1",
     #             username,
     #         )
     #         return [result[0] for result in results]
@@ -1556,7 +1569,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
 
     #     async with self.pool.acquire() as conn:
     #         results = await conn.fetch(
-    #             "SELECT data from nemesis.authentication_data WHERE type = 'ntlm_hash' AND username ILIKE $1",
+    #             "SELECT data FROM nemesis.authentication_data WHERE type = 'ntlm_hash' AND username ILIKE $1",
     #             username,
     #         )
     #     return [result[0] for result in results]
@@ -1566,18 +1579,31 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
 
     #     async with self.pool.acquire() as conn:
     #         results = await conn.fetch(
-    #             "SELECT plaintext_value from nemesis.authentication_data is_cracked = True AND username ILIKE $1",
+    #             "SELECT plaintext_value FROM nemesis.extracted_hashes WHERE is_cracked = True AND username ILIKE $1",
     #             username,
     #         )
     #         return [result[0] for result in results]
 
-    # async def get_encrypted_dpapi_masterkeys(self, username: str = "%", machine: bool = False):
-    #     """Gets encrypted DPAPI masterkeys linked to a specific domain backupkey guid.
+    # async def get_cracked_hash_value(self, hash_value: str):
+    #     """Returns the plaintext value for a hash if it's already cracked."""
 
-    #     machine -> only return machine masterkeys
+    #     async with self.pool.acquire() as conn:
+    #         results = await conn.fetch(
+    #             "SELECT plaintext_value FROM nemesis.extracted_hashes WHERE is_cracked = True AND hash_value = $1",
+    #             hash_value,
+    #         )
+    #         if results:
+    #             return results[0][0]
+    #         else:
+    #             return None
 
-    #     TODO: Use cursors to handle lots of results https://magicstack.github.io/asyncpg/current/api/index.html?highlight=fetchval#cursors
-    #     """
+    async def get_encrypted_dpapi_masterkeys(self, username: str = "%", machine: bool = False):
+        """Gets encrypted DPAPI masterkeys linked to a specific domain backupkey guid.
+
+        #     machine -> only return machine masterkeys
+
+        #     TODO: Use cursors to handle lots of results https://magicstack.github.io/asyncpg/current/api/index.html?highlight=fetchval#cursors
+        #"""
 
     #     if machine:
     #         query = ("SELECT username, user_sid, masterkey_guid, masterkey_bytes FROM nemesis.dpapi_masterkeys WHERE username = $1 AND is_decrypted = False AND type = 'machine'",)

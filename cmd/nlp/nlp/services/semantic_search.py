@@ -6,11 +6,11 @@ from typing import List
 # 3rd Party Libraries
 import structlog
 from fastapi.responses import Response
-from fastapi_class.decorators import get, post
-from fastapi_class.routable import Routable
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import ElasticVectorSearch
+from fastapi import APIRouter
+from langchain.text_splitter import (RecursiveCharacterTextSplitter,
+                                     TokenTextSplitter)
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores.elasticsearch import ElasticsearchStore
 from nlp.settings import NLPSettings
 from prometheus_async import aio
 from prometheus_client import Summary
@@ -45,27 +45,49 @@ class SemanticSearchResults(BaseModel):
     results: List[SemanticSearchResult]
 
 
-class SemanticSearchAPI(Routable):
+class SemanticSearchAPI():
     cfg: NLPSettings
     embeddings: HuggingFaceEmbeddings
-    vector_store: ElasticVectorSearch
+    vector_store: ElasticsearchStore
     text_splitter: RecursiveCharacterTextSplitter
 
     def __init__(self, cfg: NLPSettings) -> None:
         super().__init__()
-        self.cfg = cfg
-        embeddings = HuggingFaceEmbeddings(model_name=cfg.embedding_model)
-        self.vector_store = ElasticVectorSearch(
-            embedding=embeddings, elasticsearch_url=cfg.elastic_connection_uri, index_name=cfg.elastic_index_name
-        )
-        # significantly faster than HuggingFace tokenization
-        self.text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=500, chunk_overlap=0)
 
-    @get("/")
+        self.cfg = cfg
+
+        chunk_size = int(self.cfg.text_chunk_size)
+        chunk_overlap = int(chunk_size/15)
+        logger.info(f"semantic_search text chunk_size: {chunk_size}, chunk_overlap: {chunk_overlap}")
+
+        self.embeddings = HuggingFaceEmbeddings(model_name=cfg.embedding_model)
+
+        self.vector_store = ElasticsearchStore(
+            es_url=self.cfg.elasticsearch_url,
+            es_user=self.cfg.elasticsearch_user,
+            es_password=self.cfg.elasticsearch_password,
+            index_name=self.cfg.elastic_index_name,
+            embedding=self.embeddings
+        )
+
+        # significantly faster than HuggingFace tokenization
+        # self.text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        self.text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            encoding_name="cl100k_base",
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
+        self.router.add_api_route("/ready", self.ready, methods=["GET"])
+        self.router.add_api_route("/semantic_search", self.semantic_search, methods=["POST"])
+        self.router.add_api_route("/indexing", self.indexing, methods=["POST"])
+
+
     async def home(self):
         return Response()
 
-    @get("/ready")
     async def ready(self):
         """
         Used for readiness probes.
@@ -73,9 +95,11 @@ class SemanticSearchAPI(Routable):
         return Response()
 
     @aio.time(Summary("semantic_search", "Semantic search over indexed documents"))  # type: ignore
-    @post("/semantic_search")
     async def semantic_search(self, request: SemanticSearchRequest):
         try:
+            if not self.vector_store.client.indices.exists(index=self.cfg.elastic_index_name):
+                return {"error": f"index_not_found_exception"}
+
             results = self.vector_store.similarity_search_with_score(request.search_phrase, k=request.num_results)
 
             search_results = SemanticSearchResults(results=[])
@@ -100,35 +124,28 @@ class SemanticSearchAPI(Routable):
             return {"error": f"{e}"}
 
     @aio.time(Summary("indexing_request", "Indexing of document text"))  # type: ignore
-    @post("/indexing")
     async def indexing(self, request: IndexingRequest):
         try:
-            # combine all whitespace into single spaces
-            text_processed = re.sub(r"\s+", " ", request.text)
+            if request.text.strip():
+                # split the text using our default splitter
+                docs = self.text_splitter.split_text(request.text)
 
-            # split the text using our default splitter
-            docs = self.text_splitter.split_text(text_processed)
-            total_words = len(text_processed.split())
+                # construct the metadata dict for each split text
+                metadata = [
+                    {
+                        "object_id": request.object_id,
+                        "originating_object_id": request.originating_object_id,
+                        "originating_object_path": request.originating_object_path,
+                    }
+                ] * len(docs)
 
-            # construct the metadata dict for each split text
-            metadata = [
-                {
-                    "object_id": request.object_id,
-                    "originating_object_id": request.originating_object_id,
-                    "originating_object_path": request.originating_object_path,
-                }
-            ] * len(docs)
+                await logger.ainfo(f"Loading {len(docs)} documents into the vector store", object_id=request.object_id)
 
-            await logger.ainfo(
-                f"Loading {len(docs)} documents ({total_words} total words) into the vector store", object_id=request.object_id
-            )
-
-            # load the documents into the vector store asynchronously
-            #   vector_store.aadd_texts() not yet implemented
-            start = time.time()
-            self.vector_store.add_texts(docs, metadata)
-            end = time.time()
-            await logger.ainfo(f"Documents loaded in {(end - start):.2f} seconds", object_id=request.object_id)
+                # load the documents into the vector store asynchronously
+                start = time.time()
+                await self.vector_store.add_texts(docs, metadata)
+                end = time.time()
+                await logger.ainfo(f"{len(docs)} documents loaded in {(end - start):.2f} seconds", object_id=request.object_id)
 
         except Exception as e:
             await logger.aexception(e, message="exception in processing a indexing request")

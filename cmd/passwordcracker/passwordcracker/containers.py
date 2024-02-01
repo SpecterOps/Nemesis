@@ -1,6 +1,7 @@
 # Standard Libraries
 from typing import AsyncGenerator
 
+import asyncpg
 # 3rd Party Libraries
 import google.protobuf.message
 import httpx
@@ -38,6 +39,12 @@ async def create_producer(rabbitmq_connection_uri: str, queue: NemesisQueue):
         ) as outputQ,
     ):
         yield outputQ
+
+
+async def create_nemesis_db_pool(postgres_connection_uri: str):
+    pool = await asyncpg.create_pool(dsn=postgres_connection_uri)
+    yield pool
+    await pool.Close()
 
 
 async def create_http_retry_client() -> AsyncGenerator[httpx.AsyncClient, None]:
@@ -82,6 +89,8 @@ class Container(containers.DeclarativeContainer):
         config.data_download_dir,
     )
 
+    database_pool = providers.Resource(create_nemesis_db_pool, config.postgres_connection_uri)
+
     #
     # passwordcracker Service Tasks
     #
@@ -89,6 +98,7 @@ class Container(containers.DeclarativeContainer):
         PasswordCracker,
         config2,
         alerting_service,
+        database_pool,
         cracker_service,
         inputq_passwordcracker_passwordcrackertask,
         outputq_extractedhash,

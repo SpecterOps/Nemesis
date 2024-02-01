@@ -1,4 +1,5 @@
 # Standard Libraries
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -8,8 +9,7 @@ import uvicorn
 from enrichment.tasks.webapi.crack_list.client_wordlists import ClientWordlists
 from fastapi import FastAPI
 from fastapi.responses import Response
-from fastapi_class.decorators import get, post
-from fastapi_class.routable import Routable
+from fastapi import APIRouter
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio
@@ -42,7 +42,7 @@ class UploadRequest(BaseModel):
     client_id: str
 
 
-class CrackListApiRoutes(Routable):
+class CrackListApiRoutes():
     """Inherits from Routable."""
 
     storage: StorageInterface
@@ -51,13 +51,16 @@ class CrackListApiRoutes(Routable):
     def __init__(self, storage: StorageInterface) -> None:
         super().__init__()
         self.storage = storage
-        self.client_wordlists = ClientWordlists()
+        self.client_wordlists = ClientWordlists("/opt/cracklist/")
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
+        self.router.add_api_route("/ready", self.ready, methods=["GET"])
+        self.router.add_api_route("/add", self.root_post, methods=["POST"])
+        self.router.add_api_route("/client/{client_id}/{count}", self.root_get, methods=["GET"])
 
-    @get("/")
     async def home(self):
         return Response()
 
-    @get("/ready")
     async def ready(self):
         """
         Used for readiness probes.
@@ -65,10 +68,9 @@ class CrackListApiRoutes(Routable):
         return Response()
 
     @aio.time(Summary("wordlist_add", "Time spent adding a document to the wordlist"))  # type: ignore
-    @post("/add")
     async def root_post(self, request: UploadRequest, length_filter: bool = False):
         try:
-            await logger.adebug("Got request", request=request)
+            await logger.ainfo("crack-list ADD request", request=request)
             with await self.storage.download(request.object_id) as temp_file:
                 data = Path(temp_file.name).read_text()
                 self.client_wordlists.add_file(request.client_id, data, length_filter)
@@ -76,10 +78,12 @@ class CrackListApiRoutes(Routable):
             return {"error": str(e)}
 
     @aio.time(Summary("wordlist_retrieve", "Time spent retrieving the wordlist"))  # type: ignore
-    @get("/client/{client_id}")
-    def root_get(self, client_id: str, count: int = 10):
+    async def root_get(self, client_id: str, count: str | None = None):
+        if not count:
+            count = 10
+        await logger.ainfo(f"crack-list GET request", client_id=client_id, count=count)
         try:
-            ret = self.client_wordlists.get_as_file(client_id, count=count)
+            ret = self.client_wordlists.get_as_file(client_id, count=int(count))
             return Response(ret, media_type="text/plain")
         except Exception as e:
             return {"error": str(e)}
