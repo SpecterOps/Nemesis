@@ -96,9 +96,9 @@ def build_page(username: str):
                     st.session_state["reprocessing"] = True
                     try:
                         requests.post(f"{NEMESIS_API_URL}reprocess", timeout=0.1)
-                        st.experimental_rerun()
+                        st.rerun()
                     except requests.exceptions.ReadTimeout:
-                        st.experimental_rerun()
+                        st.rerun()
                     except Exception as e:
                         st.warning(f"Error posting to Nemesis URL {NEMESIS_API_URL}reprocess : {e}", icon="⚠️")
 
@@ -115,9 +115,9 @@ def build_page(username: str):
                     st.session_state["clearing"] = True
                     try:
                         requests.post(f"{NEMESIS_API_URL}reset", timeout=0.1)
-                        st.experimental_rerun()
+                        st.rerun()
                     except requests.exceptions.ReadTimeout:
-                        st.experimental_rerun()
+                        st.rerun()
                     except Exception as e:
                         st.warning(f"Error posting to Nemesis URL {NEMESIS_API_URL}reset : {e}", icon="⚠️")
 
