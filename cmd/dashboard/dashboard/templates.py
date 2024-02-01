@@ -144,29 +144,49 @@ def text_search_result(i: int, url: str, pdf_url: str, source: str, path: str, h
     """HTML scripts to display text search results."""
 
     view_file_url = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={originating_object_id}"
-
-    return (
-        f"""
-        <div style="font-size:120%;">
-            {i + 1}.
-            <a href="{view_file_url}">
-                {path}
-            </a>
-        </div>
-        <div style="font-size:95%;">
-            <div style="color:grey;font-size:95%;">
-                {length} words
-                &nbsp;
-                <a href="{pdf_url}">
-                    PDF Link
+    if pdf_url:
+        return (
+            f"""
+            <div style="font-size:120%;">
+                {i + 1}.
+                <a href="{view_file_url}">
+                    {path}
                 </a>
             </div>
-            <pre>""",
-        highlights,
-        """</pre>
-        </div>
-    """,
-    )
+            <div style="font-size:95%;">
+                <div style="color:grey;font-size:95%;">
+                    {length} words
+                    &nbsp;
+                    <a href="{pdf_url}">
+                        PDF Link
+                    </a>
+                </div>
+                <pre>""",
+            highlights,
+            """</pre>
+            </div>
+        """,
+        )
+    else:
+        return (
+            f"""
+            <div style="font-size:120%;">
+                {i + 1}.
+                <a href="{view_file_url}">
+                    {path}
+                </a>
+            </div>
+            <div style="font-size:95%;">
+                <div style="color:grey;font-size:95%;">
+                    {length} words
+                    &nbsp;
+                </div>
+                <pre>""",
+            highlights,
+            """</pre>
+            </div>
+        """,
+        )
 
 
 def sourcecode_search_result(i: int, object_id: str, download_url: str, source: str, path: str, name: str, language: str, highlights: str, size: str, **kwargs) -> Tuple[str, str, str]:
@@ -220,12 +240,23 @@ def semantic_search_result(result) ->str:
         else None
     )
 
-    return f"""
-    <div style="font-size:120%;">
-        <a href="{view_file_url}">
-            {originating_object_path}
-        </a>
-    </div>
-    <div style="color:grey;font-size:95%;">
-        Score: {score}<br>{f"Source: {source}" if source else ""}<br>{pdf_html}
-    """
+    if pdf_html:
+        return f"""
+        <div style="font-size:120%;">
+            <a href="{view_file_url}">
+                {originating_object_path}
+            </a>
+        </div>
+        <div style="color:grey;font-size:95%;">
+            Score: {score}<br>{f"Source: {source}" if source else ""}<br>{pdf_html}
+        """
+    else:
+        return f"""
+        <div style="font-size:120%;">
+            <a href="{view_file_url}">
+                {originating_object_path}
+            </a>
+        </div>
+        <div style="color:grey;font-size:95%;">
+            Score: {score}<br>{f"Source: {source}" if source else ""}<br>
+        """

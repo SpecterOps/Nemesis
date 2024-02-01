@@ -117,10 +117,15 @@ class SemanticSearchAPI():
 
                 for document, score in results:
                     metadata = document.metadata
+                    source = metadata["source"] if "source" in metadata else ""
+                    object_id = metadata["object_id"] if "object_id" in metadata else ""
+                    originating_object_id = metadata["originating_object_id"] if "originating_object_id" in metadata else ""
+                    originating_object_path = metadata["originating_object_path"] if "originating_object_path" in metadata else ""
+                    originating_object_pdf = metadata["originating_object_pdf"] if "originating_object_pdf" in metadata else ""
                     search_result = SemanticSearchResult(
                         text=document.page_content,
                         score=score,
-                        source=metadata["source"],
+                        source=source,
                         object_id=metadata["object_id"],
                         originating_object_id=metadata["originating_object_id"],
                         originating_object_path=metadata["originating_object_path"],
@@ -140,14 +145,19 @@ class SemanticSearchAPI():
 
                 for document, score in results:
                     metadata = document.metadata
+                    source = metadata["source"] if "source" in metadata else ""
+                    object_id = metadata["objectId"] if "objectId" in metadata else ""
+                    originating_object_id = metadata["originatingObjectId"] if "originatingObjectId" in metadata else ""
+                    originating_object_path = metadata["originatingObjectPath"] if "originatingObjectPath" in metadata else ""
+                    originating_object_pdf = metadata["originatingObjectConvertedPdf"] if "originatingObjectConvertedPdf" in metadata else ""
                     search_result = SemanticSearchResult(
                         text=f"{document.page_content[0:100]} ...",
                         score=score,
-                        source=metadata["source"],
-                        object_id=metadata["objectId"],
-                        originating_object_id=metadata["originatingObjectId"],
-                        originating_object_path=metadata["originatingObjectPath"],
-                        originating_object_pdf=metadata["originatingObjectConvertedPdf"]
+                        source=source,
+                        object_id=object_id,
+                        originating_object_id=originating_object_id,
+                        originating_object_path=originating_object_path,
+                        originating_object_pdf=originating_object_pdf
                     )
                     search_results.results.append(search_result)
 

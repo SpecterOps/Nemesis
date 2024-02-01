@@ -975,20 +975,112 @@ def is_dotnet_assembly(nemesis_uuid: str) -> bool:
     return re.match(".*\\.Net assembly.*", get_magic_type(nemesis_uuid), re.IGNORECASE) is not None
 
 
-def tika_compatible(file_path: str) -> bool:
-    """Returns True if the file can be used with Tika.
+def tika_compatible(mime_type: str) -> bool:
+    """Returns True if the mime type can be used with Tika."""
+    # # image_regex = "^.*\\.(exr|avif|bmp|cgm|emf|g3|gif|heic|heif|ief|jp2|jpg|jpeg|jpm|jpf|jxl|ntf|png|btif|svg|tiff|psd|ppj|dgn|djvu|dxb|dxf|fbs|fpx|fst|mmr|rlc|mdi|npx|wbmp|xif|webp|wmf|bpg|cr2|cr3|rgb|xwd)$"
+    # image_regex = "^.*\\.(bmp|gif|jpg|jpeg|png|svg|tiff|wbmp|webp|wmf)$"
+    # is_image = re.match(image_regex, file_path, re.IGNORECASE) is not None
 
-    Returns True if the supplied file_path matches a number of specific file extensions
-    that allow the document to work with Tika.
-    """
-    # image_regex = "^.*\\.(exr|avif|bmp|cgm|emf|g3|gif|heic|heif|ief|jp2|jpg|jpeg|jpm|jpf|jxl|ntf|png|btif|svg|tiff|psd|ppj|dgn|djvu|dxb|dxf|fbs|fpx|fst|mmr|rlc|mdi|npx|wbmp|xif|webp|wmf|bpg|cr2|cr3|rgb|xwd)$"
-    image_regex = "^.*\\.(bmp|gif|jpg|jpeg|png|svg|tiff|wbmp|webp|wmf)$"
-    is_image = re.match(image_regex, file_path, re.IGNORECASE) is not None
+    # misc_regex = "^.*\\.(txt|rtf|chm|pdf)$"
+    # is_misc = re.match(misc_regex, file_path, re.IGNORECASE) is not None
 
-    misc_regex = "^.*\\.(txt|rtf|chm|pdf)$"
-    is_misc = re.match(misc_regex, file_path, re.IGNORECASE) is not None
+    # return is_office_doc(file_path) or is_image or is_misc
 
-    return is_office_doc(file_path) or is_image or is_misc
+    # from https://tika.apache.org/2.8.0/formats.html#Full_list_of_Supported_Formats_in_standard_artifacts
+    supported_mime_types = {
+        "text/csv": 1,
+        "text/plain": 1,
+        "text/html": 1,
+        "application/vnd.wap.xhtml+xml": 1,
+        "application/x-asp": 1,
+        "application/xhtml+xml": 1,
+        "image/png": 1,
+        "image/vnd.wap.wbmp": 1,
+        "image/x-jbig2": 1,
+        "image/bmp": 1,
+        "image/x-xcf": 1,
+        "image/gif": 1,
+        "image/x-ms-bmp": 1,
+        "image/jpeg": 1,
+        # "application/mbox": 1,
+        "image/emf": 1,
+        # "application/x-msaccess": 1,
+        "application/x-tika-msoffice-embedded; format=ole10_native": 1,
+        "application/msword": 1,
+        "application/vnd.visio": 1,
+        "application/x-tika-ole-drm-encrypted": 1,
+        "application/vnd.ms-project": 1,
+        "application/x-tika-msworks-spreadsheet": 1,
+        "application/x-mspublisher": 1,
+        "application/vnd.ms-powerpoint": 1,
+        "application/x-tika-msoffice": 1,
+        "application/sldworks": 1,
+        "application/x-tika-ooxml-protected": 1,
+        "application/vnd.ms-excel": 1,
+        # "application/vnd.ms-outlook": 1,
+        "application/vnd.ms-excel.workspace.3": 1,
+        "application/vnd.ms-excel.workspace.4": 1,
+        "application/vnd.ms-excel.sheet.2": 1,
+        "application/vnd.ms-excel.sheet.3": 1,
+        "application/vnd.ms-excel.sheet.4": 1,
+        "image/wmf": 1,
+        "application/vnd.ms-htmlhelp": 1,
+        "application/x-chm": 1,
+        "application/chm": 1,
+        "application/onenote; format=one": 1,
+        "application/vnd.ms-powerpoint.template.macroenabled.12": 1,
+        "application/vnd.ms-excel.addin.macroenabled.12": 1,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.template": 1,
+        "application/vnd.ms-excel.sheet.binary.macroenabled.12": 1,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": 1,
+        "application/vnd.ms-powerpoint.slide.macroenabled.12": 1,
+        "application/vnd.ms-visio.drawing": 1,
+        "application/vnd.ms-powerpoint.slideshow.macroenabled.12": 1,
+        "application/vnd.ms-powerpoint.presentation.macroenabled.12": 1,
+        "application/vnd.openxmlformats-officedocument.presentationml.slide": 1,
+        "application/vnd.ms-excel.sheet.macroenabled.12": 1,
+        "application/vnd.ms-word.template.macroenabled.12": 1,
+        "application/vnd.ms-word.document.macroenabled.12": 1,
+        "application/vnd.ms-powerpoint.addin.macroenabled.12": 1,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.template": 1,
+        "application/vnd.ms-xpsdocument": 1,
+        "application/vnd.ms-visio.drawing.macroenabled.12": 1,
+        "application/vnd.ms-visio.template.macroenabled.12": 1,
+        "model/vnd.dwfx+xps": 1,
+        "application/vnd.openxmlformats-officedocument.presentationml.template": 1,
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": 1,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": 1,
+        "application/vnd.ms-visio.stencil": 1,
+        "application/vnd.ms-visio.template": 1,
+        "application/vnd.openxmlformats-officedocument.presentationml.slideshow": 1,
+        "application/vnd.ms-visio.stencil.macroenabled.12": 1,
+        "application/vnd.ms-excel.template.macroenabled.12": 1,
+        "application/vnd.ms-word2006ml": 1,
+        "application/vnd.ms-outlook-pst": 1,
+        "application/rtf": 1,
+        "application/vnd.ms-wordml": 1,
+        "image/ocr-x-portable-pixmap": 1,
+        "image/ocr-jpx": 1,
+        "image/x-portable-pixmap": 1,
+        "image/ocr-jpeg": 1,
+        "image/ocr-jp2": 1,
+        "image/jpx": 1,
+        "image/ocr-png": 1,
+        "image/ocr-tiff": 1,
+        "image/ocr-gif": 1,
+        "image/ocr-bmp": 1,
+        "image/jp2": 1,
+        "application/pdf": 1,
+        "application/vnd.wordperfect; version=5.1": 1,
+        "application/vnd.wordperfect; version=5.0": 1,
+        "application/vnd.wordperfect; version=6.x": 1,
+        "application/xml": 1,
+    }
+
+    if mime_type in supported_mime_types:
+        return True
+    else:
+        return False
 
 
 def is_office_doc(file_path: str) -> bool:

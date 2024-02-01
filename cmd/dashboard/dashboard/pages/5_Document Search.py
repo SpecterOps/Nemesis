@@ -65,7 +65,7 @@ def build_page(username: str):
     st.session_state.current_tab = chosen_tab
     st.query_params["current_tab"] = chosen_tab
 
-    if st.query_params["current_tab"] == "text_search":
+    if chosen_tab == "text_search":
         st.subheader("Document Search")
 
         if "code_search" in st.query_params:
@@ -133,7 +133,8 @@ def build_page(username: str):
                 originating_object_id=originatingObjectId,
             )
             st.write(header, unsafe_allow_html=True)
-            st.markdown(highlights)
+            # st.markdown(highlights)
+            st.code(highlights, None)
             st.write(footer, unsafe_allow_html=True)
 
         # pagination

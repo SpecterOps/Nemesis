@@ -257,9 +257,6 @@ class FileProcessor(TaskInterface):
         # now get its magic type from the first 2048 bytes using python-magic
         file_magic_type = helpers.get_magic_type(file_path_on_disk)
 
-        # check if the file can have plaintext extracted with Tika
-        tika_compatible = helpers.tika_compatible(file_path)
-
         # check if this file is an office document
         is_office_doc = helpers.is_office_doc(file_path)
 
@@ -565,7 +562,9 @@ class FileProcessor(TaskInterface):
         # Check if the office document was encrypted
         doc_is_encrypted = file_data.parsed_data.is_encrypted
 
-        await self.text_extractor.detect(file_path_on_disk)
+        mime_type = await self.text_extractor.detect(file_path_on_disk)
+        tika_compatible = helpers.tika_compatible(mime_type)
+        await logger.ainfo(f"mime type: {mime_type}, tika_compatible: {tika_compatible}", object_id=file_data.object_id)
 
         # If the file is known to be tika compatible, or is not a binary file
         #   and is also not known source code, and is not an encrypted word doc,

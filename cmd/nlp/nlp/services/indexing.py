@@ -173,7 +173,6 @@ class IndexingService(SingleQueueRabbitMQWorker):
                         # average all the embeddings for this document and save the vector to the original plaintext document
                         vectors = [h["_source"]["vector"] for h in vector_output["hits"]["hits"]]
                         chunk_lens = [h["_source"]["metadata"]["chunk_len"] for h in vector_output["hits"]["hits"]]
-                        print(chunk_lens)
                         chunk_embeddings = np.average(vectors, axis=0, weights=chunk_lens)
                         # chunk_embeddings = chunk_embeddings / np.linalg.norm(chunk_embeddings) # normalizes length to 1, don't think this is needed...
                         avg_embedding = chunk_embeddings.tolist()
