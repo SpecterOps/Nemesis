@@ -91,7 +91,7 @@ class App:
     async def start_indexing_service(self) -> None:
         async with (
             await NemesisRabbitMQConsumer.create(
-                self.cfg.rabbitmq_connection_uri, constants.Q_FILE_DATA_PLAINTEXT, pb.FileDataPlaintextMessage, "indexingservice"
+                self.cfg.rabbitmq_connection_uri, constants.Q_FILE_DATA_PLAINTEXT, pb.FileDataPlaintextMessage, "indexingservice", 1
             ) as textQ,
         ):
             service = IndexingService(textQ, self.cfg, self.storage)
