@@ -114,15 +114,19 @@ class IndexingService(SingleQueueRabbitMQWorker):
                             start = time.time()
                             await logger.ainfo(f"Loading {len(docs)} documents into the vector store", object_id=object_id)
                             for batch in split(docs, 10):
-                                metadata = [
-                                    {
-                                        "source": source,
-                                        "object_id": object_id,
-                                        "originating_object_id": originating_object_id,
-                                        "originating_object_path": originating_object_path,
-                                        "originating_object_pdf": originating_object_converted_pdf,
-                                    }
-                                ] * len(batch)
+                                metadata = []
+
+                                for b in batch:
+                                    metadata.append(
+                                        {
+                                            "source": source,
+                                            "object_id": object_id,
+                                            "chunk_len": len(b),
+                                            "originating_object_id": originating_object_id,
+                                            "originating_object_path": originating_object_path,
+                                            "originating_object_pdf": originating_object_converted_pdf,
+                                        }
+                                    )
                                 await self.vector_store.aadd_texts(batch, metadata)
                             end = time.time()
                             await logger.ainfo(f"{len(docs)} total documents loaded into the vector store in {(end - start):.2f} seconds", object_id=object_id)
@@ -160,16 +164,19 @@ class IndexingService(SingleQueueRabbitMQWorker):
                     vector_output = self.es_client.search(
                         index=self.cfg.elastic_index_name,
                         query={"term": {"metadata.object_id.keyword": object_id}},
-                        source_includes=["vector"]
+                        source_includes=["vector", "metadata.chunk_len"]
                     )
                     vector_hits = vector_output["hits"]["total"]["value"]
-
                     if plaintext_id == -1:
                         await logger.ainfo(f"_id not retried for indexed plaintext document in Elastic")
                     if vector_hits > 0:
                         # average all the embeddings for this document and save the vector to the original plaintext document
                         vectors = [h["_source"]["vector"] for h in vector_output["hits"]["hits"]]
-                        avg_embedding = np.average(vectors, axis=0).tolist()
+                        chunk_lens = [h["_source"]["metadata"]["chunk_len"] for h in vector_output["hits"]["hits"]]
+                        print(chunk_lens)
+                        chunk_embeddings = np.average(vectors, axis=0, weights=chunk_lens)
+                        # chunk_embeddings = chunk_embeddings / np.linalg.norm(chunk_embeddings) # normalizes length to 1, don't think this is needed...
+                        avg_embedding = chunk_embeddings.tolist()
 
                         # make sure the vector field is set to a dense vector first
                         mapping = {
