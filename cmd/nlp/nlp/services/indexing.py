@@ -18,7 +18,13 @@ from nlp.settings import NLPSettings
 from prometheus_async import aio
 from prometheus_client import Summary
 
+
 logger = structlog.get_logger(module=__name__)
+
+
+def split(list_a, chunk_size):
+    for i in range(0, len(list_a), chunk_size):
+        yield list_a[i:i + chunk_size]
 
 
 class IndexingService(SingleQueueRabbitMQWorker):
@@ -36,7 +42,6 @@ class IndexingService(SingleQueueRabbitMQWorker):
 
         chunk_size = int(self.cfg.text_chunk_size)
         chunk_overlap = int(chunk_size/15)
-        logger.info(f"indexing model: {self.cfg.embedding_model}, text chunk_size: {chunk_size}, chunk_overlap: {chunk_overlap}")
 
         self.embeddings = HuggingFaceEmbeddings(model_name=self.cfg.embedding_model)
 
@@ -48,10 +53,7 @@ class IndexingService(SingleQueueRabbitMQWorker):
             embedding=self.embeddings
         )
 
-        # significantly faster than HuggingFace tokenization
-        # self.text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-
-        # significantly faster than HuggingFace tokenization
+        # significantly faster than straight HuggingFace tokenization
         self.text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
             encoding_name="cl100k_base",
             chunk_size=chunk_size,
@@ -71,35 +73,33 @@ class IndexingService(SingleQueueRabbitMQWorker):
             source = event.metadata.source
 
             try:
-                print(f"object_id: {object_id}")
                 with await self.storage.download(object_id) as file:
                     with open(file.name, 'r') as f:
 
                         text = f.read()
 
                         if text.strip():
-
                             # split the text using our default splitter
-                            docs = self.text_splitter.split_text(text)
-
-                            # construct the metadata dict for each split text
-                            metadata = [
-                                {
-                                    "source": source,
-                                    "object_id": object_id,
-                                    "originating_object_id": originating_object_id,
-                                    "originating_object_path": originating_object_path,
-                                    "originating_object_pdf": originating_object_converted_pdf,
-                                }
-                            ] * len(docs)
-
-                            await logger.ainfo(f"Loading {len(docs)} documents into the vector store", object_id=object_id)
-
-                            # load the documents into the vector store asynchronously
                             start = time.time()
-                            await self.vector_store.aadd_texts(docs, metadata)
+                            docs = self.text_splitter.split_text(text)
                             end = time.time()
-                            await logger.ainfo(f"{len(docs)} documents loaded in {(end - start):.2f} seconds", object_id=object_id)
+                            await logger.ainfo(f"{len(docs)} documents split in {(end - start):.2f} seconds", object_id=object_id)
+
+                            start = time.time()
+                            await logger.ainfo(f"Loading {len(docs)} documents into the vector store", object_id=object_id)
+                            for batch in split(docs, 10):
+                                metadata = [
+                                    {
+                                        "source": source,
+                                        "object_id": object_id,
+                                        "originating_object_id": originating_object_id,
+                                        "originating_object_path": originating_object_path,
+                                        "originating_object_pdf": originating_object_converted_pdf,
+                                    }
+                                ] * len(batch)
+                                await self.vector_store.aadd_texts(batch, metadata)
+                            end = time.time()
+                            await logger.ainfo(f"{len(docs)} total documents loaded into the vector store in {(end - start):.2f} seconds", object_id=object_id)
 
             except Exception as e:
                 await logger.aexception(e, message="exception in processing a plaintext file")
