@@ -714,12 +714,6 @@ data:
       #   - targets: ['dotnet.default.svc.cluster.local:9800']
 
       # # TODO: is it possible to implement a metrics export ?
-      # - job_name: 'tensorflow-serving'
-      #   scrape_interval: 5s
-      #   static_configs:
-      #   - targets: ['tensorflow-serving.default.svc.cluster.local:8501']
-
-      # # TODO: is it possible to implement a metrics export ?
       # - job_name: 'tika'
       #   scrape_interval: 5s
       #   static_configs:

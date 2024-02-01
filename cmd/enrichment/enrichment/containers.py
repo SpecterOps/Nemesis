@@ -31,7 +31,6 @@ from enrichment.tasks.service_categorizer.service_categorizer import ServiceCate
 from enrichment.tasks.slack_webhook_alerter import SlackWebHookAlerter
 from enrichment.tasks.webapi.crack_list.cracklist_api import CrackListApi
 from enrichment.tasks.webapi.landingpage import LandingPageApi
-from enrichment.tasks.webapi.ml_models_api import MlModelsApi
 from enrichment.tasks.webapi.nemesis_api import NemesisApi
 from enrichment.tasks.webapi.yara_api import YaraApi
 from nemesiscommon.constants import NemesisQueue
@@ -506,13 +505,11 @@ class Container(containers.DeclarativeContainer):
         config.crack_list_uri,
         config.dotnet_uri,
         config.gotenberg_uri,
-        config.ml_models_uri,
         config.public_kibana_url,
         # Other settings
         config.chunk_size,
         config.data_download_dir,
         config.extracted_archive_size_limit,
-        config.model_word_limit,
         # Queues
         inputq_filedata_fileprocessor,
         inputq_filedataenriched_fileprocessor,
@@ -584,7 +581,6 @@ class Container(containers.DeclarativeContainer):
     # Web APIs (alphabetical order)
     #
     task_cracklist_api = providers.Factory(CrackListApi, storage_service, config.log_level)
-    task_mlmodels_api = providers.Factory(MlModelsApi, storage_service, config2)
     task_nemesis_api = providers.Factory(
         NemesisApi,
         storage_service,
@@ -608,7 +604,6 @@ class Container(containers.DeclarativeContainer):
         elasticconnector=task_elasticconnector,  # type: ignore
         fileprocessor=task_fileprocessor,  # type: ignore
         landingpage=task_landingpage,  # type: ignore
-        mlmodels_api=task_mlmodels_api,  # type: ignore
         nemesis_api=task_nemesis_api,  # type: ignore
         postgresconnector=task_postgresconnector,  # type: ignore
         processcategorizer=task_processcategorizer,  # type: ignore

@@ -58,28 +58,15 @@ spec:
               value: "500000000"
             - name: CHUNK_SIZE # number of bytes to read at a time per file
               value: "128000"
-            - name: MODEL_WORD_LIMIT # only extract passwords for documents below this word limit
-              value: "100000"
             - name: YARA_API_PORT
               value: "9700"
 
-            - name: CONTEXT_WORDS
-              value: "5"
-            - name: ML_CHUNK_SIZE
-              value: "5000"
-            - name: PROB_THRESHOLD
-              value: ".95"
-
-            - name: TENSORFLOW_URI
-              value: "http://tensorflow-serving:8501/"
             - name: TIKA_URI
               value: http://tika:9998/
             - name: DOTNET_URI
               value: http://dotnet:9800/
             - name: GOTENBERG_URI
               value: http://gotenberg:3000/
-            - name: ML_MODELS_URI
-              value: http://127.0.0.1:5000/
             - name: CRACK_LIST_URI
               value: http://127.0.0.1:9900/
             - name: NEMESIS_HTTP_SERVER

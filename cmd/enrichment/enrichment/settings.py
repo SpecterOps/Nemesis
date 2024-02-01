@@ -44,9 +44,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     tika_uri: HttpUrlWithSlash
     dotnet_uri: HttpUrlWithSlash
     gotenberg_uri: HttpUrlWithSlash
-    ml_models_uri: HttpUrlWithSlash
     crack_list_uri: HttpUrlWithSlash
-    model_word_limit: PositiveInt
     extracted_archive_size_limit: PositiveInt
     db_iteration_size: PositiveInt
     elasticsearch_user: str
@@ -59,11 +57,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     slack_username: str
     slack_emoji: str
     slack_channel: Optional[str]
-    tensorflow_uri: str
-    context_words: PositiveInt
     chunk_size: PositiveInt
-    ml_chunk_size: PositiveInt
-    prob_threshold: float
     yara_api_port: int = Field(None, ge=0, le=65535)
     disable_alerting: bool = False
     crack_wordlist_top_words: CrackWordlistSize  # either 10000 or 100000 for now
