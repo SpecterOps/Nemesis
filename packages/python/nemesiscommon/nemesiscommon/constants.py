@@ -105,6 +105,7 @@ ES_INDEX_REGISTRY_VALUE: ElasticIndex = "registry_value"
 ES_INDEX_SERVICE_ENRICHED: ElasticIndex = "service_enriched"
 ES_INDEX_NAMED_PIPE: ElasticIndex = "named_pipe"
 ES_INDEX_NETWORK_CONNECTION: ElasticIndex = "network_connection"
+ES_INDEX_TEXT_EMBEDDINGS: ElasticIndex = "text_embeddings"
 
 ALL_ES_INDICIES: List[ElasticIndex] = [
     ES_INDEX_AUTHENTICATION_DATA,
@@ -117,7 +118,8 @@ ALL_ES_INDICIES: List[ElasticIndex] = [
     ES_INDEX_REGISTRY_VALUE,
     ES_INDEX_SERVICE_ENRICHED,
     ES_INDEX_NAMED_PIPE,
-    ES_INDEX_NETWORK_CONNECTION
+    ES_INDEX_NETWORK_CONNECTION,
+    ES_INDEX_TEXT_EMBEDDINGS
 ]
 
 NemesisEnrichment = str

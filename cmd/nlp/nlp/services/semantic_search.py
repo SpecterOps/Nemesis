@@ -28,6 +28,7 @@ class IndexingRequest(BaseModel):
 
 class SemanticSearchRequest(BaseModel):
     search_phrase: str
+    search_choice: str
     num_results: int
 
 
@@ -62,11 +63,19 @@ class SemanticSearchAPI():
 
         self.embeddings = HuggingFaceEmbeddings(model_name=cfg.embedding_model)
 
-        self.vector_store = ElasticsearchStore(
+        self.vector_store_chunks = ElasticsearchStore(
             es_url=self.cfg.elasticsearch_url,
             es_user=self.cfg.elasticsearch_user,
             es_password=self.cfg.elasticsearch_password,
             index_name=self.cfg.elastic_index_name,
+            embedding=self.embeddings
+        )
+
+        self.vector_store_documents = ElasticsearchStore(
+            es_url=self.cfg.elasticsearch_url,
+            es_user=self.cfg.elasticsearch_user,
+            es_password=self.cfg.elasticsearch_password,
+            index_name="file_data_plaintext",
             embedding=self.embeddings
         )
 
@@ -97,27 +106,53 @@ class SemanticSearchAPI():
     @aio.time(Summary("semantic_search", "Semantic search over indexed documents"))  # type: ignore
     async def semantic_search(self, request: SemanticSearchRequest):
         try:
-            if not self.vector_store.client.indices.exists(index=self.cfg.elastic_index_name):
-                return {"error": f"index_not_found_exception"}
+            if request.search_choice == "text_chunks":
 
-            results = self.vector_store.similarity_search_with_score(request.search_phrase, k=request.num_results)
+                if not self.vector_store_chunks.client.indices.exists(index=self.cfg.elastic_index_name):
+                    return {"error": f"index_not_found_exception"}
 
-            search_results = SemanticSearchResults(results=[])
+                results = self.vector_store_chunks.similarity_search_with_score(request.search_phrase, k=request.num_results)
 
-            for document, score in results:
-                metadata = document.metadata
-                search_result = SemanticSearchResult(
-                    text=document.page_content,
-                    score=score,
-                    source=metadata["source"],
-                    object_id=metadata["object_id"],
-                    originating_object_id=metadata["originating_object_id"],
-                    originating_object_path=metadata["originating_object_path"],
-                    originating_object_pdf=metadata["originating_object_pdf"]
-                )
-                search_results.results.append(search_result)
+                search_results = SemanticSearchResults(results=[])
 
-            return search_results
+                for document, score in results:
+                    metadata = document.metadata
+                    search_result = SemanticSearchResult(
+                        text=document.page_content,
+                        score=score,
+                        source=metadata["source"],
+                        object_id=metadata["object_id"],
+                        originating_object_id=metadata["originating_object_id"],
+                        originating_object_path=metadata["originating_object_path"],
+                        originating_object_pdf=metadata["originating_object_pdf"]
+                    )
+                    search_results.results.append(search_result)
+
+                return search_results
+            else:
+                # otherwise we're doing document averages
+                if not self.vector_store_documents.client.indices.exists(index="file_data_plaintext"):
+                    return {"error": f"index_not_found_exception"}
+
+                results = self.vector_store_documents.similarity_search_with_score(request.search_phrase, k=request.num_results, fields=["objectId", "originatingObjectId", "originatingObjectPath", "originatingObjectConvertedPdf"])
+
+                search_results = SemanticSearchResults(results=[])
+
+                for document, score in results:
+                    metadata = document.metadata
+                    search_result = SemanticSearchResult(
+                        text=f"{document.page_content[0:100]} ...",
+                        score=score,
+                        source=metadata["source"],
+                        object_id=metadata["objectId"],
+                        originating_object_id=metadata["originatingObjectId"],
+                        originating_object_path=metadata["originatingObjectPath"],
+                        originating_object_pdf=metadata["originatingObjectConvertedPdf"]
+                    )
+                    search_results.results.append(search_result)
+
+                return search_results
+
 
         except Exception as e:
             await logger.aexception(e, message="exception in processing a semantic search request")
