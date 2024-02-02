@@ -1,0 +1,16 @@
+{{ if eq .Values.operation.environment "production" }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: elasticsearch-data-pvc
+  labels:
+    app: elasticsearch
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: elasticsearch-data-pv # the volume we want this claim to bind to
+{{ end }}

@@ -1,0 +1,18 @@
+{{ if eq .Values.operation.environment "production" }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: rabbitmq-data-pv
+  labels:
+    type: local
+    app: rabbitmq
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/rabbitmq/"
+{{ end }}

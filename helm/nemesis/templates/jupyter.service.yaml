@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: jupyter
+  name: jupyter
+spec:
+  type: NodePort
+  ports:
+    - name: "8888"
+      port: 8888
+      targetPort: 8888
+      nodePort: {{ .Values.jupyter.nodePort }}
+  selector:
+    app: jupyter
+status:
+  loadBalancer: {}

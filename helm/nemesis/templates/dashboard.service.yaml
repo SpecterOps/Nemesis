@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: dashboard
+    component: dashboard
+  name: dashboard
+spec:
+  type: NodePort
+  ports:
+    - name: "8601"
+      port: 8601
+      targetPort: 8601
+      nodePort: {{ .Values.dashboard.nodePort }}
+  selector:
+    app: dashboard
+status:
+  loadBalancer: {}

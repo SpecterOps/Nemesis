@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: update-basic-auth
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    spec:
+      serviceAccountName: secret-manager
+      containers:
+      - name: update-script
+        image: bitnami/kubectl:latest
+        command: ["/bin/sh", "/scripts/create-secrets.sh"]
+        volumeMounts:
+        - name: script-volume
+          mountPath: /scripts
+        env:
+          - name: BASIC_AUTH_USER
+            valueFrom:
+              secretKeyRef:
+                name: operation-creds
+                key: basic-auth-user
+          - name: BASIC_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: operation-creds
+                key: basic-auth-password
+      restartPolicy: Never
+      volumes:
+      - name: script-volume
+        configMap:
+          name: operation-creds-script
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: operation-creds-script
+data:
+  create-secrets.sh: |
+    #!/bin/sh
+    set -e # Exit immediately if a command exits with a non-zero status.
+
+    kubectl delete secret basic-auth --ignore-not-found
+
+    # Create basic-auth script
+    encrypted=$(openssl passwd -apr1 "${BASIC_AUTH_PASSWORD}")
+    kubectl create secret generic basic-auth \
+      --from-literal=auth="${BASIC_AUTH_USER}:${encrypted}"

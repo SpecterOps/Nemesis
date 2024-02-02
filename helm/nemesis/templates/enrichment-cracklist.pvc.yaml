@@ -1,0 +1,16 @@
+{{- if eq .Values.operation.environment "production" }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: cracklist-pv-claim
+  labels:
+    app: enrichment
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: cracklist-pv-volume
+{{- end }}

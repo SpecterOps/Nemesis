@@ -1,0 +1,9 @@
+dependencies:
+- name: ingress-nginx
+  repository: https://kubernetes.github.io/ingress-nginx
+  version: 4.9.0
+- name: minio
+  repository: https://charts.bitnami.com/bitnami
+  version: 12.13.1
+digest: sha256:34cd635c86db72dc24af1290d0a0570a6feb6fbea75255ddebd63f4dacb8b526
+generated: "2024-01-12T11:54:47.546652603-05:00"

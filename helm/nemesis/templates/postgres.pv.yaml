@@ -1,0 +1,18 @@
+{{ if eq .Values.operation.environment "production" }}
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: postgres-pv-volume
+  labels:
+    type: local
+    app: postgres
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 15Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "/mnt/data/postgres/"
+    # path: "/postgres-data/"
+{{ end }}

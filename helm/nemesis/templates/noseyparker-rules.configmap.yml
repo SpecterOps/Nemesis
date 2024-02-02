@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: noseyparker-rules
+data:
+  noseyparker.rules: |
+    {{.Files.Get "files/noseyparker/noseyparker.yaml" | nindent 4}}

@@ -1,0 +1,171 @@
+operation:
+  disableSlackAlerting: true
+  # lint: (disableSlackAlerting: false) & (must start with https://)
+  slackWebhook: ""
+  # lint: (disableSlackAlerting: false) & (must start with #)
+  slackChannel: ""
+  logLevel: "INFO"
+  assessmentId: "ASSESS-0"
+  # Can't be localhost because of URL validation in passwordcracker container
+  nemesisHttpServer: "http://127.0.0.1:80/"
+  environment: "development"
+  dataExpirationDays: "100"
+  basicAuthUser: "nemesis"
+  # Default password for basic auth
+  # basicAuthPassword: ""
+
+storage: minio
+
+aws:
+  bucket: "not-applicable"
+  region: "not-applicable"
+  kmsKeyAlias: "not-applicable"
+  accessKeyId: "not-applicable"
+  secretKey: "not-applicable"
+
+minio:
+  rootUser: "nemesis"
+  # rootPassword: ""
+  auth:
+    existingSecret: minio-creds
+  persistence:
+    size: "30Gi"
+  extraEnvVars:
+    - name: MINIO_BROWSER_LOGIN_ANIMATION
+      value: "\"off\""
+
+ingress-nginx:
+  prometheus:
+    create: True
+    port: 9113
+  tcp:
+    5044: "default/nemesis-ls-beats:5044"
+  controller:
+    admissionWebhooks:
+      enabled: false
+
+gotenberg:
+  image:
+    repository: gotenberg/gotenberg
+    tag: "7.8.0"
+    pullPolicy: IfNotPresent
+  nodePort: 31300
+  resources:
+    # requests as specified in https://gotenberg.dev/docs/get-started/kubernetes
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+grafana:
+  user: "nemesis"
+  # password: ""
+
+elasticsearch:
+  user: "nemesis"
+  # password: ""
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1G"
+    limits:
+      cpu: "1000m"
+      memory: "2G"
+
+pgAdmin:
+  nodePort: 31288
+
+postgres:
+  nodePort: 31209
+  user: "nemesis"
+  # password: ""
+  pgadminEmail: "nemesis@nemesis.com"
+  # pgadminPassword: ""
+
+dashboard:
+  nodePort: 30073
+  image:
+    repository: t94j0/nemesis-dashboard
+    tag: latest
+    pullPolicy: IfNotPresent
+  username: "nemesis"
+  # password: ""
+  resources: {}
+
+nemesisWaiter:
+  image:
+    repository: t94j0/nemesis-waiter
+    tag: latest
+    pullPolicy: IfNotPresent
+
+rabbitmq:
+  adminUser: "nemesis"
+  adminPassword: "password"
+  connectionUri: "amqp://nemesis:password@nemesis-rabbitmq-svc:5672/"
+  erlangCookie: "default-cookie"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 100Mi
+
+eck-operator:
+  installCRDs: true
+
+dotnet:
+  nodePort: 31800
+  resources: {}
+  image:
+    repository: t94j0/nemesis-dotnet
+    tag: latest
+    pullPolicy: IfNotPresent
+
+enrichment:
+  image:
+    repository: t94j0/nemesis-enrichment
+    tag: latest
+    pullPolicy: IfNotPresent
+  cracklist:
+    nodePort: 30089
+  yara:
+    nodePort: 30079
+  webapi:
+    nodePort: 30808
+  landingpage:
+    nodePort: 30809
+  monitoring:
+    nodePort: 31693
+
+jupyter:
+  nodePort: 31888
+  image:
+    repository: t94j0/nemesis-jupyter
+    tag: latest
+    pullPolicy: IfNotPresent
+
+nlp:
+  prometheusNodePort: 31692
+  nodePort: 31803
+  image:
+    repository: t94j0/nemesis-nlp
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources: {}
+
+passwordcracker:
+  nodePort: 31990
+  image:
+    repository: t94j0/nemesis-passwordcracker
+    tag: latest
+    pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: "100m"
+      limits:
+        cpu: "2000m"
+
+tika:
+  nodePort: 31998
+  resources: {}
+

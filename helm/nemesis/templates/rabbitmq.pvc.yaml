@@ -1,0 +1,16 @@
+{{ if eq .Values.operation.environment "production" }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: nemesis-rabbitmq-pvc
+  labels:
+    app: rabbitmq
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: rabbitmq-data-pv
+{{ end}}

@@ -1,0 +1,17 @@
+{{- if eq .Values.operation.environment "production" }}
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: cracklist-pv-volume
+  labels:
+    type: local
+    app: enrichment
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "/mnt/data/cracklist/"
+{{- end }}
