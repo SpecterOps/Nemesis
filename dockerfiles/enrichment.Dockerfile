@@ -70,9 +70,6 @@ RUN poetry install $(if [ "${ENVIRONMENT}" = 'production' ]; then echo "--withou
 RUN poetry run pip3 install msfastpbkdf2
 RUN cp /usr/local/lib/python3.11/site-packages/msfastpbkdf2/_fastpbkdf2.abi3.so /app/cmd/enrichment/.venv/lib/python3.11/site-packages/msfastpbkdf2/_fastpbkdf2.abi3.so
 
-# install stuff for sumy
-RUN poetry run python3 -c "import nltk; nltk.download('punkt')"
-
 # the main enrichment container code
 COPY cmd/enrichment/enrichment/ ./enrichment/
 

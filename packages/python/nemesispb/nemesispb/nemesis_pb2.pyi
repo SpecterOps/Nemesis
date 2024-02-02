@@ -4382,26 +4382,6 @@ global___ExtractedHashMessage = ExtractedHashMessage
 class FileDataPlaintext(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
-    class PasswordCandidate(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        LEFT_CONTEXT_FIELD_NUMBER: builtins.int
-        PASSWORD_FIELD_NUMBER: builtins.int
-        RIGHT_CONTEXT_FIELD_NUMBER: builtins.int
-        left_context: builtins.str
-        """"Candidate" password matches (from regex/ML models)"""
-        password: builtins.str
-        right_context: builtins.str
-        def __init__(
-            self,
-            *,
-            left_context: builtins.str = ...,
-            password: builtins.str = ...,
-            right_context: builtins.str = ...,
-        ) -> None: ...
-        def ClearField(self, field_name: typing_extensions.Literal["left_context", b"left_context", "password", b"password", "right_context", b"right_context"]) -> None: ...
-
     OBJECT_ID_FIELD_NUMBER: builtins.int
     ENRICHMENTS_SUCCESS_FIELD_NUMBER: builtins.int
     ENRICHMENTS_FAILURE_FIELD_NUMBER: builtins.int
@@ -4411,8 +4391,6 @@ class FileDataPlaintext(google.protobuf.message.Message):
     ORIGINATING_OBJECT_SIZE_FIELD_NUMBER: builtins.int
     WORD_COUNT_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
-    MODEL_PASSWORDS_FIELD_NUMBER: builtins.int
-    REGEX_PASSWORDS_FIELD_NUMBER: builtins.int
     NOSEYPARKER_FIELD_NUMBER: builtins.int
     object_id: builtins.str
     """the Nemesis UUID referencing the plaintext file in S3"""
@@ -4435,12 +4413,6 @@ class FileDataPlaintext(google.protobuf.message.Message):
     summary: builtins.str
     """short summary of the text"""
     @property
-    def model_passwords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___FileDataPlaintext.PasswordCandidate]:
-        """any extracted model password candidates"""
-    @property
-    def regex_passwords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___FileDataPlaintext.PasswordCandidate]:
-        """any extracted regex password candidates"""
-    @property
     def noseyparker(self) -> global___NoseyParker:
         """any NoseyParker results (including hashes) for the plaintext"""
     def __init__(
@@ -4455,12 +4427,10 @@ class FileDataPlaintext(google.protobuf.message.Message):
         originating_object_size: builtins.int = ...,
         word_count: builtins.int = ...,
         summary: builtins.str = ...,
-        model_passwords: collections.abc.Iterable[global___FileDataPlaintext.PasswordCandidate] | None = ...,
-        regex_passwords: collections.abc.Iterable[global___FileDataPlaintext.PasswordCandidate] | None = ...,
         noseyparker: global___NoseyParker | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["noseyparker", b"noseyparker"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["enrichments_failure", b"enrichments_failure", "enrichments_success", b"enrichments_success", "model_passwords", b"model_passwords", "noseyparker", b"noseyparker", "object_id", b"object_id", "originating_object_converted_pdf", b"originating_object_converted_pdf", "originating_object_id", b"originating_object_id", "originating_object_path", b"originating_object_path", "originating_object_size", b"originating_object_size", "regex_passwords", b"regex_passwords", "summary", b"summary", "word_count", b"word_count"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["enrichments_failure", b"enrichments_failure", "enrichments_success", b"enrichments_success", "noseyparker", b"noseyparker", "object_id", b"object_id", "originating_object_converted_pdf", b"originating_object_converted_pdf", "originating_object_id", b"originating_object_id", "originating_object_path", b"originating_object_path", "originating_object_size", b"originating_object_size", "summary", b"summary", "word_count", b"word_count"]) -> None: ...
 
 global___FileDataPlaintext = FileDataPlaintext
 

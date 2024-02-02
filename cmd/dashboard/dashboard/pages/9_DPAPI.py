@@ -221,7 +221,7 @@ def render_page(username: str):
                         st.success(f"Successful Nemesis submission: {submission_id}", icon="✅")
                         time.sleep(5)
                         st.cache_data.clear()
-                        st.experimental_rerun()
+                        st.rerun()
 
         gb = GridOptionsBuilder.from_dataframe(df)
 

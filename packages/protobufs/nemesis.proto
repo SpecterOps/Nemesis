@@ -1670,13 +1670,6 @@ message ExtractedHashMessage {
 
 
 message FileDataPlaintext {
-  message PasswordCandidate {
-    // "Candidate" password matches (from regex/ML models)
-    string left_context = 1;
-    string password = 2;
-    string right_context = 3;
-  }
-
   // the Nemesis UUID referencing the plaintext file in S3
   string object_id = 1;
 
@@ -1703,12 +1696,6 @@ message FileDataPlaintext {
 
   // short summary of the text
   string summary = 11;
-
-  // any extracted model password candidates
-  repeated PasswordCandidate model_passwords = 20;
-
-  // any extracted regex password candidates
-  repeated PasswordCandidate regex_passwords = 22;
 
   // any NoseyParker results (including hashes) for the plaintext
   NoseyParker noseyparker = 24;

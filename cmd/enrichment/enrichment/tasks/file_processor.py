@@ -33,9 +33,6 @@ from nemesiscommon.tasking import TaskInterface
 from plyara import utils as plyara_utils
 from prometheus_async import aio
 from prometheus_client import Summary
-from sumy.nlp.tokenizers import Tokenizer
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.summarizers.text_rank import TextRankSummarizer
 
 logger = structlog.get_logger(module=__name__)
 
@@ -51,7 +48,6 @@ class FileProcessor(TaskInterface):
     dotnet_uri: str
     gotenberg_uri: str
     kibana_url: str
-    ml_models_uri: str
 
     # Queues
     in_q_filedata: MessageQueueConsumerInterface
@@ -71,7 +67,6 @@ class FileProcessor(TaskInterface):
     out_q_rawdata: MessageQueueProducerInterface
 
     chunk_size: int
-    model_word_limit: int
     extracted_archive_size_limit: int
     data_download_dir: str
     kibana_url: str
@@ -86,13 +81,11 @@ class FileProcessor(TaskInterface):
         crack_list_uri: str,
         dotnet_uri: str,
         gotenberg_uri: str,
-        ml_models_uri: str,
         public_kibana_url: str,
         # Other settings
         chunk_size: int,
         data_download_dir: str,
         extracted_archive_size_limit: int,
-        model_word_limit: int,
         # Queues
         in_q_filedata: MessageQueueConsumerInterface,
         in_q_filedataenriched: MessageQueueConsumerInterface,
@@ -120,12 +113,10 @@ class FileProcessor(TaskInterface):
         self.dotnet_uri = dotnet_uri
         self.gotenberg_uri = gotenberg_uri
         self.kibana_url = public_kibana_url
-        self.ml_models_uri = ml_models_uri
 
         self.chunk_size = chunk_size  # number of bytes to read at a time per file
         self.data_download_dir = data_download_dir
         self.extracted_archive_size_limit = extracted_archive_size_limit  # upper size limit of an (extracted) archive to process
-        self.model_word_limit = model_word_limit  # only summarize/extract passwords for documents below this word limit
 
         self.in_q_filedata = in_q_filedata
         self.in_q_filedataenriched = in_q_filedataenriched
@@ -149,9 +140,6 @@ class FileProcessor(TaskInterface):
 
         # number of bytes to read at a time per file
         self.chunk_size = chunk_size
-
-        # only summarize/extract passwords for documents below this word limit
-        self.model_word_limit = model_word_limit
 
         # load up the file parsing modules
         (self.file_modules, self.file_module_names) = helpers.dynamic_import_from_src("./enrichment/lib/file_parsers")
@@ -268,9 +256,6 @@ class FileProcessor(TaskInterface):
 
         # now get its magic type from the first 2048 bytes using python-magic
         file_magic_type = helpers.get_magic_type(file_path_on_disk)
-
-        # check if the file can have plaintext extracted with Tika
-        tika_compatible = helpers.tika_compatible(file_path)
 
         # check if this file is an office document
         is_office_doc = helpers.is_office_doc(file_path)
@@ -577,6 +562,10 @@ class FileProcessor(TaskInterface):
         # Check if the office document was encrypted
         doc_is_encrypted = file_data.parsed_data.is_encrypted
 
+        mime_type = await self.text_extractor.detect(file_path_on_disk)
+        tika_compatible = helpers.tika_compatible(mime_type)
+        await logger.ainfo(f"mime type: {mime_type}, tika_compatible: {tika_compatible}", object_id=file_data.object_id)
+
         # If the file is known to be tika compatible, or is not a binary file
         #   and is also not known source code, and is not an encrypted word doc,
         #   then try to extract text and index is
@@ -599,7 +588,7 @@ class FileProcessor(TaskInterface):
             pdf_size_limit = 25000000
             if (file_data.size > pdf_size_limit):
                 await logger.awarning(
-                    f"file '{file_data.name}' is over the conversion size limit of  {pdf_size_limit} bytes"
+                    f"file '{file_data.name}' is over the PDF conversion size limit of  {pdf_size_limit} bytes"
                 )
             else:
                 orig_filename = file_path_on_disk
@@ -1029,35 +1018,6 @@ class FileProcessor(TaskInterface):
                             await logger.awarning(f"Result {temp_file.path} is 0 bytes")
                             return None
 
-    async def extract_passwords(self, file_path: str) -> dict:
-        """Calls the self.ml_models_uri to extract password candidates from a plaintext document."""
-
-        try:
-            data = {"object_id": file_path}
-            url = f"{self.ml_models_uri}passwords"
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=data) as resp:
-                    resp.raise_for_status()
-                    response = await resp.json()
-                    return response
-
-        except Exception as e:
-            await logger.aexception(e, message="Error calling ml_models", file_path=file_path)
-            return {"error": f"Error calling ml_models on {file_path} : {e}"}
-
-    async def summarize_text(self, file_path: str, num_sentences: int = 4) -> str:
-        """Summarizes a local text file using the `sumy` Python library."""
-        try:
-            parser = PlaintextParser.from_file(file_path, Tokenizer("english"))
-            summarizer = TextRankSummarizer()
-            summary = " ".join([f"{sentence}" for sentence in summarizer(parser.document, num_sentences)])
-            summary = re.sub("\\s", " ", summary)
-            return summary
-        except Exception as e:
-            await logger.aerror(f"Error summarizing {file_path} : {e}")
-            return f"Error: summarizing {file_path} : {e}"
-
     async def update_cracklist(self, object_id: str, client_id: str) -> bool:
         """Calls self.crack_list_uri to update the cracklist with the current plaintext file.
 
@@ -1209,50 +1169,6 @@ class FileProcessor(TaskInterface):
                         word_count += len(chunk.split())
 
                 file_data_plaintext.word_count = word_count
-
-                if file_data_plaintext.word_count < self.model_word_limit:
-                    # model/regex password candidate from the plaintext
-                    password_candidates = await self.extract_passwords(file_data_plaintext.object_id)
-
-                    if "error" in password_candidates:
-                        await logger.aerror(
-                            "Failed to run extract_passwords() on plaintext file",
-                            message=password_candidates["error"],
-                            file_path=file_data_plaintext.object_id,
-                        )
-                        enrichments_failure.append(constants.E_EXTRACT_PASSWORDS)
-                    else:
-                        enrichments_success.append(constants.E_EXTRACT_PASSWORDS)
-
-                    if "model_password_candidates" in password_candidates:
-                        for model_password_candidate in password_candidates["model_password_candidates"]:
-                            password_candidate = file_data_plaintext.model_passwords.add()
-                            password_candidate.left_context = " ".join(model_password_candidate["left_context"])
-                            password_candidate.password = model_password_candidate["password"]
-                            password_candidate.right_context = " ".join(model_password_candidate["right_context"])
-                    if "regex_password_candidates" in password_candidates:
-                        for regex_password_candidate in password_candidates["regex_password_candidates"]:
-                            password_candidate = file_data_plaintext.regex_passwords.add()
-                            password_candidate.left_context = " ".join(regex_password_candidate["left_context"])
-                            password_candidate.password = regex_password_candidate["password"]
-                            password_candidate.right_context = " ".join(regex_password_candidate["right_context"])
-
-                # summarization, in 4 sentences here, if under MODEL_WORD_LIMIT words
-                if file_data_plaintext.word_count < self.model_word_limit:
-                    summary = f"{await self.summarize_text(temp_file.name, 4)}"
-                    if summary.startswith("Error:"):
-                        await logger.aerror(
-                            "Failed to run summarize_text() on plaintext file",
-                            message=summary,
-                            file_path=file_data_plaintext.object_id,
-                        )
-                        enrichments_failure.append(constants.E_SUMMARIZE)
-                    else:
-                        file_data_plaintext.summary = summary
-                        enrichments_success.append(constants.E_SUMMARIZE)
-                else:
-                    file_data_plaintext.summary = f"file contents were above {self.model_word_limit} word limit"
-                    enrichments_failure.append(constants.E_SUMMARIZE)
 
                 # run NoseyParker on the plaintext for anything we can find
                 try:

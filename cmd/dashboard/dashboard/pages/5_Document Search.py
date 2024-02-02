@@ -65,7 +65,7 @@ def build_page(username: str):
     st.session_state.current_tab = chosen_tab
     st.query_params["current_tab"] = chosen_tab
 
-    if st.query_params["current_tab"] == "text_search":
+    if chosen_tab == "text_search":
         st.subheader("Document Search")
 
         if "code_search" in st.query_params:
@@ -133,7 +133,8 @@ def build_page(username: str):
                 originating_object_id=originatingObjectId,
             )
             st.write(header, unsafe_allow_html=True)
-            st.markdown(highlights)
+            # st.markdown(highlights)
+            st.code(highlights, None)
             st.write(footer, unsafe_allow_html=True)
 
         # pagination
@@ -226,6 +227,12 @@ def build_page(username: str):
             del st.query_params["code_page"]
 
         cols = st.columns(2)
+
+        with cols[0]:
+            search_choice = st.selectbox(
+                "Search over text chunk embeddings or weighted document averages",
+                ("text_chunks", "document_averages")
+            )
         with cols[1]:
             num_results = st.slider("Select the number of results to return", min_value=0, max_value=10, value=4, step=1)
 
@@ -235,7 +242,7 @@ def build_page(username: str):
             st.session_state.text_search = search_term
 
             try:
-                json_results = utils.semantic_search(search_term, num_results)
+                json_results = utils.semantic_search(search_term, search_choice, num_results)
                 if json_results and "error" in json_results:
                     error = json_results["error"]
                     if "index_not_found_exception" in error:
