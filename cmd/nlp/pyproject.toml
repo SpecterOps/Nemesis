@@ -11,7 +11,7 @@ app = "nlp.__main__:main"
 [tool.poetry.dependencies]
 python = "^3.11.2"
 typing-extensions = "^4.5.0"
-fastapi = "^0.109.0"
+fastapi = "^0.109.2"
 uvicorn = { extras = ["standard"], version = "^0.22.0" }
 prometheus-async  = { extras = ["aiohttp"], version = "^22.2.0"}
 aiohttp = "^3.9.3"
