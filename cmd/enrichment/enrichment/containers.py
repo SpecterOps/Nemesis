@@ -480,6 +480,7 @@ class Container(containers.DeclarativeContainer):
         ElasticConnector,
         storage_service,
         elasticsearch_client,
+        config.plaintext_size_limit,
         config.web_api_url,
         config.public_kibana_url,
         inputq_authdata_elasticconnector,

@@ -227,12 +227,6 @@ def build_page(username: str):
             del st.query_params["code_page"]
 
         cols = st.columns(2)
-
-        with cols[0]:
-            search_choice = st.selectbox(
-                "Search over text chunk embeddings or weighted document averages",
-                ("text_chunks", "document_averages")
-            )
         with cols[1]:
             num_results = st.slider("Select the number of results to return", min_value=0, max_value=10, value=4, step=1)
 
@@ -242,7 +236,7 @@ def build_page(username: str):
             st.session_state.text_search = search_term
 
             try:
-                json_results = utils.semantic_search(search_term, search_choice, num_results)
+                json_results = utils.semantic_search(search_term, num_results)
                 if json_results and "error" in json_results:
                     error = json_results["error"]
                     if "index_not_found_exception" in error:

@@ -8,7 +8,8 @@ import nemesispb.nemesis_pb2 as pb
 import structlog
 import uvicorn
 from fastapi import FastAPI
-from nemesiscommon.messaging_rabbitmq import NemesisRabbitMQConsumer
+from nemesiscommon.messaging_rabbitmq import (NemesisRabbitMQConsumer,
+                                              NemesisRabbitMQProducer)
 from nemesiscommon.setupqueues import initRabbitMQ
 from nemesiscommon.socketwaiter import SocketWaiter
 from nemesiscommon.storage_s3 import StorageS3
@@ -92,9 +93,20 @@ class App:
         async with (
             await NemesisRabbitMQConsumer.create(
                 self.cfg.rabbitmq_connection_uri, constants.Q_FILE_DATA_PLAINTEXT, pb.FileDataPlaintextMessage, "indexingservice", 1
-            ) as textQ,
+            ) as plaintext_input_queue,
+            await NemesisRabbitMQConsumer.create(
+                self.cfg.rabbitmq_connection_uri, constants.Q_FILE_DATA_PLAINTEXT_CHUNK, pb.FileDataPlaintextChunkMessage, "indexingservice", 1
+            ) as plaintext_chunk_input_queue,
+            await NemesisRabbitMQProducer.create(
+                self.cfg.rabbitmq_connection_uri,
+                constants.Q_FILE_DATA_PLAINTEXT_CHUNK
+            ) as plaintext_chunk_output_queue,
         ):
-            service = IndexingService(textQ, self.cfg, self.storage)
+            service = IndexingService(  self.cfg,
+                                        self.storage,
+                                        plaintext_input_queue,
+                                        plaintext_chunk_input_queue,
+                                        plaintext_chunk_output_queue)
             await service.run()
 
     async def start_semantic_search_api(self) -> None:

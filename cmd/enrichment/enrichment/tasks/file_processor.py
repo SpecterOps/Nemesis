@@ -1162,13 +1162,16 @@ class FileProcessor(TaskInterface):
                     enrichments_failure.append(constants.E_UPDATE_CRACKLIST)
 
                 word_count = 0
+                size = 0
 
                 with open(temp_file.name, "rb") as f:
                     # chunking to handle large files
                     while chunk := f.read(self.chunk_size):
                         word_count += len(chunk.split())
+                        size += len(chunk)
 
                 file_data_plaintext.word_count = word_count
+                file_data_plaintext.size = size
 
                 # run NoseyParker on the plaintext for anything we can find
                 try:

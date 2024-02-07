@@ -227,36 +227,15 @@ def semantic_search_result(result) ->str:
 
     originating_object_id = result["originating_object_id"]
     originating_object_path = result["originating_object_path"]
-    pdf_object_id = result["originating_object_pdf"]
 
     view_file_url = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={originating_object_id}"
-    originating_object_pdf_url = f"{WEB_API_URL}download/{pdf_object_id}?name=result.pdf&action=view"
 
-    pdf_html = (
-        f"""
-<a href="{originating_object_pdf_url}">PDF Link</a>
-"""
-        if pdf_object_id
-        else None
-    )
-
-    if pdf_html:
-        return f"""
-        <div style="font-size:120%;">
-            <a href="{view_file_url}">
-                {originating_object_path}
-            </a>
-        </div>
-        <div style="color:grey;font-size:95%;">
-            Score: {score}<br>{f"Source: {source}" if source else ""}<br>{pdf_html}
-        """
-    else:
-        return f"""
-        <div style="font-size:120%;">
-            <a href="{view_file_url}">
-                {originating_object_path}
-            </a>
-        </div>
-        <div style="color:grey;font-size:95%;">
-            Score: {score}<br>{f"Source: {source}" if source else ""}<br>
-        """
+    return f"""
+    <div style="font-size:120%;">
+        <a href="{view_file_url}">
+            {originating_object_path}
+        </a>
+    </div>
+    <div style="color:grey;font-size:95%;">
+        Similarity Score: {score}<br>{f"Source: {source}" if source else ""}<br>
+    """

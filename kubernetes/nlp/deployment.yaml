@@ -90,10 +90,15 @@ spec:
             - name: ELASTIC_INDEX_NAME
               value: "text_embeddings"
             - name: EMBEDDING_MODEL
-              value: "TaylorAI/bge-micro-v2"
-              # value: "TaylorAI/gte-tiny" # potentially more accurate but slower
-            - name: text_chunk_size
-              value: "500"
+              # value: "TaylorAI/bge-micro-v2" # ranked lowest but fastest - 13/sec
+              value: "TaylorAI/gte-tiny"  # ranked higher but slower - 7.7
+              # value: "thenlper/gte-small" # ranked highest but slowest - 3-3.3
+            - name: TEXT_CHUNK_SIZE
+              value: "510"
+            - name: PLAINTEXT_SIZE_LIMIT
+              value: "100000000" # max number of bytes for a plaintext doc to prevent indexing
+            - name: NORMALIZE_EMBEDDINGS
+              value: "False"
             - name: ELASTICSEARCH_URL
               value: http://nemesis-es-internal-http:9200/
             - name: ELASTICSEARCH_USER
@@ -117,7 +122,13 @@ spec:
               name: nlp-http
             # - containerPort: 9801
             #   name: dotnet-prom
-          resources: {}
+          resources:
+            requests:
+              memory: "500Mi"
+              cpu: "250m"
+            limits:
+              memory: "1500Mi"
+              cpu: "1500m"
           readinessProbe:
             httpGet:
               path: /ready

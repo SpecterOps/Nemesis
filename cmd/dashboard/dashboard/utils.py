@@ -53,13 +53,13 @@ engine = create_engine(POSTGRES_CONNECTION_URI)
 ######################################################
 
 
-def semantic_search(search_phrase: str, search_choice: str, num_results: int = 4) -> dict:
+def semantic_search(search_phrase: str, num_results: int = 4) -> dict:
     """
     Calls {NLP_URL}/semantic_search to extract password candidates from a plaintext document.
     """
 
     try:
-        data = {"search_phrase": search_phrase, "search_choice": search_choice, "num_results": num_results}
+        data = {"search_phrase": search_phrase, "num_results": num_results}
         url = f"{NLP_URL}semantic_search"
         result = requests.post(url, json=data)
         return result.json()
