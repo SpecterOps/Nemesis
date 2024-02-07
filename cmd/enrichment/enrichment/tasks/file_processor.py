@@ -68,6 +68,7 @@ class FileProcessor(TaskInterface):
 
     chunk_size: int
     extracted_archive_size_limit: int
+    plaintext_size_limit: int
     data_download_dir: str
     kibana_url: str
 
@@ -86,6 +87,7 @@ class FileProcessor(TaskInterface):
         chunk_size: int,
         data_download_dir: str,
         extracted_archive_size_limit: int,
+        plaintext_size_limit: int,
         # Queues
         in_q_filedata: MessageQueueConsumerInterface,
         in_q_filedataenriched: MessageQueueConsumerInterface,
@@ -117,6 +119,7 @@ class FileProcessor(TaskInterface):
         self.chunk_size = chunk_size  # number of bytes to read at a time per file
         self.data_download_dir = data_download_dir
         self.extracted_archive_size_limit = extracted_archive_size_limit  # upper size limit of an (extracted) archive to process
+        self.plaintext_size_limit = plaintext_size_limit
 
         self.in_q_filedata = in_q_filedata
         self.in_q_filedataenriched = in_q_filedataenriched
@@ -1152,15 +1155,6 @@ class FileProcessor(TaskInterface):
         try:
             # download the file from the nemesis API
             with await self.storage.download(uuid.UUID(nemesis_uuid)) as temp_file:
-                # update the cracking list with this plaintext file + the project ID
-                # TODO: is this working?
-                success = await self.update_cracklist(nemesis_uuid, file_data_plaintext_message.metadata.project)
-
-                if success:
-                    enrichments_success.append(constants.E_UPDATE_CRACKLIST)
-                else:
-                    enrichments_failure.append(constants.E_UPDATE_CRACKLIST)
-
                 word_count = 0
                 size = 0
 
@@ -1172,6 +1166,17 @@ class FileProcessor(TaskInterface):
 
                 file_data_plaintext.word_count = word_count
                 file_data_plaintext.size = size
+
+                # update the cracking list with this plaintext file + the project ID
+                if size > self.plaintext_size_limit:
+                    await logger.awarning(f"Plaintext object is over the plaintext_size_limit of {self.plaintext_size_limit}, not adding to cracklist", object_id=nemesis_uuid)
+                else:
+                    success = await self.update_cracklist(nemesis_uuid, file_data_plaintext_message.metadata.project)
+
+                    if success:
+                        enrichments_success.append(constants.E_UPDATE_CRACKLIST)
+                    else:
+                        enrichments_failure.append(constants.E_UPDATE_CRACKLIST)
 
                 # run NoseyParker on the plaintext for anything we can find
                 try:

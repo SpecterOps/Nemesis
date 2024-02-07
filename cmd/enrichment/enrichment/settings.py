@@ -58,7 +58,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     slack_emoji: str
     slack_channel: Optional[str]
     chunk_size: PositiveInt
-    plaintext_size_limit: PositiveInt = 100000000
+    plaintext_size_limit: PositiveInt = 50000000
     yara_api_port: int = Field(None, ge=0, le=65535)
     disable_alerting: bool = False
     crack_wordlist_top_words: CrackWordlistSize  # either 10000 or 100000 for now

@@ -511,6 +511,7 @@ class Container(containers.DeclarativeContainer):
         config.chunk_size,
         config.data_download_dir,
         config.extracted_archive_size_limit,
+        config.plaintext_size_limit,
         # Queues
         inputq_filedata_fileprocessor,
         inputq_filedataenriched_fileprocessor,
