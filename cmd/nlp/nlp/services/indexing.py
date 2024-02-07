@@ -139,7 +139,7 @@ class IndexingService(TaskInterface):
             size = data.size
 
             if size > self.cfg.plaintext_size_limit:
-                await logger.awarning(f"Plaintext object is over the plaintext_size_limit of {self.cfg.plaintext_size_limit}", object_id=object_id)
+                await logger.awarning(f"Plaintext object is over the plaintext_size_limit of {self.cfg.plaintext_size_limit}, not indexing embeddings", object_id=object_id)
             else:
                 try:
                     with await self.storage.download(object_id) as file:

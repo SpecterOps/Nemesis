@@ -198,7 +198,7 @@ class ElasticConnector(TaskInterface):
 
             with await self.storage.download(file_uuid) as temp_file:
                 if os.path.getsize(temp_file.name) > self.plaintext_size_limit:
-                    await logger.awarning(f"Plaintext object is over the plaintext_size_limit of {self.cfg.plaintext_size_limit}", object_id=d.object_id)
+                    await logger.awarning(f"Plaintext object is over the plaintext_size_limit of {self.plaintext_size_limit}, not indexing into Elastic", object_id=d.object_id)
                 else:
                     # index the plaintext if we have it
                     with open(temp_file.name, "r") as f:
