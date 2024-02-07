@@ -96,7 +96,7 @@ spec:
             - name: TEXT_CHUNK_SIZE
               value: "510"
             - name: PLAINTEXT_SIZE_LIMIT
-              value: "100000000" # max number of bytes for a plaintext doc to prevent indexing
+              value: "50000000" # max number of bytes for a plaintext doc to prevent indexing of embeddings
             - name: NORMALIZE_EMBEDDINGS
               value: "False"
             - name: ELASTICSEARCH_URL
