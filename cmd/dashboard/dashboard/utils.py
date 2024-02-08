@@ -53,13 +53,13 @@ engine = create_engine(POSTGRES_CONNECTION_URI)
 ######################################################
 
 
-def semantic_search(search_phrase: str, num_results: int = 4) -> dict:
+def semantic_search(search_phrase: str, file_path_include: str, file_path_exclude: str, num_results: int = 4) -> dict:
     """
     Calls {NLP_URL}/semantic_search to extract password candidates from a plaintext document.
     """
 
     try:
-        data = {"search_phrase": search_phrase, "num_results": num_results}
+        data = {"search_phrase": search_phrase, "file_path_include": file_path_include, "file_path_exclude": file_path_exclude, "num_results": num_results}
         url = f"{NLP_URL}semantic_search"
         result = requests.post(url, json=data)
         return result.json()
@@ -846,7 +846,7 @@ def elastic_file_search(object_id: str) -> dict:
         return {}
 
 
-def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
+def elastic_text_search(search_term: str, file_path_include: str, file_path_exclude: str, from_i: int, size: int) -> dict:
     """
     Searches the 'file_data_plaintext' index in Elasticsearch for
     the supplied search term, paginating results based on the
@@ -854,14 +854,31 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
     """
     try:
         es_client = wait_for_elasticsearch()
+
         query = {
-            "wildcard": {
-                "text": {
-                    "value": search_term,
-                    "case_insensitive": True
-                }
+            "bool": {
+                "must": [
+                    {
+                        "wildcard": {"text": {"value": search_term, "case_insensitive": True}}
+                    },
+                ]
             }
         }
+        if file_path_include:
+             file_path_include = file_path_include.replace("\\", "/")
+             query["bool"]["must"].append(
+                {
+                    "wildcard": {"originatingObjectPath.keyword": {"value": file_path_include, "case_insensitive": True}}
+                }
+             )
+        if file_path_exclude:
+             file_path_exclude = file_path_exclude.replace("\\", "/")
+             query["bool"]["must_not"] = [
+                {
+                    "wildcard": {"originatingObjectPath.keyword": {"value": file_path_exclude, "case_insensitive": True}}
+                }
+             ]
+
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
             "_id",
@@ -872,8 +889,7 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
             "wordCount",
             "metadata.source",
         ]
-        result = es_client.search(index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields)
-        return result
+        return es_client.search(index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields)
     except Exception as e:
         if "index_not_found_exception" in f"{e}":
             st.error("Elastic index 'file_data_plaintext' doesn't yet exist - no text data has been extracted yet!", icon="🚨")
@@ -882,7 +898,7 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
         return None
 
 
-def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
+def elastic_sourcecode_search(search_term: str, file_path_include: str, file_path_exclude: str, from_i: int, size: int) -> dict:
     """
     Searches the 'file_data_sourcecode' index in Elasticsearch for
     the supplied search term, paginating results based on the
@@ -890,14 +906,32 @@ def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
     """
     try:
         es_client = wait_for_elasticsearch()
+
         query = {
-            "wildcard": {
-                "text": {
-                    "value": search_term,
-                    "case_insensitive": True
-                }
+            "bool": {
+                "must": [
+                    {
+                        "wildcard": {"text": {"value": search_term, "case_insensitive": True}}
+                    },
+                ]
             }
         }
+
+        if file_path_include:
+             file_path_include = file_path_include.replace("\\", "/")
+             query["bool"]["must"].append(
+                {
+                    "wildcard": {"path.keyword": {"value": file_path_include, "case_insensitive": True}}
+                }
+             )
+        if file_path_exclude:
+             file_path_exclude = file_path_exclude.replace("\\", "/")
+             query["bool"]["must_not"] = [
+                {
+                    "wildcard": {"path.keyword": {"value": file_path_exclude, "case_insensitive": True}}
+                }
+             ]
+
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
             "_id",

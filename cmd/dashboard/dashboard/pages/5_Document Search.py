@@ -73,6 +73,15 @@ def build_page(username: str):
         if "code_page" in st.query_params:
             del st.query_params["code_page"]
 
+        with st.expander("Search Filters"):
+            cols = st.columns(2)
+            file_path_include = ""
+            file_path_exclude = ""
+            with cols[0]:
+                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
+            with cols[1]:
+                file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
+
         text_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.text_search)
 
         if not text_search_term:
@@ -87,7 +96,7 @@ def build_page(username: str):
 
         from_i = (st.session_state.text_page - 1) * PAGE_SIZE
 
-        results = utils.elastic_text_search(text_search_term, from_i, PAGE_SIZE)
+        results = utils.elastic_text_search(text_search_term, file_path_include, file_path_exclude, from_i, PAGE_SIZE)
         if not results:
             st.write(templates.no_result_html(), unsafe_allow_html=True)
             return
@@ -151,6 +160,15 @@ def build_page(username: str):
         if "text_page" in st.query_params:
             del st.query_params["text_page"]
 
+        with st.expander("Search Filters"):
+            cols = st.columns(2)
+            file_path_include = ""
+            file_path_exclude = ""
+            with cols[0]:
+                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
+            with cols[1]:
+                file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
+
         code_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.code_search)
 
         if not code_search_term:
@@ -165,7 +183,7 @@ def build_page(username: str):
 
         from_i = (st.session_state.code_page - 1) * PAGE_SIZE
 
-        results = utils.elastic_sourcecode_search(code_search_term, from_i, PAGE_SIZE)
+        results = utils.elastic_sourcecode_search(code_search_term, file_path_include, file_path_exclude, from_i, PAGE_SIZE)
         if not results:
             st.write(templates.no_result_html(), unsafe_allow_html=True)
             return
@@ -226,17 +244,26 @@ def build_page(username: str):
         if "code_page" in st.query_params:
             del st.query_params["code_page"]
 
+        with st.expander("Search Filters"):
+            cols = st.columns(2)
+            file_path_include = ""
+            file_path_exclude = ""
+            with cols[0]:
+                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
+            with cols[1]:
+                file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
+
+        search_term = st.text_input("Enter search term(s):")
+
         cols = st.columns(2)
         with cols[1]:
             num_results = st.slider("Select the number of results to return", min_value=0, max_value=10, value=4, step=1)
-
-        search_term = st.text_input("Enter search term(s):")
 
         if search_term != "":
             st.session_state.text_search = search_term
 
             try:
-                json_results = utils.semantic_search(search_term, num_results)
+                json_results = utils.semantic_search(search_term, file_path_include, file_path_exclude, num_results)
                 if json_results and "error" in json_results:
                     error = json_results["error"]
                     if "index_not_found_exception" in error:
@@ -246,7 +273,7 @@ def build_page(username: str):
                 elif not json_results or "results" not in json_results:
                     st.warning("No results retrieved from semantic search, service might be busy")
                 else:
-                    if len(json_results) > 0:
+                    if json_results and json_results["results"] and len(json_results["results"]) > 0:
                         for result in json_results["results"]:
                             header = templates.semantic_search_result(result)
                             st.subheader("", divider="red")

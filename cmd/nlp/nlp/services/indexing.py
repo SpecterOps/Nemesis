@@ -17,18 +17,13 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores.elasticsearch import ElasticsearchStore
 from nemesiscommon.messaging import (MessageQueueConsumerInterface,
                                      MessageQueueProducerInterface)
-from nemesiscommon.tasking import TaskInterface
 from nemesiscommon.storage import StorageInterface
+from nemesiscommon.tasking import TaskInterface
 from nlp.settings import NLPSettings
 from prometheus_async import aio
 from prometheus_client import Summary
 
 logger = structlog.get_logger(module=__name__)
-
-
-def split(list_a, chunk_size):
-    for i in range(0, len(list_a), chunk_size):
-        yield list_a[i:i + chunk_size]
 
 
 def wait_for_elasticsearch(elasticsearch_url: str, elasticsearch_user: str, elasticsearch_password: str):
@@ -50,6 +45,11 @@ def wait_for_elasticsearch(elasticsearch_url: str, elasticsearch_user: str, elas
             )
             time.sleep(5)
             continue
+
+
+def split(list_a, chunk_size):
+    for i in range(0, len(list_a), chunk_size):
+        yield list_a[i:i + chunk_size]
 
 
 class IndexingService(TaskInterface):
