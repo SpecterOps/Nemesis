@@ -34,6 +34,7 @@ Q_DPAPI_MASTERKEY: NemesisQueue = "dpapi_masterkey"
 Q_EXTRACTED_HASH: NemesisQueue = "extracted_hash"
 Q_FILE_DATA_ENRICHED: NemesisQueue = "file_data_enriched"
 Q_FILE_DATA_PLAINTEXT: NemesisQueue = "file_data_plaintext"
+Q_FILE_DATA_PLAINTEXT_CHUNK: NemesisQueue = "file_data_plaintext_chunk"
 Q_FILE_DATA_SOURCECODE: NemesisQueue = "file_data_sourcecode"
 Q_FILE_DATA: NemesisQueue = "file_data"
 Q_FILE_INFORMATION: NemesisQueue = "file_information"
@@ -67,6 +68,7 @@ ALL_QUEUES: List[NemesisQueue] = [
     Q_EXTRACTED_HASH,
     Q_FILE_DATA_ENRICHED,
     Q_FILE_DATA_PLAINTEXT,
+    Q_FILE_DATA_PLAINTEXT_CHUNK,
     Q_FILE_DATA_SOURCECODE,
     Q_FILE_DATA,
     Q_FILE_INFORMATION,

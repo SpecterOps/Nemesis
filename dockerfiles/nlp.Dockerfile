@@ -53,9 +53,11 @@ ENV PATH="/app/cmd/nlp/.venv/bin:$PATH"
 
 # preload the main embedding model(s) we're using so we don't have to wait for it to download on first use
 
-# better ranked but slower
+# best ranked but slowest
+RUN python3 -c "from langchain.embeddings import HuggingFaceEmbeddings; embeddings=HuggingFaceEmbeddings(model_name='thenlper/gte-small')"
+# middle speed/rank
 RUN python3 -c "from langchain.embeddings import HuggingFaceEmbeddings; embeddings=HuggingFaceEmbeddings(model_name='TaylorAI/gte-tiny')"
-# faster but not as effective
+# fastest but worst ranked
 RUN python3 -c "from langchain.embeddings import HuggingFaceEmbeddings; embeddings=HuggingFaceEmbeddings(model_name='TaylorAI/bge-micro-v2')"
 
 

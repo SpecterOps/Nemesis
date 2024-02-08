@@ -59,6 +59,8 @@ spec:
               value: "128000"
             - name: YARA_API_PORT
               value: "9700"
+            - name: PLAINTEXT_SIZE_LIMIT
+              value: "50000000" # max number of bytes for a plaintext doc to prevent indexing
 
             - name: TIKA_URI
               value: http://tika:9998/
