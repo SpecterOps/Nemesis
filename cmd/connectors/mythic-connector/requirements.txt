@@ -1,6 +1,6 @@
-aiohttp==3.9.3
+aiohttp==3.8.6
 redis==3.5.3
-mythic==0.1.6
+mythic==0.1.8
 requests==2.31.0
 elasticsearch==8.4.1
 gql==3.4.1
