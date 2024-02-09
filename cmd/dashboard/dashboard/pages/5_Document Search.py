@@ -21,18 +21,22 @@ def build_about_expander():
         of each document is also broken into chunks of ~500 tokens/words each which
         are also indexed into Elasticsearch along with generated vector embeddings.
 
-        "Full Document Search" searches for literal phrases over complete documents,
-        returning each unique document result. "Source Code Search" operates similarly
-        but for indexed source code files.
+        **Full Document Search** searches for literal phrases over complete documents,
+        returning each unique document result. By default it searches through text
+        extracted from documents, but indexed source code can be searched by selecting
+        the "source_code" index in the Search Filters.
 
-        "Text Chunk Search" searches over the text chunks extracted from plaintext documents.
+        **Text Chunk Search** searches over the text chunks extracted from plaintext documents.
         If "Use Hybrid Vector Search" is selected, fuzzy/BM25 search is done by Elastic
         over the file name and indexed text, and a embedding is generated from the query
         to also search over the indexed emebdding vectors. Reciprocal Rank Fusion is then
         used to rerank the results and return the top X.
 
-        If "Use Hybrid Vector Search" is not selected, just the fuzzy/BM25 search is
+        If _Use Hybrid Vector Search_ is not selected, just the fuzzy/BM25 search is
         performed without embedding vector enrichment.
+
+        For both search types, the Search Filters expander allows you to specify a wildcard
+        path for files to include or exclude from each. For example: C:\\Temp\\*, or *.pdf
         """
         )
 
