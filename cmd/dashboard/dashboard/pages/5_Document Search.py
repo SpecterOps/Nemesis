@@ -45,22 +45,18 @@ def build_page(username: str):
         st.session_state.text_search = None
     if "text_page" not in st.session_state:
         st.session_state.text_page = 1
-    if "code_search" not in st.session_state:
-        st.session_state.code_search = None
-    if "code_page" not in st.session_state:
-        st.session_state.code_page = 1
+    if "search_index" not in st.session_state:
+        st.session_state.search_index = 0
     if "current_tab" not in st.session_state:
-        st.session_state.current_tab = "text_search"
+        st.session_state.current_tab = "full_document"
 
     # get parameters in url
     if "text_search" in st.query_params:
         st.session_state.text_search = urllib.parse.unquote(st.query_params["text_search"])
     if "text_page" in st.query_params:
         st.session_state.text_page = int(st.query_params["text_page"])
-    if "code_search" in st.query_params:
-        st.session_state.code_search = urllib.parse.unquote(st.query_params["code_search"])
-    if "code_page" in st.query_params:
-        st.session_state.code_page = int(st.query_params["code_page"])
+    if "search_index" in st.query_params:
+        st.session_state.search_index = int(st.query_params["search_index"])
     if "current_tab" in st.query_params:
         st.session_state.current_tab = st.query_params["current_tab"]
 
@@ -68,7 +64,6 @@ def build_page(username: str):
         data=[
             stx.TabBarItemData(id="full_document", title="Full Document Search", description="Over Complete Documents"),
             stx.TabBarItemData(id="text_chunk_search", title="Text Chunk Search", description="Over Extracted Text Chunks"),
-            stx.TabBarItemData(id="source_code_search", title="Source Code Search", description="Over Complete Source Code Files"),
         ],
         default=st.session_state.current_tab
     )
@@ -78,101 +73,172 @@ def build_page(username: str):
 
     if chosen_tab == "full_document":
         st.subheader("Full Document Search")
-
-        if "code_search" in st.query_params:
-            del st.query_params["code_search"]
-        if "code_page" in st.query_params:
-            del st.query_params["code_page"]
+        st.markdown("_Searches Over Complete/Unique Documents, a la Google_")
 
         with st.expander("Search Filters"):
-            cols = st.columns(2)
+            cols = st.columns(3)
             file_path_include = ""
             file_path_exclude = ""
             with cols[0]:
-                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
+                if st.session_state.search_index:
+                    default_index = int(st.session_state.search_index)
+                else:
+                    default_index = 0
+                search_index = st.selectbox(
+                    "Search index to use",
+                    ["extracted_plainext", "source_code"],
+                    index=default_index
+                )
             with cols[1]:
+                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
+            with cols[2]:
                 file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
 
-        text_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.text_search)
+        if search_index == "extracted_plainext":
+            text_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.text_search)
 
-        if not text_search_term:
-            return
+            if not text_search_term:
+                return
 
-        # if we get a different term, it means a new search was initiated
-        if text_search_term != st.session_state.text_search:
-            st.session_state.text_search = text_search_term
-            st.session_state.text_page = 1
-            st.query_params["text_search"] = st.session_state.text_search
-            st.query_params["text_page"] = st.session_state.text_page
+            # if we get a different term, it means a new search was initiated
+            if text_search_term != st.session_state.text_search:
+                st.session_state.text_search = text_search_term
+                st.session_state.text_page = 1
+                st.query_params["text_search"] = st.session_state.text_search
+                st.query_params["text_page"] = st.session_state.text_page
+                st.query_params["search_index"] = st.session_state.search_index
 
-        from_i = (st.session_state.text_page - 1) * PAGE_SIZE
+            from_i = (st.session_state.text_page - 1) * PAGE_SIZE
 
-        results = utils.elastic_text_search(text_search_term, file_path_include, file_path_exclude, from_i, PAGE_SIZE)
-        if not results:
-            st.write(templates.no_result_html(), unsafe_allow_html=True)
-            return
+            results = utils.elastic_text_search(text_search_term, file_path_include, file_path_exclude, from_i, PAGE_SIZE)
+            if not results:
+                st.write(templates.no_result_html(), unsafe_allow_html=True)
+                return
 
-        total_hits = results["hits"]["total"]["value"]
-        num_results = len(results["hits"]["hits"])
+            total_hits = results["hits"]["total"]["value"]
+            num_results = len(results["hits"]["hits"])
 
-        if total_hits <= 0:
-            st.warning("No document results!")
-            return
+            if total_hits <= 0:
+                st.warning("No document results!")
+                return
 
-        st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
+            st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
 
-        for i in range(num_results):
-            res = utils.simplify_es_text_result(results["hits"]["hits"][i])
+            for i in range(num_results):
+                res = utils.simplify_es_text_result(results["hits"]["hits"][i])
 
-            originatingObjectPath = res["originatingObjectPath"]
-            originatingObjectId = res["originatingObjectId"]
-            originatingObjectURL = res["originatingObjectURL"]
-            if "originatingObjectConvertedPdfUrl" in res:
-                originatingObjectConvertedPdfUrl = res["originatingObjectConvertedPdfUrl"]
-                pdf_url = f"{originatingObjectConvertedPdfUrl}&action=view"
-            else:
-                pdf_url = ""
+                originatingObjectPath = res["originatingObjectPath"]
+                originatingObjectId = res["originatingObjectId"]
+                originatingObjectURL = res["originatingObjectURL"]
+                if "originatingObjectConvertedPdfUrl" in res:
+                    originatingObjectConvertedPdfUrl = res["originatingObjectConvertedPdfUrl"]
+                    pdf_url = f"{originatingObjectConvertedPdfUrl}&action=view"
+                else:
+                    pdf_url = ""
 
-            highlights = res["highlights"]
-            source = ""
-            if "metadata" in res and "source" in res["metadata"]:
-                source = res["metadata"]["source"]
-            if "wordCount" in res:
-                length = res["wordCount"]
-            else:
-                length = "-1"
+                highlights = res["highlights"]
+                source = ""
+                if "metadata" in res and "source" in res["metadata"]:
+                    source = res["metadata"]["source"]
+                if "wordCount" in res:
+                    length = res["wordCount"]
+                else:
+                    length = "-1"
 
-            (header, highlights, footer) = templates.text_search_result(
-                i=(from_i + i),
-                url=originatingObjectURL,
-                pdf_url=pdf_url,
-                source=source,
-                path=originatingObjectPath,
-                highlights=highlights,
-                length=length,
-                originating_object_id=originatingObjectId,
-            )
-            st.write(header, unsafe_allow_html=True)
-            st.code(utils.text_to_chunk_display(highlights), None)
-            st.write(footer, unsafe_allow_html=True)
+                (header, highlights, footer) = templates.text_search_result(
+                    i=(from_i + i),
+                    url=originatingObjectURL,
+                    pdf_url=pdf_url,
+                    source=source,
+                    path=originatingObjectPath,
+                    highlights=highlights,
+                    length=length,
+                    originating_object_id=originatingObjectId,
+                )
+                st.write(header, unsafe_allow_html=True)
+                st.code(utils.text_to_chunk_display(highlights), None)
+                st.write(footer, unsafe_allow_html=True)
 
-        # pagination
-        if total_hits > PAGE_SIZE:
-            total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
-            pagination_html = templates.text_pagination(total_pages, text_search_term, st.session_state.text_page, "text_search")
-            st.write(pagination_html, unsafe_allow_html=True)
+            # pagination
+            if total_hits > PAGE_SIZE:
+                total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
+                pagination_html = templates.text_pagination(total_pages, text_search_term, st.session_state.text_page, "text_search")
+                st.write(pagination_html, unsafe_allow_html=True)
+        else:
+            code_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.text_search)
+
+            if not code_search_term:
+                return
+
+            # if we get a different term, it means a new search was initiated
+            if code_search_term != st.session_state.text_search:
+                st.session_state.text_search = code_search_term
+                st.session_state.text_page = 1
+                st.query_params["text_search"] = st.session_state.text_search
+                st.query_params["text_page"] = st.session_state.text_page
+                st.query_params["search_index"] = st.session_state.search_index
+
+            from_i = (st.session_state.text_page - 1) * PAGE_SIZE
+
+            results = utils.elastic_sourcecode_search(code_search_term, file_path_include, file_path_exclude, from_i, PAGE_SIZE)
+            if not results:
+                st.write(templates.no_result_html(), unsafe_allow_html=True)
+                return
+
+            total_hits = results["hits"]["total"]["value"]
+            num_results = len(results["hits"]["hits"])
+
+            if total_hits <= 0:
+                st.warning("No source code results!")
+                return
+
+            st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
+
+            for i in range(num_results):
+                res = utils.simplify_es_text_result(results["hits"]["hits"][i])
+                path = res["path"]
+                download_url = res["downloadURL"]
+                object_id = res["objectId"]
+                language = res["language"]
+                name = res["name"]
+                path = res["path"]
+                size = res["size"]
+                highlights = res["highlights"]
+                source = ""
+                if "metadata" in res and "source" in res["metadata"]:
+                    source = res["metadata"]["source"]
+
+                (header, highlights, footer) = templates.sourcecode_search_result(
+                    i=(from_i + i),
+                    object_id=object_id,
+                    download_url=download_url,
+                    source=source,
+                    path=path,
+                    name=name,
+                    language=language,
+                    highlights=highlights,
+                    size=size,
+                )
+                st.write(header, unsafe_allow_html=True)
+                st.code(highlights, language=language.lower())
+                st.write(footer, unsafe_allow_html=True)
+
+            # pagination
+            if total_hits > PAGE_SIZE:
+                total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
+                pagination_html = templates.text_pagination(total_pages, code_search_term, st.session_state.text_page, "source_code_search")
+                st.write(pagination_html, unsafe_allow_html=True)
 
     elif chosen_tab == "text_chunk_search":
         st.subheader("Text Chunk Search")
+        st.markdown("_Searches Over Text Chunks Extracted From Documents_")
 
         if "text_search" in st.query_params:
             del st.query_params["text_search"]
         if "text_page" in st.query_params:
             del st.query_params["text_page"]
-        if "code_search" in st.query_params:
-            del st.query_params["code_search"]
-        if "code_page" in st.query_params:
-            del st.query_params["code_page"]
+        if "search_index" in st.query_params:
+            del st.query_params["search_index"]
 
         with st.expander("Search Filters"):
             cols = st.columns(2)
@@ -227,85 +293,6 @@ def build_page(username: str):
             except Exception as e:
                 st.error(f"Exception: {e}")
 
-    elif chosen_tab == "source_code_search":
-        st.subheader("Source Code Search")
-
-        if "text_search" in st.query_params:
-            del st.query_params["text_search"]
-        if "text_page" in st.query_params:
-            del st.query_params["text_page"]
-
-        with st.expander("Search Filters"):
-            cols = st.columns(2)
-            file_path_include = ""
-            file_path_exclude = ""
-            with cols[0]:
-                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
-            with cols[1]:
-                file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
-
-        code_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.code_search)
-
-        if not code_search_term:
-            return
-
-        # if we get a different term, it means a new search was initiated
-        if code_search_term != st.session_state.code_search:
-            st.session_state.code_search = code_search_term
-            st.session_state.code_page = 1
-            st.query_params["code_search"] = st.session_state.code_search
-            st.query_params["code_page"] = st.session_state.code_page
-
-        from_i = (st.session_state.code_page - 1) * PAGE_SIZE
-
-        results = utils.elastic_sourcecode_search(code_search_term, file_path_include, file_path_exclude, from_i, PAGE_SIZE)
-        if not results:
-            st.write(templates.no_result_html(), unsafe_allow_html=True)
-            return
-
-        total_hits = results["hits"]["total"]["value"]
-        num_results = len(results["hits"]["hits"])
-
-        if total_hits <= 0:
-            st.warning("No source code results!")
-            return
-
-        st.write(templates.number_of_results(total_hits, results["took"] / 1000), unsafe_allow_html=True)
-
-        for i in range(num_results):
-            res = utils.simplify_es_text_result(results["hits"]["hits"][i])
-            path = res["path"]
-            download_url = res["downloadURL"]
-            object_id = res["objectId"]
-            language = res["language"]
-            name = res["name"]
-            path = res["path"]
-            size = res["size"]
-            highlights = res["highlights"]
-            source = ""
-            if "metadata" in res and "source" in res["metadata"]:
-                source = res["metadata"]["source"]
-
-            (header, highlights, footer) = templates.sourcecode_search_result(
-                i=(from_i + i),
-                object_id=object_id,
-                download_url=download_url,
-                source=source,
-                path=path,
-                name=name,
-                language=language,
-                highlights=highlights,
-                size=size,
-            )
-            st.write(header, unsafe_allow_html=True)
-            st.code(highlights, language=language.lower())
-            st.write(footer, unsafe_allow_html=True)
-
-        # pagination
-        if total_hits > PAGE_SIZE:
-            total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
-            pagination_html = templates.text_pagination(total_pages, code_search_term, st.session_state.code_page, "source_code_search")
-            st.write(pagination_html, unsafe_allow_html=True)
 
 
 utils.render_nemesis_page(build_page)
