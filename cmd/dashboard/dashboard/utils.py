@@ -53,18 +53,40 @@ engine = create_engine(POSTGRES_CONNECTION_URI)
 ######################################################
 
 
-def semantic_search(search_phrase: str, file_path_include: str, file_path_exclude: str, num_results: int = 4) -> dict:
-    """
-    Calls {NLP_URL}/semantic_search to extract password candidates from a plaintext document.
-    """
+def text_search(search_phrase: str, use_hybrid: bool, file_path_include: str, file_path_exclude: str, num_results: int = 25) -> dict:
+    """Calls {NLP_URL}/fuzzy_search or {NLP_URL}/hybrid_search to search for text results."""
 
     try:
-        data = {"search_phrase": search_phrase, "file_path_include": file_path_include, "file_path_exclude": file_path_exclude, "num_results": num_results}
-        url = f"{NLP_URL}semantic_search"
+        data = {
+            "search_phrase": search_phrase,
+            "file_path_include": file_path_include,
+            "file_path_exclude": file_path_exclude,
+            "num_results": num_results
+        }
+        if use_hybrid:
+            url = f"{NLP_URL}hybrid_search"
+        else:
+            url = f"{NLP_URL}fuzzy_search"
         result = requests.post(url, json=data)
         return result.json()
     except Exception as e:
-        return {"error": f"Error calling semantic_search with search_phrase '{search_phrase}' : {e}"}
+        return {"error": f"Error calling text search {url} with search_phrase '{search_phrase}' : {e}"}
+
+
+def text_to_chunks(s, maxlength=100):
+    start = 0
+    end   = 0
+    while start + maxlength  < len(s) and end != -1:
+        end = s.rfind(" ", start, start + maxlength + 1)
+        if end == -1: break
+        yield s[start:end]
+        start = end +1
+    yield s[start:]
+
+
+def text_to_chunk_display(s):
+    """Used for "wrapping" in st.code()."""
+    return "\n".join(list(text_to_chunks(s)))
 
 
 ######################################################

@@ -17,11 +17,22 @@ def build_about_expander():
         This page searches the extracted plaintext from every convertible document
         ingested into Nemesis as well as any downloaded source code.
 
-        Text is extracted with Apache Tika and indexed into Elasticsearch.
+        Text is extracted with Apache Tika and indexed into Elasticsearch. The text
+        of each document is also broken into chunks of ~500 tokens/words each which
+        are also indexed into Elasticsearch along with generated vector embeddings.
 
-        Semantic search is powered by searching pre-computed dense vector embeddings,
-        vectoring the input query and returning document chunks that are the semantically
-        closest to the input.
+        "Full Document Search" searches for literal phrases over complete documents,
+        returning each unique document result. "Source Code Search" operates similarly
+        but for indexed source code files.
+
+        "Text Chunk Search" searches over the text chunks extracted from plaintext documents.
+        If "Use Hybrid Vector Search" is selected, fuzzy/BM25 search is done by Elastic
+        over the file name and indexed text, and a embedding is generated from the query
+        to also search over the indexed emebdding vectors. Reciprocal Rank Fusion is then
+        used to rerank the results and return the top X.
+
+        If "Use Hybrid Vector Search" is not selected, just the fuzzy/BM25 search is
+        performed without embedding vector enrichment.
         """
         )
 
@@ -55,9 +66,9 @@ def build_page(username: str):
 
     chosen_tab = stx.tab_bar(
         data=[
-            stx.TabBarItemData(id="text_search", title="Text Search", description="Search text extracted from downloaded files"),
-            stx.TabBarItemData(id="source_code_search", title="Source Code Search", description="Search downloaded source code files"),
-            stx.TabBarItemData(id="semantic_search", title="Semantic Search", description="Semantic search over extracted text"),
+            stx.TabBarItemData(id="full_document", title="Full Document Search", description="Over Complete Documents"),
+            stx.TabBarItemData(id="text_chunk_search", title="Text Chunk Search", description="Over Extracted Text Chunks"),
+            stx.TabBarItemData(id="source_code_search", title="Source Code Search", description="Over Complete Source Code Files"),
         ],
         default=st.session_state.current_tab
     )
@@ -65,8 +76,8 @@ def build_page(username: str):
     st.session_state.current_tab = chosen_tab
     st.query_params["current_tab"] = chosen_tab
 
-    if chosen_tab == "text_search":
-        st.subheader("Document Search")
+    if chosen_tab == "full_document":
+        st.subheader("Full Document Search")
 
         if "code_search" in st.query_params:
             del st.query_params["code_search"]
@@ -142,8 +153,7 @@ def build_page(username: str):
                 originating_object_id=originatingObjectId,
             )
             st.write(header, unsafe_allow_html=True)
-            # st.markdown(highlights)
-            st.code(highlights, None)
+            st.code(utils.text_to_chunk_display(highlights), None)
             st.write(footer, unsafe_allow_html=True)
 
         # pagination
@@ -151,6 +161,71 @@ def build_page(username: str):
             total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
             pagination_html = templates.text_pagination(total_pages, text_search_term, st.session_state.text_page, "text_search")
             st.write(pagination_html, unsafe_allow_html=True)
+
+    elif chosen_tab == "text_chunk_search":
+        st.subheader("Text Chunk Search")
+
+        if "text_search" in st.query_params:
+            del st.query_params["text_search"]
+        if "text_page" in st.query_params:
+            del st.query_params["text_page"]
+        if "code_search" in st.query_params:
+            del st.query_params["code_search"]
+        if "code_page" in st.query_params:
+            del st.query_params["code_page"]
+
+        with st.expander("Search Filters"):
+            cols = st.columns(2)
+            file_path_include = ""
+            file_path_exclude = ""
+            with cols[0]:
+                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
+            with cols[1]:
+                file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
+
+        search_term = st.text_input("Enter search term(s):")
+
+        cols = st.columns(3)
+        with cols[1]:
+            use_hybrid = st.toggle("Use Hybrid Vector Search",
+                                   True,
+                                   help="Use Hybrid Search/Reciprocal Rank Fusion with text embedding vectors instead of just fuzzy text search.")
+        with cols[2]:
+            num_results = st.slider("Select the number of results to return",
+                                    min_value=1,
+                                    max_value=100,
+                                    value=50,
+                                    step=1)
+
+        if search_term != "":
+            st.session_state.text_search = search_term
+
+            try:
+                json_results = utils.text_search(search_term, use_hybrid, file_path_include, file_path_exclude, num_results)
+                if json_results and "error" in json_results:
+                    error = json_results["error"]
+                    if "index_not_found_exception" in error:
+                        st.warning("No text has been indexed!")
+                    else:
+                        st.error(f"Error from NLP service: {error}")
+                elif not json_results or "results" not in json_results:
+                    st.warning("No results retrieved from semantic search, service might be busy")
+                else:
+                    if json_results and json_results["results"] and len(json_results["results"]) > 0:
+                        for result in json_results["results"]:
+                            header = templates.semantic_search_result(result)
+                            st.subheader("", divider="red")
+                            st.markdown(header, unsafe_allow_html=True)
+                            st.markdown("")
+                            with st.expander("Text Block"):
+                                st.code(result["text"], None)
+                        st.subheader("", divider="red")
+                    else:
+                        st.warning("No results retrieved from semantic search")
+
+
+            except Exception as e:
+                st.error(f"Exception: {e}")
 
     elif chosen_tab == "source_code_search":
         st.subheader("Source Code Search")
@@ -231,62 +306,6 @@ def build_page(username: str):
             total_pages = (total_hits + PAGE_SIZE - 1) // PAGE_SIZE
             pagination_html = templates.text_pagination(total_pages, code_search_term, st.session_state.code_page, "source_code_search")
             st.write(pagination_html, unsafe_allow_html=True)
-
-    elif chosen_tab == "semantic_search":
-        st.subheader("Semantic Search")
-
-        if "text_search" in st.query_params:
-            del st.query_params["text_search"]
-        if "text_page" in st.query_params:
-            del st.query_params["text_page"]
-        if "code_search" in st.query_params:
-            del st.query_params["code_search"]
-        if "code_page" in st.query_params:
-            del st.query_params["code_page"]
-
-        with st.expander("Search Filters"):
-            cols = st.columns(2)
-            file_path_include = ""
-            file_path_exclude = ""
-            with cols[0]:
-                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
-            with cols[1]:
-                file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
-
-        search_term = st.text_input("Enter search term(s):")
-
-        cols = st.columns(2)
-        with cols[1]:
-            num_results = st.slider("Select the number of results to return", min_value=0, max_value=10, value=4, step=1)
-
-        if search_term != "":
-            st.session_state.text_search = search_term
-
-            try:
-                json_results = utils.semantic_search(search_term, file_path_include, file_path_exclude, num_results)
-                if json_results and "error" in json_results:
-                    error = json_results["error"]
-                    if "index_not_found_exception" in error:
-                        st.warning("No text has been indexed!")
-                    else:
-                        st.error(f"Error from NLP service: {error}")
-                elif not json_results or "results" not in json_results:
-                    st.warning("No results retrieved from semantic search, service might be busy")
-                else:
-                    if json_results and json_results["results"] and len(json_results["results"]) > 0:
-                        for result in json_results["results"]:
-                            header = templates.semantic_search_result(result)
-                            st.subheader("", divider="red")
-                            st.markdown(header, unsafe_allow_html=True)
-                            st.markdown("")
-                            st.code(result["text"], None)
-                        st.subheader("", divider="red")
-                    else:
-                        st.warning("No results retrieved from semantic search")
-
-
-            except Exception as e:
-                st.error(f"Exception: {e}")
 
 
 utils.render_nemesis_page(build_page)
