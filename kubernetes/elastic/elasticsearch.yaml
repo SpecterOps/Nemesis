@@ -3,7 +3,7 @@ kind: Elasticsearch
 metadata:
   name: nemesis
 spec:
-  version:  8.8.0
+  version: 8.11.0
   auth:
     fileRealm:
       - secretName: elasticsearch-users
@@ -43,9 +43,9 @@ spec:
               resources:
                 requests:
                   cpu: "1000m"
-                  memory: "1.5G"
+                  memory: "1G"
                 limits:
-                  cpu: "2000m"
+                  cpu: "1500m"
                   memory: "3G"
               env:
                 - name: ES_JAVA_OPTS

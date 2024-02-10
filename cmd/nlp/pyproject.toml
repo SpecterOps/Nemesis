@@ -17,7 +17,7 @@ prometheus-async  = { extras = ["aiohttp"], version = "^22.2.0"}
 aiohttp = "^3.9.3"
 nemesiscommon = { path = "../../packages/python/nemesiscommon", develop = true }
 nemesispb = { path = "../../packages/python/nemesispb", develop = true }
-elasticsearch = "^8.7.0"
+elasticsearch = "^8.10.0"
 torch = {version = "^2.1.2+cpu", source = "torch"}
 sentence-transformers = "^2.2.2"
 langchain = "^0.1.2"
