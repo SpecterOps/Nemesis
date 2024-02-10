@@ -237,5 +237,5 @@ def semantic_search_result(result) ->str:
         </a>
     </div>
     <div style="color:grey;font-size:95%;">
-        Similarity Score: {score}<br>{f"Source: {source}" if source else ""}<br>
+        Score: {score}<br>{f"Source: {source}" if source else ""}<br>
     """

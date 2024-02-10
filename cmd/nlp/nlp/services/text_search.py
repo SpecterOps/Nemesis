@@ -37,9 +37,24 @@ def wait_for_elasticsearch(elasticsearch_url: str, elasticsearch_user: str, elas
             time.sleep(5)
             continue
 
+def min_max_scale(x: float, a: float = 0.0, b: float= 10.0):
+    """
+    Helper to scale our hybrid results for display.
+
+    a = minimum display value
+    b = maximum display value
+
+    Min ~= 1/(100+60) (max RRF ranking for 10 results)
+    Max ~= 1/(1+40) + 1/(1+60) (max RRF ranking)
+
+    """
+    min = 0.00625
+    max = 0.0407
+    return a + ((x - min)*(b-a))/(max - min)
+
 class TextSearchRequest(BaseModel):
     search_phrase: str
-    knn_candidates: Optional[int] = 100
+    use_reranker: Optional[bool] = False
     file_path_include: Optional[str]
     file_path_exclude: Optional[str]
     num_results: int
@@ -86,8 +101,8 @@ class TextSearchAPI():
         self.router = APIRouter()
         self.router.add_api_route("/", self.home, methods=["GET"])
         self.router.add_api_route("/ready", self.ready, methods=["GET"])
-        self.router.add_api_route("/semantic_search", self.semantic_search, methods=["POST"])
-        self.router.add_api_route("/fuzzy_search", self.fuzzy_search, methods=["POST"])
+        self.router.add_api_route("/semantic_search", self.handle_semantic_search, methods=["POST"])
+        self.router.add_api_route("/fuzzy_search", self.handle_fuzzy_search, methods=["POST"])
         self.router.add_api_route("/hybrid_search", self.hybrid_search, methods=["POST"])
 
     async def home(self):
@@ -127,66 +142,80 @@ class TextSearchAPI():
     async def get_fuzzy_search_query(self, request: TextSearchRequest) -> str:
         """Helper that builds the appropriate fuzzy search match query."""
 
+        # search both the text itself and the originating file path
         query = {
             "bool": {
                 "must": [
                     {
                         "multi_match": {
                             "query": request.search_phrase,
-                            "fields": ["text", "metadata.originating_object_path"]
+                            "fields": ["text", "metadata.originating_object_path"],
+                            # "fuzziness": "AUTO"
                         }
                     }
-                ]
+                ],
+                "must_not": []
             }
         }
 
+        # check if we need to add a file filter
         request_dict = request.dict()
         if "file_path_include" in request_dict and request_dict["file_path_include"]:
             file_path_include = request.file_path_include.replace("\\", "/")
-            query["bool"]["must"].append({"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_include, "case_insensitive": True}}})
+            for file_path_include_part in file_path_include.split("|"):
+                query["bool"]["must"].append({"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_include_part, "case_insensitive": True}}})
         if "file_path_exclude" in request_dict and request_dict["file_path_exclude"]:
             file_path_exclude = request.file_path_exclude.replace("\\", "/")
-            query["bool"]["must_not"] = [{"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_exclude, "case_insensitive": True}}}]
+            for file_path_exclude_part in file_path_exclude.split("|"):
+                query["bool"]["must_not"].append({"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_exclude_part, "case_insensitive": True}}})
 
         return query
 
-    async def get_semantic_search_query(self, request: TextSearchRequest) -> str:
+    async def get_semantic_search_query(self, request: TextSearchRequest, k: int = -1) -> str:
         """Helper that builds the appropriate semantic search match query."""
+
+        k = request.num_results if k == -1 else k
 
         # generate embeddings for this query
         search_embeddings = self.embeddings.embed_query(request.search_phrase)
 
+        # check if we need to add a file filter
         filter = {"bool": {}}
         request_dict = request.dict()
         if "file_path_include" in request_dict and request_dict["file_path_include"]:
+            filter["bool"]["must"] = []
             file_path_include = request.file_path_include.replace("\\", "/")
-            filter["bool"]["must"] = [{"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_include, "case_insensitive": True}}}]
+            for file_path_include_part in file_path_include.split("|"):
+                filter["bool"]["must"] = [{"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_include_part, "case_insensitive": True}}}]
         if "file_path_exclude" in request_dict and request_dict["file_path_exclude"]:
+            filter["bool"]["must_not"] = []
             file_path_exclude = request.file_path_exclude.replace("\\", "/")
-            filter["bool"]["must_not"] = [{"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_exclude, "case_insensitive": True}}}]
+            for file_path_exclude_part in file_path_exclude.split("|"):
+                filter["bool"]["must_not"] = [{"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_exclude_part, "case_insensitive": True}}}]
 
         if filter["bool"]:
             query = {
                 "field": "vector",
                 "query_vector": search_embeddings,
-                "k": request.num_results,
-                "num_candidates": request.knn_candidates,
-                "filter": {
-                    filter
-                }
+                "k": k,
+                "num_candidates": k,
+                "filter": filter
             }
         else:
             query = {
                 "field": "vector",
                 "query_vector": search_embeddings,
-                "k": request.num_results,
-                "num_candidates": request.knn_candidates,
+                "k": k,
+                "num_candidates": k,
             }
 
         return query
 
+    async def handle_fuzzy_search(self, request: TextSearchRequest):
+        return await self.fuzzy_search(request)
+
     @aio.time(Summary("fuzzy_search", "Fuzzy text over indexed documents"))  # type: ignore
-    async def fuzzy_search(self, request: TextSearchRequest):
+    async def fuzzy_search(self, request: TextSearchRequest, search_candidates: int = -1):
         """Performs a fuzzy/BM25 text search for the query."""
         try:
             if not self.es_client.indices.exists(index=self.cfg.elastic_index_name):
@@ -194,10 +223,12 @@ class TextSearchAPI():
 
             query = await self.get_fuzzy_search_query(request)
 
+            size = request.num_results if search_candidates == -1 else search_candidates
+
             response = self.es_client.search(
                 index=self.cfg.elastic_index_name,
                 query=query,
-                size=request.num_results
+                size=size
             )
             return await self.handle_elastic_results(response)
 
@@ -205,19 +236,24 @@ class TextSearchAPI():
             await logger.aexception(e, message="Exception in processing a fuzzy_search request")
             return {"error": f"{e}"}
 
+    async def handle_semantic_search(self, request: TextSearchRequest):
+        return await self.semantic_search(request)
+
     @aio.time(Summary("semantic_search", "Semantic search over indexed document vectors"))  # type: ignore
-    async def semantic_search(self, request: TextSearchRequest):
+    async def semantic_search(self, request: TextSearchRequest, search_candidates: int = -1):
         """Performs a KNN semantic vector search for the query."""
         try:
             if not self.es_client.indices.exists(index=self.cfg.elastic_index_name):
                 return {"error": f"index_not_found_exception"}
 
-            query = await self.get_semantic_search_query(request)
+            query = await self.get_semantic_search_query(request, search_candidates)
+
+            size = request.num_results if search_candidates == -1 else search_candidates
 
             response = self.es_client.search(
                 index=self.cfg.elastic_index_name,
                 knn=query,
-                size=request.num_results
+                size=size
             )
             return await self.handle_elastic_results(response)
 
@@ -233,12 +269,20 @@ class TextSearchAPI():
         """
 
         # get our fuzzy and semantic results
-        fuzzy_results = await self.fuzzy_search(request)
-        semantic_results = await self.semantic_search(request)
-
+        # cast a 3x net for the initial queries that will be reduced with RRF
+        start = time.time()
+        fuzzy_results = await self.fuzzy_search(request, 3 * request.num_results)
+        end = time.time()
+        await logger.ainfo(f"RRF/hybrid fuzzy search completed in {(end - start):.2f} seconds for query: '{request.search_phrase}'")
         # make sure we didn't get any error messages
         if isinstance(fuzzy_results, dict):
             return fuzzy_results
+
+        start = time.time()
+        semantic_results = await self.semantic_search(request, 3 * request.num_results)
+        end = time.time()
+        await logger.ainfo(f"RRF/hybrid semantic search completed in {(end - start):.2f} seconds for query: '{request.search_phrase}'")
+        # make sure we didn't get any error messages
         if isinstance(semantic_results, dict):
             return semantic_results
 
@@ -251,13 +295,17 @@ class TextSearchAPI():
             "semantic_results": semantic_results,
         }
 
-        # return num_results of the reranked results
+        # rerank the results using RRF
         return await self.reciprocal_rank_fusion(search_results, num_results=request.num_results)
 
-    async def reciprocal_rank_fusion(self, search_results, num_results=20, k=60) -> TextSearchResults:
+    async def reciprocal_rank_fusion(self, search_results, num_results=20, k_fuzzy=40, k_semantic=60) -> TextSearchResults:
         """
         Combines two ranked lists of the same length, fuses the rankings based solely on the
         order of documents (w/ overlap) in each list.
+
+        Weights fuzzy results ~40% more heavily than semantic search results.
+
+        Ref - https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf
 
         *sigh* let's do this ourselves because it's a paid feature in Elasticsearch
         """
@@ -266,6 +314,12 @@ class TextSearchAPI():
 
         fuzzy_results = search_results["fuzzy_results"]
         semantic_results = search_results["semantic_results"]
+
+        # get the maximum BM25 search score for scaling our hybrid search results
+        if not fuzzy_results or len(fuzzy_results) == 0:
+            max_fuzzy_score = 10.0
+        else:
+            max_fuzzy_score = max(fuzzy_results, key=lambda x: x.score).score
 
         # get the set of unique documents
         unique_docs_dict = {}
@@ -280,17 +334,19 @@ class TextSearchAPI():
         fuzzy_result_ranks = [(rank, result.id) for (rank, result) in enumerate(sorted(fuzzy_results, key=lambda x: x.score, reverse=True), 1)]
         semantic_result_rank = [(rank, result.id) for (rank, result) in enumerate(sorted(semantic_results, key=lambda x: x.score, reverse=True), 1)]
 
-        # get the fused ranking scores
-        for result_rank in (fuzzy_result_ranks, semantic_result_rank):
-            for (rank, id) in result_rank:
-                fused_scores[id] = fused_scores.get(id, 0) + 1 / (k + rank)
+        # get the fused ranking scores, weighting fuzzy text ~40% more heavily than semantic results
+        for (rank, id) in fuzzy_result_ranks:
+            fused_scores[id] = fused_scores.get(id, 0) + 1 / (k_fuzzy + rank)
+        for (rank, id) in semantic_result_rank:
+            fused_scores[id] = fused_scores.get(id, 0) + 1 / (k_semantic + rank)
 
         # rerank the unique docs based on the fused score
         combined_results_sorted = list(sorted(unique_docs, key=lambda x: fused_scores[x.id], reverse=True))
 
-        # save a scaled score to each document
+        # save a scaled score (for display) to each document
+        #   the RRF scores are scaled to [0 - max fuzzy/BM25 score]
         for result in combined_results_sorted:
-            result.score = round(fused_scores[result.id] * 30 * 100, 3)
+            result.score = round(min_max_scale(fused_scores[result.id], 0, max_fuzzy_score), 3)
 
         # only return up to num_results
         return TextSearchResults(results=combined_results_sorted[:num_results])

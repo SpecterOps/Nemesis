@@ -1,6 +1,7 @@
 # Standard Libraries
 import os
 import urllib.parse
+import re
 
 # 3rd Party Libraries
 import extra_streamlit_components as stx
@@ -18,7 +19,7 @@ def build_about_expander():
         ingested into Nemesis as well as any downloaded source code.
 
         Text is extracted with Apache Tika and indexed into Elasticsearch. The text
-        of each document is also broken into chunks of ~500 tokens/words each which
+        of each document is also broken into chunks of ~500 tokens/words which
         are also indexed into Elasticsearch along with generated vector embeddings.
 
         **Full Document Search** searches for literal phrases over complete documents,
@@ -27,7 +28,7 @@ def build_about_expander():
         the "source_code" index in the Search Filters.
 
         **Text Chunk Search** searches over the text chunks extracted from plaintext documents.
-        If "Use Hybrid Vector Search" is selected, fuzzy/BM25 search is done by Elastic
+        If _Use Hybrid Vector Search_ is selected, fuzzy/BM25 search is done by Elastic
         over the file name and indexed text, and a embedding is generated from the query
         to also search over the indexed emebdding vectors. Reciprocal Rank Fusion is then
         used to rerank the results and return the top X.
@@ -36,7 +37,10 @@ def build_about_expander():
         performed without embedding vector enrichment.
 
         For both search types, the Search Filters expander allows you to specify a wildcard
-        path for files to include or exclude from each. For example: C:\\Temp\\*, or *.pdf
+        path for files to include or exclude from each, e.g., C:\\Temp\\\\* or \\*.pdf
+        Multiple terms can be separated with |, e.g., C:\\Temp\\\\*|\\*.pdf
+
+        Ref on semantic vs keyword search: https://www.elastic.co/what-is/semantic-search
         """
         )
 
@@ -94,10 +98,10 @@ def build_page(username: str):
                     index=default_index
                 )
             with cols[1]:
-                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
+                file_path_include = st.text_input("Enter file 'path' to include:")
             with cols[2]:
-                file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
-
+                file_path_exclude = st.text_input("Enter file 'path' to exclude:")
+            st.markdown("""_For paths, wildcard == \\*, use | to separate multiple terms, e.g. C:\\Temp\\\\*|\\*.pdf_""")
         if search_index == "extracted_plainext":
             text_search_term = st.text_input("Enter search term (wildcard == *):", st.session_state.text_search)
 
@@ -249,11 +253,12 @@ def build_page(username: str):
             file_path_include = ""
             file_path_exclude = ""
             with cols[0]:
-                file_path_include = st.text_input("Enter file 'path' to include (wildcard == *):")
+                file_path_include = st.text_input("Enter file 'path' to include:")
             with cols[1]:
-                file_path_exclude = st.text_input("Enter file 'path' to exclude (wildcard == *):")
+                file_path_exclude = st.text_input("Enter file 'path' to exclude:")
+            st.markdown("""_For paths, wildcard == \\*, use | to separate multiple terms, e.g. C:\\Temp\\\\*|\\*.pdf_""")
 
-        search_term = st.text_input("Enter search term(s):")
+        search_term = st.text_input("Enter search term(s) (no wildcards needed):")
 
         cols = st.columns(3)
         with cols[1]:
@@ -264,7 +269,7 @@ def build_page(username: str):
             num_results = st.slider("Select the number of results to return",
                                     min_value=1,
                                     max_value=100,
-                                    value=50,
+                                    value=10    ,
                                     step=1)
 
         if search_term != "":
@@ -288,11 +293,12 @@ def build_page(username: str):
                             st.markdown(header, unsafe_allow_html=True)
                             st.markdown("")
                             with st.expander("Text Block"):
-                                st.code(result["text"], None)
+                                cleaned = re.sub(r'([\s][*\n]+[\s]*)+', '\n', result["text"])
+                                chunked = utils.text_to_chunk_display(cleaned)
+                                st.code(chunked, None)
                         st.subheader("", divider="red")
                     else:
                         st.warning("No results retrieved from semantic search")
-
 
             except Exception as e:
                 st.error(f"Exception: {e}")

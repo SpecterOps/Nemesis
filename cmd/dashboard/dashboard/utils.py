@@ -883,23 +883,26 @@ def elastic_text_search(search_term: str, file_path_include: str, file_path_excl
                     {
                         "wildcard": {"text": {"value": search_term, "case_insensitive": True}}
                     },
-                ]
+                ],
+                "must_not": []
             }
         }
         if file_path_include:
              file_path_include = file_path_include.replace("\\", "/")
-             query["bool"]["must"].append(
-                {
-                    "wildcard": {"originatingObjectPath.keyword": {"value": file_path_include, "case_insensitive": True}}
-                }
-             )
+             for file_path_include_part in file_path_include.split("|"):
+                query["bool"]["must"].append(
+                    {
+                        "wildcard": {"originatingObjectPath.keyword": {"value": file_path_include_part, "case_insensitive": True}}
+                    }
+                )
         if file_path_exclude:
              file_path_exclude = file_path_exclude.replace("\\", "/")
-             query["bool"]["must_not"] = [
-                {
-                    "wildcard": {"originatingObjectPath.keyword": {"value": file_path_exclude, "case_insensitive": True}}
-                }
-             ]
+             for file_path_exclude_part in file_path_exclude.split("|"):
+                query["bool"]["must_not"].append(
+                    {
+                        "wildcard": {"originatingObjectPath.keyword": {"value": file_path_exclude_part, "case_insensitive": True}}
+                    }
+                )
 
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
