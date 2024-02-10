@@ -27,11 +27,11 @@ def build_about_expander():
         extracted from documents, but indexed source code can be searched by selecting
         the "source_code" index in the Search Filters.
 
-        **Text Chunk Search** searches over the text chunks extracted from plaintext documents.
-        If _Use Hybrid Vector Search_ is selected, fuzzy/BM25 search is done by Elastic
-        over the file name and indexed text, and a embedding is generated from the query
-        to also search over the indexed emebdding vectors. Reciprocal Rank Fusion is then
-        used to rerank the results and return the top X.
+        **Text Snippet Search** searches over the text chunks/snippets extracted from
+        plaintext documents. If _Use Hybrid Vector Search_ is selected, fuzzy/BM25 search
+        is done by Elastic over the file name and indexed text, and a embedding is generated
+        from the query to also search over the indexed emebdding vectors. Reciprocal Rank Fusion
+        is then used to rerank the results and return the top X results.
 
         If _Use Hybrid Vector Search_ is not selected, just the fuzzy/BM25 search is
         performed without embedding vector enrichment.
@@ -71,7 +71,7 @@ def build_page(username: str):
     chosen_tab = stx.tab_bar(
         data=[
             stx.TabBarItemData(id="full_document", title="Full Document Search", description="Over Complete Documents"),
-            stx.TabBarItemData(id="text_chunk_search", title="Text Chunk Search", description="Over Extracted Text Chunks"),
+            stx.TabBarItemData(id="text_chunk_search", title="Snippet Search", description="Over Snippets Extracted From Documents"),
         ],
         default=st.session_state.current_tab
     )
@@ -238,8 +238,8 @@ def build_page(username: str):
                 st.write(pagination_html, unsafe_allow_html=True)
 
     elif chosen_tab == "text_chunk_search":
-        st.subheader("Text Chunk Search")
-        st.markdown("_Searches Over Text Chunks Extracted From Documents_")
+        st.subheader("Text Snippet Search")
+        st.markdown("_Searches Over Text Snippets Extracted From Documents_")
 
         if "text_search" in st.query_params:
             del st.query_params["text_search"]
