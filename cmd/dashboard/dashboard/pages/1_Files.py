@@ -238,7 +238,7 @@ def build_file_listing():
         tags=search_filters["file_filter_tags"] if search_filters["file_filter_tags"] else [],
         show_triaged=search_filters["file_show_triaged"] if search_filters["file_show_triaged"] else False,
         show_archive_originated=search_filters["file_show_archive_originated"],
-        order_desc_timestamp=search_filters["file_order_desc_timestamp"] if search_filters["file_order_desc_timestamp"] else False,
+        order_desc_timestamp=search_filters["file_order_desc_timestamp"] if search_filters["file_order_desc_timestamp"] else True,
     )
 
     # number of results returned for this search

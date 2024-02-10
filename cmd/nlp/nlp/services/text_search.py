@@ -150,7 +150,7 @@ class TextSearchAPI():
                         "multi_match": {
                             "query": request.search_phrase,
                             "fields": ["text", "metadata.originating_object_path"],
-                            # "fuzziness": "AUTO"
+                            "fuzziness": "AUTO"
                         }
                     }
                 ],

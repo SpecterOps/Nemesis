@@ -42,7 +42,7 @@ spec:
             - name: elasticsearch
               resources:
                 requests:
-                  cpu: "1000m"
+                  cpu: "750m"
                   memory: "1G"
                 limits:
                   cpu: "1500m"
