@@ -186,12 +186,12 @@ class TextSearchAPI():
             filter["bool"]["must"] = []
             file_path_include = request.file_path_include.replace("\\", "/")
             for file_path_include_part in file_path_include.split("|"):
-                filter["bool"]["must"] = [{"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_include_part, "case_insensitive": True}}}]
+                filter["bool"]["must"].append({"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_include_part, "case_insensitive": True}}})
         if "file_path_exclude" in request_dict and request_dict["file_path_exclude"]:
             filter["bool"]["must_not"] = []
             file_path_exclude = request.file_path_exclude.replace("\\", "/")
             for file_path_exclude_part in file_path_exclude.split("|"):
-                filter["bool"]["must_not"] = [{"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_exclude_part, "case_insensitive": True}}}]
+                filter["bool"]["must_not"].append({"wildcard": {"metadata.originating_object_path.keyword": {"value": file_path_exclude_part, "case_insensitive": True}}})
 
         if filter["bool"]:
             query = {
