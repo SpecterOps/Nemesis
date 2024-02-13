@@ -123,8 +123,6 @@ spec:
           ports:
             - containerPort: 9803
               name: nlp-http
-            # - containerPort: 9801
-            #   name: dotnet-prom
           resources:
             requests:
               memory: "500Mi"
