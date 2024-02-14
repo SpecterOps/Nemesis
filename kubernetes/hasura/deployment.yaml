@@ -45,6 +45,11 @@ spec:
               value: "true"
             - name: HASURA_GRAPHQL_ENABLED_LOG_TYPES
               value: startup
+            # - name: HASURA_GRAPHQL_ADMIN_SECRET
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: operation-creds
+            #       key: basic_auth_password
           image: hasura/graphql-engine:v2.36.2.cli-migrations-v2
           imagePullPolicy: IfNotPresent
           name: hasura
