@@ -18,12 +18,12 @@ aiohttp = "^3.9.3"
 nemesiscommon = { path = "../../packages/python/nemesiscommon", develop = true }
 nemesispb = { path = "../../packages/python/nemesispb", develop = true }
 elasticsearch = "^8.10.0"
-torch = {version = "^2.1.2+cpu", source = "torch"}
-sentence-transformers = "^2.2.2"
+torch = {version = "^2.2.0+cpu", source = "torch"}
+sentence-transformers = "^2.3.1"
 langchain = "^0.1.2"
 langchain-community = "^0.0.14"
-tiktoken = "^0.5.2"
 certifi = "^2023.7.22"
+tiktoken = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.2"
@@ -35,7 +35,6 @@ mypy = "^0.971"
 name = "torch"
 url = "https://download.pytorch.org/whl/cpu"
 priority = "primary"
-
 
 [tool.poetry.group.dev.dependencies]
 debugpy = "^1.6.7"
