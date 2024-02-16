@@ -21,7 +21,7 @@ spec:
             name: tika-config
       containers:
         - env: []
-          image: apache/tika:2.8.0.0-full
+          image: apache/tika:2.9.1.0-full
           imagePullPolicy: IfNotPresent
           name: tika
           # command: [ "/bin/sh", "-c", "exec java -cp \"/tika-server-standard-2.8.0.jar:/tika-extras/*\" org.apache.tika.server.core.TikaServerCli -h 0.0.0.0 -c /tika-config.xml"]
@@ -32,14 +32,14 @@ spec:
           ports:
             - containerPort: 9998
               name: http
-          resources: {}
-          # resources:
-          #   requests:
-          #     memory: "256Mi"
-          #     cpu: "200m"
-          #   limits:
-          #     memory: "1Gi"
-          #     cpu: "500m"
+          # resources: {}
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "1.5Gi"
+              cpu: "1000m"
           readinessProbe:
             httpGet:
               path: /

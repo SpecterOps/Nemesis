@@ -40,8 +40,8 @@ class TikaTextExtractor(TextExtractorInterface):
         with open(file_path, "rb") as doc_file:
             try:
                 data = doc_file.read()
-                # resp = await self.http_client.put(url, content=data, headers={"Accept": "text/plain"}, timeout=30)
-                resp = await self.http_client.put(url, content=data, headers={"Accept": "text/plain"})
+                resp = await self.http_client.put(url, content=data, headers={"Accept": "text/plain"}, timeout=120)
+                # resp = await self.http_client.put(url, content=data, headers={"Accept": "text/plain"})
                 resp.raise_for_status()
 
                 # check if it's empty, otherwise return it
@@ -70,8 +70,8 @@ class TikaTextExtractor(TextExtractorInterface):
         with open(file_path, "rb") as doc_file:
             try:
                 data = doc_file.read()
-                # resp = await self.http_client.put(url, content=data, headers={"Accept": "text/plain"}, timeout=30)
-                resp = await self.http_client.put(url, content=data, headers={"Accept": "text/plain"})
+                resp = await self.http_client.put(url, content=data, headers={"Accept": "text/plain"}, timeout=30)
+                # resp = await self.http_client.put(url, content=data, headers={"Accept": "text/plain"})
                 resp.raise_for_status()
                 if resp.status_code == 200:
                     return resp.text.strip()

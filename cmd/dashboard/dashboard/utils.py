@@ -904,7 +904,12 @@ def elastic_text_search(search_term: str, file_path_include: str, file_path_excl
                     }
                 )
 
-        highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
+        highlight = {
+            "pre_tags": [""],
+            "post_tags": [""],
+            "fields": {"text": {}},
+            "max_analyzed_offset": 950000
+        }
         fields = [
             "_id",
             "originatingObjectPath",
