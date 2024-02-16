@@ -36,19 +36,20 @@ All Nemesis services are exposed through a single HTTP endpoint (defined in the 
 
 To see a basic landing page with exposed services, go to http `NEMESIS_HTTP_SERVER` endpoint root. The routes and corresponding services are:
 
-| Service      | Route             | Username            | Password                |
-| ------------ | ----------------- | ------------------- | ----------------------- |
-| dashboard    | /dashboard/       | DASHBOARD_USER      | DASHBOARD_PASSWORD      |
-| kibana       | /kibana/          | ELASTICSEARCH_USER  | ELASTICSEARCH_PASSWORD  |
-| pgadmin      | /pgadmin/         | PGADMIN_EMAIL       | PGADMIN_PASSWORD        |
-| rabbitmq     | /rabbitmq/        | RABBITMQ_ADMIN_USER | RABBITMQ_ADMIN_PASSWORD |
-| alertmanager | /alertmanager/    | N/A                 | N/A                     |
-| grafana      | /grafana/         | GRAFANA_USER        | GRAFANA_PASSWORD        |
-| prometheus   | /prometheus/graph | N/A                 | N/A                     |
-| web-api      | /api/             | N/A                 | N/A                     |
-| elastic      | /elastic/         | ELASTICSEARCH_USER  | ELASTICSEARCH_PASSWORD  |
-| yara         | /yara/            | N/A                 | N/A                     |
-| crack-list   | /crack-list/      | N/A                 | N/A                     |
+| Service         | Route             | Username            | Password                |
+| --------------- | ----------------- | ------------------- | ----------------------- |
+| dashboard       | /dashboard/       | DASHBOARD_USER      | DASHBOARD_PASSWORD      |
+| kibana          | /kibana/          | ELASTICSEARCH_USER  | ELASTICSEARCH_PASSWORD  |
+| Hasura          | /hasura/          | N/A                 | N/A                     |
+| Nemesis web-api | /api/             | N/A                 | N/A                     |
+| pgadmin         | /pgadmin/         | PGADMIN_EMAIL       | PGADMIN_PASSWORD        |
+| rabbitmq        | /rabbitmq/        | RABBITMQ_ADMIN_USER | RABBITMQ_ADMIN_PASSWORD |
+| alertmanager    | /alertmanager/    | N/A                 | N/A                     |
+| grafana         | /grafana/         | GRAFANA_USER        | GRAFANA_PASSWORD        |
+| prometheus      | /prometheus/graph | N/A                 | N/A                     |
+| elastic         | /elastic/         | ELASTICSEARCH_USER  | ELASTICSEARCH_PASSWORD  |
+| yara            | /yara/            | N/A                 | N/A                     |
+| crack-list      | /crack-list/      | N/A                 | N/A                     |
 
 # (Optional) Changing Persistent File Storage
 
