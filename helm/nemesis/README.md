@@ -3,7 +3,7 @@ helm repo add elastic https://helm.elastic.co
 helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 helm dependency build
 # This step may take a while because two post-install tasks must be waited on before helm wil return
-helm install nemesis-helm-release .
+helm install nemesis . --timeout '10m'
 # Run this in a different terminal to monitor the pod status
 kubectl get pod -w
 ```
