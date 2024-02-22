@@ -14,6 +14,7 @@ from typing import Optional
 
 # 3rd Party Libraries
 import aiohttp
+from anyascii import anyascii
 import enrichment.lib.canaries as canary_helpers
 import enrichment.lib.helpers as helpers
 import nemesiscommon.constants as constants
@@ -68,6 +69,7 @@ class FileProcessor(TaskInterface):
 
     chunk_size: int
     extracted_archive_size_limit: int
+    plaintext_size_limit: int
     data_download_dir: str
     kibana_url: str
 
@@ -86,6 +88,7 @@ class FileProcessor(TaskInterface):
         chunk_size: int,
         data_download_dir: str,
         extracted_archive_size_limit: int,
+        plaintext_size_limit: int,
         # Queues
         in_q_filedata: MessageQueueConsumerInterface,
         in_q_filedataenriched: MessageQueueConsumerInterface,
@@ -117,6 +120,7 @@ class FileProcessor(TaskInterface):
         self.chunk_size = chunk_size  # number of bytes to read at a time per file
         self.data_download_dir = data_download_dir
         self.extracted_archive_size_limit = extracted_archive_size_limit  # upper size limit of an (extracted) archive to process
+        self.plaintext_size_limit = plaintext_size_limit
 
         self.in_q_filedata = in_q_filedata
         self.in_q_filedataenriched = in_q_filedataenriched
@@ -568,15 +572,25 @@ class FileProcessor(TaskInterface):
 
         # If the file is known to be tika compatible, or is not a binary file
         #   and is also not known source code, and is not an encrypted word doc,
-        #   then try to extract text and index is
+        #   then try to extract text and index it
         if (tika_compatible or not file_is_binary) and not is_source_code and not doc_is_encrypted:
             try:
-                # use Tika to extract to a new local UUID that references the uploaded Nemesis file text
-                plaintext_file_id = await self.extract_text(file_path_on_disk)
+                if mime_type == "text/plain" and file_data.size > self.plaintext_size_limit:
+                    await logger.awarning(f"File is plaintext and over the plaintext_size_limit of {self.plaintext_size_limit}, not performing text processing", object_id=file_data.object_id)
+                    enrichments_failure.append(constants.E_TEXT_EXTRACTED)
+                else:
+                    # use Tika to extract to a new local UUID that references the uploaded Nemesis file text
+                    #   specifying that we want to clean the text before saving
+                    #   if the file is plaintext, it's just cleaned/processed directly
+                    plaintext_file_id = await self.extract_text(file_path=file_path_on_disk,
+                                                                object_id=file_data.object_id,
+                                                                magic_type=file_magic_type,
+                                                                mime_type=mime_type,
+                                                                clean_text=True)
 
-                if plaintext_file_id:
-                    file_data.extracted_plaintext = str(plaintext_file_id)
-                enrichments_success.append(constants.E_TEXT_EXTRACTED)
+                    if plaintext_file_id:
+                        file_data.extracted_plaintext = str(plaintext_file_id)
+                    enrichments_success.append(constants.E_TEXT_EXTRACTED)
             except Exception as e:
                 await logger.aexception(e, message="Exception in running extract_text()")
                 enrichments_failure.append(constants.E_TEXT_EXTRACTED)
@@ -972,21 +986,40 @@ class FileProcessor(TaskInterface):
 
         return yara_matches
 
-    async def extract_text(self, file_path: str) -> Optional[uuid.UUID]:
+    async def extract_text(self, file_path: str, object_id: str, magic_type: str, mime_type: str, clean_text: bool = True) -> Optional[uuid.UUID]:
         """Extracts text from a file, and if there's text, returns a Nemesis File UUID."""
 
-        text = await self.text_extractor.extract(file_path)
-        if text is None:
-            await logger.adebug("No text extracted", file_path=file_path)
-            return None
+        if mime_type == "text/plain":
+            await logger.ainfo("File is 'text/plain', not using Tika", object_id=object_id, magic_type=magic_type, mime_type=mime_type)
+            if clean_text and "ascii" not in magic_type.lower():
+                with open(file_path, "r") as f:
+                    text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                with tempfile.NamedTemporaryFile(mode="w") as plaintext_file:
+                    plaintext_file.write(text)
+                    plaintext_file.seek(0)
+                    plaintext_file_uuid = await self.storage.upload(plaintext_file.name)
+                    return plaintext_file_uuid
+            else:
+                # if it's straight ascii, just return the existing object_id
+                return object_id
+        else:
+            text = await self.text_extractor.extract(file_path)
+            if text is None:
+                await logger.adebug("No text extracted", file_path=file_path)
+                return None
 
-        # Write the extracted text to a temporary file and upload it to Nemesis
-        with tempfile.NamedTemporaryFile(mode="w") as plaintext_file:
-            plaintext_file.write(text)
-            plaintext_file.seek(0)
+            # Write the extracted text to a temporary file and upload it to Nemesis
+            with tempfile.NamedTemporaryFile(mode="w") as plaintext_file:
 
-            extractedtext_file_uuid = await self.storage.upload(plaintext_file.name)
-            return extractedtext_file_uuid
+                if clean_text:
+                    # collapse multiple newlines and transliterate Unicode to ascii
+                    text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', text))
+
+                plaintext_file.write(text)
+                plaintext_file.seek(0)
+
+                extractedtext_file_uuid = await self.storage.upload(plaintext_file.name)
+                return extractedtext_file_uuid
 
     async def convert_to_pdf(self, file_path: str, landscape: bool = False) -> Optional[uuid.UUID]:
         """Calls self.gotenberg_uri to convert the supplied document to a PDF.
@@ -1152,23 +1185,28 @@ class FileProcessor(TaskInterface):
         try:
             # download the file from the nemesis API
             with await self.storage.download(uuid.UUID(nemesis_uuid)) as temp_file:
-                # update the cracking list with this plaintext file + the project ID
-                # TODO: is this working?
-                success = await self.update_cracklist(nemesis_uuid, file_data_plaintext_message.metadata.project)
-
-                if success:
-                    enrichments_success.append(constants.E_UPDATE_CRACKLIST)
-                else:
-                    enrichments_failure.append(constants.E_UPDATE_CRACKLIST)
-
                 word_count = 0
+                size = 0
 
                 with open(temp_file.name, "rb") as f:
                     # chunking to handle large files
                     while chunk := f.read(self.chunk_size):
                         word_count += len(chunk.split())
+                        size += len(chunk)
 
                 file_data_plaintext.word_count = word_count
+                file_data_plaintext.size = size
+
+                # update the cracking list with this plaintext file + the project ID
+                if size > self.plaintext_size_limit:
+                    await logger.awarning(f"Plaintext object is over the plaintext_size_limit of {self.plaintext_size_limit}, not adding to cracklist", object_id=nemesis_uuid)
+                else:
+                    success = await self.update_cracklist(nemesis_uuid, file_data_plaintext_message.metadata.project)
+
+                    if success:
+                        enrichments_success.append(constants.E_UPDATE_CRACKLIST)
+                    else:
+                        enrichments_failure.append(constants.E_UPDATE_CRACKLIST)
 
                 # run NoseyParker on the plaintext for anything we can find
                 try:

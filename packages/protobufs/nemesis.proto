@@ -1654,8 +1654,11 @@ message FileDataPlaintext {
   // the size (in bytes) of the originating file/object, if it exists
   uint64 originating_object_size = 8;
 
+  // size of the raw extracted text, in bytes
+  uint64 size = 9;
+
   // number of individual tokens
-  uint64 word_count = 9;
+  uint64 word_count = 10;
 
   // short summary of the text
   string summary = 11;
@@ -1666,6 +1669,26 @@ message FileDataPlaintext {
 message FileDataPlaintextMessage {
   Metadata metadata = 1;
   repeated FileDataPlaintext data = 2;
+}
+
+
+// message for text chunks extracted from a FileDataPlaintext document
+//  has simplified metadata since it goes straight back to the NLP service after extraction
+message FileDataPlaintextChunkMessage {
+  // length of the chunk size, in characters
+  uint64 chunk_size = 1;
+
+  // the raw text of the chunk
+  string text = 3;
+
+  // the Nemesis UUID referencing the plaintext file the chunk came from
+  string plaintext_object_id = 5;
+
+  // the Nemesis UUID referencing the original file the plaintext was extracted from
+  string originating_object_id = 6;
+
+  // the path of the originating downloaded file/object the plaintext whole originated from, if it exists
+  string originating_object_path = 7;
 }
 
 

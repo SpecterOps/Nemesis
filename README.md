@@ -36,6 +36,9 @@ Nemesis aims to automate a number of repetitive tasks operators encounter on eng
 # Setup / Installation
 See the [setup instructions](docs/setup.md).
 
+# Usage
+See the [Nemesis Usage Guide](docs/usage_guide.md).
+
 # Contributing / Development Environment Setup
 See [development.md](./docs/development.md)
 

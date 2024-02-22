@@ -954,14 +954,14 @@ def hash_file(nemesis_uuid: str) -> Optional[pb.FileHashes]:
         return None
 
 
-def get_magic_type(nemesis_uuid: str) -> str:
+def get_magic_type(nemesis_uuid: str, mime: bool = False) -> str:
     """Gets the magic type of a file.
 
     Uses python-magic to retrieve the file type via libmagic for the
     specified nemesis UUID file (a la the 'file' command but without subprocess).
     """
 
-    magic_string = magic.from_file(nemesis_uuid)
+    magic_string = magic.from_file(nemesis_uuid, mime=mime)
 
     if magic_string.startswith("Composite Document File V2 Document"):
         magic_string = "Composite Document File V2 Document"
@@ -977,14 +977,6 @@ def is_dotnet_assembly(nemesis_uuid: str) -> bool:
 
 def tika_compatible(mime_type: str) -> bool:
     """Returns True if the mime type can be used with Tika."""
-    # # image_regex = "^.*\\.(exr|avif|bmp|cgm|emf|g3|gif|heic|heif|ief|jp2|jpg|jpeg|jpm|jpf|jxl|ntf|png|btif|svg|tiff|psd|ppj|dgn|djvu|dxb|dxf|fbs|fpx|fst|mmr|rlc|mdi|npx|wbmp|xif|webp|wmf|bpg|cr2|cr3|rgb|xwd)$"
-    # image_regex = "^.*\\.(bmp|gif|jpg|jpeg|png|svg|tiff|wbmp|webp|wmf)$"
-    # is_image = re.match(image_regex, file_path, re.IGNORECASE) is not None
-
-    # misc_regex = "^.*\\.(txt|rtf|chm|pdf)$"
-    # is_misc = re.match(misc_regex, file_path, re.IGNORECASE) is not None
-
-    # return is_office_doc(file_path) or is_image or is_misc
 
     # from https://tika.apache.org/2.8.0/formats.html#Full_list_of_Supported_Formats_in_standard_artifacts
     supported_mime_types = {

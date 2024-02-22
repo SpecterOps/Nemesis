@@ -8,14 +8,15 @@ import nemesispb.nemesis_pb2 as pb
 import structlog
 import uvicorn
 from fastapi import FastAPI
-from nemesiscommon.messaging_rabbitmq import NemesisRabbitMQConsumer
+from nemesiscommon.messaging_rabbitmq import (NemesisRabbitMQConsumer,
+                                              NemesisRabbitMQProducer)
 from nemesiscommon.setupqueues import initRabbitMQ
 from nemesiscommon.socketwaiter import SocketWaiter
 from nemesiscommon.storage_s3 import StorageS3
 from nemesiscommon.storage_minio import StorageMinio
 from nemesiscommon.storage import StorageInterface
 from nlp.services.indexing import IndexingService
-from nlp.services.semantic_search import SemanticSearchAPI
+from nlp.services.text_search import TextSearchAPI
 from nlp.settings import NLPSettings
 from prometheus_async.aio.web import MetricsHTTPServer, start_http_server
 
@@ -62,7 +63,7 @@ class App:
 
         task_coroutines = [
             self.start_indexing_service(),
-            self.start_semantic_search_api(),
+            self.start_text_search_api(),
         ]
 
         async with asyncio.TaskGroup() as tg:
@@ -92,14 +93,25 @@ class App:
         async with (
             await NemesisRabbitMQConsumer.create(
                 self.cfg.rabbitmq_connection_uri, constants.Q_FILE_DATA_PLAINTEXT, pb.FileDataPlaintextMessage, "indexingservice", 1
-            ) as textQ,
+            ) as plaintext_input_queue,
+            await NemesisRabbitMQConsumer.create(
+                self.cfg.rabbitmq_connection_uri, constants.Q_FILE_DATA_PLAINTEXT_CHUNK, pb.FileDataPlaintextChunkMessage, "indexingservice", 1
+            ) as plaintext_chunk_input_queue,
+            await NemesisRabbitMQProducer.create(
+                self.cfg.rabbitmq_connection_uri,
+                constants.Q_FILE_DATA_PLAINTEXT_CHUNK
+            ) as plaintext_chunk_output_queue,
         ):
-            service = IndexingService(textQ, self.cfg, self.storage)
+            service = IndexingService(  self.cfg,
+                                        self.storage,
+                                        plaintext_input_queue,
+                                        plaintext_chunk_input_queue,
+                                        plaintext_chunk_output_queue)
             await service.run()
 
-    async def start_semantic_search_api(self) -> None:
+    async def start_text_search_api(self) -> None:
         app = FastAPI()
-        routes = SemanticSearchAPI(self.cfg)
+        routes = TextSearchAPI(self.cfg)
         app.include_router(routes.router)
         server_config = uvicorn.Config(app, host="0.0.0.0", port=9803, log_level=self.cfg.log_level.lower())
         server = uvicorn.Server(server_config)

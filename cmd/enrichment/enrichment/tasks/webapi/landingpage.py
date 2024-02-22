@@ -1,9 +1,8 @@
 # 3rd Party Libraries
 import structlog
 import uvicorn
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.responses import HTMLResponse
-from fastapi import APIRouter
 from nemesiscommon.tasking import TaskInterface
 
 logger = structlog.get_logger(module=__name__)
@@ -37,7 +36,7 @@ class LandingPageRoutes():
         self.router.add_api_route("/", self.home, methods=["GET"])
 
     async def home(self):
-        return """
+        return HTMLResponse("""
 <html>
     <head>
         <title>Nemesis Services</title>
@@ -62,4 +61,4 @@ class LandingPageRoutes():
         <a href="/crack-list/" target="_blank">Password Cracklist Endpoint</a><br>
     </body>
 </html>
-        """
+        """)

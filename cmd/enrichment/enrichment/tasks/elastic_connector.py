@@ -25,6 +25,7 @@ logger = structlog.get_logger(module=__name__)
 class ElasticConnector(TaskInterface):
     storage: StorageInterface
     es_client: AsyncElasticsearch
+    plaintext_size_limit: int
     public_kibana_url: str
     web_api_url: str
 
@@ -46,6 +47,7 @@ class ElasticConnector(TaskInterface):
         self,
         storage: StorageInterface,
         es_client: AsyncElasticsearch,
+        plaintext_size_limit: int,
         web_api_url: str,
         public_kibana_url: str,
         auth_data_q: MessageQueueConsumerInterface,
@@ -62,6 +64,7 @@ class ElasticConnector(TaskInterface):
     ):
         self.storage = storage
         self.es_client = es_client
+        self.plaintext_size_limit = plaintext_size_limit
         self.web_api_url = web_api_url
         self.public_kibana_url = public_kibana_url
 
@@ -194,8 +197,8 @@ class ElasticConnector(TaskInterface):
             file_uuid = uuid.UUID(d.object_id)
 
             with await self.storage.download(file_uuid) as temp_file:
-                if os.path.getsize(temp_file.name) > 104857600:
-                    await logger.aerror("Nemesis object_id over 100MB limit")
+                if os.path.getsize(temp_file.name) > self.plaintext_size_limit:
+                    await logger.awarning(f"Plaintext object is over the plaintext_size_limit of {self.plaintext_size_limit}, not indexing into Elastic", object_id=d.object_id)
                 else:
                     # index the plaintext if we have it
                     with open(temp_file.name, "r") as f:

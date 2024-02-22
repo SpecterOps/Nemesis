@@ -4,9 +4,9 @@ metadata:
   name: nemesis
 build:
   tagPolicy:
-    sha256: {}
+    inputDigest: {}
   local:
-    push: true
+    push: false
     tryImportMissing: false
     useBuildkit: true
     concurrency: 0
@@ -77,15 +77,15 @@ deploy:
       setValues:
         nemesisWaiter.image.pullPolicy: IfNotPresent
 
-portForward:
-  - resourceType: service
-    resourceName: ingress-nginx-controller
-    namespace: ingress-nginx
-    port: 80
-    localPort: 8080
-    address: 0.0.0.0
-  - resourceType: service
-    resourceName: jupyter
-    namespace: default
-    port: 8888
-    address: 0.0.0.0
+# portForward:
+#   - resourceType: service
+#     resourceName: ingress-nginx-controller
+#     namespace: ingress-nginx
+#     port: 80
+#     localPort: 8080
+#     address: 0.0.0.0
+#   - resourceType: service
+#     resourceName: jupyter
+#     namespace: default
+#     port: 8888
+#     address: 0.0.0.0

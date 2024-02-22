@@ -133,3 +133,18 @@ spec:
         - name: varlibdockercontainers
           hostPath:
             path: /var/lib/docker/containers
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: kube-system
+  name: fluentd-creds
+type: Opaque
+data:
+  {{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace "elasticsearch-users") | default dict }}
+  {{- $existingSecretData := (get $existingSecret "data") | default dict }}
+  {{- $username := (get $existingSecretData "username") }}
+  elasticsearch_username: {{ $username | quote }}
+
+  {{- $password := (get $existingSecretData "password") }}
+  elasticsearch_password: {{ $password | quote }}

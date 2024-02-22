@@ -89,7 +89,18 @@ spec:
             - name: ELASTIC_INDEX_NAME
               value: "text_embeddings"
             - name: EMBEDDING_MODEL
-              value: "sentence-transformers/all-MiniLM-L6-v2"
+              # value: "TaylorAI/bge-micro-v2" # ranked lowest but fastest
+              value: "TaylorAI/gte-tiny"  # ranked higher but slower
+              # value: "thenlper/gte-small" # ranked highest but slowest
+            - name: TEXT_CHUNK_SIZE
+              value: "510"
+            - name: PLAINTEXT_SIZE_LIMIT
+              value: "50000000" # max number of bytes for a plaintext doc to prevent indexing of embeddings
+            # by default NORMALIZE_EMBEDDINGS should normally be false since we're using Cosine similarity
+            #   that only considers vector direction and not magnitude, so we shouldn't
+            #   worry about normalizing the vectors
+            - name: NORMALIZE_EMBEDDINGS
+              value: "False"
             - name: ELASTICSEARCH_URL
               value: http://nemesis-es-internal-http:9200/
             - name: ELASTICSEARCH_USER

@@ -1,9 +1,9 @@
 operation:
   disableSlackAlerting: true
   # lint: (disableSlackAlerting: false) & (must start with https://)
-  slackWebhook: ""
+  slackWebhook: "https://hooks.slack.com/services/some/random/text"
   # lint: (disableSlackAlerting: false) & (must start with #)
-  slackChannel: ""
+  slackChannel: "#testing"
   logLevel: "INFO"
   assessmentId: "ASSESS-0"
   # Can't be localhost because of URL validation in passwordcracker container
@@ -169,3 +169,10 @@ tika:
   nodePort: 31998
   resources: {}
 
+hasura:
+  nodePort: 31887
+  resources: {}
+  image:
+    repository: hasura/graphql-engine
+    tag: v2.36.2.cli-migrations-v2
+    pullPolicy: IfNotPresent

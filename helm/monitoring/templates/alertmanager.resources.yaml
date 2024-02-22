@@ -82,13 +82,25 @@ spec:
         - name: alertmanager
           emptyDir: {}
 ---
+{{- $configmap := (lookup "v1" "ConfigMap" .Release.Namespace "operation-config") }}
+{{- $disableSlack := get $configmap.data "disable-slack-alerting" }}
+{{- if $disableSlack }}
 kind: ConfigMap
 apiVersion: v1
 metadata:
   name: alertmanager-config
 data:
   config.yml: |-
-    {{ .Files.Get "files/alertmanager/config.yml" | nindent 4 }}
+    {{- .Files.Get "files/alertmanager/config-dev.yaml" | nindent 4 }}
+{{- else }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: alertmanager-config
+data:
+  config.yml: |-
+    {{- .Files.Get "files/alertmanager/config-prod.yaml" | nindent 4 }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -96,6 +108,6 @@ metadata:
   name: alertmanager-templates
 data:
   default.tmpl: |-
-    {{ .Files.Get "files/alertmanager/default.tmpl" | nindent 4 }}
+    {{- .Files.Get "files/alertmanager/default.tmpl" | nindent 4 }}
   slack.tmpl: |-
-    {{ .Files.Get "files/alertmanager/slack.tmpl" | nindent 4 }}
+    {{- .Files.Get "files/alertmanager/slack.tmpl" | nindent 4 }}

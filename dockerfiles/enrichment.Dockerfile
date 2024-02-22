@@ -13,13 +13,16 @@ ENV PYTHONUNBUFFERED=true
 FROM debcommon AS dependencies-os
 
 # install our necessary dependencies
-RUN apt-get update -y && apt-get install yara -y && apt-get install git -y && apt-get install wamerican -y && apt-get install libcompress-raw-lzma-perl -y
+RUN apt-get update -y && apt-get install -y \
+    yara \
+    git \
+    wamerican \
+    libcompress-raw-lzma-perl \
+ && rm -rf /var/lib/apt/lists/*
 
 # build JTR so we build get various X-2john binaries for file hash extraction
-RUN cd /opt/ && git clone https://github.com/openwall/john && cd john/src && ./configure && make
-
-# first we have to pip3 install this *normally* so the _fastpbkdf2.abi3.so properly builds (because Poetry no like)
-RUN pip3 install msfastpbkdf2
+# msfastpbkdf2 - first we have to pip3 install this *normally* so the _fastpbkdf2.abi3.so properly builds (because Poetry no like)
+RUN cd /opt/ && git clone https://github.com/openwall/john && cd john/src && ./configure && make -j$(nproc) && pip3 install msfastpbkdf2
 
 
 ####################################

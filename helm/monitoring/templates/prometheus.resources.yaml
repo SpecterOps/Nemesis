@@ -40,10 +40,10 @@ metadata:
     name: prometheus-server-conf
 data:
   prometheus.rules: |-
-    {{ .Files.Get "files/prometheus/prometheus.rules" | nindent 4 }}
+    {{- .Files.Get "files/prometheus/prometheus.rules" | nindent 4 }}
 
   prometheus.yml: |-
-    {{ tpl (.Files.Get "files/prometheus/prometheus.template.yml") . | nindent 4 }}
+    {{- tpl (.Files.Get "files/prometheus/prometheus.template.yml") . | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment

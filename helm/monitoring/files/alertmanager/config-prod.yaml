@@ -1,0 +1,38 @@
+global:
+templates:
+  - '/etc/alertmanager/*.tmpl'
+route:
+  receiver: 'null'
+  group_by: ['alertname', 'priority']
+  group_wait: 30s
+  repeat_interval: 30m
+  routes:
+    - receiver: slack_alert
+      match:
+        severity: critical
+      group_wait: 30s
+      repeat_interval: 20m
+    - receiver: slack_alert
+      match:
+        severity: warning
+      group_wait: 30s
+      repeat_interval: 20m
+receivers:
+  - name: 'default'
+  - name: slack_alert
+    slack_configs:
+      - api_url: $SLACK_WEB_HOOK
+        channel: "#$SLACK_ALERT_CHANNEL"
+        username: '{{ template "slack.default.username" . }}'
+        send_resolved: false
+        icon_url: https://avatars3.githubusercontent.com/u/3380462
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+        title: '{{ template "slack.default.title" . }}'
+        text: |-
+          {{ range .Alerts }}
+            *Alert:* {{ .Annotations.summary }} - `{{ .Labels.severity }}`
+            *Description:* {{ .Annotations.description }}
+            *Details:*
+            {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+            {{ end }}
+          {{ end }}

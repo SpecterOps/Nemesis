@@ -480,6 +480,7 @@ class Container(containers.DeclarativeContainer):
         ElasticConnector,
         storage_service,
         elasticsearch_client,
+        config.plaintext_size_limit,
         config.web_api_url,
         config.public_kibana_url,
         inputq_authdata_elasticconnector,
@@ -510,6 +511,7 @@ class Container(containers.DeclarativeContainer):
         config.chunk_size,
         config.data_download_dir,
         config.extracted_archive_size_limit,
+        config.plaintext_size_limit,
         # Queues
         inputq_filedata_fileprocessor,
         inputq_filedataenriched_fileprocessor,

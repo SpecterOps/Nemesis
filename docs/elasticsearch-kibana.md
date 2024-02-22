@@ -10,7 +10,7 @@ The custom resource definitions that the helm chart installs can all be found [h
 
 By default this Elasticsearch instance uses a persistent data store. The size of the datastore can be adjusted in `./kubernetes/elastic/elasticsearch.yaml` by modifying the `storage: 20Gi` in the "PersistentVolume" and "PersistentVolumeClaim" config sections.
 
-To use temporary storage that is wiped on every Skaffold run, comment the existing code in `./kubernetes/elastic/elasticsearch.yaml` and uncomment the code at the bottom of the file.
+To use temporary storage that is wiped on every Skaffold run, comment the existing code in `./kubernetes/elastic/elasticsearch.yaml` and uncomment the code at the bottom of the file. This is automatically done for the `dev` mode profile in skaffold.
 
 # Accessing Elastic/Kibana
 To login to Elastic or Kibana, get the user and password with the following commands:
