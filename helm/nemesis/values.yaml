@@ -1,8 +1,6 @@
 operation:
   disableSlackAlerting: true
-  # lint: (disableSlackAlerting: false) & (must start with https://)
   slackWebhook: "https://hooks.slack.com/services/some/random/text"
-  # lint: (disableSlackAlerting: false) & (must start with #)
   slackChannel: "#testing"
   logLevel: "INFO"
   assessmentId: "ASSESS-0"

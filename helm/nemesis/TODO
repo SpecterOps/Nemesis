@@ -3,12 +3,11 @@
 - [X] Replicate secrets in monitoring namespace
 - [X] Add monitoring resources
 - [X] `MountVolume.SetUp failed for volume "grafana-dashboards-def" : configmap "grafana-dashboards-def" not found`
-- [ ] Configure values.schema.json
+- [X] Configure values.schema.json
 
 # V2
 - [ ] helm test
     - [ ] HTTP endpoints are curl'able
-- [ ] Investigate monitoring subchart instead of being installed with everything so that we don't need to manage namespace. Goal would be, if monitoring is wanted, `helm install nemesis-monitoring-release nemesis-monitoring -n monitoring`
 - [ ] dotnet-deployment - Add data hosting provider values based on if .Values.aws or .Values.minio. Might need code changes
 - [ ] Mimic validate_aws_resources
 - [ ] RabbitMq connection string as a configuration. Can this be dynamically built so we can use a generated password?
