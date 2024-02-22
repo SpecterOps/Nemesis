@@ -1,13 +1,11 @@
 # Nemesis Installation and Setup
 1. Ensure the [requisite software/hardware is installed](./requirements.md).
 
-2. Run `python3 nemesis-cli.py` to configure Nemesis's kubernetes environment. Examples and detailed usage info [can be found here](./nemesis-cli.md).
+2. Run `helm install nemesis ./helm/nemesis`. Optionally configure build values in `./helm/nemesis/values.yaml`.
 
-3. Start all of Nemesis's services with `skaffold run -m nemesis --port-forward=user`.
+   Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
 
-   Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `nemesis_http_server` nemesis-cli option) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
-
-4. [Ingest data into Nemesis.](#data-ingestion)
+3. [Ingest data into Nemesis.](#data-ingestion)
 
 # Data Ingestion
 Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in muliple ways, including
@@ -59,7 +57,7 @@ Elasticsearch, PostgreSQL, and Minio (if using instead of AWS S3) have persisten
 
 By default, Nemesis uses Minio for file storage with a default storage size of `30Gi`. To change the size, modify the **minio_storage_size** value in the nemesis.config file or CLI argument.
 
-Nemesis can use AWS S3 (in conjunction with KMS for file encryption) for file storage by setting the `storage_provider` to `s3` when running `nemesis-cli.py`.  When S3 file storage is configured, the `aws_*` nemesis-cli.py config variables need to be completed.
+Nemesis can use AWS S3 (in conjunction with KMS for file encryption) for file storage by modifying the `storage` setting in `./helm/nemesis/values.yaml` and configuring the `aws` block.
 
 ## Elasticsearch
 
@@ -71,7 +69,7 @@ The default storage size is 15Gi. To change this, modify the *two* `storage: 15G
 
 
 
-# (Optional) Chainge Nemesis's Listening Port
+# (Optional) Change Nemesis's Listening Port
 The ingress port for Nemesis is **8080**, which routes access for all services. To change this port, in `./skaffold.yaml` modify the `localPort` value under the `portForward-ingress` configuration section (if you change this, you must update nemesis-cli.py's `nemesis_http_server` option).
 
 The only other publicly forwarded port is **9001** if minio is used for storage (the default).

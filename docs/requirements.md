@@ -136,58 +136,24 @@ export SKAFFOLD_UPDATE_CHECK=false
 **Validation:** Running `skaffold` should print skaffold's help.
 </details>
 
+
 <details>
 <summary>
-Python, Pyenv, and Poetry
+Required k8s services
 </summary>
-To get Nemesis running, Python 3.11.2 is needed in order to run nemesis-cli.py (which configures Nemesis's k8s environment). It is not required to install Pyenv/Poetry. However, Pyenv makes global python version management easy and Poetry is required if using the submit_to_nemesis CLI tool.
+You will need to install two services in k8s before getting started. Helm makes this process very simple. If you already have an ElasticSearch cluster or an NGinx Ingress set up in the desired namespace, then you can configure them yourself. You can set them up from scratch with the process below:
 
-## Install Pyenv
-**Purpose:** Manages python environments in a sane way.
-
-1. Install the [relevant prereqs specified by PyEnv](https://github.com/pyenv/pyenv/wiki#suggested-build-environment).
-2. Installation:
 ```bash
-curl https://pyenv.run | bash
-```
-3. After running the install script, add the following to `~/.bashrc` (after pyenv finishes installing, it prints a message telling you to add this):
-```bash
-export PYENV_ROOT="$HOME/.pyenv"
-command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-```
-4. Restart your shell
-5. Install a version of Python and configure the version of Python to use globally on your machine
-```bash
- pyenv install 3.11.2
- pyenv global 3.11.2
+# Add Elastic repository
+helm repo add elastic https://helm.elastic.co
+# Add Bitnami repository
+helm repo add bitnami https://charts.bitnami.com/bitnami
+# Add NGINX repository
+helm repo add nginx https://kubernetes.github.io/ingress-nginx
+# Install NGINX ingress
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
+# Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you desire to install Nemesis in a different namespace
+helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 
-**Validation:** Running `python3 --version` should show version 3.11.2.
-
-## Install Poetry
-**Purpose:** Python package and dependency management tool.
-```bash
-python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
-```
-
-Add the following to `~/.bashrc`:
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Restart your shell.
-
-**Validation:** Running `poetry --version` from the shell should output the current version.
-
-## Install Poetry Environment for Artifact Submission
-**Purpose:** Install the Poetry environment for ./scripts/submit_to_nemesis.sh
-
-`./scripts/submit_to_nemesis.sh` uses code from a Nemesis module that needs its Poetry environment installed first.
-
-```
-poetry -C ./cmd/enrichment/ install
-```
 </details>
-
-
