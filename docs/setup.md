@@ -1,7 +1,7 @@
 # Nemesis Installation and Setup
 1. Ensure the [requisite software/hardware is installed](./requirements.md).
 
-2. Run `helm install nemesis ./helm/nemesis`. Optionally configure build values in `./helm/nemesis/values.yaml`.
+2. Run `helm install nemesis ./helm/nemesis`. Optionally configure build values in [values.yaml](./helm/nemesis/values.yaml).
 
    Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
 
@@ -55,32 +55,39 @@ Elasticsearch, PostgreSQL, and Minio (if using instead of AWS S3) have persisten
 
 ## File Storage Backend
 
-By default, Nemesis uses Minio for file storage with a default storage size of `30Gi`. To change the size, modify the **minio_storage_size** value in the nemesis.config file or CLI argument.
-
 Nemesis can use AWS S3 (in conjunction with KMS for file encryption) for file storage by modifying the `storage` setting in `./helm/nemesis/values.yaml` and configuring the `aws` block.
+
+By default, Nemesis uses Minio for file storage with a default storage size of `30Gi`.
+To change the size, modify the `minio.persistence.size` value in [values.yaml](helm/nemesis/values.yaml) file.
+
 
 ## Elasticsearch
 
-The default storage size is 20Gi. To change this, modify the *two* `storage: 20Gi` entries under the **PersistentVolume** and **PersistentVolumeClaim** sections in ./kubernetes/elastic/elasticsearch.yaml
+The default storage size is 20Gi. To change this, modify the `elasticsearch.storage` value in [values.yaml](helm/nemesis/values.yaml).
+
 
 ## PostgreSQL
 
-The default storage size is 15Gi. To change this, modify the *two* `storage: 15Gi` entries under the **PersistentVolume** and **PersistentVolumeClaim** sections in ./kubernetes/postgres/deployment.yaml
-
+The default storage size is 20Gi. To change this, modify the `postgres.storage` value in [values.yaml](helm/nemesis/values.yaml).
 
 
 # (Optional) Change Nemesis's Listening Port
-The ingress port for Nemesis is **8080**, which routes access for all services. To change this port, in `./skaffold.yaml` modify the `localPort` value under the `portForward-ingress` configuration section (if you change this, you must update nemesis-cli.py's `nemesis_http_server` option).
+The ingress port for Nemesis is **8080**, which routes access for all services. To change this port, in `./skaffold.yaml` modify the `localPort` value under the `portForward-ingress` configuration section (if you change this, you must update `operation.nemesisHttpServer` in values.yaml).
 
 The only other publicly forwarded port is **9001** if minio is used for storage (the default).
 
 Underneath, Skaffold manages all of Nemesis's port forwards using `kubectl`. If you'd like `kubectl` to be able to bind to lower ports without being root, you can run the following:
 ```bash
-sudo setcap CAP_NET_BIND_SERVICE=+eip /path/to/kubectl
+sudo setcap CAP_NET_BIND_SERVICE=+eip $(which kubectl)
 ```
 
 # (Optional) Deleting Running Pods
-Run `skaffold delete` at the root of the repo to remove running pods. There currently is not a way to remove all the Kubernetes objects created by `nemesis-cli.py` without deleting the cluster (e.g., `minikube delete`).
+## Skaffold
+`skaffold delete`
+
+## Helm
+`helm uninstall [nemesis-name]`
+
 
 # Troubleshooting, Common Errors, and Support
 ## "CONTAINER can't be pulled" error
@@ -120,12 +127,8 @@ If you want to start fresh again you can run the following general steps:
 minikube delete   # delete your current cluster
 minikube start    # start up minikube again
 
-python3 nemesis-cli.py  # Setup Nemesis configuration again
-
-./scripts/pull_images.sh  # Avoid any potential skaffold timeouts that may occur from image pulling taking a long time
-skaffold build            # Manually build everything
-
-skaffold run -m nemesis --port-forward=user  # Kick things off
+# Optionally configure Helm values in `./helm/nemesis/values.yaml`
+helm install nemesis ./helm/nemesis
 ```
 
 ## Need additional help?

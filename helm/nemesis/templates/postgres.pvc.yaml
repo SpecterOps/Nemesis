@@ -11,6 +11,6 @@ spec:
     - ReadWriteMany
   resources:
     requests:
-      storage: 15Gi
+      storage: {{ .Values.postgres.storage }}
   volumeName: postgres-pv-volume
 {{- end }}

@@ -11,6 +11,6 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 20Gi
+      storage: {{ .Values.elasticsearch.storage }}
   volumeName: elasticsearch-data-pv # the volume we want this claim to bind to
 {{ end }}

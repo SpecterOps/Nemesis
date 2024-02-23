@@ -1,4 +1,14 @@
-# VM Hardware Requirements
+# Requirements
+
+## Table of Contents
+
+1. [Table of Contents](#table-of-contents)
+1. [VM Hardware Requirements](#vm-hardware-requirements)
+2. [Software Requirements](#software-requirements)
+    1. [Docker Desktop](#docker-desktop-with-kubernetes)
+    2. [Minikube](#minikube)
+
+## VM Hardware Requirements
 We have only tested on machines with the the following specs. All other configurations are not officially supported.
 
  * OS: Debian 11 LTS or Debian 11 on the Windows Subsystem for Linux(WSL).
@@ -12,12 +22,12 @@ Additionally, only x64 architecture has been tested and is supported. ARM platfo
 
 **Do not install the following requirements as root! Minikube is particular does not like to be run as root.**
 
-# Software Requirements
+## Software Requirements
 **The following requirements need to be installed:**
 
-## Docker Desktop with Kubernetes
+### Docker Desktop with Kubernetes
 
-Using Docker Desktop for installing Nemesis is great for development and testing, but is not the best option for team-wide installations.
+Using Docker Desktop for installing Nemesis is great for development and testing, but is not the best option for non-local installations.
 
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
@@ -88,7 +98,7 @@ helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ing
 helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 
-## MiniKube
+### MiniKube
 
 <details>
 <summary>
@@ -214,8 +224,9 @@ export SKAFFOLD_UPDATE_CHECK=false
 
 <details>
 <summary>
-Required k8s services
+Required Kubernetes services
 </summary>
+
 You will need to install two services in k8s before getting started. Helm makes this process very simple. If you already have an ElasticSearch cluster or an NGinx Ingress set up in the desired namespace, then you can configure them yourself. You can set them up from scratch with the process below:
 
 ```bash
@@ -230,5 +241,4 @@ helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ing
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you desire to install Nemesis in a different namespace
 helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
-
 </details>

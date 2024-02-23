@@ -71,6 +71,7 @@ elasticsearch:
     limits:
       cpu: "1000m"
       memory: "2G"
+  storage: 20Gi
 
 pgAdmin:
   nodePort: 31288
@@ -81,6 +82,7 @@ postgres:
   # password: ""
   pgadminEmail: "nemesis@nemesis.com"
   # pgadminPassword: ""
+  storage: 15Gi
 
 dashboard:
   nodePort: 30073
@@ -107,6 +109,7 @@ rabbitmq:
     requests:
       cpu: 100m
       memory: 100Mi
+  storage: 20Gi
 
 eck-operator:
   installCRDs: true

@@ -9,7 +9,7 @@ metadata:
 spec:
   storageClassName: manual
   capacity:
-    storage: 15Gi
+    storage: {{ .Values.postgres.storage }}
   accessModes:
     - ReadWriteMany
   hostPath:
