@@ -1,3 +1,4 @@
+{{- if not .Values.operation.environment "testing" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -239,3 +240,5 @@ spec:
             failureThreshold: 10
       restartPolicy: Always
 status: {}
+
+{{- end }}

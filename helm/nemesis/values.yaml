@@ -6,6 +6,10 @@ operation:
   assessmentId: "ASSESS-0"
   # Can't be localhost because of URL validation in passwordcracker container
   nemesisHttpServer: "http://127.0.0.1:8080/"
+  # Environment defines how pods should be deployed
+  #   "testing" will deploy similar to "development", but doesn't deploy the enrichment container
+  #   "development" will deploy without persistent storage
+  #   "production" deploys all images with persistent storage
   environment: "development"
   dataExpirationDays: "100"
   basicAuthUser: "nemesis"

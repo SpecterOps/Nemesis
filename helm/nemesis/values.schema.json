@@ -63,14 +63,9 @@
           "default": "\"http://127.0.0.1:80/\""
         },
         "environment": {
-          "type": [
-            "string",
-            "boolean",
-            "number",
-            "object",
-            "array"
-          ],
-          "default": "\"development\""
+          "type": "string",
+          "default": "testing",
+          "enum": ["production", "development", "testing"]
         },
         "dataExpirationDays": {
           "type": [

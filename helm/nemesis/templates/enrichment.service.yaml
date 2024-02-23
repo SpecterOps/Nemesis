@@ -1,3 +1,4 @@
+{{- if not .Values.operation.environment "testing" }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -92,3 +93,5 @@ spec:
     app: enrichment
 status:
   loadBalancer: {}
+
+{{- end }}
