@@ -15,6 +15,70 @@ Additionally, only x64 architecture has been tested and is supported. ARM platfo
 # Software Requirements
 **The following requirements need to be installed:**
 
+## Docker Desktop with Kubernetes
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+2. [Enable Kubernetes in Docker Desktop](https://docs.docker.com/desktop/kubernetes/)
+
+3. Install `kubectl`
+
+Linux:
+```bash
+# Download kubectl binary
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+# Install kubectl to /usr/local/bin
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+```
+
+Windows (chocolatey):
+```bash
+choco install kubernetes-cli
+```
+
+Windows (scoop)
+```bash
+scoop install kubectl
+```
+
+4. Install Helm
+
+Linux (apt):
+```bash
+curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+sudo apt-get install apt-transport-https --yes
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+sudo apt-get update
+sudo apt-get install helm
+```
+
+Windows (chocolatey):
+```bash
+choco install kubernetes-helm
+```
+
+Windows (scoop):
+```bash
+scoop install helm
+```
+
+5. Install service dependencies
+
+```bash
+# Add Elastic repository
+helm repo add elastic https://helm.elastic.co
+# Add Bitnami repository
+helm repo add bitnami https://charts.bitnami.com/bitnami
+# Add NGINX repository
+helm repo add nginx https://kubernetes.github.io/ingress-nginx
+# Install NGINX ingress. The path "default/nemesis-ls-beats" will need to be configured if you want to install Nemesis to a namespace not "default"
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
+# Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you want to install Nemesis to a namespace not "default"
+helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
+```
+
+## MiniKube
+
 <details>
 <summary>
 Docker and docker-compose
