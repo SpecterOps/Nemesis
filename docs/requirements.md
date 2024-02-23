@@ -17,11 +17,13 @@ Additionally, only x64 architecture has been tested and is supported. ARM platfo
 
 ## Docker Desktop with Kubernetes
 
+Using Docker Desktop for installing Nemesis is great for development and testing, but is not the best option for team-wide installations.
+
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 2. [Enable Kubernetes in Docker Desktop](https://docs.docker.com/desktop/kubernetes/)
 
-3. Install `kubectl`
+3. Install [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)
 
 Linux:
 ```bash
@@ -41,7 +43,7 @@ Windows (scoop)
 scoop install kubectl
 ```
 
-4. Install Helm
+4. Install [Helm](https://helm.sh/docs/intro/install/)
 
 Linux (apt):
 ```bash
@@ -62,7 +64,9 @@ Windows (scoop):
 scoop install helm
 ```
 
-5. Install service dependencies
+5. Import Helm repositories for dependent services
+
+**Purpose**: Nemesis depends on containers in different repositories
 
 ```bash
 # Add Elastic repository
@@ -71,6 +75,13 @@ helm repo add elastic https://helm.elastic.co
 helm repo add bitnami https://charts.bitnami.com/bitnami
 # Add NGINX repository
 helm repo add nginx https://kubernetes.github.io/ingress-nginx
+```
+
+6. Install Nginx Ingress and eck-operator
+
+**Purpose**: Helm dependencies can't put resources in other namespaces (`ingress-nginx` and `elastic-system`), so we must install these separately.
+
+```bash
 # Install NGINX ingress. The path "default/nemesis-ls-beats" will need to be configured if you want to install Nemesis to a namespace not "default"
 helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you want to install Nemesis to a namespace not "default"
