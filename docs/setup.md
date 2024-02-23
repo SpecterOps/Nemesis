@@ -1,7 +1,7 @@
 # Nemesis Installation and Setup
 1. Ensure the [requisite software/hardware is installed](./requirements.md).
 
-2. Run `helm install nemesis ./helm/nemesis`. Optionally configure build values in [values.yaml](./helm/nemesis/values.yaml).
+2. Run `helm install nemesis ./helm/nemesis`. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml).
 
    Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
 
