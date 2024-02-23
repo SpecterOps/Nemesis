@@ -1,4 +1,4 @@
-{{- if not .Values.operation.environment "testing" }}
+{{- if not .Values.operation.environment "development" }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

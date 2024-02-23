@@ -9,5 +9,5 @@ data:
   assessment-id: {{ .Values.operation.assessmentId | quote }}
   storage_provider: {{ default "minio" .Values.operation.storageProvider | quote }}
   nemesis-http-server: {{ .Values.operation.nemesisHttpServer | quote }}
-  environment: {{ default "development" .Values.operation.environment | quote }}
+  environment: {{ default "testing" .Values.operation.environment | quote }}
   data-expiration-days: {{ default "100" .Values.operation.dataExpirationDays | quote }}
