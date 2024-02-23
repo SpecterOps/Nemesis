@@ -1,4 +1,4 @@
-{{- if not .Values.operation.environment "development" }}
+{{- if ne .Values.operation.environment "development" }}
 apiVersion: v1
 kind: Service
 metadata:

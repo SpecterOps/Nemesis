@@ -1,4 +1,4 @@
-{{- if not .Values.operation.environment "testing" }}
+{{- if ne .Values.operation.environment "testing" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
