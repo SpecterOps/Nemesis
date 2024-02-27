@@ -491,7 +491,7 @@ def build_page(username: str):
                         st.table(df)
                 if rule_text:
                     with st.expander(f"###### Rule Definition"):
-                        st.code(rule_text, language="yaml")
+                        st.code(rule_text, language="lua")
 
         elif chosen_tab == "elasticsearch_info":
             if es_results != {}:

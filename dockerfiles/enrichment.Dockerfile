@@ -28,20 +28,30 @@ RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://insta
 FROM dependencies-python AS build
 
 # clone the common yara rulebase
-# commit 2a8de15d3c2fb95c1e261edfe3f4154480b93161 - Jan 11, 2023
+# commit b6a07188e0081de8774d3f9c76bd7062615d1750 - Feb 26, 2024
 #   we have to tag this to a comment because ~sometimes~ (often) invalid rules sneak in
 #   License: Detection Rule License (DRL) 1.1 - https://github.com/Neo23x0/signature-base/blob/master/LICENSE
-RUN git clone https://github.com/Neo23x0/signature-base /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/ && cd /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/ && git checkout 2a8de15d3c2fb95c1e261edfe3f4154480b93161
+ENV YARA_COMMIT b6a07188e0081de8774d3f9c76bd7062615d1750
+RUN wget https://github.com/Neo23x0/signature-base/archive/${YARA_COMMIT}.zip -P /tmp/
+RUN mkdir -p /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/
+RUN unzip -j /tmp/${YARA_COMMIT}.zip -d /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/
+RUN ls -al /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/
+
 # the following use external variables and have to be removed
 #   ref- https:/github.com/Neo23x0/signature-base#external-variables-in-yara-rules
+#   to find: python3 -c 'import yara, glob; yara_rules = yara.compile(filepaths={f"{ind}": elem for ind, elem in enumerate(glob.glob("/tmp/signature-base/yara/**/*.yar*", recursive=True))})'
 RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/generic_anomalies.yar
 RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/general_cloaking.yar
 RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/gen_webshells_ext_vars.yar
 RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/thor_inverse_matches.yar
 RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/yara_mixed_ext_vars.yar
 RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/configured_vulns_ext_vars.yar
-RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/*_ext_vars* 2> /dev/null || true
-
+RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/expl_connectwise_screenconnect_vuln_feb24.yar
+RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/expl_citrix_netscaler_adc_exploitation_cve_2023_3519.yar
+RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/gen_fake_amsi_dll.yar
+RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/yara-rules_vuln_drivers_strict_renamed.yar
+RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/gen_mal_3cx_compromise_mar23.yar
+RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/gen_vcruntime140_dll_sideloading.yar
 
 COPY cmd/enrichment/poetry.lock cmd/enrichment/pyproject.toml ./
 

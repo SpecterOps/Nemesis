@@ -12,3 +12,6 @@ RUN apt-get update -y && apt-get install yara -y && apt-get install git -y && ap
 #   Commit date - Feb 2, 2024
 ENV JTR_COMMIT f55f42067431c0e8f67e600768cd8a3ad8439818
 RUN cd /opt/ && git clone https://github.com/openwall/john && cd john && git checkout ${JTR_COMMIT} && cd ./src && ./configure && make
+
+# any additional deps so we don't have to compile John again
+RUN apt-get install unzip

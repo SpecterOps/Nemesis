@@ -14,7 +14,6 @@ from typing import Optional
 
 # 3rd Party Libraries
 import aiohttp
-from anyascii import anyascii
 import enrichment.lib.canaries as canary_helpers
 import enrichment.lib.helpers as helpers
 import nemesiscommon.constants as constants
@@ -22,6 +21,7 @@ import nemesispb.nemesis_pb2 as pb
 import plyara
 import structlog
 import yara
+from anyascii import anyascii
 from binaryornot.check import is_binary
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.services.text_extractor import TextExtractorInterface
@@ -992,8 +992,15 @@ class FileProcessor(TaskInterface):
         if mime_type == "text/plain":
             await logger.ainfo("File is 'text/plain', not using Tika", object_id=object_id, magic_type=magic_type, mime_type=mime_type)
             if clean_text and "ascii" not in magic_type.lower():
-                with open(file_path, "r") as f:
-                    text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                if "utf-16" in magic_type.lower():
+                    with open(file_path, "r", encoding="utf-16") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                elif "utf-32" in magic_type.lower():
+                    with open(file_path, "r", encoding="utf-32") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                else:
+                    with open(file_path, "r") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
                 with tempfile.NamedTemporaryFile(mode="w") as plaintext_file:
                     plaintext_file.write(text)
                     plaintext_file.seek(0)
