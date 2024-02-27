@@ -1,0 +1,45 @@
+name: Release Helm Charts
+
+on:
+  push:
+    branches:
+      - helm-chart-hosting
+
+jobs:
+  release:
+    # Provision a Github token with write permissions to the repository. This is needed in
+    # order to create and push to the 'gh-pages' branch.
+    permissions:
+      contents: write
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Set the Git commit user to the whoever pushed to most recent changes. This can be
+      # changed to the 'github_actions' user name with the 'github-actions[bot]@users.noreply.github.com'
+      # to use the Github actions bot user instead.
+      - name: Configure git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Add dependency chart repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          # Set the path to the helm chart
+          charts_dir: helm
+        env:
+          # Use the Github token which that was created above with write permissions
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
