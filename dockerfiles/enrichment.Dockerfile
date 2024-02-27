@@ -1,22 +1,8 @@
 ####################################
-# Common python dependencies layer
+# Pre-built python:3.11.2-bullseye base w/ JTR
 ####################################
-FROM python:3.11.2-bullseye AS debcommon
+FROM harmj0y/jtr-base AS dependencies-os
 WORKDIR /app/cmd/enrichment
-
-ENV PYTHONUNBUFFERED=true
-
-
-####################################
-# OS dependencies
-####################################
-FROM debcommon AS dependencies-os
-
-# install our necessary dependencies
-RUN apt-get update -y && apt-get install yara -y && apt-get install git -y && apt-get install wamerican -y && apt-get install libcompress-raw-lzma-perl -y
-
-# build JTR so we build get various X-2john binaries for file hash extraction
-RUN cd /opt/ && git clone https://github.com/openwall/john && cd john/src && ./configure && make
 
 # first we have to pip3 install this *normally* so the _fastpbkdf2.abi3.so properly builds (because Poetry no like)
 RUN pip3 install msfastpbkdf2
