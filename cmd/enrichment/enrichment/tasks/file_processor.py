@@ -148,25 +148,16 @@ class FileProcessor(TaskInterface):
         # load up the file parsing modules
         (self.file_modules, self.file_module_names) = helpers.dynamic_import_from_src("./enrichment/lib/file_parsers")
 
-        # load up the Yara rules
-        yara_file_paths = glob.glob("./enrichment/lib/public_yara/**/*.yara", recursive=True) + glob.glob(
-            "./enrichment/lib/public_yara/**/*.yar", recursive=True
-        )
-        yara_files = {}
-        for yara_file_path in yara_file_paths:
-            try:
-                yara_files[yara_file_path.split("/")[-1]] = yara_file_path
-            except:
-                continue
+        # load up Yara rules
+        yara_file_paths = {f"{ind}": elem for ind, elem in enumerate(glob.glob("./enrichment/lib/public_yara/**/*.yar*", recursive=True))}
+        self.yara_rules = yara.compile(filepaths=yara_file_paths)
 
-        # compile all the rules
-        self.yara_rules = yara.compile(filepaths=yara_files)
-
-        # save off the rule definitions in a readable way
+        # save off the rule definitions in a readable way so the rule text
+        #   can be passed along with a rule hit
         self.yara_rule_definitions = {}
         yara_rule_definitions_raw = list()
         parser = plyara.Plyara()
-        for file_path in yara_file_paths:
+        for file_path in yara_file_paths.values():
             with open(file_path, 'r') as fh:
                 try:
                     parsed_yara_rules = parser.parse_string(fh.read())
