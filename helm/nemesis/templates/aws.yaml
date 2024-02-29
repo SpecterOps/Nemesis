@@ -1,4 +1,5 @@
 {{- if .Values.aws }}
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,4 +8,14 @@ data:
   aws-bucket: {{ .Values.aws.bucket | quote }}
   aws-default-region: {{ .Values.aws.region | quote }}
   aws-kms-key-alias: {{ .Values.aws.kmsKeyAlias | quote }}
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-creds
+type: Opaque
+data:
+  aws_access_key_id: {{ .Values.aws.accessKeyId | b64enc }}
+  aws_secret_key: {{ .Values.aws.secretKey | b64enc }}
 {{- end }}
