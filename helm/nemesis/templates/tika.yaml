@@ -1,3 +1,22 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tika-config
+data:
+  tika-config.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <properties>
+      <server>
+        <params>
+          <maxRestarts>10</maxRestarts>
+          <maxFiles>10</maxFiles>
+          <timeoutThresholdMillis>125000</timeoutThresholdMillis>
+        </params>
+      </server>
+    </properties>
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,3 +62,21 @@ spec:
             failureThreshold: 10
 
       restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: tika
+  name: tika
+spec:
+  type: NodePort
+  ports:
+    - name: "9998"
+      port: 9998
+      targetPort: 9998
+      nodePort: {{ .Values.tika.nodePort }}
+  selector:
+    app: tika
+status:
+  loadBalancer: {}
