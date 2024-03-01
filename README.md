@@ -46,10 +46,10 @@ See [development.md](./docs/development.md)
 
 | Post Name                                   | Publication Date | Link                                                                               |
 |---------------------------------------------|------------------|------------------------------------------------------------------------------------|
+| *Shadow Wizard Registry Gang: Structured Registry Querying* | Sep 5, 2023 | https://posts.specterops.io/shadow-wizard-registry-gang-structured-registry-querying-9a2fab62a26f |
 | *Hacking With Your Nemesis*                 | Aug 9, 2023      | https://posts.specterops.io/hacking-with-your-nemesis-7861f75fcab4                 |
 | *Challenges In Post-Exploitation Workflows* | Aug 2, 2023      | https://posts.specterops.io/challenges-in-post-exploitation-workflows-2b3469810fe9 |
 | *On (Structured) Data*                      | Jul 26, 2023     | https://posts.specterops.io/on-structured-data-707b7d9876c6                        |
-| *Shadow Wizard Registry Gang: Structured Registry Querying* | Sep 5, 2023 | https://posts.specterops.io/shadow-wizard-registry-gang-structured-registry-querying-9a2fab62a26f |
 
 
 # Acknowledgments
