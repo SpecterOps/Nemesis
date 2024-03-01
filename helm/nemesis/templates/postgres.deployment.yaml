@@ -81,9 +81,6 @@ spec:
         args:
           - >
             kubectl exec $(kubectl get pod --selector=app=postgres -o jsonpath={.items[0].metadata.name}) -- psql -U nemesis -c "ALTER USER nemesis PASSWORD '$POSTGRES_PASSWORD';" nemesis
-
-        # command: ["kubectl", "exec", "-ti", "$(kubectl get pod --selector=app=postgres -o jsonpath={.items[0].metadata.name})", "--", "psql", "-U", "nemesis", "-c", "\"ALTER USER nemesis PASSWORD '$POSTGRES_PASSWORD';\"", "nemesis"]
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
