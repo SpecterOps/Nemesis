@@ -12,6 +12,7 @@ spec:
     storage: {{ .Values.postgres.storage }}
   accessModes:
     - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
   hostPath:
     path: "/mnt/data/postgres/"
     # path: "/postgres-data/"

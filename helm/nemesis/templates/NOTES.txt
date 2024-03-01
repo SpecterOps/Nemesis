@@ -1,20 +1,12 @@
+------------------------------------------------------------------------
+
 To retrieve generated credentials run:
+    ./scripts/get_service_credentials.sh
 
-- BASIC AUTH (used to access most services, e.g., /dashboard)
-    export BASIC_AUTH_USER=$(kubectl get secret operation-creds -o jsonpath="{.data.basic-auth-user}" | base64 -d)
-    export BASIC_AUTH_PASSWORD=$(kubectl get secret operation-creds -o jsonpath="{.data.basic-auth-password}" | base64 -d)
-    echo "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD"
+If you are using Minikube, run './scripts/minikube_port_forward.sh' to expose port 8080 to your host.
 
-- ELASTICSEARCH (/kibana)
-    export ES_USER=$(kubectl get secret elasticsearch-users -o jsonpath="{.data.username}" | base64 -d)
-    export ES_PASSWORD=$(kubectl get secret elasticsearch-users -o jsonpath="{.data.password}" | base64 -d)
-    echo "$ES_USER:$ES_PASSWORD"
+Navigate to `https://127.0.0.1:8080/` and enter the "Basic Auth" credentials to see the list of exposed services.
+    - To interact with the Nemesis dashboard, click "Dashboard" (https://127.0.0.1:8080/dashboard/)
+    - To interact with Elastic/Kibana, click "Kibana" (https://127.0.0.1:8080/kibana/) and use the Elastic/Kibana credentials.
 
-- AWS (if enabled/used)
-    export AWS_ACCESS_KEY=$(kubectl get secret aws-creds -o jsonpath="{.data.aws_access_key_id}" | base64 -d)
-    export AWS_SECRET_KEY=$(kubectl get secret aws-creds -o jsonpath="{.data.aws_secret_key}" | base64 -d)
-    echo -n "AWS_ACCESS_KEY:$AWS_ACCESS_KEY\nAWS_SECRET_KEY: $AWS_SECRET_KEY"
-
-
-*NOTE:  If you are using Minikube, run './scripts/minikube_port_forward.sh' to expose port 8080 to your host
-        Then navigate to https://127.0.0.1:8080/dashboard
+------------------------------------------------------------------------
