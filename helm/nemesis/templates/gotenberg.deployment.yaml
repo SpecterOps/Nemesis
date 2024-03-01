@@ -31,7 +31,7 @@ spec:
           image: "{{ .Values.gotenberg.image.repository }}:{{ .Values.gotenberg.image.tag }}"
           imagePullPolicy: {{ .Values.gotenberg.image.pullPolicy }}
           name: gotenberg
-          # command: ["gotenberg", "--uno-listener-restart-threshold=0"]
+          command: ["gotenberg", "--api-timeout=180s", "--libreoffice-restart-after=5", "--libreoffice-auto-start=true"]
           ports:
             - containerPort: 3000
               name: http

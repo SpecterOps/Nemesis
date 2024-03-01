@@ -45,11 +45,6 @@ spec:
               value: "true"
             - name: HASURA_GRAPHQL_ENABLED_LOG_TYPES
               value: startup
-            # - name: HASURA_GRAPHQL_ADMIN_SECRET
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: operation-creds
-            #       key: basic_auth_password
           image: {{ .Values.hasura.image.repository }}:{{ .Values.hasura.image.tag }}
           imagePullPolicy: {{ .Values.hasura.image.pullPolicy }}
           name: hasura

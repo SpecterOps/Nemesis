@@ -1,4 +1,4 @@
-{{- if ne .Values.operation.environment "testing" }}
+{{- if ne .Values.operation.environment "development" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -69,7 +69,7 @@ spec:
             - name: YARA_API_PORT
               value: "9700"
             - name: PLAINTEXT_SIZE_LIMIT
-              value: "50000000" # max number of bytes for a plaintext doc to prevent indexing
+              value: "50000000" # max number of bytes for a plaintext doc to prevent indexing of embeddings
 
             - name: CONTEXT_WORDS
               value: "5"

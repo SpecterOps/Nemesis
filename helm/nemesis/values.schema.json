@@ -64,8 +64,8 @@
         },
         "environment": {
           "type": "string",
-          "default": "testing",
-          "enum": ["production", "development", "testing"]
+          "default": "production",
+          "enum": ["production", "development", "test"]
         },
         "dataExpirationDays": {
           "type": [

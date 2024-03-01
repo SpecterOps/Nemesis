@@ -8,9 +8,9 @@ operation:
   nemesisHttpServer: "http://127.0.0.1:8080/"
   # Environment defines how pods should be deployed
   #   "development" will deploy without persistent storage and won't deploy the enrichment container
-  #   "testing" will deploy without persistent storage
+  #   "test" will deploy without persistent storage
   #   "production" deploys all images with persistent storage
-  environment: "development"
+  environment: "production"
   dataExpirationDays: "100"
   basicAuthUser: "nemesis"
   # Default password for basic auth
@@ -49,7 +49,7 @@ ingress-nginx:
 gotenberg:
   image:
     repository: gotenberg/gotenberg
-    tag: "7.8.0"
+    tag: "8.0.1"
     pullPolicy: IfNotPresent
   nodePort: 31300
   resources:
