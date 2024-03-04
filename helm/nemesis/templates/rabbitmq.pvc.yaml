@@ -13,4 +13,4 @@ spec:
     requests:
       storage: {{ .Values.rabbitmq.storage }}
   volumeName: rabbitmq-data-pv
-{{ end}}
+{{ end }}

@@ -1,3 +1,3 @@
 FROM alpine:3.17.0
 
-RUN apk --update add jq curl
+RUN apk --update add jq curl postgresql-client

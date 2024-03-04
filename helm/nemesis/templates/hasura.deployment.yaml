@@ -15,6 +15,39 @@ spec:
       labels:
         app: hasura
     spec:
+      initContainers:
+        - name: init-hasura-postgres
+          image: "{{ .Values.nemesisWaiter.image.repository }}:{{ .Values.nemesisWaiter.image.tag }}"
+          imagePullPolicy: {{ .Values.nemesisWaiter.image.pullPolicy }}
+          env:
+            - name: POSTGRES_SERVER
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DATABASE
+              value: nemesis
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-creds
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-creds
+                  key: postgres-password
+            - name: PG_DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until pg_isready -h ${POSTGRES_SERVER} -p ${POSTGRES_PORT} -d ${POSTGRES_DATABASE} -U ${POSTGRES_USER}
+              do
+                echo "Waiting for postgres to be ready at ${PG_DATABASE_URL}..."
+                sleep 2
+              done
+
+              echo "postgres is available."
       containers:
         - env:
             - name: POSTGRES_SERVER
@@ -45,7 +78,7 @@ spec:
               value: "true"
             - name: HASURA_GRAPHQL_ENABLED_LOG_TYPES
               value: startup
-          image: {{ .Values.hasura.image.repository }}:{{ .Values.hasura.image.tag }}
+          image: "{{ .Values.hasura.image.repository }}:{{ .Values.hasura.image.tag }}"
           imagePullPolicy: {{ .Values.hasura.image.pullPolicy }}
           name: hasura
           ports:

@@ -43,14 +43,9 @@ curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stabl
 sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 ```
 
-Windows (chocolatey):
+Windows (winget)
 ```bash
-choco install kubernetes-cli
-```
-
-Windows (scoop)
-```bash
-scoop install kubectl
+winget install Kubernetes.kubectl
 ```
 
 4. Install [Helm](https://helm.sh/docs/intro/install/)
@@ -64,14 +59,9 @@ sudo apt-get update
 sudo apt-get install helm
 ```
 
-Windows (chocolatey):
+Windows (winget):
 ```bash
-choco install kubernetes-helm
-```
-
-Windows (scoop):
-```bash
-scoop install helm
+winget install Helm.Helm
 ```
 
 5. Import Helm repositories for dependent services
@@ -79,12 +69,8 @@ scoop install helm
 **Purpose**: Nemesis depends on containers in different repositories
 
 ```bash
-# Add Elastic repository
-helm repo add elastic https://helm.elastic.co
 # Add Bitnami repository
 helm repo add bitnami https://charts.bitnami.com/bitnami
-# Add NGINX repository
-helm repo add nginx https://kubernetes.github.io/ingress-nginx
 ```
 
 6. Install Nginx Ingress and eck-operator
@@ -95,7 +81,7 @@ helm repo add nginx https://kubernetes.github.io/ingress-nginx
 # Install NGINX ingress. The path "default/nemesis-ls-beats" will need to be configured if you want to install Nemesis to a namespace not "default"
 helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you want to install Nemesis to a namespace not "default"
-helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
+helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 
 ### MiniKube
