@@ -52,7 +52,10 @@ ENV PATH="/app/cmd/enrichment/.venv/bin:$PATH"
 
 # Clone our base Yara rules
 #   License: Detection Rule License (DRL) 1.1 - https://github.com/Neo23x0/signature-base/blob/master/LICENSE
-RUN git clone https://github.com/Neo23x0/signature-base/ --depth 1 /signature-base/
+# Set a specific commit for the rule base in case someone changes the license
+#   Commit date - March 2, 2024
+ENV YARA_COMMIT cd7651d2ccf4158a35a8d1cc0441928f7d92818f
+RUN git clone https://github.com/Neo23x0/signature-base/ /signature-base/ && cd /signature-base/ && git checkout ${YARA_COMMIT}
 # Clean the rules to get rid of Thor-ness that throws Yara compilation errors
 RUN python3 enrichment/lib/public_yara/clean_yara_rules.py
 
