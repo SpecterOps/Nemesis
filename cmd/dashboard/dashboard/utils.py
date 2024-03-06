@@ -1101,9 +1101,7 @@ def get_monaco_languages() -> List[str]:
     """
     return ["plaintext", "abap", "aes", "apex", "azcli", "bat", "bicep", "c", "csv", "cameligo", "clojure", "coffeescript",
             "cpp", "csharp", "csp", "css", "cypher", "dart", "dockerfile", "ecl", "elixir", "flow9",
-            "freemarker2", "freemarker2.tag-angle.interpolation-bracket", "freemarker2.tag-angle.interpolation-dollar",
-            "freemarker2.tag-auto.interpolation-bracket", "freemarker2.tag-auto.interpolation-dollar",
-            "freemarker2.tag-bracket.interpolation-bracket", "freemarker2.tag-bracket.interpolation-dollar", "fsharp",
+            "freemarker2", "fsharp",
             "go", "graphql", "handlebars", "hcl", "html", "ini", "java", "javascript", "julia", "kotlin", "less", "lexon",
             "liquid", "lua", "m3", "markdown", "mdx", "mips", "msdax", "mysql", "objective-c", "pascal", "pascaligo",
             "perl", "pgsql", "php", "pla", "postiats", "powerquery", "powershell", "proto", "pug", "python", "qsharp", "r",
