@@ -54,7 +54,6 @@ gotenberg:
     pullPolicy: IfNotPresent
   nodePort: 31300
   resources:
-    # requests as specified in https://gotenberg.dev/docs/get-started/kubernetes
     requests:
       memory: "512Mi"
       cpu: "200m"
@@ -73,11 +72,11 @@ elasticsearch:
   password: "Qwerty12345"
   resources:
     requests:
-      cpu: "500m"
+      cpu: "750m"
       memory: "1G"
     limits:
-      cpu: "1000m"
-      memory: "2G"
+      cpu: "1500m"
+      memory: "3G"
   storage: 20Gi
 
 pgAdmin:
@@ -162,7 +161,13 @@ nlp:
     repository: t94j0/nemesis-nlp
     tag: latest
     pullPolicy: IfNotPresent
-  resources: {}
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "250m"
+    limits:
+      memory: "1500Mi"
+      cpu: "1000m"
 
 passwordcracker:
   nodePort: 31990
@@ -170,15 +175,21 @@ passwordcracker:
     repository: t94j0/nemesis-passwordcracker
     tag: latest
     pullPolicy: IfNotPresent
-    resources:
-      requests:
-        cpu: "100m"
-      limits:
-        cpu: "2000m"
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "2000m"
 
 tika:
   nodePort: 31998
-  resources: {}
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1.5Gi"
+      cpu: "1000m"
 
 hasura:
   nodePort: 31887
