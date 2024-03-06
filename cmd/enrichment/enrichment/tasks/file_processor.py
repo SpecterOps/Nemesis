@@ -474,6 +474,17 @@ class FileProcessor(TaskInterface):
             await logger.ainfo("Detected Seatbelt json file, emitting RawDataIngestionMessage")
             await self.out_q_rawdata.Send(seatbelt_raw_data_message.SerializeToString())
 
+        # if this file is DPAPI domain backup key data, emit a raw_data message so the data is properly processed
+        elif file_data.magic_type == "JSON data" and helpers.scan_with_yara(file_path_on_disk, "dpapi_domain_backupkey"):
+            dpapi_raw_data_message = pb.RawDataIngestionMessage()
+            dpapi_raw_data_message.metadata.CopyFrom(metadata)
+            raw_data_message = dpapi_raw_data_message.data.add()
+            raw_data_message.data = file_data.object_id
+            raw_data_message.tags.append("dpapi_domain_backupkey")
+            raw_data_message.is_file = True
+            await logger.ainfo("Detected DPAPI domain backup key json file, emitting RawDataIngestionMessage")
+            await self.out_q_rawdata.Send(dpapi_raw_data_message.SerializeToString())
+
         # if we have a registry file, try to extract all the strings and run NoseyParker on everything
         if file_data.magic_type.startswith("MS Windows registry file"):
 
