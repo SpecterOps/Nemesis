@@ -76,6 +76,11 @@ deploy:
         nemesisWaiter.image.tag: "{{.IMAGE_TAG_nemesis_waiter}}@{{.IMAGE_DIGEST_nemesis_waiter}}"
       setValues:
         nemesisWaiter.image.pullPolicy: IfNotPresent
+    flags:
+      upgrade:
+        ["--timeout=30m"]
+      install:
+        ["--timeout=30m"]
 
 portForward:
   - resourceType: service

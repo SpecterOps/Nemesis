@@ -14,6 +14,7 @@ operation:
   dataExpirationDays: "100"
   basicAuthUser: "nemesis"
   # Default password for basic auth
+  #   sets to a random value if not specified
   # basicAuthPassword: ""
 
 storage: minio
@@ -67,7 +68,9 @@ grafana:
 
 elasticsearch:
   user: "nemesis"
-  # password: ""
+  # NOTE: if you're use persist "production" storage, this needs to be set to a static value
+  #   ahead of time for services to play nicely together
+  password: "Qwerty12345"
   resources:
     requests:
       cpu: "500m"
@@ -83,7 +86,9 @@ pgAdmin:
 postgres:
   nodePort: 31209
   user: "nemesis"
-  # password: ""
+  # NOTE: if you're use persist "production" storage, this needs to be set to a static value
+  #   ahead of time for services to play nicely together
+  password: "Qwerty12345"
   pgadminEmail: "nemesis@nemesis.com"
   # pgadminPassword: ""
   storage: 15Gi
@@ -95,6 +100,7 @@ dashboard:
     tag: latest
     pullPolicy: IfNotPresent
   username: "nemesis"
+  # not actually used anymore as auth is disabled for the dashboard
   # password: ""
   resources: {}
 
