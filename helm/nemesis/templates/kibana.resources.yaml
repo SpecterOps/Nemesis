@@ -8,9 +8,16 @@ spec:
   elasticsearchRef:
     name: nemesis
   config:
-     telemetry.enabled: false
-     telemetry.optIn: false
-     newsfeed.enabled: false
+    telemetry.enabled: false
+    telemetry.optIn: false
+    newsfeed.enabled: false
+    xpack.security.authc.providers:
+      basic.basci1:
+        order: 1
+      anonymous.anonymous1:
+        order: 0
+        description: "Log into Kibana"
+        credentials: "elasticsearch_anonymous_user"
   http:
     tls:
       selfSignedCertificate:

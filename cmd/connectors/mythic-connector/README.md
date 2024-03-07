@@ -15,7 +15,7 @@ MYTHIC_USERNAME=mythic_admin
 MYTHIC_PASSWORD=SuperSecretPassword
 REDIS_HOSTNAME=redis
 REDIS_PORT=6379
-NEMESIS_HTTP_SERVER=http://172.16.111.187:8000
+NEMESIS_HTTP_SERVER=https://172.16.111.187:8000
 NEMESIS_CREDS=nemesis:password
 ELASTICSEARCH_USER=elastic
 ELASTICSEARCH_PASSWORD=password
@@ -55,7 +55,7 @@ REDIS_LAST_FILEBROWSER_ID=456
 REDIS_LAST_PROCESS_ID=789
 ```
 
-You can find the last processed file ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+You can find the last processed file ID through Hasura (https://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
 
 ```
 query MyQuery {
@@ -65,7 +65,7 @@ query MyQuery {
 }
 ```
 
-You can find the last processed file listing ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+You can find the last processed file listing ID through Hasura (https://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
 
 ```
 query MyQuery {
@@ -75,7 +75,7 @@ query MyQuery {
 }
 ```
 
-You can find the last processed processing listing ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+You can find the last processed processing listing ID through Hasura (https://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
 
 ```
 query MyQuery {

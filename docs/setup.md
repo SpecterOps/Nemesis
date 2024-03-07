@@ -3,11 +3,13 @@
 
 2. Run `helm install nemesis ./helm/nemesis --timeout '30m'`. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml).
 
-   If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis && kubectl delete all --all -n default` and rerun the install command with an increased timeout value.
+   If you want monitoring capabilities, run `helm install nemesis-monitoring ./helm/monitoring --timeout '30m'`
 
-   Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
+   If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis nemesis-monitoring && kubectl delete all --all -n default` and rerun the install command with an increased timeout value. If you installed `nemesis-monitoring` as well, run `helm uninstall nemesis && helm uninstall nemesis-monitoring && kubectl delete all --all -n default`
 
-   If you used Minikube as a base, run `./scripts/minikube_port_forward.sh` to setup a portforawd to 8080 (or the port passed as an argument) for access.
+   Once running, browsing `https://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
+
+   If you used Minikube as a base, run `./scripts/minikube_port_forward.sh` to setup a portforward to 8080 (or the port passed as an argument) for access.
 
    **Note:** If you want to change anything in [values.yaml](../helm/nemesis/values.yaml), make the modification(s) and then run `helm upgrade nemesis ./helm/nemesis --reset-values` to apply the changes.
 

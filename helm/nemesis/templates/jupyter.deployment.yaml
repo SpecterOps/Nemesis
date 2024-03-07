@@ -20,8 +20,8 @@ spec:
             - name: JUPYTER_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: dashboard-creds
-                  key: dashboard-password
+                  name: jupyter-creds
+                  key: token
 
             - name: JUPYTER_PORT
               value: "8888"
@@ -41,6 +41,6 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 10
-            
+
       restartPolicy: Always
 status: {}

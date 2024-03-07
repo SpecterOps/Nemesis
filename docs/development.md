@@ -18,27 +18,13 @@ sudo unzip protoc-21.5-linux-x86_64.zip -d /usr/local/
 ```
 </details>
 
+**Also ensure you have minikube and skaffold setup from the [setup](./setup.md) guide.**
 
 # Running Nemesis during Dev
 
-1. Run `nemesis-cli.py`.  This script ensures minikube is started with sufficient resources, tests access to AWS resources (and optionally creates them), and adds secrets to the k8s cluster (and generates random ones if wanted).
+In [values.yaml](../helm/nemesis/values.yaml), set "environment" at the top to either "test", which deploys without persistent storage, or "development", which will deploy without persistent storage and won't deploy the enrichment container (the most commonly dev'ed container).
 
-2. Start Nemesis. The output of `nemesis-cli.py` will contain some instructions on how to start Nemesis. In general during dev, Nemesis's infrastructure and services are started separately:
-
-```
-# Start fairly static services (Elastic, RabbitMQ, kibana, jupyter, tika, gotenberg, etc)
-./scripts/infra_start.sh
-
-# Start up the data ingest/enrichment services. If you pass any args to this command, the "enrichment" service will NOT start
-./scripts/services_start.sh
-```
-
-These scripts are just wrappers around skaffold commands.
-
-**Note 1 - Image pull timeouts**
-
-Sometimes right after a minikube cluster is created, it takes a while for all the docker images to be downloaded into minikube. Skaffold may timeout during this time and tear down all the infrastructure. If this happens, you can usually just run skaffold again without issue.
-
+Running `skaffold dev` will then build and deploy images, instead of pulling the images from Dockerhub.
 
 # Service Development
 
@@ -49,6 +35,8 @@ deploy the complete container.
 To do this, [follow this guide](https://code.visualstudio.com/docs/remote/ssh) to
 set up remote SSH for development - we recommend having the code itself reside
 on a supported Debian 11 image and remoting in from your main OS for development.
+If you have issues, see the [remote debugging guide](./remote_debugging.md) for more details.
+
 Once the remote session has been established:
 
 - Open up **just** the module folder in ./cmd/ (e.g., `enrichment`)

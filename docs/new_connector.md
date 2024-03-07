@@ -6,7 +6,7 @@ Regardless of the connector actions, it will need to somehow save the following 
 
 | Description                               | Example                      |
 | ----------------------------------------- | ---------------------------- |
-| Address of the Nemesis endpoint           | http://<NEMESIS_URL>/api     |
+| Address of the Nemesis endpoint           | https://<NEMESIS_URL>/api     |
 | Nemesis basic-auth connection credentials | nemesis:Qwerty12345          |
 | Project name                              | PROJECT-X                    |
 | Expiration days (or date)                 | 100 (or 01/01/2024)          |
@@ -17,7 +17,7 @@ File processing is the one flow that differs from other structured data ingestio
 
 ## Step 1 - File Upload
 
-For a file to be processed, the raw file bytes first need to be posted to the correct API route for storage in the data lake. This is accomplished by POSTing the file bytes to the `http://<NEMESIS_URL>/api/file` which returns a simple JSON response with an `object_id` field containing a UUID that references the uploaded file. For example, to do this in Python (as shown in [mythic-connector](../cmd/connectors/mythic-connector/sync.py)), you would run something like this:
+For a file to be processed, the raw file bytes first need to be posted to the correct API route for storage in the data lake. This is accomplished by POSTing the file bytes to the `https://<NEMESIS_URL>/api/file` which returns a simple JSON response with an `object_id` field containing a UUID that references the uploaded file. For example, to do this in Python (as shown in [mythic-connector](../cmd/connectors/mythic-connector/sync.py)), you would run something like this:
 
 ```python
 basic = HTTPBasicAuth(NEMESIS_USERNAME, NEMESIS_PASSWORD)
@@ -27,7 +27,7 @@ nemesis_file_id = json_result["object_id"]
 ```
 The equivalent `curl` command:
 ```bash
-curl -H "Content-Type: application/octet-stream" -v --user 'nemesis:Qwerty12345' --data-binary @/etc/issue http://192.168.230.42:8080/api/file
+curl -H "Content-Type: application/octet-stream" -v --user 'nemesis:Qwerty12345' -k --data-binary @/etc/issue https://192.168.230.42:8080/api/file
 ```
 
 The `nemesis_file_id` is used in the `file_data` message in Step 2 below. This UUID is the unique reference for the file in Nemesis.
@@ -72,5 +72,5 @@ As an example, see the `handle_process()` function in the [mythic-connector](../
 
 Example of many of the structured datatypes can be found in the `./sample_files/structured/` folder. Example of using these to submit process data:
 ```bash
-curl -H "Content-Type: application/octet-stream" -v --user 'nemesis:Qwerty12345' --data-binary @./sample_files/structured/process_data.json http://192.168.230.42:8080/api/data
+curl -H "Content-Type: application/octet-stream" -k -v --user 'nemesis:Qwerty12345' --data-binary @./sample_files/structured/process_data.json https://192.168.230.42:8080/api/data
 ```
