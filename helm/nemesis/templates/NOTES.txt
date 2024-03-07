@@ -3,10 +3,14 @@
 To retrieve generated credentials run:
     ./scripts/get_service_credentials.sh
 
-If you are using Minikube, run './scripts/minikube_port_forward.sh' to expose port 8080 to your host.
+If you are using Minikube, to expose port 8080 to your host run
+    ./scripts/minikube_port_forward.sh
+
+If you want to install monitoring, run:
+    helm install nemesis-monitoring ./helm/monitoring
 
 Navigate to `https://127.0.0.1:8080/` and enter the "Basic Auth" credentials to see the list of exposed services.
     - To interact with the Nemesis dashboard, click "Dashboard" (https://127.0.0.1:8080/dashboard/)
-    - To interact with Elastic/Kibana, click "Kibana" (https://127.0.0.1:8080/kibana/) and use the Elastic/Kibana credentials.
+    - To interact with Elastic/Kibana, click "Kibana" (https://127.0.0.1:8080/kibana/)
 
 ------------------------------------------------------------------------

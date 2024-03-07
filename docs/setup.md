@@ -3,7 +3,7 @@
 
 2. Run `helm install nemesis ./helm/nemesis --timeout '30m'`. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml).
 
-   If you want monitoring capabilities, run `helm install nemesis-monitoring ./helm/monitoring --timeout '30m'`
+   If you want monitoring capabilities, run `helm install nemesis-monitoring ./helm/monitoring`
 
    If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis nemesis-monitoring && kubectl delete all --all -n default` and rerun the install command with an increased timeout value. If you installed `nemesis-monitoring` as well, run `helm uninstall nemesis && helm uninstall nemesis-monitoring && kubectl delete all --all -n default`
 
