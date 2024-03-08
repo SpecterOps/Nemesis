@@ -122,6 +122,7 @@ class NemesisApi(TaskInterface):
     assessment_id: str
     log_level: str
     reprocessing_workers: int
+    storage_expiration_days: int
 
     def __init__(
         self,
@@ -134,6 +135,7 @@ class NemesisApi(TaskInterface):
         assessment_id: str,
         log_level: str,
         reprocessing_workers: int,
+        storage_expiration_days: int
     ) -> None:
         self.storage = storage
         self.rabbitmq_connection_uri = rabbitmq_connection_uri
@@ -144,6 +146,7 @@ class NemesisApi(TaskInterface):
         self.assessment_id = assessment_id
         self.log_level = log_level
         self.reprocessing_workers = reprocessing_workers
+        self.storage_expiration_days = storage_expiration_days
 
     async def run(self) -> None:
         app = FastAPI(title="Nemesis API")
@@ -156,6 +159,7 @@ class NemesisApi(TaskInterface):
             self.queue_map,
             self.assessment_id,
             self.reprocessing_workers,
+            self.storage_expiration_days,
         )
 
         app.include_router(routes.router)
@@ -199,6 +203,7 @@ class NemesisApiRoutes():
     producers: Dict[NemesisQueue, MessageQueueProducerInterface]
     assessment_id: str
     reprocessing_workers: int
+    storage_expiration_days: int
 
     def __init__(
         self,
@@ -210,6 +215,7 @@ class NemesisApiRoutes():
         queues: Dict[NemesisQueue, MessageQueueProducerInterface],
         assessment_id: str,
         reprocessing_workers: int,
+        storage_expiration_days: int,
     ) -> None:
         super().__init__()
         self.storage = storage
@@ -220,6 +226,7 @@ class NemesisApiRoutes():
         self.producers = queues
         self.assessment_id = assessment_id
         self.reprocessing_workers = reprocessing_workers
+        self.storage_expiration_days = storage_expiration_days
         self.router = APIRouter()
         self.router.add_api_route("/", self.home, methods=["GET"])
         self.router.add_api_route("/ready", self.ready, methods=["GET"])
@@ -395,7 +402,8 @@ class NemesisApiRoutes():
             with open(tmpfile.name, "wb") as f:
                 f.write(await request.body())
 
-            file_uuid = await self.storage.upload(f.name)
+            # the first file that comes in will set the bucket file expiry policy (for now)
+            file_uuid = await self.storage.upload(f.name, self.storage_expiration_days)
             return {"object_id": str(file_uuid)}
 
     @aio.time(Summary("download", "Download file"))  # type: ignore

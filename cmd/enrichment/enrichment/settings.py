@@ -66,6 +66,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     reprocessing_workers: PositiveInt = 5  # number of parallel reprocessing workers
     tasks: Optional[List[str]]  # List of tasks to start
     registry_value_batch_size: PositiveInt = 5000  # number of registry values to emit per reg carving message
+    storage_expiration_days: PositiveInt = 100  # number of days to set for file storage auto-expiry
 
     @validator("slack_channel")
     def slack_channel_is_valid(cls, channel: Optional[str]) -> Optional[str]:
