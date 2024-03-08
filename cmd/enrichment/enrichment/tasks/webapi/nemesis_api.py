@@ -17,15 +17,12 @@ import uvicorn
 from aio_pika import connect_robust
 from elasticsearch import AsyncElasticsearch
 from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
-    map_unordered,
-    return_args_and_exceptions,
-)
+    map_unordered, return_args_and_exceptions)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
-from fastapi import FastAPI, Request, APIRouter, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from google.protobuf.json_format import Parse
-
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
 from nemesiscommon.constants import ALL_ES_INDICIES, NemesisQueue
 from nemesiscommon.messaging import MessageQueueProducerInterface
@@ -125,6 +122,7 @@ class NemesisApi(TaskInterface):
     assessment_id: str
     log_level: str
     reprocessing_workers: int
+    storage_expiration_days: int
 
     def __init__(
         self,
@@ -137,6 +135,7 @@ class NemesisApi(TaskInterface):
         assessment_id: str,
         log_level: str,
         reprocessing_workers: int,
+        storage_expiration_days: int
     ) -> None:
         self.storage = storage
         self.rabbitmq_connection_uri = rabbitmq_connection_uri
@@ -147,6 +146,7 @@ class NemesisApi(TaskInterface):
         self.assessment_id = assessment_id
         self.log_level = log_level
         self.reprocessing_workers = reprocessing_workers
+        self.storage_expiration_days = storage_expiration_days
 
     async def run(self) -> None:
         app = FastAPI(title="Nemesis API")
@@ -159,6 +159,7 @@ class NemesisApi(TaskInterface):
             self.queue_map,
             self.assessment_id,
             self.reprocessing_workers,
+            self.storage_expiration_days,
         )
 
         app.include_router(routes.router)
@@ -202,6 +203,7 @@ class NemesisApiRoutes():
     producers: Dict[NemesisQueue, MessageQueueProducerInterface]
     assessment_id: str
     reprocessing_workers: int
+    storage_expiration_days: int
 
     def __init__(
         self,
@@ -213,6 +215,7 @@ class NemesisApiRoutes():
         queues: Dict[NemesisQueue, MessageQueueProducerInterface],
         assessment_id: str,
         reprocessing_workers: int,
+        storage_expiration_days: int,
     ) -> None:
         super().__init__()
         self.storage = storage
@@ -223,6 +226,7 @@ class NemesisApiRoutes():
         self.producers = queues
         self.assessment_id = assessment_id
         self.reprocessing_workers = reprocessing_workers
+        self.storage_expiration_days = storage_expiration_days
         self.router = APIRouter()
         self.router.add_api_route("/", self.home, methods=["GET"])
         self.router.add_api_route("/ready", self.ready, methods=["GET"])
@@ -243,7 +247,7 @@ class NemesisApiRoutes():
         return Response()
 
     async def reset(self):
-        """When called, purges Postgres, Elastic, and RabbitMQ."""
+        """When called, purges Postgres, Elastic, RabbitMQ, and datalake files."""
         await logger.ainfo("Clearing datastore!")
 
         # first purge all RabbitMQ queue messages
@@ -260,6 +264,10 @@ class NemesisApiRoutes():
             if await self.es_client.indices.exists(index=ES_INDEX):
                 await logger.ainfo("Clearing Elastic index", index=ES_INDEX)
                 await self.es_client.indices.delete(index=ES_INDEX)
+
+        # and finally clear the files from the datalake
+        await logger.ainfo("Deleting files in the datalake.")
+        await self.storage.delete_all_files()
 
     async def reprocess(self):
         """When called, triggers the reprocessing of all existing data messages."""
@@ -394,7 +402,8 @@ class NemesisApiRoutes():
             with open(tmpfile.name, "wb") as f:
                 f.write(await request.body())
 
-            file_uuid = await self.storage.upload(f.name)
+            # the first file that comes in will set the bucket file expiry policy (for now)
+            file_uuid = await self.storage.upload(f.name, self.storage_expiration_days)
             return {"object_id": str(file_uuid)}
 
     @aio.time(Summary("download", "Download file"))  # type: ignore

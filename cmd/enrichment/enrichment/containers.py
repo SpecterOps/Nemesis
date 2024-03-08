@@ -594,6 +594,7 @@ class Container(containers.DeclarativeContainer):
         config.assessment_id,
         config.log_level,
         config.reprocessing_workers,
+        config.storage_expiration_days,
     )
     task_landingpage = providers.Factory(LandingPageApi, config.log_level)
     task_yara_api = providers.Factory(YaraApi, storage_service, config.yara_api_port, config.data_download_dir, config.log_level)

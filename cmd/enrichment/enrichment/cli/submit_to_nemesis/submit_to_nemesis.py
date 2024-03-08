@@ -385,7 +385,7 @@ async def process_file(config: dict[str, str], file_path: str) -> uuid.UUID | No
     if string_matches_regexes(api_json_regexes, file_path):
         return await post_json_to_api(config, file_path)
     elif string_matches_regexes([dpapi_domain_backupkey_regex], file_path):
-        return await submit_file_with_raw_data_tag(config, file_path, ["dpapi_domain_backupkey_json"])
+        return await submit_file_with_raw_data_tag(config, file_path, ["dpapi_domain_backupkey"])
     elif string_matches_regexes([seatbelt_json_regex], file_path):
         return await submit_file_with_raw_data_tag(config, file_path, ["seatbelt_json"])
     elif string_matches_regexes([bof_reg_collect_regex], file_path):

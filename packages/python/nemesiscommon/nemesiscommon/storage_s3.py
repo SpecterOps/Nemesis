@@ -90,6 +90,11 @@ class StorageS3(StorageInterface):
     async def exists(self, file_name: str) -> bool:
         raise NotImplementedError
 
+    async def delete_all_files(self) -> bool:
+        await logger.awarning("Deleting all files from S3 not yet implemented!")
+        # async with aioboto3.Session().client(service_name="s3", **self._aws_client_args) as s3_client:
+        #     s3_client.
+
     async def get_s3_file_path(self, file_uuid: uuid.UUID) -> str:
         return f"{self.assessment_id}/{file_uuid}.enc"
 

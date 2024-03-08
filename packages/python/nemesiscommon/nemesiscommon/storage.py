@@ -20,6 +20,10 @@ class StorageInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def delete_all_files(self) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     async def __aenter__(self):
         raise NotImplementedError
 
