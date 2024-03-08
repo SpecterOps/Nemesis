@@ -17,15 +17,12 @@ import uvicorn
 from aio_pika import connect_robust
 from elasticsearch import AsyncElasticsearch
 from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
-    map_unordered,
-    return_args_and_exceptions,
-)
+    map_unordered, return_args_and_exceptions)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
-from fastapi import FastAPI, Request, APIRouter, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from google.protobuf.json_format import Parse
-
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
 from nemesiscommon.constants import ALL_ES_INDICIES, NemesisQueue
 from nemesiscommon.messaging import MessageQueueProducerInterface
@@ -243,7 +240,7 @@ class NemesisApiRoutes():
         return Response()
 
     async def reset(self):
-        """When called, purges Postgres, Elastic, and RabbitMQ."""
+        """When called, purges Postgres, Elastic, RabbitMQ, and datalake files."""
         await logger.ainfo("Clearing datastore!")
 
         # first purge all RabbitMQ queue messages
@@ -260,6 +257,10 @@ class NemesisApiRoutes():
             if await self.es_client.indices.exists(index=ES_INDEX):
                 await logger.ainfo("Clearing Elastic index", index=ES_INDEX)
                 await self.es_client.indices.delete(index=ES_INDEX)
+
+        # and finally clear the files from the datalake
+        await logger.ainfo("Deleting files in the datalake.")
+        await self.storage.delete_all_files()
 
     async def reprocess(self):
         """When called, triggers the reprocessing of all existing data messages."""

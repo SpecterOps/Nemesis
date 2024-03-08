@@ -55,6 +55,18 @@ class StorageMinio(StorageInterface):
     async def exists(self, file_name: str) -> bool:
         raise NotImplementedError
 
+    async def delete_all_files(self) -> bool:
+        await logger.adebug("Deleting all files from bucket", bucket_name=self.assessment_id)
+
+        try:
+            files = await self.minio_client.list_objects(self.assessment_id, recursive=True)
+            for file in files:
+                await self.minio_client.remove_object(self.assessment_id, file.object_name)
+            return True
+        except Exception as e:
+            await logger.aexception(e, message="Failed to delete files from bucket", bucket_name=self.assessment_id)
+            raise
+
     async def __aenter__(self):
         return self
 
