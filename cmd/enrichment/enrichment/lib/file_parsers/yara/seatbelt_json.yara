@@ -1,7 +1,8 @@
 rule is_seatbelt_json
 {
     strings:
-        $str = "{\"Type\":\"Seatbelt.Commands.HostDTO\",\""
+        $str1 = "{\"Type\":\"Seatbelt.Commands."
+        $str2 = "DTO\","
     condition:
-        $str
+        $str1 and $str2
 }
