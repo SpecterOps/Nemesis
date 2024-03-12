@@ -14,4 +14,4 @@ To use temporary storage that is wiped on every run, set the `operation.environm
 
 ## pgAdmin
 
-A pgAdmin interface is exposed at `NEMESIS_URL/pgadmin` with the credentials (PGADMIN_EMAIL/PGADMIN_PASSWORD) set in the common config.
+A pgAdmin interface is exposed at `NEMESIS_URL/pgadmin` with the credentials from [values.yaml](./helm/nemesis/values.yaml)

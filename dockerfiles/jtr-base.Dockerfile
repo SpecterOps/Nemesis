@@ -1,6 +1,6 @@
 ##########################################################
 # JTR base image used in enrichment and passwordcracker
-# Published to harmj0y/jtr-base
+# Published to specterops/nemesis-jtr-base
 ##########################################################
 FROM python:3.11.2-bullseye as dependencies
 ENV PYTHONUNBUFFERED=true

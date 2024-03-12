@@ -1,7 +1,7 @@
 ####################################
 # Pre-built python:3.11.2-bullseye base w/ JTR
 ####################################
-FROM harmj0y/jtr-base AS dependencies-os
+FROM specterops/nemesis-jtr-base AS dependencies-os
 WORKDIR /app/cmd/enrichment
 
 # first we have to pip3 install this *normally* so the _fastpbkdf2.abi3.so properly builds (because Poetry no like)
