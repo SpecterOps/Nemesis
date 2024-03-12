@@ -22,9 +22,9 @@ sudo unzip protoc-21.5-linux-x86_64.zip -d /usr/local/
 
 # Running Nemesis during Dev
 
-In [values.yaml](../helm/nemesis/values.yaml), set "environment" at the top to either "test", which deploys without persistent storage, or "development", which will deploy without persistent storage and won't deploy the enrichment container (the most commonly dev'ed container).
+If you're doing general development, if you set the **operation.environment** variable in [values.yaml](../helm/nemesis/values.yaml) to *test* which will deploy everything without persistent storage. Then running `skaffold dev -m nemesis` will build the images and kick everything off.
 
-Running `skaffold dev` will then build and deploy images, instead of pulling the images from Dockerhub.
+If you want to perform remote debugging for the `enrichment` container (see [remote_debugging.md](remote_debugging.md)) set the **operation.environment** variable in [values.yaml](../helm/nemesis/values.yaml) to *development* for the Helm chart which will deploy everything but the `enrichment` container without persistent storage. Run `skaffold dev -m nemesis` and then launching `skaffold dev -m enrichment` via VS Code will kick off the separate chart for just the enrichment container.
 
 # Service Development
 

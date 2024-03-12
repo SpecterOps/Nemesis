@@ -4,14 +4,10 @@
   * Doesn't delete pods/statefulsets during shutdown
 * Didn't go with just the docker container because to scale up you need to deploy them one at a time (so used a statefulset).
 
-# Data persistence
-
-Uncomment the PeristentVolume and PersistentVolumeClaim at the end of `./kubernetes/rabbitmq/statefulset.yaml`.
-
 # Scaling
 
 Rabbitmq scales vertifcally better (so give it more CPU + RAM)
-Add more replicas by editing `./kubernetes/rabbitmq/statefulset.yaml`.
+Add more replicas by editing `./helm/nemesis/templates/rabbitmq.service.yaml`.
 
 # Performance testing
 
