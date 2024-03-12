@@ -87,6 +87,6 @@ postgresExporter:
 
 nemesisWaiter:
   image:
-    repository: t94j0/nemesis-waiter
+    repository: specterops/nemesis-waiter
     tag: latest
     pullPolicy: IfNotPresent

@@ -1,4 +1,3 @@
-{{- if ne .Values.operation.environment "development" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,14 +18,8 @@ spec:
         component: enrichment-pipeline
     spec:
       volumes:
-        {{- if eq .Values.operation.environment "production" }}
-        - name: cracklist
-          persistentVolumeClaim:
-            claimName: cracklist-pv-claim
-        {{- else }}
         - name: cracklist
           emptyDir: {}
-        {{- end }}
         - name: noseyparker
           emptyDir: {}
         - name: noseyparker-rules
@@ -245,5 +238,3 @@ spec:
             failureThreshold: 10
       restartPolicy: Always
 status: {}
-
-{{- end }}

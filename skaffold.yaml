@@ -40,7 +40,6 @@ build:
       sync:
         infer:
           - "**/*"
-
 deploy:
   helm:
     releases:
@@ -80,8 +79,7 @@ deploy:
       upgrade:
         ["--timeout=30m"]
       install:
-        ["--timeout=30m"]
-
+        ["--timeout=45m"]
 portForward:
   - resourceType: service
     resourceName: ingress-nginx-controller
@@ -94,3 +92,36 @@ portForward:
     namespace: default
     port: 8888
     address: 0.0.0.0
+---
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: enrichment
+build:
+  tagPolicy:
+    sha256: {}
+  local:
+    push: false
+    tryImportMissing: false
+    useBuildkit: true
+    concurrency: 0
+  artifacts:
+    - image: enrichment-dev
+      docker:
+        dockerfile: dockerfiles/enrichment.Dockerfile
+      sync:
+        manual:
+          - src: 'cmd/enrichment/**/*.py'
+            dest: '/app/cmd/enrichment'
+            strip: 'cmd/enrichment'
+deploy:
+  helm:
+    releases:
+    - name: enrichment
+      chartPath: helm/enrichment
+      setValueTemplates:
+        operation.environment: test # force no storage
+        enrichment.image.repository: "{{.IMAGE_REPO_enrichment_dev}}"
+        enrichment.image.tag: "{{.IMAGE_REPO_enrichment_dev}}@{{.IMAGE_DIGEST_enrichment_dev}}"
+      setValues:
+        enrichment.image.pullPolicy: IfNotPresent

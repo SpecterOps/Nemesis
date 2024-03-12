@@ -10,4 +10,4 @@ data:
   storage_provider: {{ default "minio" .Values.operation.storageProvider | quote }}
   nemesis-http-server: {{ .Values.operation.nemesisHttpServer | quote }}
   environment: {{ default "production" .Values.operation.environment | quote }}
-  data-expiration-days: {{ default "100" .Values.operation.dataExpirationDays | quote }}
+  storage-expiration-days: {{ default "100" .Values.operation.storageExpirationDays | quote }}
