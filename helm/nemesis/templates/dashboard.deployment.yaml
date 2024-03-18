@@ -107,4 +107,3 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 10
       restartPolicy: Always
-status: {}

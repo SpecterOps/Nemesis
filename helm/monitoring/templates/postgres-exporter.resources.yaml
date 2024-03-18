@@ -13,8 +13,6 @@ spec:
       nodePort: {{ .Values.postgresExporter.nodePort }}
   selector:
     app: postgres-exporter
-status:
-  loadBalancer: {}
 ---
 apiVersion: apps/v1
 kind: Deployment

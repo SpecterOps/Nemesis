@@ -100,4 +100,3 @@ spec:
             failureThreshold: 10
 
       restartPolicy: Always
-status: {}
