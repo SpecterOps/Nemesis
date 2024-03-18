@@ -15,8 +15,6 @@ spec:
       nodePort: {{ .Values.enrichment.yara.nodePort }}
   selector:
     app: enrichment
-status:
-  loadBalancer: {}
 ---
 apiVersion: v1
 kind: Service
@@ -34,8 +32,6 @@ spec:
       nodePort: {{ .Values.enrichment.cracklist.nodePort }}
   selector:
     app: enrichment
-status:
-  loadBalancer: {}
 ---
 apiVersion: v1
 kind: Service
@@ -53,8 +49,6 @@ spec:
       nodePort: {{ .Values.enrichment.webapi.nodePort }}
   selector:
     app: enrichment
-status:
-  loadBalancer: {}
 ---
 apiVersion: v1
 kind: Service
@@ -72,8 +66,6 @@ spec:
       nodePort: {{ .Values.enrichment.landingpage.nodePort }}
   selector:
     app: enrichment
-status:
-  loadBalancer: {}
 ---
 apiVersion: v1
 kind: Service
@@ -91,7 +83,4 @@ spec:
       nodePort: {{ .Values.enrichment.monitoring.nodePort }}
   selector:
     app: enrichment
-status:
-  loadBalancer: {}
-
 {{- end }}

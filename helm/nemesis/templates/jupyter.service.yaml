@@ -13,5 +13,3 @@ spec:
       nodePort: {{ .Values.jupyter.nodePort }}
   selector:
     app: jupyter
-status:
-  loadBalancer: {}

@@ -18,5 +18,3 @@ spec:
       nodePort: {{ .Values.nlp.prometheusNodePort }}
   selector:
     app: nlp
-status:
-  loadBalancer: {}

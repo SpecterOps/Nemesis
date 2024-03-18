@@ -13,5 +13,3 @@ spec:
       nodePort: {{ .Values.tika.nodePort }}
   selector:
     app: tika
-status:
-  loadBalancer: {}

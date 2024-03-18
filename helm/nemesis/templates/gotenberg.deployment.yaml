@@ -45,4 +45,3 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 5
       restartPolicy: Always
-status: {}

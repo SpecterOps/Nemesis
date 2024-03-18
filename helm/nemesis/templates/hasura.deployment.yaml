@@ -113,4 +113,3 @@ spec:
           configMap:
             name: hasura-metadata
       restartPolicy: Always
-status: {}

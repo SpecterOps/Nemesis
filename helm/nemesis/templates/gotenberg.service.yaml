@@ -13,5 +13,3 @@ spec:
       nodePort: {{ .Values.gotenberg.nodePort }}
   selector:
     app: gotenberg
-status:
-  loadBalancer: {}

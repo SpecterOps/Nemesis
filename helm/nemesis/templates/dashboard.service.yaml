@@ -14,5 +14,3 @@ spec:
       nodePort: {{ .Values.dashboard.nodePort }}
   selector:
     app: dashboard
-status:
-  loadBalancer: {}

@@ -15,8 +15,6 @@ spec:
       nodePort: {{ .Values.elasticsearchExporter.nodePort }}
   selector:
     app: elasticsearch-exporter
-status:
-  loadBalancer: {}
 ---
 apiVersion: apps/v1
 kind: Deployment

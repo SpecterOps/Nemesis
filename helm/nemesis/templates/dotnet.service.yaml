@@ -18,5 +18,3 @@ spec:
     #   nodePort: 31801
   selector:
     app: dotnet
-status:
-  loadBalancer: {}

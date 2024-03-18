@@ -13,5 +13,3 @@ spec:
       nodePort: {{ .Values.hasura.nodePort }}
   selector:
     app: hasura
-status:
-  loadBalancer: {}
