@@ -1,0 +1,15 @@
+enrichment:
+  image:
+    repository: specterops/nemesis-enrichment-dev
+    tag: latest
+    pullPolicy: IfNotPresent
+  cracklist:
+    nodePort: 30089
+  yara:
+    nodePort: 30079
+  webapi:
+    nodePort: 30808
+  landingpage:
+    nodePort: 30809
+  monitoring:
+    nodePort: 31693

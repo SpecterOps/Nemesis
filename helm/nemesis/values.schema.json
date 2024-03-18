@@ -625,7 +625,7 @@
                 "object",
                 "array"
               ],
-              "default": "t94j0/nemesis-dashboard"
+              "default": "specterops/nemesis-dashboard"
             },
             "tag": {
               "type": [
@@ -687,7 +687,7 @@
                 "object",
                 "array"
               ],
-              "default": "t94j0/nemesis-waiter"
+              "default": "specterops/nemesis-waiter"
             },
             "tag": {
               "type": [
@@ -842,7 +842,7 @@
                 "object",
                 "array"
               ],
-              "default": "t94j0/nemesis-dotnet"
+              "default": "specterops/nemesis-dotnet"
             },
             "tag": {
               "type": [
@@ -884,7 +884,7 @@
                 "object",
                 "array"
               ],
-              "default": "t94j0/nemesis-enrichment"
+              "default": "specterops/nemesis-enrichment"
             },
             "tag": {
               "type": [
@@ -1016,7 +1016,7 @@
                 "object",
                 "array"
               ],
-              "default": "t94j0/nemesis-jupyter"
+              "default": "specterops/nemesis-jupyter"
             },
             "tag": {
               "type": [
@@ -1078,7 +1078,7 @@
                 "object",
                 "array"
               ],
-              "default": "t94j0/nemesis-nlp"
+              "default": "specterops/nemesis-nlp"
             },
             "tag": {
               "type": [
@@ -1139,7 +1139,7 @@
                 "object",
                 "array"
               ],
-              "default": "t94j0/nemesis-passwordcracker"
+              "default": "specterops/nemesis-passwordcracker"
             },
             "tag": {
               "type": [

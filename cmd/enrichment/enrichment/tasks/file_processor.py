@@ -14,7 +14,6 @@ from typing import Optional
 
 # 3rd Party Libraries
 import aiohttp
-from anyascii import anyascii
 import enrichment.lib.canaries as canary_helpers
 import enrichment.lib.helpers as helpers
 import nemesiscommon.constants as constants
@@ -22,6 +21,7 @@ import nemesispb.nemesis_pb2 as pb
 import plyara
 import structlog
 import yara
+from anyascii import anyascii
 from binaryornot.check import is_binary
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.services.text_extractor import TextExtractorInterface
@@ -148,25 +148,16 @@ class FileProcessor(TaskInterface):
         # load up the file parsing modules
         (self.file_modules, self.file_module_names) = helpers.dynamic_import_from_src("./enrichment/lib/file_parsers")
 
-        # load up the Yara rules
-        yara_file_paths = glob.glob("./enrichment/lib/public_yara/**/*.yara", recursive=True) + glob.glob(
-            "./enrichment/lib/public_yara/**/*.yar", recursive=True
-        )
-        yara_files = {}
-        for yara_file_path in yara_file_paths:
-            try:
-                yara_files[yara_file_path.split("/")[-1]] = yara_file_path
-            except:
-                continue
+        # load up Yara rules
+        yara_file_paths = {f"{ind}": elem for ind, elem in enumerate(glob.glob("./enrichment/lib/public_yara/**/*.yar*", recursive=True))}
+        self.yara_rules = yara.compile(filepaths=yara_file_paths)
 
-        # compile all the rules
-        self.yara_rules = yara.compile(filepaths=yara_files)
-
-        # save off the rule definitions in a readable way
+        # save off the rule definitions in a readable way so the rule text
+        #   can be passed along with a rule hit
         self.yara_rule_definitions = {}
         yara_rule_definitions_raw = list()
         parser = plyara.Plyara()
-        for file_path in yara_file_paths:
+        for file_path in yara_file_paths.values():
             with open(file_path, 'r') as fh:
                 try:
                     parsed_yara_rules = parser.parse_string(fh.read())
@@ -482,6 +473,17 @@ class FileProcessor(TaskInterface):
             raw_data_message.is_file = True
             await logger.ainfo("Detected Seatbelt json file, emitting RawDataIngestionMessage")
             await self.out_q_rawdata.Send(seatbelt_raw_data_message.SerializeToString())
+
+        # if this file is DPAPI domain backup key data, emit a raw_data message so the data is properly processed
+        elif file_data.magic_type == "JSON data" and helpers.scan_with_yara(file_path_on_disk, "dpapi_domain_backupkey"):
+            dpapi_raw_data_message = pb.RawDataIngestionMessage()
+            dpapi_raw_data_message.metadata.CopyFrom(metadata)
+            raw_data_message = dpapi_raw_data_message.data.add()
+            raw_data_message.data = file_data.object_id
+            raw_data_message.tags.append("dpapi_domain_backupkey")
+            raw_data_message.is_file = True
+            await logger.ainfo("Detected DPAPI domain backup key json file, emitting RawDataIngestionMessage")
+            await self.out_q_rawdata.Send(dpapi_raw_data_message.SerializeToString())
 
         # if we have a registry file, try to extract all the strings and run NoseyParker on everything
         if file_data.magic_type.startswith("MS Windows registry file"):
@@ -992,8 +994,15 @@ class FileProcessor(TaskInterface):
         if mime_type == "text/plain":
             await logger.ainfo("File is 'text/plain', not using Tika", object_id=object_id, magic_type=magic_type, mime_type=mime_type)
             if clean_text and "ascii" not in magic_type.lower():
-                with open(file_path, "r") as f:
-                    text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                if "utf-16" in magic_type.lower():
+                    with open(file_path, "r", encoding="utf-16") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                elif "utf-32" in magic_type.lower():
+                    with open(file_path, "r", encoding="utf-32") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                else:
+                    with open(file_path, "r") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
                 with tempfile.NamedTemporaryFile(mode="w") as plaintext_file:
                     plaintext_file.write(text)
                     plaintext_file.seek(0)

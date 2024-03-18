@@ -1,13 +1,15 @@
 # Nemesis Installation and Setup
 1. Ensure the [requisite software/hardware is installed](./requirements.md).
 
-2. Run `helm install nemesis ./helm/nemesis --timeout '30m'`. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml).
+2. Run `helm install nemesis ./helm/nemesis --timeout '45m'`. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml).
 
-   If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis && kubectl delete all --all -n default` and rerun the install command with an increased timeout value.
+   If you want monitoring capabilities, run `helm install nemesis-monitoring ./helm/monitoring`
 
-   Once running, browsing `http://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
+   If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis && kubectl delete all --all -n default` and rerun the install command with an increased timeout value. If you installed `nemesis-monitoring` as well, run `helm uninstall nemesis && helm uninstall nemesis-monitoring && kubectl delete all --all -n default`
 
-   If you used Minikube as a base, run `./scripts/minikube_port_forward.sh` to setup a portforawd to 8080 (or the port passed as an argument) for access.
+   Once running, browsing `https://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
+
+   If you used Minikube as a base, run `./scripts/minikube_port_forward.sh` to setup a portforward to 8080 (or the port passed as an argument) for access.
 
    **Note:** If you want to change anything in [values.yaml](../helm/nemesis/values.yaml), make the modification(s) and then run `helm upgrade nemesis ./helm/nemesis --reset-values` to apply the changes.
 
@@ -61,26 +63,31 @@ Elasticsearch, PostgreSQL, and Minio (if using instead of AWS S3) have persisten
 
 ## File Storage Backend
 
-Nemesis can use AWS S3 (in conjunction with KMS for file encryption) for file storage by modifying the `storage` setting in `./helm/nemesis/values.yaml` and configuring the `aws` block.
+Nemesis can use AWS S3 (in conjunction with KMS for file encryption) for file storage by modifying the `storage` setting in [values.yaml](../helm/nemesis/values.yaml) and configuring the `aws` block.
 
 By default, Nemesis uses Minio for file storage with a default storage size of `30Gi`.
-To change the size, modify the `minio.persistence.size` value in [values.yaml](helm/nemesis/values.yaml) file.
+To change the size, modify the `minio.persistence.size` value in [values.yaml](../helm/nemesis/values.yaml) file.
 
 
 ## Elasticsearch
 
-The default storage size is 20Gi. To change this, modify the `elasticsearch.storage` value in [values.yaml](helm/nemesis/values.yaml).
+The default storage size is 20Gi. To change this, modify the `elasticsearch.storage` value in [values.yaml](../helm/nemesis/values.yaml).
 
 
 ## PostgreSQL
 
-The default storage size is 20Gi. To change this, modify the `postgres.storage` value in [values.yaml](helm/nemesis/values.yaml).
+The default storage size is 20Gi. To change this, modify the `postgres.storage` value in [values.yaml](../helm/nemesis/values.yaml).
 
 
 # (Optional) Change Nemesis's Listening Port
-The ingress port for Nemesis is **8080**, which routes access for all services. To change this port, in `./skaffold.yaml` modify the `localPort` value under the `portForward-ingress` configuration section (if you change this, you must update `operation.nemesisHttpServer` in values.yaml).
 
-The only other publicly forwarded port is **9001** if minio is used for storage (the default).
+## Helm
+
+Launch `./scripts/minikube_port_forward.sh <PORT>`
+
+## Skaffold
+
+The ingress port for Nemesis is **8080**, which routes access for all services. To change this port, in `./skaffold.yaml` modify the `localPort` value under the `portForward-ingress` configuration section (if you change this, you must update `operation.nemesisHttpServer` in values.yaml).
 
 Underneath, Skaffold manages all of Nemesis's port forwards using `kubectl`. If you'd like `kubectl` to be able to bind to lower ports without being root, you can run the following:
 ```bash
@@ -88,12 +95,12 @@ sudo setcap CAP_NET_BIND_SERVICE=+eip $(which kubectl)
 ```
 
 # (Optional) Deleting Running Pods
-## Skaffold
-`skaffold delete`
 
 ## Helm
-`helm uninstall [nemesis-name]`
+`helm uninstall nemesis && kubectl delete all --all -n default`
 
+## Skaffold
+`skaffold delete`
 
 # Troubleshooting, Common Errors, and Support
 ## "CONTAINER can't be pulled" error

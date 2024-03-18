@@ -14,7 +14,8 @@ operation:
   dataExpirationDays: "100"
   basicAuthUser: "nemesis"
   # Default password for basic auth
-  # basicAuthPassword: ""
+  #   sets to a random value if not specified
+  # basicAuthPassword: "Qwerty12345"
 
 storage: minio
 
@@ -53,7 +54,6 @@ gotenberg:
     pullPolicy: IfNotPresent
   nodePort: 31300
   resources:
-    # requests as specified in https://gotenberg.dev/docs/get-started/kubernetes
     requests:
       memory: "512Mi"
       cpu: "200m"
@@ -67,14 +67,16 @@ grafana:
 
 elasticsearch:
   user: "nemesis"
-  # password: ""
+  # NOTE: if you're use persist "production" storage, this needs to be set to a static value
+  #   ahead of time for services to play nicely together
+  password: "Qwerty12345"
   resources:
     requests:
-      cpu: "500m"
+      cpu: "750m"
       memory: "1G"
     limits:
-      cpu: "1000m"
-      memory: "2G"
+      cpu: "1500m"
+      memory: "3G"
   storage: 20Gi
 
 pgAdmin:
@@ -83,7 +85,9 @@ pgAdmin:
 postgres:
   nodePort: 31209
   user: "nemesis"
-  # password: ""
+  # NOTE: if you're use persist "production" storage, this needs to be set to a static value
+  #   ahead of time for services to play nicely together
+  password: "Qwerty12345"
   pgadminEmail: "nemesis@nemesis.com"
   # pgadminPassword: ""
   storage: 15Gi
@@ -91,16 +95,17 @@ postgres:
 dashboard:
   nodePort: 30073
   image:
-    repository: t94j0/nemesis-dashboard
+    repository: specterops/nemesis-dashboard
     tag: latest
     pullPolicy: IfNotPresent
   username: "nemesis"
+  # not actually used anymore as auth is disabled for the dashboard
   # password: ""
   resources: {}
 
 nemesisWaiter:
   image:
-    repository: t94j0/nemesis-waiter
+    repository: specterops/nemesis-waiter
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -122,13 +127,13 @@ dotnet:
   nodePort: 31800
   resources: {}
   image:
-    repository: t94j0/nemesis-dotnet
+    repository: specterops/nemesis-dotnet
     tag: latest
     pullPolicy: IfNotPresent
 
 enrichment:
   image:
-    repository: t94j0/nemesis-enrichment
+    repository: specterops/nemesis-enrichment
     tag: latest
     pullPolicy: IfNotPresent
   cracklist:
@@ -145,7 +150,7 @@ enrichment:
 jupyter:
   nodePort: 31888
   image:
-    repository: t94j0/nemesis-jupyter
+    repository: specterops/nemesis-jupyter
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -153,26 +158,38 @@ nlp:
   prometheusNodePort: 31692
   nodePort: 31803
   image:
-    repository: t94j0/nemesis-nlp
+    repository: specterops/nemesis-nlp
     tag: latest
     pullPolicy: IfNotPresent
-  resources: {}
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "250m"
+    limits:
+      memory: "1500Mi"
+      cpu: "1000m"
 
 passwordcracker:
   nodePort: 31990
   image:
-    repository: t94j0/nemesis-passwordcracker
+    repository: specterops/nemesis-passwordcracker
     tag: latest
     pullPolicy: IfNotPresent
-    resources:
-      requests:
-        cpu: "100m"
-      limits:
-        cpu: "2000m"
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "2000m"
 
 tika:
   nodePort: 31998
-  resources: {}
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1.5Gi"
+      cpu: "1000m"
 
 hasura:
   nodePort: 31887

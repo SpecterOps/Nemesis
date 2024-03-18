@@ -34,7 +34,7 @@ mypy = "^0.971"
 [[tool.poetry.source]]
 name = "torch"
 url = "https://download.pytorch.org/whl/cpu"
-priority = "primary"
+priority = "supplemental"
 
 [tool.poetry.group.dev.dependencies]
 debugpy = "^1.6.7"

@@ -18,7 +18,7 @@
         - In the *Container* class add a *inputq_\<DATA_TYPE\>_elasticconnector* similar to the surrounding examples.
         - In *task_elasticconnector()* add the new queue as an argument.
 7. If the ODR should ingest into Postgres:
-    1. In `./kubernetes/postgres/configmap.yaml` create the appropriate table.
+    1. In `./helm/nemesis/files/postgres/nemesis.sql` create the appropriate table.
         - Start up the infra and navigate to the tables in Postgres to ensure everything created correctly (an error will prevent everything from being created).
     2. In `./cmd/enrichment/enrichment/lib/nemesis_db.py`:
         - Create a new dataclass at the top of the file for your object to store in Postgres.
