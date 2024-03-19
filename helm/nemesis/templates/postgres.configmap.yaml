@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: postgres-nemesis-schema
-  labels:
-    app: postgres-nemesis-schema
-data:
-  nemesis.sql: |
-    {{ .Files.Get "files/postgres/nemesis.sql" | nindent 4 }}
