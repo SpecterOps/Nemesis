@@ -85,7 +85,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: fluentd-creds
-                  key: elasticsearch_username
+                  key: elasticsearch-username
             - name: FLUENT_ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -112,7 +112,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: fluentd-creds
-                  key: elasticsearch_username
+                  key: elasticsearch-username
             - name: FLUENT_ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -144,7 +144,7 @@ data:
   {{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace "elasticsearch-users") | default dict }}
   {{- $existingSecretData := (get $existingSecret "data") | default dict }}
   {{- $username := (get $existingSecretData "username") }}
-  elasticsearch_username: {{ $username | quote }}
+  elasticsearch-username: {{ $username | quote }}
 
   {{- $password := (get $existingSecretData "password") }}
-  elasticsearch_password: {{ $password | quote }}
+  elasticsearch-password: {{ $password | quote }}
