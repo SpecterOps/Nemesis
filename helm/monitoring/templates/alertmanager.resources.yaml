@@ -47,7 +47,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: operation-creds
-                  key: slack_web_hook
+                  key: slack-web-hook
           volumeMounts:
             - mountPath: /etc/alertmanager
               name: alertmanager

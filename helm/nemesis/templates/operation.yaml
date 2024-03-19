@@ -35,4 +35,4 @@ data:
   {{- end }}
   basic-auth-password: {{ $password | quote }}
 
-  slack_web_hook: {{ .Values.operation.slackWebhook | b64enc | quote }}
+  slack-web-hook: {{ .Values.operation.slackWebhook | b64enc | quote }}
