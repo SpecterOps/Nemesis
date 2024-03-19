@@ -16,6 +16,6 @@ metadata:
   name: aws-creds
 type: Opaque
 data:
-  aws_access_key_id: {{ .Values.aws.accessKeyId | b64enc }}
+  aws-access-key-id: {{ .Values.aws.accessKeyId | b64enc }}
   aws_secret_key: {{ .Values.aws.secretKey | b64enc }}
 {{- end }}
