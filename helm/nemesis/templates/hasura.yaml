@@ -6,7 +6,7 @@ metadata:
 data:
   # to export: curl -d '{"type": "export_metadata", "args": {}}' http://localhost:8080/v1/metadata -o hasura_metadata.json
   hasura_metadata.json: |-
-    {{- .Files.Get "files/hasura/hasura_metadata.json" | nindent 4 -}}
+    {{- .Files.Get "files/hasura/hasura_metadata.json" | nindent 4 }}
 ---
 apiVersion: v1
 kind: Service
