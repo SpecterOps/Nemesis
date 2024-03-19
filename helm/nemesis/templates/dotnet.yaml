@@ -62,7 +62,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: aws-creds
-                  key: aws_secret_key
+                  key: aws-secret-key
             - name: AWS_BUCKET
               valueFrom:
                 configMapKeyRef:

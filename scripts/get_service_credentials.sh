@@ -20,7 +20,7 @@ export RABBITMQ_PASSWORD=$(kubectl get secret rabbitmq-creds -o jsonpath="{.data
 echo -e "\nRabbitMQ:\n\t$RABBITMQ_USER:$RABBITMQ_PASSWORD"
 
 export AWS_ACCESS_KEY=$(kubectl get secret aws-creds -o jsonpath="{.data.aws-access-key-id}" | base64 -d)
-export AWS_SECRET_KEY=$(kubectl get secret aws-creds -o jsonpath="{.data.aws_secret_key}" | base64 -d)
+export AWS_SECRET_KEY=$(kubectl get secret aws-creds -o jsonpath="{.data.aws-secret-key}" | base64 -d)
 if [ $AWS_ACCESS_KEY != "not-applicable" ]; then
     echo -n "AWS_ACCESS_KEY:$AWS_ACCESS_KEY\nAWS_SECRET_KEY: $AWS_SECRET_KEY"
 fi
