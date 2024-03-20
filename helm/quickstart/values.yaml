@@ -7,6 +7,11 @@ operation:
   #   sets to a random value if not specified
   # basicAuthPassword: "Qwerty12345"
 
+aws:
+  secretName: aws-creds
+  accessKeyId: not-applicable
+  secretKey: not-applicable
+
 rabbitmq:
   secretName: rabbitmq-creds
   adminUser: "nemesis"
@@ -45,8 +50,3 @@ postgres:
 jupyter:
   secretName: jupyter-creds
   # token: ""
-
-aws:
-  secretName: aws-creds
-  accessKeyId: not-applicable
-  secretKey: not-applicable
