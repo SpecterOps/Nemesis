@@ -13,10 +13,6 @@ operation:
   environment: "production"
   dataExpirationDays: "100"
   existingSecret: operation-creds
-  basicAuthUser: "nemesis"
-  # Default password for basic auth
-  #   sets to a random value if not specified
-  # basicAuthPassword: "Qwerty12345"
   basicAuthExistingSecret: basic-auth
 
 storage: minio
@@ -26,13 +22,9 @@ aws:
   bucket: not-applicable
   region: not-applicable
   kmsKeyAlias: not-applicable
-  accessKeyId: not-applicable
-  secretKey: not-applicable
 
 minio:
   exposeService: true
-  rootUser: nemesis
-  # rootPassword: ""
   existingSecret: minio-creds
   persistence:
     size: "30Gi"
@@ -64,16 +56,8 @@ gotenberg:
       memory: "1Gi"
       cpu: "500m"
 
-grafana:
-  user: "nemesis"
-  # password: ""
-
 elasticsearch:
   existingSecret: elasticsearch-creds
-  user: "nemesis"
-  # NOTE: if you're use persist "production" storage, this needs to be set to a static value
-  #   ahead of time for services to play nicely together
-  password: "Qwerty12345"
   resources:
     requests:
       cpu: "750m"
@@ -87,14 +71,8 @@ pgAdmin:
   nodePort: 31288
 
 postgres:
-  nodePort: 31209
-  user: "nemesis"
-  # NOTE: if you're use persist "production" storage, this needs to be set to a static value
-  #   ahead of time for services to play nicely together
   existingSecret: postgres-creds
-  password: "Qwerty12345"
-  pgadminEmail: "nemesis@nemesis.com"
-  # pgadminPassword: ""
+  nodePort: 31209
   storage: 15Gi
 
 dashboard:
@@ -104,9 +82,6 @@ dashboard:
     repository: specterops/nemesis-dashboard
     tag: latest
     pullPolicy: IfNotPresent
-  username: "nemesis"
-  # not actually used anymore as auth is disabled for the dashboard
-  # password: ""
   resources: {}
 
 nemesisWaiter:
@@ -117,10 +92,6 @@ nemesisWaiter:
 
 rabbitmq:
   existingSecret: rabbitmq-creds
-  adminUser: "nemesis"
-  adminPassword: "password"
-  connectionUri: "amqp://nemesis:password@nemesis-rabbitmq-svc:5672/"
-  erlangCookie: "default-cookie"
   resources:
     requests:
       cpu: 100m
