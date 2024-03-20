@@ -1,7 +1,13 @@
 # Nemesis Installation and Setup
 1. Ensure the [requisite software/hardware is installed](./requirements.md).
 
-2. Run `helm install nemesis ./helm/nemesis --timeout '45m'`. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml).
+2. Start Nemesis Quickstart
+
+    This create secrets that are nessecary for Nemesis to run. If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
+
+    Run `helm install nemesis-quickstart ./helm/quickstart` to kick off the quickstart.
+
+3. Run `helm install nemesis ./helm/nemesis --timeout '45m'` to kick off the Nemesis install. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml) for things like resource requests/etc.
 
    If you want monitoring capabilities, run `helm install nemesis-monitoring ./helm/monitoring`
 
@@ -13,7 +19,7 @@
 
    **Note:** If you want to change anything in [values.yaml](../helm/nemesis/values.yaml), make the modification(s) and then run `helm upgrade nemesis ./helm/nemesis --reset-values` to apply the changes.
 
-3. [Ingest data into Nemesis.](#data-ingestion)
+4. [Ingest data into Nemesis.](#data-ingestion)
 
 # Data Ingestion
 Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in muliple ways, including
