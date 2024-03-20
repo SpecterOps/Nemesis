@@ -1159,9 +1159,17 @@ def nemesis_error(message: str) -> pb.Error:
     return error
 
 
+def is_jar(path: str) -> bool:
+    """Returns true if the file is a JAR."""
+    magic = get_magic_type(path).lower()
+    is_jar_file = True if magic == "java archive data (jar)" else False
+    is_zip_file = libarchive.is_archive(path, ["zip"])
+    return is_jar_file and is_zip_file
+
+
 def is_archive(path: str) -> bool:
     """Returns true if the file supplied is a Zip, 7z, Tarball, or CAB."""
-    return zipfile.is_zipfile(path) or py7zr.is_7zfile(path) or tarfile.is_tarfile(path) or libarchive.is_archive(path, ["cab"])
+    return is_jar(path) or zipfile.is_zipfile(path) or py7zr.is_7zfile(path) or tarfile.is_tarfile(path) or libarchive.is_archive(path, ["cab"])
 
 
 def get_archive_size(path: str) -> int:
@@ -1180,6 +1188,13 @@ def get_archive_size(path: str) -> int:
     elif tarfile.is_tarfile(path):
         return estimate_uncompressed_gz_size(path)
     elif libarchive.is_archive(path, ["cab"]):
+        total_size = 0
+        with libarchive.Archive(path) as a:
+            for entry in a:
+                total_size += entry.size
+        return total_size
+    # special case for JARs
+    elif libarchive.is_archive(path, ["zip"]):
         total_size = 0
         with libarchive.Archive(path) as a:
             for entry in a:
@@ -1254,6 +1269,15 @@ def extract_archive(path: str) -> str:
     elif tarfile.is_tarfile(path):
         shutil.unpack_archive(path, tmp_dir, "tar")
     elif libarchive.is_archive(path, ["cab"]):
+        with libarchive.Archive(path) as a:
+            for entry in a:
+                target_path = f"{tmp_dir}/{entry.pathname}"
+                # make sure we create all the subfolders needed to extract this file entry
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                with open(target_path, "wb") as f:
+                    f.write(a.read(entry.size))
+    # special case for JARs
+    elif libarchive.is_archive(path, ["zip"]):
         with libarchive.Archive(path) as a:
             for entry in a:
                 target_path = f"{tmp_dir}/{entry.pathname}"
