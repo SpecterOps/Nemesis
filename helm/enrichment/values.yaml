@@ -1,3 +1,21 @@
+operation:
+  existingSecret: operation-creds
+
+aws:
+  existingSecret: aws-creds
+
+minio:
+  existingSecret: minio-creds
+
+elasticsearch:
+  existingSecret: elasticsearch-creds
+
+postgres:
+  existingSecret: postgres-creds
+
+rabbitmq:
+  existingSecret: rabbitmq-creds
+
 enrichment:
   image:
     repository: specterops/nemesis-enrichment-dev

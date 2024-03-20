@@ -12,25 +12,28 @@ operation:
   #   "production" deploys all images with persistent storage
   environment: "production"
   dataExpirationDays: "100"
+  existingSecret: operation-creds
   basicAuthUser: "nemesis"
   # Default password for basic auth
   #   sets to a random value if not specified
   # basicAuthPassword: "Qwerty12345"
+  basicAuthExistingSecret: basic-auth
 
 storage: minio
 
 aws:
-  bucket: "not-applicable"
-  region: "not-applicable"
-  kmsKeyAlias: "not-applicable"
-  accessKeyId: "not-applicable"
-  secretKey: "not-applicable"
+  existingSecret: aws-creds
+  bucket: not-applicable
+  region: not-applicable
+  kmsKeyAlias: not-applicable
+  accessKeyId: not-applicable
+  secretKey: not-applicable
 
 minio:
-  rootUser: "nemesis"
+  exposeService: true
+  rootUser: nemesis
   # rootPassword: ""
-  auth:
-    existingSecret: minio-creds
+  existingSecret: minio-creds
   persistence:
     size: "30Gi"
   extraEnvVars:
@@ -66,6 +69,7 @@ grafana:
   # password: ""
 
 elasticsearch:
+  existingSecret: elasticsearch-creds
   user: "nemesis"
   # NOTE: if you're use persist "production" storage, this needs to be set to a static value
   #   ahead of time for services to play nicely together
@@ -87,12 +91,14 @@ postgres:
   user: "nemesis"
   # NOTE: if you're use persist "production" storage, this needs to be set to a static value
   #   ahead of time for services to play nicely together
+  existingSecret: postgres-creds
   password: "Qwerty12345"
   pgadminEmail: "nemesis@nemesis.com"
   # pgadminPassword: ""
   storage: 15Gi
 
 dashboard:
+  existingSecret: dashboard-creds
   nodePort: 30073
   image:
     repository: specterops/nemesis-dashboard
@@ -110,6 +116,7 @@ nemesisWaiter:
     pullPolicy: IfNotPresent
 
 rabbitmq:
+  existingSecret: rabbitmq-creds
   adminUser: "nemesis"
   adminPassword: "password"
   connectionUri: "amqp://nemesis:password@nemesis-rabbitmq-svc:5672/"
@@ -148,6 +155,7 @@ enrichment:
     nodePort: 31693
 
 jupyter:
+  existingSecret: jupyter-creds
   nodePort: 31888
   image:
     repository: specterops/nemesis-jupyter

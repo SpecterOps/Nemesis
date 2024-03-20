@@ -29,25 +29,6 @@ metadata:
   name: postgrespw-service-account
 ---
 apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-creds
-type: Opaque
-data:
-  postgres-user: {{ default "nemesis" .Values.grafana.username | b64enc }}
-
-  {{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace "postgres-creds") | default dict }}
-  {{- $existingSecretData := (get $existingSecret "data") | default dict }}
-  {{- $postgresPassword := (get $existingSecretData "postgres-password") | default (randAlphaNum 24 | b64enc) }}
-  postgres-password: {{ $postgresPassword | quote }}
-  pgadmin-email: {{ default "nemesis@nemesis.com" .Values.grafana.pgadminEmail | b64enc }}
-
-  {{- $existingPGAdminSecret := (lookup "v1" "Secret" .Release.Namespace "postgres-creds") | default dict }}
-  {{- $existingPGAdminSecretData := (get $existingPGAdminSecret "data") | default dict }}
-  {{- $pgAdminPassword := (get $existingPGAdminSecretData "pgagmin-password") | default (randAlphaNum 24 | b64enc) }}
-  pgadmin-password: {{ $pgAdminPassword | quote }}
----
-apiVersion: v1
 kind: ConfigMap
 metadata:
   name: postgres-nemesis-schema
@@ -120,12 +101,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                    name: postgres-creds
+                    name: {{ .Values.postgres.existingSecret }}
                     key: postgres-user
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                    name: postgres-creds
+                    name: {{ .Values.postgres.existingSecret }}
                     key: postgres-password
           volumeMounts:
             - mountPath: /var/lib/postgresql/data
@@ -171,7 +152,7 @@ spec:
           - name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-password
         command: ["/bin/bash", "-c"]
         args:

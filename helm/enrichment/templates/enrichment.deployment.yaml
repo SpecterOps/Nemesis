@@ -109,12 +109,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-user
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-password
             - name: POSTGRES_CONNECTION_URI
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
@@ -125,12 +125,12 @@ spec:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: aws-creds
+                  name: {{ .Values.aws.existingSecret }}
                   key: aws-access-key-id
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: aws-creds
+                  name: {{ .Values.aws.existingSecret }}
                   key: aws-secret-key
             - name: AWS_BUCKET
               valueFrom:
@@ -156,14 +156,13 @@ spec:
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
-                  name: minio-creds
+                  name: {{ .Values.minio.existingSecret }}
                   key: root-user
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: minio-creds
+                  name: {{ .Values.minio.existingSecret }}
                   key: root-password
-
             - name: ASSESSMENT_ID
               valueFrom:
                 configMapKeyRef:
@@ -172,7 +171,7 @@ spec:
             - name: RABBITMQ_CONNECTION_URI
               valueFrom:
                 secretKeyRef:
-                  name: rabbitmq-creds
+                  name: {{ .Values.rabbitmq.existingSecret }}
                   key: rabbitmq-connectionuri
             - name: ELASTICSEARCH_URL
               value: http://nemesis-es-internal-http:9200/
@@ -181,12 +180,12 @@ spec:
             - name: ELASTICSEARCH_USER
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: username
             - name: ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: password
             - name: PROMETHEUS_PORT
               value: "8000"
@@ -198,7 +197,7 @@ spec:
             - name: SLACK_WEBHOOK_URL
               valueFrom:
                 secretKeyRef:
-                  name: operation-creds
+                  name: {{ .Values.operation.existingSecret }}
                   key: slack-web-hook
             - name: SLACK_USERNAME
               value: Nemesis

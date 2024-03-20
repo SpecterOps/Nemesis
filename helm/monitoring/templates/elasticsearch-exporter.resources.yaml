@@ -40,12 +40,12 @@ spec:
             - name: ES_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: username
             - name: ES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: password
           image: "{{ .Values.elasticsearchExporter.image.repository }}:{{ .Values.elasticsearchExporter.image.tag }}"
           imagePullPolicy: {{ .Values.elasticsearchExporter.image.pullPolicy }}

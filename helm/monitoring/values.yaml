@@ -1,3 +1,12 @@
+operation:
+  existingSecret: operation-creds
+
+elasticsearch:
+  existingSecret: elasticsearch-creds
+
+postgres:
+  existingSecret: postgres-creds
+
 elasticsearchExporter:
   nodePort: 31108
   image:

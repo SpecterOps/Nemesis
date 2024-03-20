@@ -46,12 +46,12 @@ spec:
         - name: ELASTICSEARCH_USER
           valueFrom:
             secretKeyRef:
-              name: elasticsearch-users
+              name: {{ .Values.elasticsearch.existingSecret }}
               key: username
         - name: ELASTICSEARCH_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: elasticsearch-users
+              name: {{ .Values.elasticsearch.existingSecret }}
               key: password
         # readinessProbe:
         #   failureThreshold: 3
@@ -100,12 +100,12 @@ spec:
             - name: ELASTICSEARCH_USER
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: username
             - name: ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: password
             - name: KIBANA_URL
               value: http://nemesis-kb-http.default.svc.cluster.local:5601
@@ -155,12 +155,12 @@ spec:
             - name: ELASTICSEARCH_USER
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: username
             - name: ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: password
       restartPolicy: Never
       volumes:

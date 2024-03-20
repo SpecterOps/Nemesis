@@ -46,7 +46,7 @@ spec:
             - name: SLACK_WEB_HOOK
               valueFrom:
                 secretKeyRef:
-                  name: operation-creds
+                  name: {{ .Values.operation.existingSecret }}
                   key: slack-web-hook
           volumeMounts:
             - mountPath: /etc/alertmanager

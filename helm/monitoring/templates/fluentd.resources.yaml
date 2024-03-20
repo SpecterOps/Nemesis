@@ -141,7 +141,7 @@ metadata:
   name: fluentd-creds
 type: Opaque
 data:
-  {{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace "elasticsearch-users") | default dict }}
+  {{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace .Values.elasticsearch.existingSecret) | default dict }}
   {{- $existingSecretData := (get $existingSecret "data") | default dict }}
   {{- $username := (get $existingSecretData "username") }}
   elasticsearch-username: {{ $username | quote }}

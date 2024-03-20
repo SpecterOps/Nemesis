@@ -47,12 +47,12 @@ spec:
             - name: DATA_SOURCE_USER
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-user
             - name: DATA_SOURCE_PASS
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-password
           ports:
             - containerPort: 9187

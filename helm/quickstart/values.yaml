@@ -1,0 +1,52 @@
+operation:
+  secretName: operation-creds
+  slackWebhook: "https://hooks.slack.com/services/some/random/text"
+  basicAuthUser: "nemesis"
+  basicAuthSecretName: basic-auth
+  # Default password for basic auth
+  #   sets to a random value if not specified
+  # basicAuthPassword: "Qwerty12345"
+
+rabbitmq:
+  secretName: rabbitmq-creds
+  adminUser: "nemesis"
+  adminPassword: "password"
+  connectionUri: "amqp://nemesis:password@nemesis-rabbitmq-svc:5672/"
+  erlangCookie: "default-cookie"
+
+grafana:
+  user: "nemesis"
+  # password: ""
+
+minio:
+  secretName: minio-creds
+  rootUser: nemesis
+  # rootPassword: ""
+
+elasticsearch:
+  secretName: elasticsearch-creds
+  user: "nemesis"
+  # NOTE: if you're use persist "production" storage, this needs to be set to a static value
+  #   ahead of time for services to play nicely together
+  password: "Qwerty12345"
+
+dashboard:
+  secretName: dashboard-creds
+  username: "nemesis"
+  # not actually used anymore as auth is disabled for the dashboard
+  # password: ""
+
+postgres:
+  secretName: postgres-creds
+  username: "nemesis"
+  pgadminEmail: "nemesis@nemesis.com"
+  # pgadminPassword: ""
+
+jupyter:
+  secretName: jupyter-creds
+  # token: ""
+
+aws:
+  secretName: aws-creds
+  accessKeyId: not-applicable
+  secretKey: not-applicable

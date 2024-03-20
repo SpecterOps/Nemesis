@@ -1,23 +1,3 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: dashboard-creds
-type: Opaque
-data:
-  dashboard-user: {{ .Values.dashboard.username | b64enc | quote }}
-
-  {{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace "dashboard-creds") | default dict }}
-  {{- $existingSecretData := (get $existingSecret "data") | default dict }}
-  {{- $password := (get $existingSecretData "dashboard-password") }}
-  {{- if not $password}}
-    {{- if .Values.dashboard.password }}
-      {{- $password = .Values.dashboard.password | b64enc }}
-    {{- else }}
-      {{- $password = randAlphaNum 32 | b64enc }}
-    {{- end }}
-  {{- end }}
-  dashboard-password: {{ $password | quote }}
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -55,12 +35,12 @@ spec:
             - name: DASHBOARD_USER
               valueFrom:
                 secretKeyRef:
-                  name: dashboard-creds
+                  name: {{ .Values.dashboard.existingSecret }}
                   key: dashboard-user
             - name: DASHBOARD_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: dashboard-creds
+                  name: {{ .Values.dashboard.existingSecret }}
                   key: dashboard-password
             - name: STREAMLIT_SERVER_PORT
               value: "8601"
@@ -84,12 +64,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-user
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-password
             - name: POSTGRES_CONNECTION_URI
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
@@ -103,12 +83,12 @@ spec:
             - name: ELASTICSEARCH_USER
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: username
             - name: ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: password
 
           image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
@@ -154,7 +134,7 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "1000m"
     nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: basic-auth
+    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
     nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/rewrite-target: /$2

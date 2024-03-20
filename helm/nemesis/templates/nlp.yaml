@@ -26,7 +26,7 @@ metadata:
   name: nlp-ingress
   annotations:
     nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: basic-auth
+    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
     nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
@@ -96,12 +96,12 @@ spec:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: aws-creds
+                  name: {{ .Values.aws.existingSecret }}
                   key: aws-access-key-id
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: aws-creds
+                  name: {{ .Values.aws.existingSecret }}
                   key: aws-secret-key
             - name: AWS_KMS_KEY_ALIAS
               valueFrom:
@@ -119,17 +119,17 @@ spec:
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
-                  name: minio-creds
+                  name: {{ .Values.minio.existingSecret }}
                   key: root-user
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: minio-creds
+                  name: {{ .Values.minio.existingSecret }}
                   key: root-password
             - name: RABBITMQ_CONNECTION_URI
               valueFrom:
                 secretKeyRef:
-                  name: rabbitmq-creds
+                  name: {{ .Values.rabbitmq.existingSecret }}
                   key: rabbitmq-connectionuri
             - name: ELASTIC_INDEX_NAME
               value: "text_embeddings"
@@ -151,12 +151,12 @@ spec:
             - name: ELASTICSEARCH_USER
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: username
             - name: ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: elasticsearch-users
+                  name: {{ .Values.elasticsearch.existingSecret }}
                   key: password
             - name: ELASTIC_CONNECTION_URI
               value: "http://$(ELASTICSEARCH_USER):$(ELASTICSEARCH_PASSWORD)@nemesis-es-internal-http:9200"

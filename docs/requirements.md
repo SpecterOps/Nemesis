@@ -84,6 +84,15 @@ helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ing
 helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 
+7. Start Nemesis Quickstart
+
+**Purpose**: Create secrets and other resources that are nessecary for Nemesis to run
+
+
+```bash
+helm install nemesis-quickstart ./helm/quickstart
+```
+
 ### MiniKube
 
 <details>

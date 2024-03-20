@@ -1,23 +1,5 @@
 ---
 apiVersion: v1
-kind: Secret
-metadata:
-  name: jupyter-creds
-type: Opaque
-data:
-  {{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace "jupyter-creds") | default dict }}
-  {{- $existingSecretData := (get $existingSecret "data") | default dict }}
-  {{- $jupyterToken:= (get $existingSecretData "token") }}
-  {{- if not $jupyterToken }}
-    {{- if .Values.minio.rootPassword }}
-      {{- $jupyterToken = .Values.jupyter.token | b64enc }}
-    {{- else }}
-      {{- $jupyterToken = randAlphaNum 32 | b64enc }}
-    {{- end }}
-  {{- end }}
-  token: {{ $jupyterToken | quote }}
----
-apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -40,7 +22,7 @@ metadata:
   annotations:
     # TODO: Basic-auth breaks the websocket for some reasone
     # nginx.ingress.kubernetes.io/auth-type: basic
-    # nginx.ingress.kubernetes.io/auth-secret: basic-auth
+    # nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
     # nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
     ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/rewrite-target: /jupyter/$2
@@ -82,7 +64,7 @@ spec:
             - name: JUPYTER_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: jupyter-creds
+                  name: {{ .Values.jupyter.existingSecret }}
                   key: token
 
             - name: JUPYTER_PORT

@@ -11,28 +11,3 @@ data:
   nemesis-http-server: {{ .Values.operation.nemesisHttpServer | quote }}
   environment: {{ default "production" .Values.operation.environment | quote }}
   storage-expiration-days: {{ default "100" .Values.operation.storageExpirationDays | quote }}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: operation-creds
-type: Opaque
-data:
-  basic-auth-user: {{ default "nemesis" .Values.operation.basicAuthUser | b64enc | quote }}
-
-  # If the secret exists already, use that
-  {{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace "operation-creds") | default dict }}
-  {{- $existingSecretData := (get $existingSecret "data") | default dict }}
-  {{- $password := (get $existingSecretData "basic-auth-password") }}
-  {{- if not $password}}
-    # If the password exists in values.yaml, use that
-    {{- if .Values.operation.basicAuthPassword }}
-      {{- $password = .Values.operation.basicAuthPassword | b64enc }}
-    {{- else }}
-    # Otherwise, generate a new password
-      {{- $password = randAlphaNum 32 | b64enc }}
-    {{- end }}
-  {{- end }}
-  basic-auth-password: {{ $password | quote }}
-
-  slack-web-hook: {{ .Values.operation.slackWebhook | b64enc | quote }}

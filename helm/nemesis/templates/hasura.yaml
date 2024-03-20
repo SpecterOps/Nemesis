@@ -30,7 +30,7 @@ metadata:
   name: hasura-ingress
   annotations:
     nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: basic-auth
+    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
     nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
@@ -79,12 +79,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-user
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-password
             - name: PG_DATABASE_URL
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
@@ -109,12 +109,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-user
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-password
             - name: PG_DATABASE_URL
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"

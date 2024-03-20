@@ -56,12 +56,12 @@ spec:
             - name: PGADMIN_DEFAULT_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: pgadmin-email
             - name: PGADMIN_DEFAULT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgres-creds
+                  name: {{ .Values.postgres.existingSecret }}
                   key: pgadmin-password
             - name: SCRIPT_NAME
               value: /pgadmin/
@@ -119,7 +119,7 @@ metadata:
   name: pgadmin-ingress
   annotations:
     nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: basic-auth
+    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
     nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
     ingress.kubernetes.io/ssl-redirect: "false"
 spec:
