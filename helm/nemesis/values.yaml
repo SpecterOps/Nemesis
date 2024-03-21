@@ -5,7 +5,7 @@ operation:
   logLevel: "INFO"
   assessmentId: "ASSESS-0"
   # Can't be localhost because of URL validation in passwordcracker container
-  nemesisHttpServer: "http://127.0.0.1:8080/"
+  nemesisHttpServer: "https://127.0.0.1:8080/"
   # Environment defines how pods should be deployed
   #   "development" will deploy without persistent storage and won't deploy the enrichment container
   #   "test" will deploy without persistent storage
@@ -25,6 +25,10 @@ aws:
 
 minio:
   exposeService: true
+  # for minio itself
+  auth:
+    existingSecret: minio-creds
+  # for other services
   existingSecret: minio-creds
   persistence:
     size: "30Gi"
