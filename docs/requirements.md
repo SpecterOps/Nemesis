@@ -75,9 +75,17 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 
 6. Start Nemesis Quickstart
 
-    This create secrets that are nessecary for Nemesis to run. If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
+    This create secrets that are nessecary for Nemesis to run.
 
-    Run `helm install nemesis-quickstart ./helm/quickstart` to kick off the quickstart.
+    Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart`
+
+    If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
+
+    ```
+    curl https://raw.githubusercontent.com/SpecterOps/Nemesis/helm/helm/quickstart/values.yaml -o quickstart-values.yaml
+    # Edit values.yaml as you need
+    helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart -f quickstart-values.yaml
+    ```
 
 7. Install Nginx Ingress and eck-operator
 
