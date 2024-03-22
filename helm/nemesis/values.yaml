@@ -25,7 +25,7 @@ aws:
 
 minio:
   exposeService: true
-  # for minio itself
+  # For the minio dependency (Chart.yaml)
   auth:
     existingSecret: minio-creds
   # for other services
