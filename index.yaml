@@ -1,0 +1,54 @@
+apiVersion: v1
+entries:
+  monitoring:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2024-03-22T19:56:14.426363545Z"
+    description: A Helm chart for Kubernetes
+    digest: da343adb165b7c41eb370db7ee1c9c3c8e62c1a34436b265e4e9356f7eff1add
+    name: monitoring
+    type: application
+    urls:
+    - https://github.com/SpecterOps/Nemesis/releases/download/monitoring-0.1.0/monitoring-0.1.0.tgz
+    version: 0.1.0
+  nemesis:
+  - apiVersion: v2
+    appVersion: 0.1.0a
+    created: "2024-03-22T19:56:14.629418583Z"
+    dependencies:
+    - name: minio
+      repository: https://charts.bitnami.com/bitnami
+      version: 12.13.1
+    description: Nemesis is an offensive data enrichment pipeline and operator support
+      system.
+    digest: 4afa80f95e55a69dbff39cac1b0c085d0ca5a408c3d75ef182ecd774b228bbec
+    icon: https://github.com/SpecterOps/Nemesis/raw/main/img/nemesis_white.png
+    name: nemesis
+    type: application
+    urls:
+    - https://github.com/SpecterOps/Nemesis/releases/download/nemesis-0.1.0/nemesis-0.1.0.tgz
+    version: 0.1.0
+  nemesis-enrichment:
+  - apiVersion: v2
+    appVersion: 0.1.0a
+    created: "2024-03-22T19:56:14.838194416Z"
+    description: The enrichment container for Nemesis
+    digest: b698b4999a598d55566baeb6efd3d8e0673d2fa683f295f0000658c89cb6fb4d
+    icon: https://github.com/SpecterOps/Nemesis/raw/main/img/nemesis_white.png
+    name: nemesis-enrichment
+    type: application
+    urls:
+    - https://github.com/SpecterOps/Nemesis/releases/download/nemesis-enrichment-0.1.0/nemesis-enrichment-0.1.0.tgz
+    version: 0.1.0
+  quickstart:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2024-03-22T19:56:15.027933391Z"
+    description: Quickstart Helm chart for Nemesis
+    digest: b54656eb45ae3b8b47151f4e869fd958ab3548373ce41f4649bbdac37d189ab5
+    name: quickstart
+    type: application
+    urls:
+    - https://github.com/SpecterOps/Nemesis/releases/download/quickstart-0.1.0/quickstart-0.1.0.tgz
+    version: 0.1.0
+generated: "2024-03-22T19:56:15.027944623Z"
