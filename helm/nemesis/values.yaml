@@ -10,7 +10,7 @@ operation:
   #   "development" will deploy without persistent storage and won't deploy the enrichment container
   #   "test" will deploy without persistent storage
   #   "production" deploys all images with persistent storage
-  environment: "production"
+  environment: "test"
   dataExpirationDays: "100"
   existingSecret: operation-creds
   basicAuthExistingSecret: basic-auth
@@ -151,6 +151,31 @@ nlp:
     limits:
       memory: "1500Mi"
       cpu: "1000m"
+llm:
+  prometheusNodePort: 31694
+  nodePort: 31804
+  resources: {}
+  image:
+    repository: specterops/nemesis-llm
+    tag: latest
+    pullPolicy: IfNotPresent
+  # if you want to enable LLM enrichment, add LLM_CONNECTION_STRING and LLM_MODEL_MAX_TOKENS as below
+  # LLM_CONNECTION_STRING is in LiteLLM format, compatible with Rigging
+  #   example: ogether_ai/mistralai/Mixtral-8x7B-Instruct-v0.1,api_key=06...
+  # You can find some max_tokens in https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json
+  #   If you can't find the max_tokens, a reasonable default of 8192 is set.
+  #
+  # !!! WARNING WARNING WARNING !!!
+  #     MAKE SURE YOU'RE USING A PROVIDER THAT PRESERVES DATA PRIVACY!
+  #          ALL EXTRACTED TEXT, FILE LISTINGS, ETC. MAY/WILL BE SENT TO THIS PROVIDER FOR PROCESSING
+  #     MAKE SURE YOU PUT IN USAGE LIMITS UNLESS YOU WANT A POSSIBLE $$$ BILL!
+  #     You have been warned warned warned.
+  #
+  extraEnvVars:
+    - name: LLM_CONNECTION_STRING
+      value: ""
+    - name: LLM_MODEL_MAX_TOKENS
+      value: "32000"
 
 passwordcracker:
   nodePort: 31990

@@ -42,8 +42,6 @@ spec:
                 configMapKeyRef:
                   name: operation-config
                   key: log-level
-            - name: DATA_DOWNLOAD_DIR
-              value: "/tmp"
             - name: ENVIRONMENT
               valueFrom:
                 configMapKeyRef:
@@ -53,7 +51,9 @@ spec:
               value: "True"
             - name: PROMETHEUS_PORT
               value: "9801"
-
+            {{- with .Values.llm.extraEnvVars }}
+            {{- . | toYaml | nindent 12 }}
+            {{- end }}
           image: {{ .Values.llm.image.repository }}:{{ .Values.llm.image.tag }}
           imagePullPolicy: {{ .Values.llm.image.pullPolicy }}
           name: nemesis-llm

@@ -98,7 +98,7 @@ class LLMApi():
             chunks.append(decode(model=self.cfg.llm_connection_string, tokens=chunk))
             chunk_start = chunk_end
 
-        await logger.ainfo(f"get_text_chunks len(chunks): {len(chunks)}")
+        await logger.ainfo(f"[get_text_chunks] get_text_chunks len(chunks): {len(chunks)}")
 
         return chunks
 
@@ -164,7 +164,7 @@ class LLMApi():
         each chunk is summarized with get_chunk_summary(), and the summaries are summarized with get_summary_of_chunk_summaries().
         """
 
-        await logger.ainfo(f"llm_connection_string: {self.cfg.llm_connection_string}")
+        await logger.ainfo(f"[get_text_summary] llm_connection_string: {self.cfg.llm_connection_string}")
 
         if not self.cfg.llm_connection_string:
             return ""
@@ -172,7 +172,7 @@ class LLMApi():
         # chunk up our text
         chunks = await self.get_text_chunks(text)
 
-        await logger.ainfo(f"len(chunks): {len(chunks)}")
+        await logger.ainfo(f"[get_text_summary] len(chunks): {len(chunks)}")
 
         if chunks and len(chunks) == 1:
             # if our text is under llm_model_max_tokens, just return the chunk summary
@@ -185,7 +185,7 @@ class LLMApi():
                 if summary:
                     chunk_summaries.append(summary)
 
-            await logger.ainfo(f"len(chunk_summaries): {len(chunk_summaries)}")
+            await logger.ainfo(f"[get_text_summary] len(chunk_summaries): {len(chunk_summaries)}")
 
             if len(chunk_summaries) == 0:
                 return ""
@@ -195,6 +195,7 @@ class LLMApi():
                 return self.get_summary_of_chunk_summaries(chunk_summaries)
 
     async def handle_summarize_text(self, request: SummarizeRequest):
+        await logger.ainfo(f"[handle_summarize_text] request: {request}")
         summary = await self.get_text_summary(request.text)
         return SummarizeResult(summary=summary)
 

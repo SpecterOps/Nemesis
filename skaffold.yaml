@@ -23,6 +23,9 @@ build:
     - image: nemesis-nlp
       docker:
         dockerfile: dockerfiles/nlp.Dockerfile
+    - image: nemesis-llm
+      docker:
+        dockerfile: dockerfiles/llm.Dockerfile
     - image: nemesis-passwordcracker
       docker:
         dockerfile: dockerfiles/passwordcracker.Dockerfile
@@ -58,6 +61,8 @@ deploy:
         jupyter.image.tag: "{{.IMAGE_TAG_nemesis_jupyter}}@{{.IMAGE_DIGEST_nemesis_jupyter}}"
         nlp.image.repository: "{{.IMAGE_REPO_nemesis_nlp}}"
         nlp.image.tag: "{{.IMAGE_TAG_nemesis_nlp}}@{{.IMAGE_DIGEST_nemesis_nlp}}"
+        llm.image.repository: "{{.IMAGE_REPO_nemesis_llm}}"
+        llm.image.tag: "{{.IMAGE_TAG_nemesis_llm}}@{{.IMAGE_DIGEST_nemesis_llm}}"
         passwordcracker.image.repository: "{{.IMAGE_REPO_nemesis_passwordcracker}}"
         passwordcracker.image.tag: "{{.IMAGE_TAG_nemesis_passwordcracker}}@{{.IMAGE_DIGEST_nemesis_passwordcracker}}"
       setValues:
@@ -67,6 +72,7 @@ deploy:
         enrichment.image.pullPolicy: IfNotPresent
         jupyter.image.pullPolicy: IfNotPresent
         nlp.image.pullPolicy: IfNotPresent
+        llm.image.pullPolicy: IfNotPresent
         passwordcracker.image.pullPolicy: IfNotPresent
     - name: nemesis-monitoring
       chartPath: helm/monitoring
