@@ -49,7 +49,7 @@ spec:
           - name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
-                  name: {{ .Values.postgres.secretName }}
+                  name: {{ .Values.postgres.existingSecret }}
                   key: postgres-password
         command: ["/bin/bash", "-c"]
         args:
