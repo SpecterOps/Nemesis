@@ -1,13 +1,13 @@
 # Nemesis Installation and Setup
 1. Ensure the [requisite software/hardware is installed](./requirements.md).
 
-2. Run `helm install https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m'` to kick off the Nemesis install. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml) for things like resource requests/etc.
+2. Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m'` to kick off the Nemesis install. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml) for things like resource requests/etc.
 
    To configure [values.yaml](../helm/nemesis/values.yaml), download values.yaml and install using helm.
 
    ```bash
    curl https://raw.githubusercontent.com/SpecterOps/Nemesis/helm/helm/nemesis/values.yaml -o nemesis-values.yaml
-   helm install https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' -f nemesis-values.yaml
+   helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' -f nemesis-values.yaml
    ```
 
    If you want monitoring capabilities, run `helm install nemesis-monitoring ./helm/monitoring`
