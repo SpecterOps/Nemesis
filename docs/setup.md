@@ -10,7 +10,7 @@
    helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' -f nemesis-values.yaml
    ```
 
-   If you want monitoring capabilities, run `helm install nemesis-monitoring ./helm/monitoring`
+   If you want monitoring capabilities, run `helm install --repo https://specterops.github.io/Nemesis/ monitoring`
 
    If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis && kubectl delete all --all -n default` and rerun the install command with an increased timeout value. If you installed `nemesis-monitoring` as well, run `helm uninstall nemesis && helm uninstall nemesis-monitoring && kubectl delete all --all -n default`
 
