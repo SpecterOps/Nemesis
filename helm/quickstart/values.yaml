@@ -50,3 +50,7 @@ postgres:
 jupyter:
   secretName: jupyter-creds
   # token: ""
+
+tls:
+  secretName: nemesis-cert
+  enable: true

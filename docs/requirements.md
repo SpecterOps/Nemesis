@@ -73,13 +73,19 @@ winget install Helm.Helm
 helm repo add bitnami https://charts.bitnami.com/bitnami
 ```
 
-6. Install Nginx Ingress and eck-operator
+6. Start Nemesis Quickstart
+
+    This create secrets that are nessecary for Nemesis to run. If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
+
+    Run `helm install nemesis-quickstart ./helm/quickstart` to kick off the quickstart.
+
+7. Install Nginx Ingress and eck-operator
 
 **Purpose**: Helm dependencies can't put resources in other namespaces (`ingress-nginx` and `elastic-system`), so we must install these separately.
 
 ```bash
-# Install NGINX ingress. The path "default/nemesis-ls-beats" will need to be configured if you want to install Nemesis to a namespace not "default"
-helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
+# Install NGINX ingress. The path "default/nemesis-ls-beats" will need to be configured if you want to install Nemesis to a namespace not "default". Optionally set the default-ssl-certificate. A default secret (default/nemesis-cert) is created in quickstart.
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044" --set controller.extraArgs.default-ssl-certificate="default/nemesis-cert"
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you want to install Nemesis to a namespace not "default"
 helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
