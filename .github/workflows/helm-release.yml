@@ -1,45 +1,190 @@
 name: Release Helm Charts
 
 on:
-  push:
-    branches:
-      - helm
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version"
+        required: true
+        type: string
+
+      charts_dir:
+        description: "Charts directory"
+        required: true
+        default: 'helm'
+        type: string
+
+env:
+  PACKAGE_DIR: dist
+
+
+# Only allow one instance of this workflow to run at a time
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Make sure charts directory exists and contains Helm charts
+        env:
+          CHARTS_DIR: ${{ inputs.charts_dir }}
+        run: find $CHARTS_DIR -maxdepth 2 -mindepth 2 -type f -name "Chart.yaml"
+
+      - name: Verify release version is a valid SemVer version string
+        env:
+          VERSION: ${{ inputs.version }}
+        # regex is from the semver.org list of suggested regex strings https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+        run:  echo $VERSION | grep -qP '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+
+      - name: Ensure a git tag for this version does not already exist
+        env:
+          VERSION: v${{ inputs.version }}
+        run: |
+          if [ $(git tag -l "$VERSION") ]; then
+            echo "Git tag matching release version '$VERSION' already exists"
+            false
+          else
+            true
+          fi
+
+      - name: Ensure a Github release for this version does not already exist
+        env:
+          VERSION: v${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export API_RESULT=$(gh api --silent \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-Github-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/releases/tags/${VERSION} 2>&1)
+
+          if [[ "$API_RESULT" == *"Not Found"* ]]; then
+            true
+          else
+            echo "Release for version '$VERSION' already exists on Github"
+            false
+          fi
+
   release:
-    # Provision a Github token with write permissions to the repository. This is needed in
-    # order to create and push to the 'gh-pages' branch.
+    needs: verify
+
+    # Provision a Github token with repository and pages write permissions
     permissions:
       contents: write
+      pages: write
+      id-token: write
+
+    # Use the github-pages environment. The actions/deploy-pages workflow fails with a
+    # "Invalid environment node id" error if an environment is not specified.
+    # https://github.com/actions/deploy-pages/issues/271
+    environment:
+      name: github-pages
 
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # Set the Git commit user to the whoever pushed to most recent changes. This can be
-      # changed to the 'github_actions' user name with the 'github-actions[bot]@users.noreply.github.com'
-      # to use the Github actions bot user instead.
       - name: Configure git
         run: |
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
+      - name: Create a git tag for the release
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "Nemesis v${{ inputs.version }}"
+          push: true
+          tag: "v${{ inputs.version }}"
+
       - name: Install Helm
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         uses: azure/setup-helm@v3
 
-      - name: Add dependency chart repositories
-        run: |
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        with:
-          # Set the path to the helm chart
-          charts_dir: helm
+      - name: Add chart dependency repositories
         env:
-          # Use the Github token which that was created above with write permissions
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CHARTS_DIR: ${{ inputs.charts_dir }}
+        run: |
+          charts=($(find $CHARTS_DIR -maxdepth 2 -mindepth 2 -type f -name "Chart.yaml" -printf '%h\n'))
+          for chart in "${charts[@]}"; do
+            repos=($(helm dependency list $chart | head -n '-1' | tail -n '+2' | cut -f3))
+            for repo in "${repos[@]}"; do
+              name=$(echo $repo | grep -o '[^/]*$')
+              helm repo add $name $repo
+            done
+          done
+
+      - name: Package Helm charts
+        env:
+          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
+          CHARTS_DIR: ${{ inputs.charts_dir }}
+        run: |
+          mkdir -p $PACKAGE_DIR
+          find $CHARTS_DIR -maxdepth 2 -mindepth 2 -type f -name "Chart.yaml" -printf '%h\n' | xargs -I % bash -c "helm package -d $PACKAGE_DIR %"
+
+      - name: Pull in previous index.yaml file if it exists
+        env:
+          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PAGES_URL=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/pages \
+            | jq -r '.html_url')
+
+          if [[ "$PAGES_URL" != "null" ]]; then
+            HTTP_STATUS=$(curl -sL -w '%{http_code}' "${PAGES_URL%/}/index.yaml" -o ${PACKAGE_DIR}/index.yaml)
+            if [[ "$HTTP_STATUS" != "200" ]]; then
+              rm ${PACKAGE_DIR}/index.yaml
+            fi
+          fi
+
+      - name: Update Helm repository index.yaml file
+        env:
+          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
+          CHART_BASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/download/v${{ inputs.version }}
+        run: |
+          if [ -f ${PACKAGE_DIR}/index.yaml ]; then
+            helm repo index $PACKAGE_DIR --merge ${PACKAGE_DIR}/index.yaml --url $CHART_BASE_URL
+          else
+            helm repo index $PACKAGE_DIR --url $CHART_BASE_URL
+          fi
+
+      - name: Create Github release with the Helm charts
+        env:
+          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
+          VERSION: v${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${VERSION} -R ${{ github.repository }} -t "Nemesis $VERSION" -n "Nemesis $VERSION release" $PACKAGE_DIR/*.tgz
+
+      - name: Remove packaged Helm charts
+        env:
+          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
+        run: rm -f ${PACKAGE_DIR}/*.tgz
+
+      - name: Setup Github pages
+        uses: actions/configure-pages@v4
+
+      - name: Create Github pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.PACKAGE_DIR }}
+
+      - name: Deploy Helm chart repository to Github pages
+        uses: actions/deploy-pages@v4
+
+      - name: Remove Github release and tag on failure
+        continue-on-error: true
+        if: ${{ failure() }}
+        env:
+          VERSION: v${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete -R ${{ github.repository }} $VERSION -y --cleanup-tag
