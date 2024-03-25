@@ -11,7 +11,7 @@
 ## VM Hardware Requirements
 We have only tested on machines with the the following specs. All other configurations are not officially supported.
 
- * OS: Debian 11 LTS or Debian 11 on the Windows Subsystem for Linux(WSL).
+ * OS: Debian 11 LTS or Debian 11 on the Windows Subsystem for Linux (WSL).
  * 4 processors
  * 16 GB RAM
  * 100 GB disk
@@ -23,6 +23,9 @@ Additionally, only x64 architecture has been tested and is supported. ARM platfo
 **Do not install the following requirements as root! Minikube is particular does not like to be run as root.**
 
 ## Software Requirements
+
+We support installing Nemesis in either [Docker Desktop](#docker-desktop-with-kubernetes) or [Minikube](#minikube).
+
 **The following requirements need to be installed:**
 
 ### Docker Desktop with Kubernetes
@@ -75,7 +78,7 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 
 6. Start Nemesis Quickstart
 
-    This create secrets that are nessecary for Nemesis to run.
+    This create secrets that are necessary for Nemesis to run.
 
     Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart`
 
@@ -203,6 +206,8 @@ Skaffold
 
 **Purpose:** Development tool used to auto deploy containers to a Kubernetes cluster anytime the code changes.
 
+***This is only needed if you're planning on doing Nemesis development!***
+
 [Install Skaffold v2.7.1 with this command](https://github.com/GoogleContainerTools/skaffold/releases/tag/v2.7.1):
 ```
 # For Linux x86_64 (amd64)
@@ -240,5 +245,23 @@ helm repo add nginx https://kubernetes.github.io/ingress-nginx
 helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you desire to install Nemesis in a different namespace
 helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
+```
+</details>
+
+<details>
+<summary>
+Nemesis Quickstart
+</summary>
+
+This create secrets that are nessecary for Nemesis to run.
+
+Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart`
+
+If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
+
+```bash
+curl https://raw.githubusercontent.com/SpecterOps/Nemesis/helm/helm/quickstart/values.yaml -o quickstart-values.yaml
+# Edit values.yaml as you need
+helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart -f quickstart-values.yaml
 ```
 </details>
