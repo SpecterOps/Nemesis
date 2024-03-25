@@ -173,11 +173,7 @@ data:
       @type grep
       <exclude>
         key $['kubernetes']['container_name']
-        pattern /^coredns$/
-      </exclude>
-      <exclude>
-        key $['kubernetes']['container_name']
-        pattern /^kube-apiserver.*$/
+        pattern /^(coredns|kube-apiserver.*)$/
       </exclude>
     </filter>
 
