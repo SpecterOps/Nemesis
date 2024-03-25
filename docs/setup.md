@@ -10,9 +10,11 @@
    helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' -f nemesis-values.yaml
    ```
 
-   If you want monitoring capabilities, run `helm install --repo https://specterops.github.io/Nemesis/ monitoring`
+   If you want monitoring capabilities, run `helm install --repo https://specterops.github.io/Nemesis/ monitoring monitoring`
 
-   If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis && kubectl delete all --all -n default` and rerun the install command with an increased timeout value. If you installed `nemesis-monitoring` as well, run `helm uninstall nemesis && helm uninstall nemesis-monitoring && kubectl delete all --all -n default`
+   **Note**: If you want to install from the local Helm charts, use `helm install nemesis-quickstart ./helm/quickstart`, `helm install nemesis ./helm/nemesis --timeout '45m'`, and `helm install nemesis-monitoring ./helm/monitoring`.
+
+   If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis && kubectl delete all --all -n default` and rerun the install command with an increased timeout value. If you installed `monitoring` as well, run `helm uninstall nemesis && helm uninstall monitoring && kubectl delete all --all -n default`
 
    Once running, browsing `https://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
 

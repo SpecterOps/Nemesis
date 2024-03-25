@@ -61,6 +61,8 @@ gotenberg:
       cpu: "500m"
 
 elasticsearch:
+  # how many days to keep fluentd logs before purging
+  fluentdLogsAge: 100
   existingSecret: elasticsearch-creds
   resources:
     requests:
