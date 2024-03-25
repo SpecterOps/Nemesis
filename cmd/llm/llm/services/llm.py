@@ -12,6 +12,9 @@ from prometheus_client import Summary
 from pydantic import BaseModel
 import rigging as rg
 from litellm import get_max_tokens, encode, decode, acompletion
+import litellm
+
+# litellm.set_verbose=True
 
 logger = structlog.get_logger(module=__name__)
 
@@ -75,7 +78,8 @@ class LLMApi():
         """
 
         document_tokens = encode(model=self.cfg.llm_connection_string, text=text)
-        document_size = len(document_tokens)
+        document_size = len(document_tokens) * 1.4 # some token estimates are off, so give some room
+        await logger.ainfo(f"document_tokens: {len(document_tokens)}")
 
         # total chunk number
         K = math.ceil(document_size / self.cfg.llm_model_max_tokens)
@@ -110,6 +114,8 @@ class LLMApi():
         if text == "":
             return ""
 
+        await logger.ainfo(f"[get_chunk_summary] len(text): {len(text)}")
+
         chat = (
             rg.get_generator(self.cfg.llm_connection_string)
             .chat([
@@ -137,6 +143,8 @@ class LLMApi():
         elif len(chunks) == 1:
             return chunks[0]
         else:
+            await logger.ainfo(f"[get_summary_of_chunk_summaries] len(chunks): {len(chunks)}, self.cfg.llm_connection_string: {self.cfg.llm_connection_string}")
+
             all_chunks = "\n\n".join(chunks)
 
             chat = (
@@ -192,10 +200,10 @@ class LLMApi():
             elif len(chunk_summaries) == 1:
                 return chunk_summaries[0]
             else:
-                return self.get_summary_of_chunk_summaries(chunk_summaries)
+                return await self.get_summary_of_chunk_summaries(chunk_summaries)
 
     async def handle_summarize_text(self, request: SummarizeRequest):
-        await logger.ainfo(f"[handle_summarize_text] request: {request}")
+        await logger.ainfo(f"[handle_summarize_text] request: {request.text[0:200]}")
         summary = await self.get_text_summary(request.text)
         return SummarizeResult(summary=summary)
 

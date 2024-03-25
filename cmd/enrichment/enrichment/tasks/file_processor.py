@@ -47,6 +47,7 @@ class FileProcessor(TaskInterface):
     # URIs
     crack_list_uri: str
     dotnet_uri: str
+    llm_uri: str
     gotenberg_uri: str
     kibana_url: str
 
@@ -82,6 +83,7 @@ class FileProcessor(TaskInterface):
         # URIs
         crack_list_uri: str,
         dotnet_uri: str,
+        llm_uri: str,
         gotenberg_uri: str,
         public_kibana_url: str,
         # Other settings
@@ -114,6 +116,7 @@ class FileProcessor(TaskInterface):
 
         self.crack_list_uri = crack_list_uri
         self.dotnet_uri = dotnet_uri
+        self.llm_uri = llm_uri
         self.gotenberg_uri = gotenberg_uri
         self.kibana_url = public_kibana_url
 
@@ -1079,6 +1082,25 @@ class FileProcessor(TaskInterface):
             await logger.aexception(e, message="Error calling cracklist", file_uuid=object_id)
             return False
 
+    async def summarize_text(self, text: str) -> bool:
+        """Calls self.llm_uri to summarize the text supplied."""
+
+        try:
+            data = {"text": text}
+            url = f"{self.llm_uri}summarize_text"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=data) as resp:
+                    resp.raise_for_status()
+                    response = await resp.json()
+                    if "summary" in response:
+                        return response["summary"]
+                    else:
+                        return ""
+        except Exception as e:
+            await logger.aexception(e, message="Error calling llm")
+            return ""
+
     async def process_dotnet(self, file_path: str) -> Optional[dict]:
         """Calls the self.dotnet_uri/process api endpoint to decompile the supplied .NET assembly."""
 
@@ -1216,6 +1238,22 @@ class FileProcessor(TaskInterface):
                         enrichments_success.append(constants.E_UPDATE_CRACKLIST)
                     else:
                         enrichments_failure.append(constants.E_UPDATE_CRACKLIST)
+
+                    with open(temp_file.name, "r") as f:
+                        text = f.read()
+
+                    try:
+                        await logger.ainfo(f"Summarizing text", object_id=nemesis_uuid)
+                        summary = await self.summarize_text(text)
+                        await logger.ainfo(f"Length of text summary: {len(summary)}", object_id=nemesis_uuid)
+                        if summary and len(summary) > 0:
+                            enrichments_success.append(constants.E_SUMMARIZE)
+                            file_data_plaintext.summary = summary
+                        else:
+                            enrichments_failure.append(constants.E_SUMMARIZE)
+                    except Exception as e:
+                        await logger.awarning(f"Exception summarizing text: {e}", object_id=nemesis_uuid)
+                        enrichments_failure.append(constants.E_SUMMARIZE)
 
                 # run NoseyParker on the plaintext for anything we can find
                 try:

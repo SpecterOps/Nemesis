@@ -505,6 +505,7 @@ class Container(containers.DeclarativeContainer):
         # URIs
         config.crack_list_uri,
         config.dotnet_uri,
+        config.llm_uri,
         config.gotenberg_uri,
         config.public_kibana_url,
         # Other settings

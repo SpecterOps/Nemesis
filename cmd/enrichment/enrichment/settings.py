@@ -45,6 +45,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     dotnet_uri: HttpUrlWithSlash
     gotenberg_uri: HttpUrlWithSlash
     crack_list_uri: HttpUrlWithSlash
+    llm_uri: HttpUrlWithSlash
     extracted_archive_size_limit: PositiveInt
     db_iteration_size: PositiveInt
     elasticsearch_user: str

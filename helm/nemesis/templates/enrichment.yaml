@@ -127,6 +127,8 @@ spec:
               value: http://tika:9998/
             - name: DOTNET_URI
               value: http://dotnet:9800/
+            - name: LLM_URI
+              value: http://llm:9900/
             - name: GOTENBERG_URI
               value: http://gotenberg:3000/
             - name: ML_MODELS_URI
