@@ -175,6 +175,10 @@ data:
         key $['kubernetes']['container_name']
         pattern /^coredns$/
       </exclude>
+      <exclude>
+        key $['kubernetes']['container_name']
+        pattern /^kube-apiserver.*$/
+      </exclude>
     </filter>
 
     <match **>
