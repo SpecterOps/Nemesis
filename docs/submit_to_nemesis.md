@@ -8,7 +8,7 @@ Install with the instructions below.
 <summary>
 Python, Pyenv, and Poetry
 </summary>
-To get Nemesis running, Python 3.11.2 is needed in order to run nemesis-cli.py (which configures Nemesis's k8s environment). It is not required to install Pyenv/Poetry. However, Pyenv makes global python version management easy and Poetry is required if using the submit_to_nemesis CLI tool.
+To get Nemesis running, Python 3.11.2 is needed, as well as Pyenv/Poetry.
 
 ## Install Pyenv
 **Purpose:** Manages python environments in a sane way.
