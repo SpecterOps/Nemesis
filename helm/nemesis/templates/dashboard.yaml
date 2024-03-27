@@ -20,6 +20,12 @@ spec:
         - env:
             - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
               value: "False"
+
+            {{- range .Values.dashboard.extraEnvVars }}
+            - name: {{ .name }}
+              value: "{{ .value }}"
+            {{- end }}
+
             - name: PAGE_SIZE
               value: "30"
             - name: LOG_LEVEL

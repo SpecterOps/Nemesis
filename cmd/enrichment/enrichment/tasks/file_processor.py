@@ -87,8 +87,8 @@ class FileProcessor(TaskInterface):
         # Other settings
         chunk_size: int,
         data_download_dir: str,
-        extracted_archive_size_limit: int,
-        plaintext_size_limit: int,
+        extracted_archive_size_limit: str,
+        plaintext_size_limit: str,
         # Queues
         in_q_filedata: MessageQueueConsumerInterface,
         in_q_filedataenriched: MessageQueueConsumerInterface,
@@ -117,11 +117,6 @@ class FileProcessor(TaskInterface):
         self.gotenberg_uri = gotenberg_uri
         self.kibana_url = public_kibana_url
 
-        self.chunk_size = chunk_size  # number of bytes to read at a time per file
-        self.data_download_dir = data_download_dir
-        self.extracted_archive_size_limit = extracted_archive_size_limit  # upper size limit of an (extracted) archive to process
-        self.plaintext_size_limit = plaintext_size_limit
-
         self.in_q_filedata = in_q_filedata
         self.in_q_filedataenriched = in_q_filedataenriched
         self.out_q_alert = out_q_alerting
@@ -139,11 +134,14 @@ class FileProcessor(TaskInterface):
         self.out_q_filedatasourcecode = out_q_filedatasourcecode
         self.out_q_rawdata = out_q_rawdata
 
-        # upper size limit of an (extracted) archive to process
-        self.extracted_archive_size_limit = extracted_archive_size_limit
-
         # number of bytes to read at a time per file
         self.chunk_size = chunk_size
+        # folder to download temp files to
+        self.data_download_dir = data_download_dir
+        # upper size limit of an (extracted) archive to process, in MB
+        self.extracted_archive_size_limit = int(extracted_archive_size_limit) * 1000000
+        # upper size limit of a extracted text to process, in MB
+        self.plaintext_size_limit = int(plaintext_size_limit) * 1000000
 
         # load up the file parsing modules
         (self.file_modules, self.file_module_names) = helpers.dynamic_import_from_src("./enrichment/lib/file_parsers")
