@@ -1,6 +1,10 @@
 # Overview of submit_to_nemesis
 `submit_to_nemesis` is a CLI tool used to upload files to Nemesis. Its targeted audience is operators who want to upload files using the CLI and Nemesis developers who want to quickly test sample files.
 
+# Docker
+
+If you want to use the pre-build Docker container to submit artifacts to Nemesis, run [monitor_folder_docker.sh](../scripts/monitor_folder_docker.sh). The only requirement for the script is Docker and wget.
+
 # Requirements
 Install with the instructions below.
 
