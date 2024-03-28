@@ -20,7 +20,9 @@ ENV PATH="$POETRY_HOME/bin:$PATH"
 # install Poetry
 RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
 
-RUN git clone --depth 1 https://www.github.com/SpecterOps/Nemesis /opt/Nemesis/
+# clone down Nemesis
+ENV NEMESIS_COMMIT 927b34b5bfb923bbf201bb2c6edbb9ac54ef4e2c
+RUN git clone https://www.github.com/SpecterOps/Nemesis /opt/Nemesis/ && cd /opt/Nemesis/ && git checkout ${NEMESIS_COMMIT}
 RUN mkdir /submit/
 
 RUN poetry -C ./cmd/enrichment/ install
