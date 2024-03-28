@@ -14,6 +14,13 @@ To get Nemesis running, Python 3.11.2 is needed, as well as Pyenv/Poetry.
 **Purpose:** Manages python environments in a sane way.
 
 1. Install the [relevant prereqs specified by PyEnv](https://github.com/pyenv/pyenv/wiki#suggested-build-environment).
+
+For Debian, this is:
+```bash
+sudo apt update; sudo apt install build-essential libssl-dev zlib1g-dev \
+libbz2-dev libreadline-dev libsqlite3-dev curl \
+libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+```
 2. Installation:
 ```bash
 curl https://pyenv.run | bash
