@@ -90,7 +90,9 @@ dashboard:
     pullPolicy: IfNotPresent
   extraEnvVars:
     - name: STREAMLIT_SERVER_MAX_UPLOAD_SIZE # the maximum size of files that can be uploaded via Streamlit, in MB
-      value: "500"
+      value: "200"
+    - name: STREAMLIT_SERVER_MAX_MESSAGE_SIZE # the maximum size of messagea that can be sent via the Streamlit websocket, in MB
+      value: "200"
   resources: {}
 
 nemesisWaiter:
@@ -125,7 +127,7 @@ enrichment:
     pullPolicy: IfNotPresent
   extraEnvVars:
     - name: EXTRACTED_ARCHIVE_SIZE_LIMIT # limit of extracted archives to process, in MB
-      value: "1000"
+      value: "2000"
     - name: PLAINTEXT_SIZE_LIMIT
       value: "50" # size limit for extracted text to process, in MB
 

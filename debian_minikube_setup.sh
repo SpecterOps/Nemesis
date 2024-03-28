@@ -48,10 +48,12 @@ helm install elastic-operator elastic/eck-operator --namespace elastic-system --
 # run the Nemesis quickstart
 echo -e "\nInstalling Nemesis quickstart\n"
 helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart
+# helm install quickstart ./helm/quickstart --timeout '45m' # for using the local repo
 
 # install Nemesis
 echo -e "\n\n\nInstalling Nemesis itself (this may take some time to pull down all containers)...\n"
 helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m'
+# helm install nemesis ./helm/nemesis --timeout '45m' # for using the local repo
 EOF
 
 
