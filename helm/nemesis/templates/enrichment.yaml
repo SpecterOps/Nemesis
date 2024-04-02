@@ -271,8 +271,7 @@ spec:
             - name: noseyparker
               mountPath: /opt/noseyparker/
             - name: noseyparker-rules
-              mountPath: /opt/noseyparker/noseyparker.rules
-              subPath: noseyparker.rules
+              mountPath: /opt/noseyparker-rules
               readOnly: true
           readinessProbe:
             httpGet:

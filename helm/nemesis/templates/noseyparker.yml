@@ -3,5 +3,13 @@ kind: ConfigMap
 metadata:
   name: noseyparker-rules
 data:
-  noseyparker.rules: |
-    {{.Files.Get "files/noseyparker/noseyparker.yaml" | nindent 4}}
+  {{- $files := .Files.Glob "files/noseyparker/*.yaml" }}
+  {{- if $files }}
+  {{- range $path, $_ := $files }}
+    {{ $path | base | trimSuffix ".yaml" | printf "%s.rules" }}: |
+    {{- $.Files.Get $path | nindent 6 }}
+  {{- end }}
+  {{- else }}
+    noseyparker.rules: |
+      # Placeholder
+  {{- end }}
