@@ -85,7 +85,7 @@ spec:
               echo "Waiting for Kibana..."
 
               COUNTER=1
-              URL="${KIBANA_URL}/api/status"
+              URL="http://${NEMESIS_KB_HTTP_SERVICE_HOST}:5601/api/status"
               until curl --silent --user "${ELASTICSEARCH_USER}:${ELASTICSEARCH_PASSWORD}" --insecure --max-time 5 \
                 $URL \
                 | jq '.status.overall.level' \
