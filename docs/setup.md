@@ -9,7 +9,7 @@
 
 5. [Ingest data into Nemesis.](#data-ingestion)
 
-If you run into any issues, please see [troubleshooting.md](troubleshooting.md) for common issues.
+If you run into any issues, please see [troubleshooting.md](troubleshooting.md) for common errors/issues.
 
 # Data Ingestion
 Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in muliple ways, including
@@ -116,4 +116,6 @@ helm install nemesis-monitoring ./helm/monitoring
 
 
 ## Need additional help?
-Please [file an issue](https://github.com/SpecterOps/Nemesis/issues) or feel free to ask questions in the [#nemesis-chat channel](https://bloodhoundhq.slack.com/archives/C05KN15CCGP) in the Bloodhound Slack ([click here to join](https://ghst.ly/BHSlack)).
+If you run into any issues, please see [troubleshooting.md](troubleshooting.md) for common errors/issues.
+
+Otherwise, [file an issue](https://github.com/SpecterOps/Nemesis/issues) or feel free to ask questions in the [#nemesis-chat channel](https://bloodhoundhq.slack.com/archives/C05KN15CCGP) in the Bloodhound Slack ([click here to join](https://ghst.ly/BHSlack)).

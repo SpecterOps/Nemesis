@@ -78,5 +78,10 @@ You can use kubectl to easily setup a port forward, but this should only be for 
 kubectl port-forward -n ingress-nginx service/ingress-nginx-controller 7443:443 --address=0.0.0.0
 ```
 
+If you want `kubectl` to bind on a lower port without root, you can give it permission to so with the following:
+```bash
+sudo setcap CAP_NET_BIND_SERVICE=+eip $(which kubectl)
+```
+
 ## Accessing Nemesis via Docker Desktop
 Nemesis can run locally Docker Desktop. In that case, once Nemesis is deployed, you can access the nginx endpoint at `https://localhost/`.
