@@ -24,6 +24,14 @@ Use 'Ctrl+C' to stop the forward.
 ```
 You can then access Nemesis's HTTP endpoint at `https://192.168.230.42:7443`.
 
+* **Note:** If you forgot to get the basic auth username/password when running the `quickstart` chart, you can get them by running the following:
+```
+export BASIC_AUTH_USER=$(kubectl get secret --namespace "default" operation-creds -o jsonpath="{.data.basic-auth-user}" | base64 -d)
+export BASIC_AUTH_PASSWORD=$(kubectl get secret --namespace "default" operation-creds -o jsonpath="{.data.basic-auth-password}" | base64 -d)
+
+echo "Basic Auth Username: ${BASIC_AUTH_USER}"
+echo "Basic Auth Password: ${BASIC_AUTH_PASSWORD}"
+``
 
 ## Manually setting up Minikube Portforward with SSH
 If you do not want to use the `minikube_port_forward.sh` script, you can manually setup the port forward using steps below.
