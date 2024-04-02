@@ -247,21 +247,3 @@ helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ing
 helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 </details>
-
-<details>
-<summary>
-Nemesis Quickstart
-</summary>
-
-This create secrets that are nessecary for Nemesis to run.
-
-Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart`
-
-If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
-
-```bash
-curl https://raw.githubusercontent.com/SpecterOps/Nemesis/helm/helm/quickstart/values.yaml -o quickstart-values.yaml
-# Edit values.yaml as you need
-helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart -f quickstart-values.yaml
-```
-</details>
