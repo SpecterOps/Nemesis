@@ -1,35 +1,22 @@
 # Nemesis Installation and Setup
 1. Ensure the [requisite software/hardware is installed](./requirements.md).
 
-2. Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m'` to kick off the Nemesis install. Optionally configure build values in [values.yaml](../helm/nemesis/values.yaml) for things like resource requests/etc.
+2. Run the [`quickstart` Helm chart](quickstart_chart.md) to configure Nemesis's services and secrets.
 
-   To configure [values.yaml](../helm/nemesis/values.yaml), download values.yaml and install using helm.
+3. Deploy Nemesis's services by [using its Helm chart](nemesis_chart.md).
 
-   ```bash
-   curl https://raw.githubusercontent.com/SpecterOps/Nemesis/helm/helm/nemesis/values.yaml -o nemesis-values.yaml
-   helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' -f nemesis-values.yaml
-   ```
+4. [Setup and access Nemesis](access_nemesis.md).
 
-   If you want monitoring capabilities, run `helm install --repo https://specterops.github.io/Nemesis/ monitoring monitoring`
+5. [Ingest data into Nemesis.](#data-ingestion)
 
-   **Note**: If you want to install from the local Helm charts, use `helm install nemesis-quickstart ./helm/quickstart`, `helm install nemesis ./helm/nemesis --timeout '45m'`, and `helm install nemesis-monitoring ./helm/monitoring`.
-
-   If you run into an `INSTALLATION FAILED` error stating "timed out waiting for the condition", run `helm uninstall nemesis && kubectl delete all --all -n default` and rerun the install command with an increased timeout value. If you installed `monitoring` as well, run `helm uninstall nemesis && helm uninstall monitoring && kubectl delete all --all -n default`
-
-   Once running, browsing `https://<NEMESIS_IP>:8080/` (or whatever you specified in the `operation.nemesisHttpServer` field in `values.yaml`) will display a set of links to Nemesis services. Operators primarily use the Dashboard which allows them to upload files and triage ingested/processed data.
-
-   If you used Minikube as a base, run `./scripts/minikube_port_forward.sh` to setup a portforward to 8080 (or the port passed as an argument) for access.
-
-   **Note:** If you want to change anything in [values.yaml](../helm/nemesis/values.yaml), make the modification(s) and then run `helm upgrade nemesis ./helm/nemesis --reset-values` to apply the changes.
-
-3. [Ingest data into Nemesis.](#data-ingestion)
+If you run into any issues, please see [troubleshooting.md](troubleshooting.md) for common errors/issues.
 
 # Data Ingestion
 Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in muliple ways, including
 * [Auto-ingesting data from C2 platorms.](#nemesis-c2-connector-setup)
 * Manually uploading files on the "File Upload" page in the Nemesis's Dashboard UI.
 * Using the [submit_to_nemesis](./submit_to_nemesis.md) CLI tool to submit files.
-* Writing custom tools to interact with Nemesis's API.
+* Writing custom tools to interact with [Nemesis's API](new_connector.md).
 
 ## Nemesis C2 Connector Setup
 Nemesis includes connectors for various C2 platorms. The connectors hook into the C2 platforms and transfer data automatically into Nemesis. The `./cmd/connectors/` folder contains the following C2 connectors:
@@ -65,6 +52,11 @@ To see a basic landing page with exposed services, go to http `NEMESIS_HTTP_SERV
 | elastic         | /elastic/         | ELASTICSEARCH_USER  | ELASTICSEARCH_PASSWORD  |
 | yara            | /yara/            | N/A                 | N/A                     |
 | crack-list      | /crack-list/      | N/A                 | N/A                     |
+
+# (Optional) Install logging and monitoring services by running the following:
+```bash
+helm install --repo https://specterops.github.io/Nemesis/ monitoring monitoring
+```
 
 # (Optional) Changing Persistent File Storage
 
@@ -105,53 +97,25 @@ sudo setcap CAP_NET_BIND_SERVICE=+eip $(which kubectl)
 
 # (Optional) Deleting Running Pods
 
-## Helm
+## Using Helm
 `helm uninstall nemesis && kubectl delete all --all -n default`
 
-## Skaffold
+## Using Skaffold
 `skaffold delete`
 
+# (Optional) Running Helm local charts
+If you do not want to run the Helm charts hosted on `https://specterops.github.io/Nemesis/`, you can run them locally. For example:
+```bash
+helm install nemesis-quickstart ./helm/quickstart
+helm install nemesis ./helm/nemesis --timeout '45m'
+helm install nemesis-monitoring ./helm/monitoring
+```
+
+
 # Troubleshooting, Common Errors, and Support
-## "CONTAINER can't be pulled" error
-When running skaffold, you may encounter an error stating:
-> deployment/______ failed. Error: container _____ is waiting to start: _______ can't be pulled
 
-This error usually occurs when on a slower internet connection and occurs because skaffold has to pull down a large docker image and eventually times out due to the download taking too long. This most commonly occurs with the gotenberg image, manifesting with this error:
-> deployment/gotenberg failed. Error: container gotenberg is waiting to start: gotenberg/gotenberg:7.7.0 can't be pulled.
-
-Two solutions:
-* Run `minikube ssh docker pull CONTAINER` to manually pull an individual docker image into minikube.
-* In the root of the repo run `./scripts/pull_images.sh`. This will pull all Nemesis docker images into minikube w/o using skaffold.
-
-## Troubleshooting Minikube's Internet/DNS
-The easiest way to troubleshoot internet/DNS issues is to use `minikube ssh` to get a terminal in the minikube host. From there, you can test connectivity in a variety of ways:
-```
-# Test internet connectivity
-ping -c 1 1.1.1.1
-
-# Test DNS
-nslookup google.com
-
-# Test docker image pulling is working
-docker pull debian:11
-```
-
-If minikube can connect to the internet but DNS isn't working, add the following to `/etc/docker/daemon.json` and restart Docker with `sudo service docker restart`:
-```
-{
-    "dns": ["8.8.8.8"]
-}
-```
-
-## Freshly Install Nemesis
-If you want to start fresh again you can run the following general steps:
-```
-minikube delete   # delete your current cluster
-minikube start    # start up minikube again
-
-# Optionally configure Helm values in `./helm/nemesis/values.yaml`
-helm install nemesis ./helm/nemesis
-```
 
 ## Need additional help?
-Please [file an issue](https://github.com/SpecterOps/Nemesis/issues) or feel free to ask questions in the [#nemesis-chat channel](https://bloodhoundhq.slack.com/archives/C05KN15CCGP) in the Bloodhound Slack ([click here to join](https://ghst.ly/BHSlack)).
+If you run into any issues, please see [troubleshooting.md](troubleshooting.md) for common errors/issues.
+
+Otherwise, [file an issue](https://github.com/SpecterOps/Nemesis/issues) or feel free to ask questions in the [#nemesis-chat channel](https://bloodhoundhq.slack.com/archives/C05KN15CCGP) in the Bloodhound Slack ([click here to join](https://ghst.ly/BHSlack)).

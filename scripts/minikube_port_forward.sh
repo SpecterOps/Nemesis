@@ -12,5 +12,9 @@ else
     FORWARD_PORT=$1
 fi
 
-echo "Forwarding $HTTPS_SERVICE to $FORWARD_PORT via SSH. Navigate to https://localhost:$FORWARD_PORT. Use 'Ctrl+C' to stop the forward."
+echo "Forwarding the nginx service listening on $HTTPS_SERVICE to 0.0.0.0:$FORWARD_PORT via SSH."
+echo
+echo "  Access Nemesis at: https://HOST_IP:${FORWARD_PORT}"
+echo
+echo "Use 'Ctrl+C' to stop the forward."
 ssh -N -o StrictHostKeychecking=no -L 0.0.0.0:$FORWARD_PORT:$HTTPS_SERVICE localhost
