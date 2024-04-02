@@ -1,0 +1,13 @@
+# V1
+- [X] Make kibana-init-job managed by Helm and deletable
+- [X] Replicate secrets in monitoring namespace
+- [X] Add monitoring resources
+- [X] `MountVolume.SetUp failed for volume "grafana-dashboards-def" : configmap "grafana-dashboards-def" not found`
+- [X] Configure values.schema.json
+
+# V2
+- [ ] helm test
+    - [ ] HTTP endpoints are curl'able
+- [ ] dotnet-deployment - Add data hosting provider values based on if .Values.aws or .Values.minio. Might need code changes
+- [ ] Mimic validate_aws_resources
+- [ ] RabbitMq connection string as a configuration. Can this be dynamically built so we can use a generated password?

@@ -26,7 +26,7 @@ class StorageMinio(StorageInterface):
         access_key: str,
         secret_key: str,
     ) -> None:
-        self.minio_client = Minio("minio:9000", access_key=access_key, secret_key=secret_key, secure=False)
+        self.minio_client = Minio("nemesis-minio:9000", access_key=access_key, secret_key=secret_key, secure=False)
         self.data_download_dir = data_download_dir
         # the bucket name must be lowercase
         self.assessment_id = assessment_id.lower()

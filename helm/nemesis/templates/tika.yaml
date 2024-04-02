@@ -1,0 +1,82 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tika-config
+data:
+  tika-config.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <properties>
+      <server>
+        <params>
+          <maxRestarts>10</maxRestarts>
+          <maxFiles>10</maxFiles>
+          <timeoutThresholdMillis>125000</timeoutThresholdMillis>
+        </params>
+      </server>
+    </properties>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tika
+  labels:
+    app: tika
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tika
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: tika
+    spec:
+      volumes:
+        - name: tika-config
+          configMap:
+            name: tika-config
+      containers:
+        - env: []
+          image: apache/tika:2.9.1.0-full
+          imagePullPolicy: IfNotPresent
+          name: tika
+          # command: [ "/bin/sh", "-c", "exec java -cp \"/tika-server-standard-2.8.0.jar:/tika-extras/*\" org.apache.tika.server.core.TikaServerCli -h 0.0.0.0 -c /tika-config.xml"]
+          # volumeMounts:
+          #   - mountPath: /tika-config.xml
+          #     subPath: tika-config.xml
+          #     name: tika-config
+          ports:
+            - containerPort: 9998
+              name: http
+          resources: {{ toYaml .Values.tika.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: tika
+  name: tika
+spec:
+  type: NodePort
+  ports:
+    - name: "9998"
+      port: 9998
+      targetPort: 9998
+      nodePort: {{ .Values.tika.nodePort }}
+  selector:
+    app: tika
+status:
+  loadBalancer: {}

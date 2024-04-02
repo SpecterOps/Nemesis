@@ -26,10 +26,14 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.websockets import WebsocketsTransport
 from pprint import pprint
+import ssl
 
-HASURA_ENDPOINT = "http://<HOST>:8080/hasura/v1/graphql"
+HASURA_ENDPOINT = "https://localhost:8080/hasura/v1/graphql"
 BASIC_AUTH_USERNAME = "nemesis"
 BASIC_AUTH_PASSWORD = "Qwerty12345"
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 
 def basic_auth(username, password):
     token = b64encode(f"{username}:{password}".encode('utf-8')).decode("ascii")
@@ -37,7 +41,8 @@ def basic_auth(username, password):
 
 transport = AIOHTTPTransport(
     url=HASURA_ENDPOINT,
-    headers={'Authorization': basic_auth(BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD)}
+    headers={'Authorization': basic_auth(BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD)},
+    ssl=ssl_context
 )
 
 client = Client(transport=transport, fetch_schema_from_transport=True)
@@ -67,21 +72,25 @@ Here is an example of performing a subscription that returns files with extracte
 ```python
 from base64 import b64encode
 from pprint import pprint
+import urllib3
 import time
 import datetime
+import ssl
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.websockets import WebsocketsTransport
 from elasticsearch import Elasticsearch
 
 
-HASURA_WEBSOCKET_ENDPOINT = "ws://<NEMESIS_HOST>:8080/hasura/v1/graphql"
+HASURA_WEBSOCKET_ENDPOINT = "wss://localhost:8080/hasura/v1/graphql"
 BASIC_AUTH_USERNAME = "nemesis"
 BASIC_AUTH_PASSWORD = "Qwerty12345"
-ELASTICSEARCH_URL = "http://<NEMESIS_HOST>:8080/elastic/"
-ELASTICSEARCH_USER = "nemesis"
-ELASTICSEARCH_PASSWORD = "Qwerty12345"
+ELASTICSEARCH_URL = "https://localhost:8080/elastic/"
 WAIT_TIMEOUT = 5
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+urllib3.disable_warnings()
 
 
 def basic_auth(username, password):
@@ -112,7 +121,13 @@ def wait_for_elasticsearch():
 
     while True:
         try:
-            es_client = Elasticsearch(ELASTICSEARCH_URL, basic_auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD), verify_certs=False)
+            es_client = Elasticsearch(
+                ELASTICSEARCH_URL,
+                basic_auth=(BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD),
+                verify_certs=False,
+                ssl_show_warn=False,
+                ssl_context=ssl_context
+            )
             es_client.info()
             return es_client
         except Exception:
@@ -127,7 +142,8 @@ def wait_for_elasticsearch():
 
 transport = WebsocketsTransport(
     url=HASURA_WEBSOCKET_ENDPOINT,
-    headers={'Authorization': basic_auth(BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD)}
+    headers={'Authorization': basic_auth(BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD)},
+    ssl=ssl_context
 )
 
 client = Client(
@@ -152,6 +168,7 @@ for results in client.subscribe(plaintext_subscription):
     if results and len(results["nemesis_file_data_enriched"]) > 0:
         for result in results["nemesis_file_data_enriched"]:
             path = result["path"]
+            print(f"path: {path}")
             # retrieve the actual plaintext from Elastic
             text = elastic_plaintext_search(result["extracted_plaintext_id"])
             # ... do stuffz

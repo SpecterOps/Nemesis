@@ -1,0 +1,196 @@
+operation:
+  disableSlackAlerting: true
+  slackWebhook: "https://hooks.slack.com/services/some/random/text"
+  slackChannel: "#testing"
+  logLevel: "INFO"
+  assessmentId: "ASSESS-0"
+  # Can't be localhost because of URL validation in passwordcracker container
+  nemesisHttpServer: "https://127.0.0.1:8080/"
+  # Environment defines how pods should be deployed
+  #   "development" will deploy without persistent storage and won't deploy the enrichment container
+  #   "test" will deploy without persistent storage
+  #   "production" deploys all images with persistent storage
+  environment: "production"
+  dataExpirationDays: "100"
+  existingSecret: operation-creds
+  basicAuthExistingSecret: basic-auth
+
+storage: minio
+
+aws:
+  existingSecret: aws-creds
+  bucket: not-applicable
+  region: not-applicable
+  kmsKeyAlias: not-applicable
+
+minio:
+  exposeService: true
+  # For the minio dependency (Chart.yaml)
+  auth:
+    existingSecret: minio-creds
+  # for other services
+  existingSecret: minio-creds
+  persistence:
+    size: "30Gi"
+  extraEnvVars:
+    - name: MINIO_BROWSER_LOGIN_ANIMATION
+      value: "\"off\""
+
+ingress-nginx:
+  prometheus:
+    create: True
+    port: 9113
+  tcp:
+    5044: "default/nemesis-ls-beats:5044"
+  controller:
+    admissionWebhooks:
+      enabled: false
+
+gotenberg:
+  image:
+    repository: gotenberg/gotenberg
+    tag: "8.0.1"
+    pullPolicy: IfNotPresent
+  nodePort: 31300
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+elasticsearch:
+  # how many days to keep fluentd logs before purging
+  fluentdLogsAge: 100
+  existingSecret: elasticsearch-creds
+  resources:
+    requests:
+      cpu: "750m"
+      memory: "1G"
+    limits:
+      cpu: "1500m"
+      memory: "3G"
+  storage: 20Gi
+
+pgAdmin:
+  nodePort: 31288
+
+postgres:
+  existingSecret: postgres-creds
+  nodePort: 31209
+  storage: 15Gi
+
+dashboard:
+  existingSecret: dashboard-creds
+  nodePort: 30073
+  image:
+    repository: specterops/nemesis-dashboard
+    tag: latest
+    pullPolicy: IfNotPresent
+  extraEnvVars:
+    - name: STREAMLIT_SERVER_MAX_UPLOAD_SIZE # the maximum size of files that can be uploaded via Streamlit, in MB
+      value: "200"
+    - name: STREAMLIT_SERVER_MAX_MESSAGE_SIZE # the maximum size of messagea that can be sent via the Streamlit websocket, in MB
+      value: "200"
+  resources: {}
+
+nemesisWaiter:
+  image:
+    repository: specterops/nemesis-waiter
+    tag: latest
+    pullPolicy: IfNotPresent
+
+rabbitmq:
+  existingSecret: rabbitmq-creds
+  resources:
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  storage: 20Gi
+
+eck-operator:
+  installCRDs: true
+
+dotnet:
+  nodePort: 31800
+  resources: {}
+  image:
+    repository: specterops/nemesis-dotnet
+    tag: latest
+    pullPolicy: IfNotPresent
+
+enrichment:
+  image:
+    repository: specterops/nemesis-enrichment
+    tag: latest
+    pullPolicy: IfNotPresent
+  extraEnvVars:
+    - name: EXTRACTED_ARCHIVE_SIZE_LIMIT # limit of extracted archives to process, in MB
+      value: "2000"
+    - name: PLAINTEXT_SIZE_LIMIT
+      value: "50" # size limit for extracted text to process, in MB
+
+  cracklist:
+    nodePort: 30089
+  yara:
+    nodePort: 30079
+  webapi:
+    nodePort: 30808
+  landingpage:
+    nodePort: 30809
+  monitoring:
+    nodePort: 31693
+
+jupyter:
+  existingSecret: jupyter-creds
+  nodePort: 31888
+  image:
+    repository: specterops/nemesis-jupyter
+    tag: latest
+    pullPolicy: IfNotPresent
+
+nlp:
+  prometheusNodePort: 31692
+  nodePort: 31803
+  image:
+    repository: specterops/nemesis-nlp
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "250m"
+    limits:
+      memory: "1500Mi"
+      cpu: "1000m"
+
+passwordcracker:
+  nodePort: 31990
+  image:
+    repository: specterops/nemesis-passwordcracker
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "2000m"
+
+tika:
+  nodePort: 31998
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1.5Gi"
+      cpu: "1000m"
+
+hasura:
+  nodePort: 31887
+  resources: {}
+  image:
+    repository: hasura/graphql-engine
+    tag: v2.36.2.cli-migrations-v2
+    pullPolicy: IfNotPresent

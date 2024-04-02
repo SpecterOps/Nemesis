@@ -15,7 +15,7 @@ MYTHIC_USERNAME=mythic_admin
 MYTHIC_PASSWORD=SuperSecretPassword
 REDIS_HOSTNAME=redis
 REDIS_PORT=6379
-NEMESIS_HTTP_SERVER=http://172.16.111.187:8000
+NEMESIS_HTTP_SERVER=https://172.16.111.187:8000
 NEMESIS_CREDS=nemesis:password
 ELASTICSEARCH_USER=elastic
 ELASTICSEARCH_PASSWORD=password
@@ -23,7 +23,7 @@ MAX_FILE_SIZE=100000000
 EXPIRATION_DAYS=100
 ```
 
-**Note**: The `NEMESIS_CREDS` are the `basic_auth_user` / `basic_auth_password` from the nemesis.config or set during the ./nemesis-cli.py setup. `MAX_FILE_SIZE` is in bytes, and `EXPIRATION_DAYS` is the number of days until data will be expunged from backend storage.
+**Note**: The `NEMESIS_CREDS` are the `basic_auth_user` / `basic_auth_password` fields in the `operation-creds` Kubernetes secret. `MAX_FILE_SIZE` is in bytes, and `EXPIRATION_DAYS` is the number of days until data will be expunged from backend storage.
 
 **Make sure the `NEMESIS_HTTP_SERVER` and `MYTHIC_IP` variables do not reference localhost or 127.0.0.1! They need to be reachable from a Docker container.**
 
@@ -55,7 +55,7 @@ REDIS_LAST_FILEBROWSER_ID=456
 REDIS_LAST_PROCESS_ID=789
 ```
 
-You can find the last processed file ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+You can find the last processed file ID through Hasura (https://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
 
 ```
 query MyQuery {
@@ -65,7 +65,7 @@ query MyQuery {
 }
 ```
 
-You can find the last processed file listing ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+You can find the last processed file listing ID through Hasura (https://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
 
 ```
 query MyQuery {
@@ -75,7 +75,7 @@ query MyQuery {
 }
 ```
 
-You can find the last processed processing listing ID through Hasura (http://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
+You can find the last processed processing listing ID through Hasura (https://MYTHIC/console/, using the HASURA_SECRET from Mythic's .env file) with:
 
 ```
 query MyQuery {

@@ -174,13 +174,19 @@ async def get_nemesis_api_client(config) -> httpx.AsyncClient:
         timeout = config["timeout"]
 
         auth = httpx.BasicAuth(nemesis_user, nemesis_pass)
-        transport = httpx.AsyncHTTPTransport(retries=5)
+        transport = httpx.AsyncHTTPTransport(retries=5, verify=False)
         limits = httpx.Limits(
             max_keepalive_connections=5,
             max_connections=10,
         )
 
-        api_client = httpx.AsyncClient(base_url=nemesis_url, auth=auth, transport=transport, timeout=timeout, limits=limits)
+        api_client = httpx.AsyncClient(
+            base_url=nemesis_url,
+            auth=auth,
+            transport=transport,
+            timeout=timeout,
+            limits=limits
+        )
 
     return api_client
 

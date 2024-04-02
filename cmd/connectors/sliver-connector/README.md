@@ -22,7 +22,7 @@ SLIVER_TOKEN="..."
 3. Configure settings.env with Nemesis settings
 
 ```
-NEMESIS_HTTP_SERVER=http://127.0.0.1
+NEMESIS_HTTP_SERVER=https://127.0.0.1
 NEMESIS_CREDS=nemesis:password
 ```
 

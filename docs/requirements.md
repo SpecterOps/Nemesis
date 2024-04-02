@@ -1,7 +1,17 @@
-# VM Hardware Requirements
+# Requirements
+
+## Table of Contents
+
+1. [Table of Contents](#table-of-contents)
+1. [VM Hardware Requirements](#vm-hardware-requirements)
+2. [Software Requirements](#software-requirements)
+    1. [Docker Desktop](#docker-desktop-with-kubernetes)
+    2. [Minikube](#minikube)
+
+## VM Hardware Requirements
 We have only tested on machines with the the following specs. All other configurations are not officially supported.
 
- * OS: Debian 11 LTS or Debian 11 on the Windows Subsystem for Linux(WSL).
+ * OS: Debian 11 LTS or Debian 11 on the Windows Subsystem for Linux (WSL).
  * 4 processors
  * 16 GB RAM
  * 100 GB disk
@@ -12,8 +22,86 @@ Additionally, only x64 architecture has been tested and is supported. ARM platfo
 
 **Do not install the following requirements as root! Minikube is particular does not like to be run as root.**
 
-# Software Requirements
+## Software Requirements
+
+We support installing Nemesis in either [Docker Desktop](#docker-desktop-with-kubernetes) or [Minikube](#minikube).
+
 **The following requirements need to be installed:**
+
+### Docker Desktop with Kubernetes
+
+Using Docker Desktop for installing Nemesis is great for development and testing, but is not the best option for non-local installations.
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+2. [Enable Kubernetes in Docker Desktop](https://docs.docker.com/desktop/kubernetes/)
+
+3. Install [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)
+
+Linux:
+```bash
+# Download kubectl binary
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+# Install kubectl to /usr/local/bin
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+```
+
+Windows (winget)
+```bash
+winget install Kubernetes.kubectl
+```
+
+4. Install [Helm](https://helm.sh/docs/intro/install/)
+
+Linux (apt):
+```bash
+curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+sudo apt-get install apt-transport-https --yes
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+sudo apt-get update
+sudo apt-get install helm
+```
+
+Windows (winget):
+```bash
+winget install Helm.Helm
+```
+
+5. Import Helm repositories for dependent services
+
+**Purpose**: Nemesis depends on containers in different repositories
+
+```bash
+# Add Bitnami repository
+helm repo add bitnami https://charts.bitnami.com/bitnami
+```
+
+6. Start Nemesis Quickstart
+
+    This create secrets that are necessary for Nemesis to run.
+
+    Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart`
+
+    If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
+
+    ```
+    curl https://raw.githubusercontent.com/SpecterOps/Nemesis/helm/helm/quickstart/values.yaml -o quickstart-values.yaml
+    # Edit values.yaml as you need
+    helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart -f quickstart-values.yaml
+    ```
+
+7. Install Nginx Ingress and eck-operator
+
+**Purpose**: Helm dependencies can't put resources in other namespaces (`ingress-nginx` and `elastic-system`), so we must install these separately.
+
+```bash
+# Install NGINX ingress. The path "default/nemesis-ls-beats" will need to be configured if you want to install Nemesis to a namespace not "default". Optionally set the default-ssl-certificate. A default secret (default/nemesis-cert) is created in quickstart.
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044" --set controller.extraArgs.default-ssl-certificate="default/nemesis-cert"
+# Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you want to install Nemesis to a namespace not "default"
+helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
+```
+
+### MiniKube
 
 <details>
 <summary>
@@ -118,6 +206,8 @@ Skaffold
 
 **Purpose:** Development tool used to auto deploy containers to a Kubernetes cluster anytime the code changes.
 
+***This is only needed if you're planning on doing Nemesis development!***
+
 [Install Skaffold v2.7.1 with this command](https://github.com/GoogleContainerTools/skaffold/releases/tag/v2.7.1):
 ```
 # For Linux x86_64 (amd64)
@@ -136,58 +226,42 @@ export SKAFFOLD_UPDATE_CHECK=false
 **Validation:** Running `skaffold` should print skaffold's help.
 </details>
 
+
 <details>
 <summary>
-Python, Pyenv, and Poetry
+Required Kubernetes services
 </summary>
-To get Nemesis running, Python 3.11.2 is needed in order to run nemesis-cli.py (which configures Nemesis's k8s environment). It is not required to install Pyenv/Poetry. However, Pyenv makes global python version management easy and Poetry is required if using the submit_to_nemesis CLI tool.
 
-## Install Pyenv
-**Purpose:** Manages python environments in a sane way.
+You will need to install two services in k8s before getting started. Helm makes this process very simple. If you already have an ElasticSearch cluster or an NGinx Ingress set up in the desired namespace, then you can configure them yourself. You can set them up from scratch with the process below:
 
-1. Install the [relevant prereqs specified by PyEnv](https://github.com/pyenv/pyenv/wiki#suggested-build-environment).
-2. Installation:
 ```bash
-curl https://pyenv.run | bash
-```
-3. After running the install script, add the following to `~/.bashrc` (after pyenv finishes installing, it prints a message telling you to add this):
-```bash
-export PYENV_ROOT="$HOME/.pyenv"
-command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-```
-4. Restart your shell
-5. Install a version of Python and configure the version of Python to use globally on your machine
-```bash
- pyenv install 3.11.2
- pyenv global 3.11.2
-```
-
-**Validation:** Running `python3 --version` should show version 3.11.2.
-
-## Install Poetry
-**Purpose:** Python package and dependency management tool.
-```bash
-python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
-```
-
-Add the following to `~/.bashrc`:
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Restart your shell.
-
-**Validation:** Running `poetry --version` from the shell should output the current version.
-
-## Install Poetry Environment for Artifact Submission
-**Purpose:** Install the Poetry environment for ./scripts/submit_to_nemesis.sh
-
-`./scripts/submit_to_nemesis.sh` uses code from a Nemesis module that needs its Poetry environment installed first.
-
-```
-poetry -C ./cmd/enrichment/ install
+# Add Elastic repository
+helm repo add elastic https://helm.elastic.co
+# Add Bitnami repository
+helm repo add bitnami https://charts.bitnami.com/bitnami
+# Add NGINX repository
+helm repo add nginx https://kubernetes.github.io/ingress-nginx
+# Install NGINX ingress
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
+# Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you desire to install Nemesis in a different namespace
+helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 </details>
 
+<details>
+<summary>
+Nemesis Quickstart
+</summary>
 
+This create secrets that are nessecary for Nemesis to run.
+
+Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart`
+
+If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
+
+```bash
+curl https://raw.githubusercontent.com/SpecterOps/Nemesis/helm/helm/quickstart/values.yaml -o quickstart-values.yaml
+# Edit values.yaml as you need
+helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart -f quickstart-values.yaml
+```
+</details>

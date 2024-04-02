@@ -1,0 +1,89 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: jupyter
+  name: jupyter
+spec:
+  type: NodePort
+  ports:
+    - name: "8888"
+      port: 8888
+      targetPort: 8888
+      nodePort: {{ .Values.jupyter.nodePort }}
+  selector:
+    app: jupyter
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jupyter-ingress
+  annotations:
+    # TODO: Basic-auth breaks the websocket for some reasone
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
+    # nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+    ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /jupyter/$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /jupyter(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: jupyter
+                port:
+                  number: 8888
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jupyter
+  labels:
+    app: jupyter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jupyter
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: jupyter
+    spec:
+      containers:
+        - env:
+            - name: JUPYTER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.jupyter.existingSecret }}
+                  key: token
+
+            - name: JUPYTER_PORT
+              value: "8888"
+            - name: NOTEBOOK_ARGS
+              value: "--NotebookApp.base_url=/jupyter/"
+          image: {{ .Values.jupyter.image.repository }}:{{ .Values.jupyter.image.tag }}
+          imagePullPolicy: {{ .Values.jupyter.image.pullPolicy }}
+          name: nemesis-jupyter
+          ports:
+            - containerPort: 8888
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /jupyter/api
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+
+      restartPolicy: Always

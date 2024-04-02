@@ -20,7 +20,7 @@ consumers are:
 - **./cmd/** - contains the custom applications deployed on each container
 - **./dockerfiles/** - contains Dockerfiles for building each container
 - **./docs/** - documentation
-- **./kubernetes/** - the k8s deployment/service configs for each pod/service
+- **./helm/** - the nemesis Helm charts
 - **./packages/** - the protobuf definitions + Go/Python compiled protobufs, and common Python library functions
 - **./skaffold.yaml** - the main skaffold deployment file
 

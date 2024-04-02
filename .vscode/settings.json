@@ -17,6 +17,9 @@
         },
         // "editor.defaultFormatter": "ms-python.black-formatter"
     },
+    "flake8.args": [
+        "--max-line=length=120"
+    ],
     "files.watcherExclude": {
         "**/__pycache__/**": true,
         "**/.git/objects/**": true,
