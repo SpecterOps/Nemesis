@@ -34,7 +34,19 @@ spec:
   hostPath:
     path: "/mnt/data/cracklist/"
 {{- end }}
-
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yara-rules
+data:
+  {{- $files := .Files.Glob "files/yara/*.yara" }}
+  {{- if $files }}
+  {{- range $path, $_ := $files }}
+  {{ $path | base }}: |
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
+  {{- end }}
 {{- if ne .Values.operation.environment "development" }}
 ---
 apiVersion: apps/v1
@@ -70,6 +82,9 @@ spec:
         - name: noseyparker-rules
           configMap:
             name: noseyparker-rules
+        - name: yara-rules
+          configMap:
+            name: yara-rules
       initContainers:
         - name: noseyparker
           image: ghcr.io/praetorian-inc/noseyparker:v0.16.0
@@ -273,6 +288,9 @@ spec:
             - name: noseyparker-rules
               mountPath: /opt/noseyparker/noseyparker.rules
               subPath: noseyparker.rules
+              readOnly: true
+            - name: yara-rules
+              mountPath: /app/cmd/enrichment/enrichment/lib/public_yara/extrarules
               readOnly: true
           readinessProbe:
             httpGet:
