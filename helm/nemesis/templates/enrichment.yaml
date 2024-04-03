@@ -286,8 +286,7 @@ spec:
             - name: noseyparker
               mountPath: /opt/noseyparker/
             - name: noseyparker-rules
-              mountPath: /opt/noseyparker/noseyparker.rules
-              subPath: noseyparker.rules
+              mountPath: /opt/noseyparker-rules
               readOnly: true
             - name: yara-rules
               mountPath: /app/cmd/enrichment/enrichment/lib/public_yara/extrarules
