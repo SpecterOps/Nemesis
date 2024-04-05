@@ -4,7 +4,7 @@ kind: Ingress
 metadata:
   name: enrichment-ingress
   annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: "1000m"
+    # nginx.ingress.kubernetes.io/proxy-body-size: "5000m"
     nginx.ingress.kubernetes.io/auth-type: basic
     nginx.ingress.kubernetes.io/auth-secret: basic-auth
     nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'

@@ -1304,6 +1304,9 @@ def run_noseyparker(path: str) -> Optional[pb.NoseyParker]:
     # the temporary datastore to use for NoseyParker
     temp_dir = f"/tmp/{uuid.uuid4()}/"
 
+    if not os.path.exists("/opt/noseyparker-rules/"):
+        os.makedirs("/opt/noseyparker-rules/")
+
     # run a scan with the temporary datastore
     result = subprocess.run(
         [
@@ -1311,8 +1314,8 @@ def run_noseyparker(path: str) -> Optional[pb.NoseyParker]:
             "scan",
             "--datastore",
             temp_dir,
-            "--rules-path",
-            "/opt/noseyparker-rules",
+            "--rules",
+            "/opt/noseyparker-rules/",
             path,
         ],
         stdout=subprocess.PIPE,

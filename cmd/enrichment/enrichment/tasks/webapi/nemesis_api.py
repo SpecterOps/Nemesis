@@ -3,15 +3,18 @@ import base64
 import json
 import os
 import tempfile
+import time
 import urllib.parse
 import uuid
 from datetime import datetime
 from enum import StrEnum
 from typing import Dict, List, Optional
 
+import aiofiles
 # 3rd Party Libraries
 import httpx
 import nemesispb.nemesis_pb2 as pb
+import streaming_form_data
 import structlog
 import uvicorn
 from aio_pika import connect_robust
@@ -20,7 +23,7 @@ from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
     map_unordered, return_args_and_exceptions)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response
 from google.protobuf.json_format import Parse
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
@@ -34,6 +37,9 @@ from prometheus_async import aio
 from prometheus_client import Summary
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
+from starlette.requests import ClientDisconnect
+from streaming_form_data import StreamingFormDataParser
+from streaming_form_data.targets import FileTarget
 
 logger = structlog.get_logger(module=__name__)
 
@@ -393,18 +399,40 @@ class NemesisApiRoutes():
 
     @aio.time(Summary("post_file", "POST file"))  # type: ignore
     async def post_file(self, request: Request) -> Dict[str, str]:
-        await logger.ainfo("Received file upload request")
-        with tempfile.NamedTemporaryFile() as tmpfile:
-            # TODO: Write to disk and then create a queue that uploads the file in
-            # the background so we don't have to wait for the upload to finish before sending a response.
-            # Right now, large uploads could take quite a while to upload and API clients could timeout
-            # before recieving a response, despite the upload completing successfully
-            with open(tmpfile.name, "wb") as f:
-                f.write(await request.body())
 
-            # the first file that comes in will set the bucket file expiry policy (for now)
-            file_uuid = await self.storage.upload(f.name, self.storage_expiration_days)
-            return {"object_id": str(file_uuid)}
+        await logger.ainfo("Received file upload request")
+        start = time.time()
+
+        try:
+            content_type = request.headers["content-type"]
+            with tempfile.NamedTemporaryFile() as tmpfile:
+                # handle raw binary file uploads
+                if content_type == "application/octet-stream":
+                    async with aiofiles.open(tmpfile.name, "wb") as f:
+                        async for chunk in request.stream():
+                            await f.write(chunk)
+                # handle large file multi-part uploads
+                # Ref - https://stackoverflow.com/a/73443824
+                elif content_type.startswith("multipart/form-data"):
+                    file_ = FileTarget(tmpfile.name)
+                    parser = StreamingFormDataParser(headers=request.headers)
+                    parser.register('file', file_)
+                    async for chunk in request.stream():
+                        parser.data_received(chunk)
+                else:
+                    raise HTTPException(status_code=422, detail=f"Content type '{content_type}' not allowed.")
+                end = time.time()
+                file_size = os.path.getsize(tmpfile.name)
+                await logger.ainfo(f"File ({file_size} bytes) uploaded in {(end-start):.2f} seconds")
+                # the first file that comes in will set the bucket file expiry policy (for now)
+                file_uuid = await self.storage.upload(tmpfile.name, self.storage_expiration_days)
+                return {"object_id": str(file_uuid)}
+        except ClientDisconnect:
+            await logger.awarning("Client Disconnected")
+        except Exception as e:
+            await logger.aerror(f"Exception in file upload: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"There was an error uploading the file: {e}")
 
     @aio.time(Summary("download", "Download file"))  # type: ignore
     async def download(self, id: uuid.UUID, name: Optional[str] = None, action: Optional[DownloadAction] = None) -> Response:

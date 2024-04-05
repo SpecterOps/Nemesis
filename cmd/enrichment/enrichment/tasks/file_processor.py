@@ -566,8 +566,15 @@ class FileProcessor(TaskInterface):
         # Check if the office document was encrypted
         doc_is_encrypted = file_data.parsed_data.is_encrypted
 
-        mime_type = await self.text_extractor.detect(file_path_on_disk)
-        tika_compatible = helpers.tika_compatible(mime_type)
+        if file_data.size > self.plaintext_size_limit:
+            # if a file is too large, make sure we don't use Gotenberg/Tika to prevent system freezes
+            mime_type = "application/octet-stream"
+            tika_compatible = False
+            can_convert_to_pdf = False
+        else:
+            mime_type = await self.text_extractor.detect(file_path_on_disk)
+            tika_compatible = helpers.tika_compatible(mime_type)
+
         await logger.ainfo(f"mime type: {mime_type}, tika_compatible: {tika_compatible}", object_id=file_data.object_id)
 
         # If the file is known to be tika compatible, or is not a binary file
@@ -634,7 +641,7 @@ class FileProcessor(TaskInterface):
         ###########################################################
 
         # check the file for canaries :smiling_imp:
-        if not doc_is_encrypted:
+        if not doc_is_encrypted and tika_compatible:
             if file_data.parsed_data.WhichOneof("data_type") == "office_doc_new":
                 canaries = await canary_helpers.get_office_document_canaries(file_path_on_disk)
                 file_data.canaries.CopyFrom(canaries)

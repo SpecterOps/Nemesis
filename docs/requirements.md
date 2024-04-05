@@ -96,7 +96,7 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 
 ```bash
 # Install NGINX ingress. The path "default/nemesis-ls-beats" will need to be configured if you want to install Nemesis to a namespace not "default". Optionally set the default-ssl-certificate. A default secret (default/nemesis-cert) is created in quickstart.
-helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044" --set controller.extraArgs.default-ssl-certificate="default/nemesis-cert"
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044" --set controller.extraArgs.default-ssl-certificate="default/nemesis-cert" --set controller.config."proxy-body-size"="5000m"
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you want to install Nemesis to a namespace not "default"
 helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
@@ -242,7 +242,7 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 # Add NGINX repository
 helm repo add nginx https://kubernetes.github.io/ingress-nginx
 # Install NGINX ingress
-helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044" --set controller.config."proxy-body-size"="5000m"
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you desire to install Nemesis in a different namespace
 helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
