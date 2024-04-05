@@ -2,7 +2,7 @@
 The [`nemesis` Helm chart](../helm/nemesis/) deploys Nemesis's services. You can run the chart with its default configuration using the following command:
 
 ```bash
-helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m'`
+helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m'
 ```
 
 If you want customize the deployment (e.g., HTTP server URI, pod CPU/memory resources, Minio disk size), you need to download the `nemesis` chart's [values.yaml](../helm/nemesis/values.yaml) file, edit it, and then run the `nemesis` chart using the customize values. You can do so with the following commands:
