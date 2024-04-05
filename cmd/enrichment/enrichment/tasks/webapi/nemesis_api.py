@@ -3,12 +3,14 @@ import base64
 import json
 import os
 import tempfile
+import time
 import urllib.parse
 import uuid
 from datetime import datetime
 from enum import StrEnum
 from typing import Dict, List, Optional
 
+import aiofiles
 # 3rd Party Libraries
 import httpx
 import nemesispb.nemesis_pb2 as pb
@@ -20,7 +22,8 @@ from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
     map_unordered, return_args_and_exceptions)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import (APIRouter, FastAPI, File, HTTPException, Request,
+                     UploadFile, status)
 from fastapi.responses import FileResponse, Response
 from google.protobuf.json_format import Parse
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
@@ -394,17 +397,21 @@ class NemesisApiRoutes():
     @aio.time(Summary("post_file", "POST file"))  # type: ignore
     async def post_file(self, request: Request) -> Dict[str, str]:
         await logger.ainfo("Received file upload request")
-        with tempfile.NamedTemporaryFile() as tmpfile:
-            # TODO: Write to disk and then create a queue that uploads the file in
-            # the background so we don't have to wait for the upload to finish before sending a response.
-            # Right now, large uploads could take quite a while to upload and API clients could timeout
-            # before recieving a response, despite the upload completing successfully
-            with open(tmpfile.name, "wb") as f:
-                f.write(await request.body())
-
-            # the first file that comes in will set the bucket file expiry policy (for now)
-            file_uuid = await self.storage.upload(f.name, self.storage_expiration_days)
-            return {"object_id": str(file_uuid)}
+        start = time.time()
+        try:
+            with tempfile.NamedTemporaryFile() as tmpfile:
+                async with aiofiles.open(tmpfile.name, "wb") as f:
+                    async for chunk in request.stream():
+                        await f.write(chunk)
+                end = time.time()
+                file_size = os.path.getsize(tmpfile.name)
+                await logger.ainfo(f"File uploaded in {end-start} seconds: {file_size} bytes")
+                # the first file that comes in will set the bucket file expiry policy (for now)
+                file_uuid = await self.storage.upload(tmpfile.name, self.storage_expiration_days)
+                return {"object_id": str(file_uuid)}
+        except Exception as e:
+            await logger.aerror(f"Exception in file upload: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
     @aio.time(Summary("download", "Download file"))  # type: ignore
     async def download(self, id: uuid.UUID, name: Optional[str] = None, action: Optional[DownloadAction] = None) -> Response:

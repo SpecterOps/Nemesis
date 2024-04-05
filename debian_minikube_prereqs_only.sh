@@ -40,7 +40,7 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 # Add NGINX repository
 helm repo add nginx https://kubernetes.github.io/ingress-nginx
 # Install NGINX ingress
-helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044"
+helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044" --set controller.config."proxy-body-size"="5000m"
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you desire to install Nemesis in a different namespace
 helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 
