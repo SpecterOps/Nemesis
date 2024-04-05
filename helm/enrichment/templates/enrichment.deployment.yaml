@@ -58,16 +58,16 @@ spec:
             - name: JTR_INSTANCES
               value: "1"
 
-            - name: EXTRACTED_ARCHIVE_SIZE_LIMIT # limit of extracted archives to process, 500 MB
-              value: "500000000"
+            - name: EXTRACTED_ARCHIVE_SIZE_LIMIT # limit of extracted archives to process, in MB
+              value: "2000"
+            - name: PLAINTEXT_SIZE_LIMIT
+              value: "50" # size limit for extracted text to process, in MB
             - name: CHUNK_SIZE # number of bytes to read at a time per file
               value: "128000"
             - name: MODEL_WORD_LIMIT # only extract passwords for documents below this word limit
               value: "100000"
             - name: YARA_API_PORT
               value: "9700"
-            - name: PLAINTEXT_SIZE_LIMIT
-              value: "50000000" # max number of bytes for a plaintext doc to prevent indexing of embeddings
 
             - name: CONTEXT_WORDS
               value: "5"

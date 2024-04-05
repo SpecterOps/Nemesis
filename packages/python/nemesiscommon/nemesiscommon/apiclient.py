@@ -133,6 +133,8 @@ class NemesisApiClient:
         if not os.path.isfile(r.file_path):
             raise Exception(f"File {r.file_path} does not exist")
 
+        del self.client.headers["Content-Type"]
+
         with open(r.file_path, 'rb') as file:
             files = {'file': (r.file_path.split('/')[-1], file)}
             #files = {'file': open(r.file_path, 'rb')}
