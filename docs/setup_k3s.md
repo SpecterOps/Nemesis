@@ -118,3 +118,23 @@ With the prerequisites in place, you can now install Nemesis. Use the following 
 ```bash
 helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m'
 ```
+
+## Verify Installation
+
+Use the following bash oneliner to get the basic auth secrets and ensure the Nemesis home page is reachable:
+
+```bash
+$ curl -u $(kubectl get secret operation-creds -o jsonpath='{.data.basic-auth-user}' | base64 --decode):$(kubectl get secret operation-creds -o jsonpath='{.data.basic-auth-password}' | base64 --decode) http://127.0.0.1
+
+<html>
+    <head>
+        <title>Nemesis Services</title>
+    </head>
+    <body>
+        <h1>Nemesis Services</h1>
+
+        <h2>Main Services</h2>
+        <a href="/dashboard/" target="_blank"">Dashboard</a><br>
+...
+```
+
