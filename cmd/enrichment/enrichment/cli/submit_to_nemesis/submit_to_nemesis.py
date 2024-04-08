@@ -207,7 +207,9 @@ async def nemesis_post_file(config: dict[str, str], file_path: str):
     nemesis_url = config["nemesis_url"]
 
     client = NemesisApiClient(nemesis_url, await get_nemesis_api_client(config))
-
+    # set a 15 minute upload timeout
+    client.timeout = 60*15
+    
     try:
         resp = await client.send_file(FileUploadRequest(file_path))
     except httpx.HTTPStatusError as e:

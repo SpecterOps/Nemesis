@@ -8,9 +8,18 @@ ENV PYTHONUNBUFFERED=true
 
 
 ####################################
+# OS dependencies
+####################################
+FROM debcommon AS dependencies-os
+
+RUN apt-get update -y
+RUN apt install libarchive13 libarchive-dev cmake -y && rm -rf /var/lib/apt/lists/*
+
+
+####################################
 # Python dependencies
 ####################################
-FROM debcommon AS dependencies-python
+FROM dependencies-os AS dependencies-python
 
 ARG ENVIRONMENT=dev
 ENV POETRY_HOME=/opt/poetry
@@ -21,10 +30,12 @@ ENV PATH="$POETRY_HOME/bin:$PATH"
 RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
 
 # clone down Nemesis
-ENV NEMESIS_COMMIT 927b34b5bfb923bbf201bb2c6edbb9ac54ef4e2c
-RUN git clone https://www.github.com/SpecterOps/Nemesis /opt/Nemesis/ && cd /opt/Nemesis/ && git checkout ${NEMESIS_COMMIT}
+RUN git clone https://www.github.com/SpecterOps/Nemesis /opt/Nemesis/ && cd /opt/Nemesis/
+# needed in case we're building for macOS/arm
+RUN rm ./cmd/enrichment/poetry.lock
 RUN mkdir /submit/
 
+ENV POETRY_VIRTUALENVS_CREATE=false
 RUN poetry -C ./cmd/enrichment/ install
 
 
