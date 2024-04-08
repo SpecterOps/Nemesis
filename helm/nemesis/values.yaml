@@ -194,3 +194,6 @@ hasura:
     repository: hasura/graphql-engine
     tag: v2.36.2.cli-migrations-v2
     pullPolicy: IfNotPresent
+
+metricsServer:
+  enabled: false

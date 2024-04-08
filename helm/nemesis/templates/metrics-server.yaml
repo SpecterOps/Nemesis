@@ -1,3 +1,4 @@
+{{ if .Values.metricsServer.enabled }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -196,3 +197,4 @@ spec:
     namespace: kube-system
   version: v1beta1
   versionPriority: 100
+{{ end }}
