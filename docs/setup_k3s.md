@@ -96,6 +96,12 @@ spec:
         proxy-body-size: 5000m
 ```
 
+K3s will periodically enumerate this folder for new manifests and automatically apply them. You can check if the Helm chart has been applied by running:
+
+```bash
+helm ls -A | grep ingress-nginx
+```
+
 #### Elastic Operator
 
 Install the Elastic operator with the following Helm command to manage Elasticsearch in the `default` namespace:
