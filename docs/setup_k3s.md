@@ -18,11 +18,10 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -s -
 After installing k3s, modify your kubeconfig to use the k3s Kubernetes configuration with the following commands:
 
 ```bash
+export KUBECONFIG=~/.kube/config
 mkdir ~/.kube 2> /dev/null
 sudo k3s kubectl config view --raw > "$KUBECONFIG"
 chmod 600 "$KUBECONFIG"
-# Optionally set this variable in your .bashrc so that you don't have to set it every time
-export KUBECONFIG=~/.kube/config
 ```
 
 ## Install Helm
