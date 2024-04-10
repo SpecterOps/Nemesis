@@ -99,19 +99,18 @@ spec:
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: ingress-elk-stripprefix
+  name: ingress-elastic-stripprefix
 spec:
   stripPrefix:
     prefixes:
       - /elastic
-      - /kibana
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: elk-ingress
+  name: elastic-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-elk-stripprefix@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-elastic-stripprefix@kubernetescrd"
 spec:
   ingressClassName: traefik
   rules:
@@ -124,10 +123,3 @@ spec:
                 name: nemesis-es-http
                 port:
                   number: 9200
-          - path: /kibana
-            pathType: Prefix
-            backend:
-              service:
-                name: nemesis-kb-http
-                port:
-                  number: 5601
