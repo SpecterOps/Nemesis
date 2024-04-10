@@ -36,16 +36,6 @@ minio:
     - name: MINIO_BROWSER_LOGIN_ANIMATION
       value: "\"off\""
 
-ingress-nginx:
-  prometheus:
-    create: True
-    port: 9113
-  tcp:
-    5044: "default/nemesis-ls-beats:5044"
-  controller:
-    admissionWebhooks:
-      enabled: false
-
 gotenberg:
   image:
     repository: gotenberg/gotenberg
@@ -194,3 +184,6 @@ hasura:
     repository: hasura/graphql-engine
     tag: v2.36.2.cli-migrations-v2
     pullPolicy: IfNotPresent
+
+metricsServer:
+  enabled: false
