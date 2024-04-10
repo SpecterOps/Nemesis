@@ -116,17 +116,12 @@ enrichment:
       value: "2000"
     - name: PLAINTEXT_SIZE_LIMIT
       value: "50" # size limit for extracted text to process, in MB
-
-  cracklist:
-    nodePort: 30089
-  yara:
-    nodePort: 30079
-  webapi:
-    nodePort: 30808
-  landingpage:
-    nodePort: 30809
-  monitoring:
-    nodePort: 31693
+  resources: {}
+  cracklist: {}
+  yara: {}
+  webapi: {}
+  landingpage: {}
+  monitoring: {}
 
 jupyter:
   existingSecret: jupyter-creds
