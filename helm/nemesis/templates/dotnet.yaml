@@ -7,14 +7,13 @@ metadata:
     app: dotnet
     component: enrichment-pipeline
 spec:
-  type: NodePort
+  type: ClusterIP
+  selector:
+    app: dotnet
   ports:
     - name: "9800"
       port: 9800
       targetPort: 9800
-      nodePort: {{ .Values.dotnet.nodePort }}
-  selector:
-    app: dotnet
 ---
 apiVersion: apps/v1
 kind: Deployment

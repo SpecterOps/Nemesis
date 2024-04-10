@@ -63,9 +63,6 @@ elasticsearch:
       memory: "3G"
   storage: 20Gi
 
-pgAdmin:
-  nodePort: 31288
-
 postgres:
   existingSecret: postgres-creds
   nodePort: 31209
@@ -103,7 +100,6 @@ eck-operator:
   installCRDs: true
 
 dotnet:
-  nodePort: 31800
   resources: {}
   image:
     repository: specterops/nemesis-dotnet
