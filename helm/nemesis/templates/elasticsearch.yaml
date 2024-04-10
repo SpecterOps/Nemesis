@@ -95,50 +95,39 @@ spec:
               persistentVolumeClaim:
                 claimName: elasticsearch-data-pvc
           {{- end }}
-
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: ingress-elk-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /elastic
+      - /kibana
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: kibana-ingress
+  name: elk-ingress
   annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-elk-stripprefix@kubernetescrd"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
-          - path: /kibana(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: nemesis-kb-http
-                port:
-                  number: 5601
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: elastic-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /elastic(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /elastic
+            pathType: Prefix
             backend:
               service:
                 name: nemesis-es-http
                 port:
                   number: 9200
+          - path: /kibana
+            pathType: Prefix
+            backend:
+              service:
+                name: nemesis-kb-http
+                port:
+                  number: 5601
