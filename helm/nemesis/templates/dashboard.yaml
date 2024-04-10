@@ -123,14 +123,13 @@ metadata:
     component: dashboard
   name: dashboard
 spec:
-  type: NodePort
+  type: ClusterIP
+  selector:
+    app: dashboard
   ports:
     - name: "8601"
       port: 8601
       targetPort: 8601
-      nodePort: {{ .Values.dashboard.nodePort }}
-  selector:
-    app: dashboard
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware

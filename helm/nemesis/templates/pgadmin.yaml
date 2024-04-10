@@ -102,14 +102,14 @@ metadata:
   labels:
     app: pgadmin
 spec:
-  type: NodePort
+  type: ClusterIP
+  selector:
+    app: pgadmin
   ports:
     - name: "80"
       port: 80
       targetPort: 80
       nodePort: {{ .Values.pgAdmin.nodePort }}
-  selector:
-    app: pgadmin
 ---
 # working for /pgadmin https://stackoverflow.com/a/72586264
 apiVersion: networking.k8s.io/v1
