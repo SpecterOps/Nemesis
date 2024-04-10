@@ -410,7 +410,7 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-enrichment-stripprefix@kubernetescrd"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
