@@ -317,6 +317,10 @@ metadata:
     app.kubernetes.io/name: nemesis
     app.kubernetes.io/component: rabbitmq-server
 spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: nemesis
+    app.kubernetes.io/component: rabbitmq-server
   ports:
   - name: amqp
     port: 5672
@@ -328,27 +332,19 @@ spec:
     port: 15692
   - name: http
     port: 15672
-  selector:
-    app.kubernetes.io/name: nemesis
-    app.kubernetes.io/component: rabbitmq-server
-  type: ClusterIP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: rabbitmqadmin-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
+  annotations: {}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
           - path: /rabbitmq/
-            pathType: ImplementationSpecific
+            pathType: Prefix
             backend:
               service:
                 name: nemesis-rabbitmq-svc
