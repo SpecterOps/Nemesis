@@ -65,8 +65,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: jupyter-ingress
-  annotations:
-    # traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-jupyter-stripprefix@kubernetescrd"
+  annotations: {}
 spec:
   ingressClassName: traefik
   rules:
