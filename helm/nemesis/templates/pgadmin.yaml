@@ -64,7 +64,7 @@ spec:
                   name: {{ .Values.postgres.existingSecret }}
                   key: pgadmin-password
             - name: SCRIPT_NAME
-              value: /pgadmin/
+              value: /pgadmin
             - name: MAX_LOGIN_ATTEMPTS
               value: "15"
           ports:
