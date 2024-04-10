@@ -103,11 +103,13 @@ eck-operator:
   installCRDs: true
 
 dotnet:
-  resources: {}
   image:
     repository: specterops/nemesis-dotnet
     tag: latest
     pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+  resources: {}
 
 enrichment:
   image:
