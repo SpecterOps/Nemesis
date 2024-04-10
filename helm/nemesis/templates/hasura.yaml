@@ -24,30 +24,6 @@ spec:
   selector:
     app: hasura
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: hasura-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /hasura(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: hasura
-                port:
-                  number: 8080
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -163,3 +139,31 @@ spec:
           configMap:
             name: hasura-metadata
       restartPolicy: Always
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: ingress-hasura-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /hasura
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hasura-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-hasura-stripprefix@kubernetescrd"
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /hasura
+            pathType: Prefix
+            backend:
+              service:
+                name: hasura
+                port:
+                  number: 8080
