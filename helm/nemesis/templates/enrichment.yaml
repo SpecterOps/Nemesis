@@ -392,45 +392,51 @@ spec:
 
 {{- if ne .Values.operation.environment "development" }}
 ---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: ingress-enrichment-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /crack-list
+      - /yara
+      - /api
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: enrichment-ingress
   annotations:
-    # nginx.ingress.kubernetes.io/proxy-body-size: "5000m"
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-enrichment-stripprefix@kubernetescrd"
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: /crack-list(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /crack-list
+            pathType: Prefix
             backend:
               service:
                 name: enrichment-cracklist
                 port:
                   number: 9900
-          - path: /yara(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /yara
+            pathType: Prefix
             backend:
               service:
                 name: enrichment-yara
                 port:
                   number: 9700
-          - path: /api(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /api
+            pathType: Prefix
             backend:
               service:
                 name: enrichment-webapi
                 port:
                   number: 9910
           - path: /
-            pathType: ImplementationSpecific
+            pathType: Exact
             backend:
               service:
                 name: enrichment-landingpage
