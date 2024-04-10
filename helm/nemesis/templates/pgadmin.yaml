@@ -102,6 +102,7 @@ metadata:
   labels:
     app: pgadmin
 spec:
+  type: NodePort
   ports:
     - name: "80"
       port: 80
@@ -109,26 +110,20 @@ spec:
       nodePort: {{ .Values.pgAdmin.nodePort }}
   selector:
     app: pgadmin
-  type: NodePort
-
 ---
 # working for /pgadmin https://stackoverflow.com/a/72586264
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: pgadmin-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
+  annotations: {}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
           - path: /pgadmin
-            pathType: ImplementationSpecific
+            pathType: Prefix
             backend:
               service:
                 name: pgadmin
