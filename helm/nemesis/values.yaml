@@ -185,5 +185,7 @@ hasura:
     tag: v2.36.2.cli-migrations-v2
     pullPolicy: IfNotPresent
 
+# kubernetes-sigs/metrics-server
 metricsServer:
+  # Enable the metrics-server Deployment
   enabled: false
