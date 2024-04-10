@@ -123,18 +123,17 @@ metadata:
     component: dashboard
   name: dashboard
 spec:
-  type: ClusterIP
+  type: {{ .Values.dashboard.service.type }}
   selector:
     app: dashboard
   ports:
-    - name: "8601"
-      port: 8601
+    - port: 8601
       targetPort: 8601
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: ingress-dashboard-stripprefix
+  name: dashboard-stripprefix
 spec:
   stripPrefix:
     prefixes:
@@ -145,7 +144,10 @@ kind: Ingress
 metadata:
   name: dashboard-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-dashboard-stripprefix@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-dashboard-stripprefix@kubernetescrd"
+    {{- if .Values.dashboard.ingress.annotations }}
+    {{- .Values.dashboard.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
   ingressClassName: traefik
   rules:
