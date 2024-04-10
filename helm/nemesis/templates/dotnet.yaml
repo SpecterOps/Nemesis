@@ -11,8 +11,7 @@ spec:
   selector:
     app: dotnet
   ports:
-    - name: "9800"
-      port: 9800
+    - port: 9800
       targetPort: 9800
 ---
 apiVersion: apps/v1
