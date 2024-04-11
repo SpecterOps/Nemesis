@@ -149,15 +149,17 @@ spec:
   selector:
     app: nlp
   ports:
-    - port: {{ .Values.nlp.service.port }}
+    - name: http
+      port: {{ .Values.nlp.service.nlp.port }}
       targetPort: 9803
-      {{- if .Values.nlp.service.nodePort }}
-      nodePort: {{ .Values.nlp.service.nodePort }}
+      {{- if .Values.nlp.service.nlp.nodePort }}
+      nodePort: {{ .Values.nlp.service.nlp.nodePort }}
       {{- end }}
-    - port: {{ .Values.nlp.servicePrometheus.port }}
+    - name: prometheus
+      port: {{ .Values.nlp.service.prometheus.port }}
       targetPort: 8000
-      {{- if .Values.nlp.servicePrometheus.nodePort }}
-      nodePort: {{ .Values.nlp.servicePrometheus.nodePort }}
+      {{- if .Values.nlp.service.prometheus.nodePort }}
+      nodePort: {{ .Values.nlp.service.prometheus.nodePort }}
       {{- end }}
 ---
 apiVersion: traefik.containo.us/v1alpha1
