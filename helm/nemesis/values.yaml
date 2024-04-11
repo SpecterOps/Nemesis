@@ -77,6 +77,8 @@ dashboard:
   resources: {}
   service:
     type: ClusterIP
+    port: 8601
+    nodePort:
   ingress:
     annotations:
   extraEnvVars:

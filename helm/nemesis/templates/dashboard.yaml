@@ -127,8 +127,11 @@ spec:
   selector:
     app: dashboard
   ports:
-    - port: 8601
+    - port: {{ .Values.dashboard.service.port }}
       targetPort: 8601
+      {{- if .Values.dashboard.service.nodePort -}}
+      nodePort: {{ .Values.dashboard.service.nodePort }}
+      {{- end -}}
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
