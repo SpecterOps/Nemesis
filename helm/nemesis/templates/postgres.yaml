@@ -171,7 +171,7 @@ spec:
     app: postgres
   ports:
     - port: {{ .Values.postgres.service.port }}
-      targetPort: 8601
+      targetPort: 5432
       {{- if .Values.postgres.service.nodePort }}
       nodePort: {{ .Values.postgres.service.nodePort }}
       {{- end }}
