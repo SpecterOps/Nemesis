@@ -323,7 +323,7 @@ spec:
     app.kubernetes.io/component: rabbitmq-server
   ports:
   - name: amqp
-    port: {{ .Vaues.rabbitmq.service.amqp.port }}
+    port: {{ .Values.rabbitmq.service.amqp.port }}
   - name: amqp-ssl
     port: {{ .Values.rabbitmq.service.amqpSsl.port }}
   - name: clustering
