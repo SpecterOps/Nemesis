@@ -71,6 +71,12 @@ postgres:
   nodePort: 31209
   storage: 15Gi
 
+pgadmin:
+  service:
+    type: ClusterIP
+    port: 80
+    nodePort:
+
 dashboard:
   existingSecret: dashboard-creds
   image:
