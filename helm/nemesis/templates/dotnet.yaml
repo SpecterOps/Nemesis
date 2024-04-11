@@ -116,6 +116,6 @@ spec:
   ports:
     - port: {{ .Values.dotnet.service.port }}
       targetPort: 9800
-      {{- if .Values.dashboard.service.nodePort -}}
+      {{- if .Values.dashboard.service.nodePort }}
       nodePort: {{ .Values.dashboard.service.nodePort }}
       {{- end -}}

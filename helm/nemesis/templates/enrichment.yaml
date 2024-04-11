@@ -312,12 +312,15 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-yara
 spec:
-  type: ClusterIP
+  type: {{ .Values.enrichment.yara.service.type }}
   selector:
     app: enrichment
   ports:
-    - port: 9700
+    - port: {{ .Values.enrichment.yara.service.port }}
       targetPort: 9700
+      {{- if .Values.enrichment.yara.service.nodePort }}
+      nodePort: {{ .Values.enrichment.yara.service.nodePort }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -327,12 +330,15 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-cracklist
 spec:
-  type: ClusterIP
+  type: {{ .Values.enrichment.cracklist.service.type }}
   selector:
     app: enrichment
   ports:
-    - port: 9900
+    - port: {{ .Values.enrichment.cracklist.service.port }}
       targetPort: 9900
+      {{- if .Values.enrichment.cracklist.service.nodePort }}
+      nodePort: {{ .Values.enrichment.cracklist.service.nodePort }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -342,12 +348,15 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-webapi
 spec:
-  type: ClusterIP
+  type: {{ .Values.enrichment.webapi.service.type }}
   selector:
     app: enrichment
   ports:
-    - port: 9910
+    - port: {{ .Values.enrichment.webapi.service.port }}
       targetPort: 9910
+      {{- if .Values.enrichment.webapi.service.nodePort }}
+      nodePort: {{ .Values.enrichment.webapi.service.nodePort }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -357,12 +366,15 @@ metadata:
     component: enrichment-landingpage
   name: enrichment-landingpage
 spec:
-  type: ClusterIP
+  type: {{ .Values.enrichment.landingpage.service.type }}
   selector:
     app: enrichment
   ports:
-    - port: 9920
-      targetPort: 9920
+    - port: {{ .Values.enrichment.landingpage.service.port }}
+      targetPort: 9910
+      {{- if .Values.enrichment.landingpage.service.nodePort }}
+      nodePort: {{ .Values.enrichment.landingpage.service.nodePort }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -372,12 +384,15 @@ metadata:
     component: enrichment-monitoring
   name: enrichment-monitoring
 spec:
-  type: ClusterIP
+  type: {{ .Values.enrichment.monitoring.service.type }}
   selector:
     app: enrichment
   ports:
-    - port: 8000
+    - port: {{ .Values.enrichment.monitoring.service.port }}
       targetPort: 8000
+      {{- if .Values.enrichment.monitoring.service.nodePort }}
+      nodePort: {{ .Values.enrichment.monitoring.service.nodePort }}
+      {{- end -}}
 {{- end }}
 
 {{- if ne .Values.operation.environment "development" }}
