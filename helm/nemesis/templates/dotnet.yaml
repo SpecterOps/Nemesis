@@ -114,5 +114,8 @@ spec:
   selector:
     app: dotnet
   ports:
-    - port: 9800
+    - port: {{ .Values.dotnet.service.port }}
       targetPort: 9800
+      {{- if .Values.dashboard.service.nodePort -}}
+      nodePort: {{ .Values.dashboard.service.nodePort }}
+      {{- end -}}

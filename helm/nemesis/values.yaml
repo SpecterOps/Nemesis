@@ -111,6 +111,8 @@ dotnet:
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
+    port: 9800
+    nodePort:
   resources: {}
 
 enrichment:
