@@ -168,12 +168,22 @@ jupyter:
     nodePort:
 
 nlp:
-  prometheusNodePort: 31692
-  nodePort: 31803
+  prometheusNodePort:
+  nodePort:
   image:
     repository: specterops/nemesis-nlp
     tag: latest
     pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9803
+    # nodePort: 31803
+    nodePort:
+  servicePrometheus:
+    type: ClusterIP
+    port: 8000
+    # nodePort: 31692
+    nodePort:
   resources:
     requests:
       memory: "500Mi"

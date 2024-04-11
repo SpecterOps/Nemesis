@@ -1,23 +1,4 @@
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: nlp-ingress
-  annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-nlp-stripprefix@kubernetescrd"
-spec:
-  ingressClassName: traefik
-  rules:
-    - http:
-        paths:
-          - path: /nlp
-            pathType: Prefix
-            backend:
-              service:
-                name: nlp
-                port:
-                  number: 9803
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -164,18 +145,20 @@ metadata:
     app: nlp
     component: enrichment-pipeline
 spec:
-  type: NodePort
-  ports:
-    - name: "9803"
-      port: 9803
-      targetPort: 9803
-      nodePort: {{ .Values.nlp.nodePort }}
-    - name: "8000"
-      port: 8000
-      targetPort: 8000
-      nodePort: {{ .Values.nlp.prometheusNodePort }}
+  type: {{ .Values.nlp.service.type }}
   selector:
     app: nlp
+  ports:
+    - port: {{ .Values.nlp.service.port }}
+      targetPort: 9803
+      {{- if .Values.nlp.service.nodePort }}
+      nodePort: {{ .Values.nlp.service.nodePort }}
+      {{- end }}
+    - port: {{ .Values.nlp.servicePrometheus.port }}
+      targetPort: 8000
+      {{- if .Values.nlp.servicePrometheus.nodePort }}
+      nodePort: {{ .Values.nlp.servicePrometheus.nodePort }}
+      {{- end }}
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
@@ -185,3 +168,22 @@ spec:
   stripPrefix:
     prefixes:
       - /nlp
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nlp-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-nlp-stripprefix@kubernetescrd"
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /nlp
+            pathType: Prefix
+            backend:
+              service:
+                name: nlp
+                port:
+                  number: 9803
