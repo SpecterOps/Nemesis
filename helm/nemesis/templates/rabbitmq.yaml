@@ -317,21 +317,21 @@ metadata:
     app.kubernetes.io/name: nemesis
     app.kubernetes.io/component: rabbitmq-server
 spec:
-  type: ClusterIP
+  type: {{ .Values.rabbitmq.service.type }}
   selector:
     app.kubernetes.io/name: nemesis
     app.kubernetes.io/component: rabbitmq-server
   ports:
   - name: amqp
-    port: 5672
+    port: {{ .Vaues.rabbitmq.service.amqp.port }}
   - name: amqp-ssl
-    port: 5671
+    port: {{ .Values.rabbitmq.service.amqpSsl.port }}
   - name: clustering
-    port: 25672
+    port: {{ .Values.rabbitmq.service.clustering.port }}
   - name: prometheus
-    port: 15692
+    port: {{ .Values.rabbitmq.service.prometheus.port}}
   - name: http
-    port: 15672
+    port: {{ .Values.rabbitmq.service.http.port }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

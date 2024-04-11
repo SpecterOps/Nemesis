@@ -108,11 +108,23 @@ nemesisWaiter:
 
 rabbitmq:
   existingSecret: rabbitmq-creds
+  storage: 20Gi
+  service:
+    type: ClusterIP
+    amqp:
+      port: 5672
+    amqpSsl:
+      port: 5671
+    clustering:
+      port: 25672
+    prometheus:
+      port: 15692
+    http:
+      port: 15672
   resources:
     requests:
       cpu: 100m
       memory: 100Mi
-  storage: 20Gi
 
 eck-operator:
   installCRDs: true
