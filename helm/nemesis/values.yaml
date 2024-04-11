@@ -44,6 +44,7 @@ gotenberg:
   service:
     type: ClusterIP
     port: 9900
+    # nodePort: 31300
     nodePort:
   resources:
     requests:
@@ -91,13 +92,16 @@ dashboard:
   service:
     type: ClusterIP
     port: 8601
+    # nodePort: 30073
     nodePort:
   ingress:
     annotations:
   extraEnvVars:
-    - name: STREAMLIT_SERVER_MAX_UPLOAD_SIZE # the maximum size of files that can be uploaded via Streamlit, in MB
+    # the maximum size of files that can be uploaded via Streamlit, in MB
+    - name: STREAMLIT_SERVER_MAX_UPLOAD_SIZE
       value: "200"
-    - name: STREAMLIT_SERVER_MAX_MESSAGE_SIZE # the maximum size of messagea that can be sent via the Streamlit websocket, in MB
+    # the maximum size of messagea that can be sent via the Streamlit websocket, in MB
+    - name: STREAMLIT_SERVER_MAX_MESSAGE_SIZE
       value: "200"
 
 nemesisWaiter:
@@ -137,6 +141,7 @@ dotnet:
   service:
     type: ClusterIP
     port: 9800
+    # nodePort: 31800
     nodePort:
   resources: {}
 
@@ -155,26 +160,31 @@ enrichment:
     service:
       type: ClusterIP
       port: 9700
+      # nodePort: 30079
       nodePort:
   cracklist:
     service:
       type: ClusterIP
       port: 9900
+      # nodePort: 30089
       nodePort:
   webapi:
     service:
       type: ClusterIP
       port: 9910
+      # nodePort: 30808
       nodePort:
   landingpage:
     service:
       type: ClusterIP
       port: 9920
+      # nodePort: 30809
       nodePort:
   monitoring:
     service:
       type: ClusterIP
       port: 8000
+      # nodePort: 31693
       nodePort:
 
 jupyter:
@@ -190,8 +200,6 @@ jupyter:
     nodePort:
 
 nlp:
-  prometheusNodePort:
-  nodePort:
   image:
     repository: specterops/nemesis-nlp
     tag: latest
@@ -231,7 +239,11 @@ passwordcracker:
       cpu: "2000m"
 
 tika:
-  nodePort: 31998
+  service:
+    type: ClusterIP
+    port: 9998
+    # nodePort: 31998
+    nodePort:
   resources:
     requests:
       memory: "256Mi"

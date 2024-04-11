@@ -70,13 +70,12 @@ metadata:
     app: tika
   name: tika
 spec:
-  type: NodePort
-  ports:
-    - name: "9998"
-      port: 9998
-      targetPort: 9998
-      nodePort: {{ .Values.tika.nodePort }}
+  type: {{ .Values.tika.service.type }}
   selector:
     app: tika
-status:
-  loadBalancer: {}
+  ports:
+    - port: {{ .Values.tika.service.port }}
+      targetPort: 9998
+      {{- if .Values.tika.service.nodePort }}
+      nodePort: {{ .Values.tika.service.nodePort }}
+      {{- end }}
