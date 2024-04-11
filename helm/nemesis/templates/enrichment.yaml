@@ -371,7 +371,7 @@ spec:
     app: enrichment
   ports:
     - port: {{ .Values.enrichment.landingpage.service.port }}
-      targetPort: 9910
+      targetPort: 9920
       {{- if .Values.enrichment.landingpage.service.nodePort }}
       nodePort: {{ .Values.enrichment.landingpage.service.nodePort }}
       {{- end }}
