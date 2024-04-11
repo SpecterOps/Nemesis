@@ -201,12 +201,16 @@ tika:
       cpu: "1000m"
 
 hasura:
-  nodePort: 31887
-  resources: {}
   image:
     repository: hasura/graphql-engine
     tag: v2.36.2.cli-migrations-v2
     pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+    # nodePort: 31887
+    nodePort:
+  resources: {}
 
 metricsServer:
   enabled: false

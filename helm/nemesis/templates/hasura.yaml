@@ -8,22 +8,6 @@ data:
   hasura_metadata.json: |-
     {{- .Files.Get "files/hasura/hasura_metadata.json" | nindent 4 }}
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: hasura
-  name: hasura
-spec:
-  type: NodePort
-  ports:
-    - name: "8080"
-      port: 8080
-      targetPort: 8080
-      nodePort: {{ .Values.hasura.nodePort }}
-  selector:
-    app: hasura
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -139,6 +123,23 @@ spec:
           configMap:
             name: hasura-metadata
       restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hasura
+  name: hasura
+spec:
+  type: {{ .Values.hasura.service.type }}
+  selector:
+    app: hasura
+  ports:
+    - port: {{ .Values.hasura.service.port }}
+      targetPort: 8080
+      {{- if .Values.hasura.service.nodePort }}
+      nodePort: {{ .Values.hasura.service.nodePort }}
+      {{- end }}
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
