@@ -193,11 +193,15 @@ nlp:
       cpu: "1000m"
 
 passwordcracker:
-  nodePort: 31990
   image:
     repository: specterops/nemesis-passwordcracker
     tag: latest
     pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9090
+    # nodePort: 31990
+    nodePort:
   resources:
     requests:
       cpu: "100m"
