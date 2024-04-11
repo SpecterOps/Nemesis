@@ -41,7 +41,10 @@ gotenberg:
     repository: gotenberg/gotenberg
     tag: "8.0.1"
     pullPolicy: IfNotPresent
-  nodePort: 31300
+  service:
+    type: ClusterIP
+    port: 9900
+    nodePort:
   resources:
     requests:
       memory: "512Mi"
