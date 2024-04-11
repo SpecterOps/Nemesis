@@ -68,8 +68,12 @@ elasticsearch:
 
 postgres:
   existingSecret: postgres-creds
-  nodePort: 31209
   storage: 15Gi
+  service:
+    type: ClusterIP
+    port: 5432
+    # nodePort: 31209
+    nodePort:
 
 pgadmin:
   service:

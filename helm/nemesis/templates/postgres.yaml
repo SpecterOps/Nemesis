@@ -166,11 +166,12 @@ metadata:
   labels:
     app: postgres
 spec:
-  type: NodePort
-  ports:
-    - name: "5432"
-      port: 5432
-      targetPort: 5432
-      nodePort: {{ .Values.postgres.nodePort }}
+  type: {{ .Values.postgres.service.type }}
   selector:
     app: postgres
+  ports:
+    - port: {{ .Values.postgres.service.port }}
+      targetPort: 8601
+      {{- if .Values.postgres.service.nodePort }}
+      nodePort: {{ .Values.postgres.service.nodePort }}
+      {{- end }}
