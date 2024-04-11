@@ -157,11 +157,15 @@ enrichment:
 
 jupyter:
   existingSecret: jupyter-creds
-  nodePort: 31888
   image:
     repository: specterops/nemesis-jupyter
     tag: latest
     pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8888
+    # nodePort: 31888
+    nodePort:
 
 nlp:
   prometheusNodePort: 31692

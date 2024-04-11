@@ -52,14 +52,15 @@ metadata:
     app: jupyter
   name: jupyter
 spec:
-  type: NodePort
-  ports:
-    - name: "8888"
-      port: 8888
-      targetPort: 8888
-      nodePort: {{ .Values.jupyter.nodePort }}
+  type: {{ .Values.jupyter.service.type }}
   selector:
     app: jupyter
+  ports:
+    - port: {{ .Values.jupyter.service.port }}
+      targetPort: 8888
+      {{- if .Values.jupyter.service.nodePort }}
+      nodePort: {{ .Values.jupyter.service.nodePort }}
+      {{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
