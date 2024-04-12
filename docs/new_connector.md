@@ -17,7 +17,7 @@ File processing is the one flow that differs from other structured data ingestio
 
 ## Step 1 - File Upload
 
-For a file to be processed, the raw file bytes first need to be posted to the correct API route for storage in the data lake. This is accomplished by POSTing the file bytes to the `https://<NEMESIS_URL>/api/file` which returns a simple JSON response with an `object_id` field containing a UUID that references the uploaded file. For example, to do this in Python (as shown in [mythic-connector](../cmd/connectors/mythic-connector/sync.py)), you would run something like this:
+For a file to be processed, the raw file bytes first need to be posted to the correct API route for storage in the data lake. This is accomplished by POSTing the file bytes to the `https://<NEMESIS_URL>/api/file` which returns a simple JSON response with an `object_id` field containing a UUID that references the uploaded file. For example, to do this in Python (as shown in [mythic-connector](https://github.com/SpecterOps/Nemesis/blob/main/cmd/connectors/mythic-connector/sync.py)), you would run something like this:
 
 ```python
 basic = HTTPBasicAuth(NEMESIS_USERNAME, NEMESIS_PASSWORD)
@@ -34,7 +34,7 @@ The `nemesis_file_id` is used in the `file_data` message in Step 2 below. This U
 
 ## Step 2 - File Data Message
 
-After the file is uploaded to Nemesis, a [file_data](./odr/references/file_data.md) ODR message needs to be posted with file metadata information. The example from the [mythic-connector](../cmd/connectors/mythic-connector/sync.py) is:
+After the file is uploaded to Nemesis, a [file_data](odr/references/file_data.md) ODR message needs to be posted with file metadata information. The example from the [mythic-connector](https://github.com/SpecterOps/Nemesis/blob/main/cmd/connectors/mythic-connector/sync.py) is:
 
 ```python
 metadata = {}
@@ -64,11 +64,11 @@ r = requests.request("POST", f"{NEMESIS_URL}/data", auth=basic, data=data, heade
 
 # Other Structured Data
 
-For other types of structured data, only a single message needs to be posted to the `http://<NEMESIS_URL>/api/data` API route, e.g. Step 2 in the downloading processing example. The `metadata["data_type"]` field should be one of the types defined in the [ODR](./odr/references/). The appropriate ODR document will also define the fields and structure needed for the datatype.
+For other types of structured data, only a single message needs to be posted to the `http://<NEMESIS_URL>/api/data` API route, e.g. Step 2 in the downloading processing example. The `metadata["data_type"]` field should be one of the types defined in the [ODR](odr/references/). The appropriate ODR document will also define the fields and structure needed for the datatype.
 
 Note that the "data" section of the message is an array of dictionaries, i.e., multiple instances of a datatype can be posted in a single message. For example, multiple process messages can exist in the single post.
 
-As an example, see the `handle_process()` function in the [mythic-connector](../cmd/connectors/mythic-connector/sync.py).
+As an example, see the `handle_process()` function in the [mythic-connector](https://github.com/SpecterOps/Nemesis/blob/main/cmd/connectors/mythic-connector/sync.py).
 
 Example of many of the structured datatypes can be found in the `./sample_files/structured/` folder. Example of using these to submit process data:
 ```bash

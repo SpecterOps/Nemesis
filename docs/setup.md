@@ -1,5 +1,5 @@
 # Nemesis Installation and Setup
-1. Ensure the [requisite software/hardware is installed](./requirements.md).
+1. Ensure the [requisite software/hardware is installed](requirements.md).
 
 2. Run the [`quickstart` Helm chart](quickstart_chart.md) to configure Nemesis's services and secrets.
 
@@ -15,22 +15,22 @@ If you run into any issues, please see [troubleshooting.md](troubleshooting.md) 
 Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in muliple ways, including
 * [Auto-ingesting data from C2 platorms.](#nemesis-c2-connector-setup)
 * Manually uploading files on the "File Upload" page in the Nemesis's Dashboard UI.
-* Using the [submit_to_nemesis](./submit_to_nemesis.md) CLI tool to submit files.
+* Using the [submit_to_nemesis](submit_to_nemesis.md) CLI tool to submit files.
 * Writing custom tools to interact with [Nemesis's API](new_connector.md).
 
 ## Nemesis C2 Connector Setup
 Nemesis includes connectors for various C2 platorms. The connectors hook into the C2 platforms and transfer data automatically into Nemesis. The `./cmd/connectors/` folder contains the following C2 connectors:
 
-- [Cobalt Strike](../cmd/connectors/cobaltstrike-nemesis-connector/README.md)
-- [Mythic](../cmd/connectors/mythic-connector/README.md)
-- [Sliver](../cmd/connectors/sliver-connector/README.md)
-- [OST Stage1](../cmd/connectors/stage1-connector/README.md)
-- [Metasploit](../cmd/connectors/metasploit-connector/README.md)
-- [Chrome Extension](../cmd/connectors/chrome-extension/README.md)
+- [Cobalt Strike](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/cobaltstrike-nemesis-connector#readme)
+- [Mythic](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/mythic-connector#readme)
+- [Sliver](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/sliver-connector#readme)
+- [OST Stage1](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/stage1-connector#readme)
+- [Metasploit](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/metasploit-connector#readme)
+- [Chrome Extension](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/chrome-extension#readme)
 
 ***Note: not all connectors have the same level of completeness! We intended to show the range of connectors possible, but there is not yet feature parity.***
 
-If you'd like to ingest data from another platform, see the documentation for [adding a new connector](./new_connector.md).
+If you'd like to ingest data from another platform, see the documentation for [adding a new connector](new_connector.md).
 
 # Nemesis Service Endpoints
 
@@ -72,7 +72,7 @@ metricsServer:
   enabled: true
 ```
 
-If you have not installed Nemesis yet, see [Nemesis Chart](./nemesis_chart.md) or upgrade the installation:
+If you have not installed Nemesis yet, see [Nemesis Chart](nemesis_chart.md) or upgrade the installation:
 
 ```bash
 helm upgrade --repo https://specterops.github.io/Nemesis/ [chart name] nemesis
@@ -84,20 +84,20 @@ Elasticsearch, PostgreSQL, and Minio (if using instead of AWS S3) have persisten
 
 ## File Storage Backend
 
-Nemesis can use AWS S3 (in conjunction with KMS for file encryption) for file storage by modifying the `storage` setting in [values.yaml](../helm/nemesis/values.yaml) and configuring the `aws` block.
+Nemesis can use AWS S3 (in conjunction with KMS for file encryption) for file storage by modifying the `storage` setting in [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml) and configuring the `aws` block.
 
 By default, Nemesis uses Minio for file storage with a default storage size of `30Gi`.
-To change the size, modify the `minio.persistence.size` value in [values.yaml](../helm/nemesis/values.yaml) file.
+To change the size, modify the `minio.persistence.size` value in [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml) file.
 
 
 ## Elasticsearch
 
-The default storage size is 20Gi. To change this, modify the `elasticsearch.storage` value in [values.yaml](../helm/nemesis/values.yaml).
+The default storage size is 20Gi. To change this, modify the `elasticsearch.storage` value in [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml).
 
 
 ## PostgreSQL
 
-The default storage size is 20Gi. To change this, modify the `postgres.storage` value in [values.yaml](../helm/nemesis/values.yaml).
+The default storage size is 20Gi. To change this, modify the `postgres.storage` value in [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml).
 
 
 # (Optional) Change Nemesis's Listening Port

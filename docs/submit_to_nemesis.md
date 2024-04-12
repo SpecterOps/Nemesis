@@ -3,7 +3,7 @@
 
 # Docker
 
-If you want to use the pre-build Docker container to submit artifacts to Nemesis, run [monitor_folder_docker.sh](../scripts/monitor_folder_docker.sh). The only requirement for the script is Docker and wget.
+If you want to use the pre-build Docker container to submit artifacts to Nemesis, run [monitor_folder_docker.sh](https://github.com/SpecterOps/Nemesis/blob/main/scripts/monitor_folder_docker.sh). The only requirement for the script is Docker and wget.
 
 # Requirements
 Install with the instructions below.
@@ -70,7 +70,7 @@ poetry -C ./cmd/enrichment/ install
 </details>
 
 # Configuring
-To use `submit_to_nemesis`, one must edit the YAML configuration file found in `cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml` ([link to YAML file](../cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml)). This config file includes the credentials to authenticate to Nemesis, the location of the Nemesis server, and information about the operation that Nemesis will tag each uploaded file with (operator name, project, network, etc.).
+To use `submit_to_nemesis`, one must edit the YAML configuration file found in `cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml` ([link to YAML file](https://github.com/SpecterOps/Nemesis/blob/main/cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml)). This config file includes the credentials to authenticate to Nemesis, the location of the Nemesis server, and information about the operation that Nemesis will tag each uploaded file with (operator name, project, network, etc.).
 
 # Usage
 Once configured, in the root Nemesis directory run

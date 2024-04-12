@@ -17,7 +17,7 @@ May consider aliasing `kubectl` to `k` just so you don't have to type it out eac
 
 Reasons why it might happen include:
 * Pod doesn't have enough memory. Solution: Look at the pod's k8s code and check the `resources` section and increase the memory in [the limits/request section](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
-* The kubernetes node doesn't have enough memory to deploy the pods. Solution: If you're using Minikube, make sure the VM has enough memory and that minikube is configured to start with more memory (see the [preq instructions](prerequisites.md) for Minikube for how to configure the memory).
+* The kubernetes node doesn't have enough memory to deploy the pods. Solution: If you're using Minikube, make sure the VM has enough memory and that minikube is configured to start with more memory (see the preq instructions for Minikube for how to configure the memory).
 * The application has a memory leak, and over time, consumes all the available memory dedicated to it. Solution: Fix the memory leak.
 
 # CrashLoopBackOff Error

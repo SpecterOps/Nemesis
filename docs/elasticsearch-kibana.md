@@ -8,9 +8,9 @@ The custom resource definitions that the helm chart installs can all be found [h
 
 # Storage
 
-By default this Elasticsearch instance uses a persistent data store. The size of the datastore can be adjusted in the [values.yaml](../helm/nemesis/values.yaml) file by modifying the `storage: 20Gi` in the `elasticsearch` config section.
+By default this Elasticsearch instance uses a persistent data store. The size of the datastore can be adjusted in the [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml) file by modifying the `storage: 20Gi` in the `elasticsearch` config section.
 
-To use temporary storage that is wiped on every run, set "environment" to "test" at the top of [values.yaml](../helm/nemesis/values.yaml).
+To use temporary storage that is wiped on every run, set "environment" to "test" at the top of [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml).
 
 # Accessing Elastic/Kibana
 To login to Elastic or Kibana, run `./scripts/get_service_credentials.sh` to get the basic auth credentials.

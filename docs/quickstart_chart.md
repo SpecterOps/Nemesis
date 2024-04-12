@@ -1,5 +1,5 @@
 # Quickstart Helm Chart
-The purpose of the [`quickstart` Helm chart](../helm/quickstart/) is to configure and set secrets for each Nemesis service (e.g., usernames and passwords and ingress TLS certificates). You can run the quickstart chart with the following command:
+The purpose of the [`quickstart` Helm chart](https://github.com/SpecterOps/Nemesis/tree/main/helm/quickstart) is to configure and set secrets for each Nemesis service (e.g., usernames and passwords and ingress TLS certificates). You can run the quickstart chart with the following command:
 
 ```bash
 helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart
@@ -13,7 +13,7 @@ echo "Basic Auth Password: ${BASIC_AUTH_PASSWORD}"
 ```
 
 # Customizing the Configuration
-If you want customize any of the services' secrets, you need to download the `quickstart` chart's [values.yaml](../helm/quickstart/values.yaml) file, edit it, and then run the `quickstart` chart using the customized values. You can do so with the following commands:
+If you want customize any of the services' secrets, you need to download the `quickstart` chart's [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/quickstart/values.yaml) file, edit it, and then run the `quickstart` chart using the customized values. You can do so with the following commands:
 
 1. Download the quickstart chart's `values.yaml`:
 ```bash

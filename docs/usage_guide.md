@@ -32,12 +32,12 @@ Once Nemesis is running, data first needs to be ingested into the platform. Inge
 ## Nemesis C2 Connector Setup
 Nemesis includes connectors for various C2 platorms. The connectors hook into the C2 platforms and transfer data automatically into Nemesis. The `./cmd/connectors/` folder contains the following C2 connectors:
 
-- [Cobalt Strike](../cmd/connectors/cobaltstrike-nemesis-connector/README.md)
-- [Mythic](../cmd/connectors/mythic-connector/README.md)
-- [Sliver](../cmd/connectors/sliver-connector/README.md)
-- [OST Stage1](../cmd/connectors/stage1-connector/README.md)
-- [Metasploit](../cmd/connectors/metasploit-connector/README.md)
-- [Chrome Extension](../cmd/connectors/chrome-extension/README.md)
+- [Cobalt Strike](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/cobaltstrike-nemesis-connector#readme)
+- [Mythic](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/mythic-connector#readme)
+- [Sliver](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/sliver-connector#readme)
+- [OST Stage1](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/stage1-connector#readme)
+- [Metasploit](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/metasploit-connector#readme)
+- [Chrome Extension](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/chrome-extension#readme)
 
 ***Note: not all connectors have the same level of completeness! We intended to show the range of connectors possible, but there is not yet feature parity.***
 
@@ -117,7 +117,7 @@ The **Source Code Search** tab on the top of the page functions similarly to the
 
 ### Snippet Search
 
-The **Snippet Search** tab operates a bit differently. In addition to being normally indexed in Elasticsearch, all text extracted from plaintext documents by Nemesis are also broken into chunks and run through a small [embedding model](https://www.elastic.co/what-is/vector-embedding) to produce fixed-length vector embeddings. The model currently being used is [gte-tiny](https://huggingface.co/TaylorAI/gte-tiny) but this can be modified in the [nlp.deployment.yaml](./helm/nemesis/templates/nlp.deployment.yaml) of the NLP container. These embeddings are stored in Elasticsearch along with the associated chunked text, allowing for [sematic search](https://en.wikipedia.org/wiki/Semantic_search) over indexed text.
+The **Snippet Search** tab operates a bit differently. In addition to being normally indexed in Elasticsearch, all text extracted from plaintext documents by Nemesis are also broken into chunks and run through a small [embedding model](https://www.elastic.co/what-is/vector-embedding) to produce fixed-length vector embeddings. The model currently being used is [gte-tiny](https://huggingface.co/TaylorAI/gte-tiny) but this can be modified in the [nlp.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/templates/nlp.yaml) of the NLP container. These embeddings are stored in Elasticsearch along with the associated chunked text, allowing for [sematic search](https://en.wikipedia.org/wiki/Semantic_search) over indexed text.
 
 In addition, we also exploit the BM25 text search of Elasticsearch over the sparse indexed text. The two lists of results are fused with [Reciprocal Rank Fusion (RRF)](https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking) and the reordered list of snippets is presented to the user:
 
