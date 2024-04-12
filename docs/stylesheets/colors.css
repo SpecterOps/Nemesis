@@ -17,24 +17,22 @@
   --md-code-fg-color:                hsla(var(--md-hue), 18%, 86%, 0.82);
   --md-code-bg-color:                hsla(var(--md-hue), 15%, 18%, 1);
 
+  --md-code-hl-number-color: #619a8c;
+  --md-code-hl-special-color: var(--md-code-hl-number-color);
+  --md-code-hl-function-color: #5382db;
+  --md-code-hl-string-color: #61a242;
+  --md-code-hl-operator-color: #965822;
+  --md-code-hl-name-color:           #e4e4e4;
+  --md-code-hl-keyword-color:        #4b74c6;
+  --md-code-hl-punctuation-color:    #808080;
+  --md-code-hl-constant-color:       hsla(250, 62%, 70%, 1);
+  --md-code-hl-comment-color:        rgb(98, 103, 119);
+  --md-code-hl-variable-color:       #ffffff;
   --md-code-hl-color:                hsla(#{hex2hsl($clr-blue-a400)}, 1);
   --md-code-hl-color--light:         hsla(#{hex2hsl($clr-blue-a400)}, 0.1);
-
-  --md-code-hl-number-color:         hsla(6, 74%, 63%, 1);
-  --md-code-hl-special-color:        hsla(340, 83%, 66%, 1);
-  --md-code-hl-function-color:       hsla(291, 57%, 65%, 1);
-  --md-code-hl-constant-color:       hsla(250, 62%, 70%, 1);
-  --md-code-hl-keyword-color:        hsla(219, 66%, 64%, 1);
-  --md-code-hl-string-color:         hsla(150, 58%, 44%, 1);
-  --md-code-hl-name-color:           var(--md-code-fg-color);
-  --md-code-hl-operator-color:       var(--md-default-fg-color--light);
-  --md-code-hl-punctuation-color:    var(--md-default-fg-color--light);
-  --md-code-hl-comment-color:        var(--md-default-fg-color--light);
   --md-code-hl-generic-color:        var(--md-default-fg-color--light);
-  --md-code-hl-variable-color:       var(--md-default-fg-color--light);
 
   --md-typeset-color:                var(--md-default-fg-color);
-
   --md-typeset-a-color:              #498AFB;
 
   --md-typeset-kbd-color:            hsla(var(--md-hue), 15%, 90%, 0.12);

@@ -28,3 +28,8 @@ theme:
 
 extra_css:
   - stylesheets/colors.css
+
+markdown_extensions:
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      use_pygments: true
