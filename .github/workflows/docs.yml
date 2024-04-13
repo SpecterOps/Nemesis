@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
 
-    # Only trigger workflow when documentation files are are changed
+    # Only trigger workflow when documentation files are changed
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
       - '.github/workflows/docs.yml'
 
-# Prevent this workflow from running concurrently with the docs.yml workflow
+# Prevent this workflow from running concurrently with the helm-release.yml workflow
 concurrency:
   group: "pages"
   cancel-in-progress: false
