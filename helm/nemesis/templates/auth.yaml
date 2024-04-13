@@ -5,3 +5,4 @@ metadata:
 spec:
   basicAuth:
     secret: {{ .Values.basicAuth.existingSecret }}
+    removeHeader: true
