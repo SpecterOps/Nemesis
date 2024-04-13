@@ -312,14 +312,14 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-yara
 spec:
-  type: {{ .Values.enrichment.yara.service.type }}
+  type: {{ .Values.enrichment.service.yara.type }}
   selector:
     app: enrichment
   ports:
-    - port: {{ .Values.enrichment.yara.service.port }}
+    - port: {{ .Values.enrichment.service.yara.port }}
       targetPort: 9700
-      {{- if .Values.enrichment.yara.service.nodePort }}
-      nodePort: {{ .Values.enrichment.yara.service.nodePort }}
+      {{- if .Values.enrichment.service.yara.nodePort }}
+      nodePort: {{ .Values.enrichment.service.yara.nodePort }}
       {{- end }}
 ---
 apiVersion: v1
@@ -330,14 +330,14 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-cracklist
 spec:
-  type: {{ .Values.enrichment.cracklist.service.type }}
+  type: {{ .Values.enrichment.service.cracklist.type }}
   selector:
     app: enrichment
   ports:
-    - port: {{ .Values.enrichment.cracklist.service.port }}
+    - port: {{ .Values.enrichment.service.cracklist.port }}
       targetPort: 9900
-      {{- if .Values.enrichment.cracklist.service.nodePort }}
-      nodePort: {{ .Values.enrichment.cracklist.service.nodePort }}
+      {{- if .Values.enrichment.service.cracklist.nodePort }}
+      nodePort: {{ .Values.enrichment.service.cracklist.nodePort }}
       {{- end }}
 ---
 apiVersion: v1
@@ -348,14 +348,14 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-webapi
 spec:
-  type: {{ .Values.enrichment.webapi.service.type }}
+  type: {{ .Values.enrichment.service.webapi.type }}
   selector:
     app: enrichment
   ports:
-    - port: {{ .Values.enrichment.webapi.service.port }}
+    - port: {{ .Values.enrichment.service.webapi.port }}
       targetPort: 9910
-      {{- if .Values.enrichment.webapi.service.nodePort }}
-      nodePort: {{ .Values.enrichment.webapi.service.nodePort }}
+      {{- if .Values.enrichment.service.webapi.nodePort }}
+      nodePort: {{ .Values.enrichment.service.webapi.nodePort }}
       {{- end }}
 ---
 apiVersion: v1
@@ -366,14 +366,14 @@ metadata:
     component: enrichment-landingpage
   name: enrichment-landingpage
 spec:
-  type: {{ .Values.enrichment.landingpage.service.type }}
+  type: {{ .Values.enrichment.service.landingpage.type }}
   selector:
     app: enrichment
   ports:
-    - port: {{ .Values.enrichment.landingpage.service.port }}
+    - port: {{ .Values.enrichment.service.landingpage.port }}
       targetPort: 9920
-      {{- if .Values.enrichment.landingpage.service.nodePort }}
-      nodePort: {{ .Values.enrichment.landingpage.service.nodePort }}
+      {{- if .Values.enrichment.service.landingpage.nodePort }}
+      nodePort: {{ .Values.enrichment.service.landingpage.nodePort }}
       {{- end }}
 ---
 apiVersion: v1
@@ -384,14 +384,14 @@ metadata:
     component: enrichment-monitoring
   name: enrichment-monitoring
 spec:
-  type: {{ .Values.enrichment.monitoring.service.type }}
+  type: {{ .Values.enrichment.service.monitoring.type }}
   selector:
     app: enrichment
   ports:
-    - port: {{ .Values.enrichment.monitoring.service.port }}
+    - port: {{ .Values.enrichment.service.monitoring.port }}
       targetPort: 8000
-      {{- if .Values.enrichment.monitoring.service.nodePort }}
-      nodePort: {{ .Values.enrichment.monitoring.service.nodePort }}
+      {{- if .Values.enrichment.service.monitoring.nodePort }}
+      nodePort: {{ .Values.enrichment.service.monitoring.nodePort }}
       {{- end -}}
 {{- end }}
 
@@ -400,7 +400,7 @@ spec:
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: ingress-enrichment-stripprefix
+  name: enrichment-stripprefix
 spec:
   stripPrefix:
     prefixes:
@@ -413,7 +413,10 @@ kind: Ingress
 metadata:
   name: enrichment-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-enrichment-stripprefix@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-enrichment-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.enrichment.ingress.annotations }}
+    {{- .Values.enrichment.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
   ingressClassName: traefik
   rules:

@@ -66,7 +66,11 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: jupyter-ingress
-  annotations: {}
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.jupyter.ingress.annotations }}
+    {{- .Values.jupyter.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
   ingressClassName: traefik
   rules:

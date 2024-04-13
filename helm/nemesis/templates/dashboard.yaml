@@ -147,7 +147,7 @@ kind: Ingress
 metadata:
   name: dashboard-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-dashboard-stripprefix@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-dashboard-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
     {{- if .Values.dashboard.ingress.annotations }}
     {{- .Values.dashboard.ingress.annotations | toYaml | nindent 4 }}
     {{- end }}

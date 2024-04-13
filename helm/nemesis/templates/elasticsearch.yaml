@@ -99,7 +99,7 @@ spec:
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: ingress-elastic-stripprefix
+  name: elastic-stripprefix
 spec:
   stripPrefix:
     prefixes:
@@ -110,7 +110,10 @@ kind: Ingress
 metadata:
   name: elastic-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-elastic-stripprefix@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-elastic-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.elasticsearch.ingress.annotations }}
+    {{- .Values.elasticsearch.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
   ingressClassName: traefik
   rules:

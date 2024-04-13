@@ -1,7 +1,7 @@
 Secrets created:
 
-export BASIC_AUTH_USER=$(kubectl get secret --namespace "{{ .Release.Namespace }}" {{ .Values.operation.secretName }} -o jsonpath="{.data.basic-auth-user}" | base64 -d)
-export BASIC_AUTH_PASSWORD=$(kubectl get secret --namespace "{{ .Release.Namespace }}" {{ .Values.operation.secretName }} -o jsonpath="{.data.basic-auth-password}" | base64 -d)
+export BASIC_AUTH_USER=$(kubectl get secret --namespace "{{ .Release.Namespace }}" {{ .Values.basicAuth.secretName }} -o jsonpath="{.data.username}" | base64 -d)
+export BASIC_AUTH_PASSWORD=$(kubectl get secret --namespace "{{ .Release.Namespace }}" {{ .Values.basicAuth.secretName }} -o jsonpath="{.data.password}" | base64 -d)
 
 export RABBITMQ_ADMIN_USER=$(kubectl get secret --namespace "{{ .Release.Namespace }}" {{ .Values.rabbitmq.secretName }} -o jsonpath="{.data.rabbitmq-admin-user}" | base64 -d)
 export RABBITMQ_ADMIN_PASSWORD=$(kubectl get secret --namespace "{{ .Release.Namespace }}" {{ .Values.rabbitmq.secretName }} -o jsonpath="{.data.rabbitmq-admin-password}" | base64 -d)

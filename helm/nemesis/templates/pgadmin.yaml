@@ -117,7 +117,11 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: pgadmin-ingress
-  annotations: {}
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.pgadmin.ingress.annotations }}
+    {{- .Values.pgadmin.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
   ingressClassName: traefik
   rules:

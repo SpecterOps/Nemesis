@@ -144,7 +144,7 @@ spec:
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: ingress-hasura-stripprefix
+  name: hasura-stripprefix
 spec:
   stripPrefix:
     prefixes:
@@ -155,7 +155,10 @@ kind: Ingress
 metadata:
   name: hasura-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-ingress-hasura-stripprefix@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-hasura-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.hasura.ingress.annotations }}
+    {{- .Values.hasura.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
   ingressClassName: traefik
   rules:

@@ -337,7 +337,10 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: rabbitmqadmin-ingress
-  annotations: {}
+  annotations:
+    {{- if .Values.rabbitmq.ingress.annotations }}
+    {{- .Values.rabbitmq.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
   ingressClassName: traefik
   rules:

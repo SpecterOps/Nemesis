@@ -12,8 +12,11 @@ operation:
   #   "production" deploys all images with persistent storage
   environment: "production"
   dataExpirationDays: "100"
-  existingSecret: operation-creds
-  basicAuthExistingSecret: basic-auth
+  existingSecret: operation
+
+basicAuth:
+  existingSecret: basic-auth
+  middlewareName: nemesis-auth
 
 storage: minio
 
@@ -58,6 +61,8 @@ elasticsearch:
   # how many days to keep fluentd logs before purging
   fluentdLogsAge: 100
   existingSecret: elasticsearch-creds
+  ingress:
+    annotations:
   resources:
     requests:
       cpu: "750m"
@@ -66,6 +71,10 @@ elasticsearch:
       cpu: "1500m"
       memory: "3G"
   storage: 20Gi
+
+kibana:
+  ingress:
+    annotations:
 
 postgres:
   existingSecret: postgres-creds
@@ -81,6 +90,8 @@ pgadmin:
     type: ClusterIP
     port: 80
     nodePort:
+  ingress:
+    annotations:
 
 dashboard:
   existingSecret: dashboard-creds
@@ -129,6 +140,8 @@ rabbitmq:
     requests:
       cpu: 100m
       memory: 100Mi
+  ingress:
+    annotations:
 
 eck-operator:
   installCRDs: true
@@ -156,36 +169,34 @@ enrichment:
     - name: PLAINTEXT_SIZE_LIMIT
       value: "50" # size limit for extracted text to process, in MB
   resources: {}
-  yara:
-    service:
+  service:
+    yara:
       type: ClusterIP
       port: 9700
       # nodePort: 30079
       nodePort:
-  cracklist:
-    service:
+    cracklist:
       type: ClusterIP
       port: 9900
       # nodePort: 30089
       nodePort:
-  webapi:
-    service:
+    webapi:
       type: ClusterIP
       port: 9910
       # nodePort: 30808
       nodePort:
-  landingpage:
-    service:
+    landingpage:
       type: ClusterIP
       port: 9920
       # nodePort: 30809
       nodePort:
-  monitoring:
-    service:
+    monitoring:
       type: ClusterIP
       port: 8000
       # nodePort: 31693
       nodePort:
+  ingress:
+    annotations:
 
 jupyter:
   existingSecret: jupyter-creds
@@ -198,6 +209,8 @@ jupyter:
     port: 8888
     # nodePort: 31888
     nodePort:
+  ingress:
+    annotations:
 
 nlp:
   image:
@@ -214,6 +227,8 @@ nlp:
       port: 8000
       # nodePort: 31692
       nodePort:
+  ingress:
+    annotations:
   resources:
     requests:
       memory: "500Mi"
@@ -262,6 +277,8 @@ hasura:
     port: 8080
     # nodePort: 31887
     nodePort:
+  ingress:
+    annotations:
   resources: {}
 
 metricsServer:
