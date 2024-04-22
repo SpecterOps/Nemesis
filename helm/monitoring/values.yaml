@@ -104,11 +104,15 @@ prometheus:
     pullPolicy: IfNotPresent
 
 postgresExporter:
-  nodePort: 31119
   image:
     repository: prometheuscommunity/postgres-exporter
     tag: v0.11.1
     pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9187
+    # nodePort: 31119
+    nodePort:
 
 nemesisWaiter:
   image:
