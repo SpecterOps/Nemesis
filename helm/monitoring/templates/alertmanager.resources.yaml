@@ -3,7 +3,7 @@
 {{- if $configmap }}
 {{- $configData := index $configmap "data" }}
 {{- $disableSlack := index $configData "disable-slack-alerting" }}
-{{- if eq $disableSlack "true" }}
+{{- if $disableSlack }}
 kind: ConfigMap
 apiVersion: v1
 metadata:
