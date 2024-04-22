@@ -39,10 +39,10 @@ alertmanager:
     tag: v0.24.0
     pullPolicy: IfNotPresent
   service:
-    type: ClusterIP
+    type: NodePort
     port: 9093
-    # nodePort: 31000
-    nodePort:
+    nodePort: 31000
+    # nodePort:
 
 fluentd:
   elasticsearchHost: "nemesis-es-http.default.svc.cluster.local"

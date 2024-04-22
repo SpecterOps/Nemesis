@@ -118,12 +118,21 @@ spec:
       nodePort: {{ .Values.alertmanager.service.nodePort }}
       {{- end }}
 ---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: alertmanager-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /alertmanager
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: alertmanager-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Values.nemesisNamespace }}-{{ .Values.auth.middlewareName }}@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-alertmanager-stripprefix@kubernetescrd, {{ .Values.nemesisNamespace }}-{{ .Values.auth.middlewareName }}@kubernetescrd"
 spec:
   ingressClassName: traefik
   rules:
@@ -135,4 +144,4 @@ spec:
               service:
                 name: alertmanager
                 port:
-                  number: 9093
+                  number: {{ .Values.alertmanager.service.port }}
