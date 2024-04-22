@@ -100,3 +100,22 @@ spec:
       {{- if .Values.prometheus.service.nodePort }}
       nodePort: {{ .Values.prometheus.service.nodePort }}
       {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Values.nemesisNamespace }}-{{ .Values.auth.middlewareName }}@kubernetescrd"
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /prometheus
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-service
+                port:
+                  number: 9090

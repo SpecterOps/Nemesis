@@ -1,5 +1,13 @@
+nemesisNamespace: default
+
+auth:
+  # Assume the secret lives in the Nemesis installation namespace. Should be
+  # the same name configured in .Values.auth.middlewareName in the Nemesis Helm
+  # chart.
+  middlewareName: nemesis-auth
+
 operation:
-  existingSecret: operation-creds
+  existingSecret: operation
 
 elasticsearch:
   existingSecret: elasticsearch-creds
