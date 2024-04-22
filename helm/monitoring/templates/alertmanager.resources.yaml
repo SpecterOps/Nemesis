@@ -1,7 +1,9 @@
 ---
 {{- $configmap := (lookup "v1" "ConfigMap" .Release.Namespace "operation-config") }}
-{{- $disableSlack := get $configmap.data "disable-slack-alerting" }}
-{{- if $disableSlack }}
+{{- if $configmap }}
+{{- $configData := index $configmap "data" }}
+{{- $disableSlack := index $configData "disable-slack-alerting" }}
+{{- if eq $disableSlack "true" }}
 kind: ConfigMap
 apiVersion: v1
 metadata:
@@ -17,6 +19,7 @@ metadata:
 data:
   config.yml: |-
     {{- .Files.Get "files/alertmanager/config-prod.yaml" | nindent 4 }}
+{{- end }}
 {{- end }}
 ---
 apiVersion: v1
