@@ -81,6 +81,10 @@ nodeExporter:
     requests:
       cpu: 102m
       memory: 180Mi
+  service:
+    type: ClusterIP
+    port: 9100
+    nodePort:
 
 prometheus:
   nodePort: 30090
