@@ -76,12 +76,12 @@ spec:
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
                 secretKeyRef:
-                  name: grafana-creds
+                  name: {{ .Values.grafana.existingSecret }}
                   key: username
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: grafana-creds
+                  name: {{ .Values.grafana.existingSecret }}
                   key: password
             - name: GF_SERVER_ROOT_URL # used to serve through ingress-nginx
               value: "%(protocol)s://%(domain)s:%(http_port)s/grafana/"

@@ -54,8 +54,7 @@ fluentd:
       memory: 200Mi
 
 grafana:
-  username: nemesis
-  # password: ""
+  existingSecret: grafana-creds
   prometheusUrl: http://prometheus-service.default.svc:9090
   image:
     repository: grafana/grafana
