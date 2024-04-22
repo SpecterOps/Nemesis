@@ -21,7 +21,8 @@ rabbitmq:
   erlangCookie: "default-cookie"
 
 grafana:
-  user: "nemesis"
+  secretName: grafana-creds
+  username: "nemesis"
   # Add a value to the password field to set a static password
   password:
 
