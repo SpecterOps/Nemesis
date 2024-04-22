@@ -48,7 +48,6 @@ fluentd:
 grafana:
   username: nemesis
   # password: ""
-  nodePort: 32002
   prometheusUrl: http://prometheus-service.default.svc:9090
   image:
     repository: grafana/grafana
@@ -61,6 +60,11 @@ grafana:
     requests:
       cpu: 102m
       memory: 180Mi
+  service:
+    type: ClusterIP
+    port: 3000
+    # nodePort: 32002
+    nodePort:
 
 nodeExporter:
   # Values are being mapped from /host, so if you're on Windows, set this value to false
