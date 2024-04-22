@@ -1,18 +1,40 @@
+---
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: grafana
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "3000"
-spec:
-  selector:
-    app: grafana
-  type: NodePort
-  ports:
-    - port: 3000
-      targetPort: 3000
-      nodePort: {{ .Values.grafana.nodePort }}
+  name: grafana-datasources
+data:
+  prometheus.yaml: |-
+    {
+        "apiVersion": 1,
+        "datasources": [
+            {
+               "access":"proxy",
+                "editable": true,
+                "name": "prometheus",
+                "orgId": 1,
+                "type": "prometheus",
+                "url": "{{ .Values.grafana.prometheusUrl }}",
+                "version": 1
+            }
+        ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+data:
+  dashboards.yaml: |-
+    apiVersion: 1
+    providers:
+      - name: 'Metrics'
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: true
+        type: file
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -81,38 +103,19 @@ spec:
             name: grafana-dashboards-def
 ---
 apiVersion: v1
-kind: ConfigMap
+kind: Service
 metadata:
-  name: grafana-datasources
-data:
-  prometheus.yaml: |-
-    {
-        "apiVersion": 1,
-        "datasources": [
-            {
-               "access":"proxy",
-                "editable": true,
-                "name": "prometheus",
-                "orgId": 1,
-                "type": "prometheus",
-                "url": "{{ .Values.grafana.prometheusUrl }}",
-                "version": 1
-            }
-        ]
-    }
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboards-config
-data:
-  dashboards.yaml: |-
-    apiVersion: 1
-    providers:
-      - name: 'Metrics'
-        updateIntervalSeconds: 10
-        allowUiUpdates: true
-        options:
-          path: /var/lib/grafana/dashboards
-          foldersFromFilesStructure: true
-        type: file
+  name: grafana
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
+spec:
+  selector:
+    app: grafana
+  type: {{ .Values.grafana.service.type }}
+  ports:
+    - port: {{ .Values.alertmanager.service.port }}
+      targetPort: 3000
+      {{- if .Values.grafana.service.nodePort }}
+      nodePort: {{ .Values.grafana.service.nodePort }}
+      {{- end }}
