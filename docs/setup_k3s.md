@@ -54,56 +54,6 @@ helm install nemesis-quickstart nemesis/quickstart -f values.yaml
 
 Nemesis requires ingress-nginx for routing HTTP requests and the Elastic operator for managing Elasticsearch instances. Follow these steps to install these dependencies:
 
-#### Ingress-NGINX
-
-Add the ingress-nginx manifest file to `/var/lib/rancher/k3s/server/manifests/nginx.yaml` with the configuration provided below:
-
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ingress-nginx
----
-apiVersion: helm.cattle.io/v1
-kind: HelmChart
-metadata:
-  name: ingress-nginx
-  namespace: kube-system
-spec:
-  chart: ingress-nginx
-  repo: https://kubernetes.github.io/ingress-nginx
-  targetNamespace: ingress-nginx
-  version: v4.0.19
-  set:
-  valuesContent: |-
-    fullnameOverride: ingress-nginx
-    prometheus:
-      port: 9113
-    tcp:
-      5044: 'default/nemesis-ls-beats:5044'
-    controller:
-      kind: DaemonSet
-      dnsPolicy: ClusterFirstWithHostNet
-      watchIngressWithoutClass: true
-      allowSnippetAnnotations: false
-      hostNetwork: true
-      hostPort:
-        enabled: true
-      publishService:
-        enabled: false
-      service:
-        enabled: false
-      extraArgs:
-        default-ssl-certificate: default/nemesis-cert
-      config:
-        proxy-body-size: 5000m
-```
-
-K3s will periodically enumerate this folder for new manifests and automatically apply them. You can check if the Helm chart has been applied by running:
-
-```bash
-helm ls -A | grep ingress-nginx
-```
 
 #### Elastic Operator
 
