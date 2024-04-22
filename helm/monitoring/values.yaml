@@ -15,18 +15,22 @@ elasticsearchExporter:
     pullPolicy: IfNotPresent
 
 alertmanager:
-  nodePort: 31000
+  resources:
+    requests:
+      cpu: 500m
+      memory: 500M
+    limits:
+      cpu: 1
+      memory: 1Gi
   image:
     repository: prom/alertmanager
     tag: v0.24.0
     pullPolicy: IfNotPresent
-    resources:
-      requests:
-        cpu: 500m
-        memory: 500M
-      limits:
-        cpu: 1
-        memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 9093
+    # nodePort: 31000
+    nodePort:
 
 fluentd:
   elasticsearchHost: "nemesis-es-http.default.svc.cluster.local"
