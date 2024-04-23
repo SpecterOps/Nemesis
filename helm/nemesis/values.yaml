@@ -5,7 +5,7 @@ operation:
   logLevel: "INFO"
   assessmentId: "ASSESS-0"
   # Can't be localhost because of URL validation in passwordcracker container
-  nemesisHttpServer: "http://127.0.0.1:80/"
+  nemesisHttpServer: "https://127.0.0.1:443/"
   # Environment defines how pods should be deployed
   #   "development" will deploy without persistent storage and won't deploy the enrichment container
   #   "test" will deploy without persistent storage
