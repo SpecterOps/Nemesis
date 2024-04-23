@@ -56,7 +56,7 @@ class NemesisRabbitMQProducer(MessageQueueProducerInterface):
 
     @classmethod
     async def create(self, uri: str, queue: NemesisQueue) -> "NemesisRabbitMQProducer":
-        connection = await aio_pika.connect_robust(uri)
+        connection = await aio_pika.connect_robust(uri, timeout=10)
         channel = await connection.channel()
 
         # Ensure the exchange exists

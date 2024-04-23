@@ -1,0 +1,16 @@
+global:
+templates:
+  - '/etc/alertmanager/*.tmpl'
+route:
+  receiver: 'null'
+  group_by: ['alertname', 'priority']
+  group_wait: 30s
+  repeat_interval: 30m
+  routes:
+    - receiver: "null"
+      match:
+        severity: critical
+      group_wait: 30s
+      repeat_interval: 20m
+receivers:
+  - name: "null"

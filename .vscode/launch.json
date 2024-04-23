@@ -19,33 +19,16 @@
                     "sourceFileMap": {
                         "${workspaceFolder}/cmd/enrichment": "/app/cmd/enrichment"
                     },
-                    "justMyCode": false,
+                    "justMyCode": false
+                },
+                {
+                    "image": "enrichment-dev",
+                    "containerName": "enrichment",
+                    "sourceFileMap": {
+                        "${workspaceFolder}/cmd/enrichment": "/app/cmd/enrichment"
+                    }
                 }
             ]
-        },
-        {
-            "name": "Kubernetes: Run/Debug Dashboard",
-            "type": "cloudcode.kubernetes",
-            "request": "launch",
-            "skaffoldConfig": "${workspaceFolder}/skaffold.yaml",
-            "skaffoldFlags": {
-                "modules": [
-                    "dashboard"
-                ]
-            },
-            "watch": true,
-            "cleanUp": false,
-            "portForward": true,
-            "debug": [
-                {
-                    "image": "dashboard",
-                    "sourceFileMap": {
-                        "${workspaceFolder}/cmd/dashboard": "/app/cmd/dashboard"
-                    },
-                    "justMyCode": false
-                }
-            ],
-            "imageRegistry": "docker.io"
         }
     ]
 }

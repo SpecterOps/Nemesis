@@ -3,11 +3,14 @@ import base64
 import json
 import os
 import tempfile
+import time
 import urllib.parse
 import uuid
 from datetime import datetime
 from enum import StrEnum
 from typing import Dict, List, Optional
+
+import aiofiles
 
 # 3rd Party Libraries
 import httpx
@@ -16,7 +19,7 @@ import structlog
 import uvicorn
 from aio_pika import connect_robust
 from elasticsearch import AsyncElasticsearch
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response
 from google.protobuf.json_format import Parse
 
@@ -30,11 +33,11 @@ from prometheus_async import aio
 from prometheus_client import Summary
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
+from starlette.requests import ClientDisconnect
+from streaming_form_data import StreamingFormDataParser
+from streaming_form_data.targets import FileTarget
 
-from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
-    map_unordered,
-    return_args_and_exceptions,
-)
+from enrichment.cli.submit_to_nemesis.submit_to_nemesis import map_unordered, return_args_and_exceptions
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
 
@@ -126,6 +129,7 @@ class NemesisApi(TaskInterface):
     assessment_id: str
     log_level: str
     reprocessing_workers: int
+    storage_expiration_days: int
 
     def __init__(
         self,
@@ -138,6 +142,7 @@ class NemesisApi(TaskInterface):
         assessment_id: str,
         log_level: str,
         reprocessing_workers: int,
+        storage_expiration_days: int,
     ) -> None:
         self.storage = storage
         self.rabbitmq_connection_uri = rabbitmq_connection_uri
@@ -148,6 +153,7 @@ class NemesisApi(TaskInterface):
         self.assessment_id = assessment_id
         self.log_level = log_level
         self.reprocessing_workers = reprocessing_workers
+        self.storage_expiration_days = storage_expiration_days
 
     async def run(self) -> None:
         app = FastAPI(title="Nemesis API")
@@ -160,6 +166,7 @@ class NemesisApi(TaskInterface):
             self.queue_map,
             self.assessment_id,
             self.reprocessing_workers,
+            self.storage_expiration_days,
         )
 
         app.include_router(routes.router)
@@ -203,6 +210,7 @@ class NemesisApiRoutes:
     producers: Dict[NemesisQueue, MessageQueueProducerInterface]
     assessment_id: str
     reprocessing_workers: int
+    storage_expiration_days: int
 
     def __init__(
         self,
@@ -214,6 +222,7 @@ class NemesisApiRoutes:
         queues: Dict[NemesisQueue, MessageQueueProducerInterface],
         assessment_id: str,
         reprocessing_workers: int,
+        storage_expiration_days: int,
     ) -> None:
         super().__init__()
         self.storage = storage
@@ -224,6 +233,7 @@ class NemesisApiRoutes:
         self.producers = queues
         self.assessment_id = assessment_id
         self.reprocessing_workers = reprocessing_workers
+        self.storage_expiration_days = storage_expiration_days
         self.router = APIRouter()
         self.router.add_api_route("/", self.home, methods=["GET"])
         self.router.add_api_route("/ready", self.ready, methods=["GET"])
@@ -244,7 +254,7 @@ class NemesisApiRoutes:
         return Response()
 
     async def reset(self):
-        """When called, purges Postgres, Elastic, and RabbitMQ."""
+        """When called, purges Postgres, Elastic, RabbitMQ, and datalake files."""
         await logger.ainfo("Clearing datastore!")
 
         # first purge all RabbitMQ queue messages
@@ -261,6 +271,10 @@ class NemesisApiRoutes:
             if await self.es_client.indices.exists(index=ES_INDEX):
                 await logger.ainfo("Clearing Elastic index", index=ES_INDEX)
                 await self.es_client.indices.delete(index=ES_INDEX)
+
+        # and finally clear the files from the datalake
+        await logger.ainfo("Deleting files in the datalake.")
+        await self.storage.delete_all_files()
 
     async def reprocess(self):
         """When called, triggers the reprocessing of all existing data messages."""
@@ -407,16 +421,39 @@ class NemesisApiRoutes:
     @aio.time(Summary("post_file", "POST file"))  # type: ignore
     async def post_file(self, request: Request) -> Dict[str, str]:
         await logger.ainfo("Received file upload request")
-        with tempfile.NamedTemporaryFile() as tmpfile:
-            # TODO: Write to disk and then create a queue that uploads the file in
-            # the background so we don't have to wait for the upload to finish before sending a response.
-            # Right now, large uploads could take quite a while to upload and API clients could timeout
-            # before recieving a response, despite the upload completing successfully
-            with open(tmpfile.name, "wb") as f:
-                f.write(await request.body())
+        start = time.time()
 
-            file_uuid = await self.storage.upload(f.name)
-            return {"object_id": str(file_uuid)}
+        try:
+            content_type = request.headers["content-type"]
+            with tempfile.NamedTemporaryFile() as tmpfile:
+                # handle raw binary file uploads
+                if content_type == "application/octet-stream":
+                    async with aiofiles.open(tmpfile.name, "wb") as f:
+                        async for chunk in request.stream():
+                            await f.write(chunk)
+                # handle large file multi-part uploads
+                # Ref - https://stackoverflow.com/a/73443824
+                elif content_type.startswith("multipart/form-data"):
+                    file_ = FileTarget(tmpfile.name)
+                    parser = StreamingFormDataParser(headers=request.headers)
+                    parser.register("file", file_)
+                    async for chunk in request.stream():
+                        parser.data_received(chunk)
+                else:
+                    raise HTTPException(status_code=422, detail=f"Content type '{content_type}' not allowed.")
+                end = time.time()
+                file_size = os.path.getsize(tmpfile.name)
+                await logger.ainfo(f"File ({file_size} bytes) uploaded in {(end-start):.2f} seconds")
+                # the first file that comes in will set the bucket file expiry policy (for now)
+                file_uuid = await self.storage.upload(tmpfile.name, self.storage_expiration_days)
+                return {"object_id": str(file_uuid)}
+        except ClientDisconnect:
+            await logger.awarning("Client Disconnected")
+        except Exception as e:
+            await logger.aerror(f"Exception in file upload: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"There was an error uploading the file: {e}"
+            )
 
     @aio.time(Summary("download", "Download file"))  # type: ignore
     async def download(

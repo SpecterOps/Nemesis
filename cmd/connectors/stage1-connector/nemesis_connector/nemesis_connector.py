@@ -27,7 +27,7 @@ import requests
 from pip._internal import main as pipmain
 
 # # Hard code creds if you don't want to bother editing OST's docker-compose file
-# os.environ["NEMESIS_URL"] = "http://192.168.80.128:8080/api/"
+# os.environ["NEMESIS_URL"] = "https://192.168.80.128:8080/api/"
 # os.environ["NEMESIS_USERNAME"] = "nemesis"
 # os.environ["NEMESIS_PASSWORD"] = "Qwerty12345"
 # os.environ["NEMESIS_PROJECT"] = "ASSESS-TEST"

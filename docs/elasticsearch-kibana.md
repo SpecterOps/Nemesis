@@ -8,26 +8,19 @@ The custom resource definitions that the helm chart installs can all be found [h
 
 # Storage
 
-By default this Elasticsearch instance uses a persistent data store. The size of the datastore can be adjusted in `./kubernetes/elastic/elasticsearch.yaml` by modifying the `storage: 20Gi` in the "PersistentVolume" and "PersistentVolumeClaim" config sections.
+By default this Elasticsearch instance uses a persistent data store. The size of the datastore can be adjusted in the [values.yaml](../helm/nemesis/values.yaml) file by modifying the `storage: 20Gi` in the `elasticsearch` config section.
 
-To use temporary storage that is wiped on every Skaffold run, comment the existing code in `./kubernetes/elastic/elasticsearch.yaml` and uncomment the code at the bottom of the file.
+To use temporary storage that is wiped on every run, set "environment" to "test" at the top of [values.yaml](../helm/nemesis/values.yaml).
 
 # Accessing Elastic/Kibana
-To login to Elastic or Kibana, get the user and password with the following commands:
-```
-kubectl get secret elasticsearch-users -o=go-template='{{index .data "username" | base64decode}}'
-kubectl get secret elasticsearch-users -o=go-template='{{index .data "password" | base64decode}}'
-```
+To login to Elastic or Kibana, run `./scripts/get_service_credentials.sh` to get the basic auth credentials.
 
 Example to confirm elastic is working:
 ```bash
-export K8S_HOST=192.168.230.52
-export ELASTICSEARCH_USER=$(kubectl get secret elasticsearch-users -o=go-template='{{index .data "username" | base64decode}}')
-export ELASTICSEARCH_PASSWORD=$(kubectl get secret elasticsearch-users -o=go-template='{{index .data "password" | base64decode}}')
-curl -u "${ELASTICSEARCH_USER}:${ELASTICSEARCH_PASSWORD}" -k "http://${K8S_HOST}:8080/elastic/"
+export BASIC_AUTH_USER=$(kubectl get secret operation-creds -o jsonpath="{.data.basic-auth-user}" | base64 -d)
+export BASIC_AUTH_PASSWORD=$(kubectl get secret operation-creds -o jsonpath="{.data.basic-auth-password}" | base64 -d)
+curl -k -u "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" "https://localhost:8080/elastic/"
 ```
-
-
 
 # Troubleshooting
 ## Helm can't install the elastic operator
@@ -36,14 +29,14 @@ See https://github.com/elastic/cloud-on-k8s/issues/5325#issuecomment-1124682097.
 ## Elastic endpoints for troubleshooting
 
 - Any issues with cluster allocation:
-  - http://127.0.0.1:8080/elastic/_cluster/allocation/explain
+  - https://localhost:8080/elastic/_cluster/allocation/explain
 - Indicies/shard health:
-  - http://127.0.0.1:8080/elastic/_cat/indices?v&health=yellow
-  - http://127.0.0.1:8080/elastic/_cat/shards?v
+  - https://localhost:8080/elastic/_cat/indices?v&health=yellow
+  - https://localhost:8080/elastic/_cat/shards?v
 - Drive space:
-  - http://127.0.0.1:8080/elastic/_cat/allocation?v
+  - https://localhost:8080/elastic/_cat/allocation?v
 - CPU utilization/etc:
-  - http://127.0.0.1:8080/elastic/_cat/nodes?v
+  - https://localhost:8080/elastic/_cat/nodes?v
 
 By default, Elastic will not allocate additional shard if 90%+ of the hard disk in the pod is allocated. If Minikube fills up, the drive space will be reflected as also filled in the Elastic container. This causes Kibana to fail in object creation, and Kibana will be stuck in a non-functional startup look. The solution is to ssh into minikube with `minikube ssh` and then run `docker system prune` to free up resources.
 
@@ -54,7 +47,7 @@ An "easy" way to build elastic search queries is to do the search in Kibana's "D
 
 ## 1 - Simple search via query string for a process name and message GUID:
 ```
-curl -k -u nemesis:Qwerty12345 -XGET 'http://192.168.230.52:8080/elastic/process_category/_search?q=name:explorer.exe%20AND%20metadata.messageId:75f07c40-a4fe-4eb7-bfe6-4b1b04c79d4f&pretty'
+curl -k -u nemesis:Qwerty12345 -XGET 'https://192.168.230.52:8080/elastic/process_category/_search?q=name:explorer.exe%20AND%20metadata.messageId:75f07c40-a4fe-4eb7-bfe6-4b1b04c79d4f&pretty'
 ```
 
 More info about the query string syntax [here](https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-query-string-query.html#query-string-syntax).
@@ -62,7 +55,7 @@ More info about the query string syntax [here](https://www.elastic.co/guide/en/e
 
 ## Same search as above, but only returning the name/category fields
 ```bash
-curl -k -X POST -u nemesis:Qwerty12345 -H 'Content-Type: application/json' 'http://192.168.230.52:8080/elastic/process_category/_search?pretty' -d '
+curl -k -X POST -u nemesis:Qwerty12345 -H 'Content-Type: application/json' 'https://192.168.230.52:8080/elastic/process_category/_search?pretty' -d '
 {
     "_source": {
         "includes": [ "name", "category.*" ]
@@ -91,7 +84,7 @@ curl -k -X POST -u nemesis:Qwerty12345 -H 'Content-Type: application/json' 'http
 **Use case:** If the minikube node ever needs to be deleted (e.g., something goes wrong to start fresh or you're done with an op) and you want to backup Elastic's data.
 
 **Backup**
-1. Ensure Nemesis's Elastic DB or minikube is stopped: `minikube stop` or `kubectl delete es/nemesis`.
+1. Ensure Nemesis's Elastic DB or minikube is stopped: `minikube stop` or `kubectl delete nemesis-es-default-0`.
 
 2. Copy the ES's files to somewhere else:
 ```

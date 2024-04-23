@@ -10,7 +10,7 @@ Make sure the following environment variables are set before running `nemesis-co
 | Configuration Variable             | Required | Example                     | Default (if applicable) | Description                                                                                                   |
 |------------------------------------|----------|-----------------------------|-------------------------|---------------------------------------------------------------------------------------------------------------|
 | NEMESIS_COBALTSTRIKE_DOWNLOADS_DIR | Yes      | /tmp/                       |                         | Temporary directory used when syncing downloads from a Cobalt Strike teamserver                               |
-| NEMESIS_BASE_URL                   | Yes      | http://192.168.230.42:8080/ |                         | Base URL used when constructing the URL to web api, elastic, kibana, etc (e.g., NEMESIS_BASE_URL + "/kibana") |
+| NEMESIS_BASE_URL                   | Yes      | https://192.168.230.42:8080/ |                         | Base URL used when constructing the URL to web api, elastic, kibana, etc (e.g., NEMESIS_BASE_URL + "/kibana") |
 | NEMESIS_CREDS                      | Yes      | nemesis:Qwerty12345         |                         | Basic auth credentials used when accessing the Nemesis frontend web endpoints                                 |
 | NEMESIS_DEBUG_JSON                 | No       | 1                           | 0                       | Print JSON responses from web API requests                                                                    |
 | NEMESIS_PROJECT                    | Yes      | ASSESS-123                  |                         | Assessmend project ID the teamserver is associated with                                                       |
@@ -19,7 +19,7 @@ Make sure the following environment variables are set before running `nemesis-co
 Example:
 ```
 export NEMESIS_COBALTSTRIKE_DOWNLOADS_DIR=/tmp/
-export NEMESIS_BASE_URL=http://192.168.230.100:8080/
+export NEMESIS_BASE_URL=https://192.168.230.100:8080/
 export NEMESIS_CREDS="nemesis:Qwerty12345"
 # export NEMESIS_DEBUG_JSON="1"
 export NEMESIS_PROJECT=ASSESS-X

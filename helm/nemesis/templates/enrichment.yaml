@@ -1,0 +1,441 @@
+{{- if eq .Values.operation.environment "production" }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: cracklist-pv-claim
+  labels:
+    app: enrichment
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: cracklist-pv-volume
+{{- end }}
+
+{{- if eq .Values.operation.environment "production" }}
+---
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: cracklist-pv-volume
+  labels:
+    type: local
+    app: enrichment
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "/mnt/data/cracklist/"
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yara-rules
+data:
+  {{- $files := .Files.Glob "files/yara/*.yara" }}
+  {{- if $files }}
+  {{- range $path, $_ := $files }}
+  {{ $path | base }}: |
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
+  {{- end }}
+{{- if ne .Values.operation.environment "development" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: enrichment
+  labels:
+    app: enrichment
+    component: enrichment-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: enrichment
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: enrichment
+        component: enrichment-pipeline
+    spec:
+      volumes:
+        {{- if eq .Values.operation.environment "production" }}
+        - name: cracklist
+          persistentVolumeClaim:
+            claimName: cracklist-pv-claim
+        {{- else }}
+        - name: cracklist
+          emptyDir: {}
+        {{- end }}
+        - name: noseyparker
+          emptyDir: {}
+        - name: noseyparker-rules
+          configMap:
+            name: noseyparker-rules
+        - name: yara-rules
+          configMap:
+            name: yara-rules
+      initContainers:
+        - name: noseyparker
+          image: ghcr.io/praetorian-inc/noseyparker:v0.16.0
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "cp /usr/local/bin/noseyparker /opt/noseyparker/"]
+          volumeMounts:
+            - name: noseyparker
+              mountPath: /opt/noseyparker/
+      containers:
+        - env:
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: log-level
+            - name: DATA_DOWNLOAD_DIR
+              value: "/tmp"
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: environment
+            - name: STORAGE_EXPIRATION_DAYS
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: storage-expiration-days
+
+            - name: CRACK_WORDLIST_TOP_WORDS
+              value: "10000" # either 10,000 or 100,000
+            - name: JTR_INSTANCES
+              value: "1"
+
+            {{- range .Values.enrichment.extraEnvVars }}
+            - name: {{ .name }}
+              value: "{{ .value }}"
+            {{- end }}
+
+            - name: CHUNK_SIZE # number of bytes to read at a time per file
+              value: "128000"
+            - name: MODEL_WORD_LIMIT # only extract passwords for documents below this word limit
+              value: "100000"
+            - name: YARA_API_PORT
+              value: "9700"
+
+            - name: CONTEXT_WORDS
+              value: "5"
+            - name: ML_CHUNK_SIZE
+              value: "5000"
+            - name: PROB_THRESHOLD
+              value: ".95"
+
+            - name: TENSORFLOW_URI
+              value: "http://tensorflow-serving:8501/"
+            - name: TIKA_URI
+              value: http://tika:9998/
+            - name: DOTNET_URI
+              value: http://dotnet:9800/
+            - name: GOTENBERG_URI
+              value: http://gotenberg:3000/
+            - name: ML_MODELS_URI
+              value: http://127.0.0.1:5000/
+            - name: CRACK_LIST_URI
+              value: http://127.0.0.1:9900/
+            - name: NEMESIS_HTTP_SERVER
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: nemesis-http-server
+            - name: PUBLIC_NEMESIS_URL
+              value: "$(NEMESIS_HTTP_SERVER)dashboard/"
+            - name: PUBLIC_KIBANA_URL
+              value: "$(NEMESIS_HTTP_SERVER)kibana/"
+            - name: WEB_API_URL
+              value: "$(NEMESIS_HTTP_SERVER)api/"
+
+            - name: POSTGRES_SERVER
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DATABASE
+              value: nemesis
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.existingSecret }}
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.existingSecret }}
+                  key: postgres-password
+            - name: POSTGRES_CONNECTION_URI
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
+            - name: POSTGRES_ASYNC_CONNECTION_URI
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
+            - name: DB_ITERATION_SIZE
+              value: "1000"
+            - name: PROMETHEUS_DISABLE_CREATED_SERIES
+              value: "True"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aws.existingSecret }}
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aws.existingSecret }}
+                  key: aws-secret-key
+            - name: AWS_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-config
+                  key: aws-bucket
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-config
+                  key: aws-default-region
+            - name: AWS_KMS_KEY_ALIAS
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-config
+                  key: aws-kms-key-alias
+
+            - name: STORAGE_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: storage_provider
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.existingSecret }}
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minio.existingSecret }}
+                  key: root-password
+
+            - name: ASSESSMENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: assessment-id
+            - name: RABBITMQ_CONNECTION_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rabbitmq.existingSecret }}
+                  key: rabbitmq-connectionuri
+            - name: ELASTICSEARCH_URL
+              value: http://nemesis-es-internal-http:9200/
+            - name: KIBANA_URL
+              value: http://nemesis-kb-http:5601/
+            - name: ELASTICSEARCH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.elasticsearch.existingSecret }}
+                  key: username
+            - name: ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.elasticsearch.existingSecret }}
+                  key: password
+            - name: PROMETHEUS_PORT
+              value: "8000"
+            - name: SLACK_CHANNEL
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: slack-alert-channel
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.operation.existingSecret }}
+                  key: slack-web-hook
+            - name: SLACK_USERNAME
+              value: Nemesis
+            - name: SLACK_EMOJI
+              value: ":smiling_imp:"
+            - name: DISABLE_ALERTING
+              valueFrom:
+                configMapKeyRef:
+                  name: operation-config
+                  key: disable-slack-alerting
+            - name: REPROCESSING_WORKERS
+              value: "5"
+
+          image: "{{ .Values.enrichment.image.repository }}:{{ .Values.enrichment.image.tag }}"
+          imagePullPolicy: {{ .Values.enrichment.image.pullPolicy }}
+          name: enrichment
+          ports:
+            - containerPort: 9700
+              name: yara-http
+          resources: {{ toYaml .Values.enrichment.resources | nindent 12 }}
+          volumeMounts:
+            - name: cracklist
+              mountPath: /opt/cracklist/
+            - name: noseyparker
+              mountPath: /opt/noseyparker/
+            - name: noseyparker-rules
+              mountPath: /opt/noseyparker-rules
+              readOnly: true
+            - name: yara-rules
+              mountPath: /app/cmd/enrichment/enrichment/lib/public_yara/extrarules
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: yara-http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+      restartPolicy: Always
+{{- end }}
+
+{{- if ne .Values.operation.environment "development" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: enrichment
+    component: enrichment-pipeline
+  name: enrichment-yara
+spec:
+  type: NodePort
+  ports:
+    - name: "9700"
+      port: 9700
+      targetPort: 9700
+      nodePort: {{ .Values.enrichment.yara.nodePort }}
+  selector:
+    app: enrichment
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: enrichment
+    component: enrichment-pipeline
+  name: enrichment-cracklist
+spec:
+  type: NodePort
+  ports:
+    - name: "9900"
+      port: 9900
+      targetPort: 9900
+      nodePort: {{ .Values.enrichment.cracklist.nodePort }}
+  selector:
+    app: enrichment
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: enrichment
+    component: enrichment-pipeline
+  name: enrichment-webapi
+spec:
+  type: NodePort
+  ports:
+    - name: "9910"
+      port: 9910
+      targetPort: 9910
+      nodePort: {{ .Values.enrichment.webapi.nodePort }}
+  selector:
+    app: enrichment
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: enrichment
+    component: enrichment-landingpage
+  name: enrichment-landingpage
+spec:
+  type: NodePort
+  ports:
+    - name: "9920"
+      port: 9920
+      targetPort: 9920
+      nodePort: {{ .Values.enrichment.landingpage.nodePort }}
+  selector:
+    app: enrichment
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: enrichment
+    component: enrichment-monitoring
+  name: enrichment-monitoring
+spec:
+  type: NodePort
+  ports:
+    - name: "8000"
+      port: 8000
+      targetPort: 8000
+      nodePort: {{ .Values.enrichment.monitoring.nodePort }}
+  selector:
+    app: enrichment
+{{- end }}
+
+{{- if ne .Values.operation.environment "development" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: enrichment-ingress
+  annotations:
+    # nginx.ingress.kubernetes.io/proxy-body-size: "5000m"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
+    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /crack-list(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: enrichment-cracklist
+                port:
+                  number: 9900
+          - path: /yara(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: enrichment-yara
+                port:
+                  number: 9700
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: enrichment-webapi
+                port:
+                  number: 9910
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: enrichment-landingpage
+                port:
+                  number: 9920
+{{- end }}

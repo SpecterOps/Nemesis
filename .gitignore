@@ -7,4 +7,6 @@ __pycache__
 *.asc
 nemesis.config
 config.yml
+submit_to_nemesis.yaml
+submit/
 .ruff_cache

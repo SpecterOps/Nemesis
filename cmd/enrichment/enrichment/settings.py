@@ -51,6 +51,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     slack_emoji: str
     slack_channel: Optional[str]
     chunk_size: PositiveInt
+    plaintext_size_limit: PositiveInt = 50000000
     yara_api_port: int = Field(None, ge=0, le=65535)
     disable_alerting: bool = False
     crack_wordlist_top_words: CrackWordlistSize  # either 10000 or 100000 for now
@@ -58,6 +59,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     reprocessing_workers: PositiveInt = 5  # number of parallel reprocessing workers
     tasks: Optional[List[str]] = None  # List of tasks to start
     registry_value_batch_size: PositiveInt = 5000  # number of registry values to emit per reg carving message
+    storage_expiration_days: PositiveInt = 100  # number of days to set for file storage auto-expiry
 
     @validator("slack_channel")
     def slack_channel_is_valid(cls, channel: Optional[str]) -> Optional[str]:

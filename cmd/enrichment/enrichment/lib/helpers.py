@@ -1009,14 +1009,14 @@ def hash_file(nemesis_uuid: str) -> Optional[pb.FileHashes]:
         return None
 
 
-def get_magic_type(nemesis_uuid: str) -> str:
+def get_magic_type(nemesis_uuid: str, mime: bool = False) -> str:
     """Gets the magic type of a file.
 
     Uses python-magic to retrieve the file type via libmagic for the
     specified nemesis UUID file (a la the 'file' command but without subprocess).
     """
 
-    magic_string = magic.from_file(nemesis_uuid)
+    magic_string = magic.from_file(nemesis_uuid, mime=mime)
 
     if magic_string.startswith("Composite Document File V2 Document"):
         magic_string = "Composite Document File V2 Document"
@@ -1032,14 +1032,6 @@ def is_dotnet_assembly(nemesis_uuid: str) -> bool:
 
 def tika_compatible(mime_type: str) -> bool:
     """Returns True if the mime type can be used with Tika."""
-    # # image_regex = "^.*\\.(exr|avif|bmp|cgm|emf|g3|gif|heic|heif|ief|jp2|jpg|jpeg|jpm|jpf|jxl|ntf|png|btif|svg|tiff|psd|ppj|dgn|djvu|dxb|dxf|fbs|fpx|fst|mmr|rlc|mdi|npx|wbmp|xif|webp|wmf|bpg|cr2|cr3|rgb|xwd)$"
-    # image_regex = "^.*\\.(bmp|gif|jpg|jpeg|png|svg|tiff|wbmp|webp|wmf)$"
-    # is_image = re.match(image_regex, file_path, re.IGNORECASE) is not None
-
-    # misc_regex = "^.*\\.(txt|rtf|chm|pdf)$"
-    # is_misc = re.match(misc_regex, file_path, re.IGNORECASE) is not None
-
-    # return is_office_doc(file_path) or is_image or is_misc
 
     # from https://tika.apache.org/2.8.0/formats.html#Full_list_of_Supported_Formats_in_standard_artifacts
     supported_mime_types = {
@@ -1224,6 +1216,14 @@ def nemesis_error(message: str) -> pb.Error:
     return error
 
 
+def is_jar(path: str) -> bool:
+    """Returns true if the file is a JAR."""
+    magic = get_magic_type(path).lower()
+    is_jar_file = True if magic == "java archive data (jar)" else False
+    is_zip_file = libarchive.is_archive(path, ["zip"])
+    return is_jar_file and is_zip_file
+
+
 def is_archive(path: str) -> bool:
     """Returns true if the file supplied is a Zip, 7z, Tarball, or CAB."""
     return (
@@ -1250,6 +1250,13 @@ def get_archive_size(path: str) -> int:
     elif tarfile.is_tarfile(path):
         return estimate_uncompressed_gz_size(path)
     elif libarchive.is_archive(path, ["cab"]):
+        total_size = 0
+        with libarchive.Archive(path) as a:
+            for entry in a:
+                total_size += entry.size
+        return total_size
+    # special case for JARs
+    elif libarchive.is_archive(path, ["zip"]):
         total_size = 0
         with libarchive.Archive(path) as a:
             for entry in a:
@@ -1331,6 +1338,15 @@ def extract_archive(path: str) -> str:
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 with open(target_path, "wb") as f:
                     f.write(a.read(entry.size))
+    # special case for JARs
+    elif libarchive.is_archive(path, ["zip"]):
+        with libarchive.Archive(path) as a:
+            for entry in a:
+                target_path = f"{tmp_dir}/{entry.pathname}"
+                # make sure we create all the subfolders needed to extract this file entry
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                with open(target_path, "wb") as f:
+                    f.write(a.read(entry.size))
     else:
         raise FileNotSupportedException("File is not a supported archive format")
     return tmp_dir
@@ -1350,6 +1366,9 @@ def run_noseyparker(path: str) -> Optional[pb.NoseyParker]:
     # the temporary datastore to use for NoseyParker
     temp_dir = f"/tmp/{uuid.uuid4()}/"
 
+    if not os.path.exists("/opt/noseyparker-rules/"):
+        os.makedirs("/opt/noseyparker-rules/")
+
     # run a scan with the temporary datastore
     result = subprocess.run(
         [
@@ -1358,7 +1377,7 @@ def run_noseyparker(path: str) -> Optional[pb.NoseyParker]:
             "--datastore",
             temp_dir,
             "--rules",
-            "/opt/noseyparker/noseyparker.rules",
+            "/opt/noseyparker-rules/",
             path,
         ],
         stdout=subprocess.PIPE,

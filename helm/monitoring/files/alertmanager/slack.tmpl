@@ -1,0 +1,4 @@
+{{ define "slack.devops.text" }}
+{{range .Alerts}}{{.Annotations.DESCRIPTION}}
+{{end}}
+{{ end }}

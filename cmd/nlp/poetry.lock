@@ -1909,6 +1909,7 @@ twisted = ["twisted"]
 [[package]]
 name = "prometheus-client"
 version = "0.20.0"
+version = "0.20.0"
 description = "Python client for the Prometheus monitoring system."
 optional = false
 python-versions = ">=3.8"
@@ -2577,7 +2578,7 @@ files = [
 
 [package.dependencies]
 joblib = ">=1.2.0"
-numpy = ">=1.19.5"
+numpy = ">=1.19.5,<2.0"
 scipy = ">=1.6.0"
 threadpoolctl = ">=2.0.0"
 

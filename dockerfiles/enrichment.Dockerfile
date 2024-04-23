@@ -1,22 +1,8 @@
 ####################################
-# Common python dependencies layer
+# Pre-built python:3.11.2-bullseye base w/ JTR
 ####################################
-FROM python:3.11.2-bullseye AS debcommon
+FROM specterops/nemesis-jtr-base AS dependencies-os
 WORKDIR /app/cmd/enrichment
-
-ENV PYTHONUNBUFFERED=true
-
-
-####################################
-# OS dependencies
-####################################
-FROM debcommon AS dependencies-os
-
-# install our necessary dependencies
-RUN apt-get update -y && apt-get install yara -y && apt-get install git -y && apt-get install wamerican -y && apt-get install libcompress-raw-lzma-perl -y
-
-# build JTR so we build get various X-2john binaries for file hash extraction
-RUN cd /opt/ && git clone https://github.com/openwall/john && cd john/src && ./configure && make
 
 # first we have to pip3 install this *normally* so the _fastpbkdf2.abi3.so properly builds (because Poetry no like)
 RUN pip3 install msfastpbkdf2
@@ -41,22 +27,6 @@ RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://insta
 ####################################
 FROM dependencies-python AS build
 
-# clone the common yara rulebase
-# commit 2a8de15d3c2fb95c1e261edfe3f4154480b93161 - Jan 11, 2023
-#   we have to tag this to a comment because ~sometimes~ (often) invalid rules sneak in
-#   License: Detection Rule License (DRL) 1.1 - https://github.com/Neo23x0/signature-base/blob/master/LICENSE
-RUN git clone https://github.com/Neo23x0/signature-base /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/ && cd /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/ && git checkout 2a8de15d3c2fb95c1e261edfe3f4154480b93161
-# the following use external variables and have to be removed
-#   ref- https:/github.com/Neo23x0/signature-base#external-variables-in-yara-rules
-RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/generic_anomalies.yar
-RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/general_cloaking.yar
-RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/gen_webshells_ext_vars.yar
-RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/thor_inverse_matches.yar
-RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/yara_mixed_ext_vars.yar
-RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/configured_vulns_ext_vars.yar
-RUN rm /app/cmd/enrichment/enrichment/lib/public_yara/signature-base/yara/*_ext_vars* 2> /dev/null || true
-
-
 COPY cmd/enrichment/poetry.lock cmd/enrichment/pyproject.toml ./
 
 # copy local libraries
@@ -74,11 +44,26 @@ RUN cp /usr/local/lib/python3.11/site-packages/msfastpbkdf2/_fastpbkdf2.abi3.so 
 COPY cmd/enrichment/enrichment/ ./enrichment/
 
 
+####################################
+# Container specific dependencies
+####################################
+FROM build AS yara-rules
+ENV PATH="/app/cmd/enrichment/.venv/bin:$PATH"
+
+# Clone our base Yara rules
+#   License: Detection Rule License (DRL) 1.1 - https://github.com/Neo23x0/signature-base/blob/master/LICENSE
+# Set a specific commit for the rule base in case someone changes the license
+#   Commit date - March 2, 2024
+ENV YARA_COMMIT cd7651d2ccf4158a35a8d1cc0441928f7d92818f
+RUN git clone https://github.com/Neo23x0/signature-base/ /signature-base/ && cd /signature-base/ && git checkout ${YARA_COMMIT}
+# Clean the rules to get rid of Thor-ness that throws Yara compilation errors
+RUN python3 enrichment/lib/public_yara/clean_yara_rules.py
+
 
 ####################################
 # Runtime
 ####################################
-# FROM build AS runtime
+FROM yara-rules AS runtime
 ENV PATH="/app/cmd/enrichment/.venv/bin:$PATH"
 
 # for generate_crack_list

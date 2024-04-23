@@ -20,7 +20,7 @@ consumers are:
 - **./cmd/** - contains the custom applications deployed on each container
 - **./dockerfiles/** - contains Dockerfiles for building each container
 - **./docs/** - documentation
-- **./kubernetes/** - the k8s deployment/service configs for each pod/service
+- **./helm/** - the nemesis Helm charts
 - **./packages/** - the protobuf definitions + Go/Python compiled protobufs, and common Python library functions
 - **./skaffold.yaml** - the main skaffold deployment file
 
@@ -37,7 +37,12 @@ it's shiny.
 Easy for people to create consumers without needing to structure their messages
 with protobuf.
 
-### Protobuf
+### ODR
+
+The data that can be input into Nemesis is strictly defined in the [Operational Data
+Reference (ODR)](#odr/README.md).
+
+#### ODR Protobuf
 
 Since the goal of this project is data processing, there should be a schema of
 the data types available. Protobuf is a great solution to schema design because

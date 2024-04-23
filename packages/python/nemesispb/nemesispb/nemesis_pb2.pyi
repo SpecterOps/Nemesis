@@ -4389,6 +4389,7 @@ class FileDataPlaintext(google.protobuf.message.Message):
     ORIGINATING_OBJECT_CONVERTED_PDF_FIELD_NUMBER: builtins.int
     ORIGINATING_OBJECT_PATH_FIELD_NUMBER: builtins.int
     ORIGINATING_OBJECT_SIZE_FIELD_NUMBER: builtins.int
+    SIZE_FIELD_NUMBER: builtins.int
     WORD_COUNT_FIELD_NUMBER: builtins.int
     SUMMARY_FIELD_NUMBER: builtins.int
     NOSEYPARKER_FIELD_NUMBER: builtins.int
@@ -4408,6 +4409,8 @@ class FileDataPlaintext(google.protobuf.message.Message):
     """the path of the originating downloaded file/object, if it exists"""
     originating_object_size: builtins.int
     """the size (in bytes) of the originating file/object, if it exists"""
+    size: builtins.int
+    """size of the raw extracted text, in bytes"""
     word_count: builtins.int
     """number of individual tokens"""
     summary: builtins.str
@@ -4425,12 +4428,13 @@ class FileDataPlaintext(google.protobuf.message.Message):
         originating_object_converted_pdf: builtins.str = ...,
         originating_object_path: builtins.str = ...,
         originating_object_size: builtins.int = ...,
+        size: builtins.int = ...,
         word_count: builtins.int = ...,
         summary: builtins.str = ...,
         noseyparker: global___NoseyParker | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["noseyparker", b"noseyparker"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["enrichments_failure", b"enrichments_failure", "enrichments_success", b"enrichments_success", "noseyparker", b"noseyparker", "object_id", b"object_id", "originating_object_converted_pdf", b"originating_object_converted_pdf", "originating_object_id", b"originating_object_id", "originating_object_path", b"originating_object_path", "originating_object_size", b"originating_object_size", "summary", b"summary", "word_count", b"word_count"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["enrichments_failure", b"enrichments_failure", "enrichments_success", b"enrichments_success", "noseyparker", b"noseyparker", "object_id", b"object_id", "originating_object_converted_pdf", b"originating_object_converted_pdf", "originating_object_id", b"originating_object_id", "originating_object_path", b"originating_object_path", "originating_object_size", b"originating_object_size", "size", b"size", "summary", b"summary", "word_count", b"word_count"]) -> None: ...
 
 global___FileDataPlaintext = FileDataPlaintext
 
@@ -4454,6 +4458,42 @@ class FileDataPlaintextMessage(google.protobuf.message.Message):
     def ClearField(self, field_name: typing_extensions.Literal["data", b"data", "metadata", b"metadata"]) -> None: ...
 
 global___FileDataPlaintextMessage = FileDataPlaintextMessage
+
+@typing_extensions.final
+class FileDataPlaintextChunkMessage(google.protobuf.message.Message):
+    """message for text chunks extracted from a FileDataPlaintext document
+     has simplified metadata since it goes straight back to the NLP service after extraction
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHUNK_SIZE_FIELD_NUMBER: builtins.int
+    TEXT_FIELD_NUMBER: builtins.int
+    PLAINTEXT_OBJECT_ID_FIELD_NUMBER: builtins.int
+    ORIGINATING_OBJECT_ID_FIELD_NUMBER: builtins.int
+    ORIGINATING_OBJECT_PATH_FIELD_NUMBER: builtins.int
+    chunk_size: builtins.int
+    """length of the chunk size, in characters"""
+    text: builtins.str
+    """the raw text of the chunk"""
+    plaintext_object_id: builtins.str
+    """the Nemesis UUID referencing the plaintext file the chunk came from"""
+    originating_object_id: builtins.str
+    """the Nemesis UUID referencing the original file the plaintext was extracted from"""
+    originating_object_path: builtins.str
+    """the path of the originating downloaded file/object the plaintext whole originated from, if it exists"""
+    def __init__(
+        self,
+        *,
+        chunk_size: builtins.int = ...,
+        text: builtins.str = ...,
+        plaintext_object_id: builtins.str = ...,
+        originating_object_id: builtins.str = ...,
+        originating_object_path: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["chunk_size", b"chunk_size", "originating_object_id", b"originating_object_id", "originating_object_path", b"originating_object_path", "plaintext_object_id", b"plaintext_object_id", "text", b"text"]) -> None: ...
+
+global___FileDataPlaintextChunkMessage = FileDataPlaintextChunkMessage
 
 @typing_extensions.final
 class FileDataSourcecode(google.protobuf.message.Message):

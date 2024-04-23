@@ -2,8 +2,8 @@
 
 *Note: for each file mentioned, search for "named_pipe" or "namedpipe" to see an example values for what to do.*
 
-1. Build out the fields for the new new datatype at `./docs/odr/references/\<DATA_TYPE\>.md`
-2. Create a sample structured json input in `./sample_files/structured/\<DATA_TYPE\>.json`
+1. Build out the fields for the new new datatype at `./docs/odr/references/<DATA_TYPE>.md`
+2. Create a sample structured json input in `./sample_files/structured/<DATA_TYPE>.json`
     - In `./cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.py` add a handler at the top of the *process_file()* function.
 3. Build a new **\<DATA_TYPE\>Ingestion** and **\<DATA_TYPE\>IngestionMessage** protbuf definitions in nemesis.proto
 4. In `./cmd/enrichment/enrichment/services/web_api/service.py` add in the data type name to protobuf mapping in MAP at the top of the file.
@@ -18,7 +18,7 @@
         - In the *Container* class add a *inputq_\<DATA_TYPE\>_elasticconnector* similar to the surrounding examples.
         - In *task_elasticconnector()* add the new queue as an argument.
 7. If the ODR should ingest into Postgres:
-    1. In `./kubernetes/postgres/configmap.yaml` create the appropriate table.
+    1. In `./helm/nemesis/files/postgres/nemesis.sql` create the appropriate table.
         - Start up the infra and navigate to the tables in Postgres to ensure everything created correctly (an error will prevent everything from being created).
     2. In `./cmd/enrichment/enrichment/lib/nemesis_db.py`:
         - Create a new dataclass at the top of the file for your object to store in Postgres.

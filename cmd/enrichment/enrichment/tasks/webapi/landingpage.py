@@ -36,8 +36,7 @@ class LandingPageRoutes:
         self.router.add_api_route("/", self.home, methods=["GET"])
 
     async def home(self):
-        return HTMLResponse(
-            """
+        return HTMLResponse("""
 <html>
     <head>
         <title>Nemesis Services</title>
@@ -62,5 +61,4 @@ class LandingPageRoutes:
         <a href="/crack-list/" target="_blank">Password Cracklist Endpoint</a><br>
     </body>
 </html>
-        """
-        )
+        """)

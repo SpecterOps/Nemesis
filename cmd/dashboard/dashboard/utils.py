@@ -54,18 +54,40 @@ engine = create_engine(POSTGRES_CONNECTION_URI)
 ######################################################
 
 
-def semantic_search(search_phrase: str, search_choice: str, num_results: int = 4) -> dict:
-    """
-    Calls {NLP_URL}/semantic_search to extract password candidates from a plaintext document.
-    """
+def text_search(search_phrase: str, use_hybrid: bool, file_path_include: str, file_path_exclude: str, num_results: int = 25) -> dict:
+    """Calls {NLP_URL}/fuzzy_search or {NLP_URL}/hybrid_search to search for text results."""
 
     try:
-        data = {"search_phrase": search_phrase, "search_choice": search_choice, "num_results": num_results}
-        url = f"{NLP_URL}semantic_search"
+        data = {
+            "search_phrase": search_phrase,
+            "file_path_include": file_path_include,
+            "file_path_exclude": file_path_exclude,
+            "num_results": num_results
+        }
+        if use_hybrid:
+            url = f"{NLP_URL}hybrid_search"
+        else:
+            url = f"{NLP_URL}fuzzy_search"
         result = requests.post(url, json=data)
         return result.json()
     except Exception as e:
-        return {"error": f"Error calling semantic_search with search_phrase '{search_phrase}' : {e}"}
+        return {"error": f"Error calling text search {url} with search_phrase '{search_phrase}' : {e}"}
+
+
+def text_to_chunks(s, maxlength=100):
+    start = 0
+    end   = 0
+    while start + maxlength  < len(s) and end != -1:
+        end = s.rfind(" ", start, start + maxlength + 1)
+        if end == -1: break
+        yield s[start:end]
+        start = end +1
+    yield s[start:]
+
+
+def text_to_chunk_display(s):
+    """Used for "wrapping" in st.code()."""
+    return "\n".join(list(text_to_chunks(s)))
 
 
 ######################################################
@@ -847,7 +869,7 @@ def elastic_file_search(object_id: str) -> dict:
         return {}
 
 
-def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
+def elastic_text_search(search_term: str, file_path_include: str, file_path_exclude: str, from_i: int, size: int) -> dict:
     """
     Searches the 'file_data_plaintext' index in Elasticsearch for
     the supplied search term, paginating results based on the
@@ -855,8 +877,40 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
     """
     try:
         es_client = wait_for_elasticsearch()
-        query = {"wildcard": {"text": {"value": search_term, "case_insensitive": True}}}
-        highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
+
+        query = {
+            "bool": {
+                "must": [
+                    {
+                        "wildcard": {"text": {"value": search_term, "case_insensitive": True}}
+                    },
+                ],
+                "must_not": []
+            }
+        }
+        if file_path_include:
+             file_path_include = file_path_include.replace("\\", "/")
+             for file_path_include_part in file_path_include.split("|"):
+                query["bool"]["must"].append(
+                    {
+                        "wildcard": {"originatingObjectPath.keyword": {"value": file_path_include_part, "case_insensitive": True}}
+                    }
+                )
+        if file_path_exclude:
+             file_path_exclude = file_path_exclude.replace("\\", "/")
+             for file_path_exclude_part in file_path_exclude.split("|"):
+                query["bool"]["must_not"].append(
+                    {
+                        "wildcard": {"originatingObjectPath.keyword": {"value": file_path_exclude_part, "case_insensitive": True}}
+                    }
+                )
+
+        highlight = {
+            "pre_tags": [""],
+            "post_tags": [""],
+            "fields": {"text": {}},
+            "max_analyzed_offset": 950000
+        }
         fields = [
             "_id",
             "originatingObjectPath",
@@ -866,8 +920,7 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
             "wordCount",
             "metadata.source",
         ]
-        result = es_client.search(index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields)
-        return result
+        return es_client.search(index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields)
     except Exception as e:
         if "index_not_found_exception" in f"{e}":
             st.error("Elastic index 'file_data_plaintext' doesn't yet exist - no text data has been extracted yet!", icon="🚨")
@@ -876,7 +929,7 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
         return None
 
 
-def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
+def elastic_sourcecode_search(search_term: str, file_path_include: str, file_path_exclude: str, from_i: int, size: int) -> dict:
     """
     Searches the 'file_data_sourcecode' index in Elasticsearch for
     the supplied search term, paginating results based on the
@@ -884,7 +937,32 @@ def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
     """
     try:
         es_client = wait_for_elasticsearch()
-        query = {"wildcard": {"text": {"value": search_term, "case_insensitive": True}}}
+
+        query = {
+            "bool": {
+                "must": [
+                    {
+                        "wildcard": {"text": {"value": search_term, "case_insensitive": True}}
+                    },
+                ]
+            }
+        }
+
+        if file_path_include:
+             file_path_include = file_path_include.replace("\\", "/")
+             query["bool"]["must"].append(
+                {
+                    "wildcard": {"path.keyword": {"value": file_path_include, "case_insensitive": True}}
+                }
+             )
+        if file_path_exclude:
+             file_path_exclude = file_path_exclude.replace("\\", "/")
+             query["bool"]["must_not"] = [
+                {
+                    "wildcard": {"path.keyword": {"value": file_path_exclude, "case_insensitive": True}}
+                }
+             ]
+
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
             "_id",
@@ -1024,98 +1102,15 @@ def get_monaco_languages() -> List[str]:
 
     Ref: https://github.com/microsoft/monaco-editor/tree/d8144cfa0eb66cf9d3cc0507df1ad33bc8fc65c5/src/basic-languages
     """
-    return [
-        "plaintext",
-        "abap",
-        "aes",
-        "apex",
-        "azcli",
-        "bat",
-        "bicep",
-        "c",
-        "csv",
-        "cameligo",
-        "clojure",
-        "coffeescript",
-        "cpp",
-        "csharp",
-        "csp",
-        "css",
-        "cypher",
-        "dart",
-        "dockerfile",
-        "ecl",
-        "elixir",
-        "flow9",
-        "freemarker2",
-        "freemarker2.tag-angle.interpolation-bracket",
-        "freemarker2.tag-angle.interpolation-dollar",
-        "freemarker2.tag-auto.interpolation-bracket",
-        "freemarker2.tag-auto.interpolation-dollar",
-        "freemarker2.tag-bracket.interpolation-bracket",
-        "freemarker2.tag-bracket.interpolation-dollar",
-        "fsharp",
-        "go",
-        "graphql",
-        "handlebars",
-        "hcl",
-        "html",
-        "ini",
-        "java",
-        "javascript",
-        "julia",
-        "kotlin",
-        "less",
-        "lexon",
-        "liquid",
-        "lua",
-        "m3",
-        "markdown",
-        "mdx",
-        "mips",
-        "msdax",
-        "mysql",
-        "objective-c",
-        "pascal",
-        "pascaligo",
-        "perl",
-        "pgsql",
-        "php",
-        "pla",
-        "postiats",
-        "powerquery",
-        "powershell",
-        "proto",
-        "pug",
-        "python",
-        "qsharp",
-        "r",
-        "razor",
-        "redis",
-        "redshift",
-        "restructuredtext",
-        "ruby",
-        "rust",
-        "sb",
-        "scala",
-        "scheme",
-        "scss",
-        "shell",
-        "sol",
-        "sparql",
-        "sql",
-        "st",
-        "swift",
-        "systemverilog",
-        "tcl",
-        "twig",
-        "typescript",
-        "vb",
-        "verilog",
-        "wgsl",
-        "xml",
-        "yaml",
-    ]
+    return ["plaintext", "abap", "aes", "apex", "azcli", "bat", "bicep", "c", "csv", "cameligo", "clojure", "coffeescript",
+            "cpp", "csharp", "csp", "css", "cypher", "dart", "dockerfile", "ecl", "elixir", "flow9",
+            "freemarker2", "fsharp",
+            "go", "graphql", "handlebars", "hcl", "html", "ini", "java", "javascript", "julia", "kotlin", "less", "lexon",
+            "liquid", "lua", "m3", "markdown", "mdx", "mips", "msdax", "mysql", "objective-c", "pascal", "pascaligo",
+            "perl", "pgsql", "php", "pla", "postiats", "powerquery", "powershell", "proto", "pug", "python", "qsharp", "r",
+            "razor", "redis", "redshift", "restructuredtext", "ruby", "rust", "sb", "scala", "scheme", "scss", "shell",
+            "sol", "sparql", "sql", "st", "swift", "systemverilog", "tcl", "twig", "typescript", "vb", "verilog", "wgsl",
+            "xml", "yaml"]
 
 
 def map_extension_to_monaco_language(extension: str) -> str:

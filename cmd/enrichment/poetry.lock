@@ -76,6 +76,17 @@ caio = ">=0.9.0,<0.10.0"
 develop = ["aiomisc-pytest", "coveralls", "pytest", "pytest-cov", "pytest-rst"]
 
 [[package]]
+name = "aiofiles"
+version = "23.2.1"
+description = "File support for asyncio."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "aiofiles-23.2.1-py3-none-any.whl", hash = "sha256:19297512c647d4b27a2cf7c34caa7e405c0d60b5560618a29a9fe027b18b0107"},
+    {file = "aiofiles-23.2.1.tar.gz", hash = "sha256:84ec2218d8419404abcb9f0c02df3f34c6e0a68ed41072acfb1cef5cbc29051a"},
+]
+
+[[package]]
 name = "aiohttp"
 version = "3.9.5"
 description = "Async http client/server framework (asyncio)"
@@ -224,6 +235,17 @@ files = [
 [package.extras]
 dev = ["aiounittest (==1.4.1)", "attribution (==1.6.2)", "black (==23.3.0)", "coverage[toml] (==7.2.3)", "flake8 (==5.0.4)", "flake8-bugbear (==23.3.12)", "flit (==3.7.1)", "mypy (==1.2.0)", "ufmt (==2.1.0)", "usort (==1.0.6)"]
 docs = ["sphinx (==6.1.3)", "sphinx-mdinclude (==0.5.3)"]
+
+[[package]]
+name = "anyascii"
+version = "0.3.2"
+description = "Unicode to ASCII transliteration"
+optional = false
+python-versions = ">=3.3"
+files = [
+    {file = "anyascii-0.3.2-py3-none-any.whl", hash = "sha256:3b3beef6fc43d9036d3b0529050b0c48bfad8bc960e9e562d7223cfb94fe45d4"},
+    {file = "anyascii-0.3.2.tar.gz", hash = "sha256:9d5d32ef844fe225b8bc7cba7f950534fae4da27a9bf3a6bea2cb0ea46ce4730"},
+]
 
 [[package]]
 name = "annotated-types"
@@ -2584,6 +2606,7 @@ cryptography = ">=41.0.5,<43"
 [package.extras]
 docs = ["sphinx (!=5.2.0,!=5.2.0.post0,!=7.2.5)", "sphinx-rtd-theme"]
 test = ["pretend", "pytest (>=3.0.1)", "pytest-rerunfailures"]
+test = ["pretend", "pytest (>=3.0.1)", "pytest-rerunfailures"]
 
 [[package]]
 name = "pypdf"
@@ -3190,6 +3213,31 @@ files = [
 ]
 
 [[package]]
+name = "smart-open"
+version = "7.0.4"
+description = "Utils for streaming large files (S3, HDFS, GCS, Azure Blob Storage, gzip, bz2...)"
+optional = false
+python-versions = "<4.0,>=3.7"
+files = [
+    {file = "smart_open-7.0.4-py3-none-any.whl", hash = "sha256:4e98489932b3372595cddc075e6033194775165702887216b65eba760dfd8d47"},
+    {file = "smart_open-7.0.4.tar.gz", hash = "sha256:62b65852bdd1d1d516839fcb1f6bc50cd0f16e05b4ec44b52f43d38bcb838524"},
+]
+
+[package.dependencies]
+wrapt = "*"
+
+[package.extras]
+all = ["azure-common", "azure-core", "azure-storage-blob", "boto3", "google-cloud-storage (>=2.6.0)", "paramiko", "requests", "zstandard"]
+azure = ["azure-common", "azure-core", "azure-storage-blob"]
+gcs = ["google-cloud-storage (>=2.6.0)"]
+http = ["requests"]
+s3 = ["boto3"]
+ssh = ["paramiko"]
+test = ["azure-common", "azure-core", "azure-storage-blob", "boto3", "google-cloud-storage (>=2.6.0)", "moto[server]", "paramiko", "pytest", "pytest-rerunfailures", "requests", "responses", "zstandard"]
+webhdfs = ["requests"]
+zst = ["zstandard"]
+
+[[package]]
 name = "sniffio"
 version = "1.3.1"
 description = "Sniff out which async library your code is running under"
@@ -3317,6 +3365,47 @@ files = [
 
 [package.dependencies]
 pbr = ">=2.0.0,<2.1.0 || >2.1.0"
+
+[[package]]
+name = "streaming-form-data"
+version = "1.15.0"
+description = "Streaming parser for multipart/form-data"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "streaming-form-data-1.15.0.tar.gz", hash = "sha256:891e011bcc18dceea06f64b20d65d79f77830bf6d746ae89d8debdce16afeea5"},
+    {file = "streaming_form_data-1.15.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:a883f303bbd01423aa2d3317ff6c80641b6e9892308e11075d171352e75caf64"},
+    {file = "streaming_form_data-1.15.0-cp310-cp310-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:50c862b05300156a19a3c55f2ecaaf715e890d928c8fd2d9f10be150f67d1d27"},
+    {file = "streaming_form_data-1.15.0-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5912818d2af4b8548ac6c2d2c3d0322065731f18216d394550abd4630dd97993"},
+    {file = "streaming_form_data-1.15.0-cp310-cp310-musllinux_1_1_i686.whl", hash = "sha256:7a33759a85696a43459c064584969777a84ba3bda932b79cab971b09a29baf11"},
+    {file = "streaming_form_data-1.15.0-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:6096bbf765c765258f6d20c8ecd12c3d6a720a3e55633a80e9ad54153054b83f"},
+    {file = "streaming_form_data-1.15.0-cp310-cp310-win32.whl", hash = "sha256:f5f6397c0ed02a51cb8d6f0b4ad1a76d09c5e05fe8fdbb9a2227187139276660"},
+    {file = "streaming_form_data-1.15.0-cp310-cp310-win_amd64.whl", hash = "sha256:b9cda6a8c290424b8c5c00cfaf18103030fc256fe68d3291635f4b180e9b6ae6"},
+    {file = "streaming_form_data-1.15.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:ef03c03b318804fb634af7961759a74c03bef665c0c9174e186a7a345f77ce1f"},
+    {file = "streaming_form_data-1.15.0-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:6360053030d3c4032dd49f923f5fa536063534fb2c100fcb7b733fe83bc320e2"},
+    {file = "streaming_form_data-1.15.0-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2a6cd81dd069e5ed0703042ac14126526b8eb39067b92a7f3dd7c2a89dcdbbf5"},
+    {file = "streaming_form_data-1.15.0-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:6c85d472a245dc64c17d9f339c1ebdf3d1db608fbf85e6024e59e2c81a7d365d"},
+    {file = "streaming_form_data-1.15.0-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:5a8a4e2be7d2d6034892a419ae0f1486b1479edc7a6003c4215cb4f5f2d76b08"},
+    {file = "streaming_form_data-1.15.0-cp311-cp311-win32.whl", hash = "sha256:3c158ed2791e574f28ef0c0b91a94fb941751306bf495163ed84bad3f68fe7ea"},
+    {file = "streaming_form_data-1.15.0-cp311-cp311-win_amd64.whl", hash = "sha256:f99868952c57684cc341c58a877664ab72d3a1d948037264b26517626024e8f1"},
+    {file = "streaming_form_data-1.15.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:4fa2c947fcda4fc8fd2071e50fc75f111d3a9756b7d9b97b2665d7ab27d9eda1"},
+    {file = "streaming_form_data-1.15.0-cp38-cp38-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:55aadcfdb342b0732cd3875a41cd39d688e44024f0ec48e931a82797089d3390"},
+    {file = "streaming_form_data-1.15.0-cp38-cp38-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0c0ecfa687b5b22e299a155351d646aab132e67b1c71c45e078a8800cb573358"},
+    {file = "streaming_form_data-1.15.0-cp38-cp38-musllinux_1_1_i686.whl", hash = "sha256:2f20bc096d2328fa6acf91907e7106a9271f4b82b063691af084e98055a21361"},
+    {file = "streaming_form_data-1.15.0-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:900443d27c8f5c86a63ffe7019de1f8282f22363e5e2e921d16dc2372bb551b9"},
+    {file = "streaming_form_data-1.15.0-cp38-cp38-win32.whl", hash = "sha256:29312e70ed095b33bacee80bcd941328627d8f471f92f515e2aa7bfbcbe5bf43"},
+    {file = "streaming_form_data-1.15.0-cp38-cp38-win_amd64.whl", hash = "sha256:ec3d34a196af6412518615855f707fb71d4271af5a0b0dd3a123b11f4de730a6"},
+    {file = "streaming_form_data-1.15.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:2d3343abbcc9d41e727c4aeb084fa5b87e46cc5b72dd8811c7e204b379ca4d7b"},
+    {file = "streaming_form_data-1.15.0-cp39-cp39-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:4e076ff1bd7acbfc8ea118ac08d5467b5aef1606c1bd719012f32edaa7a35490"},
+    {file = "streaming_form_data-1.15.0-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d59ca1a32fea68cab56906ca65942f850820997c693ec3446d6f91e578687a0f"},
+    {file = "streaming_form_data-1.15.0-cp39-cp39-musllinux_1_1_i686.whl", hash = "sha256:5a3eeef08e437fab17444fc2c0a8299db31035b029d5c9a22ee2dfc4a58d7de3"},
+    {file = "streaming_form_data-1.15.0-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:0be4071c2414a82dd8e7c1abb9d36ff08c2c85fc5cc8ff644dc770bf708225f7"},
+    {file = "streaming_form_data-1.15.0-cp39-cp39-win32.whl", hash = "sha256:30ef2030bf1b22a705ba379d1958e9c103626ae9f037cbdfffe40dca5c529a89"},
+    {file = "streaming_form_data-1.15.0-cp39-cp39-win_amd64.whl", hash = "sha256:fdcbbfc3f94babaeff4e95efb1b062feee75021a0a6239af5c6209d21b212ba0"},
+]
+
+[package.dependencies]
+smart-open = ">=6.0"
 
 [[package]]
 name = "structlog"

@@ -13,12 +13,12 @@ python = "^3.11.2"
 typing-extensions = "^4.5.0"
 fastapi = "^0.109.2"
 uvicorn = { extras = ["standard"], version = "^0.22.0" }
-prometheus-async  = { extras = ["aiohttp"], version = "^22.2.0"}
+prometheus-async = { extras = ["aiohttp"], version = "^22.2.0" }
 aiohttp = "^3.9.3"
 nemesiscommon = { path = "../../packages/python/nemesiscommon", develop = true }
 nemesispb = { path = "../../packages/python/nemesispb", develop = true }
 elasticsearch = "^8.10.0"
-torch = {version = "^2.2.0+cpu", source = "torch"}
+torch = { version = "^2.2.0+cpu", source = "torch" }
 sentence-transformers = "^2.3.1"
 langchain = "^0.1.2"
 langchain-community = "^0.0.14"
