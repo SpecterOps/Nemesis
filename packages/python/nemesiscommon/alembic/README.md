@@ -7,6 +7,10 @@ docker run -p 5432:5432 --rm --name postgres -e POSTGRES_PASSWORD=Qwerty12345 -e
 
 Then, run the following to generate the SQL schema.
 ```bash
+cd Nemesis/packages/python/nemesiscommon
+poetry install
+poetry shell
+
 export DB_URI="postgresql+asyncpg://nemesis:Qwerty12345@localhost:5432/nemesis"
 
 rm -rf alembic/versions/*;   # Remove current DB versions. Eventually we'll *actually* support migrations
