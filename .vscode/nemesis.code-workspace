@@ -2,15 +2,19 @@
 	"folders": [
 		{
 			"path": "..",
-			"name": "nemesis"
+			"name": "root"
+		},
+		{
+			"path": "../docs",
+			"name": "docs"
 		},
 		{
 			"path": "../dockerfiles",
-			"name": "nemesis/dockerfiles"
+			"name": "dockerfiles"
 		},
 		{
-			"path": "../kubernetes",
-			"name": "nemesis/kubernetes"
+			"path": "../helm",
+			"name": "helm"
 		},
 		{
 			"path": "../cmd/connectors/chrome-extension",
@@ -43,10 +47,6 @@
 		{
 			"path": "../packages/python/nemesisdb",
 			"name": "packages/nemesisdb"
-		},
-		{
-			"path": "../packages/python/nemesispb",
-			"name": "packages/nemesispb"
 		},
 		{
 			"path": "../cmd/dashboard",
