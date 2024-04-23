@@ -25,7 +25,7 @@ Additionally, only x64 architecture has been tested and is supported. ARM platfo
 
 ## Software Requirements
 
-We support installing Nemesis in either [Docker Desktop](#docker-desktop-with-kubernetes) or [Minikube](#minikube).
+K3s is the only officially supported way to install Nemesis. Installation instructions for [Docker Desktop](requirements_docker_desktop.md) and [Minikube](requirements_minikube.md) do exist but may not be up to date.
 
 **The following requirements need to be installed:**
 
@@ -54,3 +54,22 @@ chmod 600 "$KUBECONFIG"
 
 Follow the Helm installation guide for your specific operating system: [Installing Helm](https://helm.sh/docs/intro/install/).
 
+#### Install Dependencies
+
+Install the Elastic operator with the following Helm command to manage Elasticsearch in the `default` namespace:
+
+```bash
+helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
+```
+
+#### Validate Installation
+
+To ensure you're ready for the next step, run the command below and ensure a deployment exists for "traefik" and "elastic-operator."
+
+```bash
+$ helm ls -A
+NAME                    NAMESPACE       REVISION        UPDATED                                 STATUS          CHART                           APP VERSION
+elastic-operator        elastic-system  1               2024-04-22 10:42:02.9517585 -0400 EDT   deployed        eck-operator-2.12.1             2.12.1
+traefik                 kube-system     1               2024-04-19 17:56:18.401408836 +0000 UTC deployed        traefik-25.0.2+up25.0.0         v2.10.5
+traefik-crd             kube-system     1               2024-04-19 17:56:17.382691893 +0000 UTC deployed        traefik-crd-25.0.2+up25.0.0     v2.10.5
+```
