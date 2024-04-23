@@ -34,7 +34,7 @@ If you want customize the deployment (e.g., HTTP server URI, pod CPU/memory reso
 
 1. Download the quickstart chart's `values.yaml`:
 ```bash
-helm show values --repo https://specterops.github.io/Nemesis/ nemesis nemesis > nemesis-values.yaml
+helm show values --repo https://specterops.github.io/Nemesis/ nemesis > nemesis-values.yaml
 ```
 
 2. Edit `nemesis-values.yaml` as you need (e.g., using `vim`)
