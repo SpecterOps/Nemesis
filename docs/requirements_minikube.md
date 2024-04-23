@@ -1,66 +1,6 @@
-# Requirements
+# MiniKube
 
-## Table of Contents
-
-1. [Table of Contents](#table-of-contents)
-1. [VM Hardware Requirements](#vm-hardware-requirements)
-2. [Software Requirements](#software-requirements)
-    1. [K3s](#k3s)
-    2. [Docker Desktop](#docker-desktop-with-kubernetes)
-    3. [Minikube](#minikube)
-
-## VM Hardware Requirements
-We have only tested on machines with the the following specs. All other configurations are not officially supported.
-
- * OS: Debian 11 LTS or Debian 11 on the Windows Subsystem for Linux (WSL).
- * 4 processors
- * 16 GB RAM
- * 100 GB disk
-
-You could probably do 3 processors and 10 GB RAM, just might need to change how many CPUs and how much memory you give to minikube (and then cross your fingers you don't get OOMErrors from Kubernetes :P)
-
-Additionally, only x64 architecture has been tested and is supported. ARM platforms (e.g., Mac devives with M* chips) are not currently supported but we intend to support these in the future.
-
-**Do not install the following requirements as root! Minikube is particular does not like to be run as root.**
-
-## Software Requirements
-
-We support installing Nemesis in either [Docker Desktop](#docker-desktop-with-kubernetes) or [Minikube](#minikube).
-
-**The following requirements need to be installed:**
-
-### K3s
-
-Before installing k3s, you must have Docker installed on your system as it is a prerequisite for running containerized applications. Follow the Docker installation guide for your specific operating system at the official Docker documentation: [Install Docker Engine](https://docs.docker.com/engine/install/).
-
-#### Install k3s
-
-k3s is a lightweight Kubernetes distribution that simplifies the deployment and management of Kubernetes clusters. To install k3s without the Traefik ingress controller (as we will be using ingress-nginx), run the following command:
-
-```bash
-curl -sfL https://get.k3s.io | sh -
-```
-
-After installing k3s, modify your kubeconfig to use the k3s Kubernetes configuration with the following commands:
-
-```bash
-export KUBECONFIG=~/.kube/config
-mkdir ~/.kube 2> /dev/null
-sudo k3s kubectl config view --raw > "$KUBECONFIG"
-chmod 600 "$KUBECONFIG"
-```
-
-#### Install Helm
-
-Follow the Helm installation guide for your specific operating system: [Installing Helm](https://helm.sh/docs/intro/install/).
-
-
-### MiniKube
-
-<details>
-<summary>
-Docker and docker-compose
-</summary>
+## Docker and docker-compose
 
 **Purpose:** Skaffold uses docker to build container images
 
@@ -78,12 +18,8 @@ sudo apt-get install -y docker-compose
 sudo usermod -aG docker <user>
 ```
 **Validation:** `docker ps` should work as a non-root user.
-</details>
 
-<details>
-<summary>
-Kubectl
-</summary>
+## Kubectl
 
 **Purpose:** CLI tool to interact with Kubernetes.
 Instructions found here: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
@@ -91,10 +27,7 @@ Instructions found here: https://kubernetes.io/docs/tasks/tools/install-kubectl-
 **Validation:** `kubectl` should display the tool's usage. Once a Kubernetes cluster is running/configured, `kubectl get pods -A` should show some kubernetes-related pods running.
 </details>
 
-<details>
-<summary>
-Kubernetes
-</summary>
+## Kubernetes
 
 **Purpose:** Infrastructure for running/managing containerized application.
 
@@ -133,12 +66,7 @@ kubectl create secret generic regcred --from-file=.dockerconfigjson=$(realpath ~
 Minikube creates a Linux VM that has its own docker daemon inside of it. To configure your host OS's docker CLI to use minikube's docker daemon, [see the instructions here](https://skaffold.dev/docs/environment/local-cluster/#minikube-has-a-separate-docker-daemon).
 
 
-</details>
-
-<details>
-<summary>
-Helm
- </summary>
+## Helm
 
 **Purpose:** Like a package manager, but for Kubernetes stuff.
 
@@ -151,12 +79,8 @@ sudo apt-get update
 sudo apt-get install -y helm
 ```
 **Validation:** `helm list` should work and not list any installed packages.
-</details>
 
-<details>
-<summary>
-Skaffold
-</summary>
+## Skaffold
 
 **Purpose:** Development tool used to auto deploy containers to a Kubernetes cluster anytime the code changes.
 
@@ -178,26 +102,18 @@ export SKAFFOLD_UPDATE_CHECK=false
 ```
 
 **Validation:** Running `skaffold` should print skaffold's help.
-</details>
 
 
-<details>
-<summary>
-Required Kubernetes services
-</summary>
+## Required Kubernetes services
 
 You will need to install two services in k8s before getting started. Helm makes this process very simple. If you already have an ElasticSearch cluster or an NGinx Ingress set up in the desired namespace, then you can configure them yourself. You can set them up from scratch with the process below:
 
 ```bash
-# Add Elastic repository
-helm repo add elastic https://helm.elastic.co
 # Add Bitnami repository
 helm repo add bitnami https://charts.bitnami.com/bitnami
-# Add NGINX repository
-helm repo add nginx https://kubernetes.github.io/ingress-nginx
-# Install NGINX ingress
-helm install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace --set prometheus.create=true --set prometheus.port=9113 --set tcp.5044="default/nemesis-ls-beats:5044" --set controller.config."proxy-body-size"="5000m"
+# Install Traefik ingress
+helm install traefik traefik --repo https://traefik.github.io/charts --namespace kube-system
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you desire to install Nemesis in a different namespace
-helm install elastic-operator elastic/eck-operator --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
+helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 </details>
