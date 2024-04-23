@@ -88,8 +88,7 @@ Retrieve the basic authentication credentials to access the dashboard:
 ```bash
 export BASIC_AUTH_USER=$(kubectl get secret basic-auth -o jsonpath="{.data.username}" | base64 -d)
 export BASIC_AUTH_PASSWORD=$(kubectl get secret basic-auth -o jsonpath="{.data.password}" | base64 -d)
-echo "Basic Auth Username: ${BASIC_AUTH_USER}"
-echo "Basic Auth Password: ${BASIC_AUTH_PASSWORD}"
+echo "${BASIC_AUTH_USER}:${BASIC_AUTH_PASSWORD}"
 ```
 
 ### Step 8: Logging into the Dashboard
