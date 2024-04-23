@@ -77,7 +77,7 @@ helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --time
 Use the following bash oneliner to get the basic auth secrets and ensure the Nemesis home page is reachable:
 
 ```bash
-$ curl -u $(kubectl get secret operation-creds -o jsonpath='{.data.basic-auth-user}' | base64 --decode):$(kubectl get secret operation-creds -o jsonpath='{.data.basic-auth-password}' | base64 --decode) http://127.0.0.1
+$ curl -u $(kubectl get secret basic-auth -o jsonpath='{.data.username}' | base64 -d):$(kubectl get secret basic-auth -o jsonpath='{.data.password}' | base64 -d) http://127.0.0.1
 
 <html>
     <head>
