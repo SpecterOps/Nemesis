@@ -1638,7 +1638,7 @@ pydantic-settings = "^2.2.1"
 pyyaml = "^6.0"
 requests = "^2.28.1"
 rich = "^13.3.3"
-sqlalchemy = "^2.0.29"
+sqlalchemy = {version = "^2.0.29", extras = ["asyncio"]}
 structlog = "^23.1.0"
 tenacity = "^8.0.1"
 typing-extensions = "^4.4.0"
@@ -1869,13 +1869,13 @@ test = ["appdirs (==1.4.4)", "covdefaults (>=2.3)", "pytest (>=7.4.3)", "pytest-
 
 [[package]]
 name = "pluggy"
-version = "1.4.0"
+version = "1.5.0"
 description = "plugin and hook calling mechanisms for python"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "pluggy-1.4.0-py3-none-any.whl", hash = "sha256:7db9f7b503d67d1c5b95f59773ebb58a8c1c288129a88665838012cfb07b8981"},
-    {file = "pluggy-1.4.0.tar.gz", hash = "sha256:8c85c2876142a764e5b7548e7d9a0e0ddb46f5185161049a79b7e974454223be"},
+    {file = "pluggy-1.5.0-py3-none-any.whl", hash = "sha256:44e1ad92c8ca002de6377e165f3e0f1be63266ab4d554740532335b9d75ea669"},
+    {file = "pluggy-1.5.0.tar.gz", hash = "sha256:2cffa88e94fdc978c4c574f15f9e59b7f4201d439195c3715ca9e2486f1d0cf1"},
 ]
 
 [package.extras]
@@ -1908,7 +1908,6 @@ twisted = ["twisted"]
 
 [[package]]
 name = "prometheus-client"
-version = "0.20.0"
 version = "0.20.0"
 description = "Python client for the Prometheus monitoring system."
 optional = false
@@ -2232,6 +2231,7 @@ files = [
     {file = "PyYAML-6.0.1-cp311-cp311-win_amd64.whl", hash = "sha256:bf07ee2fef7014951eeb99f56f39c9bb4af143d8aa3c21b1677805985307da34"},
     {file = "PyYAML-6.0.1-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:855fb52b0dc35af121542a76b9a84f8d1cd886ea97c84703eaa6d88e37a2ad28"},
     {file = "PyYAML-6.0.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:40df9b996c2b73138957fe23a16a4f0ba614f4c0efce1e9406a184b6d07fa3a9"},
+    {file = "PyYAML-6.0.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a08c6f0fe150303c1c6b71ebcd7213c2858041a7e01975da3a99aed1e7a378ef"},
     {file = "PyYAML-6.0.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6c22bec3fbe2524cde73d7ada88f6566758a8f7227bfbf93a408a9d86bcc12a0"},
     {file = "PyYAML-6.0.1-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:8d4e9c88387b0f5c7d5f281e55304de64cf7f9c0021a3525bd3b1c542da3b0e4"},
     {file = "PyYAML-6.0.1-cp312-cp312-win32.whl", hash = "sha256:d483d2cdf104e7c9fa60c544d92981f12ad66a457afae824d146093b8c294c54"},
@@ -2578,7 +2578,7 @@ files = [
 
 [package.dependencies]
 joblib = ">=1.2.0"
-numpy = ">=1.19.5,<2.0"
+numpy = ">=1.19.5"
 scipy = ">=1.6.0"
 threadpoolctl = ">=2.0.0"
 
@@ -2735,7 +2735,7 @@ files = [
 ]
 
 [package.dependencies]
-greenlet = {version = "!=0.4.17", markers = "platform_machine == \"aarch64\" or platform_machine == \"ppc64le\" or platform_machine == \"x86_64\" or platform_machine == \"amd64\" or platform_machine == \"AMD64\" or platform_machine == \"win32\" or platform_machine == \"WIN32\""}
+greenlet = {version = "!=0.4.17", optional = true, markers = "platform_machine == \"aarch64\" or platform_machine == \"ppc64le\" or platform_machine == \"x86_64\" or platform_machine == \"amd64\" or platform_machine == \"AMD64\" or platform_machine == \"win32\" or platform_machine == \"WIN32\" or extra == \"asyncio\""}
 typing-extensions = ">=4.6.0"
 
 [package.extras]
@@ -3131,13 +3131,13 @@ vision = ["Pillow (>=10.0.1,<=15.0)"]
 
 [[package]]
 name = "types-protobuf"
-version = "5.26.0.20240420"
+version = "5.26.0.20240422"
 description = "Typing stubs for protobuf"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "types-protobuf-5.26.0.20240420.tar.gz", hash = "sha256:5b756ffdf7623c87977e2e7cf46fef77ed71e845c288c4acbf878a72b063fd8a"},
-    {file = "types_protobuf-5.26.0.20240420-py3-none-any.whl", hash = "sha256:ed19b9e13e1fb21075682eecc03ab5c5f4cbc5c001c906a5f5a7d6ebcb6fbce2"},
+    {file = "types-protobuf-5.26.0.20240422.tar.gz", hash = "sha256:e6074178109f97efe9f0b20a035ba61d7c3b03e867eb47d254d2b2ab6a805e36"},
+    {file = "types_protobuf-5.26.0.20240422-py3-none-any.whl", hash = "sha256:e4dc2554d342501d5aebc3c71203868b51118340e105fc190e3a64ca1be43831"},
 ]
 
 [[package]]
@@ -3519,6 +3519,7 @@ description = "Python interface for YARA"
 optional = false
 python-versions = "*"
 files = [
+    {file = "yara-python-4.5.0.tar.gz", hash = "sha256:4feecc56d2fe1d23ecb17cb2d3bc2e3859ebf7a2201d0ca3ae0756a728122b27"},
     {file = "yara_python-4.5.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:3feb72c2146c50e583d7e3cacbb49f280fb5cac0494cae1b48e5980ecbdc1571"},
     {file = "yara_python-4.5.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1a036c41eaebdf6c0a674e0bd9d37c9d06d1d7427455866ace09d3a159c442b0"},
     {file = "yara_python-4.5.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:acbc950b051a576dd4c6825bf4ebb1c0f0c5eea35b3e01bde921b744e2cc92e1"},
