@@ -1,1 +1,4 @@
-TODO
+Secrets for the monitoring service:
+
+export GRAFANA_USER=$(kubectl get secret --namespace "{{ .Release.Namespace }}" {{ .Values.grafana.existingSecret }} -o jsonpath="{.data.username}" | base64 -d)
+export GRAFANA_PASSWORD=$(kubectl get secret --namespace "{{ .Release.Namespace }}" {{ .Values.grafana.existingSecret }} -o jsonpath="{.data.password}" | base64 -d)
