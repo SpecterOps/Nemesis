@@ -1,6 +1,6 @@
 # Quickstart Guide
 
-Here's a quickstart guide to setting up the Nemesis platform using k3s and Helm on Debian 11:
+Here's a quickstart guide to setting up the Nemesis platform using k3s and Helm on Debian 11. This guide will start a Nemesis server running locally and accessible through "https://127.0.0.1". If this does not fit your installation need, see the full [setup guide](setup.md).
 
 ### Prerequisites
 Ensure your machine meets the following requirements:
