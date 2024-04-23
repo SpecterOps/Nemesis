@@ -6,8 +6,6 @@
 1. [VM Hardware Requirements](#vm-hardware-requirements)
 2. [Software Requirements](#software-requirements)
     1. [K3s](#k3s)
-    2. [Docker Desktop](#docker-desktop-with-kubernetes)
-    3. [Minikube](#minikube)
 
 ## VM Hardware Requirements
 We have only tested on machines with the the following specs. All other configurations are not officially supported.
