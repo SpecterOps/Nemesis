@@ -2,9 +2,10 @@
 The [`nemesis` Helm chart](../helm/nemesis/) deploys Nemesis's services. You can run the chart with its default configuration using the following command:
 
 ```bash
-# set operation.nemesisHttpServer to the IP you'll be accessing the server from. By default, the value is set to https://127.0.0.1:443/ for local deployments.
 helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' --set operation.nemesisHttpServer="https://192.168.6.9:443/"
 ```
+
+Set `operation.nemesisHttpServer` to the IP you'll be accessing the server from. By default, the value is set to `https://127.0.0.1:443/` for local deployments. You can delete the `--set` parameter if you want the default value.
 
 ## Customizing the Deployment
 
