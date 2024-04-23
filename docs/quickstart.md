@@ -100,5 +100,21 @@ https://127.0.0.1
 ```
 
 Enter the basic authentication credentials you retrieved earlier to access the Nemesis dashboard. Use the following credentials:
+
 - **Username**: The value stored in `${BASIC_AUTH_USER}`
 - **Password**: The value stored in `${BASIC_AUTH_PASSWORD}`
+
+You should be greeted by the services page:
+
+![services](images/services.png)
+
+
+### Step 9: Upload File for Analysis
+
+1. Navigate to the dashboard
+
+![dashboard](images/nemesis-dashboard.png)
+
+2. Go to the "File Upload" page and upload a file for analysis
+
+![file analysis](images/nemesis-dashboard-file-upload_success.png)
