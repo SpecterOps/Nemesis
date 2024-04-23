@@ -7,6 +7,27 @@ helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --time
 
 Set `operation.nemesisHttpServer` to the IP you'll be accessing the server from. By default, the value is set to `https://127.0.0.1:443/` for local deployments. You can delete the `--set` parameter if you want the default value.
 
+
+## Verify Installation
+
+Use the following bash oneliner to get the basic auth secrets and ensure the Nemesis home page is reachable:
+
+```bash
+$ export NEMESIS_HOSTNAME=https://127.0.0.1
+$ curl -u $(kubectl get secret basic-auth -o jsonpath='{.data.username}' | base64 -d):$(kubectl get secret basic-auth -o jsonpath='{.data.password}' | base64 -d) $NEMESIS_HOSTNAME
+
+<html>
+    <head>
+        <title>Nemesis Services</title>
+    </head>
+    <body>
+        <h1>Nemesis Services</h1>
+
+        <h2>Main Services</h2>
+        <a href="/dashboard/" target="_blank"">Dashboard</a><br>
+...
+```
+
 ## Customizing the Deployment
 
 If you want customize the deployment (e.g., HTTP server URI, pod CPU/memory resources, Minio disk size), you need to download the `nemesis` chart's [values.yaml](../helm/nemesis/values.yaml) file, edit it, and then run the `nemesis` chart using the customize values. You can do so with the following commands:
