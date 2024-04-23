@@ -1,5 +1,4 @@
 # Standard Libraries
-import json
 import os
 import re
 
@@ -61,14 +60,14 @@ class reg_hive_security(Meta.FileType):
             # NOTE: for decryption later:
             #   nlkm_secret_dec = decryptLSASecret(NKLMKeyEnc, lsa_sec_key_dec_bytes, vista_style, True)
 
-            for (secret_name, secret_enc_bytes) in lsa.dumpSecretsEnc():
+            for secret_name, secret_enc_bytes in lsa.dumpSecretsEnc():
                 lsa_secret = parsed_data.reg_hive_security.lsa_secrets.add()
                 lsa_secret.name = secret_name
                 lsa_secret.value_enc = secret_enc_bytes
                 # NOTE: for decryption later:
                 #   secret_dec_bytes = decryptLSASecret(secret_enc_bytes, lsa_sec_key_dec_bytes, vista_style)
 
-            for (iteration_count, enc_raw_value) in lsa.dumpCachedHashesEnc():
+            for iteration_count, enc_raw_value in lsa.dumpCachedHashesEnc():
                 cached_entry = parsed_data.reg_hive_security.domain_cached_credentials.add()
                 cached_entry.iteration_count = iteration_count
                 cached_entry.enc_raw_value = enc_raw_value
@@ -80,6 +79,8 @@ class reg_hive_security(Meta.FileType):
         except Exception as e:
             logger.exception(e, message="reg_hive_security.py parse() error", file_uuid=self.file_data.object_id)
             return (
-                helpers.nemesis_parsed_data_error(f"error parsing reg_hive_security file {self.file_data.object_id} : {e}"),
-                pb.AuthenticationDataIngestionMessage()
+                helpers.nemesis_parsed_data_error(
+                    f"error parsing reg_hive_security file {self.file_data.object_id} : {e}"
+                ),
+                pb.AuthenticationDataIngestionMessage(),
             )

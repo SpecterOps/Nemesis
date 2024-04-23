@@ -57,6 +57,8 @@ class chromium_cookies(Meta.FileType):
 
         except Exception as e:
             return (
-                helpers.nemesis_parsed_data_error(f"error parsing Chromium 'Cookies' file {self.file_data.object_id} : {e}"),
+                helpers.nemesis_parsed_data_error(
+                    f"error parsing Chromium 'Cookies' file {self.file_data.object_id} : {e}"
+                ),
                 pb.AuthenticationDataIngestionMessage(),
             )

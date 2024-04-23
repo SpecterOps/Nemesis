@@ -55,7 +55,9 @@ class lnk(Meta.FileType):
                 and "DISTRIBUTED_LINK_TRACKER_BLOCK" in lnk_json["extra"]
                 and "machine_identifier" in lnk_json["extra"]["DISTRIBUTED_LINK_TRACKER_BLOCK"]
             ):
-                parsed_data.lnk.machine_identifier = lnk_json["extra"]["DISTRIBUTED_LINK_TRACKER_BLOCK"]["machine_identifier"]
+                parsed_data.lnk.machine_identifier = lnk_json["extra"]["DISTRIBUTED_LINK_TRACKER_BLOCK"][
+                    "machine_identifier"
+                ]
 
             if "file_size" in lnk_json["header"]:
                 parsed_data.lnk.target_file_size = lnk_json["header"]["file_size"]
@@ -72,7 +74,10 @@ class lnk(Meta.FileType):
                     else:
                         parsed_data.lnk.target = "ERROR: no local_base_path"
                 elif parsed_data.lnk.location == "network":
-                    if "net_name" in lnk_json["link_info"]["location_info"] and "common_path_suffix" in lnk_json["link_info"]:
+                    if (
+                        "net_name" in lnk_json["link_info"]["location_info"]
+                        and "common_path_suffix" in lnk_json["link_info"]
+                    ):
                         base = lnk_json["link_info"]["location_info"]["net_name"]
                         target = lnk_json["link_info"]["common_path_suffix"]
                         parsed_data.lnk.target = f"{base}\\{target}"

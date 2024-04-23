@@ -1,23 +1,16 @@
 # Standard Libraries
-import base64
-import ntpath
-import os
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from decimal import Decimal
+from datetime import datetime
 from enum import Enum, StrEnum
 from types import TracebackType
-from typing import Any, AsyncGenerator, List, Optional, Tuple, Type, TypeVar, Union
+from typing import AsyncGenerator, List, Optional, Tuple, Type, TypeVar
 from uuid import UUID
 
 # 3rd Party Libraries
 import asyncpg
 import nemesispb.nemesis_pb2 as pb
-from enrichment.tasks.raw_data_tag.seatbelt_datatypes import SeatbeltOSInfo
-from pydantic.types import UUID4
-from typing_extensions import Self
 
 
 @dataclass
@@ -35,17 +28,17 @@ class OperationType(StrEnum):
 
 @dataclass
 class CollectedData:
-    project_id: int
+    project_id: UUID
     collection_timestamp: datetime
     expiration_date: datetime
-    agent_id: int
+    agent_id: UUID
     message_id: UUID
     operation: OperationType
 
 
 @dataclass
 class CollectedHostData(CollectedData):
-    hostagents_row_id: int
+    hostagents_row_id: UUID
     is_data_remote: bool
 
 
@@ -58,7 +51,7 @@ class Project:
 
 @dataclass
 class HostAgent:
-    row_id: int
+    row_id: UUID
     shortname: Optional[str]
     longname: Optional[str]
     ip_address: Optional[str]
@@ -367,14 +360,14 @@ class RegistryObject(Metadata):
 #     version_info: Optional[str] = None
 
 
-# @dataclass
-# class FileInfoDataEnriched(Metadata):
-#     path: str
-#     name: Optional[str] = None
-#     extension: Optional[str] = None
-#     size: Optional[int] = None
-#     magic_type: Optional[str] = None
-#     nemesis_file_id: Optional[str] = None
+@dataclass
+class FileInfoDataEnriched(CollectedHostData):
+    path: str
+    name: Optional[str] = None
+    extension: Optional[str] = None
+    size: Optional[int] = None
+    magic_type: Optional[str] = None
+    nemesis_file_id: Optional[str] = None
 
 
 # @dataclass
@@ -434,7 +427,9 @@ class NemesisDbInterface(ABC):
         pass
 
     @abstractmethod
-    async def add_host(self, project_id: int, shortname: Optional[str], fqdn: Optional[str], ip_address: Optional[str]) -> HostAgent:
+    async def add_host(
+        self, project_id: int, shortname: Optional[str], fqdn: Optional[str], ip_address: Optional[str]
+    ) -> HostAgent:
         pass
 
     @abstractmethod
@@ -523,9 +518,9 @@ class NemesisDbInterface(ABC):
     # async def add_filesystem_object(self, file_info: FileInfo) -> None:
     #     pass
 
-    # @abstractmethod
-    # async def add_filesystem_object_from_enriched(self, file_data_enriched: FileInfoDataEnriched) -> None:
-    #     pass
+    @abstractmethod
+    async def add_filesystem_object_from_enriched(self, file_data_enriched: FileInfoDataEnriched) -> None:
+        pass
 
     # @abstractmethod
     # async def get_encrypted_dpapi_masterkeys(self, domain_backupkey_guid: str):
@@ -640,7 +635,12 @@ class NemesisDb(NemesisDbInterface):
         """Adds a new `nemesis.api_data_message` entry to the database."""
 
         async with self.pool.acquire() as conn:
-            await conn.execute("INSERT INTO nemesis.api_data_messages (message_id, message_bytes, expiration) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", message_id, message_bytes, expiration)
+            await conn.execute(
+                "INSERT INTO nemesis.api_data_messages (message_id, message_bytes, expiration) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                message_id,
+                message_bytes,
+                expiration,
+            )
 
     async def clear_database(self) -> None:
         """Clears all tables in the database except for the `nemesis.api_data_messages` table."""
@@ -675,7 +675,7 @@ class NemesisDb(NemesisDbInterface):
     # Other
     #
 
-    async def register_project(self, project: Project) -> int:
+    async def register_project(self, project: Project) -> UUID:
         """Registers a project in the database and returnts the id. If the project already exists, the id is returned."""
 
         async with self.pool.acquire() as conn:
@@ -740,11 +740,13 @@ RETURNING *
 
         return Agent(*results)
 
-    async def add_host(self, project_id: int, shortname: Optional[str], fqdn: Optional[str], ip_address: Optional[str]) -> HostAgent:
-        """Adds a new `nemesis.hosts` entry ."""
+    async def add_host(
+        self, project_id: UUID, shortname: Optional[str], fqdn: Optional[str], ip_address: Optional[str]
+    ) -> HostAgent:
+        """Adds a new `nemesis.agent_host_mappings` entry ."""
 
         query = """
-INSERT INTO host_agents (shortname, longname, ip_address, project_id)
+INSERT INTO agent_host_mappings (shortname, longname, ip_address, project_id)
 VALUES ($1, $2, $3, $4)
 RETURNING *
 """
@@ -764,7 +766,7 @@ RETURNING *
 
     async def register_agent_host(
         self,
-        project_id: int,
+        project_id: UUID,
         collection_timestamp: datetime,
         expiration_date: datetime,
         agent_id: str,
@@ -772,7 +774,7 @@ RETURNING *
         shortname: Optional[str],
         longname: Optional[str],
         ip_address: Optional[str],
-    ) -> Tuple[int, int]:
+    ) -> Tuple[UUID, UUID]:
         """Registers a host in the database and returns the hostagents_row_id and the new agent_id. If the host already exists, the hostagents_row_id and the existing agent_id are returned.
 
         Args:
@@ -1324,7 +1326,7 @@ SELECT f_register_agent_host($1, $2, $3, $4, $5, $6, $7, $8)
         """Adds a new `nemesis.named_pipes` entry from a NamedPipe class object."""
 
         query = """
-INSERT INTO nemesis.namedpipes as t(
+INSERT INTO nemesis.hostdata_namedpipes as t(
     project_id,
     collection_timestamp,
     expiration_date,
@@ -1366,10 +1368,10 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             )
 
     async def add_process(self, process: ProcessEnriched) -> None:
-        """Adds a new `nemesis.processes` entry from a ProcessEnriched class object."""
+        """Adds a new `nemesis.hostdata_processes` entry from a ProcessEnriched class object."""
 
         query = """
-INSERT INTO nemesis.processes as t(
+INSERT INTO nemesis.hostdata_processes as t(
     project_id,
     collection_timestamp,
     expiration_date,
@@ -1390,7 +1392,6 @@ INSERT INTO nemesis.processes as t(
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 """
-
         async with self.pool.acquire() as conn:
             await conn.execute(
                 query,
@@ -1481,39 +1482,55 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
         #             file_info.sddl,
         #         )
 
-        # async def add_filesystem_object_from_enriched(self, file_data_enriched: FileInfoDataEnriched) -> None:
-        #     """Adds a new `nemesis.filesystem_objects` entry from a FileInfoDataEnriched class object."""
+    async def add_filesystem_object_from_enriched(self, file_data_enriched: FileInfoDataEnriched) -> None:
+        """Adds a new `nemesis.filesystem_objects` entry from a FileInfoDataEnriched class object."""
 
-        #     # NOTE: size, magic_type, nemesis_file_id are the first in
-        #     #   COALESCE to ensure we update the accurate most recent value
-        #     query = (
-        #         "INSERT INTO nemesis.filesystem_objects as t(agent_id, project_id, source, timestamp, expiration, path, name, extension, type, size, magic_type, nemesis_file_id) "
-        #         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) "
-        #         "ON CONFLICT (project_id, source, path) "
-        #         "DO UPDATE SET "
-        #         "  name = COALESCE(t.name, excluded.name),"
-        #         "  extension = COALESCE(t.extension, excluded.extension),"
-        #         "  size = COALESCE(excluded.size, t.size),"
-        #         "  magic_type = COALESCE(excluded.magic_type, t.magic_type),"
-        #         "  nemesis_file_id = COALESCE(excluded.nemesis_file_id, t.nemesis_file_id)"
-        #     )
-
-        #     async with self.pool.acquire() as conn:
-        #         await conn.execute(
-        #             query,
-        #             file_data_enriched.agent_id,
-        #             file_data_enriched.project_id,
-        #             file_data_enriched.source,
-        #             file_data_enriched.timestamp,
-        #             file_data_enriched.expiration,
-        #             file_data_enriched.path,
-        #             file_data_enriched.name,
-        #             file_data_enriched.extension,
-        #             "file",
-        #             file_data_enriched.size,
-        #             file_data_enriched.magic_type,
-        #             file_data_enriched.nemesis_file_id,
-        #         )
+        # NOTE: size, magic_type, nemesis_file_id are the first in
+        #   COALESCE to ensure we update the accurate most recent value
+        query = """
+INSERT INTO nemesis.hostdata_filesystem_objects as t(
+        project_id,
+        collection_timestamp,
+        expiration_date,
+        agent_id,
+        message_id,
+        operation,
+        hostagents_row_id,
+        is_data_remote,
+        path,
+        name,
+        extension,
+        type,
+        size,
+        magic_type,
+        nemesis_file_id
+    )
+    VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    )
+"""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                # ProjectData
+                file_data_enriched.project_id,
+                file_data_enriched.collection_timestamp,
+                file_data_enriched.expiration_date,
+                # HostData
+                file_data_enriched.agent_id,
+                file_data_enriched.message_id,
+                file_data_enriched.operation,
+                file_data_enriched.hostagents_row_id,
+                file_data_enriched.is_data_remote,
+                # Named Pipe Data
+                file_data_enriched.path,
+                file_data_enriched.name,
+                file_data_enriched.extension,
+                "file",
+                file_data_enriched.size,
+                file_data_enriched.magic_type,
+                file_data_enriched.nemesis_file_id,
+            )
 
         # async def add_file_data_enriched(self, file_data_enriched: FileDataEnriched) -> None:
         #     """Adds a new `nemesis.file_data_enriched` entry from a FileDataEnriched class object."""
@@ -1604,41 +1621,42 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
 
         #     TODO: Use cursors to handle lots of results https://magicstack.github.io/asyncpg/current/api/index.html?highlight=fetchval#cursors
         #"""
+        if machine:
+            query = (
+                "SELECT username, user_sid, masterkey_guid, masterkey_bytes FROM nemesis.dpapi_masterkeys WHERE username = $1 AND is_decrypted = False AND type = 'machine'",
+            )
+        else:
+            query = "SELECT username, user_sid, masterkey_guid, masterkey_bytes FROM nemesis.dpapi_masterkeys WHERE username = $1 AND is_decrypted = False AND type != 'machine'"
 
-    #     if machine:
-    #         query = ("SELECT username, user_sid, masterkey_guid, masterkey_bytes FROM nemesis.dpapi_masterkeys WHERE username = $1 AND is_decrypted = False AND type = 'machine'",)
-    #     else:
-    #         query = "SELECT username, user_sid, masterkey_guid, masterkey_bytes FROM nemesis.dpapi_masterkeys WHERE username = $1 AND is_decrypted = False AND type != 'machine'"
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(
+                query,
+                username,
+            )
 
-    #     async with self.pool.acquire() as conn:
-    #         return await conn.fetch(
-    #             query,
-    #             username,
-    #         )
+    async def get_encrypted_dpapi_masterkeys_from_backup_guid(
+        self, domain_backupkey_guid: str
+    ) -> List[Tuple[uuid.UUID, bytes]]:
+        """Gets encrypted DPAPI masterkeys linked to a specific domain backupkey guid.
 
-    # async def get_encrypted_dpapi_masterkeys_from_backup_guid(self, domain_backupkey_guid: str) -> List[Tuple[uuid.UUID, bytes]]:
-    #     """Gets encrypted DPAPI masterkeys linked to a specific domain backupkey guid.
+        TODO: Use cursors to handle lots of results https://magicstack.github.io/asyncpg/current/api/index.html?highlight=fetchval#cursors
+        """
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(
+                "SELECT masterkey_guid, domainkey_pb_secret FROM nemesis.dpapi_masterkeys WHERE domain_backupkey_guid = $1 AND is_decrypted = False",
+                domain_backupkey_guid,
+            )
 
-    #     TODO: Use cursors to handle lots of results https://magicstack.github.io/asyncpg/current/api/index.html?highlight=fetchval#cursors
-    #     """
+    async def get_encrypted_dpapi_masterkeys_from_username(self, username: str) -> List[Tuple[uuid.UUID, str, bytes]]:
+        """Gets encrypted DPAPI masterkeys linked to a specific username.
 
-    #     async with self.pool.acquire() as conn:
-    #         return await conn.fetch(
-    #             "SELECT masterkey_guid, domainkey_pb_secret FROM nemesis.dpapi_masterkeys WHERE domain_backupkey_guid = $1 AND is_decrypted = False",
-    #             domain_backupkey_guid,
-    #         )
-
-    # async def get_encrypted_dpapi_masterkeys_from_username(self, username: str) -> List[Tuple[uuid.UUID, str, bytes]]:
-    #     """Gets encrypted DPAPI masterkeys linked to a specific username.
-
-    #     TODO: Use cursors to handle lots of results https://magicstack.github.io/asyncpg/current/api/index.html?highlight=fetchval#cursors
-    #     """
-
-    #     async with self.pool.acquire() as conn:
-    #         return await conn.fetch(
-    #             "SELECT masterkey_guid, user_sid, masterkey_bytes FROM nemesis.dpapi_masterkeys WHERE username ILIKE $1 AND is_decrypted = False",
-    #             username,
-    #         )
+        TODO: Use cursors to handle lots of results https://magicstack.github.io/asyncpg/current/api/index.html?highlight=fetchval#cursors
+        """
+        async with self.pool.acquire() as conn:
+            return await conn.fetch(
+                "SELECT masterkey_guid, user_sid, masterkey_bytes FROM nemesis.dpapi_masterkeys WHERE username ILIKE $1 AND is_decrypted = False",
+                username,
+            )
 
     # async def get_encrypted_dpapi_blobs(self, masterkey_guid: str) -> List[Tuple[uuid.UUID, bool, bytes, uuid.UUID]]:
     #     """Gets encrypted DPAPI blobs linked to a specific masterkey guid.
@@ -1799,11 +1817,14 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
     #     async with self.pool.acquire() as conn:
     #         await conn.execute(query, value_dec, unique_db_id)
 
-    # async def is_file_processed(self, file_sha256: str) -> bool:
-    #     """Takes the sha256 of a file and returns whether the file has already been processed."""
+    async def is_file_processed(self, file_sha256: str) -> bool:
+        """Takes the sha256 of a file and returns whether the file has already been processed."""
 
-    #     async with self.pool.acquire() as conn:
-    #         return await conn.fetch("SELECT EXISTS (SELECT true FROM nemesis.file_data_enriched WHERE sha256 = $1)", file_sha256)
+        async with self.pool.acquire() as conn:
+            v = await conn.fetch(
+                "SELECT EXISTS (SELECT true FROM nemesis.file_data_enriched WHERE sha256 = $1)", file_sha256
+            )
+            return v[0][0] is True
 
     # async def sanitize_identifier(self, identifier: str) -> str:
     #     """Sanitizes a postgres column names to make it safe for use in dynamic queries

@@ -14,18 +14,16 @@ from typing import Optional
 
 # 3rd Party Libraries
 import aiohttp
-import enrichment.lib.canaries as canary_helpers
-import enrichment.lib.helpers as helpers
 import nemesiscommon.constants as constants
 import nemesispb.nemesis_pb2 as pb
 import plyara
 import structlog
 import yara
 from binaryornot.check import is_binary
-from enrichment.lib.nemesis_db import NemesisDb
-from enrichment.services.text_extractor import TextExtractorInterface
-from nemesiscommon.messaging import (MessageQueueConsumerInterface,
-                                     MessageQueueProducerInterface)
+from nemesiscommon.messaging import (
+    MessageQueueConsumerInterface,
+    MessageQueueProducerInterface,
+)
 from nemesiscommon.nemesis_tempfile import TempFile
 from nemesiscommon.services.alerter import AlerterInterface
 from nemesiscommon.storage import StorageInterface
@@ -33,6 +31,11 @@ from nemesiscommon.tasking import TaskInterface
 from plyara import utils as plyara_utils
 from prometheus_async import aio
 from prometheus_client import Summary
+
+import enrichment.lib.canaries as canary_helpers
+import enrichment.lib.helpers as helpers
+from enrichment.lib.nemesis_db import NemesisDb
+from enrichment.services.text_extractor import TextExtractorInterface
 
 logger = structlog.get_logger(module=__name__)
 
@@ -116,7 +119,9 @@ class FileProcessor(TaskInterface):
 
         self.chunk_size = chunk_size  # number of bytes to read at a time per file
         self.data_download_dir = data_download_dir
-        self.extracted_archive_size_limit = extracted_archive_size_limit  # upper size limit of an (extracted) archive to process
+        self.extracted_archive_size_limit = (
+            extracted_archive_size_limit  # upper size limit of an (extracted) archive to process
+        )
 
         self.in_q_filedata = in_q_filedata
         self.in_q_filedataenriched = in_q_filedataenriched
@@ -163,7 +168,7 @@ class FileProcessor(TaskInterface):
         yara_rule_definitions_raw = list()
         parser = plyara.Plyara()
         for file_path in yara_file_paths:
-            with open(file_path, 'r') as fh:
+            with open(file_path, "r") as fh:
                 try:
                     parsed_yara_rules = parser.parse_string(fh.read())
                     yara_rule_definitions_raw += parsed_yara_rules
@@ -172,7 +177,7 @@ class FileProcessor(TaskInterface):
             parser.clear()
         pass
         for rule_def in yara_rule_definitions_raw:
-            self.yara_rule_definitions[rule_def['rule_name']] = plyara_utils.rebuild_yara_rule(rule_def)
+            self.yara_rule_definitions[rule_def["rule_name"]] = plyara_utils.rebuild_yara_rule(rule_def)
 
     async def run(self) -> None:
         await logger.ainfo("Starting the File Processor")
@@ -217,7 +222,9 @@ class FileProcessor(TaskInterface):
         ###########################################################
 
         with await self.storage.download(uuid.UUID(nemesis_uuid)) as file:
-            return await self.process_enrichments(nemesis_uuid, originating_object_id, file.name, file_path, metadata, scan_unknown)
+            return await self.process_enrichments(
+                nemesis_uuid, originating_object_id, file.name, file_path, metadata, scan_unknown
+            )
 
     async def process_enrichments(
         self,
@@ -281,10 +288,7 @@ class FileProcessor(TaskInterface):
         file_data.is_source_code = is_source_code
         file_data.nemesis_file_type = "unknown"
 
-        try:
-            file_previously_processed = (await self.db.is_file_processed(file_data.hashes.sha256))[0][0]
-        except:
-            file_previously_processed = False
+        file_previously_processed = await self.db.is_file_processed(file_data.hashes.sha256)
 
         if file_previously_processed:
             await logger.ainfo(
@@ -481,7 +485,6 @@ class FileProcessor(TaskInterface):
 
         # if we have a registry file, try to extract all the strings and run NoseyParker on everything
         if file_data.magic_type.startswith("MS Windows registry file"):
-
             # skip DPAPI carving for registry hives since we do it manually
             skip_dpapi_carve = True
 
@@ -586,7 +589,7 @@ class FileProcessor(TaskInterface):
             # use Gotenberg to convert the document to a new local UUID that references the uploaded Nemesis file text
             #   Gotenberg requires an extension, so we have to temporarily rename the file to its original extension
             pdf_size_limit = 25000000
-            if (file_data.size > pdf_size_limit):
+            if file_data.size > pdf_size_limit:
                 await logger.awarning(
                     f"file '{file_data.name}' is over the PDF conversion size limit of  {pdf_size_limit} bytes"
                 )
@@ -601,7 +604,9 @@ class FileProcessor(TaskInterface):
                     start = time.time()
                     pdf_uuid = await self.convert_to_pdf(temp_filename, landscape)
                     end = time.time()
-                    await logger.ainfo(f"Document converted to PDF in {(end - start):.2f} seconds", object_id=file_data.object_id)
+                    await logger.ainfo(
+                        f"Document converted to PDF in {(end - start):.2f} seconds", object_id=file_data.object_id
+                    )
                     enrichments_success.append(constants.E_PDF_CONVERSION)
 
                     if pdf_uuid:
@@ -655,7 +660,9 @@ class FileProcessor(TaskInterface):
             if yara_matches.yara_matches_present and len(yara_matches.yara_matches) > 0:
                 file_data.yara_matches.CopyFrom(yara_matches)
 
-                alert_rules = [t.rule_name for t in yara_matches.yara_matches if t.rule_name not in constants.EXCLUDED_YARA_RULES]
+                alert_rules = [
+                    t.rule_name for t in yara_matches.yara_matches if t.rule_name not in constants.EXCLUDED_YARA_RULES
+                ]
 
                 if alert_rules:
                     rule_matches_str = ", ".join(alert_rules)
@@ -749,7 +756,10 @@ class FileProcessor(TaskInterface):
                             except:
                                 pass
 
-                        if "object_id" in dotnet_results["decompilation"] and dotnet_results["decompilation"]["object_id"] is not None:
+                        if (
+                            "object_id" in dotnet_results["decompilation"]
+                            and dotnet_results["decompilation"]["object_id"] is not None
+                        ):
                             file_data.extracted_source = dotnet_results["decompilation"]["object_id"]
                             with await self.storage.download(uuid.UUID(file_data.extracted_source)) as temp_decomp_file:
                                 # if there's extracted source, download the source and run NoseyParker on the extracted source
@@ -772,7 +782,9 @@ class FileProcessor(TaskInterface):
         return file_data
 
     @aio.time(Summary("process_archive", "Time spent processing an archive"))  # type: ignore
-    async def process_archive(self, archive_file_path_on_disk: str, archive_file_path: str, archive_uuid: str, metadata: pb.Metadata):
+    async def process_archive(
+        self, archive_file_path_on_disk: str, archive_file_path: str, archive_uuid: str, metadata: pb.Metadata
+    ):
         """Processes all the files in a supplied archive.
 
         If an archive is under the self.extracted_archive_size_limit when decompressed, decompress
@@ -839,11 +851,16 @@ class FileProcessor(TaskInterface):
 
             except Exception as e:
                 await logger.aexception(
-                    e, message="process_archive error", extracted_file_path=extracted_file_path, archive_file_path=archive_file_path
+                    e,
+                    message="process_archive error",
+                    extracted_file_path=extracted_file_path,
+                    archive_file_path=archive_file_path,
                 )
                 return False
 
-        await logger.ainfo("Files processed from archive", archive_file_path=archive_file_path, processed_files=processed_files)
+        await logger.ainfo(
+            "Files processed from archive", archive_file_path=archive_file_path, processed_files=processed_files
+        )
 
         # clean up the extracted directory
         if os.path.exists(tmp_dir):
@@ -874,7 +891,9 @@ class FileProcessor(TaskInterface):
             )
 
             try:
-                file_data_enriched = await self.process_file(object_id, originating_object_id, file_path, event.metadata)
+                file_data_enriched = await self.process_file(
+                    object_id, originating_object_id, file_path, event.metadata
+                )
                 file_data_enriched_message.data.extend([file_data_enriched])
 
                 await logger.ainfo("Finished processing file", duration=str(datetime.now() - start_time))
@@ -901,7 +920,9 @@ class FileProcessor(TaskInterface):
                 file_uuid_str = data.extracted_plaintext
                 start_time = datetime.now()
 
-                plaintext_result = await self.process_plaintext_from_file_data_enriched(data, file_data_plaintext_message)
+                plaintext_result = await self.process_plaintext_from_file_data_enriched(
+                    data, file_data_plaintext_message
+                )
 
                 if plaintext_result:
                     await logger.ainfo(f"{file_uuid_str} processed in: {datetime.now() - start_time}")
@@ -939,9 +960,9 @@ class FileProcessor(TaskInterface):
                     yara_match.rule_name = match.rule
                     if yara_match.rule_name in self.yara_rule_definitions:
                         yara_match.rule_text = self.yara_rule_definitions[yara_match.rule_name]
-                    if hasattr(match, 'meta') and "description" in match.meta:
+                    if hasattr(match, "meta") and "description" in match.meta:
                         yara_match.rule_description = match.meta["description"]
-                    if hasattr(match, 'strings'):
+                    if hasattr(match, "strings"):
                         for yara_string in match.strings:
                             yara_string_match = pb.YaraMatches.YaraStringMatch()
                             yara_string_match.identifier = yara_string.identifier
@@ -1001,7 +1022,7 @@ class FileProcessor(TaskInterface):
                 files = {"file": file}
             url = f"{self.gotenberg_uri}forms/libreoffice/convert"
 
-            session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=(60*3), sock_read=(60*3))
+            session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=(60 * 3), sock_read=(60 * 3))
             async with aiohttp.ClientSession(timeout=session_timeout) as session:
                 async with TempFile(self.data_download_dir) as temp_file:
                     async with session.post(url, data=files) as resp:

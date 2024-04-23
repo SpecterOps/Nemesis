@@ -98,4 +98,7 @@ class pdf(Meta.FileType):
                 return (parsed_data, pb.AuthenticationDataIngestionMessage())
 
         except Exception as e:
-            return (helpers.nemesis_parsed_data_error(f"error parsing pdf file {self.file_data.object_id} : {e}"), pb.AuthenticationDataIngestionMessage())
+            return (
+                helpers.nemesis_parsed_data_error(f"error parsing pdf file {self.file_data.object_id} : {e}"),
+                pb.AuthenticationDataIngestionMessage(),
+            )

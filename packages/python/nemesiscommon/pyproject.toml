@@ -10,7 +10,6 @@ nemesispb = { path = "../nemesispb", develop = true }
 boto3 = "^1.24.59"
 pycryptodomex = "^3.20.0"
 requests = "^2.28.1"
-pydantic = "^1.10.4"
 tenacity = "^8.0.1"
 aio-pika = "^8.3.0"
 pyyaml = "^6.0"
@@ -23,6 +22,10 @@ prometheus-async = {extras = ["aiohttp"], version = "^22.2.0"}
 winacl = "^0.1.7"
 miniopy-async = "^1.15"
 cryptography = "^41.0.6"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.29"}
+pydantic = "^2.7.0"
+asyncpg = "^0.29.0"
+pydantic-settings = "^2.2.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.2"
@@ -32,6 +35,7 @@ mypy = "^0.971"
 
 [tool.poetry.group.dev.dependencies]
 pytest-asyncio = "^0.20.3"
+alembic = "^1.13.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

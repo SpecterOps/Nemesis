@@ -7,9 +7,8 @@ import uuid
 import structlog
 import uvicorn
 import yara
-from fastapi import FastAPI, File, UploadFile
+from fastapi import APIRouter, FastAPI, File, UploadFile
 from fastapi.responses import Response
-from fastapi import APIRouter
 from nemesiscommon.nemesis_tempfile import TempFile
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
@@ -46,7 +45,7 @@ class YaraApi(TaskInterface):
         await server.serve()
 
 
-class YaraApiRoutes():
+class YaraApiRoutes:
     storage: StorageInterface
     data_download_dir: str
 
@@ -56,13 +55,17 @@ class YaraApiRoutes():
         self.data_download_dir = data_download_dir
 
         # load up the Yara rules
-        yara_file_paths = glob.glob("./enrichment/lib/public_yara/**/*.yara", recursive=True) + glob.glob("./enrichment/lib/public_yara/**/*.yar", recursive=True)
+        yara_file_paths = glob.glob("./enrichment/lib/public_yara/**/*.yara", recursive=True) + glob.glob(
+            "./enrichment/lib/public_yara/**/*.yar", recursive=True
+        )
         yara_files = {}
 
         for yara_file_path in yara_file_paths:
             try:
-                yara_files[yara_file_path.split("/")[-1]] = yara_file_path
-            except:
+                filename = yara_file_path.split("/")[-1]
+                yara_files[filename] = yara_file_path
+            except Exception as e:
+                logger.exception(e, message="YaraAPI error loading Yara rules", yara_file_path=yara_file_path)
                 continue
 
         self.yara_rules = yara.compile(filepaths=yara_files)

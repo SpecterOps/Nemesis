@@ -58,7 +58,11 @@ class SeatbeltRegistryValue:
         if "ValueKind" in json_dict:
             json_dict["ValueKind"] = RegistryValueKindEnum(json_dict["ValueKind"])
         return SeatbeltRegistryValue(
-            json_dict["Key"], json_dict.get("ValueName"), json_dict.get("Value"), json_dict.get("ValueKind"), json_dict.get("SDDL")
+            json_dict["Key"],
+            json_dict.get("ValueName"),
+            json_dict.get("Value"),
+            json_dict.get("ValueKind"),
+            json_dict.get("SDDL"),
         )
 
     def to_protobuf(self) -> pb.RegistryValueIngestion:
@@ -462,7 +466,9 @@ def parse_seatbelt_date(date_string: str) -> datetime:
         datetime: The parsed datetime object.
     """
     if not date_string.startswith(SEATBELT_DATE_START_TOKEN) or not date_string.endswith(SEATBELT_DATE_END_TOKEN):
-        raise ValueError(f"Invalid Seatbelt date string. Expected a date in the format of '/Date(%d)/' but got '{date_string}'")
+        raise ValueError(
+            f"Invalid Seatbelt date string. Expected a date in the format of '/Date(%d)/' but got '{date_string}'"
+        )
 
     num = date_string[len(SEATBELT_DATE_START_TOKEN) : -(len(SEATBELT_DATE_END_TOKEN))]
     epoch = int(num) / 1000

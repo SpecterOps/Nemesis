@@ -10,6 +10,7 @@ from dependency_injector.wiring import Provide, inject
 from nemesiscommon.logging import configure_logger
 from nemesiscommon.setupqueues import initRabbitMQ
 from nemesiscommon.socketwaiter import SocketWaiter
+
 from passwordcracker.containers import Container
 from passwordcracker.settings import PasswordCrackerSettings
 
@@ -21,7 +22,7 @@ async def amain(container: Container):
     await container.init_resources()  # type: ignore
     config = container.config2()
 
-    await initRabbitMQ(config.rabbitmq_connection_uri)
+    await initRabbitMQ(str(config.rabbitmq_connection_uri))
     await wait_for_services(config)
 
     dispatcher = await container.task_dispatcher()  # type: ignore
@@ -87,12 +88,12 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: dict[str, Any]):
 
 
 async def wait_for_services(config: PasswordCrackerSettings) -> None:
-    rabbitUri = urlparse(config.rabbitmq_connection_uri)
-    postgresUri = urlparse(config.postgres_connection_uri)
+    rabbitUri = urlparse(str(config.rabbitmq_connection_uri))
+    postgresUri = urlparse(str(config.postgres_connection_uri))
 
     if rabbitUri.hostname is None or postgresUri.hostname is None:
         raise Exception("Invalid connection URI")
-    if rabbitUri.port is None:
+    if rabbitUri.port is None or postgresUri.port is None:
         raise Exception("Invalid connection URI")
 
     SocketWaiter(rabbitUri.hostname, rabbitUri.port).wait()

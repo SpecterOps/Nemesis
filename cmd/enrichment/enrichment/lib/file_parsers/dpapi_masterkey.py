@@ -1,5 +1,4 @@
 # Standard Libraries
-import sys
 from typing import List
 
 # 3rd Party Libraries
@@ -62,10 +61,14 @@ class dpapi_masterkey(Meta.FileType):
         Parses the file if parsing is defined, including any reversible decryption.
         """
         try:
-            dpapi_masterkey = helpers.process_masterkey_file(self.file_data.object_id, self.file_path, self.file_data.path, self.metadata)
+            dpapi_masterkey = helpers.process_masterkey_file(
+                self.file_data.object_id, self.file_path, self.file_data.path, self.metadata
+            )
 
             if not dpapi_masterkey:
-                return helpers.nemesis_parsed_data_error(f"Could not find a masterkey in the file. File ID: {self.file_data.object_id}")
+                return helpers.nemesis_parsed_data_error(
+                    f"Could not find a masterkey in the file. File ID: {self.file_data.object_id}"
+                )
 
             if dpapi_masterkey.domain_backupkey_guid:
                 context = "domain"

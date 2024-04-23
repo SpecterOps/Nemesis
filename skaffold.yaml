@@ -218,24 +218,24 @@ build:
     useBuildkit: true
     concurrency: 0
   artifacts:
-    - &build-dotnet
-      image: nemesis-dotnet
-      docker:
-        dockerfile: dockerfiles/dotnet.Dockerfile
-    - &build-nlp
-      image: nemesis-nlp
-      docker:
-        dockerfile: dockerfiles/nlp.Dockerfile
-    - &build-passwordcracker
-      image: nemesis-passwordcracker
-      docker:
-        dockerfile: dockerfiles/passwordcracker.Dockerfile
+    #- &build-dotnet
+    #  image: nemesis-dotnet
+    #  docker:
+    #    dockerfile: dockerfiles/dotnet.Dockerfile
+    # - &build-nlp
+    #   image: nemesis-nlp
+    #   docker:
+    #     dockerfile: dockerfiles/nlp.Dockerfile
+    # - &build-passwordcracker
+    #   image: nemesis-passwordcracker
+    #   docker:
+    #     dockerfile: dockerfiles/passwordcracker.Dockerfile
 
 manifests:
   rawYaml:
-    - &k8s-dotnet kubernetes/dotnet/*
-    - &k8s-nlp kubernetes/nlp/*
-    - &k8s-passwordcracker kubernetes/passwordcracker/*
+    # - &k8s-dotnet kubernetes/dotnet/*
+    # - &k8s-nlp kubernetes/nlp/*
+    # - &k8s-passwordcracker kubernetes/passwordcracker/*
 deploy:
   kubectl: {}
 

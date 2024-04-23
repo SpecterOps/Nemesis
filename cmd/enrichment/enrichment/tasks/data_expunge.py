@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 # 3rd Party Libraries
 import structlog
 from elasticsearch import AsyncElasticsearch
-from enrichment.lib.nemesis_db import NemesisDb
 from nemesiscommon.constants import ALL_ES_INDICIES
 from nemesiscommon.tasking import TaskInterface
+
+from enrichment.lib.nemesis_db import NemesisDb
 
 logger = structlog.get_logger(module=__name__)
 
@@ -17,6 +18,7 @@ class DataExpunge(TaskInterface):
     Class responsible for expunging data from PostgreSQL and Elasticsearch
     that's past its expiration date.
     """
+
     es_client: AsyncElasticsearch
     db: NemesisDb
 
@@ -46,9 +48,10 @@ class DataExpunge(TaskInterface):
 
                 await logger.ainfo("Expired data expunged from Elasticsearch indexes")
 
-                await logger.ainfo("Expunging expired data from PostgreSQL tables")
-                await self.db.expunge_expirated_data()
-                await logger.ainfo("Expired data expunged from PostgreSQL tables")
+                # TODO: Fix expungement so that it keeps referential integrity
+                # await logger.ainfo("Expunging expired data from PostgreSQL tables")
+                # await self.db.expunge_expirated_data()
+                # await logger.ainfo("Expired data expunged from PostgreSQL tables")
             except Exception as e:
                 await logger.aerror(f"Exception running data expungement: {e}")
 

@@ -48,7 +48,6 @@ class shadow(Meta.FileType):
             auth_data_msg.metadata.CopyFrom(self.metadata)
 
             with open(self.file_path, "r") as f:
-
                 lines = f.readlines()
 
                 for line in lines:
@@ -92,10 +91,15 @@ class shadow(Meta.FileType):
                         auth_data.data = password
                         auth_data.type = "hash_crypt"
                         auth_data.username = username
-                        auth_data.notes = f"credential parsed from file_processor->shadow\nLast Changed: {password_last_changed}"
+                        auth_data.notes = (
+                            f"credential parsed from file_processor->shadow\nLast Changed: {password_last_changed}"
+                        )
                         auth_data.originating_object_id = self.file_data.object_id
 
             return (parsed_data, auth_data_msg)
 
         except Exception as e:
-            return (helpers.nemesis_parsed_data_error(f"error parsing shadow file {self.file_data.object_id} : {e}"), pb.AuthenticationDataIngestionMessage())
+            return (
+                helpers.nemesis_parsed_data_error(f"error parsing shadow file {self.file_data.object_id} : {e}"),
+                pb.AuthenticationDataIngestionMessage(),
+            )

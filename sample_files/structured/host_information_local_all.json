@@ -1,0 +1,18 @@
+{
+    "data": {
+        "short_name": "HOSTINFO-ALL",
+        "long_name": "HOSTINFO-ALL.CORP.LOCAL",
+        "ip_addresses": [
+            "192.168.230.101"
+        ]
+    },
+    "metadata": {
+        "agent_id": "1234512345",
+        "agent_type": "beacon",
+        "automated": true,
+        "data_type": "host_information",
+        "expiration": "2024-04-03T09:59:00.000Z",
+        "project": "ASSESS-X",
+        "timestamp": "2023-04-03T09:59:00.000Z"
+    }
+}

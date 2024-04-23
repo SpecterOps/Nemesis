@@ -41,6 +41,10 @@
 			"name": "packages/nemesiscommon"
 		},
 		{
+			"path": "../packages/python/nemesisdb",
+			"name": "packages/nemesisdb"
+		},
+		{
 			"path": "../packages/python/nemesispb",
 			"name": "packages/nemesispb"
 		},
@@ -64,7 +68,6 @@
 			"path": "../cmd/passwordcracker",
 			"name": "tasks/passwordcracker"
 		},
-
 	],
 	"settings": {
 		"files.exclude": {
@@ -81,9 +84,13 @@
 		},
 		"[python]": {
 			"diffEditor.ignoreTrimWhitespace": false,
+			"editor.defaultFormatter": "charliermarsh.ruff",
 			"editor.wordBasedSuggestions": "off",
 			"editor.formatOnSave": true,
-			"editor.defaultFormatter": "ms-python.black-formatter"
+			"editor.codeActionsOnSave": {
+				"source.fixAll": "explicit",
+				"source.organizeImports": "explicit"
+			}
 		},
 	}
 }

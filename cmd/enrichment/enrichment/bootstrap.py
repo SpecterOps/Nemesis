@@ -7,12 +7,13 @@ from urllib.parse import urlparse
 # 3rd Party Libraries
 import structlog
 from dependency_injector.wiring import Provide, inject
-from enrichment.containers import Container
-from enrichment.settings import EnrichmentSettings
 from nemesiscommon.logging import configure_logger
 from nemesiscommon.setupqueues import initRabbitMQ
 from nemesiscommon.socketwaiter import SocketWaiter
 from nemesiscommon.tasking import TaskDispatcher
+
+from enrichment.containers import Container
+from enrichment.settings import EnrichmentSettings
 
 logger: structlog.BoundLogger = structlog.get_logger(module=__name__)
 
@@ -27,7 +28,7 @@ async def amain(container: Container):
     if config.storage_provider == "s3":
         container.storage_service.override(container.storage_service_s3)
 
-    await initRabbitMQ(config.rabbitmq_connection_uri)
+    await initRabbitMQ(str(config.rabbitmq_connection_uri))
     await wait_for_services(config)
 
     task_names = get_task_names(config, container)
@@ -129,9 +130,9 @@ def handle_exception(loop: asyncio.AbstractEventLoop, context: dict[str, Any]):
 
 
 async def wait_for_services(config: EnrichmentSettings) -> None:
-    rabbitUri = urlparse(config.rabbitmq_connection_uri)
-    elasticUri = urlparse(config.elasticsearch_url)
-    postgresUri = urlparse(config.postgres_connection_uri)
+    rabbitUri = urlparse(str(config.rabbitmq_connection_uri))
+    elasticUri = urlparse(str(config.elasticsearch_url))
+    postgresUri = urlparse(str(config.postgres_connection_uri))
 
     if rabbitUri.hostname is None or elasticUri.hostname is None or postgresUri.hostname is None:
         raise Exception("Invalid connection URI")

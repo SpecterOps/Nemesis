@@ -4,10 +4,7 @@
 	// List of extensions which should be recommended for users of this workspace.
 	"recommendations": [
 		"bungcip.better-toml",
-		"ms-python.black-formatter",
-		"ms-python.flake8",
-		"ms-python.isort",
-		"ms-python.python",
+		"charliermarsh.ruff",
 		"ms-python.vscode-pylance",
 		"njpwerner.autodocstring",
 		"zxh404.vscode-proto3",

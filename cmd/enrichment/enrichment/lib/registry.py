@@ -9,8 +9,7 @@ import nemesispb.nemesis_pb2 as pb
 import structlog
 from nemesiscommon import helpers
 from Registry import Registry
-from winacl.dtyp.ace import (ACCESS_ALLOWED_CALLBACK_ACE,
-                             SYSTEM_MANDATORY_LABEL_ACE, ACEType)
+from winacl.dtyp.ace import ACCESS_ALLOWED_CALLBACK_ACE, SYSTEM_MANDATORY_LABEL_ACE, ACEType
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
 
 logger = structlog.get_logger(module=__name__)
@@ -20,19 +19,27 @@ registry_path_regexes = [
     # # paths that contain service information
     re.compile(r"^hklm[:]?\\system\\(currentcontrolset|controlset001|controlset002)\\services\\", re.IGNORECASE),
     # System ENV variables
-    re.compile(r"^hklm[:]?\\system\\(currentcontrolset|controlset001|controlset002)\\control\\session manager\\environment", re.IGNORECASE),
+    re.compile(
+        r"^hklm[:]?\\system\\(currentcontrolset|controlset001|controlset002)\\control\\session manager\\environment",
+        re.IGNORECASE,
+    ),
     # LSA settings
     re.compile(r"^hklm[:]?\\system\\(currentcontrolset|controlset001|controlset002)\\control\\lsa", re.IGNORECASE),
     # shutdown time/etc.
     re.compile(r"hklm[:]?\\system\\(currentcontrolset|controlset001|controlset002)\\control\\windows", re.IGNORECASE),
     # SecureBoot
-    re.compile(r"^hklm[:]?\\system\\(currentcontrolset|controlset001|controlset002)\\control\\secureboot\\state", re.IGNORECASE),
+    re.compile(
+        r"^hklm[:]?\\system\\(currentcontrolset|controlset001|controlset002)\\control\\secureboot\\state", re.IGNORECASE
+    ),
     # paths for autologon information
     re.compile(r"^hklm[:]?\\software\\microsoft\\windows nt\\currentversion\\winlogon", re.IGNORECASE),
     # Network profiles
     re.compile(r"hklm[:]?\\software\\microsoft\\windows nt\\currentversion\\networklist\\profiles", re.IGNORECASE),
     # autoruns
-    re.compile(r"^hklm[:]?\\software\\(wow6432node\\)*microsoft\\windows\\currentversion\\(run(once)*(service)*)", re.IGNORECASE),
+    re.compile(
+        r"^hklm[:]?\\software\\(wow6432node\\)*microsoft\\windows\\currentversion\\(run(once)*(service)*)",
+        re.IGNORECASE,
+    ),
     # UAC settings + registry audit policies
     re.compile(r"^hklm[:]?\\software\\microsoft\\windows\\currentversion\\policies\\system", re.IGNORECASE),
     # AppLocker
@@ -53,11 +60,16 @@ registry_path_regexes = [
     re.compile(r"^hklm[:]?\\software\\microsoft\\windows\\currentversion\\internet settings", re.IGNORECASE),
     # Windows Firewall settings
     re.compile(r"^hklm[:]?\\software\\policies\\microsoft\\windowsfirewall", re.IGNORECASE),
-    re.compile(r"^hklm[:]?\\system\\currentcontrolset\\services\\sharedaccess\\parameters\\firewallpolicy", re.IGNORECASE),
+    re.compile(
+        r"^hklm[:]?\\system\\currentcontrolset\\services\\sharedaccess\\parameters\\firewallpolicy", re.IGNORECASE
+    ),
     # Windows Defender settings
     re.compile(r"^hklm[:]?\\software\\(policies\\)*microsoft\\windows defender", re.IGNORECASE),
     # Eventlog forwarding
-    re.compile(r"^hklm[:]?\\software\\policies\\microsoft\\windows\\eventlog\\eventforwarding\\subscriptionmanager", re.IGNORECASE),
+    re.compile(
+        r"^hklm[:]?\\software\\policies\\microsoft\\windows\\eventlog\\eventforwarding\\subscriptionmanager",
+        re.IGNORECASE,
+    ),
     # WSUS information
     re.compile(r"^hklm[:]?\\software\\policies\\microsoft\\windows\\windowsupdate", re.IGNORECASE),
     # SCCM
@@ -67,7 +79,6 @@ registry_path_regexes = [
     re.compile(r"^hklm[:]?\\Software\\Policies\\Microsoft Services\\AdmPwd", re.IGNORECASE),
     # Installed software
     re.compile(r"^hklm[:]?\\software\\(wow6432node\\)*microsoft\\windows\\currentversion\\uninstall", re.IGNORECASE),
-
     # User RDP saved connections
     re.compile(r"^(?!hklm).+\\software\\microsoft\\terminal server client\\servers", re.IGNORECASE),
     # User Explorer MRUs
@@ -78,7 +89,6 @@ registry_path_regexes = [
     re.compile(r"^(?!hklm).+\\software\\syncengines\\providers\\onedrive", re.IGNORECASE),
     # Internet Explorer typed URLs
     re.compile(r"^(?!hklm).+\\software\\microsoft\\internet explorer\\typedurls", re.IGNORECASE),
-
     # TODO:
     #   Office MRUs https://github.com/GhostPack/Seatbelt/blob/master/Seatbelt/Commands/Products/OfficeMRUsCommand.cs
 ]
@@ -138,7 +148,11 @@ async def get_hive_name(hive_path: str) -> str:
         sk = reg.root()._nkrecord.sk_record()
         sd_size = sk.unpack_dword(16)
         sd = SECURITY_DESCRIPTOR.from_bytes(sk.unpack_binary(20, sd_size))
-        sids = [f"{ace.Sid}" for ace in sd.Dacl.aces if ace.AceType == ACEType.ACCESS_ALLOWED_ACE_TYPE and re.match("S-1-5-21-.*", f"{ace.Sid}")]
+        sids = [
+            f"{ace.Sid}"
+            for ace in sd.Dacl.aces
+            if ace.AceType == ACEType.ACCESS_ALLOWED_ACE_TYPE and re.match("S-1-5-21-.*", f"{ace.Sid}")
+        ]
         if len(sids) < 1:
             raise Exception("Can't derive a proper user SID from the DACL on the hive root")
         elif len(sids) > 2:

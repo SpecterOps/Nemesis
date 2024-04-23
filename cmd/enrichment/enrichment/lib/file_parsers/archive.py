@@ -49,7 +49,10 @@ class archive(Meta.FileType):
         elif py7zr.is_7zfile(self.file_path):
             return self.parse_7z()
         else:
-            return (helpers.nemesis_parsed_data_error(f"file is not a supported archive: {self.file_data.object_id}"), pb.AuthenticationDataIngestionMessage())
+            return (
+                helpers.nemesis_parsed_data_error(f"file is not a supported archive: {self.file_data.object_id}"),
+                pb.AuthenticationDataIngestionMessage(),
+            )
 
     def parse_zip(self) -> tuple[pb.ParsedData, pb.AuthenticationDataIngestionMessage]:
         """
@@ -104,7 +107,10 @@ class archive(Meta.FileType):
             return (parsed_data, auth_data_msg)
 
         except Exception as e:
-            return (helpers.nemesis_parsed_data_error(f"error parsing zip file {self.file_data.object_id} : {e}"), auth_data_msg)
+            return (
+                helpers.nemesis_parsed_data_error(f"error parsing zip file {self.file_data.object_id} : {e}"),
+                auth_data_msg,
+            )
 
     def parse_7z(self) -> tuple[pb.ParsedData, pb.AuthenticationDataIngestionMessage]:
         """
@@ -154,4 +160,7 @@ class archive(Meta.FileType):
             return (parsed_data, auth_data_msg)
 
         except Exception as e:
-            return (helpers.nemesis_parsed_data_error(f"error parsing 7z file {self.file_data.object_id} : {e}"), auth_data_msg)
+            return (
+                helpers.nemesis_parsed_data_error(f"error parsing 7z file {self.file_data.object_id} : {e}"),
+                auth_data_msg,
+            )

@@ -1,32 +1,21 @@
 # Standard Libraries
 import logging
-import os
 from enum import StrEnum
-from typing import Any
+from typing import Annotated
+
+from pydantic import AfterValidator, AnyHttpUrl, Field, field_validator
 
 # 3rd Party Libraries
-import yaml
-from pydantic import BaseSettings, Field, validator
-from pydantic.env_settings import SettingsSourceCallable
-from pydantic.networks import HttpUrl, Parts
+from pydantic_core import Url
+from pydantic_settings import BaseSettings
 
 
-class HttpUrlWithSlash(HttpUrl):
-    @classmethod
-    def __get_validators__(cls):
-        yield super().validate
-        yield cls.validate
+def check_url_has_slash(v: Url) -> Url:
+    if not v or not v.path or not v.path.endswith("/"):
+        raise ValueError("URL must end with a '/'")
+    return v
 
-    @classmethod
-    def validate_parts(cls, parts: "Parts", validate_port: bool = True) -> "Parts":
-        path = parts.get("path")
-        if not path or not path.endswith("/"):
-            raise ValueError("URI must end with a '/'")
-
-        return super().validate_parts(parts, validate_port=False)
-
-    def __repr__(self):
-        return f"HttpUrlWithSlash({super().__repr__()})"
+HttpUrlWithSlash = Annotated[AnyHttpUrl, AfterValidator(check_url_has_slash)]
 
 
 class EnvironmentSettings(StrEnum):
@@ -51,7 +40,7 @@ class NemesisServiceSettings(BaseSettings):
     prometheus_port: int = Field(None, ge=0, le=65535)
     assessment_id: str
 
-    @validator("log_level")
+    @field_validator("log_level")
     def method_is_valid(cls, level: str) -> str:
         levelName = logging.getLevelName(level)
 
@@ -61,30 +50,30 @@ class NemesisServiceSettings(BaseSettings):
             raise ValueError(f"must be valid log level from Python's 'logging' module, got '{level}'")
 
     # Load settings from a YAML file and from environment variables
-    class Config:
-        @classmethod
-        def customise_sources(
-            cls,
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> tuple[SettingsSourceCallable, ...]:
-            def yml_config_setting(settings: BaseSettings) -> dict[str, Any]:
-                if not os.path.exists("config.yml"):
-                    return {}
-                try:
-                    with open("config.yml") as f:
-                        conf = yaml.safe_load(f)
-                        if not conf:
-                            conf = {}
+    # class Config:
+    #     @classmethod
+    #     def customise_sources(
+    #         cls,
+    #         init_settings: SettingsSourceCallable,
+    #         env_settings: SettingsSourceCallable,
+    #         file_secret_settings: SettingsSourceCallable,
+    #     ) -> tuple[SettingsSourceCallable, ...]:
+    #         def yml_config_setting(settings: BaseSettings) -> dict[str, Any]:
+    #             if not os.path.exists("config.yml"):
+    #                 return {}
+    #             try:
+    #                 with open("config.yml") as f:
+    #                     conf = yaml.safe_load(f)
+    #                     if not conf:
+    #                         conf = {}
 
-                        return conf
-                except:
-                    # Do nothing since env vars might be specified
-                    return {}
+    #                     return conf
+    #             except:
+    #                 # Do nothing since env vars might be specified
+    #                 return {}
 
-            # Add load from yml file, change priority and remove file secret option
-            return env_settings, yml_config_setting
+    #         # Add load from yml file, change priority and remove file secret option
+    #         return env_settings, yml_config_setting
 
 
 class FileProcessingService(NemesisServiceSettings):

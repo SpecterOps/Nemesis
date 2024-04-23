@@ -9,7 +9,7 @@ import nemesispb.nemesis_pb2 as pb
 class FileType(ABC):
     def __new__(cls, *args, **kwargs):
         if cls is pb.FileDataEnriched:
-            raise TypeError(f"TypeError: Can't instantiate abstract class %s directly".format(name=cls.__name__))
+            raise TypeError("TypeError: Can't instantiate abstract class %s directly".format())
         return object.__new__(cls)
 
     @abstractmethod

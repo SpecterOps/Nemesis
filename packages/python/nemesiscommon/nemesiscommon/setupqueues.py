@@ -1,6 +1,7 @@
 # 3rd Party Libraries
 import structlog
 from aio_pika import ExchangeType, connect_robust
+
 from nemesiscommon.messaging_rabbitmq import RABBITMQ_QUEUE_BINDINGS
 
 logger = structlog.get_logger(None, module=__name__)

@@ -8,8 +8,7 @@ import structlog
 from Cryptodome.Cipher import AES
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.tasks.dpapi.dpapi_blob import DPAPI_BLOB
-from nemesiscommon.messaging import (MessageQueueConsumerInterface,
-                                     MessageQueueProducerInterface)
+from nemesiscommon.messaging import MessageQueueConsumerInterface, MessageQueueProducerInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio
 from prometheus_client import Summary
@@ -94,7 +93,7 @@ class ChromiumCookie(TaskInterface):
                             if plaintext and plaintext != "":
                                 entry.value_dec = plaintext
                                 entry.is_decrypted = True
-                        except Exception as e:
+                        except Exception:
                             await logger.aerror(
                                 "Error AES decrypting cookie value",
                                 source=event.metadata.source,
@@ -183,7 +182,13 @@ class ChromiumCookie(TaskInterface):
 
     async def get_linked_masterkeys(self, event: pb.ChromiumCookieMessage) -> Dict[str, str]:
         """Helper that returns all masterkey GUID:key mappings from a set of cookie messages."""
-        masterkey_guids_uniq = set([entry.masterkey_guid for entry in event.data if (entry.encryption_type == "dpapi" and entry.masterkey_guid != "00000000-0000-0000-0000-000000000000")])
+        masterkey_guids_uniq = set(
+            [
+                entry.masterkey_guid
+                for entry in event.data
+                if (entry.encryption_type == "dpapi" and entry.masterkey_guid != "00000000-0000-0000-0000-000000000000")
+            ]
+        )
         masterkeys = {}
         for mk_guid in masterkey_guids_uniq:
             results = await self.db.get_decrypted_dpapi_masterkey(mk_guid)

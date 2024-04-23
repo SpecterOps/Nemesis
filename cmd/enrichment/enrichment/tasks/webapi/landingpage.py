@@ -1,9 +1,8 @@
 # 3rd Party Libraries
 import structlog
 import uvicorn
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.responses import HTMLResponse
-from fastapi import APIRouter
 from nemesiscommon.tasking import TaskInterface
 
 logger = structlog.get_logger(module=__name__)
@@ -30,14 +29,15 @@ class LandingPageApi(TaskInterface):
         await server.serve()
 
 
-class LandingPageRoutes():
+class LandingPageRoutes:
     def __init__(self) -> None:
         super().__init__()
         self.router = APIRouter()
         self.router.add_api_route("/", self.home, methods=["GET"])
 
     async def home(self):
-        return """
+        return HTMLResponse(
+            """
 <html>
     <head>
         <title>Nemesis Services</title>
@@ -63,3 +63,4 @@ class LandingPageRoutes():
     </body>
 </html>
         """
+        )

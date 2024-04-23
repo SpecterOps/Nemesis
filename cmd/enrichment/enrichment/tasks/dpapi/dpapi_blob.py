@@ -28,14 +28,11 @@
 #
 
 # Standard Libraries
-from binascii import hexlify, unhexlify
-from datetime import datetime
-from struct import pack, unpack
+from binascii import hexlify
 
 # 3rd Party Libraries
 from Cryptodome.Cipher import AES, DES3
 from Cryptodome.Hash import HMAC, SHA1, SHA512
-from Cryptodome.PublicKey import RSA
 from Cryptodome.Util.Padding import unpad
 from impacket.dcerpc.v5.enum import Enum
 from impacket.structure import Structure
@@ -244,10 +241,16 @@ class DPAPI_BLOB(Structure):
         print("Guid MasterKey   : %s" % bin_to_string(self["GuidMasterKey"]))
         print("Flags            : %8x (%s)" % (self["Flags"], getFlags(FLAGS, self["Flags"])))
         print("Description      : %s" % (self["Description"].decode("utf-16le")))
-        print("CryptAlgo        : %.8x (%d) (%s)" % (self["CryptAlgo"], self["CryptAlgo"], ALGORITHMS(self["CryptAlgo"]).name))
+        print(
+            "CryptAlgo        : %.8x (%d) (%s)"
+            % (self["CryptAlgo"], self["CryptAlgo"], ALGORITHMS(self["CryptAlgo"]).name)
+        )
         print("Salt             : %s" % (hexlify(self["Salt"])))
         print("HMacKey          : %s" % (hexlify(self["HMacKey"])))
-        print("HashAlgo         : %.8x (%d) (%s)" % (self["HashAlgo"], self["HashAlgo"], ALGORITHMS(self["HashAlgo"]).name))
+        print(
+            "HashAlgo         : %.8x (%d) (%s)"
+            % (self["HashAlgo"], self["HashAlgo"], ALGORITHMS(self["HashAlgo"]).name)
+        )
         print("HMac             : %s" % (hexlify(self["HMac"])))
         print("Data             : %s" % (hexlify(self["Data"])))
         print("Sign             : %s" % (hexlify(self["Sign"])))
@@ -277,7 +280,10 @@ class DPAPI_BLOB(Structure):
             derivedKey += b"\x00" * ALGORITHMS_DATA[self["HashAlgo"]][4]
             ipad = bytearray([i ^ 0x36 for i in bytearray(derivedKey)][: ALGORITHMS_DATA[self["HashAlgo"]][4]])
             opad = bytearray([i ^ 0x5C for i in bytearray(derivedKey)][: ALGORITHMS_DATA[self["HashAlgo"]][4]])
-            derivedKey = ALGORITHMS_DATA[self["HashAlgo"]][1].new(ipad).digest() + ALGORITHMS_DATA[self["HashAlgo"]][1].new(opad).digest()
+            derivedKey = (
+                ALGORITHMS_DATA[self["HashAlgo"]][1].new(ipad).digest()
+                + ALGORITHMS_DATA[self["HashAlgo"]][1].new(opad).digest()
+            )
             derivedKey = fixparity(derivedKey)
 
         return derivedKey
@@ -301,7 +307,11 @@ class DPAPI_BLOB(Structure):
         # Derive the key
         derivedKey = self.deriveKey(sessionKey)
 
-        cipher = ALGORITHMS_DATA[self["CryptAlgo"]][1].new(derivedKey[: ALGORITHMS_DATA[self["CryptAlgo"]][0]], mode=ALGORITHMS_DATA[self["CryptAlgo"]][2], iv=b"\x00" * ALGORITHMS_DATA[self["CryptAlgo"]][3])
+        cipher = ALGORITHMS_DATA[self["CryptAlgo"]][1].new(
+            derivedKey[: ALGORITHMS_DATA[self["CryptAlgo"]][0]],
+            mode=ALGORITHMS_DATA[self["CryptAlgo"]][2],
+            iv=b"\x00" * ALGORITHMS_DATA[self["CryptAlgo"]][3],
+        )
         cleartext = unpad(cipher.decrypt(self["Data"]), ALGORITHMS_DATA[self["CryptAlgo"]][1].block_size)
 
         # Now check the signature

@@ -42,7 +42,10 @@ class dpapi_domain_backupkey:
                 await logger.aerror("Received a DPAPI backupkey file that is empty", metadata=metadata)
                 return
             elif size < 2:
-                await logger.aerror("Received a DPAPI backupkey file that is less than 2 bytes, and therefore invalid JSON", metadata=metadata)
+                await logger.aerror(
+                    "Received a DPAPI backupkey file that is less than 2 bytes, and therefore invalid JSON",
+                    metadata=metadata,
+                )
                 return
 
             with open(temp_file.name, "rb") as f:

@@ -5,7 +5,6 @@ import os
 import re
 import xml.etree.ElementTree as ET
 from typing import Callable, Tuple
-from unittest.mock import CallableMixin
 
 # 3rd Party Libraries
 import enrichment.lib.file_parsers.Meta as Meta
@@ -61,7 +60,9 @@ def decrypt_sitelist_password(b64data: str) -> str:
     return decrypted[0 : decrypted.find(b"\x00")].decode("utf-8") or "<empty>"
 
 
-def process_sitelist_xml(file_path, originating_object_id, metadata) -> tuple[pb.ParsedData, pb.AuthenticationDataIngestionMessage]:
+def process_sitelist_xml(
+    file_path, originating_object_id, metadata
+) -> tuple[pb.ParsedData, pb.AuthenticationDataIngestionMessage]:
     """
     Parses a McAfee Sitelist.xml file, extracts all data to a structured
     format, and decrypts any encrypted passwords.

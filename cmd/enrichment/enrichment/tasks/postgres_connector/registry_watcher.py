@@ -8,8 +8,7 @@ import enrichment.lib.helpers as helpers
 import nemesispb.nemesis_pb2 as pb
 import structlog
 from enrichment.lib.nemesis_db import NemesisDb, RegistryObject, ServiceColumn
-from enrichment.tasks.postgres_connector.registry_path_utils import (
-    normalize_registry_path, parse_next_subkey)
+from enrichment.tasks.postgres_connector.registry_path_utils import normalize_registry_path, parse_next_subkey
 from nemesiscommon.messaging import MessageQueueProducerInterface
 from winacl.dtyp.ace import ACCESS_ALLOWED_CALLBACK_ACE
 from winacl.dtyp.security_descriptor import SECURITY_DESCRIPTOR
@@ -156,7 +155,9 @@ class RegistryWatcher:
         """
         return SECURITY_DESCRIPTOR.from_bytes(sd_bytes).to_sddl()
 
-    async def handle_service_root_key(self, metadata: pb.Metadata, service_name: str, value_name: str, value: str) -> None:
+    async def handle_service_root_key(
+        self, metadata: pb.Metadata, service_name: str, value_name: str, value: str
+    ) -> None:
         """Handles ingestion of values from a service's root registry key("HKLM\\SYSTEM\\CurrentControlSet\\Services\\SERVICE_NAME").
 
         Args:
@@ -186,7 +187,9 @@ class RegistryWatcher:
                 if value_name_lower in self.SERVICES_ROOT_VALUE_NAMES:
                     await self.db.add_service_property(metadata, service_name, column, value)
 
-    async def handle_service_parameters_key(self, metadata: pb.Metadata, service_name: str, value_name: str, value: str) -> None:
+    async def handle_service_parameters_key(
+        self, metadata: pb.Metadata, service_name: str, value_name: str, value: str
+    ) -> None:
         """Handles ingestion of values from the "Services\\SERVICE_NAME\\Parameters" registry key.
 
         Args:
@@ -203,7 +206,9 @@ class RegistryWatcher:
         elif value_name == "servicemain":
             await self.db.add_service_property(metadata, service_name, ServiceColumn.SERVICE_DLL_ENTRYPOINT, value)
 
-    async def handle_service_security_key(self, metadata: pb.Metadata, service_name: str, value_name: str, value: str) -> None:
+    async def handle_service_security_key(
+        self, metadata: pb.Metadata, service_name: str, value_name: str, value: str
+    ) -> None:
         """Handles ingestion of values from the "Services\\SERVICE_NAME\\Security" registry key.
 
         Args:

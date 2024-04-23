@@ -15,7 +15,8 @@ import streamlit as st
 from elasticsearch import Elasticsearch
 from sqlalchemy import create_engine
 from sqlalchemy import text as sql_text
-from streamlit_extras.app_logo import add_logo
+
+# from streamlit_extras.app_logo import add_logo
 
 # pull in and check all of our required environment variables
 WAIT_TIMEOUT = 5
@@ -449,7 +450,7 @@ def postgres_count_entries(table_name: str) -> int:
             with conn.cursor() as cur:
                 cur.execute(f"SELECT COUNT(*) FROM nemesis.{table_name}")
                 return cur.fetchone()[0]
-    except Exception as e:
+    except Exception:
         return -1
 
 
@@ -460,9 +461,9 @@ def postgres_count_triaged_files() -> int:
     try:
         with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT COUNT(*) FROM nemesis.triage WHERE \"table_name\" = 'file_data_enriched'")
+                cur.execute("SELECT COUNT(*) FROM nemesis.triage WHERE \"table_name\" = 'file_data_enriched'")
                 return cur.fetchone()[0]
-    except Exception as e:
+    except Exception:
         return -1
 
 
@@ -775,7 +776,7 @@ def render_nemesis_page(render_func):
 
     auth.authenticate(render_func)
 
-    add_logo("./img/logo.png", height=160)
+    # add_logo("./img/logo.png", height=160)
 
 
 ######################################################
@@ -825,7 +826,7 @@ def get_elastic_total_indexed_documents(index_name="file_data_plaintext", query=
             return es_client.count(index=index_name, query=query)["count"]
         else:
             return es_client.count(index=index_name)["count"]
-    except Exception as e:
+    except Exception:
         return 0
 
 
@@ -854,14 +855,7 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
     """
     try:
         es_client = wait_for_elasticsearch()
-        query = {
-            "wildcard": {
-                "text": {
-                    "value": search_term,
-                    "case_insensitive": True
-                }
-            }
-        }
+        query = {"wildcard": {"text": {"value": search_term, "case_insensitive": True}}}
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
             "_id",
@@ -890,14 +884,7 @@ def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
     """
     try:
         es_client = wait_for_elasticsearch()
-        query = {
-            "wildcard": {
-                "text": {
-                    "value": search_term,
-                    "case_insensitive": True
-                }
-            }
-        }
+        query = {"wildcard": {"text": {"value": search_term, "case_insensitive": True}}}
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
             "_id",
@@ -945,6 +932,7 @@ def elastic_np_search(from_i: int, size: int) -> dict:
 #
 ######################################################
 
+
 def get_custom_crack_list(assessment_id: str, count: int = 10) -> dict:
     """
     Calls {CRACKLIST_URL}/client/{assessment_id}/{count} to return the custom
@@ -960,6 +948,7 @@ def get_custom_crack_list(assessment_id: str, count: int = 10) -> dict:
             return ""
     except Exception as e:
         return {"error": f"Error calling get_custom_crack_list with assessment_id '{assessment_id}' : {e}"}
+
 
 def is_uuid(str_uuid: str):
     try:
@@ -977,7 +966,7 @@ def reorder_archive_file_listing(file_listing):
     total_entries = {}
     for entry in file_listing:
         path = entry["name"]
-        path_parts = [p for p in path.replace('\\', '/').split('/') if p]
+        path_parts = [p for p in path.replace("\\", "/").split("/") if p]
         num_paths = len(path_parts)
         is_file = True if "uncompressSize" in entry else False
         lastModified = entry["lastModified"] if "lastModified" in entry else ""
@@ -1035,17 +1024,98 @@ def get_monaco_languages() -> List[str]:
 
     Ref: https://github.com/microsoft/monaco-editor/tree/d8144cfa0eb66cf9d3cc0507df1ad33bc8fc65c5/src/basic-languages
     """
-    return ["plaintext", "abap", "aes", "apex", "azcli", "bat", "bicep", "c", "csv", "cameligo", "clojure", "coffeescript",
-            "cpp", "csharp", "csp", "css", "cypher", "dart", "dockerfile", "ecl", "elixir", "flow9",
-            "freemarker2", "freemarker2.tag-angle.interpolation-bracket", "freemarker2.tag-angle.interpolation-dollar",
-            "freemarker2.tag-auto.interpolation-bracket", "freemarker2.tag-auto.interpolation-dollar",
-            "freemarker2.tag-bracket.interpolation-bracket", "freemarker2.tag-bracket.interpolation-dollar", "fsharp",
-            "go", "graphql", "handlebars", "hcl", "html", "ini", "java", "javascript", "julia", "kotlin", "less", "lexon",
-            "liquid", "lua", "m3", "markdown", "mdx", "mips", "msdax", "mysql", "objective-c", "pascal", "pascaligo",
-            "perl", "pgsql", "php", "pla", "postiats", "powerquery", "powershell", "proto", "pug", "python", "qsharp", "r",
-            "razor", "redis", "redshift", "restructuredtext", "ruby", "rust", "sb", "scala", "scheme", "scss", "shell",
-            "sol", "sparql", "sql", "st", "swift", "systemverilog", "tcl", "twig", "typescript", "vb", "verilog", "wgsl",
-            "xml", "yaml"]
+    return [
+        "plaintext",
+        "abap",
+        "aes",
+        "apex",
+        "azcli",
+        "bat",
+        "bicep",
+        "c",
+        "csv",
+        "cameligo",
+        "clojure",
+        "coffeescript",
+        "cpp",
+        "csharp",
+        "csp",
+        "css",
+        "cypher",
+        "dart",
+        "dockerfile",
+        "ecl",
+        "elixir",
+        "flow9",
+        "freemarker2",
+        "freemarker2.tag-angle.interpolation-bracket",
+        "freemarker2.tag-angle.interpolation-dollar",
+        "freemarker2.tag-auto.interpolation-bracket",
+        "freemarker2.tag-auto.interpolation-dollar",
+        "freemarker2.tag-bracket.interpolation-bracket",
+        "freemarker2.tag-bracket.interpolation-dollar",
+        "fsharp",
+        "go",
+        "graphql",
+        "handlebars",
+        "hcl",
+        "html",
+        "ini",
+        "java",
+        "javascript",
+        "julia",
+        "kotlin",
+        "less",
+        "lexon",
+        "liquid",
+        "lua",
+        "m3",
+        "markdown",
+        "mdx",
+        "mips",
+        "msdax",
+        "mysql",
+        "objective-c",
+        "pascal",
+        "pascaligo",
+        "perl",
+        "pgsql",
+        "php",
+        "pla",
+        "postiats",
+        "powerquery",
+        "powershell",
+        "proto",
+        "pug",
+        "python",
+        "qsharp",
+        "r",
+        "razor",
+        "redis",
+        "redshift",
+        "restructuredtext",
+        "ruby",
+        "rust",
+        "sb",
+        "scala",
+        "scheme",
+        "scss",
+        "shell",
+        "sol",
+        "sparql",
+        "sql",
+        "st",
+        "swift",
+        "systemverilog",
+        "tcl",
+        "twig",
+        "typescript",
+        "vb",
+        "verilog",
+        "wgsl",
+        "xml",
+        "yaml",
+    ]
 
 
 def map_extension_to_monaco_language(extension: str) -> str:
@@ -1325,7 +1395,7 @@ def nemesis_post_file(file_bytes):
             if "object_id" in json_result:
                 return json_result["object_id"]
             else:
-                st.warning(f"Error retrieving 'object_id' field from result", icon="⚠️")
+                st.warning("Error retrieving 'object_id' field from result", icon="⚠️")
                 return None
     except Exception as e:
         st.warning(f"Failed to upload file to Nemesis: {e}", icon="⚠️")
@@ -1346,7 +1416,7 @@ def nemesis_post_data(data):
             if "object_id" in json_result:
                 return json_result["object_id"]
             else:
-                st.warning(f"Error retrieving 'object_id' field from result", icon="⚠️")
+                st.warning("Error retrieving 'object_id' field from result", icon="⚠️")
                 return None
     except Exception as e:
         st.warning(f"Error posting to Nemesis URL {NEMESIS_API_URL}data : {e}", icon="⚠️")

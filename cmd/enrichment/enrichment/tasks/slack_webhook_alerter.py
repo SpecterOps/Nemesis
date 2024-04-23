@@ -46,7 +46,6 @@ class SlackWebHookAlerter(TaskInterface):
         else:
             logger.info("Slack alerting is ENABLED.")
 
-
     async def run(self) -> None:
         await self.in_q_alert.Read(self.process_message)  # type: ignore
         await asyncio.Future()

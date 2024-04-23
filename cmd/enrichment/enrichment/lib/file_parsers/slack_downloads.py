@@ -47,7 +47,6 @@ class slack_downloads(Meta.FileType):
                 for workspace_id in downloads_json:
                     downloads = downloads_json[workspace_id]
                     for download_id in downloads:
-
                         download = downloads[download_id]
                         download_pb = parsed_data.slack_downloads.downloads.add()
                         download_pb.username = username
@@ -79,6 +78,8 @@ class slack_downloads(Meta.FileType):
 
         except Exception as e:
             return (
-                helpers.nemesis_parsed_data_error(f"error parsing  'slack-downloads' file {self.file_data.object_id} : {e}"),
+                helpers.nemesis_parsed_data_error(
+                    f"error parsing  'slack-downloads' file {self.file_data.object_id} : {e}"
+                ),
                 pb.AuthenticationDataIngestionMessage(),
             )

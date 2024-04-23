@@ -1,30 +1,22 @@
 # Standard Libraries
 import re
 from enum import IntEnum
-from typing import Any, List, Optional
+from typing import Annotated, Any, List, Optional
 
 # 3rd Party Libraries
 from nemesiscommon.settings import FileProcessingService
-from pydantic import Field, PositiveInt, validator
-from pydantic.networks import AnyHttpUrl, AnyUrl, Parts, PostgresDsn
+from pydantic import AfterValidator, Field, PositiveInt, validator
+from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
+from pydantic_core import Url
 
 
-class HttpUrlWithSlash(AnyHttpUrl):
-    @classmethod
-    def __get_validators__(cls):
-        yield super().validate
-        yield cls.validate
+def check_url_has_slash(v: Url) -> AnyHttpUrl:
+    if not v or not v.path or not v.path.endswith("/"):
+        raise ValueError("URL must end with a '/'")
+    return v
 
-    @classmethod
-    def validate_parts(cls, parts: "Parts", validate_port: bool = True) -> "Parts":
-        path = parts.get("path")
-        if not path or not path.endswith("/"):
-            raise ValueError("URI must end with a '/'")
 
-        return super().validate_parts(parts, validate_port=False)
-
-    def __repr__(self):
-        return f"HttpUrlWithSlash({super().__repr__()})"
+HttpUrlWithSlash = Annotated[AnyHttpUrl, AfterValidator(check_url_has_slash)]
 
 
 class CrackWordlistSize(IntEnum):
@@ -41,6 +33,7 @@ class ElasticsearchSettings:
 class EnrichmentSettings(FileProcessingService):  # type: ignore
     rabbitmq_connection_uri: AnyUrl
     postgres_connection_uri: PostgresDsn
+    postgres_async_connection_uri: PostgresDsn
     tika_uri: HttpUrlWithSlash
     dotnet_uri: HttpUrlWithSlash
     gotenberg_uri: HttpUrlWithSlash
@@ -63,7 +56,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     crack_wordlist_top_words: CrackWordlistSize  # either 10000 or 100000 for now
     jtr_instances: PositiveInt = 1  # number of John the Ripper instances to run
     reprocessing_workers: PositiveInt = 5  # number of parallel reprocessing workers
-    tasks: Optional[List[str]]  # List of tasks to start
+    tasks: Optional[List[str]] = None  # List of tasks to start
     registry_value_batch_size: PositiveInt = 5000  # number of registry values to emit per reg carving message
 
     @validator("slack_channel")
@@ -76,7 +69,9 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
         if re.match(pattern, channel):
             return channel
         else:
-            raise ValueError("Slack channel must start with a '#' and be followed by 1-80 alphanumeric characters, hypens, or underscores")
+            raise ValueError(
+                "Slack channel must start with a '#' and be followed by 1-80 alphanumeric characters, hypens, or underscores"
+            )
 
     class Config:
         @classmethod

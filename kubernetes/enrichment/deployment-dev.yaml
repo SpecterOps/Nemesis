@@ -98,6 +98,8 @@ spec:
                   key: postgres-password
             - name: POSTGRES_CONNECTION_URI
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
+            - name: POSTGRES_ASYNC_CONNECTION_URI
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_SERVER):$(POSTGRES_PORT)/$(POSTGRES_DATABASE)"
             - name: DB_ITERATION_SIZE
               value: "1000"
 

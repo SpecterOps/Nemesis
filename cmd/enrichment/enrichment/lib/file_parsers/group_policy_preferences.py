@@ -7,12 +7,13 @@ from xml.dom import minidom
 
 # 3rd Party Libraries
 import chardet
-import enrichment.lib.file_parsers.Meta as Meta
-import enrichment.lib.helpers as helpers
 import nemesispb.nemesis_pb2 as pb
 import structlog
 from Cryptodome.Cipher import AES
 from Cryptodome.Util.Padding import unpad
+
+import enrichment.lib.file_parsers.Meta as Meta
+import enrichment.lib.helpers as helpers
 
 logger = structlog.get_logger(module=__name__)
 
@@ -26,7 +27,10 @@ def decrypt_cpassword(pw_enc_b64):
     """
     if len(pw_enc_b64) != 0:
         # thank you MS for publishing the key :) (https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-gppref/2c15cbf0-f086-4c74-8b70-1f2fa45dd4be)
-        key = b"\x4e\x99\x06\xe8\xfc\xb6\x6c\xc9\xfa\xf4\x93\x10\x62\x0f\xfe\xe8\xf4\x96\xe8\x06\xcc\x05\x79\x90\x20" b"\x9b\x09\xa4\x33\xb6\x6c\x1b"
+        key = (
+            b"\x4e\x99\x06\xe8\xfc\xb6\x6c\xc9\xfa\xf4\x93\x10\x62\x0f\xfe\xe8\xf4\x96\xe8\x06\xcc\x05\x79\x90\x20"
+            b"\x9b\x09\xa4\x33\xb6\x6c\x1b"
+        )
         # thank you MS for using a fixed IV :)
         iv = b"\x00" * 16
         pad = len(pw_enc_b64) % 4
@@ -42,7 +46,9 @@ def decrypt_cpassword(pw_enc_b64):
         return ""
 
 
-def parse_gpp_xml(filename, originating_object_id, metadata) -> tuple[pb.ParsedData, pb.AuthenticationDataIngestionMessage]:
+def parse_gpp_xml(
+    filename, originating_object_id, metadata
+) -> tuple[pb.ParsedData, pb.AuthenticationDataIngestionMessage]:
     """
     Decrypes a cpassword group policy preferences .xml file, returning any decrypted passwords.
 
@@ -71,7 +77,8 @@ def parse_gpp_xml(filename, originating_object_id, metadata) -> tuple[pb.ParsedD
                     properties_list = root.getElementsByTagName("Properties")
 
                     # function to get attribute if it exists, returns "" if empty
-                    read_or_empty = lambda element, attribute: (element.getAttribute(attribute) if element.getAttribute(attribute) is not None else "")
+                    def read_or_empty(element, attribute):
+                        return element.getAttribute(attribute) if element.getAttribute(attribute) is not None else ""
 
                     for properties in properties_list:
                         entry = parsed_data.group_policy_preferences.entries.add()
@@ -112,7 +119,10 @@ def parse_gpp_xml(filename, originating_object_id, metadata) -> tuple[pb.ParsedD
         return (parsed_data, auth_data_msg)
 
     except Exception as e:
-        return (helpers.nemesis_parsed_data_error(f"error parsing McAfee sitelist.xml file {filename} : {e}"), auth_data_msg)
+        return (
+            helpers.nemesis_parsed_data_error(f"error parsing McAfee sitelist.xml file {filename} : {e}"),
+            auth_data_msg,
+        )
 
 
 class group_policy_preferences(Meta.FileType):

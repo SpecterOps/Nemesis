@@ -1,31 +1,31 @@
 # Standard Libraries
 import asyncio
 import ipaddress
-import ntpath
 import re
-import uuid
-from typing import Any, Optional, Self, Tuple
+from typing import Any, Optional, Tuple
+from uuid import UUID, uuid4
 
-# 3rd Party Libraries
 import nemesiscommon.constants as constants
 import nemesispb.nemesis_pb2 as pb
 import structlog
-from enrichment.lib.helpers import pb_has_field
-from enrichment.lib.nemesis_db import (  # AuthenticationData,; ChromiumCookie,; ChromiumDownload,; ChromiumHistoryEntry,; ChromiumLogin,; ChromiumStateFile,; DpapiBlob,; ExtractedHash,; FileDataEnriched,; FileInfo,; FileInfoDataEnriched,; NetworkConnection,
-    Agent,
-    HostAgent,
-    NamedPipe,
-    NemesisDb,
-    OperationType,
-    ProcessEnriched,
-    Project,
-)
-from enrichment.tasks.postgres_connector.registry_watcher import RegistryWatcher
-from google.protobuf.json_format import MessageToDict
+from nemesiscommon.db.models import NamedPipe, Process
+from nemesiscommon.db.repositories import AgentHostMappingRepository, NamedPipeRepository, ProcessRepository
 from nemesiscommon.messaging import MessageQueueConsumerInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio
 from prometheus_client import Summary
+
+from enrichment.containers_db import get_async_session
+
+# 3rd Party Libraries
+from enrichment.lib.helpers import pb_has_field
+from enrichment.lib.nemesis_db import (  # AuthenticationData,; ChromiumCookie,; ChromiumDownload,; ChromiumHistoryEntry,; ChromiumLogin,; ChromiumStateFile,; DpapiBlob,; ExtractedHash,; FileDataEnriched,; FileInfo,;  NetworkConnection,
+    Agent,
+    NemesisDb,
+    OperationType,
+    Project,
+)
+from enrichment.tasks.postgres_connector.registry_watcher import RegistryWatcher
 
 logger = structlog.get_logger(module=__name__)
 
@@ -83,6 +83,7 @@ class PostgresConnector(TaskInterface):
     extracted_hash_q: MessageQueueConsumerInterface
     file_data_enriched_q: MessageQueueConsumerInterface
     file_info_q: MessageQueueConsumerInterface
+    host_info_q: MessageQueueConsumerInterface
     named_pipe_q: MessageQueueConsumerInterface
     network_connection_q: MessageQueueConsumerInterface
     path_list_q: MessageQueueConsumerInterface
@@ -104,6 +105,7 @@ class PostgresConnector(TaskInterface):
         extracted_hash_q: MessageQueueConsumerInterface,
         file_data_enriched_q: MessageQueueConsumerInterface,
         file_info_q: MessageQueueConsumerInterface,
+        host_info_q: MessageQueueConsumerInterface,
         named_pipe_q: MessageQueueConsumerInterface,
         network_connection_q: MessageQueueConsumerInterface,
         path_list_q: MessageQueueConsumerInterface,
@@ -124,6 +126,7 @@ class PostgresConnector(TaskInterface):
         self.extracted_hash_q = extracted_hash_q
         self.file_data_enriched_q = file_data_enriched_q
         self.file_info_q = file_info_q
+        self.host_info_q = host_info_q
         self.named_pipe_q = named_pipe_q
         self.network_connection_q = network_connection_q
         self.path_list_q = path_list_q
@@ -144,6 +147,7 @@ class PostgresConnector(TaskInterface):
             # self.dpapi_blob_processed_q.Read(self.process_dpapi_blob),  # type: ignore
             # self.extracted_hash_q.Read(self.process_extracted_hash),  # type: ignore
             # self.file_data_enriched_q.Read(self.process_file_data_enriched),  # type: ignore
+            self.host_info_q.Read(self.process_host_info),  # type: ignore
             # self.file_info_q.Read(self.process_file_info),  # type: ignore
             self.named_pipe_q.Read(self.process_named_pipe),  # type: ignore
             # self.path_list_q.Read(self.process_path_list),  # type: ignore
@@ -153,6 +157,166 @@ class PostgresConnector(TaskInterface):
             # self.network_connection_q.Read(self.process_network_connection),  # type: ignore
         )
         await asyncio.Future()
+
+    def is_remote_host(self, metadata: pb.Metadata) -> bool:
+        """Determines if a message that contains host data is from a remote host.
+
+        Rules:
+         1) automated: True + source: <name>  - Remote
+         2) automated: True + source: null    - Local Data (Data local to the host the agent is running on)
+         3) automated: False + source: <name> - Local Data (Data local to the host the agent is running on, manually uploaded)
+         4) automated: False + source: null   - Unsupported Error
+
+        Args:
+            metadata (pb.Metadata): The metadata of the host data message to check.
+
+        Returns:
+            bool: True if the message is contains data about a remote host, False if the message is reporting data about the host the agent is running on.
+        """
+        if metadata.automated:
+            if pb_has_field(metadata, "source"):
+                if metadata.source.isspace():
+                    raise ValueError("Automated message's 'source' field cannot be empty")
+
+                # Rule 1) Automated + Source = Remote host
+                return True
+
+            else:
+                # Rule 2) Automated + No source = Local Data
+                return False
+        else:
+            if pb_has_field(metadata, "source"):
+                if metadata.source.isspace():
+                    raise ValueError("Manually submitted 'source' field cannot be empty")
+
+                # Rule 3: Not Automated + source = Local Data (manually uploaded)
+                return False
+            else:
+                # Rule 4: Not Automated + No source = Unsupported Error
+                raise ValueError("Manually submitted data must have a 'source' field")
+
+    async def add_manual_agent_host(self, metadata: pb.Metadata, project_id: UUID) -> Tuple[UUID, UUID]:
+        # If it's manual upload, auto-generate a new a unique agent ID and add host
+        new_agent_id = f"{metadata.agent_id}-{uuid4()}"
+        host_mapping_data = HostMappingData.from_str(metadata.source)
+
+        hostagent_row_id, agent_id = await self.db.register_agent_host(
+            project_id,
+            metadata.timestamp.ToDatetime(),
+            metadata.expiration.ToDatetime(),
+            new_agent_id,
+            metadata.agent_type,
+            host_mapping_data.short_name,
+            host_mapping_data.long_name,
+            host_mapping_data.ip_address,
+        )
+
+        return hostagent_row_id, agent_id
+
+    async def add_automated_remote_host(self, metadata: pb.Metadata, project_id: UUID) -> Tuple[UUID, UUID]:
+        #   Data is for a remote host. Two things we need to do:
+        #     Step 1) Register the current agent + local host
+        #     Step 2) Create a new host associated with current agent + remote host
+
+        # Step 1) Register the current agent + local host
+        _, agent_id = await self.db.register_agent_host(
+            project_id,
+            metadata.timestamp.ToDatetime(),
+            metadata.expiration.ToDatetime(),
+            metadata.agent_id,
+            metadata.agent_type,
+            None,
+            None,
+            None,
+        )
+
+        # Step 2) Create a new host associated with current agent + remote host
+        host_mapping_data = HostMappingData.from_str(metadata.source)
+        new_host = await self.db.add_host(
+            project_id,
+            host_mapping_data.short_name,
+            host_mapping_data.long_name,
+            host_mapping_data.ip_address,
+        )
+
+        return new_host.row_id, agent_id
+
+    async def add_automated_local_host(self, metadata: pb.Metadata, project_id: UUID) -> Tuple[UUID, UUID]:
+        # If it's manual, auto-generate a new agent ID and add host
+        host_mapping_data = HostMappingData.from_str(metadata.source)
+
+        hostagent_row_id, agent_id = await self.db.register_agent_host(
+            project_id,
+            metadata.timestamp.ToDatetime(),
+            metadata.expiration.ToDatetime(),
+            metadata.agent_id,
+            metadata.agent_type,
+            host_mapping_data.short_name,
+            host_mapping_data.long_name,
+            host_mapping_data.ip_address,
+        )
+
+        return hostagent_row_id, agent_id
+
+    async def register_host(self, metadata: pb.Metadata, project_id: UUID, is_remote: bool) -> Tuple[UUID, UUID]:
+        """Registers a host and agent in the database"""
+
+        if metadata.automated:
+            if pb_has_field(metadata, "source"):
+                if metadata.source.isspace():
+                    raise ValueError("Automated message's 'source' field cannot be empty")
+
+                return await self.add_automated_remote_host(metadata, project_id)
+            else:
+                # No source, so it's for the local host
+                return await self.add_automated_local_host(metadata, project_id)
+        else:
+            return await self.add_manual_agent_host(metadata, project_id)
+
+    async def register_agent(self, metadata: pb.Metadata, host_mapping_data: Optional[HostMappingData]) -> Agent:
+        if host_mapping_data:
+            host = await self.db.add_host(
+                metadata,
+                host_mapping_data.short_name,
+                host_mapping_data.long_name,
+                host_mapping_data.ip_address,
+            )
+
+            agent = await self.db.add_agent(
+                metadata,
+                host.row_id,
+            )
+
+            return agent
+        else:
+            pass
+
+    async def process_host_metadata(self, m: pb.Metadata, ignore_operation=False):
+        project_id = await self.db.register_project(
+            Project(
+                m.project,
+                m.timestamp.ToDatetime(),
+                m.expiration.ToDatetime(),
+            )
+        )
+
+        is_remote = self.is_remote_host(m)
+        host_id, agent_id = await self.register_host(m, project_id, is_remote)
+
+        # Return dict of properties
+        out = {
+            "project_id": project_id,
+            "timestamp": m.timestamp.ToDatetime(),
+            "expiration": m.expiration.ToDatetime(),
+            "agent_id": agent_id,
+            "message_id": UUID(m.message_id),
+            "host_id": host_id,
+            "is_data_remote": is_remote,
+        }
+        if not ignore_operation:
+            out["operation"] = OperationType(m.operation)
+
+        return out
 
     # @aio.time(Summary("process_chromium_history", "Time spent processing a chromium_history queue"))  # type: ignore
     # async def process_chromium_history(self, event: pb.ChromiumHistoryMessage):
@@ -178,7 +342,7 @@ class PostgresConnector(TaskInterface):
     #             i.last_visit_time.ToDatetime(),
     #         )
     #         if i.originating_object_id:
-    #             data.originating_object_id = uuid.UUID(i.originating_object_id)
+    #             data.originating_object_id = UUID(i.originating_object_id)
 
     #         try:
     #             await self.db.add_chromium_history_entry(data)
@@ -210,7 +374,7 @@ class PostgresConnector(TaskInterface):
     #             i.danger_type,
     #         )
     #         if i.originating_object_id:
-    #             data.originating_object_id = uuid.UUID(i.originating_object_id)
+    #             data.originating_object_id = UUID(i.originating_object_id)
 
     #         await self.db.add_chromium_download(data)
 
@@ -245,7 +409,7 @@ class PostgresConnector(TaskInterface):
     #             i.password_value_dec,
     #         )
     #         if i.originating_object_id:
-    #             data.originating_object_id = uuid.UUID(i.originating_object_id)
+    #             data.originating_object_id = UUID(i.originating_object_id)
 
     #         await self.db.add_chromium_login(data)
 
@@ -289,9 +453,9 @@ class PostgresConnector(TaskInterface):
     #             data.masterkey_guid = "00000000-0000-0000-0000-000000000000"
 
     #         if i.originating_object_id:
-    #             data.originating_object_id = uuid.UUID(i.originating_object_id)
+    #             data.originating_object_id = UUID(i.originating_object_id)
     #         else:
-    #             data.originating_object_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
+    #             data.originating_object_id = UUID("00000000-0000-0000-0000-000000000000")
 
     #         await self.db.add_chromium_cookie(data)
 
@@ -322,7 +486,7 @@ class PostgresConnector(TaskInterface):
     #             i.app_bound_fixed_data_dec,
     #         )
     #         if i.originating_object_id:
-    #             data.originating_object_id = uuid.UUID(i.originating_object_id)
+    #             data.originating_object_id = UUID(i.originating_object_id)
 
     #         await self.db.add_chromium_state_file(data)
 
@@ -349,7 +513,7 @@ class PostgresConnector(TaskInterface):
     #             i.uri,
     #             i.username,
     #             i.notes,
-    #             uuid.UUID(i.originating_object_id),
+    #             UUID(i.originating_object_id),
     #         )
 
     #         await self.db.add_authentication_data(data)
@@ -376,7 +540,7 @@ class PostgresConnector(TaskInterface):
     #         )
 
     #         if i.originating_object_id:
-    #             data.originating_object_id = uuid.UUID(i.originating_object_id)
+    #             data.originating_object_id = UUID(i.originating_object_id)
 
     #         await self.db.add_extracted_hash(data)
 
@@ -388,13 +552,13 @@ class PostgresConnector(TaskInterface):
 
     #     for i in event.data:
     #         if i.originating_object_id:
-    #             originating_object_id = uuid.UUID(i.originating_object_id)
+    #             originating_object_id = UUID(i.originating_object_id)
     #         else:
-    #             originating_object_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
+    #             originating_object_id = UUID("00000000-0000-0000-0000-000000000000")
     #         if i.originating_registry_id:
-    #             originating_registry_id = uuid.UUID(i.originating_registry_id)
+    #             originating_registry_id = UUID(i.originating_registry_id)
     #         else:
-    #             originating_registry_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
+    #             originating_registry_id = UUID("00000000-0000-0000-0000-000000000000")
 
     #         d = DpapiBlob(
     #             project_id=event.metadata.project,
@@ -405,7 +569,7 @@ class PostgresConnector(TaskInterface):
     #             dpapi_blob_id=i.dpapi_blob_id,
     #             is_decrypted=i.is_decrypted,
     #             is_file=i.is_file,
-    #             masterkey_guid=uuid.UUID(i.masterkey_guid),
+    #             masterkey_guid=UUID(i.masterkey_guid),
     #             originating_object_id=originating_object_id,
     #             originating_registry_id=originating_registry_id,
     #         )
@@ -413,11 +577,11 @@ class PostgresConnector(TaskInterface):
     #         if i.dec_data_bytes:
     #             d.dec_data_bytes = i.dec_data_bytes
     #         if i.dec_data_object_id:
-    #             d.dec_data_object_id = uuid.UUID(i.dec_data_object_id)
+    #             d.dec_data_object_id = UUID(i.dec_data_object_id)
     #         if i.enc_data_bytes:
     #             d.enc_data_bytes = i.enc_data_bytes
     #         if i.enc_data_object_id:
-    #             d.enc_data_object_id = uuid.UUID(i.enc_data_object_id)
+    #             d.enc_data_object_id = UUID(i.enc_data_object_id)
 
     #         await self.db.add_dpapi_blob(d)
 
@@ -479,15 +643,42 @@ class PostgresConnector(TaskInterface):
     #         #     # TODO: remote file path
     #         #     pass
 
-    @aio.time(Summary("process_processenriched", "Time spent processing a process_enriched message"))  # type: ignore
-    async def process_processenriched(self, event: pb.ProcessEnrichedMessage):
+    @aio.time(Summary("process_host_info", "Time spent processing a HostInformation message"))  # type: ignore
+    async def process_host_info(
+        self,
+        event: pb.HostInformationIngestionMessage,
+    ):
         """Adds a process to the database anytime a new one is added and enriched in Nemesis.
 
         Args:
             event (pb.ProcessEnrichedMessage): The message containing the process(es) to add.
         """
-        m = event.metadata
-        project_id, is_remote, host_row_id, agent_id = await self.process_host_metadata(m)
+
+        host_metadata = await self.process_host_metadata(event.metadata, True)
+
+        async with get_async_session() as session:
+            repo = AgentHostMappingRepository(session)
+            current = await repo.get_by_id(host_metadata["host_id"])
+            if current:
+                if event.data.ip_addresses and len(event.data.ip_addresses) > 0:
+                    ip = event.data.ip_addresses[0]
+                    current.ip_address = ipaddress.ip_address(ip)
+                else:
+                    current.ip_address = None
+                current.shortname = event.data.short_name if pb_has_field(event.data, "short_name") else None
+                current.longname = event.data.long_name if pb_has_field(event.data, "long_name") else None
+                await repo.update(current)
+
+    @aio.time(Summary("process_processenriched", "Time spent processing a process_enriched message"))  # type: ignore
+    async def process_processenriched(
+        self,
+        event: pb.ProcessEnrichedMessage,
+    ):
+        """Adds a process to the database anytime a new one is added and enriched in Nemesis.
+
+        Args:
+            event (pb.ProcessEnrichedMessage): The message containing the process(es) to add.
+        """
 
         for i in event.data:
             origin = i.origin
@@ -499,28 +690,25 @@ class PostgresConnector(TaskInterface):
                     if pb_has_field(origin.token.user, "name"):
                         username = origin.token.user.name
 
-            data = ProcessEnriched(
-                project_id=project_id,
-                collection_timestamp=m.timestamp.ToDatetime(),
-                expiration_date=m.expiration.ToDatetime(),
-                agent_id=agent_id,
-                message_id=uuid.UUID(m.message_id),
-                operation=OperationType(m.operation),
-                hostagents_row_id=host_row_id,
-                is_data_remote=is_remote,
-                #
+            host_metadata = await self.process_host_metadata(event.metadata)
+            data = Process(
+                **host_metadata,
+                # Data
                 name=origin.name if pb_has_field(origin, "name") else None,
                 command_line=origin.command_line if pb_has_field(origin, "command_line") else None,
                 file_name=origin.file_name if pb_has_field(origin, "file_name") else None,
                 process_id=origin.process_id if pb_has_field(origin, "process_id") else None,
                 parent_process_id=origin.parent_process_id if pb_has_field(origin, "parent_process_id") else None,
-                arch=origin.arch if pb_has_field(origin, "arch") else None,
+                architecture=origin.arch if pb_has_field(origin, "arch") else None,
                 username=username,
+                # Enriched Data
                 category=i.category.category,
                 description=i.category.description,
             )
 
-            await self.db.add_process(data)
+            async with get_async_session() as session:
+                process_repository = ProcessRepository(session)
+                await process_repository.add(data)
 
     # @aio.time(Summary("process_file_info", "Time spent processing a file_info message"))  # type: ignore
     # async def process_file_info(self, event: pb.FileInformationIngestionMessage):
@@ -567,16 +755,11 @@ class PostgresConnector(TaskInterface):
     #         else:
     #             await logger.awarning("Unhandled path", path=path)
 
-    # @aio.time(Summary("process_file_data_enriched_postgres", "Time spent processing a process_file_data_enriched message"))  # type: ignore
-    # async def process_file_data_enriched(self, event: pb.FileDataEnrichedMessage):
-    #     """Adds file information to the database anytime a new one is added to Nemesis.
-
-    #     Args:
-    #         event (pb.FileDataEnrichedMessage): The message containing the file to add.
-    #     """
+    # Updates the state of the file system in the DB
+    # async def update_filesystem(
+    #     self, event: pb.FileDataEnrichedMessage, project_id: int, is_remote: bool, host_row_id: int, agent_id: int
+    # ):
     #     m = event.metadata
-    #     await self.ensure_project_exists(m)
-
     #     for data in event.data:
     #         path = data.path
     #         name = ntpath.basename(path)
@@ -584,15 +767,18 @@ class PostgresConnector(TaskInterface):
     #         if len(temp) > 1:
     #             extension = temp[-1]
     #         else:
-    #             extension = ""
+    #             extension = None
 
     #         # first add a basic file info entry
     #         f = FileInfoDataEnriched(
-    #             m.agent_id,
-    #             m.project,
-    #             m.source,
-    #             m.timestamp.ToDatetime(),
-    #             m.expiration.ToDatetime(),
+    #             project_id=project_id,
+    #             collection_timestamp=m.timestamp.ToDatetime(),
+    #             expiration_date=m.expiration.ToDatetime(),
+    #             agent_id=agent_id,
+    #             message_id=UUID(m.message_id),
+    #             hostagents_row_id=host_row_id,
+    #             is_data_remote=is_remote,
+    #             #
     #             path=data.path,
     #             name=name,
     #             extension=extension,
@@ -601,6 +787,19 @@ class PostgresConnector(TaskInterface):
     #             nemesis_file_id=data.object_id,
     #         )
     #         await self.db.add_filesystem_object_from_enriched(f)
+
+    # async def update_filedata(
+    #     self, event: pb.FileDataEnrichedMessage, project_id: int, is_remote: bool, host_row_id: int, agent_id: int
+    # ):
+    #     m = event.metadata
+    #     for data in event.data:
+    #         path = data.path
+    #         name = ntpath.basename(path)
+    #         temp = ntpath.splitext(path)
+    #         if len(temp) > 1:
+    #             extension = temp[-1]
+    #         else:
+    #             extension = None
 
     #         file = MessageToDict(data, preserving_proto_field_name=True)
     #         tags = await self.get_tags(file)
@@ -640,6 +839,60 @@ class PostgresConnector(TaskInterface):
 
     #         await self.db.add_file_data_enriched(f)
 
+    # @aio.time(
+    #     Summary("process_file_data_enriched_postgres", "Time spent processing a process_file_data_enriched message")
+    # )  # type: ignore
+    # async def process_file_data_enriched(self, event: pb.FileDataEnrichedMessage):
+    #     """Adds file information to the database anytime a new one is added to Nemesis.
+
+    #     Args:
+    #         event (pb.FileDataEnrichedMessage): The message containing the file to add.
+    #     """
+    #     m = event.metadata
+    #     project_id, is_remote, host_row_id, agent_id = await self.process_host_metadata(m)
+
+    #     await self.update_filesystem(event, project_id, is_remote, host_row_id, agent_id)
+    #     for data in event.data:
+    #         pass
+
+    #         # file = MessageToDict(data, preserving_proto_field_name=True)
+    #         # tags = await self.get_tags(file)
+
+    #         # # fill in some defaults
+    #         # if not data.converted_pdf:
+    #         #     data.converted_pdf = "00000000-0000-0000-0000-000000000000"
+    #         # if not data.extracted_plaintext:
+    #         #     data.extracted_plaintext = "00000000-0000-0000-0000-000000000000"
+    #         # if not data.extracted_source:
+    #         #     data.extracted_source = "00000000-0000-0000-0000-000000000000"
+    #         # if not data.originating_object_id:
+    #         #     data.originating_object_id = "00000000-0000-0000-0000-000000000000"
+
+    #         # # then add a processed data entry
+    #         # f = FileDataEnriched(
+    #         #     m.agent_id,
+    #         #     m.project,
+    #         #     m.source,
+    #         #     m.timestamp.ToDatetime(),
+    #         #     m.expiration.ToDatetime(),
+    #         #     object_id=data.object_id,
+    #         #     path=data.path,
+    #         #     name=name,
+    #         #     size=data.size,
+    #         #     md5=data.hashes.md5,
+    #         #     sha1=data.hashes.sha1,
+    #         #     sha256=data.hashes.sha256,
+    #         #     nemesis_file_type=data.nemesis_file_type,
+    #         #     magic_type=data.magic_type,
+    #         #     converted_pdf_id=data.converted_pdf,
+    #         #     extracted_plaintext_id=data.extracted_plaintext,
+    #         #     extracted_source_id=data.extracted_source,
+    #         #     originating_object_id=data.originating_object_id,
+    #         #     tags=tags,
+    #         # )
+
+    #         # await self.db.add_file_data_enriched(f)
+
     # @aio.time(Summary("process_network_connection", "Time spent processing an network_connection queue"))  # type: ignore
     # async def process_network_connection(self, event: pb.NetworkConnectionIngestionMessage):
     #     """Main function to process network_connection queue."""
@@ -664,179 +917,46 @@ class PostgresConnector(TaskInterface):
 
     #         await self.db.add_network_connection(data)
 
-    def is_remote_host(self, metadata: pb.Metadata) -> bool:
-        """Determines if a message that contains host data is from a remote host.
-
-        Rules:
-         1) automated: true + source = Remote
-         2) automated: true + No source = Local Data (Data local to the host the agent is running on)
-         3) automated: False + source = Local Data (Data local to the host the agent is running on, manually uploaded)
-         4) automated: False + No source = Unsupported Error
-
-        Args:
-            metadata (pb.Metadata): The metadata of the host data message to check.
-
-        Returns:
-            bool: True if the message is contains data about a remote host, False if the message is reporting data about the host the agent is running on.
-        """
-        if metadata.automated:
-            if pb_has_field(metadata, "source"):
-                if metadata.source.isspace():
-                    raise ValueError("Automated message's 'source' field cannot be empty")
-
-                # Rule 1) Automated + Source = Remote host
-                return True
-
-            else:
-                # Rule 2) Automated + No source = Local Data
-                return False
-        else:
-            if pb_has_field(metadata, "source"):
-                if metadata.source.isspace():
-                    raise ValueError("Manually submitted 'source' field cannot be empty")
-
-                # Rule 3: Not Automated + source = Local Data (manually uploaded)
-                return False
-            else:
-                # Rule 4: Not Automated + No source = Unsupported Error
-                raise ValueError("Manually submitted data must have a 'source' field")
-
-    async def add_manual_agent_host(self, metadata: pb.Metadata, project_id: int) -> Tuple[int, int]:
-        # If it's manual upload, auto-generate a new a unique agent ID and add host
-        new_agent_id = f"{metadata.agent_id}-{uuid.uuid4()}"
-        host_mapping_data = HostMappingData.from_str(metadata.source)
-
-        hostagent_row_id, agent_id = await self.db.register_agent_host(
-            project_id,
-            metadata.timestamp.ToDatetime(),
-            metadata.expiration.ToDatetime(),
-            new_agent_id,
-            metadata.agent_type,
-            host_mapping_data.short_name,
-            host_mapping_data.long_name,
-            host_mapping_data.ip_address,
-        )
-
-        return hostagent_row_id, agent_id
-
-    async def add_automated_remote_host(self, metadata: pb.Metadata, project_id: int) -> Tuple[int, int]:
-        #   Data is for a remote host. Two things we need to do:
-        #     Step 1) Register the current agent + local host
-        #     Step 2) Create a new host associated with current agent + remote host
-
-        # Step 1) Register the current agent + local host
-        _, agent_id = await self.db.register_agent_host(
-            project_id,
-            metadata.timestamp.ToDatetime(),
-            metadata.expiration.ToDatetime(),
-            metadata.agent_id,
-            metadata.agent_type,
-            None,
-            None,
-            None,
-        )
-
-        # Step 2) Create a new host associated with current agent + remote host
-        host_mapping_data = HostMappingData.from_str(metadata.source)
-        new_host = await self.db.add_host(
-            project_id,
-            host_mapping_data.short_name,
-            host_mapping_data.long_name,
-            host_mapping_data.ip_address,
-        )
-
-        return new_host.row_id, agent_id
-
-    async def add_automated_local_host(self, metadata: pb.Metadata, project_id: int) -> Tuple[int, int]:
-        # If it's manual, auto-generate a new agent ID and add host
-        host_mapping_data = HostMappingData.from_str(metadata.source)
-
-        hostagent_row_id, agent_id = await self.db.register_agent_host(
-            project_id,
-            metadata.timestamp.ToDatetime(),
-            metadata.expiration.ToDatetime(),
-            metadata.agent_id,
-            metadata.agent_type,
-            host_mapping_data.short_name,
-            host_mapping_data.long_name,
-            host_mapping_data.ip_address,
-        )
-
-        return hostagent_row_id, agent_id
-
-    async def register_host(self, metadata: pb.Metadata, project_id: int, is_remote: bool) -> Tuple[int, int]:
-        """Registers a host and agent in the database"""
-
-        if metadata.automated:
-            if pb_has_field(metadata, "source"):
-                if metadata.source.isspace():
-                    raise ValueError("Automated message's 'source' field cannot be empty")
-
-                return await self.add_automated_remote_host(metadata, project_id)
-            else:
-                # No source, so it's for the local host
-                return await self.add_automated_local_host(metadata, project_id)
-        else:
-            return await self.add_manual_agent_host(metadata, project_id)
-
-    async def register_agent(self, metadata: pb.Metadata, host_mapping_data: Optional[HostMappingData]) -> Agent:
-        if host_mapping_data:
-            host = await self.db.add_host(
-                metadata,
-                host_mapping_data.short_name,
-                host_mapping_data.long_name,
-                host_mapping_data.ip_address,
-            )
-
-            agent = await self.db.add_agent(
-                metadata,
-                host.row_id,
-            )
-
-            return agent
-        else:
-            pass
-
-    async def process_host_metadata(self, m: pb.Metadata):
-        project_id = await self.db.register_project(
-            Project(
-                m.project,
-                m.timestamp.ToDatetime(),
-                m.expiration.ToDatetime(),
-            )
-        )
-
-        is_remote = self.is_remote_host(m)
-        host_row_id, agent_id = await self.register_host(m, project_id, is_remote)
-
-        return project_id, is_remote, host_row_id, agent_id
-
     @aio.time(Summary("process_named_pipe", "Time spent processing an named_pipe queue"))  # type: ignore
     async def process_named_pipe(self, event: pb.NamedPipeIngestionMessage):
         """Main function to process named_pipe queue."""
 
-        m = event.metadata
-        project_id, is_remote, host_row_id, agent_id = await self.process_host_metadata(m)
+        # m = event.metadata
+        # project_id, is_remote, host_row_id, agent_id = await self.process_host_metadata(m)
+        # metadata = await self.process_host_metadata(m)
 
         for i in event.data:
+            host_metadata = await self.process_host_metadata(event.metadata)
             data = NamedPipe(
-                project_id=project_id,
-                collection_timestamp=m.timestamp.ToDatetime(),
-                expiration_date=m.expiration.ToDatetime(),
-                agent_id=agent_id,
-                message_id=uuid.UUID(m.message_id),
-                operation=OperationType(m.operation),
-                hostagents_row_id=host_row_id,
-                is_data_remote=is_remote,
+                **host_metadata,
+                # Data
                 name=i.name,
                 server_process_id=i.server_process_id if pb_has_field(i, "server_process_id") else None,
                 server_process_name=i.server_process_name if pb_has_field(i, "server_process_name") else None,
                 server_process_path=i.server_process_path if pb_has_field(i, "server_process_path") else None,
-                server_process_session_id=i.server_process_session_id if pb_has_field(i, "server_process_session_id") else None,
+                server_process_session_id=i.server_process_session_id
+                if pb_has_field(i, "server_process_session_id")
+                else None,
                 sddl=i.sddl if pb_has_field(i, "sddl") else None,
             )
 
-            await self.db.add_named_pipe(data)
+            async with get_async_session() as session:
+                process_repository = NamedPipeRepository(session)
+                await process_repository.add(data)
+            # data = NamedPipe(
+            #     **metadata,
+            #     #
+            #     name=i.name,
+            #     server_process_id=i.server_process_id if pb_has_field(i, "server_process_id") else None,
+            #     server_process_name=i.server_process_name if pb_has_field(i, "server_process_name") else None,
+            #     server_process_path=i.server_process_path if pb_has_field(i, "server_process_path") else None,
+            #     server_process_session_id=i.server_process_session_id
+            #     if pb_has_field(i, "server_process_session_id")
+            #     else None,
+            #     sddl=i.sddl if pb_has_field(i, "sddl") else None,
+            # )
+
+            # await self.db.add_named_pipe(data)
 
         # @aio.time(Summary("process_network_connection", "Time spent processing an network_connection queue"))  # type: ignore
         # async def process_network_connection(self, event: pb.NetworkConnectionIngestionMessage):
@@ -862,32 +982,46 @@ class PostgresConnector(TaskInterface):
 
         #         await self.db.add_network_connection(data)
 
-        # async def get_tags(self, file: dict[str, Any]):
-        #     tags = []
-        #     if "contains_dpapi" in file and file["contains_dpapi"]:
-        #         tags.append(constants.E_TAG_CONTAINS_DPAPI)
-        #     if "noseyparker" in file and file["noseyparker"]:
-        #         tags.append(constants.E_TAG_NOSEYPARKER_RESULTS)
-        #     if "parsed_data" in file and file["parsed_data"]:
-        #         if "has_parsed_credentials" in file["parsed_data"] and file["parsed_data"]["has_parsed_credentials"]:
-        #             tags.append(constants.E_TAG_PARSED_CREDS)
-        #         if "is_encrypted" in file["parsed_data"] and file["parsed_data"]["is_encrypted"]:
-        #             tags.append(constants.E_TAG_ENCRYPTED)
-        #     if "analysis" in file and file["analysis"] and "dotnet_analysis" in file["analysis"] and file["analysis"]["dotnet_analysis"]:
-        #         if "has_deserialization" in file["analysis"]["dotnet_analysis"] and file["analysis"]["dotnet_analysis"]["has_deserialization"]:
-        #             tags.append(constants.E_TAG_DESERIALIZATION)
-        #         if "has_cmd_execution" in file["analysis"]["dotnet_analysis"] and file["analysis"]["dotnet_analysis"]["has_cmd_execution"]:
-        #             tags.append(constants.E_TAG_CMD_EXECUTION)
-        #         if "has_remoting" in file["analysis"]["dotnet_analysis"] and file["analysis"]["dotnet_analysis"]["has_remoting"]:
-        #             tags.append(constants.E_TAG_REMOTING)
-        #     if "yara_matches" in file and file["yara_matches"]:
-        #         for rule in file["yara_matches"]:
-        #             if rule not in constants.EXCLUDED_YARA_RULES:
-        #                 tags.append(constants.E_TAG_YARA_MATCHES)
-        #     if "canaries" in file and file["canaries"] and file["canaries"]["canaries_present"]:
-        #         tags.append(constants.E_TAG_FILE_CANARY)
+    async def get_tags(self, file: dict[str, Any]):
+        tags = []
+        if "contains_dpapi" in file and file["contains_dpapi"]:
+            tags.append(constants.E_TAG_CONTAINS_DPAPI)
+        if "noseyparker" in file and file["noseyparker"]:
+            tags.append(constants.E_TAG_NOSEYPARKER_RESULTS)
+        if "parsed_data" in file and file["parsed_data"]:
+            if "has_parsed_credentials" in file["parsed_data"] and file["parsed_data"]["has_parsed_credentials"]:
+                tags.append(constants.E_TAG_PARSED_CREDS)
+            if "is_encrypted" in file["parsed_data"] and file["parsed_data"]["is_encrypted"]:
+                tags.append(constants.E_TAG_ENCRYPTED)
+        if (
+            "analysis" in file
+            and file["analysis"]
+            and "dotnet_analysis" in file["analysis"]
+            and file["analysis"]["dotnet_analysis"]
+        ):
+            if (
+                "has_deserialization" in file["analysis"]["dotnet_analysis"]
+                and file["analysis"]["dotnet_analysis"]["has_deserialization"]
+            ):
+                tags.append(constants.E_TAG_DESERIALIZATION)
+            if (
+                "has_cmd_execution" in file["analysis"]["dotnet_analysis"]
+                and file["analysis"]["dotnet_analysis"]["has_cmd_execution"]
+            ):
+                tags.append(constants.E_TAG_CMD_EXECUTION)
+            if (
+                "has_remoting" in file["analysis"]["dotnet_analysis"]
+                and file["analysis"]["dotnet_analysis"]["has_remoting"]
+            ):
+                tags.append(constants.E_TAG_REMOTING)
+        if "yara_matches" in file and file["yara_matches"]:
+            for rule in file["yara_matches"]:
+                if rule not in constants.EXCLUDED_YARA_RULES:
+                    tags.append(constants.E_TAG_YARA_MATCHES)
+        if "canaries" in file and file["canaries"] and file["canaries"]["canaries_present"]:
+            tags.append(constants.E_TAG_FILE_CANARY)
 
-        # return list(set(tags))
+        return list(set(tags))
 
     # async def get_tags(self, file: dict[str, Any]):
     #     tags = []

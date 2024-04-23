@@ -1,5 +1,4 @@
 # Standard Libraries
-import tempfile
 import uuid
 from pathlib import Path
 
@@ -42,7 +41,7 @@ class UploadRequest(BaseModel):
     client_id: str
 
 
-class CrackListApiRoutes():
+class CrackListApiRoutes:
     """Inherits from Routable."""
 
     storage: StorageInterface
@@ -81,7 +80,7 @@ class CrackListApiRoutes():
     async def root_get(self, client_id: str, count: str | None = None):
         if not count:
             count = 10
-        await logger.ainfo(f"crack-list GET request", client_id=client_id, count=count)
+        await logger.ainfo("crack-list GET request", client_id=client_id, count=count)
         try:
             ret = self.client_wordlists.get_as_file(client_id, count=int(count))
             return Response(ret, media_type="text/plain")

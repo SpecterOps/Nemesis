@@ -5,7 +5,8 @@ from typing import Optional, Type, Union
 # 3rd Party Libraries
 import nemesispb.nemesis_pb2 as pb
 import pytest
-import structlog
+from nemesiscommon.messaging import MessageQueueProducerInterface
+
 from enrichment.lib.nemesis_db import (
     AuthenticationData,
     DpapiBlob,
@@ -14,7 +15,6 @@ from enrichment.lib.nemesis_db import (
     Project,
     RegistryObject,
 )
-from nemesiscommon.messaging import MessageQueueProducerInterface
 
 
 class MockNemesisDb(NemesisDbInterface):
@@ -36,7 +36,9 @@ class MockNemesisDb(NemesisDbInterface):
     async def add_service(self, metadata: pb.Metadata, service_name: str) -> None:
         pass
 
-    async def add_service_property(self, metadata: pb.Metadata, service_name: str, value_name: str, value: Union[int, str]) -> None:
+    async def add_service_property(
+        self, metadata: pb.Metadata, service_name: str, value_name: str, value: Union[int, str]
+    ) -> None:
         pass
 
     async def add_host_info(self, os_info) -> None:

@@ -19,7 +19,7 @@ def parenthetic_contents(string):
             stack.append(i)
         elif c == ")" and stack:
             start = stack.pop()
-            s = string[start + 1: i]
+            s = string[start + 1 : i]
             temp = s.split("=")
             if len(temp) == 1:
                 yield (temp[0], "")
@@ -84,7 +84,9 @@ class web_config(Meta.FileType):
                                     if content[0].lower() == "host":
                                         connection_string.database_credential.server = content[1]
                                     elif content[0].lower() == "port":
-                                        connection_string.database_credential.server = f"{connection_string.database_credential.server}:{content[1]}"
+                                        connection_string.database_credential.server = (
+                                            f"{connection_string.database_credential.server}:{content[1]}"
+                                        )
                                     elif content[0].lower() == "service_name":
                                         connection_string.database_credential.database = content[1]
                             else:
@@ -97,7 +99,9 @@ class web_config(Meta.FileType):
                                     elif re.match("^(Server|HOST|Data Source)$", key, re.IGNORECASE):
                                         connection_string.database_credential.server = value
                                     elif re.match("^(port)$", key, re.IGNORECASE):
-                                        connection_string.database_credential.server = f"{connection_string.database_credential.server}:{value}"
+                                        connection_string.database_credential.server = (
+                                            f"{connection_string.database_credential.server}:{value}"
+                                        )
                                     elif re.match("^Database$", key, re.IGNORECASE):
                                         connection_string.database_credential.database = value
                                     elif re.match("^(password|PWD)$", key, re.IGNORECASE):
@@ -106,7 +110,11 @@ class web_config(Meta.FileType):
                                             # signal that we do have parsed credentials
                                             parsed_data.has_parsed_credentials = True
 
-                            if connection_string.database_credential.server and connection_string.database_credential.username and connection_string.database_credential.password:
+                            if (
+                                connection_string.database_credential.server
+                                and connection_string.database_credential.username
+                                and connection_string.database_credential.password
+                            ):
                                 auth_data = auth_data_msg.data.add()
                                 auth_data.data = connection_string.database_credential.password
                                 auth_data.type = "password"
@@ -124,4 +132,7 @@ class web_config(Meta.FileType):
             return (parsed_data, auth_data_msg)
 
         except Exception as e:
-            return (helpers.nemesis_parsed_data_error(f"error parsing .config file {self.file_data.object_id} : {e}"), auth_data_msg)
+            return (
+                helpers.nemesis_parsed_data_error(f"error parsing .config file {self.file_data.object_id} : {e}"),
+                auth_data_msg,
+            )

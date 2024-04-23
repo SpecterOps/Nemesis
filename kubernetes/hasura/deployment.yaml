@@ -45,7 +45,7 @@ spec:
               value: "true"
             - name: HASURA_GRAPHQL_ENABLED_LOG_TYPES
               value: startup
-          image: hasura/graphql-engine:v2.36.2.cli-migrations-v2
+          image: hasura/graphql-engine:v2.38.1.cli-migrations-v2
           imagePullPolicy: IfNotPresent
           name: hasura
           ports:

@@ -19,7 +19,7 @@
                     "sourceFileMap": {
                         "${workspaceFolder}/cmd/enrichment": "/app/cmd/enrichment"
                     },
-                    "justMyCode": false
+                    "justMyCode": false,
                 }
             ]
         },

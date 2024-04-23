@@ -16,7 +16,10 @@
                 // "PYTHONASYNCIODEBUG": "1",
                 "BETTER_EXCEPTIONS": "1",
                 "FORCE_COLOR": "1",
-            }
+            },
+            "args": [
+                "-Xfrozen_modules=off"
+            ]
         },
         {
             "name": "submit_to_nemesis.py - File",

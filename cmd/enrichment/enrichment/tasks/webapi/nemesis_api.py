@@ -16,12 +16,6 @@ import structlog
 import uvicorn
 from aio_pika import connect_robust
 from elasticsearch import AsyncElasticsearch
-from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
-    map_unordered,
-    return_args_and_exceptions,
-)
-from enrichment.lib.nemesis_db import NemesisDb
-from enrichment.lib.registry import include_registry_value
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from google.protobuf.json_format import Parse
@@ -29,7 +23,6 @@ from google.protobuf.json_format import Parse
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
 from nemesiscommon.constants import ALL_ES_INDICIES, NemesisQueue
 from nemesiscommon.messaging import MessageQueueProducerInterface
-from nemesiscommon.messaging_rabbitmq import RABBITMQ_QUEUE_BINDINGS
 from nemesiscommon.services.alerter import AlerterInterface
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
@@ -37,6 +30,13 @@ from prometheus_async import aio
 from prometheus_client import Summary
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
+
+from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
+    map_unordered,
+    return_args_and_exceptions,
+)
+from enrichment.lib.nemesis_db import NemesisDb
+from enrichment.lib.registry import include_registry_value
 
 logger = structlog.get_logger(module=__name__)
 
@@ -314,7 +314,9 @@ class NemesisApiRoutes:
         await logger.ainfo("Resubmitting all existing messages for processing")
 
         try:
-            async for result in map_unordered(wrapped_reprocess_post_data, self.db.get_api_data_messages(), limit=self.reprocessing_workers):
+            async for result in map_unordered(
+                wrapped_reprocess_post_data, self.db.get_api_data_messages(), limit=self.reprocessing_workers
+            ):
                 total_file_count += 1
         except Exception as e:
             await logger.awarn("Error reprocessing message", e=e)
@@ -351,7 +353,6 @@ class NemesisApiRoutes:
             obj = self.parse_message_bytes(body_bytes, data_type)
         except:
             raise HTTPException(status_code=400, detail=f"Invalid {data_type} message")
-            raise HTTPException(status_code=400, detail=f"Invalid {data_type} message")
 
         try:
             expiration_string = json_data["metadata"]["expiration"]
@@ -359,7 +360,9 @@ class NemesisApiRoutes:
         except:
             raise HTTPException(status_code=400, detail="Invalid metadata expiration")
 
-        await logger.ainfo("Received data message", data_type=obj.metadata.data_type, message_id=obj.metadata.message_id)
+        await logger.ainfo(
+            "Received data message", data_type=obj.metadata.data_type, message_id=obj.metadata.message_id
+        )
 
         # save off the raw POST message for possible replay later
         await self.db.add_api_data_message(obj.metadata.message_id, body_bytes, obj.metadata.expiration.ToDatetime())
@@ -416,7 +419,9 @@ class NemesisApiRoutes:
             return {"object_id": str(file_uuid)}
 
     @aio.time(Summary("download", "Download file"))  # type: ignore
-    async def download(self, id: uuid.UUID, name: Optional[str] = None, action: Optional[DownloadAction] = None) -> Response:
+    async def download(
+        self, id: uuid.UUID, name: Optional[str] = None, action: Optional[DownloadAction] = None
+    ) -> Response:
         content_type = "application/octet-stream"
         content_disposition: Optional[str] = None
 
@@ -468,7 +473,9 @@ class NemesisApiRoutes:
             with await self.storage.download(id, False) as file:
                 # set a background task to delete the file after serving
                 #   ref - https://github.com/tiangolo/fastapi/issues/2152#issuecomment-889282903
-                return FileResponse(file.name, background=BackgroundTask(os.remove, file.name), media_type=content_type, headers=headers)
+                return FileResponse(
+                    file.name, background=BackgroundTask(os.remove, file.name), media_type=content_type, headers=headers
+                )
         except Exception as e:
             await logger.aerror(message="Failed to download file", file_uuid=id, exception=e)
             raise HTTPException(status_code=404, detail="File not found")

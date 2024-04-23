@@ -55,6 +55,8 @@ class reg_hive_system(Meta.FileType):
         except Exception as e:
             logger.exception(e, message="reg_hive_system.py parse() error", file_uuid=self.file_data.object_id)
             return (
-                helpers.nemesis_parsed_data_error(f"error parsing reg_hive_system file {self.file_data.object_id} : {e}"),
+                helpers.nemesis_parsed_data_error(
+                    f"error parsing reg_hive_system file {self.file_data.object_id} : {e}"
+                ),
                 pb.AuthenticationDataIngestionMessage(),
             )

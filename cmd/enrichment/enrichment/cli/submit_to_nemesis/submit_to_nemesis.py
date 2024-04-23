@@ -42,11 +42,29 @@ async def get_config() -> dict[str, str]:
     parser.add_argument("-f", "--file", type=str, nargs="+", help="File(s) to submit to Nemesis")
     parser.add_argument("--folder", type=str, nargs="+", help="Folders(s) to submit to Nemesis")
     parser.add_argument("-m", "--monitor", type=str, nargs="?", help="Folder to monitor for new files")
-    parser.add_argument("-s", "--sec_between_files", type=float, nargs="?", default=0, help="Seconds between file submissions (default 0). If > 0, it cannot be used with the --workers argument.")
-    parser.add_argument("-w", "--workers", type=int, nargs="?", default=10, help="Number of workers to use (default 10). If --sec_between_files argument is set, value will be 1")
-    parser.add_argument("-r", "--repeat", type=int, default=0, help="Times to repeat the submission (for stress testing)")
+    parser.add_argument(
+        "-s",
+        "--sec_between_files",
+        type=float,
+        nargs="?",
+        default=0,
+        help="Seconds between file submissions (default 0). If > 0, it cannot be used with the --workers argument.",
+    )
+    parser.add_argument(
+        "-w",
+        "--workers",
+        type=int,
+        nargs="?",
+        default=10,
+        help="Number of workers to use (default 10). If --sec_between_files argument is set, value will be 1",
+    )
+    parser.add_argument(
+        "-r", "--repeat", type=int, default=0, help="Times to repeat the submission (for stress testing)"
+    )
     parser.add_argument("-l", "--log_level", type=str, default="INFO", help="Log level (default INFO)")
-    parser.add_argument("-t", "--timeout", type=int, default=60, help="HTTP connect/read/write/pool timeout in seconds (default 60)")
+    parser.add_argument(
+        "-t", "--timeout", type=int, default=60, help="HTTP connect/read/write/pool timeout in seconds (default 60)"
+    )
     parser.add_argument("-c", "--cookies", type=int, help="Number of fake cookies to construct and generate.")
     if len(sys.argv) < 2:
         parser.print_usage()
@@ -155,7 +173,8 @@ async def get_metadata(config: dict[str, str], data_type: str):
     metadata["agent_type"] = "submit_to_nemesis"
     metadata["automated"] = False
     metadata["data_type"] = data_type
-    # metadata["source"] = "computer.domain.com"
+    metadata["operation"] = "add"
+    metadata["source"] = "computer.domain.com"
     metadata["expiration"] = await get_timestamp(config["expiration_days"])
     metadata["project"] = config["project_name"]
     metadata["timestamp"] = await get_timestamp()
@@ -180,7 +199,9 @@ async def get_nemesis_api_client(config) -> httpx.AsyncClient:
             max_connections=10,
         )
 
-        api_client = httpx.AsyncClient(base_url=nemesis_url, auth=auth, transport=transport, timeout=timeout, limits=limits)
+        api_client = httpx.AsyncClient(
+            base_url=nemesis_url, auth=auth, transport=transport, timeout=timeout, limits=limits
+        )
 
     return api_client
 
@@ -206,12 +227,17 @@ async def nemesis_post_file(config: dict[str, str], file_path: str):
         resp = await client.send_file(FileUploadRequest(file_path))
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            logger.error("Nemesis API server returned 404 Not Found. Is the URL correct or is the API route enabled?", url=nemesis_url)
+            logger.error(
+                "Nemesis API server returned 404 Not Found. Is the URL correct or is the API route enabled?",
+                url=nemesis_url,
+            )
         else:
             logger.error(f"Nemesis API server returned {e.response.status_code}")
     except httpx.TimeoutException as e:
         timeoutStr = type(e).__name__
-        logger.error(f"HTTP {timeoutStr} occured while making Nemesis API call", url=nemesis_url, timeout_type=timeoutStr)
+        logger.error(
+            f"HTTP {timeoutStr} occured while making Nemesis API call", url=nemesis_url, timeout_type=timeoutStr
+        )
         return None
     except httpx.ConnectError:
         logger.error("Unable to connect to Nemesis API server", url=nemesis_url)
@@ -329,7 +355,9 @@ async def submit_file_with_raw_data_tag(config: dict[str, str], file_path: str, 
 
     resp = await nemesis_post_data(config, {"metadata": metadata, "data": [raw_data]})
     if resp:
-        logger.debug("raw_data file data sent to Nemesis", message_uuid=resp["object_id"], file_path=file_path, tags=tags)
+        logger.debug(
+            "raw_data file data sent to Nemesis", message_uuid=resp["object_id"], file_path=file_path, tags=tags
+        )
         return uuid.UUID(resp["object_id"])
     else:
         return None
@@ -403,10 +431,20 @@ async def process_folder(config, folder_path) -> AsyncIterator:
 
     if config["sec_between_files"] > 0:
         workers = 1
-        logger.info("Processing files in folder synchronously", folder_path=folder_path, workers=1, sec_between_files=config["sec_between_files"])
+        logger.info(
+            "Processing files in folder synchronously",
+            folder_path=folder_path,
+            workers=1,
+            sec_between_files=config["sec_between_files"],
+        )
     else:
         workers = config["workers"]
-        logger.info("Processing files in folder concurrently", folder_path=folder_path, workers=config["workers"], sec_between_files=config["sec_between_files"])
+        logger.info(
+            "Processing files in folder concurrently",
+            folder_path=folder_path,
+            workers=config["workers"],
+            sec_between_files=config["sec_between_files"],
+        )
 
     yield submit_paths_concurrently(config, folder_path, workers, config["sec_between_files"])
 
@@ -511,7 +549,9 @@ def exception_handler(e, args):
     logger.exception("Error processing file", args=args)
 
 
-async def submit_paths_concurrently(config: dict[str, str], paths: List[str], workers: int, delay: float = 0) -> AsyncIterator[Tuple[str, uuid.UUID]]:
+async def submit_paths_concurrently(
+    config: dict[str, str], paths: List[str], workers: int, delay: float = 0
+) -> AsyncIterator[Tuple[str, uuid.UUID]]:
     """Submits files to Nemesis concurrently.
 
     Args:
@@ -605,7 +645,9 @@ async def wait_for_stable_size(file_path, delay=1.0, retries=600):
     return False
 
 
-async def monitor_submit_paths_concurrently(config, path_iter: AsyncIterator, workers: int, delay: float = 0) -> AsyncIterator[Tuple[str, uuid.UUID]]:
+async def monitor_submit_paths_concurrently(
+    config, path_iter: AsyncIterator, workers: int, delay: float = 0
+) -> AsyncIterator[Tuple[str, uuid.UUID]]:
     """Submits files to Nemesis concurrently.
 
     Args:
@@ -691,7 +733,9 @@ async def submit_files_and_folders(config: dict[str, str]):
 
     for i in range(config["repeat"] + 1):
         logger.info("Waiting for tasks to complete")
-        async for result in submit_paths_concurrently(config, paths_to_process, config["workers"], config["sec_between_files"]):
+        async for result in submit_paths_concurrently(
+            config, paths_to_process, config["workers"], config["sec_between_files"]
+        ):
             path, file_uuid = result
             processed_file_uuids.append(file_uuid)
 

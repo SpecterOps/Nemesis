@@ -66,7 +66,9 @@ def get_office_metadata(file_path: str) -> pb.ParsedData:
             pass
 
         try:
-            parsed_data.office_doc_new.last_modified_by = doc.getElementsByTagName("cp:lastModifiedBy")[0].childNodes[0].data
+            parsed_data.office_doc_new.last_modified_by = (
+                doc.getElementsByTagName("cp:lastModifiedBy")[0].childNodes[0].data
+            )
         except:
             pass
 

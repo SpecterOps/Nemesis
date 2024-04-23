@@ -17,13 +17,19 @@ logger = structlog.get_logger(module=__name__)
 def format_optional_header(pe, parsed_data):
     parsed_data.dotnet_assembly.header.major_image_version = pe.optional_header.major_image_version
     parsed_data.dotnet_assembly.header.major_linker_version = pe.optional_header.major_linker_version
-    parsed_data.dotnet_assembly.header.major_operating_system_version = pe.optional_header.major_operating_system_version
+    parsed_data.dotnet_assembly.header.major_operating_system_version = (
+        pe.optional_header.major_operating_system_version
+    )
     parsed_data.dotnet_assembly.header.major_subsystem_version = pe.optional_header.major_subsystem_version
     parsed_data.dotnet_assembly.header.minor_image_version = pe.optional_header.minor_image_version
     parsed_data.dotnet_assembly.header.minor_linker_version = pe.optional_header.minor_linker_version
-    parsed_data.dotnet_assembly.header.minor_operating_system_version = pe.optional_header.minor_operating_system_version
+    parsed_data.dotnet_assembly.header.minor_operating_system_version = (
+        pe.optional_header.minor_operating_system_version
+    )
     parsed_data.dotnet_assembly.header.minor_subsystem_version = pe.optional_header.minor_subsystem_version
-    parsed_data.dotnet_assembly.header.time_date_stamp.FromDatetime(datetime.datetime.fromtimestamp(pe.header.time_date_stamps))
+    parsed_data.dotnet_assembly.header.time_date_stamp.FromDatetime(
+        datetime.datetime.fromtimestamp(pe.header.time_date_stamps)
+    )
 
 
 def format_export(pe, parsed_data):
@@ -142,7 +148,11 @@ def process_resources(pe):
     for r in pe.net.resources:
         # if resource data is a simple byte stream
         if isinstance(r.data, bytes):
-            resources[r.name] = [hashlib.md5(r.data).hexdigest(), hashlib.sha1(r.data).hexdigest(), hashlib.sha256(r.data).hexdigest()]
+            resources[r.name] = [
+                hashlib.md5(r.data).hexdigest(),
+                hashlib.sha1(r.data).hexdigest(),
+                hashlib.sha256(r.data).hexdigest(),
+            ]
         # if resource data is a ResourceSet, a dotnet-specific datatype
         elif isinstance(r.data, dnfile.resource.ResourceSet):
             # if there are no entries, skip it

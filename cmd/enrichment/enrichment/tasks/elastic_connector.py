@@ -182,7 +182,9 @@ class ElasticConnector(TaskInterface):
             if "extractedSource" in dataDict:
                 extracted_source_id = dataDict["extractedSource"]
                 if "error" not in extracted_source_id:
-                    dataDict["extractedSourceURL"] = f"{self.web_api_url}download/{extracted_source_id}?name={enc_file_name}.zip"
+                    dataDict[
+                        "extractedSourceURL"
+                    ] = f"{self.web_api_url}download/{extracted_source_id}?name={enc_file_name}.zip"
 
             await self.send_to_elastic(constants.ES_INDEX_FILE_DATA_ENRICHED, dataDict)
 
@@ -218,7 +220,9 @@ class ElasticConnector(TaskInterface):
 
                         if "originatingObjectConvertedPdf" in data:
                             pdf_object_id = data["originatingObjectConvertedPdf"]
-                            data["originatingObjectConvertedPdfUrl"] = f"{self.web_api_url}download/{pdf_object_id}?name=pdf.pdf"
+                            data[
+                                "originatingObjectConvertedPdfUrl"
+                            ] = f"{self.web_api_url}download/{pdf_object_id}?name=pdf.pdf"
 
                         await self.send_to_elastic(constants.ES_INDEX_FILE_DATA_PLAINTEXT, data)
 
@@ -246,10 +250,16 @@ class ElasticConnector(TaskInterface):
                         data["text"] = f.read().decode(encoding="utf-8", errors="ignore")
                         object_id = data["objectId"]
                         data["downloadURL"] = f"{self.web_api_url}download/{object_id}"
-                        data["fileObjectURL"] = f"{self.public_kibana_url}app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
+                        data[
+                            "fileObjectURL"
+                        ] = f"{self.public_kibana_url}app/discover#/?_a=(filters:!((query:(match_phrase:(objectId:'{object_id}')))),index:'26360ae8-a518-4dac-b499-ef682d3f6bac')&_g=(time:(from:now-1y%2Fd,to:now))"
                         await self.send_to_elastic(constants.ES_INDEX_FILE_DATA_SOURCECODE, data)
 
-    @aio.time(Summary("elastic_send_without_processing", "Time spent submitting process_enriched messages to Elastic/Postgres"))  # type: ignore
+    @aio.time(
+        Summary(
+            "elastic_send_without_processing", "Time spent submitting process_enriched messages to Elastic/Postgres"
+        )
+    )  # type: ignore
     async def send_without_processing(
         self,
         q_msg: pb.AuthenticationDataIngestionMessage

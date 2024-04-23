@@ -18,34 +18,34 @@ REG_QWORD = 11
 
 
 def read_unsigned_int(data: bytes) -> Tuple[int, bytes]:
-    (ret,), data = struct.unpack('>I', data[:4]), data[4:]
+    (ret,), data = struct.unpack(">I", data[:4]), data[4:]
     return ret, data
 
 
 def read_unsigned_long(data: bytes) -> Tuple[int, bytes]:
-    (ret,), data = struct.unpack('<L', data[:4]), data[4:]
+    (ret,), data = struct.unpack("<L", data[:4]), data[4:]
     return ret, data
 
 
 def read_unsigned_long_be(data: bytes) -> Tuple[int, bytes]:
-    (ret,), data = struct.unpack('>L', data[:4]), data[4:]
+    (ret,), data = struct.unpack(">L", data[:4]), data[4:]
     return ret, data
 
 
 def read_unsigned_long_long(data: bytes) -> Tuple[int, bytes]:
-    (ret,), data = struct.unpack('<Q', data[:8]), data[8:]
+    (ret,), data = struct.unpack("<Q", data[:8]), data[8:]
     return ret, data
 
 
 def read_fixed_string(data: bytes, length: int) -> Tuple[bytes, bytes]:
-    (ret,) = struct.unpack(f'>{length}s', data[:length])
+    (ret,) = struct.unpack(f">{length}s", data[:length])
     return ret, data[length:]
 
 
 def read_string(data: bytes) -> Tuple[bytes, int, bytes]:
     size, data = read_unsigned_int(data)
     if size == 0:
-        return b'', size, data
+        return b"", size, data
     ret, data = read_fixed_string(data, size)
     return ret, size, data
 
@@ -63,12 +63,12 @@ class RegKey(NamedTuple):
 def read_key(data: bytes) -> Tuple[RegKey, bytes]:
     type_, data = read_unsigned_int(data)
     path, path_size, data = read_string(data)
-    path = path.decode('utf-16')
+    path = path.decode("utf-16")
 
     key, key_size, data = read_string(data)
-    key = key.decode('utf-16')
+    key = key.decode("utf-16")
 
-    value = b''
+    value = b""
     value_length = 0
 
     if type_ == REG_NONE:
@@ -85,22 +85,22 @@ def read_key(data: bytes) -> Tuple[RegKey, bytes]:
         value, data = read_unsigned_long_be(data)
     elif type_ == REG_MULTI_SZ:
         value, value_length, data = read_string(data)
-        value = [v for v in value.decode('utf-16').split('\0') if v != '']
+        value = [v for v in value.decode("utf-16").split("\0") if v != ""]
     elif type_ == REG_QWORD:
         _, data = read_unsigned_int(data)
         value, data = read_unsigned_long_long(data)
     else:
         value, value_length, data = read_string(data)
         try:
-            value = value.decode('utf-16')
-        except Exception as e:
-            value = value.decode('latin-1')
+            value = value.decode("utf-16")
+        except Exception:
+            value = value.decode("latin-1")
 
     return RegKey(type_, path, path_size, key, key_size, value, value_length), data
 
 
 def parse_serialized_reg_data(input_path: str) -> List[Tuple[RegKey, bytes]]:
-    with open(input_path, 'rb') as f:
+    with open(input_path, "rb") as f:
         data = f.read()
         arr = []
         arr_size, data = read_unsigned_int(data)
@@ -112,14 +112,14 @@ def parse_serialized_reg_data(input_path: str) -> List[Tuple[RegKey, bytes]]:
         return arr
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print('Usage: python nemesis_reg_parser.py <input file> <output file>')
+        print("Usage: python nemesis_reg_parser.py <input file> <output file>")
         sys.exit(1)
 
     input_path = sys.argv[1]
     output_path = sys.argv[2]
 
     parsed_data = parse_serialized_reg_data(input_path)
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(parsed_data, f)

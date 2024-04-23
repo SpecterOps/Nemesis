@@ -79,7 +79,9 @@ class tomcat(Meta.FileType):
                             auth_data.type = "password"
                             auth_data.username = entry.username
                             if user_roles_str and user_roles_str != "":
-                                auth_data.notes = f"credential parsed from file_processor->tomcat\nUser roles: {user_roles_str}"
+                                auth_data.notes = (
+                                    f"credential parsed from file_processor->tomcat\nUser roles: {user_roles_str}"
+                                )
                             else:
                                 auth_data.notes = "credential parsed from file_processor->tomcat"
                             auth_data.originating_object_id = self.file_data.object_id
@@ -90,4 +92,7 @@ class tomcat(Meta.FileType):
             return (parsed_data, auth_data_msg)
 
         except Exception as e:
-            return (helpers.nemesis_parsed_data_error(f"error parsing tomcat file {self.file_data.object_id} : {e}"), pb.AuthenticationDataIngestionMessage())
+            return (
+                helpers.nemesis_parsed_data_error(f"error parsing tomcat file {self.file_data.object_id} : {e}"),
+                pb.AuthenticationDataIngestionMessage(),
+            )

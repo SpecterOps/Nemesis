@@ -13,6 +13,7 @@ class TextExtractorInterface:
     @abstractmethod
     async def extract(self, text: str) -> Optional[str]:
         pass
+
     @abstractmethod
     async def detect(self, text: str) -> Optional[str]:
         pass
@@ -50,7 +51,10 @@ class TikaTextExtractor(TextExtractorInterface):
             except httpx.HTTPStatusError as e:
                 # See https://cwiki.apache.org/confluence/display/TIKA/TikaServer
                 if e.response.status_code == 422 and e.response.text == "Unprocessable Entity":
-                    await logger.awarning("Tika could not process the file (Unsupported mime-type, encrypted document, etc)", file_path=file_path)
+                    await logger.awarning(
+                        "Tika could not process the file (Unsupported mime-type, encrypted document, etc)",
+                        file_path=file_path,
+                    )
                     return None
 
                 # This is an response code we didn't expect, so re-raise it
@@ -81,7 +85,10 @@ class TikaTextExtractor(TextExtractorInterface):
             except httpx.HTTPStatusError as e:
                 # See https://cwiki.apache.org/confluence/display/TIKA/TikaServer
                 if e.response.status_code == 422 and e.response.text == "Unprocessable Entity":
-                    await logger.awarning("Tika could not process the file (Unsupported mime-type, encrypted document, etc)", file_path=file_path)
+                    await logger.awarning(
+                        "Tika could not process the file (Unsupported mime-type, encrypted document, etc)",
+                        file_path=file_path,
+                    )
                     return None
 
                 # This is an response code we didn't expect, so re-raise it

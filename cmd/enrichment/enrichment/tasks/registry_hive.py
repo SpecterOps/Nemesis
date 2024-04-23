@@ -7,8 +7,7 @@ import uuid
 import nemesispb.nemesis_pb2 as pb
 import structlog
 from enrichment.lib.registry import get_registry_values_from_hive
-from nemesiscommon.messaging import (MessageQueueConsumerInterface,
-                                     MessageQueueProducerInterface)
+from nemesiscommon.messaging import MessageQueueConsumerInterface, MessageQueueProducerInterface
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
 from prometheus_async import aio

@@ -1,21 +1,21 @@
-# Standard Libraries
 from typing import AsyncGenerator
 
 import asyncpg
-# 3rd Party Libraries
 import google.protobuf.message
 import httpx
 import nemesiscommon.constants as constants
 import nemesispb.nemesis_pb2 as pb
-import passwordcracker.settings as settings
 from dependency_injector import containers, providers
 from nemesiscommon.constants import NemesisQueue
-from nemesiscommon.messaging_rabbitmq import (NemesisRabbitMQConsumer,
-                                              NemesisRabbitMQProducer)
+from nemesiscommon.messaging_rabbitmq import (
+    NemesisRabbitMQConsumer,
+    NemesisRabbitMQProducer,
+)
 from nemesiscommon.services.alerter import NemesisAlerter
 from nemesiscommon.tasking import TaskDispatcher
-from passwordcracker.services.john_the_ripper_cracker import \
-    JohnTheRipperCracker
+
+import passwordcracker.settings as settings
+from passwordcracker.services.john_the_ripper_cracker import JohnTheRipperCracker
 from passwordcracker.settings import PasswordCrackerSettings
 from passwordcracker.tasks.password_cracker import PasswordCracker
 
@@ -43,6 +43,8 @@ async def create_producer(rabbitmq_connection_uri: str, queue: NemesisQueue):
 
 async def create_nemesis_db_pool(postgres_connection_uri: str):
     pool = await asyncpg.create_pool(dsn=postgres_connection_uri)
+    if not pool:
+        raise Exception("Could not create database pool")
     yield pool
     await pool.Close()
 
@@ -57,7 +59,12 @@ class Container(containers.DeclarativeContainer):
     #
     # Configuration
     #
-    config: PasswordCrackerSettings = providers.Configuration(pydantic_settings=[settings.config], strict=True)  # type: ignore
+    # Workaround for Pydantic2: https://github.com/ets-labs/python-dependency-injector/issues/755#issuecomment-1885607691
+    config = providers.Configuration()
+    json_config = settings.config.model_dump(mode="json")
+    config.from_dict(json_config)
+
+    # Use this if a class needs to be instantiated with a PasswordCrackerSettings object
     config2 = providers.Factory(PasswordCrackerSettings)
 
     #

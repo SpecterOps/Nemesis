@@ -7,4 +7,4 @@ __pycache__
 *.asc
 nemesis.config
 config.yml
-
+.ruff_cache

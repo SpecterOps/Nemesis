@@ -1,7 +1,6 @@
 # Standard Libraries
 import json
 import re
-from datetime import datetime, timezone
 
 # 3rd Party Libraries
 import enrichment.lib.file_parsers.Meta as Meta
@@ -62,6 +61,8 @@ class slack_workspaces(Meta.FileType):
 
         except Exception as e:
             return (
-                helpers.nemesis_parsed_data_error(f"error parsing  'slack-workspaces' file {self.file_data.object_id} : {e}"),
+                helpers.nemesis_parsed_data_error(
+                    f"error parsing  'slack-workspaces' file {self.file_data.object_id} : {e}"
+                ),
                 pb.AuthenticationDataIngestionMessage(),
             )

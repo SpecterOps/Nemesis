@@ -3,8 +3,7 @@ import json
 from typing import Dict, List, Optional
 
 # 3rd Party Libraries
-from enrichment.tasks.webapi.crack_list.dictionary import (Dictionary,
-                                                           default_dictionary)
+from enrichment.tasks.webapi.crack_list.dictionary import Dictionary, default_dictionary
 
 # TODO: make these ENV variables
 MIN_LENGTH = 3
@@ -31,7 +30,7 @@ class Wordlist:
         try:
             raw_wordlist = json.loads(json_str)
             return Wordlist(dictionary=dictionary, raw_wordlist=raw_wordlist)
-        except Exception as e:
+        except Exception:
             return None
 
     def _tokenize(self, text: str) -> List[str]:

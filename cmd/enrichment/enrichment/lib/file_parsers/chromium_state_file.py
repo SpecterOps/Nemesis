@@ -1,5 +1,4 @@
 # Standard Libraries
-import asyncio
 import base64
 import json
 from datetime import datetime
@@ -79,13 +78,17 @@ class chromium_state_file(Meta.FileType):
                 if "uninstall_metrics" in state_file_json:
                     if "installation_date2" in state_file_json["uninstall_metrics"]:
                         try:
-                            installation_date = datetime.fromtimestamp(int(state_file_json["uninstall_metrics"]["installation_date2"]))
+                            installation_date = datetime.fromtimestamp(
+                                int(state_file_json["uninstall_metrics"]["installation_date2"])
+                            )
                             parsed_data.chromium_state_file.installation_date.FromDatetime(installation_date)
                         except:
                             pass
                     if "launch_count" in state_file_json["uninstall_metrics"]:
                         try:
-                            parsed_data.chromium_state_file.launch_count = int(state_file_json["uninstall_metrics"]["launch_count"])
+                            parsed_data.chromium_state_file.launch_count = int(
+                                state_file_json["uninstall_metrics"]["launch_count"]
+                            )
                         except:
                             pass
 
@@ -93,6 +96,8 @@ class chromium_state_file(Meta.FileType):
 
         except Exception as e:
             return (
-                helpers.nemesis_parsed_data_error(f"error parsing Chromium 'Local State' file {self.file_data.object_id} : {e}"),
+                helpers.nemesis_parsed_data_error(
+                    f"error parsing Chromium 'Local State' file {self.file_data.object_id} : {e}"
+                ),
                 pb.AuthenticationDataIngestionMessage(),
             )
