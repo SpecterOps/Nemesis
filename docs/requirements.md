@@ -33,7 +33,7 @@ Before installing k3s, you must have Docker installed on your system as it is a 
 
 #### Install k3s
 
-k3s is a lightweight Kubernetes distribution that simplifies the deployment and management of Kubernetes clusters. To install k3s without the Traefik ingress controller (as we will be using ingress-nginx), run the following command:
+k3s is a lightweight Kubernetes distribution that simplifies the deployment and management of Kubernetes clusters. Install k3s with the following command:
 
 ```bash
 curl -sfL https://get.k3s.io | sh -
