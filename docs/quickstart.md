@@ -11,7 +11,7 @@ Ensure your machine meets the following requirements:
 - **Architecture**: x64 only
 
 ### Step 1: Install Docker
-Before installing k3s, Docker is required. Install Docker by following the [official Docker installation guide](https://docs.docker.com/engine/install/). The installation instructions for Debian are replicated below:
+Install Docker by following the [official Docker installation guide](https://docs.docker.com/engine/install/). The installation instructions for Debian are replicated below:
 
 ```bash
 for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove $pkg; done
@@ -44,7 +44,7 @@ export KUBECONFIG=~/.kube/config
 
 ### Step 3: Install Helm
 
-Install [Helm](https://helm.sh/docs/intro/install/), which helps manage Kubernetes applications:
+Install [Helm](https://helm.sh/docs/intro/install/):
 
 ```bash
 curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
@@ -57,7 +57,7 @@ sudo apt-get install helm
 
 ### Step 4: Install Dependencies
 
-Install necessary dependencies using Helm:
+Install dependencies using Helm:
 
 ```bash
 helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
