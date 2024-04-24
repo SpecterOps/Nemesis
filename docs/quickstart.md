@@ -1,9 +1,12 @@
 # Quickstart Guide
 
-Here's a quickstart guide to setting up the Nemesis platform using k3s and Helm on Debian 11. This guide will start a Nemesis server running locally and accessible through "https://127.0.0.1". If this does not fit your installation need, see the full [setup guide](setup.md).
+Here's a quickstart guide to setting up the Nemesis platform using k3s and Helm on Debian 11. This guide will start a Nemesis server listening on the server "192.168.1.10". Change this IP to the host that you will be accessing Nemesis from. If this does not fit your installation need, see the full [setup guide](setup.md).
+
 
 ### Prerequisites
+
 Ensure your machine meets the following requirements:
+
 - **OS**: Debian 11 LTS
 - **Processors**: 4 cores (3 can work with adjustments)
 - **Memory**: 16 GB RAM (minimum of 10 GB for reduced performance)
@@ -57,8 +60,12 @@ helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart qui
 Deploy the main Nemesis services:
 
 ```bash
-helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m'
+helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' --set operation.nemesisHttpServer="https://192.168.1.10:443/"
 ```
+
+!!! tip
+
+    Note that the nemesisHttpServer flag is being set to the accessible IP address of your server. If you are setting up Nemesis locally, you can remove the flag to set the variable. The default value for this flag is `https://127.0.0.1:443/`
 
 
 ### Step 6: Get basic-auth Secret
@@ -73,11 +80,7 @@ echo "${BASIC_AUTH_USER}:${BASIC_AUTH_PASSWORD}"
 
 ### Step 7: Logging into the Dashboard
 
-Once all installations and configurations are complete, open a web browser and go to:
-
-```
-https://127.0.0.1
-```
+Once all installations and configurations are complete, open a web browser and go to: `https://192.168.1.10`
 
 Enter the basic authentication credentials you retrieved earlier to access the Nemesis dashboard. Use the following credentials:
 
