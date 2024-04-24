@@ -1,12 +1,4 @@
-# Requirements
-
-## Table of Contents
-
-1. [Table of Contents](#table-of-contents)
-1. [VM Hardware Requirements](#vm-hardware-requirements)
-2. [Software Requirements](#software-requirements)
-    1. [Docker](#docker)
-    1. [K3s](#k3s)
+# Developer Requirements
 
 ## VM Hardware Requirements
 
