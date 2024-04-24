@@ -82,17 +82,21 @@ The default storage size is 20Gi. To change this, modify the `postgres.storage` 
 
 # (Optional) Change Nemesis's Listening Port
 
-## Helm
+Create the `traefik-config.yaml` manifest with the following content:
 
-Launch `./scripts/minikube_port_forward.sh <PORT>`
-
-## Skaffold
-
-The ingress port for Nemesis is **8080**, which routes access for all services. To change this port, in `./skaffold.yaml` modify the `localPort` value under the `portForward-ingress` configuration section (if you change this, you must update `operation.nemesisHttpServer` in values.yaml).
-
-Underneath, Skaffold manages all of Nemesis's port forwards using `kubectl`. If you'd like `kubectl` to be able to bind to lower ports without being root, you can run the following:
-```bash
-sudo setcap CAP_NET_BIND_SERVICE=+eip $(which kubectl)
+```yaml
+# /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      web:
+        exposedPort: 8080
+      websecure:
+        exposedPort: 8443
 ```
 
 # (Optional) Deleting Running Pods
