@@ -40,6 +40,7 @@ elasticsearch:
   user: "nemesis"
   # NOTE: if you're use persist "production" storage, this needs to be set to a static value
   #   ahead of time for services to play nicely together
+  # Set the elasticsearch password to the same value as basic-auth password
   password: "Qwerty12345"
 
 dashboard:
