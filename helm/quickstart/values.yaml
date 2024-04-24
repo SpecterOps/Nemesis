@@ -15,8 +15,11 @@ aws:
 
 rabbitmq:
   secretName: rabbitmq-creds
-  adminUser: "nemesis"
-  adminPassword: "password"
+  # admin username
+  username: "nemesis"
+  # admin password
+  password: "password"
+  # If the username or password is changed, the connectionUri will need to be updated
   connectionUri: "amqp://nemesis:password@nemesis-rabbitmq-svc:5672/"
   erlangCookie: "default-cookie"
 
