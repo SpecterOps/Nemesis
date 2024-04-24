@@ -16,8 +16,6 @@ The hardware requirements are the same as what's listed in [Hardware Requirement
 
 K3s is the only officially supported way to install Nemesis. Installation instructions for [Docker Desktop](requirements_docker_desktop.md) and [Minikube](requirements_minikube.md) do exist but may not be up to date.
 
-**The following requirements need to be installed:**
-
 ### Docker
 
 Install Docker by following the [official Docker installation guide](https://docs.docker.com/engine/install/). The installation instructions for Debian are replicated below:
