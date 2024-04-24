@@ -48,6 +48,7 @@ dashboard:
 postgres:
   secretName: postgres-creds
   username: "nemesis"
+  password:
   pgadminEmail: "nemesis@nemesis.com"
   # Add a value to the password field to set a static password
   pgadminPassword:
