@@ -40,8 +40,6 @@ sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin 
 
 Install K3s with [cri-dockerd](https://github.com/Mirantis/cri-dockerd) to allow K3s to use Docker to deploy containers. This allows Skaffold and Nemesis scripts to work.
 
-#### Install k3s
-
 k3s is a lightweight Kubernetes distribution that simplifies the deployment and management of Kubernetes clusters.
 Install k3s with the following command:
 
@@ -58,7 +56,7 @@ sudo k3s kubectl config view --raw > "$KUBECONFIG"
 chmod 600 "$KUBECONFIG"
 ```
 
-#### Install Helm
+### Install Helm
 
 Follow the Helm installation guide for your specific operating system: [Installing Helm](https://helm.sh/docs/intro/install/).
 
@@ -72,7 +70,7 @@ sudo apt-get update
 sudo apt-get install helm
 ```
 
-#### Install Dependencies
+### Install Dependencies
 
 Install the Elastic operator with the following Helm command to manage Elasticsearch in the `default` namespace:
 
@@ -80,7 +78,7 @@ Install the Elastic operator with the following Helm command to manage Elasticse
 helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 
-#### Validate Installation
+### Validate Installation
 
 To ensure you're ready for the next step, run the command below and ensure a deployment exists for "traefik" and "elastic-operator."
 
