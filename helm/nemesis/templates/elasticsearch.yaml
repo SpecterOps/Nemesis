@@ -110,7 +110,12 @@ kind: Ingress
 metadata:
   name: elastic-ingress
   annotations:
+    {{- if .Values.elasticsearch.auth.basicAuth }}
     traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-elastic-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- else  }}
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-elastic-stripprefix@kubernetescrd"
+    {{- end }}
+
     {{- if .Values.elasticsearch.ingress.annotations }}
     {{- .Values.elasticsearch.ingress.annotations | toYaml | nindent 4 }}
     {{- end }}

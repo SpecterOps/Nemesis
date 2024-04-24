@@ -61,6 +61,9 @@ elasticsearch:
   # how many days to keep fluentd logs before purging
   fluentdLogsAge: 100
   existingSecret: elasticsearch-creds
+  auth:
+    # Enables or disables basic auth on the /elasticsearch route
+    basicAuth: true
   ingress:
     annotations:
   resources:
