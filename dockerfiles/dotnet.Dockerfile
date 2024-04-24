@@ -43,7 +43,7 @@ RUN apt-get update \
 # install Python
 RUN apt-get update -y && apt-get install python3 -y && apt-get install python3-pip -y
 
-RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
+RUN pip install poetry==1.8.2
 
 COPY cmd/dotnet/poetry.lock cmd/dotnet/pyproject.toml ./
 COPY cmd/dotnet/dotnet/__init__.py ./dotnet/

@@ -27,7 +27,7 @@ ENV POETRY_VIRTUALENVS_IN_PROJECT=true
 ENV PATH="$POETRY_HOME/bin:$PATH"
 
 # install Poetry
-RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
+RUN pip install poetry==1.8.2
 
 # clone down Nemesis
 RUN git clone https://www.github.com/SpecterOps/Nemesis /opt/Nemesis/ && cd /opt/Nemesis/

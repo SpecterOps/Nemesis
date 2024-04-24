@@ -25,6 +25,7 @@ async def amain(container: Container):
     await initRabbitMQ(str(config.rabbitmq_connection_uri))
     await wait_for_services(config)
 
+
     dispatcher = await container.task_dispatcher()  # type: ignore
     await dispatcher.start()
 
