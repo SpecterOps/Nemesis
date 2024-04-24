@@ -5,6 +5,36 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Kubernetes: Run/Debug Enrichment2",
+            "type": "cloudcode.kubernetes",
+            "request": "launch",
+            "skaffoldConfig": "${workspaceFolder}/../../skaffold.yaml",
+            "skaffoldFlags": {
+                "modules": [
+                    "enrichment"
+                ]
+            },
+            "watch": true,
+            "cleanUp": false,
+            "portForward": true,
+            "debug": [
+                {
+                    "image": "enrichment",
+                    "sourceFileMap": {
+                        "${workspaceFolder}/cmd/enrichment": "/app/cmd/enrichment"
+                    },
+                    "justMyCode": false
+                },
+                {
+                    "image": "enrichment-dev",
+                    "containerName": "enrichment",
+                    "sourceFileMap": {
+                        "${workspaceFolder}/cmd/enrichment": "/app/cmd/enrichment"
+                    }
+                }
+            ]
+        },
+        {
             "name": "Service: enrichment",
             "type": "python",
             "request": "launch",

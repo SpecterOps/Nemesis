@@ -4,7 +4,7 @@
 FROM python:3.11.2-bullseye AS netbuild
 WORKDIR /app/cmd/dotnet
 
-ENV PYTHONUNBUFFERED=true
+ENV PYTHONUNBUFFERED=1
 
 ########################
 # Download dependent packages

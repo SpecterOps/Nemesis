@@ -51,7 +51,7 @@ CMD ["python3", "-m", "passwordcracker"]
 # ####################################
 # FROM ghcr.io/openwall/john:latest_1.9.20240102 as debcommon
 
-# ENV PYTHONUNBUFFERED=true
+# ENV PYTHONUNBUFFERED=1
 
 
 # ####################################

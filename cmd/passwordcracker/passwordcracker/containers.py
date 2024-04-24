@@ -115,4 +115,4 @@ class Container(containers.DeclarativeContainer):
         task_passwordcracker,
     )
 
-    task_dispatcher = providers.Factory(TaskDispatcher, task_list, config.prometheus_port)
+    task_dispatcher = providers.Factory(TaskDispatcher, task_list, config.prometheus_port, config2)

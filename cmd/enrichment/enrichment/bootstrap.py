@@ -38,7 +38,7 @@ async def amain(container: Container):
         task_list.append(t)
 
     await logger.ainfo("Starting task dispatcher", tasks=task_names)
-    dispatcher = TaskDispatcher(task_list, config.prometheus_port)
+    dispatcher = TaskDispatcher(task_list, config.prometheus_port, config)
     await dispatcher.start()
 
 

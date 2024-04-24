@@ -4,14 +4,13 @@
 FROM specterops/nemesis-jtr-base AS dependencies-os
 WORKDIR /app/cmd/enrichment
 
-# first we have to pip3 install this *normally* so the _fastpbkdf2.abi3.so properly builds (because Poetry no like)
-RUN pip3 install msfastpbkdf2
+# Add OS tools and dependencies
 
 
-####################################
-# Python dependencies
-####################################
-FROM dependencies-os AS dependencies-python
+############################################################
+# Generic Python dependencies any python application needs
+############################################################
+FROM dependencies-os AS python-build-tools
 
 ARG ENVIRONMENT=dev
 ENV POETRY_HOME=/opt/poetry
@@ -23,9 +22,23 @@ RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://insta
 
 
 ####################################
-# Container specific dependencies
+# Enrichment container specific dependencies
 ####################################
-FROM dependencies-python AS build
+FROM python-build-tools AS enrichment-application
+
+# first we have to pip3 install this *normally* so the _fastpbkdf2.abi3.so properly builds (because Poetry no like)
+RUN pip3 install msfastpbkdf2
+
+ENV PATH="/app/cmd/enrichment/.venv/bin:$PATH"
+
+# Clone our base Yara rules
+#   License: Detection Rule License (DRL) 1.1 - https://github.com/Neo23x0/signature-base/blob/master/LICENSE
+# Set a specific commit for the rule base in case someone changes the license
+#   Commit date - March 2, 2024
+ENV YARA_COMMIT cd7651d2ccf4158a35a8d1cc0441928f7d92818f
+#RUN git clone https://github.com/Neo23x0/signature-base/ /signature-base/ && cd /signature-base/ && git checkout ${YARA_COMMIT}
+RUN wget "https://github.com/Neo23x0/signature-base/archive/${YARA_COMMIT}.zip"
+RUN unzip "${YARA_COMMIT}.zip" && rm *.zip && mv signature-base-* signature-base
 
 COPY cmd/enrichment/poetry.lock cmd/enrichment/pyproject.toml ./
 
@@ -43,19 +56,6 @@ RUN cp /usr/local/lib/python3.11/site-packages/msfastpbkdf2/_fastpbkdf2.abi3.so 
 # the main enrichment container code
 COPY cmd/enrichment/enrichment/ ./enrichment/
 
-
-####################################
-# Container specific dependencies
-####################################
-FROM build AS yara-rules
-ENV PATH="/app/cmd/enrichment/.venv/bin:$PATH"
-
-# Clone our base Yara rules
-#   License: Detection Rule License (DRL) 1.1 - https://github.com/Neo23x0/signature-base/blob/master/LICENSE
-# Set a specific commit for the rule base in case someone changes the license
-#   Commit date - March 2, 2024
-ENV YARA_COMMIT cd7651d2ccf4158a35a8d1cc0441928f7d92818f
-RUN git clone https://github.com/Neo23x0/signature-base/ /signature-base/ && cd /signature-base/ && git checkout ${YARA_COMMIT}
 # Clean the rules to get rid of Thor-ness that throws Yara compilation errors
 RUN python3 enrichment/lib/public_yara/clean_yara_rules.py
 
@@ -63,7 +63,7 @@ RUN python3 enrichment/lib/public_yara/clean_yara_rules.py
 ####################################
 # Runtime
 ####################################
-FROM yara-rules AS runtime
+FROM enrichment-application AS runtime
 ENV PATH="/app/cmd/enrichment/.venv/bin:$PATH"
 
 # for generate_crack_list

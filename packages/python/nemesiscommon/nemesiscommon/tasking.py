@@ -7,6 +7,8 @@ from typing import List
 import structlog
 from prometheus_async.aio.web import MetricsHTTPServer, start_http_server
 
+from nemesiscommon.settings import NemesisServiceSettings
+
 logger = structlog.get_logger(__name__)
 
 
@@ -23,15 +25,18 @@ class TaskDispatcher:
     metrics_server: MetricsHTTPServer
     tasks: List[TaskInterface]
     prometheus_port: int
+    environment: NemesisServiceSettings
 
-    def __init__(self, tasks: List[TaskInterface], prometheus_port: int) -> None:
+    def __init__(self, tasks: List[TaskInterface], prometheus_port: int, environment: NemesisServiceSettings) -> None:
         self.tasks = tasks
         self.prometheus_port = prometheus_port
+        self.environment = environment
 
     async def start(self) -> None:
         await logger.ainfo("Application started")
 
-        self.metrics_server = await start_http_server(port=self.prometheus_port)
+        if self.environment.environment.is_production():
+            self.metrics_server = await start_http_server(port=self.prometheus_port)
 
         await logger.ainfo("Starting services")
 

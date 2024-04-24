@@ -49,32 +49,6 @@ class NemesisServiceSettings(BaseSettings):
         else:
             raise ValueError(f"must be valid log level from Python's 'logging' module, got '{level}'")
 
-    # Load settings from a YAML file and from environment variables
-    # class Config:
-    #     @classmethod
-    #     def customise_sources(
-    #         cls,
-    #         init_settings: SettingsSourceCallable,
-    #         env_settings: SettingsSourceCallable,
-    #         file_secret_settings: SettingsSourceCallable,
-    #     ) -> tuple[SettingsSourceCallable, ...]:
-    #         def yml_config_setting(settings: BaseSettings) -> dict[str, Any]:
-    #             if not os.path.exists("config.yml"):
-    #                 return {}
-    #             try:
-    #                 with open("config.yml") as f:
-    #                     conf = yaml.safe_load(f)
-    #                     if not conf:
-    #                         conf = {}
-
-    #                     return conf
-    #             except:
-    #                 # Do nothing since env vars might be specified
-    #                 return {}
-
-    #         # Add load from yml file, change priority and remove file secret option
-    #         return env_settings, yml_config_setting
-
 
 class FileProcessingService(NemesisServiceSettings):
     aws_bucket: str

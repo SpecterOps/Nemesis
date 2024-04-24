@@ -3,7 +3,7 @@
 # Published to specterops/nemesis-jtr-base
 ##########################################################
 FROM python:3.11.2-bullseye as dependencies
-ENV PYTHONUNBUFFERED=true
+ENV PYTHONUNBUFFERED=1
 
 # install our necessary dependencies
 RUN apt-get update -y && apt-get install yara -y && apt-get install git -y && apt-get install wamerican -y && apt-get install libcompress-raw-lzma-perl -y

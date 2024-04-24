@@ -4,7 +4,7 @@
 FROM python:3.11.2-bullseye AS debcommon
 WORKDIR /app/cmd/dashboard
 
-ENV PYTHONUNBUFFERED=true
+ENV PYTHONUNBUFFERED=1
 
 
 ####################################
