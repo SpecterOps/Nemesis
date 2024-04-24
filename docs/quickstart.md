@@ -10,27 +10,7 @@ Ensure your machine meets the following requirements:
 - **Disk Space**: 100 GB
 - **Architecture**: x64 only
 
-### Step 1: Install Docker
-Install Docker by following the [official Docker installation guide](https://docs.docker.com/engine/install/). The installation instructions for Debian are replicated below:
-
-```bash
-for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove $pkg; done
-
-sudo apt-get update
-sudo apt-get install ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-# Add the repository to Apt sources:
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
-
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-```
-
-
-### Step 2: Install k3s
+### Step 1: Install k3s
 
 Execute the following commands to install [k3s](https://docs.k3s.io/quick-start):
 
@@ -42,7 +22,7 @@ export KUBECONFIG=~/.kube/config
 ```
 
 
-### Step 3: Install Helm
+### Step 2: Install Helm
 
 Install [Helm](https://helm.sh/docs/intro/install/):
 
@@ -55,7 +35,7 @@ sudo apt-get install helm
 ```
 
 
-### Step 4: Install Dependencies
+### Step 3: Install Dependencies
 
 Install dependencies using Helm:
 
@@ -64,7 +44,7 @@ helm install elastic-operator eck-operator --repo https://helm.elastic.co --name
 ```
 
 
-### Step 5: Install the `quickstart` Chart
+### Step 4: Install the `quickstart` Chart
 
 Deploy the `quickstart` Helm chart to configure secrets:
 
@@ -72,7 +52,7 @@ Deploy the `quickstart` Helm chart to configure secrets:
 helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart
 ```
 
-### Step 6: Install `nemesis`
+### Step 5: Install `nemesis`
 
 Deploy the main Nemesis services:
 
@@ -81,7 +61,7 @@ helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --time
 ```
 
 
-### Step 7: Get basic-auth Secret
+### Step 6: Get basic-auth Secret
 
 Retrieve the basic authentication credentials to access the dashboard:
 
@@ -91,7 +71,7 @@ export BASIC_AUTH_PASSWORD=$(kubectl get secret basic-auth -o jsonpath="{.data.p
 echo "${BASIC_AUTH_USER}:${BASIC_AUTH_PASSWORD}"
 ```
 
-### Step 8: Logging into the Dashboard
+### Step 7: Logging into the Dashboard
 
 Once all installations and configurations are complete, open a web browser and go to:
 
@@ -109,7 +89,7 @@ You should be greeted by the services page:
 ![services](images/services.png)
 
 
-### Step 9: Upload File for Analysis
+### Step 8: Upload File for Analysis
 
 1. Navigate to the dashboard
 

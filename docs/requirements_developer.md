@@ -5,21 +5,12 @@
 1. [Table of Contents](#table-of-contents)
 1. [VM Hardware Requirements](#vm-hardware-requirements)
 2. [Software Requirements](#software-requirements)
+    1. [Docker](#docker)
     1. [K3s](#k3s)
 
 ## VM Hardware Requirements
-We have only tested on machines with the the following specs. All other configurations are not officially supported.
 
- * OS: Debian 11 LTS or Debian 11 on the Windows Subsystem for Linux (WSL).
- * 4 processors
- * 16 GB RAM
- * 100 GB disk
-
-You could probably do 3 processors and 10 GB RAM, just might need to change how many CPUs and how much memory you give to minikube (and then cross your fingers you don't get OOMErrors from Kubernetes :P)
-
-Additionally, only x64 architecture has been tested and is supported. ARM platforms (e.g., Mac devives with M* chips) are not currently supported but we intend to support these in the future.
-
-**Do not install the following requirements as root! Minikube is particular does not like to be run as root.**
+The hardware requirements are the same as what's listed in (requirements.md#vm-hardware-requirements).
 
 ## Software Requirements
 
@@ -27,16 +18,37 @@ K3s is the only officially supported way to install Nemesis. Installation instru
 
 **The following requirements need to be installed:**
 
+### Docker
+
+Install Docker by following the [official Docker installation guide](https://docs.docker.com/engine/install/). The installation instructions for Debian are replicated below:
+
+```bash
+for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove $pkg; done
+
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
 ### K3s
 
-k3s is a lightweight Kubernetes distribution that simplifies the deployment and management of Kubernetes clusters.
+Install K3s with [cri-dockerd](https://github.com/Mirantis/cri-dockerd) to allow K3s to use Docker to deploy containers. This allows Skaffold and Nemesis scripts to work.
 
 #### Install k3s
 
+k3s is a lightweight Kubernetes distribution that simplifies the deployment and management of Kubernetes clusters.
 Install k3s with the following command:
 
 ```bash
-curl -sfL https://get.k3s.io | sh -
+curl -sfL https://get.k3s.io | sh - --docker
 ```
 
 After installing k3s, modify your kubeconfig to use the k3s Kubernetes configuration with the following commands:
