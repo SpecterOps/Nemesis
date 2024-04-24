@@ -10,7 +10,7 @@
 
 ## VM Hardware Requirements
 
-The hardware requirements are the same as what's listed in (requirements.md#vm-hardware-requirements).
+The hardware requirements are the same as what's listed in [Hardware Requirements](requirements.md#vm-hardware-requirements).
 
 ## Software Requirements
 
