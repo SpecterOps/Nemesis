@@ -16,7 +16,7 @@ The hardware requirements are the same as what's listed in [Hardware Requirement
 
 K3s is the only officially supported way to install Nemesis. Installation instructions for [Docker Desktop](requirements_docker_desktop.md) and [Minikube](requirements_minikube.md) do exist but may not be up to date.
 
-### Docker
+### Install Docker
 
 Install Docker by following the [official Docker installation guide](https://docs.docker.com/engine/install/). The installation instructions for Debian are replicated below:
 
@@ -36,7 +36,7 @@ sudo apt-get update
 sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
-### K3s
+### Install K3s
 
 Install K3s with [cri-dockerd](https://github.com/Mirantis/cri-dockerd) to allow K3s to use Docker to deploy containers. This allows Skaffold and Nemesis scripts to work.
 
