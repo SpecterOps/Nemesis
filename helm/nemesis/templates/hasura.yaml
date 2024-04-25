@@ -51,9 +51,9 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              until pg_isready -h ${POSTGRES_SERVER} -p ${POSTGRES_PORT} -d ${POSTGRES_DATABASE} -U ${POSTGRES_USER}
+              until psql $PG_DATABASE_URL -c '\q';
               do
-                echo "Waiting for postgres to be ready at ${PG_DATABASE_URL}..."
+                echo "Waiting for postgres to be ready..."
                 sleep 2
               done
 

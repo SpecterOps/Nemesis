@@ -81,6 +81,10 @@ kibana:
 postgres:
   existingSecret: postgres-creds
   storage: 15Gi
+  image:
+    repository: postgres
+    tag: 15.1-alpine
+    pullPolicy: IfNotPresent
   service:
     type: ClusterIP
     port: 5432
