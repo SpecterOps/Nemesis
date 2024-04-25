@@ -33,15 +33,15 @@ Built on Kubernetes with scale in mind, our goal with Nemesis was to create a ce
 
 Nemesis aims to automate a number of repetitive tasks operators encounter on engagements, empower operators’ analytic capabilities and collective knowledge, and create structured and unstructured data stores of as much operational data as possible to help guide future research and facilitate offensive data analysis.
 
-# Setup / Installation
+## Setup / Installation
 Follow the [quickstart guide](docs/quickstart.md)
 
 Or see the full [setup instructions](docs/setup.md)
 
-# Usage
+## Usage
 See the [Nemesis Usage Guide](docs/usage_guide.md).
 
-# Contributing / Development Environment Setup
+## Contributing / Development Environment Setup
 See [development.md](./docs/development.md)
 
 ## Further Reading
@@ -54,7 +54,7 @@ See [development.md](./docs/development.md)
 | *On (Structured) Data*                      | Jul 26, 2023     | https://posts.specterops.io/on-structured-data-707b7d9876c6                        |
 
 
-# Acknowledgments
+## Acknowledgments
 
 Nemesis is built on large chunk of other people's work. Throughout the codebase we've provided citations, references, and applicable licenses for anything used or adapted from public sources. If we're forgotten proper credit anywhere, please let us know or submit a pull request!
 
