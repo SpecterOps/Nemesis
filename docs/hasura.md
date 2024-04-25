@@ -1,4 +1,4 @@
-# Overview
+# Hasura Overview
 
 Nemesis uses Hasura to wrap the PostgreSQL backend to easily build a GraphQL and REST API for the structure Nemesis data model.
 
@@ -14,7 +14,7 @@ There is a [quickstart to Hasura queries here](https://hasura.io/docs/latest/que
 
 ## Scripting
 
-Hasura allows for _external_ queries and subscriptions to the backend schema, very similar to Mythic (in fact, this is what we do for the [Mythic Connector](../cmd/connectors/mythic-connector/README.md)!)
+Hasura allows for _external_ queries and subscriptions to the backend schema, very similar to Mythic (in fact, this is what we do for the [Mythic Connector](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/mythic-connector#readme)!)
 
 ### Queries
 

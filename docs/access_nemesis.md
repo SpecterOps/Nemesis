@@ -7,9 +7,9 @@ If you use Minikube, by default, services are not exposed anywhere outside of th
 
 In the examples below, the following assumptions are made:
 - Minikube server IP: `192.168.230.42`.
-- Nemesis's [`nemesisHttpServer` option](../helm/nemesis/values.yaml) is configured to be `https://192.168.230.42:7443/`
+- Nemesis's [`nemesisHttpServer` option](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml) is configured to be `https://192.168.230.42:7443/`
 
-To quickly setup an SSH port forward, you can use the [minikube_port_forward.sh](../scripts/minikube_port_forward.sh) script:
+To quickly setup an SSH port forward, you can use the [minikube_port_forward.sh](https://github.com/SpecterOps/Nemesis/blob/main/scripts/minikube_port_forward.sh) script:
 ```bash
 cd Nemesis/scripts/
 ./minikube_port_forward.sh 7443
@@ -65,7 +65,7 @@ There's many ways you can do this (kubectl, SSH local port forward, Socat, IP ta
 **SSH**
 Using an SSH local port forward is our preferred method right now as it's simple to setup and proven reliable.
 
-Let's say you configure the [`nemesisHttpServer` option](../helm/nemesis/values.yaml#L8) to listen on port `<HOST_IP>:7443`. Running the following command on the k8s host will expose the Minikube's endpoint externally (output in Step 1) using an SSH local port forward:
+Let's say you configure the [`nemesisHttpServer` option](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml#L8) to listen on port `<HOST_IP>:7443`. Running the following command on the k8s host will expose the Minikube's endpoint externally (output in Step 1) using an SSH local port forward:
 ```bash
 ssh -N -L <HOST_IP>:7443:192.168.49.2:30123
 ```

@@ -52,7 +52,7 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 
     Run `helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart`
 
-    If you want to edit any of the password values for Nemesis, edit them in [values.yaml](../helm/quickstart/values.yaml).
+    If you want to edit any of the password values for Nemesis, edit them in [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/quickstart/values.yaml)
 
     ```
     helm show values --repo https://specterops.github.io/Nemesis/ nemesis > quickstart-values.yaml
