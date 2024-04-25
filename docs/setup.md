@@ -117,6 +117,7 @@ Create the `traefik-config.yaml` manifest with the following content:
 
 ```yaml
 # /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
+apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
 metadata:
   name: traefik

@@ -34,6 +34,7 @@ nav:
     - submit_to_nemesis.md
     - troubleshooting.md
   - Developer:
+    - requirements_developer.md
     - development.md
     - new_connector.md
     - new_seatbelt_datatype_ingestion.md
