@@ -1,47 +1,4 @@
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: jupyter
-  name: jupyter
-spec:
-  type: NodePort
-  ports:
-    - name: "8888"
-      port: 8888
-      targetPort: 8888
-      nodePort: {{ .Values.jupyter.nodePort }}
-  selector:
-    app: jupyter
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: jupyter-ingress
-  annotations:
-    # TODO: Basic-auth breaks the websocket for some reasone
-    # nginx.ingress.kubernetes.io/auth-type: basic
-    # nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    # nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /jupyter/$2
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /jupyter(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: jupyter
-                port:
-                  number: 8888
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -87,3 +44,42 @@ spec:
             failureThreshold: 10
 
       restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: jupyter
+  name: jupyter
+spec:
+  type: {{ .Values.jupyter.service.type }}
+  selector:
+    app: jupyter
+  ports:
+    - port: {{ .Values.jupyter.service.port }}
+      targetPort: 8888
+      {{- if .Values.jupyter.service.nodePort }}
+      nodePort: {{ .Values.jupyter.service.nodePort }}
+      {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jupyter-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.jupyter.ingress.annotations }}
+    {{- .Values.jupyter.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /jupyter
+            pathType: Prefix
+            backend:
+              service:
+                name: jupyter
+                port:
+                  number: 8888

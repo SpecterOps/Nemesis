@@ -34,7 +34,9 @@ Built on Kubernetes with scale in mind, our goal with Nemesis was to create a ce
 Nemesis aims to automate a number of repetitive tasks operators encounter on engagements, empower operators’ analytic capabilities and collective knowledge, and create structured and unstructured data stores of as much operational data as possible to help guide future research and facilitate offensive data analysis.
 
 # Setup / Installation
-See the [setup instructions](docs/setup.md).
+Follow the [quickstart guide](docs/quickstart.md)
+
+Or see the full [setup instructions](docs/setup.md)
 
 # Usage
 See the [Nemesis Usage Guide](docs/usage_guide.md).

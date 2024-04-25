@@ -28,7 +28,7 @@ kind: ServiceAccount
 metadata:
   name: postgrespw-service-account
 ---
-# the below is so we can reset the postgres password to whatever the updated value is
+# Since the postgres PVC is "retain", if we update password and redeploy, the old password will still be in the database.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -46,6 +46,11 @@ spec:
       - name: kubectl-exec
         image: bitnami/kubectl:latest
         env:
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                  name: {{ .Values.postgres.existingSecret }}
+                  key: postgres-user
           - name: POSTGRES_PASSWORD
             valueFrom:
               secretKeyRef:
@@ -54,7 +59,7 @@ spec:
         command: ["/bin/bash", "-c"]
         args:
           - >
-            kubectl exec $(kubectl get pod --selector=app=postgres -o jsonpath={.items[0].metadata.name}) -- psql -U nemesis -c "ALTER USER nemesis PASSWORD '$POSTGRES_PASSWORD';" nemesis
+            kubectl exec $(kubectl get pod --selector=app=postgres -o jsonpath={.items[0].metadata.name}) -- psql -U $POSTGRES_USER -c "ALTER USER $POSTGRES_USER PASSWORD '$POSTGRES_PASSWORD';" nemesis
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -106,7 +111,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: postgres # Sets Deployment name
+  name: postgres
 spec:
   replicas: 1
   selector:
@@ -119,10 +124,10 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:15.1-alpine
-          imagePullPolicy: IfNotPresent
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
           ports:
-            - containerPort: 5432 # Exposes container port
+            - containerPort: 5432
           env:
             - name: POSTGRES_DB
               value: nemesis
@@ -166,11 +171,12 @@ metadata:
   labels:
     app: postgres
 spec:
-  type: NodePort
-  ports:
-    - name: "5432"
-      port: 5432
-      targetPort: 5432
-      nodePort: {{ .Values.postgres.nodePort }}
+  type: {{ .Values.postgres.service.type }}
   selector:
     app: postgres
+  ports:
+    - port: {{ .Values.postgres.service.port }}
+      targetPort: 5432
+      {{- if .Values.postgres.service.nodePort }}
+      nodePort: {{ .Values.postgres.service.nodePort }}
+      {{- end }}

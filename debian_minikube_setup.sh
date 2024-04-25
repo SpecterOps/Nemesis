@@ -68,8 +68,8 @@ EOF
 # reveal creds
 newgrp docker <<EOF
 sleep 30
-export BASIC_AUTH_USER=\$(kubectl get secret operation-creds -o jsonpath="{.data.basic-auth-user}" | base64 -d)
-export BASIC_AUTH_PASSWORD=\$(kubectl get secret operation-creds -o jsonpath="{.data.basic-auth-password}" | base64 -d)
+export BASIC_AUTH_USER=\$(kubectl get secret basic-auth -o jsonpath="{.data.username}" | base64 -d)
+export BASIC_AUTH_PASSWORD=\$(kubectl get secret basic-auth -o jsonpath="{.data.password}" | base64 -d)
 echo -e "\nBasic Auth:\n\t\$BASIC_AUTH_USER:\$BASIC_AUTH_PASSWORD"
 
 HTTPS_SERVICE=\$(minikube service list -n ingress-nginx | grep "https/443" | awk '{print \$6}' | sed -E "s_^https?://__")

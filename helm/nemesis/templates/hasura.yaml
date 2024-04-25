@@ -8,46 +8,6 @@ data:
   hasura_metadata.json: |-
     {{- .Files.Get "files/hasura/hasura_metadata.json" | nindent 4 }}
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: hasura
-  name: hasura
-spec:
-  type: NodePort
-  ports:
-    - name: "8080"
-      port: 8080
-      targetPort: 8080
-      nodePort: {{ .Values.hasura.nodePort }}
-  selector:
-    app: hasura
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: hasura-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /hasura(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: hasura
-                port:
-                  number: 8080
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -91,9 +51,10 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              until pg_isready -h ${POSTGRES_SERVER} -p ${POSTGRES_PORT} -d ${POSTGRES_DATABASE} -U ${POSTGRES_USER}
+              export PGCONNECT_TIMEOUT=2
+              until psql $PG_DATABASE_URL -c '\q';
               do
-                echo "Waiting for postgres to be ready at ${PG_DATABASE_URL}..."
+                echo "Waiting for postgres to be ready..."
                 sleep 2
               done
 
@@ -163,3 +124,51 @@ spec:
           configMap:
             name: hasura-metadata
       restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hasura
+  name: hasura
+spec:
+  type: {{ .Values.hasura.service.type }}
+  selector:
+    app: hasura
+  ports:
+    - port: {{ .Values.hasura.service.port }}
+      targetPort: 8080
+      {{- if .Values.hasura.service.nodePort }}
+      nodePort: {{ .Values.hasura.service.nodePort }}
+      {{- end }}
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: hasura-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /hasura
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hasura-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-hasura-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.hasura.ingress.annotations }}
+    {{- .Values.hasura.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /hasura
+            pathType: Prefix
+            backend:
+              service:
+                name: hasura
+                port:
+                  number: 8080

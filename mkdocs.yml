@@ -4,14 +4,66 @@ repo_url: https://github.com/SpecterOps/Nemesis
 repo_name: SpecterOps/Nemesis
 edit_uri: edit/main/docs/
 
+plugins:
+  - search
+
+
 exclude_docs: |
   /requirements.txt
+
+nav:
+  - Nemesis: index.md
+  - Quickstart: quickstart.md
+  - Installation:
+    - Setup: setup.md
+    - Requirements: requirements.md
+    - Unsupported Platforms:
+        - Docker Desktop: requirements_docker_desktop.md
+        - Minikube: requirements_minikube.md
+    - Quickstart Chart: quickstart_chart.md
+    - Nemesis Chart: nemesis_chart.md
+  - Usage:
+    - usage_guide.md
+    - overview.md
+    - access_nemesis.md
+    - elasticsearch-kibana.md
+    - hasura.md
+    - kubernetes.md
+    - postgres.md
+    - rabbitmq.md
+    - submit_to_nemesis.md
+    - troubleshooting.md
+  - Developer:
+    - development.md
+    - new_connector.md
+    - new_seatbelt_datatype_ingestion.md
+    - new_service.md
+    - new_odr_datatype.md
+    - remote_debugging.md
+  - Operational Data References:
+    - odr/README.md
+    - References:
+      - odr/references/authentication_data.md
+      - odr/references/cookie.md
+      - odr/references/file_data.md
+      - odr/references/file_information.md
+      - odr/references/network_connection.md
+      - odr/references/path_list.md
+      - odr/references/raw_data.md
+      - Host Data:
+        - odr/references/host_data/named_pipe.md
+        - odr/references/host_data/process.md
+        - odr/references/host_data/registry_value.md
+        - odr/references/host_data/service.md
 
 theme:
   name: material
   locale: en
   logo: images/logo.png
   favicon: images/logo.png
+
+  features:
+    - navigation.sections
 
   icon:
     repo: fontawesome/brands/github

@@ -1,0 +1,154 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-def
+data:
+  elasticsearch.json: |-
+    {{- .Files.Get "files/grafana/elasticsearch.json" | nindent 4 }}
+  kube_state_metrics.json: |-
+    {{- .Files.Get "files/grafana/kube_state_metrics.json" | nindent 4 }}
+  kubernetes_monitor.json: |-
+    {{- .Files.Get "files/grafana/kubernetes_monitor.json" | nindent 4 }}
+  nemesis_services.json: |-
+    {{- .Files.Get "files/grafana/nemesis_services.json" | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+data:
+  prometheus.yaml: |-
+    {
+        "apiVersion": 1,
+        "datasources": [
+            {
+               "access":"proxy",
+                "editable": true,
+                "name": "prometheus",
+                "orgId": 1,
+                "type": "prometheus",
+                "url": "{{ .Values.grafana.prometheusUrl }}",
+                "version": 1
+            }
+        ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+data:
+  dashboards.yaml: |-
+    apiVersion: 1
+    providers:
+      - name: 'Metrics'
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: true
+        type: file
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      name: grafana
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
+          imagePullPolicy: {{ .Values.grafana.image.pullPolicy }}
+          ports:
+            - name: grafana
+              containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.grafana.existingSecret }}
+                  key: username
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.grafana.existingSecret }}
+                  key: password
+            - name: GF_SERVER_ROOT_URL # used to serve through ingress-nginx
+              value: "%(protocol)s://%(domain)s:%(http_port)s/grafana/"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+          volumeMounts:
+            - mountPath: /var/lib/grafana
+              name: grafana-storage
+            - mountPath: /etc/grafana/provisioning/datasources
+              name: grafana-datasources
+              readOnly: false
+            - mountPath: /etc/grafana/provisioning/dashboards
+              name: grafana-dashboards-config
+              readOnly: false
+            - mountPath: /var/lib/grafana/dashboards
+              name: grafana-dashboards-def
+              readOnly: false
+          resources: {{ toYaml .Values.grafana.resources | nindent 12 }}
+      volumes:
+        - name: grafana-storage
+          emptyDir: {}
+        - name: grafana-datasources
+          configMap:
+            defaultMode: 420
+            name: grafana-datasources
+        - name: grafana-dashboards-config
+          configMap:
+            defaultMode: 420
+            name: grafana-dashboards-config
+        - name: grafana-dashboards-def
+          configMap:
+            defaultMode: 420
+            name: grafana-dashboards-def
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
+spec:
+  selector:
+    app: grafana
+  type: {{ .Values.grafana.service.type }}
+  ports:
+    - port: {{ .Values.grafana.service.port }}
+      targetPort: 3000
+      {{- if .Values.grafana.service.nodePort }}
+      nodePort: {{ .Values.grafana.service.nodePort }}
+      {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Values.nemesisNamespace }}-{{ .Values.auth.middlewareName }}@kubernetescrd"
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: {{ .Values.grafana.service.port }}

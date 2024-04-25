@@ -7,7 +7,7 @@ data:
   disable-slack-alerting: {{ default "true" .Values.operation.disableSlackAlerting | quote }}
   log-level: {{ default "INFO" .Values.operation.logLevel | quote }}
   assessment-id: {{ .Values.operation.assessmentId | quote }}
-  storage_provider: {{ default "minio" .Values.operation.storageProvider | quote }}
+  storage_provider: {{ default "minio" .Values.storage | quote }}
   nemesis-http-server: {{ .Values.operation.nemesisHttpServer | quote }}
   environment: {{ default "production" .Values.operation.environment | quote }}
-  storage-expiration-days: {{ default "100" .Values.operation.storageExpirationDays | quote }}
+  storage-expiration-days: {{ default "100" .Values.operation.dataExpirationDays | quote }}
