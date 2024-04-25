@@ -51,6 +51,7 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
+              export PGCONNECT_TIMEOUT=2
               until psql $PG_DATABASE_URL -c '\q';
               do
                 echo "Waiting for postgres to be ready..."
