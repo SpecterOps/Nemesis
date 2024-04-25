@@ -1,11 +1,12 @@
-# Overview of submit_to_nemesis
+# submit_to_nemesis
+
 `submit_to_nemesis` is a CLI tool used to upload files to Nemesis. Its targeted audience is operators who want to upload files using the CLI and Nemesis developers who want to quickly test sample files.
 
-# Docker
+## Docker
 
 If you want to use the pre-build Docker container to submit artifacts to Nemesis, run [monitor_folder_docker.sh](https://github.com/SpecterOps/Nemesis/blob/main/scripts/monitor_folder_docker.sh). The only requirement for the script is Docker and wget.
 
-# Requirements
+## Requirements
 Install with the instructions below.
 
 <details>
@@ -14,7 +15,7 @@ Python, Pyenv, and Poetry
 </summary>
 To get Nemesis running, Python 3.11.2 is needed, as well as Pyenv/Poetry.
 
-## Install Pyenv
+### Install Pyenv
 **Purpose:** Manages python environments in a sane way.
 
 1. Install the [relevant prereqs specified by PyEnv](https://github.com/pyenv/pyenv/wiki#suggested-build-environment).
@@ -44,7 +45,7 @@ eval "$(pyenv init -)"
 
 **Validation:** Running `python3 --version` should show version 3.11.2.
 
-## Install Poetry
+### Install Poetry
 **Purpose:** Python package and dependency management tool.
 ```bash
 python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
@@ -59,7 +60,7 @@ Restart your shell.
 
 **Validation:** Running `poetry --version` from the shell should output the current version.
 
-## Install Poetry Environment for Artifact Submission
+### Install Poetry Environment for Artifact Submission
 **Purpose:** Install the Poetry environment for ./scripts/submit_to_nemesis.sh
 
 `./scripts/submit_to_nemesis.sh` uses code from a Nemesis module that needs its Poetry environment installed first.
@@ -69,10 +70,10 @@ poetry -C ./cmd/enrichment/ install
 ```
 </details>
 
-# Configuring
+## Configuring
 To use `submit_to_nemesis`, one must edit the YAML configuration file found in `cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml` ([link to YAML file](https://github.com/SpecterOps/Nemesis/blob/main/cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml)). This config file includes the credentials to authenticate to Nemesis, the location of the Nemesis server, and information about the operation that Nemesis will tag each uploaded file with (operator name, project, network, etc.).
 
-# Usage
+## Usage
 Once configured, in the root Nemesis directory run
  ```
  ./scripts/submit_to_nemesis.sh -h

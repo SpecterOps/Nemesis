@@ -1,4 +1,4 @@
-# Goal
+# Overview
 
 The goal of Nemesis is to create an extensible data-processing system for
 Advesary Simulation operations which takes data collected from C2 agents and

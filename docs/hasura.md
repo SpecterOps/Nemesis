@@ -1,4 +1,4 @@
-# Overview
+# Hasura Overview
 
 Nemesis uses Hasura to wrap the PostgreSQL backend to easily build a GraphQL and REST API for the structure Nemesis data model.
 
