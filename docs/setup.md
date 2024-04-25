@@ -58,6 +58,26 @@ To see a basic landing page with exposed services, go to http `NEMESIS_HTTP_SERV
 helm install --repo https://specterops.github.io/Nemesis/ monitoring monitoring
 ```
 
+# (Optional) Install Metrics Server
+Metrics Server is available but not installed by default. Enable it with the following:
+
+```bash
+helm show values --repo https://specterops.github.io/Nemesis/ nemesis
+```
+
+Modify the value:
+
+```yaml
+metricsServer:
+  enabled: true
+```
+
+If you have not installed Nemesis yet, see [Nemesis Chart](./nemesis_chart.md) or upgrade the installation:
+
+```bash
+helm upgrade --repo https://specterops.github.io/Nemesis/ [chart name] nemesis
+```
+
 # (Optional) Changing Persistent File Storage
 
 Elasticsearch, PostgreSQL, and Minio (if using instead of AWS S3) have persistent storage volumes in the cluster.
