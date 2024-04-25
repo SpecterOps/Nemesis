@@ -46,6 +46,7 @@ deploy:
     - name: nemesis
       chartPath: helm/nemesis
       setValueTemplates:
+        operation.environment: "development"
         dashboard.image.repository: "{{.IMAGE_REPO_nemesis_dashboard}}"
         dashboard.image.tag: "{{.IMAGE_TAG_nemesis_dashboard}}@{{.IMAGE_DIGEST_nemesis_dashboard}}"
         nemesisWaiter.image.repository: "{{.IMAGE_REPO_nemesis_waiter}}"

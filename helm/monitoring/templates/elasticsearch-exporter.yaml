@@ -1,20 +1,4 @@
 # ref - https://github.com/epodegrid/kubegenie-dataset/blob/fbdf295014152a22d1feb146a8a889e477c4392c/E/elasticsearch-exporter-XHCu0jlpFMlCN/elasticsearch-exporter.yaml
-
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: elasticsearch-exporter
-  name: elasticsearch-exporter
-spec:
-  type: NodePort
-  ports:
-    - name: "9108"
-      port: 9108
-      targetPort: 9108
-      nodePort: {{ .Values.elasticsearchExporter.nodePort }}
-  selector:
-    app: elasticsearch-exporter
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -80,3 +64,20 @@ spec:
             initialDelaySeconds: 1
             timeoutSeconds: 5
             periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: elasticsearch-exporter
+  name: elasticsearch-exporter
+spec:
+  type: {{ .Values.elasticsearchExporter.service.type }}
+  selector:
+    app: elasticsearch-exporter
+  ports:
+    - port: {{ .Values.elasticsearchExporter.service.port }}
+      targetPort: 9108
+      {{- if .Values.elasticsearchExporter.service.nodePort }}
+      nodePort: {{ .Values.elasticsearchExporter.service.nodePort }}
+      {{- end }}

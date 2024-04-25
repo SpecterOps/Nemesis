@@ -64,7 +64,7 @@ spec:
                   name: {{ .Values.postgres.existingSecret }}
                   key: pgadmin-password
             - name: SCRIPT_NAME
-              value: /pgadmin/
+              value: /pgadmin
             - name: MAX_LOGIN_ATTEMPTS
               value: "15"
           ports:
@@ -102,15 +102,15 @@ metadata:
   labels:
     app: pgadmin
 spec:
-  ports:
-    - name: "80"
-      port: 80
-      targetPort: 80
-      nodePort: {{ .Values.pgAdmin.nodePort }}
+  type: {{ .Values.pgadmin.service.type }}
   selector:
     app: pgadmin
-  type: NodePort
-
+  ports:
+    - port: {{ .Values.pgadmin.service.port }}
+      targetPort: 80
+      {{- if .Values.pgadmin.service.nodePort }}
+      nodePort: {{ .Values.pgadmin.service.nodePort }}
+      {{- end }}
 ---
 # working for /pgadmin https://stackoverflow.com/a/72586264
 apiVersion: networking.k8s.io/v1
@@ -118,17 +118,17 @@ kind: Ingress
 metadata:
   name: pgadmin-ingress
   annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.pgadmin.ingress.annotations }}
+    {{- .Values.pgadmin.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
           - path: /pgadmin
-            pathType: ImplementationSpecific
+            pathType: Prefix
             backend:
               service:
                 name: pgadmin

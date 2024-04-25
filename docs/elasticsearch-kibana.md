@@ -17,8 +17,8 @@ To login to Elastic or Kibana, run `./scripts/get_service_credentials.sh` to get
 
 Example to confirm elastic is working:
 ```bash
-export BASIC_AUTH_USER=$(kubectl get secret operation-creds -o jsonpath="{.data.basic-auth-user}" | base64 -d)
-export BASIC_AUTH_PASSWORD=$(kubectl get secret operation-creds -o jsonpath="{.data.basic-auth-password}" | base64 -d)
+export BASIC_AUTH_USER=$(kubectl get secret basic-auth -o jsonpath="{.data.username}" | base64 -d)
+export BASIC_AUTH_PASSWORD=$(kubectl get secret basic-auth -o jsonpath="{.data.password}" | base64 -d)
 curl -k -u "$BASIC_AUTH_USER:$BASIC_AUTH_PASSWORD" "https://localhost:8080/elastic/"
 ```
 

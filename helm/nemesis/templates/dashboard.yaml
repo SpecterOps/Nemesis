@@ -123,34 +123,41 @@ metadata:
     component: dashboard
   name: dashboard
 spec:
-  type: NodePort
-  ports:
-    - name: "8601"
-      port: 8601
-      targetPort: 8601
-      nodePort: {{ .Values.dashboard.nodePort }}
+  type: {{ .Values.dashboard.service.type }}
   selector:
     app: dashboard
-
+  ports:
+    - port: {{ .Values.dashboard.service.port }}
+      targetPort: 8601
+      {{- if .Values.dashboard.service.nodePort }}
+      nodePort: {{ .Values.dashboard.service.nodePort }}
+      {{- end }}
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: dashboard-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /dashboard
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: dashboard-ingress
   annotations:
-    # nginx.ingress.kubernetes.io/proxy-body-size: "1000m"
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-dashboard-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.dashboard.ingress.annotations }}
+    {{- .Values.dashboard.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
-          - path: /dashboard(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /dashboard
+            pathType: Prefix
             backend:
               service:
                 name: dashboard

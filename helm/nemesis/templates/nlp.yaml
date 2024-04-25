@@ -1,48 +1,4 @@
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: nlp
-  labels:
-    app: nlp
-    component: enrichment-pipeline
-spec:
-  type: NodePort
-  ports:
-    - name: "9803"
-      port: 9803
-      targetPort: 9803
-      nodePort: {{ .Values.nlp.nodePort }}
-    - name: "8000"
-      port: 8000
-      targetPort: 8000
-      nodePort: {{ .Values.nlp.prometheusNodePort }}
-  selector:
-    app: nlp
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: nlp-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /nlp(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: nlp
-                port:
-                  number: 9803
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -180,3 +136,59 @@ spec:
             failureThreshold: 10
 
       restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nlp
+  labels:
+    app: nlp
+    component: enrichment-pipeline
+spec:
+  type: {{ .Values.nlp.service.type }}
+  selector:
+    app: nlp
+  ports:
+    - name: http
+      port: {{ .Values.nlp.service.nlp.port }}
+      targetPort: 9803
+      {{- if .Values.nlp.service.nlp.nodePort }}
+      nodePort: {{ .Values.nlp.service.nlp.nodePort }}
+      {{- end }}
+    - name: prometheus
+      port: {{ .Values.nlp.service.prometheus.port }}
+      targetPort: 8000
+      {{- if .Values.nlp.service.prometheus.nodePort }}
+      nodePort: {{ .Values.nlp.service.prometheus.nodePort }}
+      {{- end }}
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: nlp-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /nlp
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nlp-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-nlp-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.nlp.ingress.annotations }}
+    {{- .Values.nlp.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /nlp
+            pathType: Prefix
+            backend:
+              service:
+                name: nlp
+                port:
+                  number: 9803

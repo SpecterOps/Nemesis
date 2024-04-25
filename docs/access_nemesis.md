@@ -26,8 +26,8 @@ You can then access Nemesis's HTTP endpoint at `https://192.168.230.42:7443`.
 
 * **Note:** If you forgot to get the basic auth username/password when running the `quickstart` chart, you can get them by running the following:
 ```
-export BASIC_AUTH_USER=$(kubectl get secret --namespace "default" operation-creds -o jsonpath="{.data.basic-auth-user}" | base64 -d)
-export BASIC_AUTH_PASSWORD=$(kubectl get secret --namespace "default" operation-creds -o jsonpath="{.data.basic-auth-password}" | base64 -d)
+export BASIC_AUTH_USER=$(kubectl get secret basic-auth -o jsonpath="{.data.username}" | base64 -d)
+export BASIC_AUTH_PASSWORD=$(kubectl get secret basic-auth -o jsonpath="{.data.password}" | base6
 
 echo "Basic Auth Username: ${BASIC_AUTH_USER}"
 echo "Basic Auth Password: ${BASIC_AUTH_PASSWORD}"
