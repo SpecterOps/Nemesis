@@ -1,6 +1,6 @@
 # Quickstart Guide
 
-Here's a quickstart guide to setting up the Nemesis platform using k3s and Helm on Debian 11. This guide will start a Nemesis server listening on the server "192.168.1.10". Change this IP to the host that you will be accessing Nemesis from. If this does not fit your installation need, see the full [setup guide](setup.md). This process is automated in the [debian_k3s_setup.sh](../debian_k3s_setup.sh) script, which accepts an IP as an argument.
+Here's a quickstart guide to setting up the Nemesis platform using k3s and Helm on Debian 11. This guide will start a Nemesis server listening on the server "192.168.1.10". Change this IP to the host that you will be accessing Nemesis from. If this does not fit your installation need, see the full [setup guide](setup.md). This process is automated in the [debian_k3s_setup.sh](https://github.com/SpecterOps/Nemesis/blob/main/debian_k3s_setup.sh) script, which accepts an IP as an argument.
 
 
 ### Prerequisites
