@@ -2,5 +2,5 @@ apiVersion: v2
 name: quickstart
 description: Quickstart Helm chart for Nemesis
 type: application
-version: 0.2.0
+version: 1.0.0
 appVersion: "0.1.0"

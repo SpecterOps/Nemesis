@@ -2,7 +2,7 @@ apiVersion: v2
 name: nemesis
 description: Nemesis is an offensive data enrichment pipeline and operator support system.
 type: application
-version: 0.2.0
+version: 1.0.0
 appVersion: "0.1.0a"
 icon: https://github.com/SpecterOps/Nemesis/raw/main/img/nemesis_white.png
 
