@@ -18,6 +18,21 @@ spec:
         app: nlp
         component: enrichment-pipeline
     spec:
+      initContainers:
+        - name: init-nlp-rabbitmq
+          image: busybox:1.36.1
+          env:
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rabbitmq.existingSecret }}
+                  key: rabbitmq-admin-user
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rabbitmq.existingSecret }}
+                  key: rabbitmq-admin-password
+          command: ['sh', '-c', 'until wget "http://$RABBITMQ_USER:$RABBITMQ_PASSWORD@nemesis-rabbitmq-svc.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local:15672/rabbitmq/api/aliveness-test/%2F"; do echo waiting for rabbitmq; sleep 2; done;']
       containers:
         - env:
             - name: ENVIRONMENT
