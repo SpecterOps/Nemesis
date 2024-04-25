@@ -40,7 +40,7 @@ with protobuf.
 ### ODR
 
 The data that can be input into Nemesis is strictly defined in the [Operational Data
-Reference (ODR)](#odr/README.md).
+Reference (ODR)](odr/README.md).
 
 #### ODR Protobuf
 
