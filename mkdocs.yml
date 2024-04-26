@@ -92,6 +92,7 @@ extra_css:
   - stylesheets/colors.css
 
 markdown_extensions:
+  - admonition
   - pymdownx.superfences
   - pymdownx.highlight:
       use_pygments: true
