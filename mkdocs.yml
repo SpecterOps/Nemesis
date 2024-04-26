@@ -14,6 +14,8 @@ exclude_docs: |
 nav:
   - Nemesis: index.md
   - Quickstart: quickstart.md
+  - overview.md
+
   - Installation:
     - Setup: setup.md
     - Requirements: requirements.md
@@ -22,25 +24,29 @@ nav:
         - Minikube: requirements_minikube.md
     - Quickstart Chart: quickstart_chart.md
     - Nemesis Chart: nemesis_chart.md
+
   - Usage:
     - usage_guide.md
-    - overview.md
     - access_nemesis.md
-    - elasticsearch-kibana.md
-    - hasura.md
+    - submit_to_nemesis.md
     - kubernetes.md
+    - troubleshooting.md
+
+  - Services:
     - postgres.md
     - rabbitmq.md
-    - submit_to_nemesis.md
-    - troubleshooting.md
+    - elasticsearch-kibana.md
+    - hasura.md
+
   - Developer:
     - requirements_developer.md
     - development.md
+    - remote_debugging.md
     - new_connector.md
     - new_seatbelt_datatype_ingestion.md
     - new_service.md
     - new_odr_datatype.md
-    - remote_debugging.md
+
   - Operational Data References:
     - odr/README.md
     - References:

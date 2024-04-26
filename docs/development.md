@@ -1,4 +1,4 @@
-# Dev Software Requirements
+# Developing in Nemesis
 
 **The following requirements need to be installed for development:**
 
