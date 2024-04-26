@@ -1,4 +1,4 @@
-# RabbitMQ Overview
+# RabbitMQ
 
 * Didn't go with the RabbitMQ operator because it doesn't play nicely with skaffold and is a fairly simple wrapper for the statefulset
   * Doesn't delete pods/statefulsets during shutdown

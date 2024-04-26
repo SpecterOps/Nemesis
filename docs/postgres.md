@@ -1,4 +1,4 @@
-# PostgreSQL Overview
+# PostgreSQL
 
 In addition to Elasticsearch for an unstructed/NoSQL approach, we are using PostgreSQL to store structured data such as DPAPI blobs/masterkeys/etc.
 
