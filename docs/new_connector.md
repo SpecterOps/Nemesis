@@ -64,7 +64,7 @@ r = requests.request("POST", f"{NEMESIS_URL}/data", auth=basic, data=data, heade
 
 ## Other Structured Data
 
-For other types of structured data, only a single message needs to be posted to the `http://<NEMESIS_URL>/api/data` API route, e.g. Step 2 in the downloading processing example. The `metadata["data_type"]` field should be one of the types defined in the [ODR](odr/references/). The appropriate ODR document will also define the fields and structure needed for the datatype.
+For other types of structured data, only a single message needs to be posted to the `http://<NEMESIS_URL>/api/data` API route, e.g. Step 2 in the downloading processing example. The `metadata["data_type"]` field should be one of the types defined in the [ODR](https://github.com/SpecterOps/Nemesis/tree/main/docs/odr). The appropriate ODR document will also define the fields and structure needed for the datatype.
 
 Note that the "data" section of the message is an array of dictionaries, i.e., multiple instances of a datatype can be posted in a single message. For example, multiple process messages can exist in the single post.
 
