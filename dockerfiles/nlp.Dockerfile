@@ -1,9 +1,8 @@
-FROM python:3.11.2-slim-bullseye
 
 ####################################
 # Python build dependencies and configuration
 ####################################
-FROM dependencies-os AS dependencies-python
+FROM python:3.11.2-slim-bullseye AS dependencies-python
 
 ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VIRTUALENVS_IN_PROJECT=true
