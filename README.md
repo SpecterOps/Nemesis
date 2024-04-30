@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="docs/images/nemesis_white.png" alt="Nemesis" style="width: 800px;" />
+    <img src="docs/images/nemesis-light.png" alt="Nemesis" style="width: 800px;" />
 </p>
 <hr />
 

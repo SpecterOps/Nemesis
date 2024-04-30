@@ -1,7 +1,5 @@
-<p align="center">
-    <img src="images/nemesis_white.png" alt="Nemesis" style="width: 800px;" />
-</p>
-<hr />
+![Logo](images/nemesis-dark.png#only-dark)
+![Logo](images/nemesis-light.png#only-light)
 
 <p align="center">
 <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="version 1.0.0"/>

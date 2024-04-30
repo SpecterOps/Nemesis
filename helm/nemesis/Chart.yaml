@@ -4,7 +4,7 @@ description: Nemesis is an offensive data enrichment pipeline and operator suppo
 type: application
 version: 1.0.1
 appVersion: "0.1.0a"
-icon: https://github.com/SpecterOps/Nemesis/raw/main/img/nemesis_white.png
+icon: https://github.com/SpecterOps/Nemesis/raw/main/img/nemesis-light.png
 
 dependencies:
 - name: minio

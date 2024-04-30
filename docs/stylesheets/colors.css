@@ -142,4 +142,9 @@
   --md-shadow-z3:
     0 #{px2rem(4px)} #{px2rem(10px)} hsla(0, 0%, 0%, 0.2),
     0 0              #{px2rem(1px)}  hsla(0, 0%, 0%, 0.35);
+
+  img[src$="#only-dark"],
+  img[src$="#gh-light-mode-only"] {
+    display: none;
+  }
 }
