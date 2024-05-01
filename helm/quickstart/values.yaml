@@ -1,11 +1,12 @@
 operation:
-  secretName: operation-creds
+  secretName: operation
   slackWebhook: "https://hooks.slack.com/services/some/random/text"
-  basicAuthUser: "nemesis"
-  basicAuthSecretName: basic-auth
-  # Default password for basic auth
-  #   sets to a random value if not specified
-  # basicAuthPassword: "Qwerty12345"
+
+basicAuth:
+  secretName: basic-auth
+  username: "nemesis"
+  # Add a value to the password field to set a static password
+  password:
 
 aws:
   secretName: aws-creds
@@ -14,42 +15,52 @@ aws:
 
 rabbitmq:
   secretName: rabbitmq-creds
-  adminUser: "nemesis"
-  adminPassword: "password"
+  # admin username
+  username: "nemesis"
+  # admin password
+  password: "password"
+  # If the username or password is changed, the connectionUri will need to be updated
   connectionUri: "amqp://nemesis:password@nemesis-rabbitmq-svc:5672/"
   erlangCookie: "default-cookie"
 
 grafana:
-  user: "nemesis"
-  # password: ""
+  secretName: grafana-creds
+  username: "nemesis"
+  # Add a value to the password field to set a static password
+  password:
 
 minio:
   secretName: minio-creds
   rootUser: nemesis
-  # rootPassword: ""
+  # Add a value to the rootPassword field to set a static password
+  rootPassword:
 
 elasticsearch:
   secretName: elasticsearch-creds
   user: "nemesis"
   # NOTE: if you're use persist "production" storage, this needs to be set to a static value
   #   ahead of time for services to play nicely together
+  # Set the elasticsearch password to the same value as basic-auth password
   password: "Qwerty12345"
 
 dashboard:
   secretName: dashboard-creds
   username: "nemesis"
   # not actually used anymore as auth is disabled for the dashboard
-  # password: ""
+  password:
 
 postgres:
   secretName: postgres-creds
   username: "nemesis"
+  password:
   pgadminEmail: "nemesis@nemesis.com"
-  # pgadminPassword: ""
+  # Add a value to the password field to set a static password
+  pgadminPassword:
 
 jupyter:
   secretName: jupyter-creds
-  # token: ""
+  # Add a value to the token field to set a static password
+  token:
 
 tls:
   secretName: nemesis-cert

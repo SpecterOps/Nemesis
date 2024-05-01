@@ -1,5 +1,5 @@
 operation:
-  existingSecret: operation-creds
+  existingSecret: operation
 
 aws:
   existingSecret: aws-creds

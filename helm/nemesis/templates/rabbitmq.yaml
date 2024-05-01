@@ -317,38 +317,37 @@ metadata:
     app.kubernetes.io/name: nemesis
     app.kubernetes.io/component: rabbitmq-server
 spec:
-  ports:
-  - name: amqp
-    port: 5672
-  - name: amqp-ssl
-    port: 5671
-  - name: clustering
-    port: 25672
-  - name: prometheus
-    port: 15692
-  - name: http
-    port: 15672
+  type: {{ .Values.rabbitmq.service.type }}
   selector:
     app.kubernetes.io/name: nemesis
     app.kubernetes.io/component: rabbitmq-server
-  type: ClusterIP
+  ports:
+  - name: amqp
+    port: {{ .Values.rabbitmq.service.amqp.port }}
+  - name: amqp-ssl
+    port: {{ .Values.rabbitmq.service.amqpSsl.port }}
+  - name: clustering
+    port: {{ .Values.rabbitmq.service.clustering.port }}
+  - name: prometheus
+    port: {{ .Values.rabbitmq.service.prometheus.port}}
+  - name: http
+    port: {{ .Values.rabbitmq.service.http.port }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: rabbitmqadmin-ingress
   annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
+    {{- if .Values.rabbitmq.ingress.annotations }}
+    {{- .Values.rabbitmq.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
           - path: /rabbitmq/
-            pathType: ImplementationSpecific
+            pathType: Prefix
             backend:
               service:
                 name: nemesis-rabbitmq-svc

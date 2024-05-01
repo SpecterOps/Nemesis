@@ -1,21 +1,4 @@
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: dotnet
-  labels:
-    app: dotnet
-    component: enrichment-pipeline
-spec:
-  type: NodePort
-  ports:
-    - name: "9800"
-      port: 9800
-      targetPort: 9800
-      nodePort: {{ .Values.dotnet.nodePort }}
-  selector:
-    app: dotnet
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -118,3 +101,21 @@ spec:
             failureThreshold: 10
 
       restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dotnet
+  labels:
+    app: dotnet
+    component: enrichment-pipeline
+spec:
+  type: {{ .Values.dotnet.service.type }}
+  selector:
+    app: dotnet
+  ports:
+    - port: {{ .Values.dotnet.service.port }}
+      targetPort: 9800
+      {{- if .Values.dashboard.service.nodePort }}
+      nodePort: {{ .Values.dashboard.service.nodePort }}
+      {{- end -}}

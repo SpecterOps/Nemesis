@@ -1,42 +1,42 @@
-# Requirements
-
-## Table of Contents
-
-1. [Table of Contents](#table-of-contents)
-1. [VM Hardware Requirements](#vm-hardware-requirements)
-2. [Software Requirements](#software-requirements)
-    1. [K3s](#k3s)
+# Set Up Developer Environment
 
 ## VM Hardware Requirements
-We have only tested on machines with the the following specs. All other configurations are not officially supported.
 
- * OS: Debian 11 LTS or Debian 11 on the Windows Subsystem for Linux (WSL).
- * 4 processors
- * 16 GB RAM
- * 100 GB disk
-
-You could probably do 3 processors and 10 GB RAM, just might need to change how many CPUs and how much memory you give to minikube (and then cross your fingers you don't get OOMErrors from Kubernetes :P)
-
-Additionally, only x64 architecture has been tested and is supported. ARM platforms (e.g., Mac devives with M* chips) are not currently supported but we intend to support these in the future.
-
-**Do not install the following requirements as root! Minikube is particular does not like to be run as root.**
+The hardware requirements are the same as what's listed in [Hardware Requirements](requirements.md#vm-hardware-requirements).
 
 ## Software Requirements
 
 K3s is the only officially supported way to install Nemesis. Installation instructions for [Docker Desktop](requirements_docker_desktop.md) and [Minikube](requirements_minikube.md) do exist but may not be up to date.
 
-**The following requirements need to be installed:**
+### Install Docker
 
-### K3s
+Install Docker by following the [official Docker installation guide](https://docs.docker.com/engine/install/). The installation instructions for Debian are replicated below:
+
+```bash
+for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove $pkg; done
+
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+### Install K3s
+
+Install K3s with [cri-dockerd](https://github.com/Mirantis/cri-dockerd) to allow K3s to use Docker to deploy containers. This allows Skaffold and Nemesis scripts to work.
 
 k3s is a lightweight Kubernetes distribution that simplifies the deployment and management of Kubernetes clusters.
-
-#### Install k3s
-
 Install k3s with the following command:
 
 ```bash
-curl -sfL https://get.k3s.io | sh -
+curl -sfL https://get.k3s.io | sh - --docker
 ```
 
 After installing k3s, modify your kubeconfig to use the k3s Kubernetes configuration with the following commands:
@@ -48,7 +48,7 @@ sudo k3s kubectl config view --raw > "$KUBECONFIG"
 chmod 600 "$KUBECONFIG"
 ```
 
-#### Install Helm
+### Install Helm
 
 Follow the Helm installation guide for your specific operating system: [Installing Helm](https://helm.sh/docs/intro/install/).
 
@@ -62,7 +62,7 @@ sudo apt-get update
 sudo apt-get install helm
 ```
 
-#### Install Dependencies
+### Install Dependencies
 
 Install the Elastic operator with the following Helm command to manage Elasticsearch in the `default` namespace:
 
@@ -70,7 +70,7 @@ Install the Elastic operator with the following Helm command to manage Elasticse
 helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 
-#### Validate Installation
+### Validate Installation
 
 To ensure you're ready for the next step, run the command below and ensure a deployment exists for "traefik" and "elastic-operator."
 

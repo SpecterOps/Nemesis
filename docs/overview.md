@@ -1,4 +1,4 @@
-# Goal
+# Overview
 
 The goal of Nemesis is to create an extensible data-processing system for
 Advesary Simulation operations which takes data collected from C2 agents and
@@ -40,7 +40,7 @@ with protobuf.
 ### ODR
 
 The data that can be input into Nemesis is strictly defined in the [Operational Data
-Reference (ODR)](#odr/README.md).
+Reference (ODR)](odr/README.md).
 
 #### ODR Protobuf
 

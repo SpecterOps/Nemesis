@@ -18,4 +18,4 @@ Information about a Windows named pipe.
 
 ## Examples
 
-[named_pipes.json](../../../../sample_files/structured/named_pipes.json)
+[named_pipes.json](https://github.com/SpecterOps/Nemesis/blob/main/sample_files/structured/named_pipes.json)

@@ -314,14 +314,15 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-yara
 spec:
-  type: NodePort
-  ports:
-    - name: "9700"
-      port: 9700
-      targetPort: 9700
-      nodePort: {{ .Values.enrichment.yara.nodePort }}
+  type: {{ .Values.enrichment.service.yara.type }}
   selector:
     app: enrichment
+  ports:
+    - port: {{ .Values.enrichment.service.yara.port }}
+      targetPort: 9700
+      {{- if .Values.enrichment.service.yara.nodePort }}
+      nodePort: {{ .Values.enrichment.service.yara.nodePort }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -331,14 +332,15 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-cracklist
 spec:
-  type: NodePort
-  ports:
-    - name: "9900"
-      port: 9900
-      targetPort: 9900
-      nodePort: {{ .Values.enrichment.cracklist.nodePort }}
+  type: {{ .Values.enrichment.service.cracklist.type }}
   selector:
     app: enrichment
+  ports:
+    - port: {{ .Values.enrichment.service.cracklist.port }}
+      targetPort: 9900
+      {{- if .Values.enrichment.service.cracklist.nodePort }}
+      nodePort: {{ .Values.enrichment.service.cracklist.nodePort }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -348,14 +350,15 @@ metadata:
     component: enrichment-pipeline
   name: enrichment-webapi
 spec:
-  type: NodePort
-  ports:
-    - name: "9910"
-      port: 9910
-      targetPort: 9910
-      nodePort: {{ .Values.enrichment.webapi.nodePort }}
+  type: {{ .Values.enrichment.service.webapi.type }}
   selector:
     app: enrichment
+  ports:
+    - port: {{ .Values.enrichment.service.webapi.port }}
+      targetPort: 9910
+      {{- if .Values.enrichment.service.webapi.nodePort }}
+      nodePort: {{ .Values.enrichment.service.webapi.nodePort }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -365,14 +368,15 @@ metadata:
     component: enrichment-landingpage
   name: enrichment-landingpage
 spec:
-  type: NodePort
-  ports:
-    - name: "9920"
-      port: 9920
-      targetPort: 9920
-      nodePort: {{ .Values.enrichment.landingpage.nodePort }}
+  type: {{ .Values.enrichment.service.landingpage.type }}
   selector:
     app: enrichment
+  ports:
+    - port: {{ .Values.enrichment.service.landingpage.port }}
+      targetPort: 9920
+      {{- if .Values.enrichment.service.landingpage.nodePort }}
+      nodePort: {{ .Values.enrichment.service.landingpage.nodePort }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -382,57 +386,67 @@ metadata:
     component: enrichment-monitoring
   name: enrichment-monitoring
 spec:
-  type: NodePort
-  ports:
-    - name: "8000"
-      port: 8000
-      targetPort: 8000
-      nodePort: {{ .Values.enrichment.monitoring.nodePort }}
+  type: {{ .Values.enrichment.service.monitoring.type }}
   selector:
     app: enrichment
+  ports:
+    - port: {{ .Values.enrichment.service.monitoring.port }}
+      targetPort: 8000
+      {{- if .Values.enrichment.service.monitoring.nodePort }}
+      nodePort: {{ .Values.enrichment.service.monitoring.nodePort }}
+      {{- end -}}
 {{- end }}
 
 {{- if ne .Values.operation.environment "development" }}
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: enrichment-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /crack-list
+      - /yara
+      - /api
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: enrichment-ingress
   annotations:
-    # nginx.ingress.kubernetes.io/proxy-body-size: "5000m"
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-enrichment-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- if .Values.enrichment.ingress.annotations }}
+    {{- .Values.enrichment.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
-          - path: /crack-list(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /crack-list
+            pathType: Prefix
             backend:
               service:
                 name: enrichment-cracklist
                 port:
                   number: 9900
-          - path: /yara(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /yara
+            pathType: Prefix
             backend:
               service:
                 name: enrichment-yara
                 port:
                   number: 9700
-          - path: /api(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /api
+            pathType: Prefix
             backend:
               service:
                 name: enrichment-webapi
                 port:
                   number: 9910
           - path: /
-            pathType: ImplementationSpecific
+            pathType: Exact
             backend:
               service:
                 name: enrichment-landingpage
