@@ -34,26 +34,26 @@ Built on Kubernetes with scale in mind, our goal with Nemesis was to create a ce
 Nemesis aims to automate a number of repetitive tasks operators encounter on engagements, empower operators’ analytic capabilities and collective knowledge, and create structured and unstructured data stores of as much operational data as possible to help guide future research and facilitate offensive data analysis.
 
 ## Setup / Installation
-Follow the [quickstart guide](docs/quickstart.md)
+Follow the [quickstart guide](docs/quickstart.md).
 
-Or see the full [setup instructions](docs/setup.md)
+Or see the full [setup instructions](docs/setup.md).
 
 ## Usage
 See the [Nemesis Usage Guide](docs/usage_guide.md).
 
 ## Contributing / Development Environment Setup
-See [development.md](./docs/development.md)
+See [development.md](./docs/development.md).
 
 ## Further Reading
 
-| Post Name                                   | Publication Date | Link                                                                               |
-|---------------------------------------------|------------------|------------------------------------------------------------------------------------|
-| *Nemesis 1.0.0*                             | Apr 25, 2024     | https://posts.specterops.io/nemesis-1-0-0-8c6b745dc7c5                             |
-| *Summoning RAGnarok With Your Nemesis*      | Mar 13, 2024     | https://posts.specterops.io/summoning-ragnarok-with-your-nemesis-7c4f0577c93b      |
-| *Shadow Wizard Registry Gang: Structured Registry Querying* | Sep 5, 2023 | https://posts.specterops.io/shadow-wizard-registry-gang-structured-registry-querying-9a2fab62a26f |
-| *Hacking With Your Nemesis*                 | Aug 9, 2023      | https://posts.specterops.io/hacking-with-your-nemesis-7861f75fcab4                 |
-| *Challenges In Post-Exploitation Workflows* | Aug 2, 2023      | https://posts.specterops.io/challenges-in-post-exploitation-workflows-2b3469810fe9 |
-| *On (Structured) Data*                      | Jul 26, 2023     | https://posts.specterops.io/on-structured-data-707b7d9876c6                        |
+| Post Name                                                   | Publication Date | Link                                                                                              |
+|-------------------------------------------------------------|------------------|---------------------------------------------------------------------------------------------------|
+| *Nemesis 1.0.0*                                             | Apr 25, 2024     | https://posts.specterops.io/nemesis-1-0-0-8c6b745dc7c5                                            |
+| *Summoning RAGnarok With Your Nemesis*                      | Mar 13, 2024     | https://posts.specterops.io/summoning-ragnarok-with-your-nemesis-7c4f0577c93b                     |
+| *Shadow Wizard Registry Gang: Structured Registry Querying* | Sep 5, 2023      | https://posts.specterops.io/shadow-wizard-registry-gang-structured-registry-querying-9a2fab62a26f |
+| *Hacking With Your Nemesis*                                 | Aug 9, 2023      | https://posts.specterops.io/hacking-with-your-nemesis-7861f75fcab4                                |
+| *Challenges In Post-Exploitation Workflows*                 | Aug 2, 2023      | https://posts.specterops.io/challenges-in-post-exploitation-workflows-2b3469810fe9                |
+| *On (Structured) Data*                                      | Jul 26, 2023     | https://posts.specterops.io/on-structured-data-707b7d9876c6                                       |
 
 
 ## Acknowledgments

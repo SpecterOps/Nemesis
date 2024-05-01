@@ -67,7 +67,7 @@ spec:
               command: ["sh", "-c", "sysctl -w vm.max_map_count=262144"]
             {{- if eq .Values.operation.environment "production" }}
             - name: volume-mount-hack
-              image: busybox
+              image: busybox:1.36.1
               imagePullPolicy: IfNotPresent
               securityContext:
                 privileged: true
