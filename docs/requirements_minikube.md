@@ -111,9 +111,13 @@ You will need to install two services in k8s before getting started. Helm makes 
 ```bash
 # Add Bitnami repository
 helm repo add bitnami https://charts.bitnami.com/bitnami
-# Install Traefik ingress
-helm install traefik traefik --repo https://traefik.github.io/charts --namespace kube-system
+
 # Install ElasticSearch operator to manage "default" namespace. The managedNamespaces field will need to be configured if you desire to install Nemesis in a different namespace
 helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
+
+# Install Traefik v2
+helm repo add traefik https://traefik.github.io/charts
+helm install traefik traefik/traefik -n kube-system --version 27.0.2
+
 ```
 </details>
