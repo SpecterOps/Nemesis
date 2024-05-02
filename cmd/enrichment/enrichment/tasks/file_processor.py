@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -17,8 +18,10 @@ import enrichment.lib.canaries as canary_helpers
 import enrichment.lib.helpers as helpers
 import nemesiscommon.constants as constants
 import nemesispb.nemesis_pb2 as pb
+import plyara
 import structlog
 import yara
+from anyascii import anyascii
 from binaryornot.check import is_binary
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.services.text_extractor import TextExtractorInterface
@@ -28,11 +31,9 @@ from nemesiscommon.nemesis_tempfile import TempFile
 from nemesiscommon.services.alerter import AlerterInterface
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
+from plyara import utils as plyara_utils
 from prometheus_async import aio
 from prometheus_client import Summary
-from sumy.nlp.tokenizers import Tokenizer
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.summarizers.text_rank import TextRankSummarizer
 
 logger = structlog.get_logger(module=__name__)
 
@@ -48,7 +49,6 @@ class FileProcessor(TaskInterface):
     dotnet_uri: str
     gotenberg_uri: str
     kibana_url: str
-    ml_models_uri: str
 
     # Queues
     in_q_filedata: MessageQueueConsumerInterface
@@ -68,8 +68,8 @@ class FileProcessor(TaskInterface):
     out_q_rawdata: MessageQueueProducerInterface
 
     chunk_size: int
-    model_word_limit: int
     extracted_archive_size_limit: int
+    plaintext_size_limit: int
     data_download_dir: str
     kibana_url: str
 
@@ -83,13 +83,12 @@ class FileProcessor(TaskInterface):
         crack_list_uri: str,
         dotnet_uri: str,
         gotenberg_uri: str,
-        ml_models_uri: str,
         public_kibana_url: str,
         # Other settings
         chunk_size: int,
         data_download_dir: str,
-        extracted_archive_size_limit: int,
-        model_word_limit: int,
+        extracted_archive_size_limit: str,
+        plaintext_size_limit: str,
         # Queues
         in_q_filedata: MessageQueueConsumerInterface,
         in_q_filedataenriched: MessageQueueConsumerInterface,
@@ -117,12 +116,6 @@ class FileProcessor(TaskInterface):
         self.dotnet_uri = dotnet_uri
         self.gotenberg_uri = gotenberg_uri
         self.kibana_url = public_kibana_url
-        self.ml_models_uri = ml_models_uri
-
-        self.chunk_size = chunk_size  # number of bytes to read at a time per file
-        self.data_download_dir = data_download_dir
-        self.extracted_archive_size_limit = extracted_archive_size_limit  # upper size limit of an (extracted) archive to process
-        self.model_word_limit = model_word_limit  # only summarize/extract passwords for documents below this word limit
 
         self.in_q_filedata = in_q_filedata
         self.in_q_filedataenriched = in_q_filedataenriched
@@ -141,30 +134,38 @@ class FileProcessor(TaskInterface):
         self.out_q_filedatasourcecode = out_q_filedatasourcecode
         self.out_q_rawdata = out_q_rawdata
 
-        # upper size limit of an (extracted) archive to process
-        self.extracted_archive_size_limit = extracted_archive_size_limit
-
         # number of bytes to read at a time per file
         self.chunk_size = chunk_size
-
-        # only summarize/extract passwords for documents below this word limit
-        self.model_word_limit = model_word_limit
+        # folder to download temp files to
+        self.data_download_dir = data_download_dir
+        # upper size limit of an (extracted) archive to process, in MB
+        self.extracted_archive_size_limit = int(extracted_archive_size_limit) * 1000000
+        # upper size limit of a extracted text to process, in MB
+        self.plaintext_size_limit = int(plaintext_size_limit) * 1000000
 
         # load up the file parsing modules
         (self.file_modules, self.file_module_names) = helpers.dynamic_import_from_src("./enrichment/lib/file_parsers")
 
-        # load up the Yara rules
-        yara_file_paths = glob.glob("./enrichment/lib/public_yara/**/*.yara", recursive=True) + glob.glob(
-            "./enrichment/lib/public_yara/**/*.yar", recursive=True
-        )
-        yara_files = {}
-        for yara_file_path in yara_file_paths:
-            try:
-                yara_files[yara_file_path.split("/")[-1]] = yara_file_path
-            except:
-                continue
+        # load up Yara rules
+        yara_file_paths = {f"{ind}": elem for ind, elem in enumerate(glob.glob("./enrichment/lib/public_yara/**/*.yar*", recursive=True))}
+        self.yara_rules = yara.compile(filepaths=yara_file_paths)
 
-        self.yara_rules = yara.compile(filepaths=yara_files)
+        # save off the rule definitions in a readable way so the rule text
+        #   can be passed along with a rule hit
+        self.yara_rule_definitions = {}
+        yara_rule_definitions_raw = list()
+        parser = plyara.Plyara()
+        for file_path in yara_file_paths.values():
+            with open(file_path, 'r') as fh:
+                try:
+                    parsed_yara_rules = parser.parse_string(fh.read())
+                    yara_rule_definitions_raw += parsed_yara_rules
+                except Exception as e:
+                    logger.error(f"Error parsing yara file '{file_path}' : {e}")
+            parser.clear()
+        pass
+        for rule_def in yara_rule_definitions_raw:
+            self.yara_rule_definitions[rule_def['rule_name']] = plyara_utils.rebuild_yara_rule(rule_def)
 
     async def run(self) -> None:
         await logger.ainfo("Starting the File Processor")
@@ -244,13 +245,10 @@ class FileProcessor(TaskInterface):
             file_data.hashes.CopyFrom(file_hashes)
         else:
             enrichments_failure.append(constants.E_FILE_HASHES)
-            await logger.aerror("Hash enrichment: Failed to hash file")
+            await logger.aerror(f"Hash enrichment: Failed to hash file: {file_path_on_disk}")
 
         # now get its magic type from the first 2048 bytes using python-magic
         file_magic_type = helpers.get_magic_type(file_path_on_disk)
-
-        # check if the file can have plaintext extracted with Tika
-        tika_compatible = helpers.tika_compatible(file_path)
 
         # check if this file is an office document
         is_office_doc = helpers.is_office_doc(file_path)
@@ -474,6 +472,17 @@ class FileProcessor(TaskInterface):
             await logger.ainfo("Detected Seatbelt json file, emitting RawDataIngestionMessage")
             await self.out_q_rawdata.Send(seatbelt_raw_data_message.SerializeToString())
 
+        # if this file is DPAPI domain backup key data, emit a raw_data message so the data is properly processed
+        elif file_data.magic_type == "JSON data" and helpers.scan_with_yara(file_path_on_disk, "dpapi_domain_backupkey"):
+            dpapi_raw_data_message = pb.RawDataIngestionMessage()
+            dpapi_raw_data_message.metadata.CopyFrom(metadata)
+            raw_data_message = dpapi_raw_data_message.data.add()
+            raw_data_message.data = file_data.object_id
+            raw_data_message.tags.append("dpapi_domain_backupkey")
+            raw_data_message.is_file = True
+            await logger.ainfo("Detected DPAPI domain backup key json file, emitting RawDataIngestionMessage")
+            await self.out_q_rawdata.Send(dpapi_raw_data_message.SerializeToString())
+
         # if we have a registry file, try to extract all the strings and run NoseyParker on everything
         if file_data.magic_type.startswith("MS Windows registry file"):
 
@@ -557,42 +566,73 @@ class FileProcessor(TaskInterface):
         # Check if the office document was encrypted
         doc_is_encrypted = file_data.parsed_data.is_encrypted
 
+        if file_data.size > self.plaintext_size_limit:
+            # if a file is too large, make sure we don't use Gotenberg/Tika to prevent system freezes
+            mime_type = "application/octet-stream"
+            tika_compatible = False
+            can_convert_to_pdf = False
+        else:
+            mime_type = await self.text_extractor.detect(file_path_on_disk)
+            tika_compatible = helpers.tika_compatible(mime_type)
+
+        await logger.ainfo(f"mime type: {mime_type}, tika_compatible: {tika_compatible}", object_id=file_data.object_id)
+
         # If the file is known to be tika compatible, or is not a binary file
         #   and is also not known source code, and is not an encrypted word doc,
-        #   then try to extract text and index is
+        #   then try to extract text and index it
         if (tika_compatible or not file_is_binary) and not is_source_code and not doc_is_encrypted:
             try:
-                # use Tika to extract to a new local UUID that references the uploaded Nemesis file text
-                plaintext_file_id = await self.extract_text(file_path_on_disk)
+                if mime_type == "text/plain" and file_data.size > self.plaintext_size_limit:
+                    await logger.awarning(f"File is plaintext and over the plaintext_size_limit of {self.plaintext_size_limit}, not performing text processing", object_id=file_data.object_id)
+                    enrichments_failure.append(constants.E_TEXT_EXTRACTED)
+                else:
+                    # use Tika to extract to a new local UUID that references the uploaded Nemesis file text
+                    #   specifying that we want to clean the text before saving
+                    #   if the file is plaintext, it's just cleaned/processed directly
+                    plaintext_file_id = await self.extract_text(file_path=file_path_on_disk,
+                                                                object_id=file_data.object_id,
+                                                                magic_type=file_magic_type,
+                                                                mime_type=mime_type,
+                                                                clean_text=True)
 
-                if plaintext_file_id:
-                    file_data.extracted_plaintext = str(plaintext_file_id)
-                enrichments_success.append(constants.E_TEXT_EXTRACTED)
+                    if plaintext_file_id:
+                        file_data.extracted_plaintext = str(plaintext_file_id)
+                    enrichments_success.append(constants.E_TEXT_EXTRACTED)
             except Exception as e:
                 await logger.aexception(e, message="Exception in running extract_text()")
                 enrichments_failure.append(constants.E_TEXT_EXTRACTED)
 
-        # If we can convert the document to a PDF with Gotenberg and the document isn't an encrypted office doc
+        # If we can convert the document to a PDF with Gotenberg and the document isn't an encrypted office doc, and it's < 25 megs
         if can_convert_to_pdf and not doc_is_encrypted:
             # use Gotenberg to convert the document to a new local UUID that references the uploaded Nemesis file text
             #   Gotenberg requires an extension, so we have to temporarily rename the file to its original extension
+            pdf_size_limit = 25000000
+            if (file_data.size > pdf_size_limit):
+                await logger.awarning(
+                    f"file '{file_data.name}' is over the PDF conversion size limit of  {pdf_size_limit} bytes"
+                )
+            else:
+                orig_filename = file_path_on_disk
+                temp_filename = f"{orig_filename}.{file_data.extension}"
+                os.rename(orig_filename, temp_filename)
 
-            orig_filename = file_path_on_disk
-            temp_filename = f"{orig_filename}.{file_data.extension}"
-            os.rename(orig_filename, temp_filename)
+                try:
+                    # render Excel docs in landscape
+                    landscape = re.match("^.*\\.(xls|xlsx|xlsm)$", file_data.path, re.IGNORECASE) is not None
+                    start = time.time()
+                    pdf_uuid = await self.convert_to_pdf(temp_filename, landscape)
+                    end = time.time()
+                    await logger.ainfo(f"Document converted to PDF in {(end - start):.2f} seconds", object_id=file_data.object_id)
+                    enrichments_success.append(constants.E_PDF_CONVERSION)
 
-            try:
-                pdf_uuid = await self.convert_to_pdf(temp_filename)
-                enrichments_success.append(constants.E_PDF_CONVERSION)
+                    if pdf_uuid:
+                        file_data.converted_pdf = str(pdf_uuid)
+                except Exception as e:
+                    await logger.aexception(e, message="Could not convert file to PDF", file_uuid=file_uuid_str)
+                    enrichments_failure.append(constants.E_PDF_CONVERSION)
 
-                if pdf_uuid:
-                    file_data.converted_pdf = str(pdf_uuid)
-            except Exception as e:
-                await logger.aexception(e, message="Could not convert file to PDF", file_uuid=file_uuid_str)
-                enrichments_failure.append(constants.E_PDF_CONVERSION)
-
-            # restore the original file name
-            os.rename(temp_filename, orig_filename)
+                # restore the original file name
+                os.rename(temp_filename, orig_filename)
 
         ###########################################################
         #
@@ -601,43 +641,42 @@ class FileProcessor(TaskInterface):
         ###########################################################
 
         # check the file for canaries :smiling_imp:
-        if file_data.parsed_data.WhichOneof("data_type") == "office_doc_new":
-            canaries = await canary_helpers.get_office_document_canaries(file_path_on_disk)
-            file_data.canaries.CopyFrom(canaries)
-        else:
-            canaries = await canary_helpers.get_file_canaries(file_path_on_disk)
-            file_data.canaries.CopyFrom(canaries)
+        if not doc_is_encrypted and tika_compatible:
+            if file_data.parsed_data.WhichOneof("data_type") == "office_doc_new":
+                canaries = await canary_helpers.get_office_document_canaries(file_path_on_disk)
+                file_data.canaries.CopyFrom(canaries)
+            else:
+                canaries = await canary_helpers.get_file_canaries(file_path_on_disk)
+                file_data.canaries.CopyFrom(canaries)
 
-        if file_data.canaries.canaries_present:
-            text = ""
+            if file_data.canaries.canaries_present:
+                text = ""
 
-            for canary in file_data.canaries.canaries:
-                rule = canary.type
-                urls = ", ".join(canary.data)
-                urls = urls.replace(".", "[.]")
-                text += f"*Rule {rule} :* {urls}\n"
+                for canary in file_data.canaries.canaries:
+                    rule = canary.type
+                    urls = ", ".join(canary.data)
+                    urls = urls.replace(".", "[.]")
+                    text += f"*Rule {rule} :* {urls}\n"
 
-            if not file_previously_processed:
-                await self.alerter.file_data_alert(
-                    file_data=file_data,
-                    metadata=metadata,
-                    title="Possible canaries detected",
-                    text=text,
-                )
+                if not file_previously_processed:
+                    await self.alerter.file_data_alert(
+                        file_data=file_data,
+                        metadata=metadata,
+                        title="Possible canaries detected",
+                        text=text,
+                    )
 
-        # run Yara on the file
-        yara_results = await self.yara_opsec_scan(file_path_on_disk)
-        if "error" in yara_results:
-            error_text = yara_results["error"]
+        # run Yara OPSEC rules on the file
+        yara_matches = await self.yara_opsec_scan(file_path_on_disk)
+        if isinstance(yara_matches, pb.Error):
             enrichments_failure.append(constants.E_YARA_SCAN)
-            await logger.aerror(f"Error in yara_opsec_scan: {error_text}")
+            await logger.aerror(f"Error in yara_opsec_scan: {yara_matches.error}")
         else:
             enrichments_success.append(constants.E_YARA_SCAN)
-            if "yara_matches" in yara_results and len(yara_results["yara_matches"]) > 0:
-                rule_matches = yara_results["yara_matches"]
-                file_data.yara_matches.extend(rule_matches)
+            if yara_matches.yara_matches_present and len(yara_matches.yara_matches) > 0:
+                file_data.yara_matches.CopyFrom(yara_matches)
 
-                alert_rules = [rule for rule in rule_matches if rule not in constants.EXCLUDED_YARA_RULES]
+                alert_rules = [t.rule_name for t in yara_matches.yara_matches if t.rule_name not in constants.EXCLUDED_YARA_RULES]
 
                 if alert_rules:
                     rule_matches_str = ", ".join(alert_rules)
@@ -910,53 +949,107 @@ class FileProcessor(TaskInterface):
         download it the Nemesis datastore.
         """
 
+        yara_matches = pb.YaraMatches()
+
         if os.path.exists(file_path):
             try:
-                return {"yara_matches": [f"{match}" for match in self.yara_rules.match(file_path)]}
+                for match in self.yara_rules.match(file_path):
+                    yara_matches.yara_matches_present = True
+                    yara_match = pb.YaraMatches.YaraMatch()
+                    yara_match.rule_file = match.namespace
+                    yara_match.rule_name = match.rule
+                    if yara_match.rule_name in self.yara_rule_definitions:
+                        yara_match.rule_text = self.yara_rule_definitions[yara_match.rule_name]
+                    if hasattr(match, 'meta') and "description" in match.meta:
+                        yara_match.rule_description = match.meta["description"]
+                    if hasattr(match, 'strings'):
+                        for yara_string in match.strings:
+                            yara_string_match = pb.YaraMatches.YaraStringMatch()
+                            yara_string_match.identifier = yara_string.identifier
+                            for instance in yara_string.instances:
+                                yara_string_match_instance = pb.YaraMatches.YaraStringMatchInstance()
+                                yara_string_match_instance.matched_data = bytes(instance.matched_data)
+                                yara_string_match_instance.offset = instance.offset
+                                yara_string_match_instance.length = instance.matched_length
+                                yara_string_match.yara_string_match_instances.extend([yara_string_match_instance])
+                            yara_match.rule_string_matches.extend([yara_string_match])
+                    yara_matches.yara_matches.extend([yara_match])
             except Exception as e:
+                yara_matches = helpers.nemesis_error(f"yara_scan_file error for {file_path} : {e}")
                 await logger.aexception(e, message="yara_scan_file error", file_path=file_path)
-                return {"error": f"yara_scan_file error for {file_path} : {e}"}
         else:
             try:
                 # try to download the file from the nemesis API
                 file_uuid = uuid.UUID(file_path)
                 with await self.storage.download(file_uuid) as temp_file:
-                    return {"yara_matches": [f"{match}" for match in self.yara_rules.match(temp_file.name)]}
+                    self.yara_rules.match(temp_file.name)
             except Exception as e:
+                yara_matches = helpers.nemesis_error(f"yara_scan_file error for {file_path} : {e}")
                 await logger.aexception(e, message="yara_scan_file error", file_path=file_path)
-                return {"error": f"yara_scan_file error for {file_path} : {e}"}
             finally:
                 # clean up the local file if it exists
                 if os.path.exists(file_path):
                     os.remove(file_path)
 
-    async def extract_text(self, file_path: str) -> Optional[uuid.UUID]:
+        return yara_matches
+
+    async def extract_text(self, file_path: str, object_id: str, magic_type: str, mime_type: str, clean_text: bool = True) -> Optional[uuid.UUID]:
         """Extracts text from a file, and if there's text, returns a Nemesis File UUID."""
 
-        text = await self.text_extractor.extract(file_path)
-        if text is None:
-            await logger.adebug("No text extracted", file_path=file_path)
-            return None
+        if mime_type == "text/plain":
+            await logger.ainfo("File is 'text/plain', not using Tika", object_id=object_id, magic_type=magic_type, mime_type=mime_type)
+            if clean_text and "ascii" not in magic_type.lower():
+                if "utf-16" in magic_type.lower():
+                    with open(file_path, "r", encoding="utf-16") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                elif "utf-32" in magic_type.lower():
+                    with open(file_path, "r", encoding="utf-32") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                else:
+                    with open(file_path, "r") as f:
+                        text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', f.read()))
+                with tempfile.NamedTemporaryFile(mode="w") as plaintext_file:
+                    plaintext_file.write(text)
+                    plaintext_file.seek(0)
+                    plaintext_file_uuid = await self.storage.upload(plaintext_file.name)
+                    return plaintext_file_uuid
+            else:
+                # if it's straight ascii, just return the existing object_id
+                return object_id
+        else:
+            text = await self.text_extractor.extract(file_path)
+            if text is None:
+                await logger.adebug("No text extracted", file_path=file_path)
+                return None
 
-        # Write the extracted text to a temporary file and upload it to Nemesis
-        with tempfile.NamedTemporaryFile(mode="w") as plaintext_file:
-            plaintext_file.write(text)
-            plaintext_file.seek(0)
+            # Write the extracted text to a temporary file and upload it to Nemesis
+            with tempfile.NamedTemporaryFile(mode="w") as plaintext_file:
 
-            extractedtext_file_uuid = await self.storage.upload(plaintext_file.name)
-            return extractedtext_file_uuid
+                if clean_text:
+                    # collapse multiple newlines and transliterate Unicode to ascii
+                    text = anyascii(re.sub(r'([\s][*\n]+[\s]*)+', '\n', text))
 
-    async def convert_to_pdf(self, file_path: str) -> Optional[uuid.UUID]:
+                plaintext_file.write(text)
+                plaintext_file.seek(0)
+
+                extractedtext_file_uuid = await self.storage.upload(plaintext_file.name)
+                return extractedtext_file_uuid
+
+    async def convert_to_pdf(self, file_path: str, landscape: bool = False) -> Optional[uuid.UUID]:
         """Calls self.gotenberg_uri to convert the supplied document to a PDF.
 
         The PDF is written to a new UUID, uploaded to S3, and the UUID is returned.
         """
 
         with open(file_path, "rb") as file:
-            files = {"file": file}
+            if landscape:
+                files = {"file": file, "landscape": "true"}
+            else:
+                files = {"file": file}
             url = f"{self.gotenberg_uri}forms/libreoffice/convert"
 
-            async with aiohttp.ClientSession() as session:
+            session_timeout = aiohttp.ClientTimeout(total=None, sock_connect=(60*3), sock_read=(60*3))
+            async with aiohttp.ClientSession(timeout=session_timeout) as session:
                 async with TempFile(self.data_download_dir) as temp_file:
                     async with session.post(url, data=files) as resp:
                         resp.raise_for_status()
@@ -971,35 +1064,6 @@ class FileProcessor(TaskInterface):
                         else:
                             await logger.awarning(f"Result {temp_file.path} is 0 bytes")
                             return None
-
-    async def extract_passwords(self, file_path: str) -> dict:
-        """Calls the self.ml_models_uri to extract password candidates from a plaintext document."""
-
-        try:
-            data = {"object_id": file_path}
-            url = f"{self.ml_models_uri}passwords"
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=data) as resp:
-                    resp.raise_for_status()
-                    response = await resp.json()
-                    return response
-
-        except Exception as e:
-            await logger.aexception(e, message="Error calling ml_models", file_path=file_path)
-            return {"error": f"Error calling ml_models on {file_path} : {e}"}
-
-    async def summarize_text(self, file_path: str, num_sentences: int = 4) -> str:
-        """Summarizes a local text file using the `sumy` Python library."""
-        try:
-            parser = PlaintextParser.from_file(file_path, Tokenizer("english"))
-            summarizer = TextRankSummarizer()
-            summary = " ".join([f"{sentence}" for sentence in summarizer(parser.document, num_sentences)])
-            summary = re.sub("\\s", " ", summary)
-            return summary
-        except Exception as e:
-            await logger.aerror(f"Error summarizing {file_path} : {e}")
-            return f"Error: summarizing {file_path} : {e}"
 
     async def update_cracklist(self, object_id: str, client_id: str) -> bool:
         """Calls self.crack_list_uri to update the cracklist with the current plaintext file.
@@ -1135,67 +1199,28 @@ class FileProcessor(TaskInterface):
         try:
             # download the file from the nemesis API
             with await self.storage.download(uuid.UUID(nemesis_uuid)) as temp_file:
-                # update the cracking list with this plaintext file + the project ID
-                # TODO: is this working?
-                success = await self.update_cracklist(nemesis_uuid, file_data_plaintext_message.metadata.project)
-
-                if success:
-                    enrichments_success.append(constants.E_UPDATE_CRACKLIST)
-                else:
-                    enrichments_failure.append(constants.E_UPDATE_CRACKLIST)
-
                 word_count = 0
+                size = 0
 
                 with open(temp_file.name, "rb") as f:
                     # chunking to handle large files
                     while chunk := f.read(self.chunk_size):
                         word_count += len(chunk.split())
+                        size += len(chunk)
 
                 file_data_plaintext.word_count = word_count
+                file_data_plaintext.size = size
 
-                if file_data_plaintext.word_count < self.model_word_limit:
-                    # model/regex password candidate from the plaintext
-                    password_candidates = await self.extract_passwords(file_data_plaintext.object_id)
-
-                    if "error" in password_candidates:
-                        await logger.aerror(
-                            "Failed to run extract_passwords() on plaintext file",
-                            message=password_candidates["error"],
-                            file_path=file_data_plaintext.object_id,
-                        )
-                        enrichments_failure.append(constants.E_EXTRACT_PASSWORDS)
-                    else:
-                        enrichments_success.append(constants.E_EXTRACT_PASSWORDS)
-
-                    if "model_password_candidates" in password_candidates:
-                        for model_password_candidate in password_candidates["model_password_candidates"]:
-                            password_candidate = file_data_plaintext.model_passwords.add()
-                            password_candidate.left_context = " ".join(model_password_candidate["left_context"])
-                            password_candidate.password = model_password_candidate["password"]
-                            password_candidate.right_context = " ".join(model_password_candidate["right_context"])
-                    if "regex_password_candidates" in password_candidates:
-                        for regex_password_candidate in password_candidates["regex_password_candidates"]:
-                            password_candidate = file_data_plaintext.regex_passwords.add()
-                            password_candidate.left_context = " ".join(regex_password_candidate["left_context"])
-                            password_candidate.password = regex_password_candidate["password"]
-                            password_candidate.right_context = " ".join(regex_password_candidate["right_context"])
-
-                # summarization, in 4 sentences here, if under MODEL_WORD_LIMIT words
-                if file_data_plaintext.word_count < self.model_word_limit:
-                    summary = f"{await self.summarize_text(temp_file.name, 4)}"
-                    if summary.startswith("Error:"):
-                        await logger.aerror(
-                            "Failed to run summarize_text() on plaintext file",
-                            message=summary,
-                            file_path=file_data_plaintext.object_id,
-                        )
-                        enrichments_failure.append(constants.E_SUMMARIZE)
-                    else:
-                        file_data_plaintext.summary = summary
-                        enrichments_success.append(constants.E_SUMMARIZE)
+                # update the cracking list with this plaintext file + the project ID
+                if size > self.plaintext_size_limit:
+                    await logger.awarning(f"Plaintext object is over the plaintext_size_limit of {self.plaintext_size_limit}, not adding to cracklist", object_id=nemesis_uuid)
                 else:
-                    file_data_plaintext.summary = f"file contents were above {self.model_word_limit} word limit"
-                    enrichments_failure.append(constants.E_SUMMARIZE)
+                    success = await self.update_cracklist(nemesis_uuid, file_data_plaintext_message.metadata.project)
+
+                    if success:
+                        enrichments_success.append(constants.E_UPDATE_CRACKLIST)
+                    else:
+                        enrichments_failure.append(constants.E_UPDATE_CRACKLIST)
 
                 # run NoseyParker on the plaintext for anything we can find
                 try:

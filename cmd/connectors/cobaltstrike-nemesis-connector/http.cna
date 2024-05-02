@@ -38,7 +38,7 @@ sub http::DisableCertificateValidation {
 http::DisableCertificateValidation();
 
 sub http::UploadFile {
-    # Uploads a file to the http://nemesis/file endpoint, returning a object_id UUID
+    # Uploads a file to the https://nemesis/file endpoint, returning a object_id UUID
 
     local('$1 $filepath @parts $filename $auth_header $guid $file $fileStream $bufferedInputStream $fileLength $buffer $bytesRead $in $url $urlobj $con $wr $responseCode $message $inputLine $message2 $date $url $urlobj $con');
 
@@ -48,7 +48,7 @@ sub http::UploadFile {
 
 
 
-    # POST to http://nemesis/file
+    # POST to https://nemesis/file
     $url = %nemesis::Settings['NemesisApiUrl']. 'file';
     $urlobj = [new URL: $url];
     $con = [$urlobj openConnection];
@@ -134,7 +134,7 @@ sub http::UploadFile {
 
 
 sub http::YaraFile {
-    # Uploads a file to the http://nemesis/yara endpoint, returning any yara results
+    # Uploads a file to the https://nemesis/yara endpoint, returning any yara results
 
     local('$1 $filepath @parts $filename $auth_header $footer $guid $body $file_bytes $in $url $urlobj $con $wr $responseCode $message $inputLine $message2 $date $url $urlobj $con');
 

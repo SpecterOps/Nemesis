@@ -508,6 +508,132 @@ async def handle_file(mythic_instance: mythic_classes.Mythic) -> None:
                 continue
 
 
+async def handle_ls_responses(mythic_instance: mythic_classes.Mythic) -> None:
+    """
+    Start a subscription for Mythic tasks and handle them.
+
+    **Parameters**
+
+    ``mythic_instance``
+        The Mythic instance to be used to query the Mythic database
+    """
+    try:
+        start_id = rconn.get("last_ls_id")
+    except:
+        rconn.mset({"last_ls_id": 0})
+        start_id = 0
+
+    # handles ls responses that don't have support for the mythictree file browser (e.g., merlin)
+
+    nemesis_ls_subscription = """
+    subscription NemesisLSSubscription {
+        task(where: {id: {_gt: %s}, _not: {command: {supported_ui_features: {_contains: "file_browser:list"}}}, command_name: {_eq: "ls"}, response_count: {_eq: 1}}) {
+            id
+            response_count
+            responses {
+                response_escape
+                timestamp
+            }
+            callback {
+                agent_callback_id
+                operation {
+                    name
+                }
+                payload {
+                    payloadtype {
+                        name
+                    }
+                }
+                host
+            }
+        }
+    }
+    """ % (
+        start_id
+    )
+
+    mythic_sync_log.info(f"Starting subscription for ls information, start_id: {start_id}")
+    async for data in mythic.subscribe_custom_query(mythic=mythic_instance, query=nemesis_ls_subscription):
+        # group by the agent ID
+        all_data = {}
+
+        tasks = data["task"]
+
+        for task in tasks:
+            if task["callback"]["payload"]["payloadtype"]["name"] == "merlin":
+                mythic_id = task["id"]
+                redis_key = f"ls{mythic_id}"
+                try:
+                    redis_entry_id = rconn.get(redis_key)
+                except:
+                    redis_entry_id = None
+
+                # if this key is _not_ already processed
+                if not redis_entry_id:
+                    callback_id = task["callback"]["agent_callback_id"]
+
+                    # build the metadata entry on first encounter of this agent ID
+                    if callback_id not in all_data:
+                        metadata = {}
+                        timestamp = task["responses"][0]["timestamp"]
+                        metadata["agent_id"] = callback_id
+                        metadata["agent_type"] = "mythic"
+                        metadata["automated"] = True
+                        metadata["data_type"] = "file_information"
+                        metadata["expiration"] = convert_timestamp(timestamp, EXPIRATION_DAYS)
+                        metadata["source"] = task["callback"]["host"]
+                        metadata["project"] = task["callback"]["operation"]["name"]
+                        metadata["timestamp"] = convert_timestamp(timestamp)
+
+                        all_data[callback_id] = {}
+                        all_data[callback_id]["metadata"] = metadata
+                        all_data[callback_id]["data"] = list()
+
+                    # parse Merlin's ls response
+                    ls_response = task["responses"][0]["response_escape"]
+                    ls_response_lines = ls_response.split("\n")
+
+                    for line in ls_response_lines[:3]:
+                        if line.startswith("Directory listing for: "):
+                            folder = line[23:].replace("\\\\", "/").strip()
+                            if not folder.endswith("/"):
+                                folder = f"{folder}/"
+
+                    for line in ls_response_lines:
+                        line_parts = line.split("\t")
+                        if len(line_parts) == 4:
+                            file_data = {}
+
+                            if line_parts[0].startswith("d"):
+                                file_data["type"] = "folder"
+                                file_data["size"] = 0
+                            else:
+                                file_data["type"] = "file"
+                                file_data["size"] = line_parts[2]
+
+                            file_data["modification_time"] = datetime.strptime(line_parts[1], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                            file_name = line_parts[3]
+                            file_data["path"] = f"{folder}{file_name}"
+
+                            all_data[callback_id]["data"].append(file_data)
+
+                    # mark this ls response as seen
+                    rconn.mset({redis_key: 1})
+
+                    # mark this Mythic ID as the last processed process ID
+                    last_ls_id = rconn.get("last_ls_id")
+                    if mythic_id > last_ls_id:
+                        rconn.mset({"last_ls_id": mythic_id})
+
+        # for each unique agent ID, issue one request with all batched file browser information
+        #   but using the same metadata entry
+        for key in all_data:
+            resp = nemesis_post_data(all_data[key])
+            if resp:
+                message_id = resp["object_id"]
+                mythic_sync_log.info(f"Nemesis message_id for submitted ls data: {message_id}")
+
+
 async def handle_filebrowser(mythic_instance: mythic_classes.Mythic) -> None:
     """
     Start a subscription for Mythic tasks and handle them.
@@ -1052,6 +1178,7 @@ async def scripting():
                 handle_file(mythic_instance=mythic_instance),
                 handle_process(mythic_instance=mythic_instance),
                 handle_filebrowser(mythic_instance=mythic_instance),
+                handle_ls_responses(mythic_instance=mythic_instance)
             )
         except Exception:
             mythic_sync_log.exception("Encountered an exception while subscribing to tasks and responses, restarting...")

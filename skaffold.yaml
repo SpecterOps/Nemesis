@@ -2,262 +2,31 @@ apiVersion: skaffold/v4beta6
 kind: Config
 metadata:
   name: nemesis
-requires:
-  - configs: ["infra-core"]
-  - configs: ["infra-nemesis"]
-  - configs: ["monitoring"]
-  - configs: ["services"]
-  - configs: ["enrichment"]
-  - configs: ["dashboard"]
----
-#############################################################################
-# infra-core - Deploys core infra (used by several services)
-#  - Nginx ingress controller - API routes
-#  - Elasticsearch/kibana - Used by Nemesis and Fluentd for logging
-#############################################################################
-apiVersion: skaffold/v4beta6
-kind: Config
-metadata:
-  name: infra-core
 build:
   tagPolicy:
-    inputDigest: {}
+    sha256: {}
   local:
     push: false
-    tryImportMissing: true
+    tryImportMissing: false
     useBuildkit: true
     concurrency: 0
   artifacts:
-    - &build-waiter
-      image: nemesis-waiter
+    - image: nemesis-waiter
       docker:
         dockerfile: dockerfiles/waiter.Dockerfile
-
-manifests:
-  rawYaml:
-    - &k8s-elastic-elasticsearch kubernetes/elastic/elasticsearch.yaml
-    - &k8s-elastic-ingress kubernetes/elastic/ingress.yaml
-    - &k8s-elastic-kibana kubernetes/elastic/kibana.yaml
-
-deploy:
-  kubectl: {}
-
-profiles:
- - name: dev
-   manifests:
-    rawYaml:
-    - kubernetes/elastic/elasticsearch-dev.yaml
-    - kubernetes/elastic/ingress.yaml
-    - kubernetes/elastic/kibana.yaml
-
-portForward:
-  - &portForward-ingress
-    resourceType: service
-    resourceName: ingress-nginx-controller
-    namespace: ingress-nginx
-    port: 80
-    localPort: 8080
-    address: 0.0.0.0
-
----
-#############################################################################
-# monitoring - Monitoring infrastructure
-#############################################################################
-apiVersion: skaffold/v4beta2
-kind: Config
-metadata:
-  name: monitoring
-build:
-  tagPolicy:
-    inputDigest: {}
-  local:
-    push: false
-    tryImportMissing: true
-    useBuildkit: true
-    concurrency: 0
-  artifacts: []
-
-manifests:
-  rawYaml:
-    - &k8s-monitoring kubernetes/monitoring/*
-    - &k8s-ingress-monitoring kubernetes/monitoring/ingress.yaml
-
-deploy:
-  kubectl: {}
-
----
-#############################################################################
-# infra-nemesis - Deploys static infrastructure (likely won't change during dev)
-#############################################################################
-apiVersion: skaffold/v4beta2
-kind: Config
-metadata:
-  name: infra-nemesis
-build:
-  tagPolicy:
-    inputDigest: {}
-  local:
-    push: false
-    tryImportMissing: true
-    useBuildkit: true
-    concurrency: 0
-  artifacts: []
-
-manifests:
-  rawYaml:
-    # Static infra
-    - &k8s-rabbitmq kubernetes/rabbitmq/*
-    - &k8s-gotenberg kubernetes/gotenberg/*
-    - &k8s-postgres-configmap kubernetes/postgres/configmap.yaml
-    - &k8s-postgres-deployment kubernetes/postgres/deployment.yaml
-    - &k8s-postgres-service kubernetes/postgres/service.yaml
-    - &k8s-pgadmin kubernetes/pgadmin/*
-    - &k8s-tika kubernetes/tika/*
-
-deploy:
-  kubectl: {}
-
-profiles:
- - name: dev
-   manifests:
-    rawYaml:
-    # Static infra
-    - kubernetes/rabbitmq/*
-    - kubernetes/gotenberg/*
-    - kubernetes/postgres/configmap.yaml
-    - kubernetes/postgres/deployment-dev.yaml
-    - kubernetes/postgres/service.yaml
-    - kubernetes/pgadmin/*
-    - kubernetes/tika/*
-
-# portForward:
-#   - &portForward-postgres
-#     resourceType: service
-#     resourceName: postgres
-#     namespace: default
-#     port: 5432
-#     localPort: 5432
-#     address: 0.0.0.0
-#   - &portForward-rabbmitmq-managementui
-#     resourceType: service
-#     resourceName: nemesis-rabbitmq-svc
-#     namespace: default
-#     port: 15672
-#     localPort: 15672
-#     address: 0.0.0.0
-#   - &portForward-rabbmitmq-amqp
-#     resourceType: service
-#     resourceName: nemesis-rabbitmq-svc
-#     namespace: default
-#     port: 5672
-#     localPort: 5672
-#     address: 0.0.0.0
-#  - &portForward-minios
-#    resourceType: service
-#    resourceName: minio
-#    namespace: default
-#    port: 9001
-#    address: 0.0.0.0
-
----
-#############################################################################
-#
-# Jupyter - Deploys an instance of Jupyter Notebooks
-#
-# Usage: skaffold dev -f skaffold.yaml -m jupyter -p jupyter
-#############################################################################
-apiVersion: skaffold/v4beta6
-kind: Config
-metadata:
-  name: jupyter
-build:
-  tagPolicy:
-    inputDigest: {}
-  local:
-    push: false
-    tryImportMissing: true
-    useBuildkit: true
-    concurrency: 0
-  artifacts:
-    - &build-jupyter
-      image: nemesis-jupyter
+    - image: nemesis-jupyter
       docker:
         dockerfile: dockerfiles/jupyter.Dockerfile
-
-manifests:
-    rawYaml:
-    -  kubernetes/jupyter/*
-
-deploy:
-  kubectl: {}
-
-portForward:
-  - &portForward-jupyter
-    resourceType: service
-    resourceName: jupyter
-    namespace: default
-    port: 8888
-    address: 0.0.0.0
-
----
-#########################################################################################
-# nemesis-services - deploys API/enrichment services (common things that change during dev)
-#########################################################################################
-apiVersion: skaffold/v4beta6
-kind: Config
-metadata:
-  name: services
-build:
-  tagPolicy:
-    inputDigest: {}
-  local:
-    push: false
-    tryImportMissing: true
-    useBuildkit: true
-    concurrency: 0
-  artifacts:
-    - &build-dotnet
-      image: nemesis-dotnet
+    - image: nemesis-dotnet
       docker:
         dockerfile: dockerfiles/dotnet.Dockerfile
-    - &build-nlp
-      image: nemesis-nlp
+    - image: nemesis-nlp
       docker:
         dockerfile: dockerfiles/nlp.Dockerfile
-    - &build-passwordcracker
-      image: nemesis-passwordcracker
+    - image: nemesis-passwordcracker
       docker:
         dockerfile: dockerfiles/passwordcracker.Dockerfile
-    - &build-tensorflow-serving
-      image: nemesis-tensorflow-serving
-      docker:
-        dockerfile: dockerfiles/tensorflow-serving.Dockerfile
-
-manifests:
-  rawYaml:
-    - &k8s-dotnet kubernetes/dotnet/*
-    - &k8s-nlp kubernetes/nlp/*
-    - &k8s-passwordcracker kubernetes/passwordcracker/*
-    - &k8s-tensorflow-serving kubernetes/tensorflow-serving/*
-deploy:
-  kubectl: {}
-
----
-apiVersion: skaffold/v4beta6
-kind: Config
-metadata:
-  name: enrichment
-build:
-  tagPolicy:
-    inputDigest: {}
-  local:
-    push: false
-    tryImportMissing: true
-    useBuildkit: true
-    concurrency: 0
-  artifacts:
-    - &build-enrichment
-      image: enrichment
+    - image: nemesis-enrichment
       docker:
         dockerfile: dockerfiles/enrichment.Dockerfile
       sync:
@@ -265,36 +34,108 @@ build:
           - src: 'cmd/enrichment/**/*.py'
             dest: '/app/cmd/enrichment'
             strip: 'cmd/enrichment'
-
-manifests:
-  rawYaml:
-    - &k8s-enrichment kubernetes/enrichment/*
-deploy:
-  kubectl: {}
----
-apiVersion: skaffold/v4beta6
-kind: Config
-metadata:
-  name: dashboard
-build:
-  tagPolicy:
-    inputDigest: {}
-  local:
-    push: false
-    tryImportMissing: true
-    useBuildkit: true
-    concurrency: 0
-  artifacts:
-    - &build-dashboard
-      image: dashboard
+    - image: nemesis-dashboard
       docker:
         dockerfile: dockerfiles/dashboard.Dockerfile
       sync:
         infer:
           - "**/*"
-
-manifests:
-  rawYaml:
-    - &k8s-dashboard kubernetes/dashboard/*
 deploy:
-  kubectl: {}
+  helm:
+    releases:
+    - name: nemesis
+      chartPath: helm/nemesis
+      setValueTemplates:
+        operation.environment: "development"
+        dashboard.image.repository: "{{.IMAGE_REPO_nemesis_dashboard}}"
+        dashboard.image.tag: "{{.IMAGE_TAG_nemesis_dashboard}}@{{.IMAGE_DIGEST_nemesis_dashboard}}"
+        nemesisWaiter.image.repository: "{{.IMAGE_REPO_nemesis_waiter}}"
+        nemesisWaiter.image.tag: "{{.IMAGE_TAG_nemesis_waiter}}@{{.IMAGE_DIGEST_nemesis_waiter}}"
+        dotnet.image.repository: "{{.IMAGE_REPO_nemesis_dotnet}}"
+        dotnet.image.tag: "{{.IMAGE_TAG_nemesis_dotnet}}@{{.IMAGE_DIGEST_nemesis_dotnet}}"
+        enrichment.image.repository: "{{.IMAGE_REPO_nemesis_enrichment}}"
+        enrichment.image.tag: "{{.IMAGE_TAG_nemesis_enrichment}}@{{.IMAGE_DIGEST_nemesis_enrichment}}"
+        jupyter.image.repository: "{{.IMAGE_REPO_nemesis_jupyter}}"
+        jupyter.image.tag: "{{.IMAGE_TAG_nemesis_jupyter}}@{{.IMAGE_DIGEST_nemesis_jupyter}}"
+        nlp.image.repository: "{{.IMAGE_REPO_nemesis_nlp}}"
+        nlp.image.tag: "{{.IMAGE_TAG_nemesis_nlp}}@{{.IMAGE_DIGEST_nemesis_nlp}}"
+        passwordcracker.image.repository: "{{.IMAGE_REPO_nemesis_passwordcracker}}"
+        passwordcracker.image.tag: "{{.IMAGE_TAG_nemesis_passwordcracker}}@{{.IMAGE_DIGEST_nemesis_passwordcracker}}"
+      setValues:
+        dashboard.image.pullPolicy: IfNotPresent
+        nemesisWaiter.image.pullPolicy: IfNotPresent
+        dotnet.image.pullPolicy: IfNotPresent
+        enrichment.image.pullPolicy: IfNotPresent
+        jupyter.image.pullPolicy: IfNotPresent
+        nlp.image.pullPolicy: IfNotPresent
+        passwordcracker.image.pullPolicy: IfNotPresent
+
+portForward:
+  - resourceType: service
+    resourceName: traefik
+    namespace: kube-system
+    port: 80
+    localPort: 8080
+    address: 0.0.0.0
+---
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: enrichment
+build:
+  tagPolicy:
+    sha256: {}
+  local:
+    push: false
+    tryImportMissing: false
+    useBuildkit: true
+    concurrency: 0
+  artifacts:
+    - image: enrichment-dev
+      docker:
+        dockerfile: dockerfiles/enrichment.Dockerfile
+      sync:
+        manual:
+          - src: 'cmd/enrichment/**/*.py'
+            dest: '/app/cmd/enrichment'
+            strip: 'cmd/enrichment'
+deploy:
+  helm:
+    releases:
+    - name: enrichment
+      chartPath: helm/enrichment
+      setValueTemplates:
+        operation.environment: test # force no storage
+        enrichment.image.repository: "{{.IMAGE_REPO_enrichment_dev}}"
+        enrichment.image.tag: "{{.IMAGE_REPO_enrichment_dev}}@{{.IMAGE_DIGEST_enrichment_dev}}"
+      setValues:
+        enrichment.image.pullPolicy: IfNotPresent
+---
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: monitoring
+build:
+  tagPolicy:
+    sha256: {}
+  local:
+    push: false
+    tryImportMissing: false
+    useBuildkit: true
+    concurrency: 0
+  artifacts: []
+deploy:
+  helm:
+    releases:
+    - name: nemesis-monitoring
+      chartPath: helm/monitoring
+      setValueTemplates:
+        nemesisWaiter.image.repository: "{{.IMAGE_REPO_nemesis_waiter}}"
+        nemesisWaiter.image.tag: "{{.IMAGE_TAG_nemesis_waiter}}@{{.IMAGE_DIGEST_nemesis_waiter}}"
+      setValues:
+        nemesisWaiter.image.pullPolicy: IfNotPresent
+    flags:
+      upgrade:
+        ["--timeout=30m"]
+      install:
+        ["--timeout=45m"]

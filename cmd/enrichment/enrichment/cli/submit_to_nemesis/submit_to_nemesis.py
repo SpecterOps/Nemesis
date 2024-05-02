@@ -174,13 +174,19 @@ async def get_nemesis_api_client(config) -> httpx.AsyncClient:
         timeout = config["timeout"]
 
         auth = httpx.BasicAuth(nemesis_user, nemesis_pass)
-        transport = httpx.AsyncHTTPTransport(retries=5)
+        transport = httpx.AsyncHTTPTransport(retries=5, verify=False)
         limits = httpx.Limits(
             max_keepalive_connections=5,
             max_connections=10,
         )
 
-        api_client = httpx.AsyncClient(base_url=nemesis_url, auth=auth, transport=transport, timeout=timeout, limits=limits)
+        api_client = httpx.AsyncClient(
+            base_url=nemesis_url,
+            auth=auth,
+            transport=transport,
+            timeout=timeout,
+            limits=limits
+        )
 
     return api_client
 
@@ -201,7 +207,9 @@ async def nemesis_post_file(config: dict[str, str], file_path: str):
     nemesis_url = config["nemesis_url"]
 
     client = NemesisApiClient(nemesis_url, await get_nemesis_api_client(config))
-
+    # set a 15 minute upload timeout
+    client.timeout = 60*15
+    
     try:
         resp = await client.send_file(FileUploadRequest(file_path))
     except httpx.HTTPStatusError as e:
@@ -385,7 +393,7 @@ async def process_file(config: dict[str, str], file_path: str) -> uuid.UUID | No
     if string_matches_regexes(api_json_regexes, file_path):
         return await post_json_to_api(config, file_path)
     elif string_matches_regexes([dpapi_domain_backupkey_regex], file_path):
-        return await submit_file_with_raw_data_tag(config, file_path, ["dpapi_domain_backupkey_json"])
+        return await submit_file_with_raw_data_tag(config, file_path, ["dpapi_domain_backupkey"])
     elif string_matches_regexes([seatbelt_json_regex], file_path):
         return await submit_file_with_raw_data_tag(config, file_path, ["seatbelt_json"])
     elif string_matches_regexes([bof_reg_collect_regex], file_path):

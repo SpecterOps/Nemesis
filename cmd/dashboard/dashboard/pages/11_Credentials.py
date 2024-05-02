@@ -7,14 +7,8 @@ import pandas as pd
 import streamlit as st
 import templates
 import utils
-from st_aggrid import (
-    AgGrid,
-    ColumnsAutoSizeMode,
-    DataReturnMode,
-    GridOptionsBuilder,
-    GridUpdateMode,
-    JsCode,
-)
+from st_aggrid import (AgGrid, ColumnsAutoSizeMode, DataReturnMode,
+                       GridOptionsBuilder, GridUpdateMode, JsCode)
 from streamlit_cookies_manager import CookieManager
 
 NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
@@ -61,14 +55,16 @@ def render_page(username: str):
     with st.expander("Triage tags"):
         options = st.multiselect("Triage Tags", triage_tags, triage_tags, on_change=st.cache_data.clear)
 
+    object_id = utils.get_single_valued_param("object_id")
+
     # trigger getting the password data in case we have a cache hit
-    df = utils.get_password_data()
+    df = utils.get_password_data(object_id)
 
     # force a cache reset if "df_loaded" is missing - this happens on a hard reload
     if "df_loaded" not in st.session_state:
         st.cache_data.clear()
         print("[!] Resetting cache")
-        df = utils.get_password_data()
+        df = utils.get_password_data(object_id)
         # if we're hard reloading, make sure the "display_object_id" cookie is wiped out
         cookies["display_object_id"] = None
         cookies.save()

@@ -1,0 +1,293 @@
+operation:
+  disableSlackAlerting: true
+  slackChannel: "#testing"
+  logLevel: "INFO"
+  assessmentId: "ASSESS-0"
+  # Can't be localhost because of URL validation in passwordcracker container
+  nemesisHttpServer: "https://127.0.0.1:443/"
+  # Environment defines how pods should be deployed
+  #   "development" will deploy without persistent storage and won't deploy the enrichment container
+  #   "test" will deploy without persistent storage
+  #   "production" deploys all images with persistent storage
+  environment: "production"
+  dataExpirationDays: "100"
+  existingSecret: operation
+
+basicAuth:
+  existingSecret: basic-auth
+  middlewareName: nemesis-auth
+
+storage: minio
+
+aws:
+  existingSecret: aws-creds
+  bucket: not-applicable
+  region: not-applicable
+  kmsKeyAlias: not-applicable
+
+minio:
+  exposeService: true
+  # For the minio dependency (Chart.yaml)
+  auth:
+    existingSecret: minio-creds
+  # for other services
+  existingSecret: minio-creds
+  persistence:
+    size: "30Gi"
+  extraEnvVars:
+    - name: MINIO_BROWSER_LOGIN_ANIMATION
+      value: "\"off\""
+
+gotenberg:
+  image:
+    repository: gotenberg/gotenberg
+    tag: "8.0.1"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+    # nodePort: 31300
+    nodePort:
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+elasticsearch:
+  # how many days to keep fluentd logs before purging
+  fluentdLogsAge: 100
+  existingSecret: elasticsearch-creds
+  auth:
+    # Enables or disables basic auth on the /elasticsearch route
+    basicAuth: true
+  ingress:
+    annotations:
+  resources:
+    requests:
+      cpu: "750m"
+      memory: "1G"
+    limits:
+      cpu: "1500m"
+      memory: "3G"
+  storage: 20Gi
+
+kibana:
+  ingress:
+    annotations:
+
+postgres:
+  existingSecret: postgres-creds
+  storage: 15Gi
+  image:
+    repository: postgres
+    tag: 15.1-alpine
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 5432
+    # nodePort: 31209
+    nodePort:
+
+pgadmin:
+  service:
+    type: ClusterIP
+    port: 80
+    nodePort:
+  ingress:
+    annotations:
+
+dashboard:
+  existingSecret: dashboard-creds
+  image:
+    repository: specterops/nemesis-dashboard
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 8601
+    # nodePort: 30073
+    nodePort:
+  ingress:
+    annotations:
+  extraEnvVars:
+    # the maximum size of files that can be uploaded via Streamlit, in MB
+    - name: STREAMLIT_SERVER_MAX_UPLOAD_SIZE
+      value: "200"
+    # the maximum size of messagea that can be sent via the Streamlit websocket, in MB
+    - name: STREAMLIT_SERVER_MAX_MESSAGE_SIZE
+      value: "200"
+
+nemesisWaiter:
+  image:
+    repository: specterops/nemesis-waiter
+    tag: latest
+    pullPolicy: IfNotPresent
+
+rabbitmq:
+  existingSecret: rabbitmq-creds
+  storage: 20Gi
+  service:
+    type: ClusterIP
+    amqp:
+      port: 5672
+    amqpSsl:
+      port: 5671
+    clustering:
+      port: 25672
+    prometheus:
+      port: 15692
+    http:
+      port: 15672
+  resources:
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  ingress:
+    annotations:
+
+eck-operator:
+  installCRDs: true
+
+dotnet:
+  image:
+    repository: specterops/nemesis-dotnet
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9800
+    # nodePort: 31800
+    nodePort:
+  resources: {}
+
+enrichment:
+  image:
+    repository: specterops/nemesis-enrichment
+    tag: latest
+    pullPolicy: IfNotPresent
+  extraEnvVars:
+    - name: EXTRACTED_ARCHIVE_SIZE_LIMIT # limit of extracted archives to process, in MB
+      value: "2000"
+    - name: PLAINTEXT_SIZE_LIMIT
+      value: "50" # size limit for extracted text to process, in MB
+  resources: {}
+  service:
+    yara:
+      type: ClusterIP
+      port: 9700
+      # nodePort: 30079
+      nodePort:
+    cracklist:
+      type: ClusterIP
+      port: 9900
+      # nodePort: 30089
+      nodePort:
+    webapi:
+      type: ClusterIP
+      port: 9910
+      # nodePort: 30808
+      nodePort:
+    landingpage:
+      type: ClusterIP
+      port: 9920
+      # nodePort: 30809
+      nodePort:
+    monitoring:
+      type: ClusterIP
+      port: 8000
+      # nodePort: 31693
+      nodePort:
+  ingress:
+    annotations:
+
+jupyter:
+  existingSecret: jupyter-creds
+  image:
+    repository: specterops/nemesis-jupyter
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8888
+    # nodePort: 31888
+    nodePort:
+  ingress:
+    annotations:
+
+nlp:
+  image:
+    repository: specterops/nemesis-nlp
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    nlp:
+      port: 9803
+      # nodePort: 31803
+      nodePort:
+    prometheus:
+      port: 8000
+      # nodePort: 31692
+      nodePort:
+  ingress:
+    annotations:
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "250m"
+    limits:
+      memory: "1500Mi"
+      cpu: "1000m"
+
+passwordcracker:
+  image:
+    repository: specterops/nemesis-passwordcracker
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9090
+    # nodePort: 31990
+    nodePort:
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "2000m"
+
+tika:
+  service:
+    type: ClusterIP
+    port: 9998
+    # nodePort: 31998
+    nodePort:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1.5Gi"
+      cpu: "1000m"
+
+hasura:
+  image:
+    repository: hasura/graphql-engine
+    tag: v2.36.2.cli-migrations-v2
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+    # nodePort: 31887
+    nodePort:
+  ingress:
+    annotations:
+  resources: {}
+
+# kubernetes-sigs/metrics-server
+metricsServer:
+  # Enable the metrics-server Deployment
+  enabled: false

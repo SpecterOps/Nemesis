@@ -9,8 +9,7 @@ import uvicorn
 import yara
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import Response
-from fastapi_class.decorators import get, post
-from fastapi_class.routable import Routable
+from fastapi import APIRouter
 from nemesiscommon.nemesis_tempfile import TempFile
 from nemesiscommon.storage import StorageInterface
 from nemesiscommon.tasking import TaskInterface
@@ -47,7 +46,7 @@ class YaraApi(TaskInterface):
         await server.serve()
 
 
-class YaraApiRoutes(Routable):
+class YaraApiRoutes():
     storage: StorageInterface
     data_download_dir: str
 
@@ -67,19 +66,22 @@ class YaraApiRoutes(Routable):
                 continue
 
         self.yara_rules = yara.compile(filepaths=yara_files)
+
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
+        self.router.add_api_route("/ready", self.ready, methods=["GET"])
+        self.router.add_api_route("/file", self.yara_file, methods=["POST"])
+
         logger.info("YaraAPI initialization completed")
 
-    @get("/")
     async def home(self):
         return Response()
 
-    @get("/ready")
     async def ready(self):
         """Used for readiness probes."""
         return Response()
 
     @aio.time(Summary("file", "Time spent scanning raw file bytes with Yara"))  # type: ignore
-    @post("/file")
     async def yara_file(self, file: UploadFile = File(...)):
         """Scan submitted file bytes with all current Yara rules."""
 

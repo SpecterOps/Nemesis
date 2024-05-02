@@ -52,38 +52,38 @@ def search_projects(search_term: str) -> List[str]:
 
 def get_search_filters_from_session():
     search_filters = {}
-    para = st.experimental_get_query_params()
+    para = st.query_params
 
     for key in para.keys():
         match key:
             case "file_download_page":
-                st.session_state.file_download_page = int(para["file_download_page"][0])
+                st.session_state.file_download_page = int(para["file_download_page"])
             case "file_show_triaged":
-                st.session_state.file_show_triaged = bool(para["file_show_triaged"][0])
+                st.session_state.file_show_triaged = bool(para["file_show_triaged"])
                 search_filters["file_show_triaged"] = st.session_state.file_show_triaged
             case "file_show_archive_originated":
-                st.session_state.file_show_archive_originated = bool(para["file_show_archive_originated"][0])
+                st.session_state.file_show_archive_originated = bool(para["file_show_archive_originated"])
                 search_filters["file_show_archive_originated"] = st.session_state.file_show_archive_originated
             case "file_path_pattern":
-                st.session_state.file_path_pattern = para["file_path_pattern"][0]
+                st.session_state.file_path_pattern = para["file_path_pattern"]
                 search_filters["file_path_pattern"] = st.session_state.file_path_pattern
             case "file_notes_pattern":
-                st.session_state.file_notes_pattern = para["file_notes_pattern"][0]
+                st.session_state.file_notes_pattern = para["file_notes_pattern"]
                 search_filters["file_notes_pattern"] = st.session_state.file_notes_pattern
             case "file_source_selection":
-                st.session_state.file_source_selection = para["file_source_selection"][0]
+                st.session_state.file_source_selection = para["file_source_selection"]
                 search_filters["file_source_selection"] = st.session_state.file_source_selection
             case "file_project_selection":
-                st.session_state.file_project_selection = para["file_project_selection"][0]
+                st.session_state.file_project_selection = para["file_project_selection"]
                 search_filters["file_project_selection"] = st.session_state.file_project_selection
             case "file_filter_tags":
-                st.session_state.file_filter_tags = para["file_filter_tags"][0]
+                st.session_state.file_filter_tags = para["file_filter_tags"]
                 search_filters["file_filter_tags"] = st.session_state.file_filter_tags
             case "file_hash":
-                st.session_state.file_hash = para["file_hash"][0]
+                st.session_state.file_hash = para["file_hash"]
                 search_filters["file_hash"] = st.session_state.file_hash
             case "file_order_desc_timestamp":
-                st.session_state.file_order_desc_timestamp = para["file_order_desc_timestamp"][0]
+                st.session_state.file_order_desc_timestamp = para["file_order_desc_timestamp"]
                 search_filters["file_order_desc_timestamp"] = st.session_state.file_order_desc_timestamp
 
     return search_filters
@@ -238,7 +238,7 @@ def build_file_listing():
         tags=search_filters["file_filter_tags"] if search_filters["file_filter_tags"] else [],
         show_triaged=search_filters["file_show_triaged"] if search_filters["file_show_triaged"] else False,
         show_archive_originated=search_filters["file_show_archive_originated"],
-        order_desc_timestamp=search_filters["file_order_desc_timestamp"] if search_filters["file_order_desc_timestamp"] else False,
+        order_desc_timestamp=search_filters["file_order_desc_timestamp"] if search_filters["file_order_desc_timestamp"] else True,
     )
 
     # number of results returned for this search
@@ -392,7 +392,24 @@ def build_file_listing():
                                                 with mui.TableCell():
                                                     # Tags
                                                     for tag in file["tags"]:
-                                                        mui.Chip(label=tag, color="primary")
+                                                        link_uri = ""
+                                                        if tag == "parsed_creds":
+                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/Credentials?object_id={object_id}"
+                                                        elif tag == "yara_matches":
+                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={object_id}&tab=yara_matches"
+                                                        elif tag == "file_canary":
+                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={object_id}&tab=canaries"
+                                                        elif tag == "noseyparker_results":
+                                                            link_uri = f"{NEMESIS_HTTP_SERVER}/dashboard/NoseyParker"
+                                                        if link_uri:
+                                                            mui.Chip(   label=tag,
+                                                                        href=link_uri,
+                                                                        component="a",
+                                                                        target="_blank",
+                                                                        clickable=True,
+                                                                        color="info")
+                                                        else:
+                                                            mui.Chip(label=tag, color="primary")
                             # Notes
                             mui.Typography("Comments:")
                             with mui.Box(sx={"flexGrow": 1}):

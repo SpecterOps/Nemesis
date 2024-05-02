@@ -17,15 +17,14 @@ nemesispb = { path = "../../packages/python/nemesispb", develop = true }
 nemesiscommon = { path = "../../packages/python/nemesiscommon", develop = true }
 prometheus-async = { extras = ["aiohttp"], version = "^22.2.0" }
 elasticsearch = "^8.6.2"
-aiohttp = "^3.8.4"
+aiohttp = "^3.9.3"
 httpx = "^0.23.3"
 asyncpg = "^0.27.0"
 winacl = "^0.1.7"
 jsonlines = "^3.1.0"
 aioboto3 = "^10.4.0"
 impacket = "^0.10.0"
-fastapi = "^0.82.0"
-fastapi-class = "^2.0.0"
+fastapi = "^0.109.2"
 uvicorn = { extras = ["standard"], version = "^0.18.3" }
 numpy = "^1.23.2"
 python-magic = "^0.4.27"

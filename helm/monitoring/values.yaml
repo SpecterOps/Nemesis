@@ -1,0 +1,132 @@
+nemesisNamespace: default
+
+auth:
+  # Assume the secret lives in the Nemesis installation namespace. Should be
+  # the same name configured in .Values.auth.middlewareName in the Nemesis Helm
+  # chart.
+  middlewareName: nemesis-auth
+
+operation:
+  existingSecret: operation
+
+elasticsearch:
+  existingSecret: elasticsearch-creds
+
+postgres:
+  existingSecret: postgres-creds
+
+elasticsearchExporter:
+  image:
+    repository: quay.io/prometheuscommunity/elasticsearch-exporter
+    tag: v1.5.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9108
+    # nodePort: 31108
+    nodePort:
+
+alertmanager:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 500M
+    limits:
+      cpu: 1
+      memory: 1Gi
+  image:
+    repository: prom/alertmanager
+    tag: v0.24.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9093
+    # nodePort: 31000
+    nodePort:
+
+fluentd:
+  elasticsearchHost: "nemesis-es-http.default.svc.cluster.local"
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 200Mi
+
+grafana:
+  existingSecret: grafana-creds
+  prometheusUrl: http://prometheus-service.default.svc:9090
+  image:
+    repository: grafana/grafana
+    tag: 9.5.2
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 250m
+      memory: 180Mi
+    requests:
+      cpu: 102m
+      memory: 180Mi
+  service:
+    type: ClusterIP
+    port: 3000
+    # nodePort: 32002
+    nodePort:
+
+nodeExporter:
+  # Values are being mapped from /host, so if you're on Windows, set this value to false
+  useVolumeMounts: false
+  nemesisElasticInternalUrl: http://nemesis-es-internal-http:9200
+  image:
+    repository: prom/node-exporter
+    tag: v1.5.0
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 250m
+      memory: 180Mi
+    requests:
+      cpu: 102m
+      memory: 180Mi
+  service:
+    type: ClusterIP
+    port: 9100
+    nodePort:
+
+prometheus:
+  connections:
+    alertmanager: alertmanager.default.svc:9093
+    kubernetes: kubernetes.default.svc:443
+    kubeStateMetrics: kube-state-metrics.kube-system.svc.cluster.local:8080
+    elasticsearchExporter: elasticsearch-exporter.default.svc.cluster.local:9108
+    gotenberg: gotenberg.default.svc.cluster.local:3000
+    passwordcracker: passwordcracker.default.svc.cluster.local:9090
+    postgresExporter: postgres-exporter.default.svc.cluster.local:9187
+    nlp: nlp.default.svc.cluster.local:8000
+    enrichment: enrichment-monitoring.default.svc.cluster.local:8000
+  image:
+    repository: prom/prometheus
+    tag: v2.40.3
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9090
+    # nodePort: 30090
+    nodePort:
+
+postgresExporter:
+  image:
+    repository: prometheuscommunity/postgres-exporter
+    tag: v0.11.1
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9187
+    # nodePort: 31119
+    nodePort:
+
+nemesisWaiter:
+  image:
+    repository: specterops/nemesis-waiter
+    tag: latest
+    pullPolicy: IfNotPresent

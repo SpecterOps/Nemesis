@@ -824,6 +824,20 @@ class NemesisDb(NemesisDbInterface):
                 auth_data.plaintext_value,
             )
 
+        if auth_data.is_cracked:
+            # update any values in the table where the hash matches this cracked value
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE nemesis.extracted_hashes
+                    SET is_cracked = True, plaintext_value = $1
+                    WHERE is_cracked= False AND hash_value = $2
+                    """,
+                    auth_data.plaintext_value,
+                    auth_data.hash_value
+                )
+
+
     async def add_dpapi_blob(self, dpapi_blob: DpapiBlob) -> None:
         """Adds a new `nemesis.dpapi_blobs` entry from a DpapiBlob class object."""
 
@@ -1256,7 +1270,7 @@ class NemesisDb(NemesisDbInterface):
 
         async with self.pool.acquire() as conn:
             results = await conn.fetch(
-                "SELECT data from nemesis.authentication_data WHERE type = 'password' AND username ILIKE $1",
+                "SELECT data FROM nemesis.authentication_data WHERE type = 'password' AND username ILIKE $1",
                 username,
             )
             return [result[0] for result in results]
@@ -1269,7 +1283,7 @@ class NemesisDb(NemesisDbInterface):
 
         async with self.pool.acquire() as conn:
             results = await conn.fetch(
-                "SELECT data from nemesis.authentication_data WHERE type = 'ntlm_hash' AND username ILIKE $1",
+                "SELECT data FROM nemesis.authentication_data WHERE type = 'ntlm_hash' AND username ILIKE $1",
                 username,
             )
         return [result[0] for result in results]
@@ -1279,10 +1293,23 @@ class NemesisDb(NemesisDbInterface):
 
         async with self.pool.acquire() as conn:
             results = await conn.fetch(
-                "SELECT plaintext_value from nemesis.authentication_data is_cracked = True AND username ILIKE $1",
+                "SELECT plaintext_value FROM nemesis.extracted_hashes WHERE is_cracked = True AND username ILIKE $1",
                 username,
             )
             return [result[0] for result in results]
+
+    async def get_cracked_hash_value(self, hash_value: str):
+        """Returns the plaintext value for a hash if it's already cracked."""
+
+        async with self.pool.acquire() as conn:
+            results = await conn.fetch(
+                "SELECT plaintext_value FROM nemesis.extracted_hashes WHERE is_cracked = True AND hash_value = $1",
+                hash_value,
+            )
+            if results:
+                return results[0][0]
+            else:
+                return None
 
     async def get_encrypted_dpapi_masterkeys(self, username: str = "%", machine: bool = False):
         """Gets encrypted DPAPI masterkeys linked to a specific domain backupkey guid.

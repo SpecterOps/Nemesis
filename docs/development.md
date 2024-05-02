@@ -1,4 +1,4 @@
-# Dev Software Requirements
+# Developing in Nemesis
 
 **The following requirements need to be installed for development:**
 
@@ -18,29 +18,15 @@ sudo unzip protoc-21.5-linux-x86_64.zip -d /usr/local/
 ```
 </details>
 
+**Also ensure you have minikube and skaffold setup from the [setup](./setup.md) guide.**
 
-# Running Nemesis during Dev
+## Running Nemesis during Dev
 
-1. Run `nemesis-cli.py`.  This script ensures minikube is started with sufficient resources, tests access to AWS resources (and optionally creates them), and adds secrets to the k8s cluster (and generates random ones if wanted).
+If you're doing general development, if you set the **operation.environment** variable in [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml) to *test* which will deploy everything without persistent storage. Then running `skaffold dev -m nemesis` will build the images and kick everything off.
 
-2. Start Nemesis. The output of `nemesis-cli.py` will contain some instructions on how to start Nemesis. In general during dev, Nemesis's infrastructure and services are started separately:
+If you want to perform remote debugging for the `enrichment` container (see [remote_debugging.md](remote_debugging.md)) set the **operation.environment** variable in [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml) to *development* for the Helm chart which will deploy everything but the `enrichment` container without persistent storage. Run `skaffold dev -m nemesis` (or `helm install nemesis ./helm/nemesis --timeout '45m'` to use the public images) and then launching `skaffold dev -m enrichment` via VS Code will kick off the separate chart for just the enrichment container.
 
-```
-# Start fairly static services (Elastic, RabbitMQ, kibana, jupyter, tika, gotenberg, etc)
-./scripts/infra_start.sh
-
-# Start up the data ingest/enrichment services. If you pass any args to this command, the "enrichment" service will NOT start
-./scripts/services_start.sh
-```
-
-These scripts are just wrappers around skaffold commands.
-
-**Note 1 - Image pull timeouts**
-
-Sometimes right after a minikube cluster is created, it takes a while for all the docker images to be downloaded into minikube. Skaffold may timeout during this time and tear down all the infrastructure. If this happens, you can usually just run skaffold again without issue.
-
-
-# Service Development
+## Service Development
 
 The recommended way to develop a new (or modify a current) service is with VS Code
 and a remote workspace. This allows you to write and debug code without having to
@@ -49,6 +35,8 @@ deploy the complete container.
 To do this, [follow this guide](https://code.visualstudio.com/docs/remote/ssh) to
 set up remote SSH for development - we recommend having the code itself reside
 on a supported Debian 11 image and remoting in from your main OS for development.
+If you have issues, see the [remote debugging guide](./remote_debugging.md) for more details.
+
 Once the remote session has been established:
 
 - Open up **just** the module folder in ./cmd/ (e.g., `enrichment`)
@@ -63,7 +51,7 @@ Once the remote session has been established:
 **Note:** If you want to reset your Poetry environment, [see this post](https://stackoverflow.com/a/70064450).
 
 
-# Building and Troubleshooting Docker Images
+## Building and Troubleshooting Docker Images
 You can build and troubleshoot Nemesis's docker containers using the docker CLI. For example, to troublehshoot the enrichment image you can do the following:
 
 1. Build the image and give it a name of "test"
@@ -81,7 +69,7 @@ To build the images inside of k8s, you can use skaffold:
 skaffold build
 ```
 
-# Testing file processing
+## Testing file processing
 One can test file processing using the `./scripts/submit_to_nemesis.sh` script. To configure the script, modify the settings in `./cmd/enrichment/enrichment/cli/submit_to_nemesis/submit_to_nemesis.yaml`.
 
 The `./sample_files/` folder contains many examples of files that Nemesis can process. For example, to test Nemesis's ability to extract a .ZIP file and process all the files inside of the zip, configure the YAML file and then run (make sure to specify the absolute path):
@@ -92,7 +80,7 @@ The `./sample_files/` folder contains many examples of files that Nemesis can pr
 
 To see a list of all command line arguments run `./scripts/submit_to_nemesis.sh -h`.
 
-# kubectl / kubernetes version skews
+## kubectl / kubernetes version skews
 
 According to [kubernetes](https://kubernetes.io/releases/version-skew-policy/#kubectl) it's the best practice to keep kubectl and the kubernetes image used by minikube in sync. You can tell the versions of both with:
 
@@ -122,7 +110,7 @@ You can then specify the kubernetes imge pulled by minikube with:
 minikube start --kubernetes-version v1.25.4
 ```
 
-# ./scripts/
+## ./scripts/
 
 The following describes the files in the ./scripts/ directory:
 

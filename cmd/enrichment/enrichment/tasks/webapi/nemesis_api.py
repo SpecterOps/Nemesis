@@ -3,31 +3,29 @@ import base64
 import json
 import os
 import tempfile
+import time
 import urllib.parse
 import uuid
 from datetime import datetime
 from enum import StrEnum
 from typing import Dict, List, Optional
 
+import aiofiles
 # 3rd Party Libraries
 import httpx
 import nemesispb.nemesis_pb2 as pb
+import streaming_form_data
 import structlog
 import uvicorn
 from aio_pika import connect_robust
 from elasticsearch import AsyncElasticsearch
 from enrichment.cli.submit_to_nemesis.submit_to_nemesis import (
-    map_unordered,
-    return_args_and_exceptions,
-)
+    map_unordered, return_args_and_exceptions)
 from enrichment.lib.nemesis_db import NemesisDb
 from enrichment.lib.registry import include_registry_value
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response
-from fastapi_class.decorators import get, post
-from fastapi_class.routable import Routable
 from google.protobuf.json_format import Parse
-
 # from nemesiscommon.clearqueues import clearRabbitMQQueues
 from nemesiscommon.constants import ALL_ES_INDICIES, NemesisQueue
 from nemesiscommon.messaging import MessageQueueProducerInterface
@@ -39,6 +37,9 @@ from prometheus_async import aio
 from prometheus_client import Summary
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
+from starlette.requests import ClientDisconnect
+from streaming_form_data import StreamingFormDataParser
+from streaming_form_data.targets import FileTarget
 
 logger = structlog.get_logger(module=__name__)
 
@@ -127,6 +128,7 @@ class NemesisApi(TaskInterface):
     assessment_id: str
     log_level: str
     reprocessing_workers: int
+    storage_expiration_days: int
 
     def __init__(
         self,
@@ -139,6 +141,7 @@ class NemesisApi(TaskInterface):
         assessment_id: str,
         log_level: str,
         reprocessing_workers: int,
+        storage_expiration_days: int
     ) -> None:
         self.storage = storage
         self.rabbitmq_connection_uri = rabbitmq_connection_uri
@@ -149,6 +152,7 @@ class NemesisApi(TaskInterface):
         self.assessment_id = assessment_id
         self.log_level = log_level
         self.reprocessing_workers = reprocessing_workers
+        self.storage_expiration_days = storage_expiration_days
 
     async def run(self) -> None:
         app = FastAPI(title="Nemesis API")
@@ -161,6 +165,7 @@ class NemesisApi(TaskInterface):
             self.queue_map,
             self.assessment_id,
             self.reprocessing_workers,
+            self.storage_expiration_days,
         )
 
         app.include_router(routes.router)
@@ -195,7 +200,7 @@ class DownloadAction(StrEnum):
     VIEW_RAW = "view_raw"
 
 
-class NemesisApiRoutes(Routable):
+class NemesisApiRoutes():
     storage: StorageInterface
     rabbitmq_connection_uri: str
     alerter: AlerterInterface
@@ -204,6 +209,7 @@ class NemesisApiRoutes(Routable):
     producers: Dict[NemesisQueue, MessageQueueProducerInterface]
     assessment_id: str
     reprocessing_workers: int
+    storage_expiration_days: int
 
     def __init__(
         self,
@@ -215,6 +221,7 @@ class NemesisApiRoutes(Routable):
         queues: Dict[NemesisQueue, MessageQueueProducerInterface],
         assessment_id: str,
         reprocessing_workers: int,
+        storage_expiration_days: int,
     ) -> None:
         super().__init__()
         self.storage = storage
@@ -225,21 +232,28 @@ class NemesisApiRoutes(Routable):
         self.producers = queues
         self.assessment_id = assessment_id
         self.reprocessing_workers = reprocessing_workers
+        self.storage_expiration_days = storage_expiration_days
+        self.router = APIRouter()
+        self.router.add_api_route("/", self.home, methods=["GET"])
+        self.router.add_api_route("/ready", self.ready, methods=["GET"])
+        self.router.add_api_route("/reset", self.reset, methods=["POST"])
+        self.router.add_api_route("/reprocess", self.reprocess, methods=["POST"])
+        self.router.add_api_route("/data", self.get_file, methods=["GET"])
+        self.router.add_api_route("/data", self.post_data, methods=["POST"])
+        self.router.add_api_route("/file", self.post_file, methods=["POST"])
+        self.router.add_api_route("/download/{id}", self.download, methods=["GET"])
 
-    @get("/")
     async def home(self):
         return Response()
 
-    @get("/ready")
     async def ready(self):
         """
         Used for readiness probes.
         """
         return Response()
 
-    @post("/reset")
     async def reset(self):
-        """When called, purges Postgres, Elastic, and RabbitMQ."""
+        """When called, purges Postgres, Elastic, RabbitMQ, and datalake files."""
         await logger.ainfo("Clearing datastore!")
 
         # first purge all RabbitMQ queue messages
@@ -257,7 +271,10 @@ class NemesisApiRoutes(Routable):
                 await logger.ainfo("Clearing Elastic index", index=ES_INDEX)
                 await self.es_client.indices.delete(index=ES_INDEX)
 
-    @post("/reprocess")
+        # and finally clear the files from the datalake
+        await logger.ainfo("Deleting files in the datalake.")
+        await self.storage.delete_all_files()
+
     async def reprocess(self):
         """When called, triggers the reprocessing of all existing data messages."""
 
@@ -319,7 +336,6 @@ class NemesisApiRoutes(Routable):
         return Response()
 
     @aio.time(Summary("get_file", "GET file"))  # type: ignore
-    @get("/data")
     async def get_file(self, storage_id: str) -> Response:
         file_uuid_str = base64.b64decode(storage_id).decode("utf-8")
         file_uuid = uuid.UUID(file_uuid_str)
@@ -328,33 +344,32 @@ class NemesisApiRoutes(Routable):
             return FileResponse(file.name)
 
     @aio.time(Summary("data_post", "Data POST"))  # type: ignore
-    @post("/data")
-    async def post_data(self, request: Request) -> Dict[str, str] | Response:
+    async def post_data(self, request: Request) -> Dict[str, str]:
         # first parse the message as a JSON object so we can extract out the message data_type
         try:
             body_bytes = await request.body()
             body_string = body_bytes.decode("utf-8")
             json_data = json.loads(body_string)
         except:
-            return Response(status_code=400, content="Invalid message")
+            raise HTTPException(status_code=400, detail="Invalid message")
 
         if "metadata" not in json_data or "data_type" not in json_data["metadata"]:
-            return Response(status_code=400, content="Invalid metadata")
+            raise HTTPException(status_code=400, detail="Invalid metadata")
 
         data_type = json_data["metadata"]["data_type"]
         if data_type not in MAP:
-            return Response(status_code=400, content="Invalid metadata data_type")
+            raise HTTPException(status_code=400, detail="Invalid metadata data_type")
 
         try:
             obj = Parse(body_bytes, MAP[data_type]())
         except:
-            return Response(status_code=400, content=f"Invalid {data_type} message")
+            raise HTTPException(status_code=400, detail=f"Invalid {data_type} message")
 
         try:
             expiration_string = json_data["metadata"]["expiration"]
             expiration = datetime.strptime(expiration_string, "%Y-%m-%dT%H:%M:%S.000Z")
         except:
-            return Response(status_code=400, content="Invalid expiration value in metadata field")
+            raise HTTPException(status_code=400, detail=f"Invalid expiration value in metadata field")
 
         await logger.ainfo("Received data message", data_type=obj.metadata.data_type)
 
@@ -383,22 +398,43 @@ class NemesisApiRoutes(Routable):
         return {"object_id": id_}
 
     @aio.time(Summary("post_file", "POST file"))  # type: ignore
-    @post("/file")
-    async def get_data(self, request: Request) -> Dict[str, str]:
-        await logger.ainfo("Received file upload request")
-        with tempfile.NamedTemporaryFile() as tmpfile:
-            # TODO: Write to disk and then create a queue that uploads the file in
-            # the background so we don't have to wait for the upload to finish before sending a response.
-            # Right now, large uploads could take quite a while to upload and API clients could timeout
-            # before recieving a response, despite the upload completing successfully
-            with open(tmpfile.name, "wb") as f:
-                f.write(await request.body())
+    async def post_file(self, request: Request) -> Dict[str, str]:
 
-            file_uuid = await self.storage.upload(f.name)
-            return {"object_id": str(file_uuid)}
+        await logger.ainfo("Received file upload request")
+        start = time.time()
+
+        try:
+            content_type = request.headers["content-type"]
+            with tempfile.NamedTemporaryFile() as tmpfile:
+                # handle raw binary file uploads
+                if content_type == "application/octet-stream":
+                    async with aiofiles.open(tmpfile.name, "wb") as f:
+                        async for chunk in request.stream():
+                            await f.write(chunk)
+                # handle large file multi-part uploads
+                # Ref - https://stackoverflow.com/a/73443824
+                elif content_type.startswith("multipart/form-data"):
+                    file_ = FileTarget(tmpfile.name)
+                    parser = StreamingFormDataParser(headers=request.headers)
+                    parser.register('file', file_)
+                    async for chunk in request.stream():
+                        parser.data_received(chunk)
+                else:
+                    raise HTTPException(status_code=422, detail=f"Content type '{content_type}' not allowed.")
+                end = time.time()
+                file_size = os.path.getsize(tmpfile.name)
+                await logger.ainfo(f"File ({file_size} bytes) uploaded in {(end-start):.2f} seconds")
+                # the first file that comes in will set the bucket file expiry policy (for now)
+                file_uuid = await self.storage.upload(tmpfile.name, self.storage_expiration_days)
+                return {"object_id": str(file_uuid)}
+        except ClientDisconnect:
+            await logger.awarning("Client Disconnected")
+        except Exception as e:
+            await logger.aerror(f"Exception in file upload: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"There was an error uploading the file: {e}")
 
     @aio.time(Summary("download", "Download file"))  # type: ignore
-    @get("/download/{id}")
     async def download(self, id: uuid.UUID, name: Optional[str] = None, action: Optional[DownloadAction] = None) -> Response:
         content_type = "application/octet-stream"
         content_disposition: Optional[str] = None
@@ -454,4 +490,4 @@ class NemesisApiRoutes(Routable):
                 return FileResponse(file.name, background=BackgroundTask(os.remove, file.name), media_type=content_type, headers=headers)
         except Exception as e:
             await logger.aerror(message="Failed to download file", file_uuid=id, exception=e)
-            return Response(status_code=404, content="File not found")
+            raise HTTPException(status_code=404, detail="File not found")

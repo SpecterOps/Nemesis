@@ -3,6 +3,7 @@ import datetime
 import os
 import re
 import time
+import uuid
 from typing import List, Tuple
 
 # 3rd Party Libraries
@@ -26,6 +27,7 @@ DASHBOARD_USER = os.environ.get("DASHBOARD_USER")
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
 NLP_URL = os.environ.get("NLP_URL")
 NEMESIS_API_URL = "http://enrichment-webapi:9910/"
+CRACKLIST_URL = "http://enrichment-cracklist:9900/"
 
 if not all(
     var is not None and var != ""
@@ -51,18 +53,40 @@ engine = create_engine(POSTGRES_CONNECTION_URI)
 ######################################################
 
 
-def semantic_search(search_phrase: str, num_results: int = 4) -> dict:
-    """
-    Calls {NLP_URL}/semantic_search to extract password candidates from a plaintext document.
-    """
+def text_search(search_phrase: str, use_hybrid: bool, file_path_include: str, file_path_exclude: str, num_results: int = 25) -> dict:
+    """Calls {NLP_URL}/fuzzy_search or {NLP_URL}/hybrid_search to search for text results."""
 
     try:
-        data = {"search_phrase": search_phrase, "num_results": num_results}
-        url = f"{NLP_URL}semantic_search"
+        data = {
+            "search_phrase": search_phrase,
+            "file_path_include": file_path_include,
+            "file_path_exclude": file_path_exclude,
+            "num_results": num_results
+        }
+        if use_hybrid:
+            url = f"{NLP_URL}hybrid_search"
+        else:
+            url = f"{NLP_URL}fuzzy_search"
         result = requests.post(url, json=data)
         return result.json()
     except Exception as e:
-        return {"error": f"Error calling semantic_search with search_phrase '{search_phrase}' : {e}"}
+        return {"error": f"Error calling text search {url} with search_phrase '{search_phrase}' : {e}"}
+
+
+def text_to_chunks(s, maxlength=100):
+    start = 0
+    end   = 0
+    while start + maxlength  < len(s) and end != -1:
+        end = s.rfind(" ", start, start + maxlength + 1)
+        if end == -1: break
+        yield s[start:end]
+        start = end +1
+    yield s[start:]
+
+
+def text_to_chunk_display(s):
+    """Used for "wrapping" in st.code()."""
+    return "\n".join(list(text_to_chunks(s)))
 
 
 ######################################################
@@ -318,7 +342,7 @@ def get_masterkeys() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=1000, show_spinner="Fetching fresh data from the database...")
-def get_password_data() -> pd.DataFrame:
+def get_password_data(originating_object_id: str = "") -> pd.DataFrame:
     """Performs the main database query for passwords so the data can be cached on reruns."""
 
     # query the `nemesis.authentication_data` table for entries of type "password"
@@ -336,6 +360,9 @@ def get_password_data() -> pd.DataFrame:
 
         WHERE authentication_data.type = 'password'
     """
+
+    if originating_object_id:
+        query += f"\n            AND authentication_data.originating_object_id = '{originating_object_id}'"
 
     try:
         with engine.connect() as conn:
@@ -443,6 +470,19 @@ def postgres_count_entries(table_name: str) -> int:
         with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
             with conn.cursor() as cur:
                 cur.execute(f"SELECT COUNT(*) FROM nemesis.{table_name}")
+                return cur.fetchone()[0]
+    except Exception as e:
+        return -1
+
+
+def postgres_count_triaged_files() -> int:
+    """
+    Returns the number of triaged files.
+    """
+    try:
+        with psycopg.connect(POSTGRES_CONNECTION_URI) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM nemesis.triage WHERE \"table_name\" = 'file_data_enriched'")
                 return cur.fetchone()[0]
     except Exception as e:
         return -1
@@ -723,9 +763,17 @@ def header() -> None:
 def render_nemesis_page(render_func):
     """Writes out the logo/auth header/etc. for all pages."""
 
+    if "ENVIRONMENT" in os.environ and os.environ["ENVIRONMENT"].lower() == "development":
+        page_title = "Nemesis (DEV)"
+    else:
+        page_title = "Nemesis"
+
+    if "ASSESSMENT_ID" in os.environ:
+        page_title += f" - {os.environ['ASSESSMENT_ID']}"
+
     st.set_page_config(
         layout="wide",
-        page_title="Nemesis",
+        page_title=page_title,
         page_icon="img/favicon.png",
         menu_items={"Get Help": "https://www.github.com/SpecterOps/Nemesis"},
     )
@@ -820,7 +868,7 @@ def elastic_file_search(object_id: str) -> dict:
         return {}
 
 
-def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
+def elastic_text_search(search_term: str, file_path_include: str, file_path_exclude: str, from_i: int, size: int) -> dict:
     """
     Searches the 'file_data_plaintext' index in Elasticsearch for
     the supplied search term, paginating results based on the
@@ -828,8 +876,40 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
     """
     try:
         es_client = wait_for_elasticsearch()
-        query = {"match": {"text": search_term}}
-        highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
+
+        query = {
+            "bool": {
+                "must": [
+                    {
+                        "wildcard": {"text": {"value": search_term, "case_insensitive": True}}
+                    },
+                ],
+                "must_not": []
+            }
+        }
+        if file_path_include:
+             file_path_include = file_path_include.replace("\\", "/")
+             for file_path_include_part in file_path_include.split("|"):
+                query["bool"]["must"].append(
+                    {
+                        "wildcard": {"originatingObjectPath.keyword": {"value": file_path_include_part, "case_insensitive": True}}
+                    }
+                )
+        if file_path_exclude:
+             file_path_exclude = file_path_exclude.replace("\\", "/")
+             for file_path_exclude_part in file_path_exclude.split("|"):
+                query["bool"]["must_not"].append(
+                    {
+                        "wildcard": {"originatingObjectPath.keyword": {"value": file_path_exclude_part, "case_insensitive": True}}
+                    }
+                )
+
+        highlight = {
+            "pre_tags": [""],
+            "post_tags": [""],
+            "fields": {"text": {}},
+            "max_analyzed_offset": 950000
+        }
         fields = [
             "_id",
             "originatingObjectPath",
@@ -839,8 +919,7 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
             "wordCount",
             "metadata.source",
         ]
-        result = es_client.search(index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields)
-        return result
+        return es_client.search(index="file_data_plaintext", query=query, highlight=highlight, from_=from_i, size=size, source_includes=fields)
     except Exception as e:
         if "index_not_found_exception" in f"{e}":
             st.error("Elastic index 'file_data_plaintext' doesn't yet exist - no text data has been extracted yet!", icon="🚨")
@@ -849,7 +928,7 @@ def elastic_text_search(search_term: str, from_i: int, size: int) -> dict:
         return None
 
 
-def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
+def elastic_sourcecode_search(search_term: str, file_path_include: str, file_path_exclude: str, from_i: int, size: int) -> dict:
     """
     Searches the 'file_data_sourcecode' index in Elasticsearch for
     the supplied search term, paginating results based on the
@@ -857,7 +936,32 @@ def elastic_sourcecode_search(search_term: str, from_i: int, size: int) -> dict:
     """
     try:
         es_client = wait_for_elasticsearch()
-        query = {"match": {"text": search_term}}
+
+        query = {
+            "bool": {
+                "must": [
+                    {
+                        "wildcard": {"text": {"value": search_term, "case_insensitive": True}}
+                    },
+                ]
+            }
+        }
+
+        if file_path_include:
+             file_path_include = file_path_include.replace("\\", "/")
+             query["bool"]["must"].append(
+                {
+                    "wildcard": {"path.keyword": {"value": file_path_include, "case_insensitive": True}}
+                }
+             )
+        if file_path_exclude:
+             file_path_exclude = file_path_exclude.replace("\\", "/")
+             query["bool"]["must_not"] = [
+                {
+                    "wildcard": {"path.keyword": {"value": file_path_exclude, "case_insensitive": True}}
+                }
+             ]
+
         highlight = {"pre_tags": [""], "post_tags": [""], "fields": {"text": {}}}
         fields = [
             "_id",
@@ -905,77 +1009,336 @@ def elastic_np_search(from_i: int, size: int) -> dict:
 #
 ######################################################
 
+def get_custom_crack_list(assessment_id: str, count: int = 10) -> dict:
+    """
+    Calls {CRACKLIST_URL}/client/{assessment_id}/{count} to return the custom
+    cracking list extracted from downloaded documents.
+    """
+
+    try:
+        url = f"{CRACKLIST_URL}client/{assessment_id}/{count}"
+        result = requests.get(url)
+        if result:
+            return result.text
+        else:
+            return ""
+    except Exception as e:
+        return {"error": f"Error calling get_custom_crack_list with assessment_id '{assessment_id}' : {e}"}
+
+def is_uuid(str_uuid: str):
+    try:
+        uuid.UUID(str_uuid)
+        return True
+    except:
+        return False
+
+
+def reorder_archive_file_listing(file_listing):
+    """
+    Reorders a file listing for an archive into a nested dict format.
+    """
+
+    total_entries = {}
+    for entry in file_listing:
+        path = entry["name"]
+        path_parts = [p for p in path.replace('\\', '/').split('/') if p]
+        num_paths = len(path_parts)
+        is_file = True if "uncompressSize" in entry else False
+        lastModified = entry["lastModified"] if "lastModified" in entry else ""
+        current_entry = None
+
+        for i in range(num_paths):
+
+            # handle the first entry in the path list
+            if i == 0:
+                if is_file and (i == (num_paths - 1)):
+                    uncompressSize = entry["uncompressSize"]
+                    temp = f"{path_parts[i]} ({lastModified} - {uncompressSize} bytes)"
+                    total_entries[temp] = "file"
+                else:
+                    path_part = f"{path_parts[i]}/"
+                    if path_part not in total_entries:
+                        total_entries[path_part] = {}
+                    current_entry = total_entries[path_part]
+            # handle the last entry in the path list
+            elif i == num_paths - 1:
+                if is_file:
+                    uncompressSize = entry["uncompressSize"]
+                    # path_part = path_parts[i]
+                    temp = f"{path_parts[i]} ({lastModified} - {uncompressSize} bytes)"
+                    current_entry[temp] = "file"
+                else:
+                    path_part = f"{path_parts[i]}/"
+                    current_entry[path_part] = {}
+            # handle middle folder entries
+            else:
+                path_part = f"{path_parts[i]}/"
+                if path_part not in current_entry:
+                    current_entry[path_part] = {}
+                current_entry = current_entry[path_part]
+
+    return total_entries
+
 
 def get_single_valued_param(name: str) -> None | str:
     """
     Obtains the value of a URL parameter. Ensures that the URL parameter only has a single value.
     If the URL parameter does not exist, the return value is None
     """
-    params = st.experimental_get_query_params()
+    params = st.query_params
 
     if name not in params:
         return None
 
-    if len(params[name]) != 1:
-        raise Exception(f"More than one value was provided for the parameter '{name}'")
+    return params[name]
 
-    object_id = params[name][0]
-    return object_id
+
+def get_monaco_languages() -> List[str]:
+    """
+    All languages supported by Monaco.
+
+    Ref: https://github.com/microsoft/monaco-editor/tree/d8144cfa0eb66cf9d3cc0507df1ad33bc8fc65c5/src/basic-languages
+    """
+    return ["plaintext", "abap", "aes", "apex", "azcli", "bat", "bicep", "c", "csv", "cameligo", "clojure", "coffeescript",
+            "cpp", "csharp", "csp", "css", "cypher", "dart", "dockerfile", "ecl", "elixir", "flow9",
+            "freemarker2", "fsharp",
+            "go", "graphql", "handlebars", "hcl", "html", "ini", "java", "javascript", "julia", "kotlin", "less", "lexon",
+            "liquid", "lua", "m3", "markdown", "mdx", "mips", "msdax", "mysql", "objective-c", "pascal", "pascaligo",
+            "perl", "pgsql", "php", "pla", "postiats", "powerquery", "powershell", "proto", "pug", "python", "qsharp", "r",
+            "razor", "redis", "redshift", "restructuredtext", "ruby", "rust", "sb", "scala", "scheme", "scss", "shell",
+            "sol", "sparql", "sql", "st", "swift", "systemverilog", "tcl", "twig", "typescript", "vb", "verilog", "wgsl",
+            "xml", "yaml"]
 
 
 def map_extension_to_monaco_language(extension: str) -> str:
     """
     Maps a file extension to a source code language for Monaco.
 
-    Ref: https://microsoft.github.io/monaco-editor/
+    Ref: https://github.com/microsoft/monaco-editor/tree/d8144cfa0eb66cf9d3cc0507df1ad33bc8fc65c5/src/basic-languages
+
+        $mappings = gci *contribution.ts -Recurse | gc | select-string -Pattern "\tid: " -Context 0,1 | % {
+            $match = $_
+            $lang = $match.Line.split("'")[1]
+            $ext = $match.Context.PostContext.split("'") | ?{$_.startswith(".")}
+            [PSCustomObject]@{
+                language = $lang
+                extension = $ext
+            }
+        }
+
+        foreach($mapping in $mappings) {
+            $lang = $mapping.language.tolower()
+            foreach($ext in $mapping.extension) {
+                $ext = $ext.trim(".").tolower()
+                Write-Host "        `"$ext`": `"$lang`","
+            }
+        }
+
+    swift and xml done manually (exceptions)
     """
 
-    language_mappings = {
-        "bat": "batch",
-        "c": "c",
+    ext_to_lang_mappings = {
+        "abap": "abap",
+        "ascx": "xml",
+        "cls": "apex",
+        "azcli": "azcli",
+        "bat": "bat",
+        "cmd": "bat",
+        "bicep": "bicep",
+        "mligo": "cameligo",
+        "clj": "clojure",
+        "cljs": "clojure",
+        "cljc": "clojure",
+        "csprog": "xml",
         "config": "xml",
+        "edn": "clojure",
+        "coffee": "coffeescript",
+        "c": "c",
+        "h": "c",
         "cpp": "cpp",
+        "cc": "cpp",
+        "cxx": "cpp",
+        "hpp": "cpp",
+        "hh": "cpp",
+        "hxx": "cpp",
         "cs": "csharp",
+        "csx": "csharp",
+        "cake": "csharp",
         "css": "css",
         "cypher": "cypher",
+        "cyp": "cypher",
+        "dart": "dart",
         "dockerfile": "dockerfile",
+        "dtd": "xml",
+        "ecl": "ecl",
+        "ex": "elixir",
+        "exs": "elixir",
+        "flow": "flow9",
+        "ftl": "freemarker2",
+        "ftlh": "freemarker2",
+        "ftlx": "freemarker2",
         "fs": "fsharp",
+        "fsi": "fsharp",
+        "ml": "fsharp",
+        "mli": "fsharp",
+        "fsx": "fsharp",
+        "fsscript": "fsharp",
         "go": "go",
-        "gql": "graphql",
         "graphql": "graphql",
+        "gql": "graphql",
+        "handlebars": "handlebars",
+        "hbs": "handlebars",
+        "tf": "hcl",
+        "tfvars": "hcl",
+        "hcl": "hcl",
         "html": "html",
+        "htm": "html",
+        "shtml": "html",
+        "xhtml": "html",
+        "mdoc": "html",
+        "jsp": "html",
+        "json": "python",
+        "asp": "html",
+        "aspx": "html",
+        "jshtm": "html",
         "ini": "ini",
+        "properties": "ini",
+        "gitconfig": "ini",
         "java": "java",
+        "jav": "java",
         "js": "javascript",
+        "es6": "javascript",
+        "jsx": "javascript",
+        "mjs": "javascript",
+        "cjs": "javascript",
+        "jl": "julia",
+        "kt": "kotlin",
+        "kts": "kotlin",
+        "less": "less",
+        "lex": "lexon",
+        "liquid": "liquid",
+        "html.liquid": "liquid",
         "lua": "lua",
+        "m3": "m3",
+        "i3": "m3",
+        "mg": "m3",
+        "ig": "m3",
         "md": "markdown",
-        "mysql": "mysql",
+        "markdown": "markdown",
+        "mdown": "markdown",
+        "mkdn": "markdown",
+        "mkd": "markdown",
+        "mdwn": "markdown",
+        "mdtxt": "markdown",
+        "mdtext": "markdown",
+        "mdx": "mdx",
+        "s": "mips",
+        "dax": "msdax",
+        "msdax": "msdax",
+        "m": "objective-c",
+        "pas": "pascal",
+        "p": "pascal",
+        "pp": "pascal",
+        "ligo": "pascaligo",
+        "pl": "perl",
+        "pm": "perl",
         "php": "php",
-        "php3": "php",
         "php4": "php",
         "php5": "php",
-        "pl": "perl",
+        "phtml": "php",
+        "props": "xml",
+        "ctp": "php",
+        "pla": "pla",
+        "dats": "postiats",
+        "sats": "postiats",
+        "hats": "postiats",
+        "pq": "powerquery",
+        "pqm": "powerquery",
         "ps1": "powershell",
-        "psd1": "powershell",
         "psm1": "powershell",
+        "psd1": "powershell",
         "proto": "proto",
+        "jade": "pug",
+        "pug": "pug",
         "py": "python",
+        "rpy": "python",
+        "pyw": "python",
+        "cpy": "python",
+        "gyp": "python",
+        "gypi": "python",
+        "qs": "qsharp",
         "r": "r",
+        "rhistory": "r",
+        "rmd": "r",
+        "rprofile": "r",
+        "rt": "r",
+        "cshtml": "razor",
+        "redis": "redis",
+        "rst": "restructuredtext",
         "rb": "ruby",
+        "rbx": "ruby",
+        "rjs": "ruby",
+        "gemspec": "ruby",
         "rs": "rust",
-        "shell": "shell",
-        "sh": "shell",
-        "sql": "sql",
+        "rlib": "rust",
+        "sb": "sb",
+        "scala": "scala",
+        "sc": "scala",
+        "sbt": "scala",
+        "scm": "scheme",
+        "ss": "scheme",
+        "sch": "scheme",
         "swift": "swift",
+        "rkt": "scheme",
+        "scss": "scss",
+        "sh": "shell",
+        "bash": "shell",
+        "sol": "sol",
+        "aes": "aes",
+        "rq": "sparql",
+        "sql": "sql",
+        "st": "st",
+        "iecst": "st",
+        "iecplc": "st",
+        "lc3lib": "st",
+        "targets": "xml",
+        "tcpou": "st",
+        "tcdut": "st",
+        "tcgvl": "st",
+        "tcio": "st",
+        "sv": "systemverilog",
+        "svh": "systemverilog",
+        "v": "verilog",
+        "vh": "verilog",
+        "tcl": "tcl",
+        "twig": "twig",
         "ts": "typescript",
-        "ts": "typescript",
+        "tsx": "typescript",
+        "cts": "typescript",
+        "mts": "typescript",
         "vb": "vb",
         "wgsl": "wgsl",
+        "wxi": "xml",
+        "wxl": "xml",
+        "wxs": "xml",
+        "xaml": "xml",
         "xml": "xml",
+        "xsd": "xml",
+        "xsl": "xml",
         "yaml": "yaml",
-        "json": "json",
+        "yml": "yaml",
     }
-    return language_mappings.get(extension.lower(), "plaintext")
+    return ext_to_lang_mappings.get(extension.lower(), "plaintext")
+
+
+# def map_guesslang_to_monaco_language(file_magic: str) -> str:
+#     """
+#     Uses guesslang to map unknown text content to a monaco language.
+
+#     NEEDS TENSORFLOW TO RUN!
+
+#     Ref: https://github.com/yoeo/guesslang/blob/master/guesslang/data/languages.json
+#     """
 
 
 def is_valid_chromium_file_path(file_path: str) -> bool:

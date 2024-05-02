@@ -5,8 +5,9 @@ import os
 import re
 import time
 
-# 3rd Party Libraries
 import extra_streamlit_components as stx
+# 3rd Party Libraries
+import pandas as pd
 import streamlit as st
 import utils
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
@@ -48,54 +49,71 @@ def render_page(username: str):
         """
         )
 
-    query_params = st.experimental_get_query_params()
+    query_params = st.query_params
 
     # pull our specified tab from the query parameters, otherwise use "overview" as the default
     if "tab" not in query_params or not query_params["tab"]:
-        query_params["tab"] = ["overview"]
+        query_params["tab"] = "overview"
 
     chosen_tab = stx.tab_bar(
         data=[
             stx.TabBarItemData(id="overview", title="DPAPI Overview", description="Overview of DPAPI Data"),
             stx.TabBarItemData(id="masterkeys", title="Masterkeys", description="DPAPI Masterkey Triage"),
         ],
-        default=query_params["tab"][0],
+        default=query_params["tab"],
     )
-    query_params["tab"] = [chosen_tab]
-    st.experimental_set_query_params(**query_params)
+    query_params["tab"] = chosen_tab
 
     if chosen_tab == "overview":
-        cols = st.columns(4)
-        with cols[0]:
-            total_dpapi_blobs = utils.postgres_count_dpapi_blobs()
-            dec_dpapi_blobs = utils.postgres_count_dpapi_blobs(show_all=False)
-            st.metric("DPAPI Blobs", f"{dec_dpapi_blobs} / {total_dpapi_blobs}")
-        with cols[1]:
-            total_statefiles = utils.postgres_count_state_files()
-            dec_statefiles = utils.postgres_count_state_files(show_all=False)
-            st.metric("Chromium State Files", f"{dec_statefiles} / {total_statefiles}")
-        with cols[2]:
-            total_dpapi_backupkeys = utils.postgres_count_entries("dpapi_domain_backupkeys")
-            st.metric("DPAPI Domain Backupkeys", total_dpapi_backupkeys)
+        total_dpapi_blobs = utils.postgres_count_dpapi_blobs()
+        dec_dpapi_blobs = utils.postgres_count_dpapi_blobs(show_all=False)
+        total_dpapi_backupkeys = utils.postgres_count_entries("dpapi_domain_backupkeys")
+        total_statefiles = utils.postgres_count_state_files()
+        dec_statefiles = utils.postgres_count_state_files(show_all=False)
 
+        total_masterkeys = utils.postgres_count_masterkeys()
+        dec_masterkeys = utils.postgres_count_masterkeys(show_all=False)
+        domain_user_masterkeys = utils.postgres_count_masterkeys(key_type="domain_user")
+        dec_domain_user_masterkeys = utils.postgres_count_masterkeys(show_all=False, key_type="domain_user")
+        local_user_masterkeys = utils.postgres_count_masterkeys(key_type="local_user")
+        dec_local_user_masterkeys = utils.postgres_count_masterkeys(show_all=False, key_type="local_user")
+        machine_masterkeys = utils.postgres_count_masterkeys(key_type="machine")
+        dec_machine_masterkeys = utils.postgres_count_masterkeys(show_all=False, key_type="machine")
+
+        st.write("###")
+        df = pd.DataFrame(
+            [
+                {"Stat": "Total DPAPI Blobs", "Value": total_dpapi_blobs},
+                {"Stat": "Decrypted DPAPI Blobs", "Value": dec_dpapi_blobs},
+                {"Stat": "DPAPI Domain BackupKeys", "Value": total_dpapi_backupkeys},
+                {"Stat": "Total State Files", "Value": total_statefiles},
+                {"Stat": "Decrypted State Files", "Value": dec_statefiles},
+            ]
+        )
+        st.dataframe(
+            data=df,
+            hide_index=True,
+            width=500
+        )
         st.divider()
-        cols = st.columns(4)
-        with cols[0]:
-            total_masterkeys = utils.postgres_count_masterkeys()
-            dec_masterkeys = utils.postgres_count_masterkeys(show_all=False)
-            st.metric("Total Masterkeys", f"{dec_masterkeys} / {total_masterkeys}")
-        with cols[1]:
-            domain_user_masterkeys = utils.postgres_count_masterkeys(key_type="domain_user")
-            dec_domain_user_masterkeys = utils.postgres_count_masterkeys(show_all=False, key_type="domain_user")
-            st.metric("Domain User Masterkeys", f"{dec_domain_user_masterkeys} / {domain_user_masterkeys}")
-        with cols[2]:
-            local_user_masterkeys = utils.postgres_count_masterkeys(key_type="local_user")
-            dec_local_user_masterkeys = utils.postgres_count_masterkeys(show_all=False, key_type="local_user")
-            st.metric("Local User Masterkeys", f"{dec_local_user_masterkeys} / {local_user_masterkeys}")
-        with cols[3]:
-            machine_masterkeys = utils.postgres_count_masterkeys(key_type="machine")
-            dec_machine_masterkeys = utils.postgres_count_masterkeys(show_all=False, key_type="machine")
-            st.metric("Machine Masterkeys", f"{dec_machine_masterkeys} / {machine_masterkeys}")
+
+        df2 = pd.DataFrame(
+            [
+                {"Stat": "Total Masterkeys", "Value": total_masterkeys},
+                {"Stat": "Decrypted Masterkeys", "Value": dec_masterkeys},
+                {"Stat": "Domain User Masterkeys", "Value": domain_user_masterkeys},
+                {"Stat": "Decrypted Domain User Masterkeys", "Value": dec_domain_user_masterkeys},
+                {"Stat": "Local User Masterkeys", "Value": local_user_masterkeys},
+                {"Stat": "Decrypted Local User Masterkeys", "Value": dec_local_user_masterkeys},
+                {"Stat": "Machine Masterkeys", "Value": machine_masterkeys},
+                {"Stat": "Decrypted Machine Masterkeys", "Value": dec_machine_masterkeys},
+            ]
+        )
+        st.dataframe(
+            data=df2,
+            hide_index=True,
+            width=500
+        )
 
     if chosen_tab == "masterkeys":
         # trigger getting the password data in case we have a cache hit
@@ -203,7 +221,7 @@ def render_page(username: str):
                         st.success(f"Successful Nemesis submission: {submission_id}", icon="✅")
                         time.sleep(5)
                         st.cache_data.clear()
-                        st.experimental_rerun()
+                        st.rerun()
 
         gb = GridOptionsBuilder.from_dataframe(df)
 

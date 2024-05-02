@@ -48,11 +48,22 @@ RUN poetry install $(if [ "${ENVIRONMENT}" = 'production' ]; then echo "--withou
 ####################################
 # Runtime
 ####################################
-FROM build AS runtime
+FROM build AS model_download
 ENV PATH="/app/cmd/nlp/.venv/bin:$PATH"
 
-# preload the main embedding model we're using so we don't have to wait for it to download on first use
-RUN python3 -c "from langchain.embeddings import HuggingFaceEmbeddings; embeddings=HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')"
+# Pre-download the embedding model(s) we're using so we don't have to wait for it to download on first use
+#   in ascending order of size, descending order of processing speed
+RUN python3 -c "from langchain_community.embeddings import HuggingFaceEmbeddings; embeddings=HuggingFaceEmbeddings(model_name='TaylorAI/bge-micro-v2')"
+RUN python3 -c "from langchain_community.embeddings import HuggingFaceEmbeddings; embeddings=HuggingFaceEmbeddings(model_name='Harmj0y/nemesis-gte-tiny')"
+RUN python3 -c "from langchain_community.embeddings import HuggingFaceEmbeddings; embeddings=HuggingFaceEmbeddings(model_name='TaylorAI/gte-tiny')"
+RUN python3 -c "from langchain_community.embeddings import HuggingFaceEmbeddings; embeddings=HuggingFaceEmbeddings(model_name='thenlper/gte-small')"
+
+
+####################################
+# Runtime
+####################################
+FROM model_download AS runtime
+ENV PATH="/app/cmd/nlp/.venv/bin:$PATH"
 
 # copy in the main nlp container code
 COPY cmd/nlp/nlp/ ./nlp/

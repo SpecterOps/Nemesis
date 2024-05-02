@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, NewType, Optional
 from uuid import UUID
+import aiofiles
 
 # 3rd Party Libraries
 import httpx
@@ -132,10 +133,12 @@ class NemesisApiClient:
         if not os.path.isfile(r.file_path):
             raise Exception(f"File {r.file_path} does not exist")
 
-        # TODO: Stream the file instead of reading all bytes into memory
-        with open(r.file_path, "rb") as f:
-            data = f.read()
-            resp = await self.client.post(self.FILE_ENDPOINT, content=data)
+        del self.client.headers["Content-Type"]
+
+        with open(r.file_path, 'rb') as file:
+            files = {'file': (r.file_path.split('/')[-1], file)}
+            #files = {'file': open(r.file_path, 'rb')}
+            resp = await self.client.post(self.FILE_ENDPOINT, files=files)
 
         resp.raise_for_status()
 

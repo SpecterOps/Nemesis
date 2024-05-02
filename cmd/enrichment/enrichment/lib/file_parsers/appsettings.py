@@ -19,7 +19,7 @@ def parenthetic_contents(string):
             stack.append(i)
         elif c == ")" and stack:
             start = stack.pop()
-            s = string[start + 1 : i]
+            s = string[start + 1: i]
             temp = s.split("=")
             if len(temp) == 1:
                 yield (temp[0], "")

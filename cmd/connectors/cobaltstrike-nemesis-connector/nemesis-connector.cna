@@ -40,7 +40,7 @@ global('%nemesis::Settings %EventHandlerMap');
 #   overwritten by the NEMESIS_COBALTSTRIKE_DOWNLOADS_DIR environment variable if present
 %nemesis::Settings['DownloadsDir'] = [System getProperty: "java.io.tmpdir"] . [System getProperty: "file.separator"];
 
-# The Nemesis server URL, http://<host>:<PORT>/ format
+# The Nemesis server URL, https://<host>:<PORT>/ format
 # Used when constructing the URL to web api, elastic, kibana, etc (e.g., NEMESIS_BASE_URL + "/kibana")
 #   overwritten by the NEMESIS_BASE_URL environment variable if present
 %nemesis::Settings['NemesisBaseUrl'] = $null;

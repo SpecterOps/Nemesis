@@ -1,0 +1,129 @@
+{
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "required": [],
+  "properties": {
+    "enrichment": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "image": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "repository": {
+              "type": [
+                "string",
+                "boolean",
+                "number",
+                "object",
+                "array"
+              ],
+              "default": "specterops/nemesis-enrichment"
+            },
+            "tag": {
+              "type": [
+                "string",
+                "boolean",
+                "number",
+                "object",
+                "array"
+              ],
+              "default": "latest"
+            },
+            "pullPolicy": {
+              "type": [
+                "string",
+                "boolean",
+                "number",
+                "object",
+                "array"
+              ],
+              "default": "IfNotPresent"
+            }
+          }
+        },
+        "cracklist": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "nodePort": {
+              "type": [
+                "string",
+                "boolean",
+                "number",
+                "object",
+                "array"
+              ],
+              "default": "30089"
+            }
+          }
+        },
+        "yara": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "nodePort": {
+              "type": [
+                "string",
+                "boolean",
+                "number",
+                "object",
+                "array"
+              ],
+              "default": "30079"
+            }
+          }
+        },
+        "webapi": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "nodePort": {
+              "type": [
+                "string",
+                "boolean",
+                "number",
+                "object",
+                "array"
+              ],
+              "default": "30808"
+            }
+          }
+        },
+        "landingpage": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "nodePort": {
+              "type": [
+                "string",
+                "boolean",
+                "number",
+                "object",
+                "array"
+              ],
+              "default": "30809"
+            }
+          }
+        },
+        "monitoring": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "nodePort": {
+              "type": [
+                "string",
+                "boolean",
+                "number",
+                "object",
+                "array"
+              ],
+              "default": "31693"
+            }
+          }
+        }
+      }
+    }
+  }
+}

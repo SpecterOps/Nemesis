@@ -1,3 +1,3 @@
-FROM alpine:3.17.0
+FROM debian:11-slim
 
-RUN apk --update add jq curl
+RUN apt-get update && apt-get install -y jq curl postgresql-client

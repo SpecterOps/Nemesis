@@ -1175,7 +1175,7 @@ message ChromiumDownload {
   string download_path = 6;
   google.protobuf.Timestamp start_time = 7;
   google.protobuf.Timestamp end_time = 8;
-  uint32 total_bytes = 9;
+  uint64 total_bytes = 9;
   string danger_type = 10;
 }
 message ChromiumDownloadMessage {
@@ -1441,21 +1441,32 @@ message NoseyParker {
       string path = 2;
   }
 
+  message BlobMetadata {
+      string charset = 1;
+      string id = 2;
+      string mime_essence = 3;
+      uint32 num_bytes = 4;
+  }
+
   message Matches {
       string blob_id = 1;
-      Location location = 2;
-      uint32 capture_group_index = 3;
-      string match_content = 4;
-      Snippet snippet = 5;
-      string rule_name = 6;
-      Provenance provenance = 7;
+      BlobMetadata blob_metadata = 2;
+      Location location = 3;
+      uint32 capture_group_index = 4;
+      string match_content = 5;
+      Snippet snippet = 6;
+      string rule_name = 7;
+      repeated Provenance provenance = 8;
   }
 
   message RuleMatches {
       string rule_name = 1;
-      string match_content = 2;
-      uint32 num_matches = 3;
-      repeated Matches matches = 4;
+      uint32 num_matches = 2;
+      string comment = 3;
+      string status = 4;
+      string type = 5;
+      string match_content = 6;
+      repeated Matches matches = 7;
   }
 
   repeated RuleMatches rule_matches = 1;
@@ -1463,6 +1474,26 @@ message NoseyParker {
 }
 
 
+message YaraMatches {
+  message YaraStringMatchInstance {
+    bytes matched_data = 1; // bytes so we can decode UTF8/UTF16 as appropriate later
+    uint64 offset = 2;
+    uint64 length = 3;
+  }
+  message YaraStringMatch {
+    string identifier = 1;
+    repeated YaraStringMatchInstance yara_string_match_instances = 2;
+  }
+  message YaraMatch {
+    string rule_file = 1;
+    string rule_name = 2;
+    string rule_description = 3;
+    string rule_text = 4;
+    repeated YaraStringMatch rule_string_matches = 5;
+  }
+  bool yara_matches_present = 1;
+  repeated YaraMatch yara_matches = 2;
+}
 message Canaries {
   message Canary {
     string type = 1;
@@ -1540,7 +1571,7 @@ message FileDataEnriched {
   NoseyParker noseyparker = 29;
 
   // any Yara rule matches
-  repeated string yara_matches = 31;
+  YaraMatches yara_matches = 31;
 
   // possible document canaries
   Canaries canaries = 33;
@@ -1602,13 +1633,6 @@ message ExtractedHashMessage {
 
 
 message FileDataPlaintext {
-  message PasswordCandidate {
-    // "Candidate" password matches (from regex/ML models)
-    string left_context = 1;
-    string password = 2;
-    string right_context = 3;
-  }
-
   // the Nemesis UUID referencing the plaintext file in S3
   string object_id = 1;
 
@@ -1630,17 +1654,14 @@ message FileDataPlaintext {
   // the size (in bytes) of the originating file/object, if it exists
   uint64 originating_object_size = 8;
 
+  // size of the raw extracted text, in bytes
+  uint64 size = 9;
+
   // number of individual tokens
-  uint64 word_count = 9;
+  uint64 word_count = 10;
 
   // short summary of the text
   string summary = 11;
-
-  // any extracted model password candidates
-  repeated PasswordCandidate model_passwords = 20;
-
-  // any extracted regex password candidates
-  repeated PasswordCandidate regex_passwords = 22;
 
   // any NoseyParker results (including hashes) for the plaintext
   NoseyParker noseyparker = 24;
@@ -1648,6 +1669,26 @@ message FileDataPlaintext {
 message FileDataPlaintextMessage {
   Metadata metadata = 1;
   repeated FileDataPlaintext data = 2;
+}
+
+
+// message for text chunks extracted from a FileDataPlaintext document
+//  has simplified metadata since it goes straight back to the NLP service after extraction
+message FileDataPlaintextChunkMessage {
+  // length of the chunk size, in characters
+  uint64 chunk_size = 1;
+
+  // the raw text of the chunk
+  string text = 3;
+
+  // the Nemesis UUID referencing the plaintext file the chunk came from
+  string plaintext_object_id = 5;
+
+  // the Nemesis UUID referencing the original file the plaintext was extracted from
+  string originating_object_id = 6;
+
+  // the path of the originating downloaded file/object the plaintext whole originated from, if it exists
+  string originating_object_path = 7;
 }
 
 

@@ -3,7 +3,7 @@ from enum import IntEnum
 
 # 3rd Party Libraries
 from nemesiscommon.settings import HttpUrlWithSlash, NemesisServiceSettings
-from pydantic.networks import AnyUrl
+from pydantic.networks import AnyUrl, PostgresDsn
 
 
 class CrackWordlistSize(IntEnum):
@@ -13,6 +13,7 @@ class CrackWordlistSize(IntEnum):
 
 class PasswordCrackerSettings(NemesisServiceSettings):  # type: ignore
     rabbitmq_connection_uri: AnyUrl
+    postgres_connection_uri: PostgresDsn
     public_nemesis_url: HttpUrlWithSlash
     public_kibana_url: HttpUrlWithSlash
     data_download_dir: str

@@ -11,6 +11,7 @@ import struct
 import subprocess
 import sys
 import tarfile
+import time
 import uuid
 import zipfile
 import zlib
@@ -28,7 +29,8 @@ import py7zr
 import structlog
 import yara
 from google.protobuf.json_format import ParseDict
-from impacket.dpapi import DPAPI_BLOB, CredHist, DomainKey, MasterKey, MasterKeyFile
+from impacket.dpapi import (DPAPI_BLOB, CredHist, DomainKey, MasterKey,
+                            MasterKeyFile)
 from impacket.uuid import bin_to_string
 from nemesiscommon.messaging import MessageQueueProducerInterface
 
@@ -167,6 +169,10 @@ async def process_chromium_history(
         async with db.execute("SELECT url,title,visit_count,typed_count,last_visit_time FROM urls") as cursor:
             chromium_history_message = pb.ChromiumHistoryMessage()
             chromium_history_message.metadata.CopyFrom(metadata)
+            page_size = 1000
+            total_history_urls = 0
+            counter = 0
+            start = time.time()
 
             async for row in cursor:
                 history_entry = pb.ChromiumHistoryEntry()
@@ -188,13 +194,31 @@ async def process_chromium_history(
                 history_entry.last_visit_time.FromDatetime(last_visit_time_dt)
 
                 chromium_history_message.data.append(history_entry)
+                counter += 1
+                total_history_urls += 1
 
+                if counter >= page_size:
+                    # send the existing 1000 packaged entries
+                    await chromium_history_q.Send(chromium_history_message.SerializeToString())
+                    # clear out the data field
+                    chromium_history_message.ClearField('data')
+                    counter = 0
+
+            if len(chromium_history_message.data) > 0:
+                # send any leftovers
                 await chromium_history_q.Send(chromium_history_message.SerializeToString())
+
+            end = time.time()
+            await logger.ainfo(f"{total_history_urls} Chromium history URLs processed in in {(end - start):.2f} seconds", object_id=object_id)
 
         # first parse out all of the downloads and emit one or more ChromiumDownloadMessage protobufs
         async with db.execute("SELECT tab_url,target_path,start_time,end_time,total_bytes,danger_type FROM downloads") as cursor:
             chromium_download_message = pb.ChromiumDownloadMessage()
             chromium_download_message.metadata.CopyFrom(metadata)
+            page_size = 1000
+            total_downloads = 0
+            counter = 0
+            start = time.time()
 
             async for row in cursor:
                 download = pb.ChromiumDownload()
@@ -221,8 +245,22 @@ async def process_chromium_history(
                 download.danger_type = DangerType(danger_type).name
 
                 chromium_download_message.data.append(download)
+                counter += 1
+                total_downloads += 1
 
-            await chromium_downloads_q.Send(chromium_download_message.SerializeToString())
+                if counter >= page_size:
+                    # send the existing 1000 packaged entries
+                    await chromium_downloads_q.Send(chromium_download_message.SerializeToString())
+                    # clear out the data field
+                    chromium_download_message.ClearField('data')
+                    counter = 0
+
+            if len(chromium_history_message.data) > 0:
+                # send any leftovers
+                await chromium_downloads_q.Send(chromium_download_message.SerializeToString())
+
+            end = time.time()
+            await logger.ainfo(f"{total_downloads} Chromium downloads processed in in {(end - start):.2f} seconds", object_id=object_id)
 
 
 async def process_chromium_logins(object_id: str, file_path: str, metadata: pb.Metadata, parsed_data: pb.ParsedData, chromium_logins_q: MessageQueueProducerInterface) -> None:
@@ -916,14 +954,14 @@ def hash_file(nemesis_uuid: str) -> Optional[pb.FileHashes]:
         return None
 
 
-def get_magic_type(nemesis_uuid: str) -> str:
+def get_magic_type(nemesis_uuid: str, mime: bool = False) -> str:
     """Gets the magic type of a file.
 
     Uses python-magic to retrieve the file type via libmagic for the
     specified nemesis UUID file (a la the 'file' command but without subprocess).
     """
 
-    magic_string = magic.from_file(nemesis_uuid)
+    magic_string = magic.from_file(nemesis_uuid, mime=mime)
 
     if magic_string.startswith("Composite Document File V2 Document"):
         magic_string = "Composite Document File V2 Document"
@@ -937,20 +975,104 @@ def is_dotnet_assembly(nemesis_uuid: str) -> bool:
     return re.match(".*\\.Net assembly.*", get_magic_type(nemesis_uuid), re.IGNORECASE) is not None
 
 
-def tika_compatible(file_path: str) -> bool:
-    """Returns True if the file can be used with Tika.
+def tika_compatible(mime_type: str) -> bool:
+    """Returns True if the mime type can be used with Tika."""
 
-    Returns True if the supplied file_path matches a number of specific file extensions
-    that allow the document to work with Tika.
-    """
-    # image_regex = "^.*\\.(exr|avif|bmp|cgm|emf|g3|gif|heic|heif|ief|jp2|jpg|jpeg|jpm|jpf|jxl|ntf|png|btif|svg|tiff|psd|ppj|dgn|djvu|dxb|dxf|fbs|fpx|fst|mmr|rlc|mdi|npx|wbmp|xif|webp|wmf|bpg|cr2|cr3|rgb|xwd)$"
-    image_regex = "^.*\\.(bmp|gif|jpg|jpeg|png|svg|tiff|wbmp|webp|wmf)$"
-    is_image = re.match(image_regex, file_path, re.IGNORECASE) is not None
+    # from https://tika.apache.org/2.8.0/formats.html#Full_list_of_Supported_Formats_in_standard_artifacts
+    supported_mime_types = {
+        "text/csv": 1,
+        "text/plain": 1,
+        "text/html": 1,
+        "application/vnd.wap.xhtml+xml": 1,
+        "application/x-asp": 1,
+        "application/xhtml+xml": 1,
+        "image/png": 1,
+        "image/vnd.wap.wbmp": 1,
+        "image/x-jbig2": 1,
+        "image/bmp": 1,
+        "image/x-xcf": 1,
+        "image/gif": 1,
+        "image/x-ms-bmp": 1,
+        "image/jpeg": 1,
+        # "application/mbox": 1,
+        "image/emf": 1,
+        # "application/x-msaccess": 1,
+        "application/x-tika-msoffice-embedded; format=ole10_native": 1,
+        "application/msword": 1,
+        "application/vnd.visio": 1,
+        "application/x-tika-ole-drm-encrypted": 1,
+        "application/vnd.ms-project": 1,
+        "application/x-tika-msworks-spreadsheet": 1,
+        "application/x-mspublisher": 1,
+        "application/vnd.ms-powerpoint": 1,
+        "application/x-tika-msoffice": 1,
+        "application/sldworks": 1,
+        "application/x-tika-ooxml-protected": 1,
+        "application/vnd.ms-excel": 1,
+        # "application/vnd.ms-outlook": 1,
+        "application/vnd.ms-excel.workspace.3": 1,
+        "application/vnd.ms-excel.workspace.4": 1,
+        "application/vnd.ms-excel.sheet.2": 1,
+        "application/vnd.ms-excel.sheet.3": 1,
+        "application/vnd.ms-excel.sheet.4": 1,
+        "image/wmf": 1,
+        "application/vnd.ms-htmlhelp": 1,
+        "application/x-chm": 1,
+        "application/chm": 1,
+        "application/onenote; format=one": 1,
+        "application/vnd.ms-powerpoint.template.macroenabled.12": 1,
+        "application/vnd.ms-excel.addin.macroenabled.12": 1,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.template": 1,
+        "application/vnd.ms-excel.sheet.binary.macroenabled.12": 1,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": 1,
+        "application/vnd.ms-powerpoint.slide.macroenabled.12": 1,
+        "application/vnd.ms-visio.drawing": 1,
+        "application/vnd.ms-powerpoint.slideshow.macroenabled.12": 1,
+        "application/vnd.ms-powerpoint.presentation.macroenabled.12": 1,
+        "application/vnd.openxmlformats-officedocument.presentationml.slide": 1,
+        "application/vnd.ms-excel.sheet.macroenabled.12": 1,
+        "application/vnd.ms-word.template.macroenabled.12": 1,
+        "application/vnd.ms-word.document.macroenabled.12": 1,
+        "application/vnd.ms-powerpoint.addin.macroenabled.12": 1,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.template": 1,
+        "application/vnd.ms-xpsdocument": 1,
+        "application/vnd.ms-visio.drawing.macroenabled.12": 1,
+        "application/vnd.ms-visio.template.macroenabled.12": 1,
+        "model/vnd.dwfx+xps": 1,
+        "application/vnd.openxmlformats-officedocument.presentationml.template": 1,
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": 1,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": 1,
+        "application/vnd.ms-visio.stencil": 1,
+        "application/vnd.ms-visio.template": 1,
+        "application/vnd.openxmlformats-officedocument.presentationml.slideshow": 1,
+        "application/vnd.ms-visio.stencil.macroenabled.12": 1,
+        "application/vnd.ms-excel.template.macroenabled.12": 1,
+        "application/vnd.ms-word2006ml": 1,
+        "application/vnd.ms-outlook-pst": 1,
+        "application/rtf": 1,
+        "application/vnd.ms-wordml": 1,
+        "image/ocr-x-portable-pixmap": 1,
+        "image/ocr-jpx": 1,
+        "image/x-portable-pixmap": 1,
+        "image/ocr-jpeg": 1,
+        "image/ocr-jp2": 1,
+        "image/jpx": 1,
+        "image/ocr-png": 1,
+        "image/ocr-tiff": 1,
+        "image/ocr-gif": 1,
+        "image/ocr-bmp": 1,
+        "image/jp2": 1,
+        "application/pdf": 1,
+        "application/vnd.wordperfect; version=5.1": 1,
+        "application/vnd.wordperfect; version=5.0": 1,
+        "application/vnd.wordperfect; version=6.x": 1,
+        "application/xml": 1,
+    }
 
-    misc_regex = "^.*\\.(txt|rtf|chm|pdf)$"
-    is_misc = re.match(misc_regex, file_path, re.IGNORECASE) is not None
-
-    return is_office_doc(file_path) or is_image or is_misc
+    if mime_type in supported_mime_types:
+        return True
+    else:
+        return False
 
 
 def is_office_doc(file_path: str) -> bool:
@@ -1037,9 +1159,17 @@ def nemesis_error(message: str) -> pb.Error:
     return error
 
 
+def is_jar(path: str) -> bool:
+    """Returns true if the file is a JAR."""
+    magic = get_magic_type(path).lower()
+    is_jar_file = True if magic == "java archive data (jar)" else False
+    is_zip_file = libarchive.is_archive(path, ["zip"])
+    return is_jar_file and is_zip_file
+
+
 def is_archive(path: str) -> bool:
     """Returns true if the file supplied is a Zip, 7z, Tarball, or CAB."""
-    return zipfile.is_zipfile(path) or py7zr.is_7zfile(path) or tarfile.is_tarfile(path) or libarchive.is_archive(path, ["cab"])
+    return is_jar(path) or zipfile.is_zipfile(path) or py7zr.is_7zfile(path) or tarfile.is_tarfile(path) or libarchive.is_archive(path, ["cab"])
 
 
 def get_archive_size(path: str) -> int:
@@ -1058,6 +1188,13 @@ def get_archive_size(path: str) -> int:
     elif tarfile.is_tarfile(path):
         return estimate_uncompressed_gz_size(path)
     elif libarchive.is_archive(path, ["cab"]):
+        total_size = 0
+        with libarchive.Archive(path) as a:
+            for entry in a:
+                total_size += entry.size
+        return total_size
+    # special case for JARs
+    elif libarchive.is_archive(path, ["zip"]):
         total_size = 0
         with libarchive.Archive(path) as a:
             for entry in a:
@@ -1139,6 +1276,15 @@ def extract_archive(path: str) -> str:
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 with open(target_path, "wb") as f:
                     f.write(a.read(entry.size))
+    # special case for JARs
+    elif libarchive.is_archive(path, ["zip"]):
+        with libarchive.Archive(path) as a:
+            for entry in a:
+                target_path = f"{tmp_dir}/{entry.pathname}"
+                # make sure we create all the subfolders needed to extract this file entry
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                with open(target_path, "wb") as f:
+                    f.write(a.read(entry.size))
     else:
         raise FileNotSupportedException("File is not a supported archive format")
     return tmp_dir
@@ -1158,6 +1304,9 @@ def run_noseyparker(path: str) -> Optional[pb.NoseyParker]:
     # the temporary datastore to use for NoseyParker
     temp_dir = f"/tmp/{uuid.uuid4()}/"
 
+    if not os.path.exists("/opt/noseyparker-rules/"):
+        os.makedirs("/opt/noseyparker-rules/")
+
     # run a scan with the temporary datastore
     result = subprocess.run(
         [
@@ -1165,8 +1314,8 @@ def run_noseyparker(path: str) -> Optional[pb.NoseyParker]:
             "scan",
             "--datastore",
             temp_dir,
-            "-r",
-            "/opt/noseyparker/noseyparker.rules",
+            "--rules",
+            "/opt/noseyparker-rules/",
             path,
         ],
         stdout=subprocess.PIPE,

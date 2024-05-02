@@ -7,14 +7,8 @@ from typing import List
 import extra_streamlit_components as stx
 import streamlit as st
 import utils
-from st_aggrid import (
-    AgGrid,
-    ColumnsAutoSizeMode,
-    DataReturnMode,
-    GridOptionsBuilder,
-    GridUpdateMode,
-    JsCode,
-)
+from st_aggrid import (AgGrid, ColumnsAutoSizeMode, DataReturnMode,
+                       GridOptionsBuilder, GridUpdateMode, JsCode)
 from streamlit_searchbox import st_searchbox
 from streamlit_toggle import st_toggle_switch
 
@@ -32,6 +26,7 @@ global cookie_names
 cookie_names = []
 global cookie_sites
 cookie_sites = []
+chosen_tab = None
 
 
 def search_sources(search_term: str) -> List[str]:
@@ -65,28 +60,6 @@ def build_about_bar():
             that are not expired (the detault).
         """
         )
-
-
-def get_search_filters():
-    query_params = st.experimental_get_query_params()
-
-    # pull our specified tab from the query parameters, otherwise use "cookies" as the default
-    if "tab" not in query_params or not query_params["tab"]:
-        query_params["tab"] = ["cookies"]
-
-    chosen_tab = stx.tab_bar(
-        data=[
-            stx.TabBarItemData(id="cookies", title="Cookies", description="Chromium pilfered cookies"),
-            stx.TabBarItemData(id="logins", title="Logins", description="Chromium saved logins"),
-            stx.TabBarItemData(id="history", title="History", description="Chromium visited URLs"),
-            stx.TabBarItemData(id="downloads", title="Downloads", description="Chromium download information"),
-        ],
-        default=query_params["tab"][0],
-    )
-    query_params["tab"] = [chosen_tab]
-    st.experimental_set_query_params(**query_params)
-
-    return query_params
 
 
 def build_cookies_tab(authenticated_user: str):
@@ -597,8 +570,17 @@ def build_downloads_tab(authenticated_user: str):
 def build_page(authenticated_user: str):
     build_about_bar()
 
-    query_params = get_search_filters()
-    chosen_tab = query_params["tab"][0]
+    query_params = st.query_params
+
+    chosen_tab = stx.tab_bar(
+        data=[
+            stx.TabBarItemData(id="cookies", title="Cookies", description="Chromium pilfered cookies"),
+            stx.TabBarItemData(id="logins", title="Logins", description="Chromium saved logins"),
+            stx.TabBarItemData(id="history", title="History", description="Chromium visited URLs"),
+            stx.TabBarItemData(id="downloads", title="Downloads", description="Chromium download information"),
+        ],
+        default="cookies",
+    )
 
     if chosen_tab == "cookies":
         build_cookies_tab(authenticated_user)
@@ -611,6 +593,5 @@ def build_page(authenticated_user: str):
 
     if chosen_tab == "downloads":
         build_downloads_tab(authenticated_user)
-
 
 utils.render_nemesis_page(build_page)

@@ -8,7 +8,7 @@ authors = ["SpecterOps <specterops.io>"]
 python = "^3.9"
 nemesispb = { path = "../nemesispb", develop = true }
 boto3 = "^1.24.59"
-pycryptodomex = "^3.15.0"
+pycryptodomex = "^3.20.0"
 requests = "^2.28.1"
 pydantic = "^1.10.4"
 tenacity = "^8.0.1"
@@ -22,7 +22,7 @@ yara-python = "^4.3.0"
 prometheus-async = {extras = ["aiohttp"], version = "^22.2.0"}
 winacl = "^0.1.7"
 miniopy-async = "^1.15"
-cryptography = "^41.0.4"
+cryptography = "^41.0.6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.2"

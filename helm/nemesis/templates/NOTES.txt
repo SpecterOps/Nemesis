@@ -1,0 +1,13 @@
+------------------------------------------------------------------------
+
+To retrieve generated credentials run:
+    ./scripts/get_service_credentials.sh
+
+If you want to install monitoring, run:
+    helm install nemesis-monitoring ./helm/monitoring
+
+Navigate to `https://127.0.0.1/` and enter the "Basic Auth" credentials to see the list of exposed services.
+    - To interact with the Nemesis dashboard, click "Dashboard" (https://127.0.0.1/dashboard/)
+    - To interact with Elastic/Kibana, click "Kibana" (https://127.0.0.1/kibana/)
+
+------------------------------------------------------------------------

@@ -5,9 +5,9 @@ import os
 import streamlit as st
 import templates
 import utils
-from annotated_text import annotated_text, annotation
 
-page_size = int(os.environ["PAGE_SIZE"])
+# page_size = int(os.environ["PAGE_SIZE"])
+page_size = 10
 NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
 
 
@@ -26,10 +26,9 @@ def render_page(username: str):
         st.session_state.np_page = 1
 
     # get parameters in url
-    para = st.experimental_get_query_params()
+    para = st.query_params
     if "np_page" in para:
-        st.experimental_set_query_params()
-        st.session_state.np_page = int(para["np_page"][0])
+        st.session_state.np_page = int(para["np_page"])
 
     from_i = (st.session_state.np_page - 1) * page_size
     results = utils.elastic_np_search(from_i, page_size)
@@ -63,19 +62,42 @@ def render_page(username: str):
                             if "matching" in match["snippet"]:
                                 rule_name = match["ruleName"]
 
+                                matching = match["snippet"]["matching"]
+                                try:
+                                    match_line = int(match["location"]["sourceSpan"]["start"]["line"])
+                                    match_line_length = len(f"{match_line}") + 3
+                                    match_line_format = f"{{0:<{match_line_length}}}"
+                                except:
+                                    match_line = -1
+                                    match_line_format = ""
+
                                 if "before" in match["snippet"]:
-                                    before = match["snippet"]["before"].replace("\n\t", " ")
+                                    before_lines = match["snippet"]["before"].replace("\n\t", " ").splitlines()
+                                    num_before_lines = len(before_lines)
+                                    before = ""
+                                    for i in range(len(before_lines)):
+                                        line = before_lines[i]
+                                        line_prefix = match_line_format.format(f"{(match_line - (num_before_lines - i) + 1)}:")
+                                        before += f"{line_prefix}{line}\n"
                                 else:
                                     before = ""
 
-                                matching = match["snippet"]["matching"]
+                                before = before.strip("\n")
 
+                                after = ""
                                 if "after" in match["snippet"]:
-                                    after = match["snippet"]["after"].replace("\n\t", " ")
-                                else:
-                                    after = ""
+                                    after_lines = match["snippet"]["after"].replace("\n\t", " ").splitlines()
+                                    if len(after_lines) > 0:
+                                        after = f"{after_lines[0]}\n"
+                                        for i in range(1, len(after_lines)):
+                                            line = after_lines[i]
+                                            line_prefix = match_line_format.format(f"{(match_line + i)}:")
+                                            after += f"{line_prefix}{line}\n"
+
+                                after = after.strip("\n")
 
                                 st.subheader(f"Rule: {rule_name}", divider="red")
+
                                 st.write(
                                     f"""
                                     <a href="{view_file_url}">
@@ -88,7 +110,7 @@ def render_page(username: str):
                                 """,
                                     unsafe_allow_html=True,
                                 )
-                                st.write("Matching text:")
+                                st.write(f"Matching text (line {match_line}):")
                                 st.code(matching)
                                 st.write("Context:")
                                 st.code(before + matching + after)

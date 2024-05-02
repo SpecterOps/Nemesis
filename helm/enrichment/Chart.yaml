@@ -1,0 +1,7 @@
+apiVersion: v2
+name: nemesis-enrichment
+description: The enrichment container for Nemesis
+type: application
+version: 1.0.1
+appVersion: "0.1.0a"
+icon: https://github.com/SpecterOps/Nemesis/raw/main/img/nemesis-light.png
