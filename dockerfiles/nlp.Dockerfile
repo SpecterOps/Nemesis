@@ -1,7 +1,7 @@
 ####################################
 # Common python dependencies layer
 ####################################
-FROM python:3.13.0a6-bullseye AS debcommon
+FROM python:3.13.0b1-slim AS debcommon
 WORKDIR /app/cmd/nlp
 
 ENV PYTHONUNBUFFERED=true
