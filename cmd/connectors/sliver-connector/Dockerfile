@@ -1,4 +1,4 @@
-FROM python:3.10.5-alpine3.15
+FROM python:3.13.0b1-slim
 
 COPY requirements.txt .
 RUN pip install --upgrade pip \
