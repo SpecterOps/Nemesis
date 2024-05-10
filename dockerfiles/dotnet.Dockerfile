@@ -1,7 +1,7 @@
 ########################
 # Common python dependencies layer
 ########################
-FROM python:3.11.2-bullseye AS netbuild
+FROM python:3.13.0a6-bullseye AS netbuild
 WORKDIR /app/cmd/dotnet
 
 ENV PYTHONUNBUFFERED=true
