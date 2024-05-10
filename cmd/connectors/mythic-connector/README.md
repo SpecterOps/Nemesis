@@ -23,7 +23,7 @@ MAX_FILE_SIZE=100000000
 EXPIRATION_DAYS=100
 ```
 
-**Note**: The `NEMESIS_CREDS` are the `basic_auth_user` / `basic_auth_password` fields in the `operation-creds` Kubernetes secret. `MAX_FILE_SIZE` is in bytes, and `EXPIRATION_DAYS` is the number of days until data will be expunged from backend storage.
+**Note**: The `NEMESIS_CREDS` are the `username` / `password` fields in the `basic-auth` Kubernetes secret. `MAX_FILE_SIZE` is in bytes, and `EXPIRATION_DAYS` is the number of days until data will be expunged from backend storage.
 
 **Make sure the `NEMESIS_HTTP_SERVER` and `MYTHIC_IP` variables do not reference localhost or 127.0.0.1! They need to be reachable from a Docker container.**
 

@@ -26,7 +26,7 @@ Then, reinstall everything but specify a higher timeout period (e.g., 90 minutes
 helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '90m'`
 ```
 
-While Nemesis is deploying, you can quickly monitor deployed pods by running the [watch_pods.sh](../scripts/watch_pods.sh) script. If the image is still pulling, usually the pod's status will be `ContainerCreating` or `Init: #/#`.  You can run `kubectl describe pods <POD_NAME>` to view some details about the pod, and if it's still pulling the image there will be an event similar to this:
+While Nemesis is deploying, you can quickly monitor deployed pods by running the [watch_pods.sh](https://github.com/SpecterOps/Nemesis/blob/main/scripts/watch_pods.sh) script. If the image is still pulling, usually the pod's status will be `ContainerCreating` or `Init: #/#`.  You can run `kubectl describe pods <POD_NAME>` to view some details about the pod, and if it's still pulling the image there will be an event similar to this:
 ```
 Events:
   Type    Reason     Age    From               Message

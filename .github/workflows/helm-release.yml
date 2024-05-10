@@ -14,17 +14,16 @@ on:
         default: 'helm'
         type: string
 
-env:
-  PACKAGE_DIR: dist
 
-
-# Only allow one instance of this workflow to run at a time
+# Prevent this workflow from running concurrently with the docs.yml workflow
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   verify:
+    name: Verify release
+
     runs-on: ubuntu-latest
 
     steps:
@@ -70,8 +69,107 @@ jobs:
             false
           fi
 
-  release:
+  docs:
+    name: Build documentation
     needs: verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python virtualenv
+        run: |
+          pip install --upgrade pip
+          python -m venv env
+          source env/bin/activate
+          pip install -r docs/requirements.txt
+
+      - name: Build documentation
+        run: |
+          source env/bin/activate
+          mkdocs build
+
+      - name: Store built documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: site
+
+  helm:
+    name: Package Helm charts
+    needs: verify
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        uses: azure/setup-helm@v3
+
+      - name: Add chart dependency repositories
+        env:
+          CHARTS_DIR: ${{ inputs.charts_dir }}
+        run: |
+          charts=($(find $CHARTS_DIR -maxdepth 2 -mindepth 2 -type f -name "Chart.yaml" -printf '%h\n'))
+          for chart in "${charts[@]}"; do
+            repos=($(helm dependency list $chart | head -n '-1' | tail -n '+2' | cut -f3))
+            for repo in "${repos[@]}"; do
+              name=$(echo $repo | grep -o '[^/]*$')
+              helm repo add $name $repo
+            done
+          done
+
+      - name: Create Chart packages
+        env:
+          CHARTS_DIR: ${{ inputs.charts_dir }}
+        run: |
+          mkdir -p dist
+          find $CHARTS_DIR -maxdepth 2 -mindepth 2 -type f -name "Chart.yaml" -printf '%h\n' | xargs -I % bash -c "helm package -d dist %"
+
+      - name: Pull in previous index.yaml file if it exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PAGES_URL=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/pages \
+            | jq -r '.html_url')
+
+          if [[ "$PAGES_URL" != "null" ]]; then
+            HTTP_STATUS=$(curl -sL -w '%{http_code}' "${PAGES_URL%/}/index.yaml" -o dist/index.yaml)
+            if [[ "$HTTP_STATUS" != "200" ]]; then
+              rm dist/index.yaml
+            fi
+          fi
+
+      - name: Update Helm repository index.yaml file
+        env:
+          CHART_BASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/download/v${{ inputs.version }}
+        run: |
+          if [ -f dist/index.yaml ]; then
+            helm repo index dist --merge dist/index.yaml --url $CHART_BASE_URL
+          else
+            helm repo index dist --url $CHART_BASE_URL
+          fi
+
+      - name: Store Helm chart artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: charts
+          path: dist
+
+  release:
+    name: Publish and release files
+    needs:
+      - verify
+      - docs
+      - helm
 
     # Provision a Github token with repository and pages write permissions
     permissions:
@@ -103,72 +201,20 @@ jobs:
           push: true
           tag: "v${{ inputs.version }}"
 
-      - name: Install Helm
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        uses: azure/setup-helm@v3
+      - name: Download documentation site files
+        uses: actions/download-artifact@v4
+        with:
+          name: docs
+          path: site
 
-      - name: Add chart dependency repositories
-        env:
-          CHARTS_DIR: ${{ inputs.charts_dir }}
-        run: |
-          charts=($(find $CHARTS_DIR -maxdepth 2 -mindepth 2 -type f -name "Chart.yaml" -printf '%h\n'))
-          for chart in "${charts[@]}"; do
-            repos=($(helm dependency list $chart | head -n '-1' | tail -n '+2' | cut -f3))
-            for repo in "${repos[@]}"; do
-              name=$(echo $repo | grep -o '[^/]*$')
-              helm repo add $name $repo
-            done
-          done
+      - name: Download Helm chart files
+        uses: actions/download-artifact@v4
+        with:
+          name: charts
+          path: dist
 
-      - name: Package Helm charts
-        env:
-          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
-          CHARTS_DIR: ${{ inputs.charts_dir }}
-        run: |
-          mkdir -p $PACKAGE_DIR
-          find $CHARTS_DIR -maxdepth 2 -mindepth 2 -type f -name "Chart.yaml" -printf '%h\n' | xargs -I % bash -c "helm package -d $PACKAGE_DIR %"
-
-      - name: Pull in previous index.yaml file if it exists
-        env:
-          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PAGES_URL=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            /repos/${{ github.repository }}/pages \
-            | jq -r '.html_url')
-
-          if [[ "$PAGES_URL" != "null" ]]; then
-            HTTP_STATUS=$(curl -sL -w '%{http_code}' "${PAGES_URL%/}/index.yaml" -o ${PACKAGE_DIR}/index.yaml)
-            if [[ "$HTTP_STATUS" != "200" ]]; then
-              rm ${PACKAGE_DIR}/index.yaml
-            fi
-          fi
-
-      - name: Update Helm repository index.yaml file
-        env:
-          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
-          CHART_BASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/download/v${{ inputs.version }}
-        run: |
-          if [ -f ${PACKAGE_DIR}/index.yaml ]; then
-            helm repo index $PACKAGE_DIR --merge ${PACKAGE_DIR}/index.yaml --url $CHART_BASE_URL
-          else
-            helm repo index $PACKAGE_DIR --url $CHART_BASE_URL
-          fi
-
-      - name: Create Github release with the Helm charts
-        env:
-          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
-          VERSION: v${{ inputs.version }}
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create ${VERSION} -R ${{ github.repository }} -t "Nemesis $VERSION" -n "Nemesis $VERSION release" $PACKAGE_DIR/*.tgz
-
-      - name: Remove packaged Helm charts
-        env:
-          PACKAGE_DIR: ${{ env.PACKAGE_DIR }}
-        run: rm -f ${PACKAGE_DIR}/*.tgz
+      - name: Merge Chart index.yaml file with documentation files
+        run: mv dist/index.yaml site/index.yaml
 
       - name: Setup Github pages
         uses: actions/configure-pages@v4
@@ -176,10 +222,16 @@ jobs:
       - name: Create Github pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ env.PACKAGE_DIR }}
+          path: site
 
-      - name: Deploy Helm chart repository to Github pages
+      - name: Deploy Github pages site
         uses: actions/deploy-pages@v4
+
+      - name: Create Github release with the Helm charts
+        env:
+          VERSION: v${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${VERSION} -R ${{ github.repository }} -t "Nemesis $VERSION" -n "Nemesis $VERSION release" dist/*.tgz
 
       - name: Remove Github release and tag on failure
         continue-on-error: true

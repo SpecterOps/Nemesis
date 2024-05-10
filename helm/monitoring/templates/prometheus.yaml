@@ -93,8 +93,38 @@ metadata:
 spec:
   selector:
     app: prometheus-server
-  type: NodePort
+  type: {{ .Values.prometheus.service.type }}
   ports:
-    - port: 9090
+    - port: {{ .Values.prometheus.service.port }}
       targetPort: 9090
-      nodePort: {{ .Values.prometheus.nodePort }}
+      {{- if .Values.prometheus.service.nodePort }}
+      nodePort: {{ .Values.prometheus.service.nodePort }}
+      {{- end }}
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: prometheus-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /prometheus
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-prometheus-stripprefix@kubernetescrd, {{ .Values.nemesisNamespace }}-{{ .Values.auth.middlewareName }}@kubernetescrd"
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /prometheus
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-service
+                port:
+                  number: {{ .Values.prometheus.service.port }}

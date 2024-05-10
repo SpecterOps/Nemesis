@@ -1,18 +1,3 @@
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: postgres-exporter
-  name: postgres-exporter
-spec:
-  type: NodePort
-  ports:
-    - name: "9187"
-      port: 9187
-      targetPort: 9187
-      nodePort: {{ .Values.postgresExporter.nodePort }}
-  selector:
-    app: postgres-exporter
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -71,3 +56,20 @@ spec:
             initialDelaySeconds: 1
             timeoutSeconds: 5
             periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: postgres-exporter
+  name: postgres-exporter
+spec:
+  type: {{ .Values.postgresExporter.service.type }}
+  selector:
+    app: postgres-exporter
+  ports:
+    - port: {{ .Values.postgresExporter.service.port }}
+      targetPort: 9187
+      {{- if .Values.postgresExporter.service.nodePort }}
+      nodePort: {{ .Values.postgresExporter.service.nodePort }}
+      {{- end }}

@@ -46,6 +46,7 @@ deploy:
     - name: nemesis
       chartPath: helm/nemesis
       setValueTemplates:
+        operation.environment: "development"
         dashboard.image.repository: "{{.IMAGE_REPO_nemesis_dashboard}}"
         dashboard.image.tag: "{{.IMAGE_TAG_nemesis_dashboard}}@{{.IMAGE_DIGEST_nemesis_dashboard}}"
         nemesisWaiter.image.repository: "{{.IMAGE_REPO_nemesis_waiter}}"
@@ -68,29 +69,13 @@ deploy:
         jupyter.image.pullPolicy: IfNotPresent
         nlp.image.pullPolicy: IfNotPresent
         passwordcracker.image.pullPolicy: IfNotPresent
-    - name: nemesis-monitoring
-      chartPath: helm/monitoring
-      setValueTemplates:
-        nemesisWaiter.image.repository: "{{.IMAGE_REPO_nemesis_waiter}}"
-        nemesisWaiter.image.tag: "{{.IMAGE_TAG_nemesis_waiter}}@{{.IMAGE_DIGEST_nemesis_waiter}}"
-      setValues:
-        nemesisWaiter.image.pullPolicy: IfNotPresent
-    flags:
-      upgrade:
-        ["--timeout=30m"]
-      install:
-        ["--timeout=45m"]
+
 portForward:
   - resourceType: service
-    resourceName: ingress-nginx-controller
-    namespace: ingress-nginx
+    resourceName: traefik
+    namespace: kube-system
     port: 80
     localPort: 8080
-    address: 0.0.0.0
-  - resourceType: service
-    resourceName: jupyter
-    namespace: default
-    port: 8888
     address: 0.0.0.0
 ---
 apiVersion: skaffold/v4beta6
@@ -125,3 +110,32 @@ deploy:
         enrichment.image.tag: "{{.IMAGE_REPO_enrichment_dev}}@{{.IMAGE_DIGEST_enrichment_dev}}"
       setValues:
         enrichment.image.pullPolicy: IfNotPresent
+---
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: monitoring
+build:
+  tagPolicy:
+    sha256: {}
+  local:
+    push: false
+    tryImportMissing: false
+    useBuildkit: true
+    concurrency: 0
+  artifacts: []
+deploy:
+  helm:
+    releases:
+    - name: nemesis-monitoring
+      chartPath: helm/monitoring
+      setValueTemplates:
+        nemesisWaiter.image.repository: "{{.IMAGE_REPO_nemesis_waiter}}"
+        nemesisWaiter.image.tag: "{{.IMAGE_TAG_nemesis_waiter}}@{{.IMAGE_DIGEST_nemesis_waiter}}"
+      setValues:
+        nemesisWaiter.image.pullPolicy: IfNotPresent
+    flags:
+      upgrade:
+        ["--timeout=30m"]
+      install:
+        ["--timeout=45m"]

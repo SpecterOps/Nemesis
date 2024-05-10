@@ -1,18 +1,36 @@
+---
+{{- $configmap := (lookup "v1" "ConfigMap" .Release.Namespace "operation-config") }}
+{{- if $configmap }}
+{{- $configData := index $configmap "data" }}
+{{- $disableSlack := index $configData "disable-slack-alerting" }}
+{{- if $disableSlack }}
+kind: ConfigMap
 apiVersion: v1
-kind: Service
 metadata:
-  name: alertmanager
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "9093"
-spec:
-  type: NodePort
-  selector:
-    app: alertmanager
-  ports:
-    - port: 9093
-      targetPort: 9093
-      nodePort: {{ .Values.alertmanager.nodePort }}
+  name: alertmanager-config
+data:
+  config.yml: |-
+    {{- .Files.Get "files/alertmanager/config-dev.yaml" | nindent 4 }}
+{{- else }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: alertmanager-config
+data:
+  config.yml: |-
+    {{- .Files.Get "files/alertmanager/config-prod.yaml" | nindent 4 }}
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-templates
+data:
+  default.tmpl: |-
+    {{- .Files.Get "files/alertmanager/default.tmpl" | nindent 4 }}
+  slack.tmpl: |-
+    {{- .Files.Get "files/alertmanager/slack.tmpl" | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -82,32 +100,48 @@ spec:
         - name: alertmanager
           emptyDir: {}
 ---
-{{- $configmap := (lookup "v1" "ConfigMap" .Release.Namespace "operation-config") }}
-{{- $disableSlack := get $configmap.data "disable-slack-alerting" }}
-{{- if $disableSlack }}
-kind: ConfigMap
 apiVersion: v1
+kind: Service
 metadata:
-  name: alertmanager-config
-data:
-  config.yml: |-
-    {{- .Files.Get "files/alertmanager/config-dev.yaml" | nindent 4 }}
-{{- else }}
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: alertmanager-config
-data:
-  config.yml: |-
-    {{- .Files.Get "files/alertmanager/config-prod.yaml" | nindent 4 }}
-{{- end }}
+  name: alertmanager
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9093"
+spec:
+  type: {{ .Values.alertmanager.service.type }}
+  selector:
+    app: alertmanager
+  ports:
+    - port: {{ .Values.alertmanager.service.port }}
+      targetPort: 9093
+      {{- if .Values.alertmanager.service.nodePort }}
+      nodePort: {{ .Values.alertmanager.service.nodePort }}
+      {{- end }}
 ---
-apiVersion: v1
-kind: ConfigMap
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
 metadata:
-  name: alertmanager-templates
-data:
-  default.tmpl: |-
-    {{- .Files.Get "files/alertmanager/default.tmpl" | nindent 4 }}
-  slack.tmpl: |-
-    {{- .Files.Get "files/alertmanager/slack.tmpl" | nindent 4 }}
+  name: alertmanager-stripprefix
+spec:
+  stripPrefix:
+    prefixes:
+      - /alertmanager
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alertmanager-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-alertmanager-stripprefix@kubernetescrd, {{ .Values.nemesisNamespace }}-{{ .Values.auth.middlewareName }}@kubernetescrd"
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /alertmanager
+            pathType: Prefix
+            backend:
+              service:
+                name: alertmanager
+                port:
+                  number: {{ .Values.alertmanager.service.port }}

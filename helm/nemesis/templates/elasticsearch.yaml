@@ -67,7 +67,7 @@ spec:
               command: ["sh", "-c", "sysctl -w vm.max_map_count=262144"]
             {{- if eq .Values.operation.environment "production" }}
             - name: volume-mount-hack
-              image: busybox
+              image: busybox:1.36.1
               imagePullPolicy: IfNotPresent
               securityContext:
                 privileged: true
@@ -95,48 +95,37 @@ spec:
               persistentVolumeClaim:
                 claimName: elasticsearch-data-pvc
           {{- end }}
-
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
 metadata:
-  name: kibana-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  name: elastic-stripprefix
 spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /kibana(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: nemesis-kb-http
-                port:
-                  number: 5601
+  stripPrefix:
+    prefixes:
+      - /elastic
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: elastic-ingress
   annotations:
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: {{ .Values.operation.basicAuthExistingSecret }}
-    nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required'
-    ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    {{- if .Values.elasticsearch.auth.basicAuth }}
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-elastic-stripprefix@kubernetescrd, {{ .Release.Namespace }}-{{ .Values.basicAuth.middlewareName }}@kubernetescrd"
+    {{- else  }}
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ .Release.Namespace }}-elastic-stripprefix@kubernetescrd"
+    {{- end }}
+
+    {{- if .Values.elasticsearch.ingress.annotations }}
+    {{- .Values.elasticsearch.ingress.annotations | toYaml | nindent 4 }}
+    {{- end }}
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - http:
         paths:
-          - path: /elastic(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /elastic
+            pathType: Prefix
             backend:
               service:
                 name: nemesis-es-http
