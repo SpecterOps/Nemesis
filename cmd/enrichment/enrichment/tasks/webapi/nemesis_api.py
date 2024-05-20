@@ -367,7 +367,7 @@ class NemesisApiRoutes():
 
         try:
             expiration_string = json_data["metadata"]["expiration"]
-            expiration = datetime.strptime(expiration_string, "%Y-%m-%dT%H:%M:%S.000Z")
+            expiration = datetime.strptime(expiration_string, "%Y-%m-%dT%H:%M:%S.%fZ")
         except:
             raise HTTPException(status_code=400, detail=f"Invalid expiration value in metadata field")
 
