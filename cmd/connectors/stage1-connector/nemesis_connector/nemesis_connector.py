@@ -211,7 +211,7 @@ class NemesisApiClient:
             auth (Optional[httpx.Auth]): Authentication to use for the API
         """
 
-        self.client = httpx.Client(base_url=url, auth=auth, transport=transport)
+        self.client = httpx.Client(base_url=url, auth=auth, transport=transport, verify=False)
         headers = {"Content-Type": "application/octet-stream"}
         self.client.headers.update(headers)
 
