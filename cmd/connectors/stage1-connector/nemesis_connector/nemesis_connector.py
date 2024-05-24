@@ -203,7 +203,7 @@ class NemesisApiClient:
     FILE_ENDPOINT = "/file"
     DATA_ENDPOINT = "/data"
 
-    def __init__(self, url: str, auth: Optional[httpx.Auth] = None, transport: Optional[httpx.BaseTransport] = httpx.HTTPTransport(retries=5)) -> None:
+    def __init__(self, url: str, auth: Optional[httpx.Auth] = None, transport: Optional[httpx.BaseTransport] = httpx.HTTPTransport(retries=5, verify=False)) -> None:
         """Create a new Nemesis API HTTP client.
 
         Args:
