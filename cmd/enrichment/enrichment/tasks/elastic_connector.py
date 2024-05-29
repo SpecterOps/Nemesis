@@ -64,7 +64,8 @@ class ElasticConnector(TaskInterface):
     ):
         self.storage = storage
         self.es_client = es_client
-        self.plaintext_size_limit = plaintext_size_limit
+        # upper size limit of a extracted text to process, in MB
+        self.plaintext_size_limit = int(plaintext_size_limit) * 1000000
         self.web_api_url = web_api_url
         self.public_kibana_url = public_kibana_url
 
