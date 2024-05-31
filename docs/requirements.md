@@ -70,9 +70,9 @@ Install the Elastic operator with the following Helm command to manage Elasticse
 helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
 ```
 
-#### Validate Installation
+#### Validate Dependencies Installation
 
-To ensure you're ready for the next step, run the command below and ensure a deployment exists for "traefik" and "elastic-operator."
+To ensure you're ready for the next step, run the command below and ensure a deployment exists for "traefik" and "elastic-operator" (it may take a minute for them to appear after running the `helm` command).
 
 ```bash
 $ helm ls -A
