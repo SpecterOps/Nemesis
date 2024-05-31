@@ -1317,6 +1317,7 @@ def map_extension_to_monaco_language(extension: str) -> str:
         "cts": "typescript",
         "mts": "typescript",
         "vb": "vb",
+        "vbs": "vb",
         "wgsl": "wgsl",
         "wxi": "xml",
         "wxl": "xml",

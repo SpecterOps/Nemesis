@@ -45,7 +45,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     dotnet_uri: HttpUrlWithSlash
     gotenberg_uri: HttpUrlWithSlash
     crack_list_uri: HttpUrlWithSlash
-    extracted_archive_size_limit: PositiveInt
+    extracted_archive_size_limit: PositiveInt = 2000 # in MB
     db_iteration_size: PositiveInt
     elasticsearch_user: str
     elasticsearch_password: str
@@ -58,7 +58,7 @@ class EnrichmentSettings(FileProcessingService):  # type: ignore
     slack_emoji: str
     slack_channel: Optional[str]
     chunk_size: PositiveInt
-    plaintext_size_limit: PositiveInt = 50000000
+    plaintext_size_limit: PositiveInt = 50 # in MB
     yara_api_port: int = Field(None, ge=0, le=65535)
     disable_alerting: bool = False
     crack_wordlist_top_words: CrackWordlistSize  # either 10000 or 100000 for now
