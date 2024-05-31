@@ -1,6 +1,10 @@
 # Accessing Nemesis
-Nemesis runs inside of a Kubernetes(k8s) cluster. Many k8s distributions do not expose access to k8s services outside of the cluster and as such, you must expose them in some way. The steps below detail how to expose Nemesis's HTTP services to the outside world using a port forward.
+Nemesis runs inside of a Kubernetes(k8s) cluster. k8s distributions differ in how they expose internal k8s services to the world outside of the cluster. Some expose them automatically, whereas others require you to expose them in some way. The steps below detail how to expose Nemesis's HTTP services using various k8s distributions..
 
+## Accessing Nemesis k3s
+When you deploy Nemesis on k3s, you can access Nemesis over HTTPS on port 443 on the server it's deployed on (i.e., whatever you specified in `operation.nemesisHttpServer` configuration option, `https://localhost/` by default).
+
+If you [changed the port of the HTTP listener](setup.md#optional-change-nemesiss-listening-port), ensure the `operation.nemesisHttpServer` configuration option matches.
 
 ## Accessing Nemesis via Minikube's Endpoints
 If you use Minikube, by default, services are not exposed anywhere outside of the cluster. As such, to access the services you need expose them to the outside world. This is easist to do with a port forward.

@@ -1,5 +1,5 @@
-nemesis_url: https://127.0.0.1:8080/api/
-nemesis_creds: nemesis:Qwerty12345
+nemesis_url: https://192.168.230.42/api/
+nemesis_creds: n:Qwerty12345
 expiration_days: 100
 network_name: 'ACMECORP'
 operator_name: operator_bob
