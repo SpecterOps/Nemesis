@@ -1,4 +1,5 @@
 # Standard Libraries
+import tarfile
 import datetime
 import ntpath
 import re
@@ -26,7 +27,7 @@ class archive(Meta.FileType):
         Returns True if the internal File path matches our target criteria.
         """
 
-        if re.match(".*\\.(zip|tar\\.gz|7z)$", self.file_data.path):
+        if re.match(".*\\.(zip|tar\\.gz|tar\\.bz2|7z)$", self.file_data.path):
             return True
         else:
             return False
@@ -48,8 +49,37 @@ class archive(Meta.FileType):
             return self.parse_zip()
         elif py7zr.is_7zfile(self.file_path):
             return self.parse_7z()
+        elif tarfile.is_tarfile(self.file_path):
+            return self.parse_tar()
         else:
             return (helpers.nemesis_parsed_data_error(f"file is not a supported archive: {self.file_data.object_id}"), pb.AuthenticationDataIngestionMessage())
+
+    def parse_tar(self) -> tuple[pb.ParsedData, pb.AuthenticationDataIngestionMessage]:
+        """
+        Helper to parse a tar file.
+        """
+
+        parsed_data = pb.ParsedData()
+        auth_data_msg = pb.AuthenticationDataIngestionMessage()
+
+        try:
+            auth_data_msg.metadata.CopyFrom(self.metadata)
+            parsed_data.archive.type = "tar"
+            parsed_data.archive.uncompressed_size = helpers.get_archive_size(self.file_path)
+
+            with tarfile.open(self.file_path, "r") as tar_obj:
+                for elem in tar_obj.getmembers():
+                    entry = parsed_data.archive.entries.add()
+                    entry.name = elem.name
+                    entry.is_dir = elem.isdir()
+                    entry.last_modified.FromDatetime(datetime.datetime.fromtimestamp(elem.mtime))
+                    entry.compress_size = elem.size
+                    entry.uncompress_size = elem.size
+
+            return (parsed_data, auth_data_msg)
+
+        except Exception as e:
+            return (helpers.nemesis_parsed_data_error(f"error parsing tar file {self.file_data.object_id} : {e}"), auth_data_msg)
 
     def parse_zip(self) -> tuple[pb.ParsedData, pb.AuthenticationDataIngestionMessage]:
         """
