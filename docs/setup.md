@@ -113,10 +113,9 @@ The default storage size is 20Gi. To change this, modify the `postgres.storage` 
 
 ## (Optional) Change Nemesis's Listening Port
 
-Create the `traefik-config.yaml` manifest with the following content:
+Nemesis's HTTP traffic is managed by k3s traefik service. Therefore, in order to change Nemesis's listening port, you need to change the port of k3s's traefik HTTP endpoint. You can do this by creating the file `/var/lib/rancher/k3s/server/manifests/traefik-config.yaml` with the content below and then installing k3s. In this case, the config exposes HTTP traffic on port 8080 and HTTPS traffic on port 8443.
 
 ```yaml
-# /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
 metadata:
@@ -130,6 +129,8 @@ spec:
       websecure:
         exposedPort: 8443
 ```
+Once updated, ensure to update the `operation.nemesisHttpServer` configuration option to use the new port.
+
 
 ## (Optional) Deleting Running Pods
 

@@ -17,7 +17,7 @@ If you want customize any of the services' secrets, you need to download the `qu
 
 1. Download the quickstart chart's `values.yaml`:
 ```bash
-curl https://raw.githubusercontent.com/SpecterOps/Nemesis/helm/helm/quickstart/values.yaml -o quickstart-values.yaml
+helm show values --repo https://specterops.github.io/Nemesis/ quickstart > quickstart-values.yaml
 ```
 
 2. Edit `quickstart-values.yaml` as needed (e.g., using `vim`)
