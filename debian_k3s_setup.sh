@@ -1,11 +1,39 @@
 #!/bin/bash
 
+# Usage:
+# This script automates the setup and deployment of Nemesis environment using k3s,
+# installs necessary tools like curl, iptables, Helm, and deploys the Nemesis platform.
+# It supports providing an IP address as an argument or interactively during execution.
+#
+# Requirements:
+# - A Linux-based system with apt package manager (Debian, Ubuntu, etc.)
+# - sudo privileges for the executing user
+#
+# How to run:
+# 1. Without an IP address (interactive mode): ./debian_k3s_setup.sh
+#    The script will prompt for an IP address or use the default 127.0.0.1.
+# 2. With an IP address: ./debian_k3s_setup.sh <IP_Address>
+#    The script will use the provided IP address for the Nemesis platform.
+#
+# Steps performed by the script:
+# 1. Checks and installs curl and iptables if they are not already installed.
+# 2. Validates the provided IP address or prompts the user for one.
+# 3. Installs k3s and configures the Kubernetes environment.
+# 4. Installs Helm and uses it to install necessary dependencies and the Nemesis platform.
+# 5. Sets up basic authentication for Nemesis and provides login information.
+
 sudo pwd &> /dev/null
 
 if ! command -v curl &> /dev/null; then
     echo -e "[*] curl could not be found, attempting to install...\n"
     sudo apt-get update
     sudo apt-get install curl -y
+fi
+
+if ! command -v iptables &> /dev/null; then
+    echo -e "[*] iptables could not be found, attempting to install...\n"
+    sudo apt-get update
+    sudo apt-get install iptables -y
 fi
 
 validate_ip() {
@@ -22,11 +50,9 @@ validate_ip() {
     fi
 }
 
-clear -x
-
 if [ -z "$1" ]; then
     while true; do
-        read -p "No IP address provided. Would you like to use the default IP 127.0.0.1 or enter another? (y/n): " answer
+        read -p "No IP address provided. Would you like to use the default IP 127.0.0.1 (n) or enter another (y)? (y/n): " answer
         answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
 
         if [[ "$answer" == "y" ]]; then
@@ -62,7 +88,16 @@ echo "[*] Using IP: $IP"
 # Step 1: Install k3s
 echo -e "\n[*] Installing k3s...\n"
 curl -sfL https://get.k3s.io | sh -
-mkdir -p ~/.kube && sudo k3s kubectl config view --raw > ~/.kube/config
+sleep 30
+mkdir -p ~/.kube 
+
+if [ -d ~/.kube ]; then
+    sudo k3s kubectl config view --raw > ~/.kube/config
+else
+    echo "Command failed, exiting the script."
+    exit 1
+fi
+
 chmod 600 ~/.kube/config
 export KUBECONFIG=~/.kube/config
 
