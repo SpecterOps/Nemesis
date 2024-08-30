@@ -32,7 +32,7 @@ $ curl -u $(kubectl get secret basic-auth -o jsonpath='{.data.username}' | base6
 
 If you want customize the deployment (e.g., HTTP server URI, pod CPU/memory resources, Minio disk size), you need to download the `nemesis` chart's [values.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/values.yaml) file, edit it, and then run the `nemesis` chart using the customize values. You can do so with the following commands:
 
-1. Download the the Nemesis chart's `values.yaml`:
+1. Download the Nemesis chart's `values.yaml`:
 ```bash
 helm show values --repo https://specterops.github.io/Nemesis/ nemesis > nemesis-values.yaml
 ```
