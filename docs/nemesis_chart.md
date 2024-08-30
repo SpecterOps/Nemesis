@@ -5,7 +5,9 @@ The [`nemesis` Helm chart](https://github.com/SpecterOps/Nemesis/tree/main/helm/
 helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' --set operation.nemesisHttpServer="https://192.168.6.9:443/"
 ```
 
-Set `operation.nemesisHttpServer` to the IP you'll be accessing the server from. By default, the value is set to `https://127.0.0.1:443/` for local deployments. You can delete the `--set` parameter if you want the default value.
+Set `operation.nemesisHttpServer` to the IP you'll be accessing the server from. You can delete the `--set` parameter if you want to use the default value of `https://127.0.0.1:443/` for local deployments.
+
+**Note:** You can change Nemesis's listening port following [these instructions](setup.md#optional-change-nemesiss-listening-port).
 
 
 ## Verify Installation
