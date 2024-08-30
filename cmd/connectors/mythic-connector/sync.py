@@ -1105,7 +1105,7 @@ async def wait_for_elasticsearch() -> None:
             mythic_sync_log.error("Out of retries for reaching the Elasticsearch endpoint")
             return False
         try:
-            get = requests.get(ELASTICSEARCH_URL, auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD))
+            get = requests.get(ELASTICSEARCH_URL, auth=(ELASTICSEARCH_USER, ELASTICSEARCH_PASSWORD), verify=False)
             status_code = get.status_code
             if status_code == 200:
                 mythic_sync_log.info("Successfully reached the Elasticsearch endpoint")
