@@ -48,6 +48,8 @@ sudo k3s kubectl config view --raw > "$KUBECONFIG"
 chmod 600 "$KUBECONFIG"
 ```
 
+If you want the Nemesis to run on a different port, you can do with [these instructions](setup.md#optional-change-nemesiss-listening-port).
+
 #### Install Helm
 
 Follow the Helm installation guide for your specific operating system: [Installing Helm](https://helm.sh/docs/intro/install/).
