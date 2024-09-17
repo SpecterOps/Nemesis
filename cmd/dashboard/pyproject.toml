@@ -26,6 +26,7 @@ urllib3 = "1.26.18"
 binaryornot = "^0.4.4"
 simple-hexdump = "^0.0.1"
 filetype = "^1.2.0"
+chardet = "^5.2.0"
 
 
 [tool.poetry.group.dev.dependencies]

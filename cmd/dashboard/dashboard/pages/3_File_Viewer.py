@@ -1,5 +1,6 @@
 # Standard Libraries
 import base64
+import io
 import json
 import os
 import pathlib
@@ -8,6 +9,7 @@ import urllib.parse
 from io import StringIO
 
 import extra_streamlit_components as stx
+
 # 3rd Party Libraries
 import filetype
 import pandas as pd
@@ -15,11 +17,11 @@ import requests
 import streamlit as st
 import utils
 from binaryornot.helpers import is_binary_string
+from chardet.universaldetector import UniversalDetector
 from hexdump import hexdump
 from st_aggrid import AgGrid
 from st_aggrid.grid_options_builder import GridOptionsBuilder
-from streamlit_elements import (dashboard, editor, elements, html, lazy, mui,
-                                sync)
+from streamlit_elements import dashboard, editor, elements, html, lazy, mui, sync
 from streamlit_toggle import st_toggle_switch
 
 NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER").rstrip("/")
@@ -27,6 +29,26 @@ NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER").rstrip("/")
 triage_pattern = re.compile(r"^triage_(?P<db_id>[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12})_(?P<triage_value>.*)")
 notes_pattern = re.compile(r"^file_notes_(?P<db_id>[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12})$")
 
+
+def detect_and_decode(content):
+    detector = UniversalDetector()
+    for line in io.BytesIO(content):
+        detector.feed(line)
+        if detector.done:
+            break
+    detector.close()
+    result = detector.result
+
+    detected_encoding = result['encoding']
+
+    # Try to decode with the detected encoding
+    try:
+        return content.decode(encoding=detected_encoding)
+    except UnicodeDecodeError:
+        try:
+            return content.decode(encoding="utf-8")
+        except UnicodeDecodeError:
+            return content.decode(encoding="iso-8859-1", errors="replace")
 
 def create_file_info_toolbar(object_id, file):
     url_enc_file_name = urllib.parse.quote(file["name"])
@@ -289,13 +311,7 @@ def build_page(username: str):
                                         textcontent = str(hexdump(response.content))
                                         language = "plaintext"
                                     else:
-                                        try:
-                                            textcontent = response.content.decode(encoding="ascii")
-                                        except:
-                                            try:
-                                                textcontent = response.content.decode(encoding="utf-8")
-                                            except:
-                                                textcontent = response.content.decode(encoding="utf-16", errors="ignore")
+                                        textcontent = detect_and_decode(response.content)
 
                                         if not language:
                                             language = utils.map_extension_to_monaco_language(extension)
@@ -503,6 +519,5 @@ def build_page(username: str):
                     st.json(es_results["hits"]["hits"][0])
                 else:
                     st.warning("Too many results found in Elasticsearch!")
-
 
 utils.render_nemesis_page(build_page)
