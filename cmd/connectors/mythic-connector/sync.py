@@ -6,6 +6,7 @@ import logging
 import ntpath
 import os
 import sys
+import urllib3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -89,6 +90,7 @@ ELASTICSEARCH_USER = os.environ.get("ELASTICSEARCH_USER") or ""
 ELASTICSEARCH_PASSWORD = os.environ.get("ELASTICSEARCH_PASSWORD") or ""
 DASHBOARD_URL = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer"
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 @dataclass
 class NemesisTag:
@@ -138,7 +140,7 @@ def nemesis_post_data(data):
     try:
         basic_auth_parts = NEMESIS_CREDS.split(":")
         basic = HTTPBasicAuth(basic_auth_parts[0], basic_auth_parts[1])
-        r = requests.post(f"{NEMESIS_URL}/data", auth=basic, json=data)
+        r = requests.post(f"{NEMESIS_URL}/data", auth=basic, json=data, verify=False)
         if r.status_code != 200:
             try:
                 mythic_sync_log.error(f"[nemesis_post_data] Error posting to Nemesis URL {NEMESIS_URL}/data ({r.status_code}) : {r.text}")
@@ -168,7 +170,7 @@ def nemesis_post_file(file_bytes):
     try:
         basic_auth_parts = NEMESIS_CREDS.split(":")
         basic = HTTPBasicAuth(basic_auth_parts[0], basic_auth_parts[1])
-        r = requests.request("POST", f"{NEMESIS_URL}/file", auth=basic, data=file_bytes, headers={"Content-Type": "application/octet-stream"})
+        r = requests.request("POST", f"{NEMESIS_URL}/file", auth=basic, data=file_bytes, headers={"Content-Type": "application/octet-stream"}, verify=False)
 
         if r.status_code != 200:
             mythic_sync_log.error(f"[nemesis_post_file] Error uploading file to Nemesis URL {NEMESIS_URL}: {r.status_code}")
