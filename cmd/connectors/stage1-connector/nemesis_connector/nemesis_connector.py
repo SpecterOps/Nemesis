@@ -565,6 +565,13 @@ class NemesisConnector(BaseBot):
                                     response_timestamp = datetime.fromisoformat(task["response_timestamp"])
                                     filename = task["response"]
                                     timestamp = datetime.fromisoformat(task["timestamp"])
+
+                                    if filename == "File Not Found":
+                                        # Returned by the agent when you try and download a file, but it fails 
+                                        # (e.g., file not existing, invalid path, inaccessible for some reason, etc.)
+                                        self._logger.debug(f"Download returned 'File Not Found'. task_uid: {task_uid}. Task JSON: {task}")
+                                        continue
+
                                     download = self.get_download_disk_filepath(filename, timestamp)
                                     if download and os.path.isfile(download):
                                         try:
