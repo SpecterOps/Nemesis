@@ -8,7 +8,8 @@ import utils
 
 # page_size = int(os.environ["PAGE_SIZE"])
 page_size = 10
-NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+#NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+NEMESIS_HTTP_SERVER = ""
 
 
 def render_page(username: str):
@@ -44,7 +45,7 @@ def render_page(username: str):
                 object_id = results["hits"]["hits"][i]["_source"]["objectId"]
                 file_name = results["hits"]["hits"][i]["_source"]["name"]
                 download_url = f"{NEMESIS_HTTP_SERVER}/api/download/{object_id}?name={file_name}"
-                view_file_url = f"{NEMESIS_HTTP_SERVER}dashboard/File_Viewer?object_id={object_id}"
+                view_file_url = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id={object_id}"
                 path = results["hits"]["hits"][i]["_source"]["path"]
                 sha1 = results["hits"]["hits"][i]["_source"]["hashes"]["sha1"]
                 source = ""

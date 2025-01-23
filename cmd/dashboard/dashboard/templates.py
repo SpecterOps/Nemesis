@@ -13,7 +13,8 @@ import streamlit as st
 
 PUBLIC_KIBANA_URL = os.environ.get("PUBLIC_KIBANA_URL")
 WEB_API_URL = os.environ.get("WEB_API_URL")
-NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER").rstrip("/")
+#NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER").rstrip("/")
+NEMESIS_HTTP_SERVER = ""
 
 
 def no_result_html() -> str:

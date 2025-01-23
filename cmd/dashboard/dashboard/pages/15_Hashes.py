@@ -11,7 +11,8 @@ from sqlalchemy import text as sql_text
 from st_aggrid import (AgGrid, ColumnsAutoSizeMode, DataReturnMode,
                        GridOptionsBuilder, GridUpdateMode, JsCode)
 
-NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+#NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+NEMESIS_HTTP_SERVER = ""
 POSTGRES_CONNECTION_URI = os.environ.get("POSTGRES_CONNECTION_URI") or ""
 DB_ITERATION_SIZE = os.environ.get("DB_ITERATION_SIZE") or ""
 PAGE_SIZE = os.environ.get("PAGE_SIZE") or ""
@@ -75,7 +76,7 @@ FROM extracted_hashes
         js_link_code = f"""
             class UrlCellRenderer {{
                 init(params) {{
-                    var link = "{NEMESIS_HTTP_SERVER}dashboard/File_Viewer?object_id=" + params.value;
+                    var link = "{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id=" + params.value;
                     this.eGui = document.createElement('a');
                     this.eGui.innerText = 'View Originating File';
                     this.eGui.setAttribute('href', link);

@@ -11,7 +11,8 @@ from st_aggrid import (AgGrid, ColumnsAutoSizeMode, DataReturnMode,
                        GridOptionsBuilder, GridUpdateMode, JsCode)
 from streamlit_cookies_manager import CookieManager
 
-NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+#NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER")
+NEMESIS_HTTP_SERVER = ""
 PUBLIC_KIBANA_URL = os.environ.get("PUBLIC_KIBANA_URL") or ""
 POSTGRES_CONNECTION_URI = os.environ.get("POSTGRES_CONNECTION_URI") or ""
 DB_ITERATION_SIZE = os.environ.get("DB_ITERATION_SIZE") or "1000"
@@ -112,7 +113,7 @@ def render_page(username: str):
         js_link_code = f"""
             class UrlCellRenderer {{
             init(params) {{
-                var link = "{NEMESIS_HTTP_SERVER}dashboard/File_Viewer?object_id=" + params.value;
+                var link = "{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer?object_id=" + params.value;
                 this.eGui = document.createElement('a');
                 this.eGui.innerText = 'View Originating File';
                 this.eGui.setAttribute('href', link);
