@@ -27,7 +27,8 @@ ENV POETRY_VIRTUALENVS_IN_PROJECT=true
 ENV PATH="$POETRY_HOME/bin:$PATH"
 
 # install Poetry
-RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
+#RUN python3 -c 'from urllib.request import urlopen; print(urlopen("https://install.python-poetry.org").read().decode())' | python3 -
+RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.4
 
 # The next two commands should always be by each other
 # Use Poetry to install the local packages only when the lock file changes
