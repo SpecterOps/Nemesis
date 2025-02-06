@@ -82,13 +82,19 @@ rconn = None
 es_client = None
 
 # Nemesis server/API
+PUBLIC_NEMESIS_HTTP_SERVER = os.environ.get("PUBLIC_NEMESIS_HTTP_SERVER") or ""
 NEMESIS_HTTP_SERVER = os.environ.get("NEMESIS_HTTP_SERVER") or ""
 NEMESIS_URL = f"{NEMESIS_HTTP_SERVER}/api"
 NEMESIS_CREDS = os.environ.get("NEMESIS_CREDS") or ""
 ELASTICSEARCH_URL = f"{NEMESIS_HTTP_SERVER}/elastic"
 ELASTICSEARCH_USER = os.environ.get("ELASTICSEARCH_USER") or ""
 ELASTICSEARCH_PASSWORD = os.environ.get("ELASTICSEARCH_PASSWORD") or ""
-DASHBOARD_URL = f"{NEMESIS_HTTP_SERVER}/dashboard/File_Viewer"
+
+# Use PUBLIC_NEMESIS_HTTP_SERVER if set(for links), otherwise fallback to NEMESIS_HTTP_SERVER
+dashboard_server = PUBLIC_NEMESIS_HTTP_SERVER if PUBLIC_NEMESIS_HTTP_SERVER else NEMESIS_HTTP_SERVER
+DASHBOARD_URL = f"{dashboard_server}/dashboard/File_Viewer"
+
+print("Nemesis dashboard URL: " + DASHBOARD_URL)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 

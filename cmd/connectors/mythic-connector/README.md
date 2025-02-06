@@ -16,6 +16,7 @@ MYTHIC_PASSWORD=SuperSecretPassword
 REDIS_HOSTNAME=redis
 REDIS_PORT=6379
 NEMESIS_HTTP_SERVER=https://172.16.111.187:8000
+PUBLIC_NEMESIS_HTTP_SERVER=https://172.16.111.187:8000
 NEMESIS_CREDS=nemesis:password
 ELASTICSEARCH_USER=elastic
 ELASTICSEARCH_PASSWORD=password
@@ -26,6 +27,8 @@ EXPIRATION_DAYS=100
 **Note**: The `NEMESIS_CREDS` are the `username` / `password` fields in the `basic-auth` Kubernetes secret. `MAX_FILE_SIZE` is in bytes, and `EXPIRATION_DAYS` is the number of days until data will be expunged from backend storage.
 
 **Make sure the `NEMESIS_HTTP_SERVER` and `MYTHIC_IP` variables do not reference localhost or 127.0.0.1! They need to be reachable from a Docker container.**
+
+You optionally set `PUBLIC_NEMESIS_HTTP_SERVER` to set the base URL used in links in Mythic.
 
 Once the environment variables are setup, you can launch the service by using `docker-compose`:
 
