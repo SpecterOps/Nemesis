@@ -31,7 +31,7 @@ You can then access Nemesis's HTTP endpoint at `https://192.168.230.42:7443`.
 * **Note:** If you forgot to get the basic auth username/password when running the `quickstart` chart, you can get them by running the following:
 ```
 export BASIC_AUTH_USER=$(kubectl get secret basic-auth -o jsonpath="{.data.username}" | base64 -d)
-export BASIC_AUTH_PASSWORD=$(kubectl get secret basic-auth -o jsonpath="{.data.password}" | base6
+export BASIC_AUTH_PASSWORD=$(kubectl get secret basic-auth -o jsonpath="{.data.password}" | base64 -d)
 
 echo "Basic Auth Username: ${BASIC_AUTH_USER}"
 echo "Basic Auth Password: ${BASIC_AUTH_PASSWORD}"
@@ -47,20 +47,19 @@ In the examples below, the following assumptions are made:
 ### Step 1) Identify the private HTTPS ingress service endpoint
 Minikube exposes k8s services to in a private network you can access locally on the k8s host. Run the following to list the `nginx` ingress's endpoint:
 ```bash
-minikube service list -n ingress-nginx
+minikube service list -n kube-system
 ```
 Example output:
 ```
-|---------------|------------------------------------|---------------|---------------------------|
-|   NAMESPACE   |                NAME                |  TARGET PORT  |            URL            |
-|---------------|------------------------------------|---------------|---------------------------|
-| ingress-nginx | ingress-nginx-controller           | http/80       | http://192.168.49.2:32010 |
-|               |                                    | https/443     | http://192.168.49.2:30123 |
-|               |                                    | 5044-tcp/5044 | http://192.168.49.2:31606 |
-| ingress-nginx | ingress-nginx-controller-admission | No node port  |                           |
-|---------------|------------------------------------|---------------|---------------------------|
+|-------------|----------|---------------|---------------------------|
+|  NAMESPACE  |   NAME   |  TARGET PORT  |            URL            |
+|-------------|----------|---------------|---------------------------|
+| kube-system | kube-dns | No node port  |                           |
+| kube-system | traefik  | web/80        | http://192.168.49.2:32498 |
+|             |          | websecure/443 | http://192.168.49.2:31863 |
+|-------------|----------|---------------|---------------------------|
 ```
-Note the value of the `https` endpoint: `http://192.168.49.2:30123`.
+Note the value of the `https` endpoint: `http://192.168.49.2:31863`.
 
 
 ### Step 2) Setup the port forward to the HTTPS endpoint
@@ -79,7 +78,7 @@ ssh -N -L <HOST_IP>:7443:192.168.49.2:30123
 ## Manually setting up Minikube Portforward with Kubectl
 You can use kubectl to easily setup a port forward, but this should only be for development or quick testing as we've noticed it occasionally unexpectedly seizes up and ceases working. The following command will forward the nginx service to `0.0.0.0:7443` on the k8s host:
 ```bash
-kubectl port-forward -n ingress-nginx service/ingress-nginx-controller 7443:443 --address=0.0.0.0
+kubectl port-forward -n kube-system service/traefik 7443:443 --address=0.0.0.0
 ```
 
 If you want `kubectl` to bind on a lower port without root, you can give it permission to so with the following:
