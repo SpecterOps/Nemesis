@@ -6,4 +6,4 @@ RUN pip install --upgrade pip \
 
 COPY sync.py .
 
-CMD python -u sync.py
+CMD ["python", "-u", "sync.py"]
