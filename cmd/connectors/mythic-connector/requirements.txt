@@ -4,3 +4,4 @@ mythic==0.2.5
 requests==2.31.0
 elasticsearch==8.4.1
 gql==3.4.1
+pycryptodome==3.21.0
