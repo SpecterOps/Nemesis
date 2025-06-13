@@ -148,7 +148,6 @@ class File(BaseModel):
     path: str | None = None
     originating_object_id: str | None = None
     nesting_level: int | None = None
-    existing_file_id: str | None = None
     creation_time: str | None = None
     access_time: str | None = None
     modification_time: str | None = None

@@ -9,54 +9,25 @@ Schema definition for the public `file` message POSTed to the API frontend.
 
 ### Required Fields
 
-| Field       | Type   | Description                                      |
-| ----------- | ------ | ------------------------------------------------ |
-| `object_id` | string | UUID v4 format identifier for the current object |
+| Field        | Type     | Description                                                                    |
+| ------------ | -------- | ------------------------------------------------------------------------------ |
+| `object_id`  | string   | UUID v4 format identifier for the current object                               |
+| `agent_id`   | string   | Identifier for the processing agent                                            |
+| `project`    | string   | Project identifier                                                             |
+| `timestamp`  | datetime | ISO 8601 formatted timestamp indicating when the file was downloaded           |
+| `expiration` | string   | ISO 8601 formatted timestamp indicating when the data should expire in Nemesis |
 
 ### Optional Fields
 
-| Field                    | Type     | Description                                                                                                      |
-| ------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| `agent_id`               | string   | Unique identifier for the processing agent                                                                       |
-| `project`                | string   | Project identifier                                                                                               |
-| `timestamp`              | datetime | ISO 8601 formatted timestamp indicating when the file was downloaded                                             |
-| `expiration`             | string   | ISO 8601 formatted timestamp indicating when the data should expire in Nemesis                                   |
-| `path`                   | string   | File system path to the relevant resource. Can use either forward (/) or backward (\\) slashes                   |
-| `originating_object_id`  | string   | UUID v4 format identifier referencing a parent or source object                                                  |
-| `nesting_level`          | number   | The level of nesting for the file within an originating container. Used to prevent indefinite container nesting. |
-| `file_creation_time`     | datetime | ISO 8601 formatted timestamp for when the file was created                                                       |
-| `file_access_time`       | datetime | ISO 8601 formatted timestamp for when the file was last accessed                                                 |
-| `file_modification_time` | datetime | ISO 8601 formatted timestamp for when the file was last modified                                                 |
-| `security_information`   | jsonb    | optional security information (defined below)                                                                    |
+| Field                   | Type     | Description                                                                                                      |
+| ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `path`                  | string   | File system path to the relevant resource. Can use either forward (/) or backward (\\) slashes                   |
+| `originating_object_id` | string   | UUID v4 format identifier referencing a parent or source object                                                  |
+| `nesting_level`         | number   | The level of nesting for the file within an originating container. Used to prevent indefinite container nesting. |
+| `creation_time`         | datetime | ISO 8601 formatted timestamp for when the file was created                                                       |
+| `access_time`           | datetime | ISO 8601 formatted timestamp for when the file was last accessed                                                 |
+| `modification_time`     | datetime | ISO 8601 formatted timestamp for when the file was last modified                                                 |
 
-#### security_information
-
-| Field         | Type   | Description                               |
-| ------------- | ------ | ----------------------------------------- |
-| `type`        | string | "windows" or "linux" or "macos"           |
-| `sddl`        | string | Case sensitive Windows ACL string         |
-| `access_mode` | number | *nix permission number                    |
-| `group`       | string | *nix case sensitive file group membership |
-| `id`          | string | *nix string for an inode or file id       |
-| `owner`       | string | Case sensitive owner (*nix and Windows)   |
-
-#### Examples
-
-```json
-{
-  "type" : "windows",
-  "sddl" : "..."
-}
-```
-```json
-{
-  "type" : "linux",
-  "access_mode" : "...",
-  "group" : "...",
-  "id" : "...",
-  "owner" : "..."
-}
-```
 
 ## Example Message - Derivative File
 ```json
