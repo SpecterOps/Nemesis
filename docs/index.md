@@ -1,4 +1,3 @@
-![Logo](images/nemesis-dark.png#only-dark)
 ![Logo](images/nemesis-light.png#only-light)
 
 <p align="center">
