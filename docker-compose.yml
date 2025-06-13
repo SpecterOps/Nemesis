@@ -335,8 +335,11 @@ services:
         npm run dev
       "
     volumes:
-      - ./projects/frontend:/app:ro
-      - /app/node_modules
+      - ./projects/frontend/src:/app/src:ro
+      - ./projects/frontend/public:/app/public:ro
+      - ./projects/frontend/package.json:/app/package.json:ro
+      - ./projects/frontend/vite.config.js:/app/vite.config.js:ro
+      - ./projects/frontend/index.html:/app/index.html:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
       interval: 10s
