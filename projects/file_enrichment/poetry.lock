@@ -350,18 +350,18 @@ files = [
 
 [[package]]
 name = "boto3"
-version = "1.38.34"
+version = "1.38.36"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "boto3-1.38.34-py3-none-any.whl", hash = "sha256:7d9409be63a11c1684427a9b06d6820ec72785cb275b56affe437f3709a80eb3"},
-    {file = "boto3-1.38.34.tar.gz", hash = "sha256:25e76b9fec8db8e21adaf84df0de5c58fa779be121bc327e07e920c7c0870394"},
+    {file = "boto3-1.38.36-py3-none-any.whl", hash = "sha256:34c27d7317cadb62c0e9856e5d5aa0271ef47202d340584831048bc7ac904136"},
+    {file = "boto3-1.38.36.tar.gz", hash = "sha256:efe0aaa060f8fedd76e5c942055f051aee0432fc722d79d8830a9fd9db83593e"},
 ]
 
 [package.dependencies]
-botocore = ">=1.38.34,<1.39.0"
+botocore = ">=1.38.36,<1.39.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.13.0,<0.14.0"
 
@@ -370,14 +370,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.38.34"
-description = "Type annotations for boto3 1.38.34 generated with mypy-boto3-builder 8.11.0"
+version = "1.38.36"
+description = "Type annotations for boto3 1.38.36 generated with mypy-boto3-builder 8.11.0"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "boto3_stubs-1.38.34-py3-none-any.whl", hash = "sha256:56ba625dc0b8673eedb2c93f29c02db2686a599820a54697f723c08fae0b8693"},
-    {file = "boto3_stubs-1.38.34.tar.gz", hash = "sha256:719d75a3993a546bfe5e567a2e5d6f9f4d218846776d5bc9417371a980595008"},
+    {file = "boto3_stubs-1.38.36-py3-none-any.whl", hash = "sha256:1f79b85f93772df94854e9e570a917f1d762f4080a88ed16b9f2e4b98b24f1f1"},
+    {file = "boto3_stubs-1.38.36.tar.gz", hash = "sha256:8de916b9433e9224f3bd4a79ed41e508dc532bfee7db34bfd3752901bcd7e69f"},
 ]
 
 [package.dependencies]
@@ -433,7 +433,7 @@ bedrock-data-automation-runtime = ["mypy-boto3-bedrock-data-automation-runtime (
 bedrock-runtime = ["mypy-boto3-bedrock-runtime (>=1.38.0,<1.39.0)"]
 billing = ["mypy-boto3-billing (>=1.38.0,<1.39.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.38.0,<1.39.0)"]
-boto3 = ["boto3 (==1.38.34)"]
+boto3 = ["boto3 (==1.38.36)"]
 braket = ["mypy-boto3-braket (>=1.38.0,<1.39.0)"]
 budgets = ["mypy-boto3-budgets (>=1.38.0,<1.39.0)"]
 ce = ["mypy-boto3-ce (>=1.38.0,<1.39.0)"]
@@ -797,14 +797,14 @@ xray = ["mypy-boto3-xray (>=1.38.0,<1.39.0)"]
 
 [[package]]
 name = "botocore"
-version = "1.38.34"
+version = "1.38.36"
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "botocore-1.38.34-py3-none-any.whl", hash = "sha256:95ff2c4819498e94b321c9b5ac65d02267df93ff7ce7617323b19f19ea7cb545"},
-    {file = "botocore-1.38.34.tar.gz", hash = "sha256:a105f4d941f329aa72c43ddf42371ec4bee50ab3619fc1ef35d0005520219612"},
+    {file = "botocore-1.38.36-py3-none-any.whl", hash = "sha256:b6a50b853f6d23af9edfed89a59800c6bc1687a947cdd3492879f7d64e002d30"},
+    {file = "botocore-1.38.36.tar.gz", hash = "sha256:4a1ced1a4218bdff0ed5b46abb54570d473154ddefafa5d121a8d96e4b76ebc1"},
 ]
 
 [package.dependencies]
@@ -1937,14 +1937,14 @@ zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
 name = "huggingface-hub"
-version = "0.32.6"
+version = "0.33.0"
 description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
 optional = false
 python-versions = ">=3.8.0"
 groups = ["main"]
 files = [
-    {file = "huggingface_hub-0.32.6-py3-none-any.whl", hash = "sha256:32cde9558c965477556edca72352621def7fbc42e167aaf33f4cdb9af65bb28b"},
-    {file = "huggingface_hub-0.32.6.tar.gz", hash = "sha256:8e960f23dc57519c6c2a0bbc7e9bc030eaa14e7f2d61f8e68fd3d025dabed2fa"},
+    {file = "huggingface_hub-0.33.0-py3-none-any.whl", hash = "sha256:e8668875b40c68f9929150d99727d39e5ebb8a05a98e4191b908dc7ded9074b3"},
+    {file = "huggingface_hub-0.33.0.tar.gz", hash = "sha256:aa31f70d29439d00ff7a33837c03f1f9dd83971ce4e29ad664d63ffb17d3bb97"},
 ]
 
 [package.dependencies]
@@ -2433,14 +2433,14 @@ pyyaml = "*"
 
 [[package]]
 name = "logfire-api"
-version = "3.18.0"
+version = "3.19.0"
 description = "Shim for the Logfire SDK which does nothing unless Logfire is installed"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "logfire_api-3.18.0-py3-none-any.whl", hash = "sha256:9c23ac20dbaecf95a5aee87944839543f02ecc6f89369bbd23bb0b2ce4e52ed7"},
-    {file = "logfire_api-3.18.0.tar.gz", hash = "sha256:87dbae56c8d50560a20ce67a9ef08ee208506fa0dd2c0c3c6b3d709dde1d9795"},
+    {file = "logfire_api-3.19.0-py3-none-any.whl", hash = "sha256:8728403642133c46fe4719eccbae12441c305c86d996384742029b4cd4ceec7b"},
+    {file = "logfire_api-3.19.0.tar.gz", hash = "sha256:fe85e56267dd12ae546179b0364fce93779fd33746516c36ea43db9bf3918be3"},
 ]
 
 [[package]]
@@ -3661,14 +3661,14 @@ files = [
 
 [[package]]
 name = "pydantic"
-version = "2.11.5"
+version = "2.11.6"
 description = "Data validation using Python type hints"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "pydantic-2.11.5-py3-none-any.whl", hash = "sha256:f9c26ba06f9747749ca1e5c94d6a85cb84254577553c8785576fd38fa64dc0f7"},
-    {file = "pydantic-2.11.5.tar.gz", hash = "sha256:7f853db3d0ce78ce8bbb148c401c2cdd6431b3473c0cdff2755c7690952a7b7a"},
+    {file = "pydantic-2.11.6-py3-none-any.whl", hash = "sha256:a24478d2be1b91b6d3bc9597439f69ed5e87f68ebd285d86f7c7932a084b72e7"},
+    {file = "pydantic-2.11.6.tar.gz", hash = "sha256:12b45cfb4af17e555d3c6283d0b55271865fb0b43cc16dd0d52749dc7abf70e7"},
 ]
 
 [package.dependencies]
@@ -3795,14 +3795,14 @@ typing-extensions = ">=4.6.0,<4.7.0 || >4.7.0"
 
 [[package]]
 name = "pydantic-xml"
-version = "2.17.0"
+version = "2.17.1"
 description = "pydantic xml extension"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "pydantic_xml-2.17.0-py3-none-any.whl", hash = "sha256:ea287cb0cb90834e0454a502aaeefb4e961d93506175b476b81c31b62e335840"},
-    {file = "pydantic_xml-2.17.0.tar.gz", hash = "sha256:136d6e61277871b40fe49f0aafa946ef46eeb1db8d6f86a30ce0557cf8fc204d"},
+    {file = "pydantic_xml-2.17.1-py3-none-any.whl", hash = "sha256:27e8762e8b3b85f649b69db7b95f838416db21a7d3fcdce4f5ca6f2bee1397b6"},
+    {file = "pydantic_xml-2.17.1.tar.gz", hash = "sha256:7ee476ee6ea86055b89a29c1d7dc7ba3763c842f4eff473f31b8b65a86f65f8d"},
 ]
 
 [package.dependencies]
@@ -5054,25 +5054,22 @@ files = [
 
 [[package]]
 name = "yara-x"
-version = "1.0.1"
+version = "1.1.0"
 description = "Python bindings for YARA-X"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "yara_x-1.0.1-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:ebc95204932a9d17da7794dd2058462a8d2d0e63c6ec2a42338835d236b185a3"},
-    {file = "yara_x-1.0.1-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:bfa419ac1202bcffb2c8c76feb2206a623d841b68e781bc92b0907a7d9ba951f"},
-    {file = "yara_x-1.0.1-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e737715a68612c8c028200001e87fe82a167053b0a87e81d886434997838aabf"},
-    {file = "yara_x-1.0.1-cp38-abi3-win_amd64.whl", hash = "sha256:c9e4ae8a8e223f543b9f1c58f20a73e7d6067d93219726cc26fb63298eaf73d9"},
-    {file = "yara_x-1.0.1-pp310-pypy310_pp73-macosx_10_15_x86_64.whl", hash = "sha256:9157737907cc99f11d058700a6b37895dcc67d2a723c23126eadd51f52a2603b"},
-    {file = "yara_x-1.0.1-pp310-pypy310_pp73-macosx_11_0_arm64.whl", hash = "sha256:8ab1c36c787912b6f61ec4ff686004fea9ce3ef6e98db9d6666eec3c952ba2f6"},
-    {file = "yara_x-1.0.1-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:655f9de34b5a948dbb0063724af5276451c1a6cf91c03e92e0c0d4acf54c042b"},
-    {file = "yara_x-1.0.1-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:fd870ac612e4cb08a528fa756a54ad27072e6319eae916ebc9f80c53e0053502"},
-    {file = "yara_x-1.0.1-pp39-pypy39_pp73-macosx_10_15_x86_64.whl", hash = "sha256:1076b4e426cf884c7615bc705930bd1d9c109c5ddb6b68f4d6302af0646b6094"},
-    {file = "yara_x-1.0.1-pp39-pypy39_pp73-macosx_11_0_arm64.whl", hash = "sha256:38b080c493c69ff4d61f3dfcb59c0dc17987f68cc2731d35e887566fe898a10b"},
-    {file = "yara_x-1.0.1-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6f10206dc27246f80c6225df39eda261e90c8cec9e426c68dc76ed8c3d3126fc"},
-    {file = "yara_x-1.0.1-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:adf8fa723eaaf0f15c7532b5913e430f9b0dab12cbf5650e45daec2ed0af1d9b"},
-    {file = "yara_x-1.0.1.tar.gz", hash = "sha256:0563f1569672c8f125f21b15ab1975cddd12f3e1a462be0e1766911a98e8f88d"},
+    {file = "yara_x-1.1.0-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:d7befedea56d70d9a2426b9bed8dfa464ca0d78bfffafa89063163724448420b"},
+    {file = "yara_x-1.1.0-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:7470c4568378b3d16cb5c06c1971b8dbf945b862f3490ba51952267b39ac1b4b"},
+    {file = "yara_x-1.1.0-cp38-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:df3ba8ab69440897e4f3d2c9d428ca1a7b32a5ac145237ec5c0a172b3392d617"},
+    {file = "yara_x-1.1.0-cp38-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:4fc11c2c26cc825e1c44a17d206fbd27bf778e114cc9a7e9dc3353d338dbf927"},
+    {file = "yara_x-1.1.0-cp38-abi3-win_amd64.whl", hash = "sha256:27ba2c6a6b9527921affeb6c8c5c4640c3e9b05793f7e5772b31dbc7141857ca"},
+    {file = "yara_x-1.1.0-pp310-pypy310_pp73-macosx_10_15_x86_64.whl", hash = "sha256:8dbc9615b85d4825e6e9d7a2af7c5ccf926bd3cd6809aaab2526cb0e2a1e6469"},
+    {file = "yara_x-1.1.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl", hash = "sha256:491db9c26733d09aa4230c3836e5431022d6e270a278a23fdf7b62d37fbe9ca6"},
+    {file = "yara_x-1.1.0-pp310-pypy310_pp73-manylinux_2_28_aarch64.whl", hash = "sha256:8ab08d813feeb6e285225e601757fb60015e62529d4301e5c14a85e74dd9a1c3"},
+    {file = "yara_x-1.1.0-pp310-pypy310_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:6ddc741fa190c9412976dd14e0ed39d0f5d5a4f2ebb186bc72b11c07a4830237"},
+    {file = "yara_x-1.1.0-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:bb332f5a26554d2777628b4b30f873abaae2f1e503b66541f4ae2e89c5926a74"},
 ]
 
 [[package]]
@@ -5217,4 +5214,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "4f825b65ed448ae04b7df8959a34b667e5f8e3c85ffa4f10086a8a3697714e30"
+content-hash = "53080891854c995202f164a59212643fe1b748a7fa8da3dfe64f29b013dd1e04"

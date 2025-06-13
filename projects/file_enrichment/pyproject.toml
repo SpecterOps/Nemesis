@@ -19,7 +19,7 @@ minio = "^7.2.14"
 requests = "^2.32.3"
 lief = "^0.16.2"
 olefile = "^0.47"
-yara-x = "^1.0.1"
+yara-x = "^1.1.0"
 pypdf = "^5.4.0"
 plyara = "^2.2.7"
 common = { path = "../../libs/common", develop = true }
