@@ -32,11 +32,11 @@ Nemesis 2.0 is built on [Docker](https://www.docker.com/) with heavy [Dapr integ
 
 
 ## Setup / Installation
-Follow the [quickstart guide](docs/quickstart.md).
+Follow the [quickstart guide](https://specterops.github.io/Nemesis/quickstart/).
 
 
 ## Usage
-See the [Nemesis Usage Guide](docs/usage_guide.md).
+See the [Nemesis Usage Guide](https://specterops.github.io/Nemesis/usage_guide/).
 
 
 ## Additional Information
