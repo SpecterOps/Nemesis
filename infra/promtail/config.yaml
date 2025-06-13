@@ -1,0 +1,145 @@
+# config/promtail/config.yaml
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    
+    relabel_configs:
+      # # If we need to drop Promtail's own logs
+      # - source_labels: ['__meta_docker_container_name']
+      #   regex: '.*promtail.*'
+      #   action: drop
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/?(.+)'
+        target_label: 'container_name'
+      - source_labels: ['__meta_docker_container_id']
+        target_label: 'container_id'
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'logstream'
+      ## TODO: not sure if this is worth the indexing cost
+      # - source_labels: ['__meta_docker_network_ip']
+      #   target_label: 'container_ip'
+        
+    pipeline_stages:
+      - json:
+          expressions:
+            message: message
+      - output:
+          source: message
+
+
+    # pipeline_stages:
+    #   - logfmt:
+    #       mapping:
+    #         message: msg
+    #         level: level
+    #         ts: ts
+    #   - labels:
+    #       level:
+    #   - timestamp:
+    #       source: ts
+    #       format: RFC3339Nano
+    #   - output:
+    #       source: message
+
+    # pipeline_stages:
+    #   - json:
+    #       expressions:
+    #         level: level
+    #         ts: ts
+    #         caller: caller
+    #         component: component
+    #         msg: msg
+    #   - labels:
+    #       level:
+    #       component:
+
+## not really working
+# # config/promtail/config.yaml
+# server:
+#   http_listen_port: 9080
+#   grpc_listen_port: 0
+
+# positions:
+#   filename: /tmp/positions.yaml
+
+# clients:
+#   - url: http://loki:3100/loki/api/v1/push
+#     tenant_id: "default"
+
+# scrape_configs:
+#   - job_name: containers
+#     docker_sd_configs:
+#       - host: unix:///var/run/docker.sock
+#         refresh_interval: 5s
+    
+#     relabel_configs:
+#       - source_labels: ['__meta_docker_container_name']
+#         regex: '/?(.+)'
+#         target_label: 'container_name'
+#       - source_labels: ['__meta_docker_container_id']
+#         target_label: 'container_id'
+#       - source_labels: ['__meta_docker_container_log_stream']
+#         target_label: 'stream'
+
+#     pipeline_stages:
+#       - match:
+#           selector: '{container_name!=""}'
+#           stages:
+#             - multiline:
+#                 firstline: '^\d{4}-\d{2}-\d{2}'
+#             - regex:
+#                 expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2}[T ][^\s]+) (?P<message>(?s:.*))$'
+#             - timestamp:
+#                 source: timestamp
+#                 format: RFC3339Nano
+#             - labels:
+#                 timestamp:
+#             - output:
+#                 source: message
+
+# scrape_configs:
+#   - job_name: docker
+#     static_configs:
+#       - targets:
+#           - localhost
+#         labels:
+#           job: docker
+#           __path__: /var/lib/docker/containers/*/*log
+
+#     pipeline_stages:
+#       - json:
+#           expressions:
+#             output: log
+#             stream: stream
+#             attrs:
+#       - json:
+#           expressions:
+#             tag:
+#           source: attrs
+#       - regex:
+#           expression: (?P<image_name>(?:[^|]*[^|])).(?P<container_name>(?:[^|]*[^|])).(?P<image_id>(?:[^|]*[^|])).(?P<container_id>(?:[^|]*[^|]))
+#           source: tag
+#       - timestamp:
+#           format: RFC3339Nano
+#           source: time
+#       - labels:
+#           tag:
+#           stream:
+#           image_name:
+#           container_name:
+#           image_id:
+#           container_id:
+#       - output:
+#           source: output

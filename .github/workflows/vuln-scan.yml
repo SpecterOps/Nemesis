@@ -1,0 +1,28 @@
+name: Vulnerability Scan
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - 'docs/**'
+      - 'mkdocs.yml'
+
+jobs:
+  run-analysis:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code for this repository
+        uses: actions/checkout@v3
+
+      - name: Run vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'repo'
+          scan-ref: './'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+          skip-dirs: "infra/traefik/certs,projects/noseyparker_scanner/custom_rules/"

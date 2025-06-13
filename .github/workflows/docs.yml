@@ -10,7 +10,6 @@ on:
       - 'mkdocs.yml'
       - '.github/workflows/docs.yml'
 
-# Prevent this workflow from running concurrently with the helm-release.yml workflow
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -22,6 +21,7 @@ jobs:
     permissions:
       pages: write
       id-token: write
+      contents: read
 
     environment:
       name: github-pages
@@ -29,7 +29,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Python virtualenv
         run: |
           pip install --upgrade pip
@@ -41,23 +40,6 @@ jobs:
         run: |
           source env/bin/activate
           mkdocs build
-
-      - name: Add existing Helm repository index.yml file
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PAGES_URL=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            /repos/${{ github.repository }}/pages \
-            | jq -r '.html_url')
-
-          if [[ "$PAGES_URL" != "null" ]]; then
-            HTTP_STATUS=$(curl -sL -w '%{http_code}' "${PAGES_URL%/}/index.yaml" -o site/index.yaml)
-            if [[ "$HTTP_STATUS" != "200" ]]; then
-              rm site/index.yaml
-            fi
-          fi
 
       - name: Setup Github pages
         uses: actions/configure-pages@v4

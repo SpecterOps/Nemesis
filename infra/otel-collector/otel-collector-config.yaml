@@ -1,0 +1,46 @@
+# Documentation: https://opentelemetry.io/docs/collector/configuration/
+
+# Defines ingestion points for traces
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+        tls:
+          # Disable TLS
+
+
+# Defines where to send traces
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+  debug: {}
+
+  otlp:
+    endpoint: "jaeger:4317"
+    tls:
+      insecure: true
+      insecure_skip_verify: true
+    
+  # file:
+  #   path: /tmp/otel-collector.json
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, otlp]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, prometheus]
+    logs:
+      receivers: [otlp]
+      processors: []
+      exporters: [debug]
+      # exporters: [debug, file]

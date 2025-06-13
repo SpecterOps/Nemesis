@@ -1,0 +1,50 @@
+# reference: https://docs.dapr.io/developing-applications/debugging/debugging-docker-compose/
+
+networks:
+  nemesis:
+    driver: bridge
+
+services:
+  # Isolate the deployed service by removing its ports and taking it off the network
+  web-api:
+    ports: !reset []
+    networks: !reset
+      - ""
+
+  # The command args should match the service's sidecar values
+  # in the docker-compose.yml file (<service>_dapr)
+  web-api-dapr:
+    command:
+      [
+        "./daprd",
+        "--app-id",
+        "web-api",
+        "--app-port",
+        "8000", # The port that the app is listening on in VS code
+        "--dapr-http-port",
+        "3500",
+        "--dapr-grpc-port",
+        "50001",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+        "--app-channel-address",
+        "host.docker.internal"
+      ] # DO NOT CHANGE: Causes the sidecar look on the host for the App Channel
+    network_mode: !reset "" # Reset the network_mode...
+
+    # Expose the Dapr sidecar ports to the host so the app being debugged
+    # can communicate with the sidecar running in the cluster
+    ports:
+      - "3500:3500" # Sidecar HTTP port
+      - "50001:50001" # Sidecar GRPC port (Dapr Worfklows depends on it)
+
+  # Open up Minio so web-api being debugged can access it
+  minio:
+    ports:
+      - "9000:9000"

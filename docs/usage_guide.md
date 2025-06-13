@@ -1,100 +1,107 @@
 # Nemesis Usage Guide
 
-This page covers usage of Nemesis after the system is properly [setup](setup.md).
+This page covers usage of Nemesis after the system is properly [setup](quickstart.md).
 
-For a general overview of the Nemesis project structure, see [overview.md](overview.md)
+For a general overview of the Nemesis project structure, see the [overview](overview.md).
 
 - [Nemesis Usage Guide](#nemesis-usage-guide)
-- [Data Ingestion](#data-ingestion)
-  - [Nemesis C2 Connector Setup](#nemesis-c2-connector-setup)
-- [Nemesis Dashboard](#nemesis-dashboard)
-  - [Files](#files)
-    - [File Triage](#file-triage)
-  - [File Details](#file-details)
-  - [Manual File Upload](#manual-file-upload)
-  - [Document Search](#document-search)
-    - [Full Document Search](#full-document-search)
-      - [Source Code Search](#source-code-search)
-    - [Snippet Search](#snippet-search)
-    - [Search Filtering](#search-filtering)
-- [Alerting](#alerting)
-- [Elasticsearch/Kibana](#elasticsearchkibana)
-
+  - [Data Ingestion](#data-ingestion)
+    - [CLI File Submission](#cli-file-submission)
+    - [Nemesis C2 Connector Setup](#nemesis-c2-connector-setup)
+  - [Nemesis Dashboard](#nemesis-dashboard)
+    - [Files](#files)
+      - [File Triage Mode](#file-triage-mode)
+      - [File Details](#file-details)
+      - [File Tags](#file-tags)
+    - [Manual File Upload](#manual-file-upload)
+    - [Document Search](#document-search)
+    - [Findings](#findings)
+    - [Dashboard Settings](#dashboard-settings)
+  - [Alerting](#alerting)
+    - [User Feedback](#user-feedback)
+  - [Submitting Files via the API](#submitting-files-via-the-api)
+    - [API Documentation](#api-documentation)
 
 ## Data Ingestion
 
 Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in muliple ways, including:
 
-* [Auto-ingesting data from C2 platorms.](#nemesis-c2-connector-setup)
+* [Auto-ingesting data from C2 platorms](#nemesis-c2-connector-setup), including Mythic and Outflank C2.
 * [Manually uploading files on the "File Upload" page in the Nemesis's Dashboard UI.](#manual-file-upload)
-* Using the [submit_to_nemesis](submit_to_nemesis.md) CLI tool to submit files.
-* Writing custom tools to interact with [Nemesis's API](new_connector.md).
+* [Using the CLI tool](./cli.md) to:
+    * [submit individual files or entire folders/subfolders](./cli.md#file-submission)
+    * [monitor a folder for new files and auto-submit them](./cli.md#folder-monitoring).
+* Writing custom tools to interact with [Nemesis's API](#api-documentation).
 
 ### Nemesis C2 Connector Setup
-Nemesis includes connectors for various C2 platorms. The connectors hook into the C2 platforms and transfer data automatically into Nemesis. The `./cmd/connectors/` folder contains the following C2 connectors:
 
-- [Cobalt Strike](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/cobaltstrike-nemesis-connector#readme)
-- [Mythic](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/mythic-connector#readme)
-- [Sliver](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/sliver-connector#readme)
-- [OST Stage1](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/stage1-connector#readme)
-- [Metasploit](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/metasploit-connector#readme)
-- [Chrome Extension](https://github.com/SpecterOps/Nemesis/tree/main/cmd/connectors/chrome-extension#readme)
+Nemesis includes connectors for [Mythic](https://github.com/its-a-feature/Mythic) and Outflank C2 (formerly Stage1). The connectors hook into the C2 platforms and transfer data automatically into Nemesis. The connectors are located in the [CLI](https://github.com/SpecterOps/Nemesis/tree/main/projects/cli/cli/) project.
 
-***Note: not all connectors have the same level of completeness! We intended to show the range of connectors possible, but there is not yet feature parity.***
-
+See the [CLI](./cli.md) documentation for more details on configuration.
 
 ## Nemesis Dashboard
 
-The main method for operators/analysts to interact with Nemesis data is through the Nemesis Dashboard. The dashboard can be accessed at `http://NEMESIS_IP:8080/dashboard/`. The initial display shows details about the number of processed files:
+The main method for operators/analysts to interact with Nemesis data is through the Nemesis Dashboard. The dashboard can be accessed at `https://NEMESIS_IP/HOST:7443/`. The initial display shows details about the number of processed files and enrichment workflow information:
 
 ![Nemesis Dashboard](images/nemesis-dashboard.png)
 
-## Files
+### Files
 
 One of the common tasks for the dashboard is file triage, accessible through the `Files` page on the left navigation bar:
 
 ![Nemesis Dashboard Files View](images/nemesis-dashboard-files.png)
 
-As files are processed by Nemesis, they will appear as paginated card entries on this page. By default the files will be sorted newest to oldest, but this can be modified in the dropdown "Filters", which also includes other filtering options:
+As files are processed by Nemesis, they will appear as lines on this page. By default the files will be sorted newest to oldest, but this can be modified by clicking the "Newest First" button at the top which will switch it to showing the oldest first.
 
-![Nemesis Dashboard File Filtering View](images/nemesis-dashboard-files-filtering.png)
+Likewise, the "(Findings) All Files" is the default (showing all files), but clicking shows just files with findings. The "Filter by path" text entry can be used to filter by file path/name/extension, and entries can be filtered by agent ID.
 
-For each file entry, the file path, download timestamp, size (in bytes), SHA1 hash, and magic type for the file are displayed. Additionally, any applicable pre-defined tags, such as `noseyparker_results`, `contains_dpapi`, `encrypted`, etc. will be displayed. These tags can be filtered for as well:
+When clicking on a file entry, you will be brought to the [File Details](#file-details) page. After viewing a file, the entry will be hidden by default on the "Files" page - click the "Files Unviewed by Me" entry on the top left to view select "Unviewed Files" to show files not viewed by anyone (including you), or "All Files" to view all files regardless of view state:
 
-![Nemesis Dashboard File Filtering View](images/nemesis-dashboard-files-np-filtering.png)
+![Nemesis Dashboard File View State](images/nemesis-dashboard-files-view-state.png)
 
-The top icons by each file will let you download a file, view the raw file bytes in a new browser tab, optionally view a PDF of the file (if applicable) in a new browser tab, download the decompiled .NET source code for an assembly (if applicable), and view the [File Details](#file-details) for the file.
+#### File Triage Mode
 
+In the main files view, type `t` to enter file triage mode:
 
-#### File Triage
+![Nemesis Dashboard File Triage Mode](images/nemesis-dashboard-files-triage-mode.png)
 
-At the top right of each file card, there is a **Triage** section with 👍 , 👎, and ❓ icons. These icons correspond to "Interesting", "Not Interesting", and "Unknown", respectively. When an icon is clicked, the triage value for the file is stored in the Nemesis backend and the file card is hidden (hidden cards can be reshown via the search filters). The selected icon will be reflected in the [File Details](#file-details) page for the file. This default behavior allows for multiple operators/analysts to easily triage large numbers of files without duplicated effort.
+As the instructions specify, Use ↑↓ to navigate. Use Shift+↑↓ to select multiple rows. Ctrl/Cmd+A to select all. 'v' to mark as viewed, or ESC to exit. Only the files currently showed by the specified filters you've applied will be marked as viewed. These files will then be hidden from the main triage pane.
 
-Additionally, comments can be saved for the file, which are also persistently saved in the Nemesis backend:
+#### File Details
 
-![Nemesis Dashboard File Notes](images/nemesis-dashboard-files-notes.png)
+Clicking on a file entry in the "Files" view brings you to a file details view:
 
-### File Details
+![Nemesis File Details](images/nemesis-dashboard-file-details.png)
 
-The **File Details** page for an individual file will display the same file card (containing path/timestamp/size/SHA1/magic type/tags/comments, triage icons, and comments) as [Files](#files) page. Beneath the card the bytes of the file (or plaintext if not binary) are displayed in a [Monaco editor](https://microsoft.github.io/monaco-editor/), a Visual Studio Code-light component that contains appropriate syntax highlighting and VSCode shortcuts.
+On the top left of this view, you'll see basic metadata like the file name, magic/mime types, MD5/SHA1 hashes, etc.
 
-![Nemesis Dashboard File Notes](images/nemesis-dashboard-file-viewer-sc.png)
+Press **[tab]** to autoscroll (or scroll manually) to get to the "File Content" view. Here, different tabs will display the summaries and transforms for a file. Pressing `p` will cycle between these views:
 
-Each file also has an **Elasticsearch Info** tab at the top, which shows the full JSON-formatted information dump of the file's storage in Elasticsearch (you can obviously find this in the `http://<NEMESIS_SERVER>/kibana/` endpoint as well):
+![Nemesis File Details Content](images/nemesis-dashboard-file-details-content.png)
 
-![Nemesis Dashboard File Notes](images/nemesis-dashboard-file-viewer-es.png)
+Any plaintext file identified with a specific file type will be rendered with that using the [Monaco](https://github.com/microsoft/monaco-editor) code editorL
 
-If the file has any [Nosey Parker](https://github.com/praetorian-inc/noseyparker) results, a **Noseyparker Results** tab will appear. This tab will display each triggered rule, the matched content, and the context for the content as well:
+![Nemesis File Details Monaco](images/nemesis-dashboard-file-details-monaco.png)
 
-![Nemesis Dashboard File Notes](images/nemesis-dashboard-file-viewer-np.png)
+If you scroll to the bottom of the page past "File Content" you cans see some basic details about the file enrichment workflow, including any successful and failed enrichments. Mousing over any failed enrichment module nodes will reveal a basic error message.
 
-Likewise, if there are any Yara matches, a **Yara Matches** tab will appear. This tab will display each triggered rule, the matched content, and the matching Yara rule definition:
+![Nemesis File Details Enrichments](images/nemesis-dashboard-file-enrichment-status.png)
 
-![Nemesis Dashboard File Notes](images/nemesis-dashboard-file-viewer-yara.png)
+If an enrichment module is failing on your file, we recommend using [the Loki logs in Grafana](./troubleshooting.md#grafana) to help track down what's going on (tip: using the file's `object_id` UUID can help track down specific log lines).
+
+#### File Tags
+
+In the file details view, clicking the "+ Add Tag" button will allow you to create new tags, or add existing defined tags, to the file:
+
+![Nemesis File Details Tagging](images/nemesis-dashboard-file-details-tagging.png)
+
+These tags will persist in the display, and can be used to filter files in the main files view:
+
+![Nemesis Files Tag Filtering](images/nemesis-dashboard-files-tag-filtering.png)
 
 ### Manual File Upload
 
-Files can be manually uploaded through the Nemesis dashboard via the `File Upload` tab on the left navigation bar. After navigating to the page, information such as the operator ID, ..., needs to be completed. This information is saved via browser cookies and does not need to be entered every time. The "Original File Path" is optional but recommended. Files can be dragged/dropped into the upload modal, and on successful submission Nemesis will display the following message:
+Files can be manually uploaded through the Nemesis dashboard via the `File Upload` tab on the left navigation bar. The "Project Name" will be auto-completed, and the "Expiration Time" will be auto set for 100 days in the future (this can be changed in the "Settings" button on the bottom left). The "Originating File Path" is optional but recommended. Files can be dragged/dropped into the upload modal, and on successful submission Nemesis will display the following message:
 
 ![Nemesis Dashboard File Upload](images/nemesis-dashboard-file-upload_success.png)
 
@@ -102,59 +109,80 @@ The file will then be displayed in the [Files](#files) page as soon as it's done
 
 ### Document Search
 
-Nemesis will extract plaintext from any files that can have ASCII/Unicode text extracted and indexes the text into the Elasticsearch backend. The **Document Search** page on the left navigation bar allows operators/analysts to search through any indexed text. Search can accomplished via **Full Document Search** and **Snippet Search**.
+Nemesis indexes the full text of any plaintext file, or the extracted plaintext of any plaintext that can have ASCII/Unicode text extracted. This is stored in the PostgreSQL backend and searchable through this interface. Partial document matches will be shown, while clicking on the file name will take you to the file details page:
 
-#### Full Document Search
+![Nemesis Document Search](images/nemesis-dashboard-docsearch.png)
 
-The default search will match the supplied search term(s) in indexed plaintext documents, displaying paginated searches along with some details about the orignating document:
+Clicking the topright filter icon will bring down filters you can apply for searches:
 
-![Nemesis Dashboard File Search](images/nemesis-dashboard-document-search-full.png)
+![Nemesis Document Search Filter](images/nemesis-dashboard-docsearch.png)
 
-##### Source Code Search
+### Findings
 
-The **Source Code Search** tab on the top of the page functions similarly to the raw text search, but only searches indexed source code documents, as opposed to "regular" plaintext documents. To search source code, change the search index in the dropdown search filters to `source_code`:
+One of the other common tasks for the dashboard is findings triage, accessible through the `Files` page on the left navigation bar:
 
-![Nemesis Dashboard Source Code Search](images/nemesis-dashboard-document-search-source-code.png)
+![Nemesis Findings](images/nemesis-dashboard-findings.png)
 
-#### Snippet Search
+Clicking on a finding brings up details for the finding:
 
-The **Snippet Search** tab operates a bit differently. In addition to being normally indexed in Elasticsearch, all text extracted from plaintext documents by Nemesis are also broken into chunks and run through a small [embedding model](https://www.elastic.co/what-is/vector-embedding) to produce fixed-length vector embeddings. The model currently being used is [gte-tiny](https://huggingface.co/TaylorAI/gte-tiny) but this can be modified in the [nlp.yaml](https://github.com/SpecterOps/Nemesis/blob/main/helm/nemesis/templates/nlp.yaml) of the NLP container. These embeddings are stored in Elasticsearch along with the associated chunked text, allowing for [sematic search](https://en.wikipedia.org/wiki/Semantic_search) over indexed text.
+![Nemesis Finding Details](images/nemesis-dashboard-finding-detail.png)
 
-In addition, we also exploit the BM25 text search of Elasticsearch over the sparse indexed text. The two lists of results are fused with [Reciprocal Rank Fusion (RRF)](https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking) and the reordered list of snippets is presented to the user:
+Clicking the hyperlinked file path will take you to the file details page for the file the finding originates from.
 
-![Nemesis Dashboard Hybrid Search](images/nemesis-dashboard-document-search-hybrid.png)
+You can filter findings by triage state, category, severity, module origin, and triage source (human/automated) at the top of the table.
 
-If you want to _only_ use the more traditional/fuzzy BM25 search and now the vector embeddings, de-select "Use Hybrid Vector Search".
+Like with the `Files` page, type `t` to enter triage mode. This will add a check box to the currently selected file along with displaying keyboard actions you can take:
 
-See [this Twitter thread for more background on this approach](https://x.com/harmj0y/status/1757511877255471299).
+![Nemesis Finding Triage](images/nemesis-dashboard-finding-triage.png)
 
-#### Search Filtering
+As the text details, use ↑↓ to navigate findings, → to view finding details details. You can select multiple with Shift + ↑↓, hitting space, or Ctrl+A. Clear selection with ESC. Typing 1, 2, or 3 will set the finding as true positive, false positive, or unknown:
 
-Both "Full Document Search" and "Snippet Search" allow for file paths/patterns to include or exclude in searches. These can be wildcard paths or extensions, and multiple `|` delineated terms can be specified.
+![Nemesis Finding Triage](images/nemesis-dashboard-finding-triage2.png)
 
-For example, to search files _only_ from a specific directory:
+When combined with the default "Untriaged Only" filter, this allows you to easily and collaboratively triage a large number of findings.
 
-![Nemesis Dashboard Include Filtering](images/nemesis-dashboard-document-search-include-filter.png)
+### Dashboard Settings
 
-To exclude .pdfs from searching:
+Navigating to the "Settings" menu reachable in the bottom left of the Nemesis interface will take you to the settings page:
 
-![Nemesis Dashboard Exclude Filtering](images/nemesis-dashboard-document-search-exclude-filter.png)
+![Nemesis Dashboard Settings](images/nemesis-dashboard-settings.png)
+
+Here, you can change your username/project ID, as well as modify the data expiration (in absolute date or number of days), and can clear the Nemesis database and datalake.
+
+Clicking the "Light Mode" or "Dark Mode" menu button in the bottom left will toggle display mods for the application
 
 ## Alerting
 
-If Slack alerting is enabled, alerts on "interesting" files (e.g., parsed credentials, Nosey Parker hits, DPAPI data discovery, etc.) will be pushed to the configuered Slack webhook/channel with **Nemesis** as the bot user. These messages will contain the alert name, sanitized file name, file SHA1, download timestamp, agent ID, message details, and a link to the [file details](#file-details) in the dashboard:
+If Slack alerting is enabled (i.e., if the `APPRISE_URLS` ENV variable is set), alerts on "interesting" files (e.g., parsed credentials, Nosey Parker hits, DPAPI data discovery, etc.) will be pushed to the configuered Slack webhook/channel with **Nemesis** as the bot user. These messages will contain the alert name, alert category, any additional details, a sanitized file path and a link to the [file details](#file-details) and finding details in the dashboard:
 
-![Nemesis Slack Alerting](images/nemesis-slack-alerting.png)
+![Nemesis Slack Alerting](images/nemesis-finding-slack-alert.png)
 
-## Elasticsearch/Kibana
+See the [Apprise Wiki](https://github.com/caronc/apprise/wiki) for the string format needed for each alerting service.
 
-Navigating to `http://NEMESIS_IP:8080/kibana/` will lead to the main Kibana dashboard for all indexed data (creds are set in `nemesis.config`)
+### User Feedback
 
-![Nemesis Kibana](images/nemesis-kibana.png)
+If you want user feedback from the [File Details viewer](#file-details) to be routed for alerting, use an Apprise link like `slack://Nemesis@T...k/#nemesis-feedback?tag=feedback` - this will route user feedback actions to that specified channel, with regular alerts going to any configured channel without the feedback tag.
 
-The top left will display the stored indexes. The most interesting indexes for operators/analysts will likely be `file_data_enriched`. Standard Kibana searches can be done across any indexed data.
+You can configure multiple Apprise URLs for alerting and user feedback (i.e., alerting to multiple services).
 
-![Nemesis Kibana Index](images/nemesis-kibana-index.png)
+## Submitting Files via the API
 
-Additionally, for Nemesis troubleshooting, Fluentd logs are stored in the `fluentd-*` indices and searchable.
+You can submit files using Nemesis's `submit` CLI tool:
+```bash
+./tools/submit.sh
+```
 
+Uploading a with curl:
+```bash
+curl -k -u n:n -F "file=@example.txt" \
+        -F 'metadata={"agent_id":"agent123","project":"assess-test","timestamp":"2025-01-29T12:00:00Z","expiration":"2026-02-29T12:00:00Z","path":"/data/files"}' \
+        https://nemesis:7443/api/files
+```
+
+### API Documentation
+
+Navigating to the "Help" menu reachable in the bottom left of the Nemesis interface will show you the clickable `/api/docs` and `/api/redoc` Swagger and ReDoc API documentation, respectively:
+
+![Swagger API Documentation](images/api-swagger.png)
+
+![ReDoc API Documentation](images/api-redoc.png)

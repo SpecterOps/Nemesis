@@ -4,7 +4,7 @@
 <hr />
 
 <p align="center">
-<img src="https://img.shields.io/badge/version-1.0.0-blue" alt="version 1.0.0"/>
+<img src="https://img.shields.io/badge/version-2.0.0-blue" alt="version 2.0.0"/>
 <a href="https://join.slack.com/t/bloodhoundhq/shared_invite/zt-1tgq6ojd2-ixpx5nz9Wjtbhc3i8AVAWw">
     <img src="https://img.shields.io/badge/Slack-%23nemesis—chat-blueviolet?logo=slack" alt="Slack"/>
 </a>
@@ -24,25 +24,21 @@
 </p>
 <hr />
 
-
 # Overview
 
-Nemesis is an offensive data enrichment pipeline and operator support system.
+Nemesis is an offensive file enrichment pipeline.
 
-Built on Kubernetes with scale in mind, our goal with Nemesis was to create a centralized data processing platform that ingests data produced during offensive security assessments.
+Nemesis 2.0 is built on [Docker](https://www.docker.com/) with heavy [Dapr integration](https://dapr.io/), our goal with Nemesis was to create a centralized file processing platform that functions as an "offensive VirusTotal".
 
-Nemesis aims to automate a number of repetitive tasks operators encounter on engagements, empower operators’ analytic capabilities and collective knowledge, and create structured and unstructured data stores of as much operational data as possible to help guide future research and facilitate offensive data analysis.
+_Note: the previous Nemesis 1.0.1 code base has been preserved [as a branch](https://github.com/SpecterOps/Nemesis/tree/nemesis-1.0.1)_
 
 ## Setup / Installation
 Follow the [quickstart guide](docs/quickstart.md).
 
-Or see the full [setup instructions](docs/setup.md).
 
 ## Usage
 See the [Nemesis Usage Guide](docs/usage_guide.md).
 
-## Contributing / Development Environment Setup
-See [development.md](./docs/development.md).
 
 ## Additional Information
 Blog Posts:
@@ -61,6 +57,7 @@ Presentations:
 
 | Title                                                                      | Date         |
 |----------------------------------------------------------------------------|--------------|
+| x33fcon 2025 (TBD)                                                         | Jun 13, 2025 |
 | [*SAINTCON 2023*](https://www.youtube.com/watch?v=0q9u2hDcpIo)             | Oct 24, 2023 |
 | [*BSidesAugusta 2023*](https://www.youtube.com/watch?v=Ug9r7lCF_FA)        | Oct 7, 2023  |
 | [*44CON 2023*](https://www.youtube.com/watch?v=tjPTLBGI7K8)                | Sep 15, 2023 |
@@ -71,4 +68,6 @@ Presentations:
 
 Nemesis is built on large chunk of other people's work. Throughout the codebase we've provided citations, references, and applicable licenses for anything used or adapted from public sources. If we're forgotten proper credit anywhere, please let us know or submit a pull request!
 
-We also want to acknowledge Evan McBroom, Hope Walker, and Carlo Alcantara from [SpecterOps](https://specterops.io/) for their help with the initial Nemesis concept and amazing feedback throughout the development process. Also thanks to [Matt Ehrnschwender](https://twitter.com/M_alphaaa) for tons of k3s and GitHub workflow help!
+We also want to acknowledge Evan McBroom, Hope Walker, and Carlo Alcantara from [SpecterOps](https://specterops.io/) for their help with the initial Nemesis concept and amazing feedback throughout the development process. Also thanks to [Matt Ehrnschwender](https://twitter.com/M_alphaaa) for tons of k3s and GitHub workflow help in Nemesis 1.0!
+
+And finally, shout out to OpenAI and Claude for helping with this rewrite.

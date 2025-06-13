@@ -1,0 +1,204 @@
+name: Build and Publish Docker Images
+
+on:
+  push:
+    # # To run on every push to main
+    # branches: [ "main" ]
+
+    # To run when release tags are created:
+    tags: [ "v*.*.*" ]
+  workflow_dispatch: # For manual triggering
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: "specterops/nemesis-2.0" # ${{ github.repository }} causes issues as SpecterOps is not all lowercase
+  # PLATFORMS: linux/amd64,linux/arm64  # Added platforms (arm64 for Mac M1/M2/M3 and AWS images)
+
+jobs:
+
+  # ### These base images never really change much, so commented out for now
+  # build-base-images:
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #   outputs:
+  #     python-base-dev-tag: ${{ steps.meta-python-base-dev.outputs.version }}
+  #     python-base-prod-tag: ${{ steps.meta-python-base-prod.outputs.version }}
+
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Set up QEMU
+  #       uses: docker/setup-qemu-action@v3
+
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+
+  #     - name: Log in to the Container registry
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ${{ env.REGISTRY }}
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+
+  #     # Python Base Dev Image (needed for current Dockerfile builds)
+  #     #   TODO: conditional builds for Dockerfiles, so we can eliminate this dev build and save some time
+  #     - name: Extract metadata for Python base dev image
+  #       id: meta-python-base-dev
+  #       uses: docker/metadata-action@v5
+  #       with:
+  #         images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev
+  #         tags: |
+  #           type=sha,format=short
+  #           type=ref,event=branch
+  #           type=raw,value=latest,enable={{is_default_branch}}
+
+  #     - name: Build and push Python base dev image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./infra/docker/python_base
+  #         file: ./infra/docker/python_base/dev.Dockerfile
+  #         push: true
+  #         platforms: ${{ env.PLATFORMS }}
+  #         tags: ${{ steps.meta-python-base-dev.outputs.tags }}
+  #         labels: ${{ steps.meta-python-base-dev.outputs.labels }}
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+
+  #     # Python Base Prod Image
+  #     - name: Extract metadata for Python base prod image
+  #       id: meta-python-base-prod
+  #       uses: docker/metadata-action@v5
+  #       with:
+  #         images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod
+  #         tags: |
+  #           type=sha,format=short
+  #           type=ref,event=branch
+  #           type=raw,value=latest,enable={{is_default_branch}}
+
+  #     - name: Build and push Python base prod image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./infra/docker/python_base
+  #         file: ./infra/docker/python_base/prod.Dockerfile
+  #         push: true
+  #         platforms: ${{ env.PLATFORMS }}
+  #         tags: ${{ steps.meta-python-base-prod.outputs.tags }}
+  #         labels: ${{ steps.meta-python-base-prod.outputs.labels }}
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+
+  #     # InspectAssembly Base Image
+  #     - name: Extract metadata for InspectAssembly image
+  #       id: meta-inspect-assembly
+  #       uses: docker/metadata-action@v5
+  #       with:
+  #         images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly
+  #         tags: |
+  #           type=sha,format=short
+  #           type=ref,event=branch
+  #           type=raw,value=latest,enable={{is_default_branch}}
+
+  #     - name: Build and push InspectAssembly image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./projects/InspectAssembly
+  #         file: ./projects/InspectAssembly/Dockerfile
+  #         push: true
+  #         platforms: ${{ env.PLATFORMS }}
+  #         tags: ${{ steps.meta-inspect-assembly.outputs.tags }}
+  #         labels: ${{ steps.meta-inspect-assembly.outputs.labels }}
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+
+  build-service-images:
+    # needs: build-base-images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - name: web-api
+            context: .
+            dockerfile: ./projects/web_api/Dockerfile
+          - name: noseyparker-scanner
+            context: .
+            dockerfile: ./projects/noseyparker_scanner/Dockerfile
+          - name: dotnet-api
+            context: .
+            dockerfile: ./projects/dotnet_api/Dockerfile
+          - name: file-enrichment
+            context: .
+            dockerfile: ./projects/file_enrichment/Dockerfile
+          - name: frontend
+            context: ./projects/frontend
+            dockerfile: ./projects/frontend/Dockerfile
+          - name: jupyter
+            context: ./projects/jupyter
+            dockerfile: ./projects/jupyter/Dockerfile
+          - name: alerting
+            context: .
+            dockerfile: ./projects/alerting/Dockerfile
+          - name: triage
+            context: .
+            dockerfile: ./projects/triage/Dockerfile
+          - name: cli
+            context: .
+            dockerfile: ./projects/cli/Dockerfile
+          - name: housekeeping
+            context: .
+            dockerfile: ./projects/housekeeping/Dockerfile
+          - name: document-conversion
+            context: .
+            dockerfile: ./projects/document_conversion/Dockerfile
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # # Installing `yara-x` on ARM for the file-enrichment container (as well as building the `noseyparker` container) nukes time, so cross-platform is commented out for now
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for ${{ matrix.service.name }} image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push ${{ matrix.service.name }} image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          # platforms: ${{ env.PLATFORMS }} # Takes a lot of time for file-enrichment to build on an arm running, so commented out for now
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PYTHON_BASE_DEV_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev:latest
+            PYTHON_BASE_PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod:latest
+            INSPECT_ASSEMBLY_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+            # # If wanting to use the proper tag
+            # PYTHON_BASE_DEV_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev:${{ needs.build-base-images.outputs.python-base-dev-tag }}
+            # PYTHON_BASE_PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod:${{ needs.build-base-images.outputs.python-base-prod-tag }}

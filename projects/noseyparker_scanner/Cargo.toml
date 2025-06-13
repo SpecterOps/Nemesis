@@ -1,0 +1,33 @@
+[package]
+name = "noseyparker-scanner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+bstr = { version = "1.0", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+console = "0.15"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+indicatif = "0.17"
+rayon = "1.8"
+mimalloc = { version = "0.1", default-features = false }
+rust-s3 = "0.34.0"
+tempfile = "3.9.0"
+dotenv = "0.15.0"
+tokio = { version = "1.36.0", features = ["rt", "rt-multi-thread", "macros", "full"] }
+dapr = "0.16.1"
+uuid = { version = "1.7.0", features = ["v4", "serde"] }
+hyper = { version = "0.14", features = ["full"] }
+lazy_static = "1.4.0"
+tonic = "0.12.3"
+dapr-macros = "0.16.1"
+
+# NoseyParker dependencies from GitHub repository
+# Commit 65f3f87bfbfec41056322cd7ce86bc1a8d9efcd8 from May 13, 2025
+noseyparker = { git = "https://github.com/praetorian-inc/noseyparker.git", rev = "65f3f87bfbfec41056322cd7ce86bc1a8d9efcd8", package = "noseyparker" }
+noseyparker-rules = { git = "https://github.com/praetorian-inc/noseyparker.git", rev = "65f3f87bfbfec41056322cd7ce86bc1a8d9efcd8", package = "noseyparker-rules" }
+bstring-serde = { git = "https://github.com/praetorian-inc/noseyparker.git", rev = "65f3f87bfbfec41056322cd7ce86bc1a8d9efcd8", package = "bstring-serde" }

@@ -1,65 +1,93 @@
 {
-	"folders": [
-		{
-			"path": "..",
-			"name": "nemesis"
-		},
-		{
-			"path": "../dockerfiles",
-			"name": "nemesis/dockerfiles"
-		},
-		{
-			"path": "../kubernetes",
-			"name": "nemesis/kubernetes"
-		},
-		{
-			"path": "../packages/python/nemesiscommon",
-			"name": "packages/nemesiscommon"
-		},
-		{
-			"path": "../packages/python/nemesispb",
-			"name": "packages/nemesispb"
-		},
-		{
-			"path": "../cmd/dashboard",
-			"name": "tasks/dashboard"
-		},
-		{
-			"path": "../cmd/dotnet",
-			"name": "tasks/dotnet"
-		},
-		{
-			"path": "../cmd/enrichment",
-			"name": "tasks/enrichment"
-		},
-		{
-			"path": "../cmd/nlp",
-			"name": "tasks/nlp"
-		},
-		{
-			"path": "../cmd/passwordcracker",
-			"name": "tasks/passwordcracker"
-		},
-
-	],
-	"settings": {
-		"files.exclude": {
-			"**/__pycache__": true,
-			"**/.DS_Store": true,
-			"**/.git": true,
-			"**/.hg": true,
-			"**/.mypy_cache": true,
-			"**/.pytest_cache": true,
-			"**/.svn": true,
-			"**/.venv": true,
-			"**/CVS": true,
-			"**/Thumbs.db": true,
-		},
-		"[python]": {
-			"diffEditor.ignoreTrimWhitespace": false,
-			"editor.wordBasedSuggestions": "off",
-			"editor.formatOnSave": true,
-			"editor.defaultFormatter": "ms-python.black-formatter"
-		},
-	}
+    "folders": [
+        {
+            "path": "..",
+            "name": "nemesis2.0"
+        },
+        {
+            "path": "../infra",
+            "name": "infra"
+        },
+        {
+            "path": "../libs/common",
+            "name": "libs → common"
+        },
+        {
+            "path": "../libs/file_enrichment_modules",
+            "name": "libs → file_enrichment_modules",
+        },
+        {
+            "path": "../projects/alerting",
+            "name": "projects → alerting"
+        },
+        {
+            "path": "../projects/cli",
+            "name": "projects → cli"
+        },
+        {
+            "path": "../projects/document_conversion",
+            "name": "projects → document_conversion"
+        },
+        {
+            "path": "../projects/dotnet_api",
+            "name": "projects → dotnet_api"
+        },
+        {
+            "path": "../projects/file_enrichment",
+            "name": "projects → file_enrichment"
+        },
+        {
+            "path": "../projects/frontend",
+            "name": "projects → frontend"
+        },
+        {
+            "path": "../projects/housekeeping",
+            "name": "projects → housekeeping"
+        },
+        {
+            "path": "../projects/InspectAssembly",
+            "name": "projects → InspectAssembly"
+        },
+        {
+            "path": "../projects/noseyparker_scanner",
+            "name": "projects → noseyparker_scanner"
+        },
+        {
+            "path": "../projects/triage",
+            "name": "projects → triage"
+        },
+        {
+            "path": "../projects/web_api",
+            "name": "projects → web_api"
+        },
+    ],
+    "settings": {
+        "files.exclude": {
+            "**/__pycache__": true,
+            "**/.DS_Store": true,
+            "**/.git": true,
+            "**/.hg": true,
+            "**/.mypy_cache": true,
+            "**/.pytest_cache": true,
+            "**/.svn": true,
+            "**/.venv": true,
+            "**/CVS": true,
+            "**/Thumbs.db": true,
+        },
+        "[python]": {
+            "diffEditor.ignoreTrimWhitespace": false,
+            "editor.wordBasedSuggestions": "off",
+            "editor.formatOnSave": true,
+            "editor.defaultFormatter": "charliermarsh.ruff"
+        },
+        "python.defaultInterpreterPath": "python",
+        // "python.pixiToolPath": "",
+        // "python.pipenvPath": "",
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-python.python",
+            "charliermarsh.ruff",
+        ]
+    }
 }

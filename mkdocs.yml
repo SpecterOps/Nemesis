@@ -7,61 +7,30 @@ edit_uri: edit/main/docs/
 plugins:
   - search
 
-
 exclude_docs: |
   /requirements.txt
 
 nav:
   - Nemesis: index.md
   - Quickstart: quickstart.md
-  - overview.md
-
-  - Installation:
-    - Setup: setup.md
-    - Requirements: requirements.md
-    - Unsupported Platforms:
-        - Docker Desktop: requirements_docker_desktop.md
-        - Minikube: requirements_minikube.md
-    - Quickstart Chart: quickstart_chart.md
-    - Nemesis Chart: nemesis_chart.md
+  - Overview: overview.md
 
   - Usage:
     - usage_guide.md
-    - access_nemesis.md
-    - submit_to_nemesis.md
-    - kubernetes.md
+    - cli.md
     - troubleshooting.md
+    - yara.md
 
   - Services:
-    - postgres.md
-    - rabbitmq.md
-    - elasticsearch-kibana.md
+    - dapr.md
     - hasura.md
+    - jupyter.md
+    - housekeeping.md
 
   - Developer:
-    - requirements_developer.md
-    - development.md
-    - remote_debugging.md
-    - new_connector.md
-    - new_seatbelt_datatype_ingestion.md
-    - new_service.md
-    - new_odr_datatype.md
-
-  - Operational Data References:
-    - odr/README.md
-    - References:
-      - odr/references/authentication_data.md
-      - odr/references/cookie.md
-      - odr/references/file_data.md
-      - odr/references/file_information.md
-      - odr/references/network_connection.md
-      - odr/references/path_list.md
-      - odr/references/raw_data.md
-      - Host Data:
-        - odr/references/host_data/named_pipe.md
-        - odr/references/host_data/process.md
-        - odr/references/host_data/registry_value.md
-        - odr/references/host_data/service.md
+    - Adding File Enrichment Modules: file_enrichment_modules.md
+    - Adding Nosey Parker Rules: noseyparker_rules.md
+    - Operational Data Reference: odr.md
 
 theme:
   name: material

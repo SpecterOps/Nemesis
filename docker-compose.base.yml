@@ -1,0 +1,25 @@
+# Only the base images are defined here
+# Base images are the images that are used by other images
+# and only needed to be built once
+
+name: nemesis
+services:
+  python-base-dev:
+    build:
+      context: ./infra/docker/python_base
+      dockerfile: dev.Dockerfile
+
+  python-base-prod:
+    build:
+      context: ./infra/docker/python_base
+      dockerfile: prod.Dockerfile
+
+  # Long term, this shouldn't be with the base image.
+  # We should publish the build artifact and use that
+  # in the final image (instead of copying from this one).
+  # Until then. we'll keep it here so we don't have to
+  # rebuild it each time we rebuild just the services.
+  inspect-assembly:
+    build:
+      context: ./projects/InspectAssembly/
+      dockerfile: Dockerfile

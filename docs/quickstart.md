@@ -1,103 +1,131 @@
 # Quickstart Guide
 
-Here's a quickstart guide to setting up the Nemesis platform using k3s and Helm on Debian 11. This guide will start a Nemesis server listening on the server "192.168.1.10". Change this IP to the host that you will be accessing Nemesis from. If this does not fit your installation need, see the full [setup guide](setup.md). This process is automated in the [debian_k3s_setup.sh](https://github.com/SpecterOps/Nemesis/blob/main/debian_k3s_setup.sh) script, which accepts an IP as an argument.
-
+Here's a quickstart guide to setting up the Nemesis platform.
 
 ### Prerequisites
 
 Ensure your machine meets the following requirements:
 
-- **OS**: Debian 11 LTS
+- **OS**: Windows, Linux, or macOS
 - **Processors**: 4 cores (3 can work with adjustments)
-- **Memory**: 16 GB RAM (minimum of 10 GB for reduced performance)
+- **Memory**: 8 GB RAM (12+ GB recommended)
 - **Disk Space**: 100 GB
-- **Architecture**: x64 only
+- **Architecture**: x64 or Arm
 
-### Step 1: Install k3s
+### Step 1: Install Docker/Docker-Compose
 
-Execute the following commands to install [k3s](https://docs.k3s.io/quick-start):
+We recommend [Docker Desktop](https://www.docker.com/products/docker-desktop/) with the following minimum resources:
 
-```bash
-curl -sfL https://get.k3s.io | sh -
-mkdir -p ~/.kube && sudo k3s kubectl config view --raw > ~/.kube/config
-chmod 600 ~/.kube/config
-export KUBECONFIG=~/.kube/config
-```
+**Memory limit:** 8 GB
+**Swap:** 2 GB
+**Virtual Disk:** 80 GB
 
 
-### Step 2: Install Helm
-
-Install [Helm](https://helm.sh/docs/intro/install/):
+### Step 2: Export necessary environment variables (required)
 
 ```bash
-curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
-sudo apt-get install apt-transport-https --yes
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
-sudo apt-get update
-sudo apt-get install helm
+export NEMESIS_URL=https://localhost:7443/
+export GRAFANA_ADMIN_PASSWORD=Qwerty12345
+export GRAFANA_ADMIN_USER=nemesis
+export JUPYTER_PASSWORD=Qwerty12345
+export MINIO_ROOT_PASSWORD=Qwerty12345
+export MINIO_ROOT_USER=nemesis
+export POSTGRES_PASSWORD=Qwerty12345
+export POSTGRES_USER=nemesis
+export RABBITMQ_PASSWORD=Qwerty12345
+export RABBITMQ_USER=nemesis
+
+# Optional
+export APPRISE_URLS=slack://Nemesis@T...6x/#nemesis-testing,slack://Nemesis@T...k/#nemesis-feedback?tag=feedback
 ```
 
+**NOTE:** you should randomize these password values for production deployments!
 
-### Step 3: Install Dependencies
+**NOTE:** `NEMESIS_URL` _is used to construct the appropriate absolute hyperlinks for findings and Apprise alerts. It does not affect the hosting of Nemesis itself._
 
-Install dependencies using Helm:
+**NOTE:** for APPRISE_URLs, to route user feedback to a specific channel use `?tag=feedback` as shown above. Otherwise stock alerts will go to the first URL listed. See the [Alerting](./usage_guide.md#alerting) section of the Usage Guide for more information.
+
+### Step 3: Build and start Nemesis.
+
+#### For Development Deployments
+
+This will build all of the images instead of pulling the prebuilt images.
 
 ```bash
-helm install elastic-operator eck-operator --repo https://helm.elastic.co --namespace elastic-system --create-namespace --set managedNamespaces='{default}'
+export ENVIRONMENT=dev
+
+# build the base images
+docker compose -f docker-compose.base.yml build
+
+# build/stand up everything
+docker compose up
 ```
 
-
-### Step 4: Install the `quickstart` Chart
-
-Deploy the `quickstart` Helm chart to configure secrets:
+Alternatively, you can use the `./tools/start.sh` script which automates all of this:
 
 ```bash
-helm install --repo https://specterops.github.io/Nemesis/ nemesis-quickstart quickstart
+./tools/script.sh dev
 ```
 
-### Step 5: Install `nemesis`
+#### For Production Deployments
 
-Deploy the main Nemesis services:
+For prod deployments or instructions on how to add users for basic auth, run `./tools/generate_start_command.sh`:
 
 ```bash
-helm install --repo https://specterops.github.io/Nemesis/ nemesis nemesis --timeout '45m' --set operation.nemesisHttpServer="https://192.168.1.10:443/"
+% ./tools/generate_start_command.sh
+
+To start Nemesis, run the following:
+
+    # No users specified. Default user & pass are both the letter 'n')
+    export ENVIRONMENT=prod
+    docker compose -f docker-compose.base.yml build
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+    docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+
+
+To add users, set the USERS (comma-separated) and PASSWORD environment variables and re-run this script.
+Note: All users will share the same password.
+Example:
+
+    USERS='alice,bob,carol' PASSWORD='password' ./tools/generate_start_command.sh
 ```
 
-!!! tip
+***Note: In production mode, the "latest" tagged containers will eventually be pulled (but are not currently)!***
 
-    Note that the nemesisHttpServer flag is being set to the accessible IP address of your server. If you are setting up Nemesis locally, you can remove the flag to set the variable. The default value for this flag is `https://127.0.0.1:443/`
+### Step 4: Logging into the Dashboard
 
+Open up `https://localhost:7443/` (or the URL Nemesis is hosted on) for the main Nemesis interface. Use `n:n` for basic auth unless you specified users via the `./tools/generate_start_command.sh` command. You will then need to enter your username and project name which are saved in your browser cache:
 
-### Step 6: Get basic-auth Secret
+![Nemesis Username and Project](images/nemesis-dashboard-username-and-project.png)
 
-Retrieve the basic authentication credentials to access the dashboard:
+This can be changed by clicking the "Settings" tab on the lower left:
 
-```bash
-export BASIC_AUTH_USER=$(kubectl get secret basic-auth -o jsonpath="{.data.username}" | base64 -d)
-export BASIC_AUTH_PASSWORD=$(kubectl get secret basic-auth -o jsonpath="{.data.password}" | base64 -d)
-echo "${BASIC_AUTH_USER}:${BASIC_AUTH_PASSWORD}"
-```
+![Nemesis Settings](images/nemesis-dashboard-settings.png)
 
-### Step 7: Logging into the Dashboard
-
-Once all installations and configurations are complete, open a web browser and go to: `https://192.168.1.10`
-
-Enter the basic authentication credentials you retrieved earlier to access the Nemesis dashboard. Use the following credentials:
-
-- **Username**: The value stored in `${BASIC_AUTH_USER}`
-- **Password**: The value stored in `${BASIC_AUTH_PASSWORD}`
-
-You should be greeted by the services page:
-
-![services](images/services.png)
-
-
-### Step 8: Upload File for Analysis
-
-1. Navigate to the dashboard
+After entering your information, you will then be shown the main Nemesis dashboard with processed file statistics and enrichment workflow information:
 
 ![dashboard](images/nemesis-dashboard.png)
 
-2. Go to the "File Upload" page and upload a file for analysis
+### Step 5: Upload File for Analysis
+
+To manually upload a file into Nemesis, click on the "File Upload" link in the sidebar:
 
 ![file analysis](images/nemesis-dashboard-file-upload_success.png)
+
+Then view the file after analysis (click on the file entry for more details):
+
+![file listing](images/nemesis-dashboard-files.png)
+
+![Nemesis File Details](images/nemesis-dashboard-file-details.png)
+
+See [Data Ingestion](./usage_guide.md#data-ingestion) for additional ways to ingest data into Nemesis besides manually uploading files through the web interface.
+
+### Step 6: View Other Nemesis Services
+
+Click on the "Help" button on the bottom left to view the additionally exposed Nemesis services. Each route listed is a hyperlink to the service. For logins, refer to the environment variables set.
+
+![Nemesis services](images/nemesis-dashboard-services.png)
+
+### Step 7: Shutting Nemesis Down
+
+If you used `docker compose up` without `-d`, just ctrl + c to bring Nemesis down. To wipe the data stores for a fresh start, after bringing it down run `docker compose down -v`.

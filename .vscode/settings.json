@@ -1,25 +1,32 @@
 {
-    "python.analysis.diagnosticSeverityOverrides": {
-        "reportMissingImports": "none",
-        "reportMissingModuleSource": "none",
-    },
-    "editor.formatOnSave": false,
     "[javascript]": {
         "editor.formatOnSave": false
     },
     "[html]": {
         "editor.formatOnSave": false
     },
-    "files.trimTrailingWhitespace": true,
     "[python]": {
+        "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
             "source.organizeImports": "explicit"
         },
-        // "editor.defaultFormatter": "ms-python.black-formatter"
+        "editor.defaultFormatter": "charliermarsh.ruff"
     },
-    "flake8.args": [
-        "--max-line=length=120"
-    ],
+    "autoDocstring.docstringFormat": "google",
+    "editor.formatOnSave": false,
+    "files.exclude": {
+        "**/.DS_Store": true,
+        "**/.git": true,
+        "**/.hg": true,
+        "**/.mypy_cache": true,
+        "**/.pytest_cache": true,
+        "**/.svn": true,
+        "**/.venv": true,
+        "**/__pycache__": true,
+        "**/Thumbs.db": true
+    },
+    "files.trimTrailingWhitespace": true,
     "files.watcherExclude": {
         "**/__pycache__/**": true,
         "**/.git/objects/**": true,
@@ -34,4 +41,25 @@
         "**/dist/**": true,
         "**/node_modules/*/**": true,
     },
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingImports": "none",
+        "reportMissingModuleSource": "none",
+    },
+    "python.analysis.useLibraryCodeForTypes": true, // Pyright
+    // "python.formatting.provider": "none",
+    "python.languageServer": "Pylance",
+    "python.linting.enabled": true,
+    "python.linting.flake8Args": [
+        "--max-line-length=240",
+        "--ignore=E203,E722,W503",
+    ],
+    "python.linting.flake8Enabled": true,
+    "python.linting.lintOnSave": true,
+    "python.linting.pylintEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.analysis.typeCheckingMode": "basic",
 }

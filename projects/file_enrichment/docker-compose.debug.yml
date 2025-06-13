@@ -1,0 +1,64 @@
+# reference: https://docs.dapr.io/developing-applications/debugging/debugging-docker-compose/
+networks:
+  nemesis:
+    driver: bridge
+
+services:
+  # Isolate the deployed service by removing its ports and taking it off the network
+  file-enrichment:
+    ports: !reset []
+    networks: !reset
+      - ""
+
+  # The command args should match the service's sidecar values
+  # in the docker-compose.yml file (<service>_dapr)
+  file-enrichment-dapr:
+    command:
+      [
+        "./daprd",
+        "--app-id",
+        "file-enrichment",
+        "--app-port",
+        "8001", # The port that the app is listening on in VS code
+        "--dapr-http-port",
+        "3503",
+        "--dapr-grpc-port",
+        "50003",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+        "--app-channel-address",
+        "host.docker.internal"
+      ] # DO NOT CHANGE: Causes the sidecar look on the host for the App Channel
+    network_mode: !reset "" # Reset the network_mode...
+    # networks:
+    #   # ... so that the sidecar can go into the normal network
+    #   - nemesis_default
+
+    # Expose the Dapr sidecar ports to the host so the app being debugged
+    # can communicate with the sidecar running in the cluster
+    ports:
+      - "3503:3503" # Sidecar HTTP port
+      - "50003:50003" # Sidecar GRPC port (Dapr Worfklows depends on it)
+
+  # Open up Minio so file-enrichment being debugged can access it
+  minio:
+    ports:
+      - "9000:9000"
+  # file-enrichment-dapr:
+  #   image: "daprio/daprd"
+  #   command: [
+  #     "./daprd",
+  #     "--app-id", "file-enrichment",
+  #     "--app-port", "8001",
+  #     "--dapr-http-port", "3503",
+  #     "--dapr-grpc-port", "50003",
+  #     "--placement-host-address", "placement:50006",
+  #     "--scheduler-host-address", "scheduler:50007",
+  #     "--resources-path", "/dapr/components",
+  #     "--config", "/dapr/configuration/config.yaml"]

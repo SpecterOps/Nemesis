@@ -1,0 +1,114 @@
+rules:
+  - name: sha256crypt Hash
+    id: custom.sha256crypt
+    pattern: '(\$5\$(?:rounds=\d+\$)?[\./A-Za-z0-9]{1,16}\$(?:(?:[\./A-Za-z0-9]{43})))'
+    references:
+      - https://akkadia.org/drepper/SHA-crypt.txt
+      - https://hashcat.net/wiki/doku.php?id=example_hashes
+    examples:
+      - '$5$rounds=5000$GX7BopJZJxPc/KEK$le16UF8I2Anb.rOrn22AUPWvzUETDGefUmAV8AZkGcD'
+
+  - name: sha512crypt Hash
+    id: custom.sha512crypt
+    pattern: '(\$6\$(?:rounds=\d+\$)?[\./A-Za-z0-9]{1,16}\$(?:(?:[\./A-Za-z0-9]{43})))'
+    references:
+      - https://akkadia.org/drepper/SHA-crypt.txt
+      - https://hashcat.net/wiki/doku.php?id=example_hashes
+    examples:
+      - '$6$52450745$k5ka2p8bFuSmoVT1tzOyyuaREkkKBcCNqoDKzYiJL9RaE8yMnPgh2XzzF0NDrUhgrcLwg78xs1w5pJiypEdFX/'
+
+  # TODO: should the MSSQL hashes also include lower case?
+  - name: MSSQL 2000 Hash
+    id: custom.mssql2000
+    pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(0x0100[0-9aA-Z]{88})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
+    references:
+      - https://passlib.readthedocs.io/en/stable/lib/passlib.hash.mssql2000.html#format-algorithm
+      - https://hashcat.net/wiki/doku.php?id=example_hashes
+    examples:
+      - "0x01002702560500000000000000000000000000000000000000008db43dd9b1972a636ad0c7d4b8c515cb8ce46578"
+      - "This matches:0x01002702560500000000000000000000000000000000000000008db43dd9b1972a636ad0c7d4b8c515cb8ce46579"
+
+  - name: MSSQL 2012/2014 Hash
+    id: custom.mssql2012.2014
+    pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(0x0200[0-9aA-Z]{136})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
+    references:
+      - https://hashcat.net/forum/thread-1474.html
+      - https://hashcat.net/wiki/doku.php?id=example_hashes
+    examples:
+      - "0x0200F733058A07892C5CACE899768F89965F6BD1DED7955FE89E1C9A10E27849B0B213B5CE92CC9347ECCB34C3EFADAF2FD99BFFECD8D9150DD6AACB5D409A9D2652A4E0AF16"
+      - "This matches:0x0200881E2999DD8E3583695F405696257B99559953705A34D774C15AC1D42699BB77BC56DB5F657751335C1B350890E643790553B60329CAE7A2E7D3C04CF8856C4DB0058723"
+
+  - name: CISCO-IOS Type 8 Hash
+    id: custom.cisco.type8
+    pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(\$8\$[0-9a-zA-Z\./]{14}\$[0-9a-zA-Z\./]{43})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
+    references:
+      - https://foss.heptapod.net/python-libs/passlib/-/issues/87
+      - https://hashcat.net/wiki/doku.php?id=example_hashes
+    examples:
+      - "$8$TnGX/fE4KGHOVU$pEhnEvxrvaynpi8j4f.EMHr6M.FzU8xnZnBr/tJdFWk"
+
+
+  - name: CISCO-IOS Type 9 Hash
+    id: custom.cisco.type9
+    pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(\$9\$[0-9a-zA-Z\./]{14}\$[0-9a-zA-Z\./]{43})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
+    references:
+      - https://foss.heptapod.net/python-libs/passlib/-/issues/87
+      - https://hashcat.net/wiki/doku.php?id=example_hashes
+    examples:
+      - "This matches:$9$2MJBozw/9R3UsU$2lFhcKvpghcyw8deP25GOfyZaagyUOGBymkryvOdfo6"
+
+  - name: Git Config Credentials
+    id: custom.git_config_credentials
+    pattern: |
+      (?x)
+      (?:url|pushurl)\s*=\s*
+      (?:https?://|git@)
+      (?:
+        (?:[a-zA-Z0-9_\-\.]+):
+        ([^@\s]+)
+        @
+        |
+        ([a-zA-Z0-9_\-\.]+)
+        @
+      )
+      [a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}
+      (?::[0-9]+)?
+      (?:/|:)
+      [^\s]+
+      \.git
+    categories: [secret, api, fuzzy]
+    references:
+      - https://git-scm.com/docs/git-config
+      - https://git-scm.com/book/en/v2/Git-Tools-Credential-Storage
+    description: >
+      Git configuration credentials were found in a config file.
+      These credentials may provide access to private Git repositories.
+      An attacker could use these credentials to access, modify, or delete
+      repository content or gain further access to systems.
+    examples:
+      - |
+        [remote "origin"]
+                url = https://auth-token:Kdhjkerjkejkje32231@git.asdgwerw33231.com/infra/repo.git
+                fetch = +refs/heads/*:refs/remotes/origin/*
+      - |
+        [remote "upstream"]
+                url = https://username:password123@github.com/user/repo.git
+                fetch = +refs/heads/*:refs/remotes/upstream/*
+      - |
+        [remote "origin"]
+                url = https://oauth2:gho_16C7e42F292c6912E7710c838347Ae178B4a@github.com/user/repo.git
+      - |
+        [remote "github"]
+                url = git@github-token:x-oauth-basic@github.com:user/repo.git
+      - |
+        [remote "gitlab"]
+                pushurl = https://personal-access-token@gitlab.com/user/repo.git
+    negative_examples:
+      - |
+        [remote "origin"]
+                url = https://github.com/user/repo.git
+                fetch = +refs/heads/*:refs/remotes/origin/*
+      - |
+        [remote "origin"]
+                url = git@github.com:user/repo.git
+                fetch = +refs/heads/*:refs/remotes/origin/*

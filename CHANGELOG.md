@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - X
+
+Complete, nearly ground-up rewrite of the 1.0 branch.
+
+### Changed
+
+- Almost too many things to count.
+- k3s support dropped (for now) for docker compose for more rapid development
+- General-data-modeling approach abandoned to focus (for now) solely on file enrichment
+- MASSIVELY simplify the data schema: just `file` and `file_enriched`
+- Droped rarely-used, performance heavy functionality (NLP embedding models, top 10k password cracking, etc.)
+- Eliminated Elasticsearch, relying solely on Postgres for final data storage.
+    - System logging now done with [Loki](https://grafana.com/oss/loki/)
+- Completely new, custom React dashboard (dropping Streamlit)
+- Introduced "findings" concept
+- Alerting generalized with [Apprise](https://github.com/caronc/apprise/)
+- Dynamic Yara rule deployment
+- Dropped S3 support (for now) - solely local Minio for datalake
+- Dropped Protobufs for increased flexibility
+
 
 ## [1.0.0] - 2024-04-25
 

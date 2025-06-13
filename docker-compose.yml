@@ -1,0 +1,1070 @@
+name: nemesis # Controls the prefix of container names
+
+networks:
+  nemesis:
+    driver: bridge
+
+x-secrestore-variables: &secrestore-variables
+  environment:
+    - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+    - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+    - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
+    - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
+    - GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER:?}
+    - GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?}
+
+volumes:
+  postgres_data:
+  minio_data:
+  grafana_data:
+  loki_data:
+  prometheus_data:
+  rabbitmq_data:
+  jaeger_data:
+  # scheduler_data:
+  # placement_data:
+
+
+# Service/image naming convention: use hyphens.
+# - Ex: web-api or webapi, not web_api
+services:
+  ########################################
+  # Enrichment Services + Dapr sidecars
+  ########################################
+
+  web-api:
+    # image: nemesis-web-api:latest
+    build:
+      context: .
+      dockerfile: ./projects/web_api/Dockerfile
+      target: dev
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      # Mount source code directories
+      - ./libs/:/src/libs/
+      - ./projects/web_api/web_api:/src/projects/web_api/web_api
+      # Ensure that the container's venv is used and NOT the host's
+      - /src/projects/web_api/.venv
+    environment:
+      - APP_ID=web-api
+      - DAPR_HTTP_PORT=3500 # has to match the port set in the web-api-dapr sidecar
+      - DAPR_GRPC_PORT=50001 # has to match the port set in the web-api-dapr sidecar
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_started
+      placement:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web-api.rule=PathPrefix(`/api`)"
+      - "traefik.http.services.web-api.loadbalancer.server.port=8000"
+      - "traefik.http.routers.web-api.entrypoints=websecure"
+      - "traefik.http.routers.web-api.tls=true"
+      - "traefik.http.routers.web-api.middlewares=auth"
+  web-api-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--app-id",
+        "web-api",
+        "--max-body-size", "300Mi",
+        "--app-port",
+        "8000",
+        "--dapr-http-port",
+        "3500",
+        "--dapr-grpc-port",
+        "50001",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables # common ENV variables for the secretstore
+    depends_on:
+      web-api:
+        condition: service_started
+      placement:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    network_mode: "service:web-api"
+
+  noseyparker-scanner:
+    build:
+      context: .
+      dockerfile: ./projects/noseyparker_scanner/Dockerfile
+      target: dev
+    depends_on:
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_BUCKET=files
+      - RUST_LOG=debug
+      - DAPR_PORT=3513
+      - DAPR_GRPC_PORT=50013
+      - SNIPPET_LENGTH=512
+    volumes:
+      - ./projects/noseyparker_scanner/custom_rules/:/opt/noseyparker
+  noseyparker-scanner-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--max-body-size", "300Mi",
+        "--app-id",
+        "noseyparker-scanner",
+        "--app-port",
+        "50042",
+        "--app-protocol",
+        "grpc",
+        "--dapr-http-port",
+        "3513",
+        "--dapr-grpc-port",
+        "50013",
+        "--placement-host-address",
+        "placement:50006",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+        "--app-max-concurrency", "1" # ensure the application processes one file at a time
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables # common ENV variables for the secretstore
+    depends_on:
+      - noseyparker-scanner
+      - placement
+    network_mode: "service:noseyparker-scanner"
+
+  dotnet-api:
+    build:
+      context: .
+      dockerfile: ./projects/dotnet_api/Dockerfile
+      target: dev
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:1337/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # volumes:   # TODO: mount source during dev
+    #   - ./src:/app/src
+    volumes:
+      # Mount source code directories
+      - ./libs/:/src/libs/
+      - ./projects/dotnet_api/dotnet_api:/src/projects/dotnet_api/dotnet_api
+      # Ensure that the container's venv is used and NOT the host's
+      - /src/projects/dotnet_api/.venv
+    environment:
+      - APP_ID=dotnet-api
+      - DAPR_HTTP_PORT=3507 # has to match the port set in the dotnet-api-dapr sidecar
+      - DAPR_GRPC_PORT=50010 # has to match the port set in the dotnet-api-dapr sidecar
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_started
+      placement:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+  dotnet-api-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--max-body-size", "300Mi",
+        "--app-id",
+        "dotnet-api",
+        "--app-port",
+        "1337",
+        "--dapr-http-port",
+        "3507",
+        "--dapr-grpc-port",
+        "50010",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables # common ENV variables for the secretstore
+    depends_on:
+      dotnet-api:
+        condition: service_started
+      placement:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    network_mode: "service:dotnet-api"
+
+  file-enrichment:
+    build:
+      context: .
+      dockerfile: ./projects/file_enrichment/Dockerfile
+      target: dev
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      # Mount source code directories
+      - ./libs/:/src/libs/
+      - ./projects/file_enrichment/file_enrichment:/src/projects/file_enrichment/file_enrichment
+      # Ensure that the container's venv is used and NOT the host's
+      - /src/projects/file_enrichment/.venv
+      - ./libs/file_enrichment_modules/yara_rules/dev/:/yara_rules/:ro
+    environment:
+      - APP_ID=file-enrichment
+      - DAPR_HTTP_PORT=3503  # has to match the port set in the file-enrichment-dapr sidecar
+      - DAPR_GRPC_PORT=50003 # has to match the port set in the file-enrichment-dapr sidecar
+      - NEMESIS_URL=${NEMESIS_URL:?}
+      - LOG_LEVEL=DEBUG
+      # - UVICORN_WORKERS=2 # if you want override the worker defaul
+      - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}                # used for text summarization
+      - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}        # used for password/credential extraction
+      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}                  # used for triaging findings
+      - MAX_PARALLEL_WORKFLOWS=${MAX_PARALLEL_WORKFLOWS:-5}                     # maximum workflows that can run in parallel
+      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}         # maximum time (in seconds) until a workflow is killed
+      - MAX_PARALLEL_ENRICHMENT_MODULES=${MAX_PARALLEL_ENRICHMENT_MODULES:-5}   # maximum enrichment modules per workflow that can run in parallel
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_started
+      placement:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+  file-enrichment-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--max-body-size", "300Mi",
+        # "-log-level",
+        # "debug",
+        "--app-id",
+        "file-enrichment",
+        "--app-port",
+        "8001",
+        "--dapr-http-port",
+        "3503",
+        "--dapr-grpc-port",
+        "50003",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables # common ENV variables for the secretstore
+    depends_on:
+      file-enrichment:
+        condition: service_started
+      placement:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy # this is critical
+    network_mode: "service:file-enrichment"
+
+  frontend:
+    build:
+      context: ./projects/frontend/
+      dockerfile: Dockerfile
+      target: dev
+    depends_on:
+      - postgres
+      - hasura
+    environment:
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
+    command: >
+      sh -c "
+        mkdir -p /app-runtime &&
+        cp -r /app/* /app-runtime/ &&
+        SECRET=\"$$HASURA_ADMIN_SECRET\" &&
+        sed -i \"s/\\$$HASURA_ADMIN_SECRET/$$SECRET/g\" /app-runtime/index.html &&
+        cd /app-runtime &&
+        npm run dev
+      "
+    volumes:
+      - ./projects/frontend/src:/app/src:ro
+      - ./projects/frontend/public:/app/public:ro
+      - ./projects/frontend/package.json:/app/package.json:ro
+      - ./projects/frontend/vite.config.js:/app/vite.config.js:ro
+      - ./projects/frontend/index.html:/app/index.html:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.middlewares=auth"
+
+  jupyter:
+    build:
+      context: ./projects/jupyter/
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+      - hasura
+    environment:
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
+      - HASURA_GRAPHQL_URL=http://hasura:8080/v1/graphql
+      - JUPYTER_PASSWORD=${JUPYTER_PASSWORD:?}            # No auth by default, but can be set
+      # - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+    volumes:
+      - ./projects/jupyter/notebooks:/home/jovyan/work
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/jupyter/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jupyter.rule=PathPrefix(`/jupyter`)"
+      - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
+      - "traefik.http.routers.jupyter.entrypoints=websecure"
+      - "traefik.http.routers.jupyter.tls=true"
+      - "traefik.http.routers.jupyter.middlewares=auth"
+
+  alerting:
+    build:
+      context: .
+      dockerfile: ./projects/alerting/Dockerfile
+      target: dev
+    # volumes:
+    #   - ./src:/app/src    # TODO: pick up source during dev
+    environment:
+      - DAPR_HTTP_PORT=3508
+      - DAPR_GRPC_PORT=50008
+      - APPRISE_URLS=${APPRISE_URLS:-}    # Optional apprise notification URLs
+      - NEMESIS_URL=${NEMESIS_URL:?}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      placement:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      hasura:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  alerting-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--max-body-size", "300Mi",
+        "--app-id",
+        "alerting",
+        "--app-port",
+        "8000",
+        "--dapr-http-port",
+        "3508",
+        "--dapr-grpc-port",
+        "50008",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables # common ENV variables for the secretstore
+    depends_on:
+      alerting:
+        condition: service_started
+      placement:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    network_mode: "service:alerting"
+
+  triage:
+    build:
+      context: .
+      dockerfile: ./projects/triage/Dockerfile
+      target: dev
+    environment:
+      - DAPR_HTTP_PORT=3509
+      - DAPR_GRPC_PORT=50009
+      - NEMESIS_URL=${NEMESIS_URL:?}
+      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      placement:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      hasura:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  triage-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--max-body-size", "300Mi",
+        "--app-id",
+        "triage",
+        "--app-port",
+        "8000",
+        "--dapr-http-port",
+        "3509",
+        "--dapr-grpc-port",
+        "50009",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables # common ENV variables for the secretstore
+    depends_on:
+      triage:
+        condition: service_started
+      placement:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    network_mode: "service:triage"
+
+  housekeeping:
+    build:
+      context: .
+      dockerfile: ./projects/housekeeping/Dockerfile
+      target: dev
+    volumes:
+      # Mount source code directories
+      - ./libs/:/src/libs/
+      - ./projects/housekeeping/housekeeping:/src/projects/housekeeping/housekeeping
+      # Ensure that the container's venv is used and NOT the host's
+      - /src/projects/housekeeping/.venv
+    environment:
+      - APP_ID=housekeeping
+      - DAPR_HTTP_PORT=3510
+      - DAPR_GRPC_PORT=50011
+      - CLEANUP_SCHEDULE=0 0 * * *  # Cron format: run at midnight every day
+      # - CLEANUP_SCHEDULE=0 * * * *    # Cron format: run every hour
+      # - CLEANUP_SCHEDULE=*/3 * * * *    # Cron format: run every 3 minutes (for testing)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      placement:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  housekeeping-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--max-body-size", "300Mi",
+        "--app-id",
+        "housekeeping",
+        "--app-port",
+        "8000",
+        "--dapr-http-port",
+        "3510",
+        "--dapr-grpc-port",
+        "50011",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables # common ENV variables for the secretstore
+    depends_on:
+      housekeeping:
+        condition: service_started
+      placement:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    network_mode: "service:housekeeping"
+
+  ##############################################
+  # Packaged Services Exposed via Dapr sidecars
+  ##############################################
+
+  document-conversion:
+    build:
+      context: .
+      dockerfile: ./projects/document_conversion/Dockerfile
+      target: dev
+    volumes:
+      # Mount source code directories
+      - ./libs/:/src/libs/
+      - ./projects/document_conversion/document_conversion:/src/projects/document_conversion/document_conversion
+      # Ensure that the container's venv is used and NOT the host's
+      - /src/projects/document_conversion/.venv
+      - ./infra/tika/tika-config.xml:/tika-config.xml
+    environment:
+      - APP_ID=document-conversion
+      - TIKA_CONFIG=/tika-config.xml
+      - DAPR_HTTP_PORT=3501
+      - DAPR_GRPC_PORT=50002
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_started
+      placement:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+  document-conversion-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--max-body-size", "300Mi",
+        "--app-id",
+        "document-conversion",
+        "--app-port",
+        "8000",
+        "--dapr-http-port",
+        "3501",
+        "--dapr-grpc-port",
+        "50002",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables  # common ENV variables for the secretstore
+    depends_on:
+      document-conversion:
+        condition: service_started
+      placement:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    network_mode: "service:document-conversion"
+
+  gotenberg:
+    image: gotenberg/gotenberg:8.15.3
+    command:
+      [
+        "gotenberg",
+        "--api-timeout=180s",
+        "--libreoffice-restart-after=5",
+        "--libreoffice-auto-start=true",
+      ]
+    environment:
+      - DISABLE_GOOGLE_CHROME="1"
+    healthcheck:
+      test: ["CMD", "curl", "-sSf", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  gotenberg-dapr:
+    image: "daprio/daprd:1.15.5"
+    command:
+      [
+        "./daprd",
+        "--max-body-size", "300Mi",
+        "--app-id",
+        "gotenberg",
+        "--app-port",
+        "3000",
+        "--dapr-http-port",
+        "3505",
+        "--dapr-grpc-port",
+        "50005",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/config.yaml",
+      ]
+    volumes:
+      - "./infra/dapr/:/dapr"
+    <<: *secrestore-variables # common ENV variables for the secretstore
+    depends_on:
+      gotenberg:
+        condition: service_started
+      placement:
+        condition: service_started
+      scheduler:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    network_mode: "service:gotenberg"
+
+
+  ############################
+  # Datalake
+  ############################
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    # ports:
+    #   - "9000:9000"     # API port
+    #   - "9001:9001"     # Console port
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001" --address ":9000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Init container to create bucket
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    entrypoint: [
+      "/bin/sh",
+      "-c",
+      "until mc alias set minio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do echo 'Waiting...'; sleep 2; done && mc mb minio/loki-data --ignore-existing"
+    ]
+    restart: "no"
+
+  ############################
+  # Message queue
+  ############################
+  rabbitmq:
+    image: rabbitmq:4.0.5-management
+    environment:
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_management path_prefix "/rabbitmq"
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:?}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq  # Persist RabbitMQ data
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq-ui.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq-ui.tls=true"
+      - "traefik.http.services.rabbitmq-ui.loadbalancer.server.port=15672"
+      - "traefik.http.routers.rabbitmq-ui.rule=PathPrefix(`/rabbitmq`)"
+      # - "traefik.http.routers.rabbitmq-ui.middlewares=auth"   # Not working for some reason...
+
+  ############################
+  # State store and final data storage
+  ############################
+  postgres:
+    image: postgres:17.2-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:-enrichment}
+    volumes:
+      - ./infra/postgres:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d enrichment"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # ports:
+    #   - "5432:5432"
+
+  hasura:
+    image: hasura/graphql-engine:v2.45.1.cli-migrations-v2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment
+      HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
+      HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
+      HASURA_GRAPHQL_ENABLE_METADATA_SYNC: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: "${HASURA_ADMIN_SECRET:-pass456}"
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
+      HASURA_GRAPHQL_BASE_PATH: "/hasura"
+      # HASURA_GRAPHQL_CONSOLE_BASE_PATH: "/hasura"
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_LOG_LEVEL: "warn"
+    volumes:
+      - ./infra/hasura/metadata:/hasura-metadata:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hasura.rule=PathPrefix(`/hasura`)"
+      - "traefik.http.services.hasura.loadbalancer.server.port=8080"
+      # - "traefik.http.routers.hasura.middlewares=auth,graphql-stripprefix"   # Not working for some reason...
+      - "traefik.http.routers.hasura.middlewares=graphql-stripprefix"
+      - "traefik.http.middlewares.graphql-stripprefix.stripprefix.prefixes=/hasura"
+      - "traefik.http.routers.hasura.entrypoints=websecure"
+      - "traefik.http.routers.hasura.tls=true"
+
+  ############################
+  # Networking
+  ############################
+  traefik:
+    image: traefik:v3.3.2
+    command:
+      - "--api.insecure=true"
+      - "--log.level=WARN"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
+      - "--metrics.prometheus.addrouterslabels=true"
+      - "--metrics.prometheus.addserviceslabels=true"
+      - "--metrics.prometheus.addentrypointslabels=true"
+    labels:
+      - "traefik.enable=true"
+      # Default username and pass are both the letter 'n'. User generate_start_command.sh otherwise.
+      - "traefik.http.middlewares.auth.basicauth.users=${BASIC_AUTH_USERS:-n:$$apr1$$RbnOjtKr$$S706SPJ3KzCKIref.gRFT.}"
+      - "traefik.http.routers.dashboard.tls=true"
+    ports:
+      - "7443:443"
+      # - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./auth:/auth"
+      - "./infra/traefik/certs:/certs"
+    # TODO: Add healthcheck that hits an unauth'ed endpoint?
+    # healthcheck:
+    #   test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+
+  ############################
+  # Dapr services
+  ############################
+  placement:
+    image: "daprio/dapr:1.15.5"
+    command: ["./placement", "-port", "50006"]
+    # user: "0:0" # run as root to deal with persistence issue
+    # volumes:
+    #   - placement_data:/var/lib/dapr  # Persist placement state
+
+  scheduler:
+    image: "daprio/dapr:1.15.5"
+    command:
+      [
+        "./scheduler",
+        "--port",
+        "50007",
+        "--etcd-data-dir=/var/lock/dapr/scheduler",
+      ]
+    # user: "0:0" # run as root to deal with persistence issue
+    # volumes:
+    #   - scheduler_data:/var/lock/dapr/scheduler  # Persist scheduler state
+
+  ############################
+  # Tracing/Logging services
+  ############################
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+    - ./infra/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    # - /tmp/:/etc/output:rw # Store the logs
+    depends_on:
+      - jaeger
+
+  # UI to view traces
+  jaeger:
+    image: jaegertracing/all-in-one
+    environment:
+      - QUERY_BASE_PATH=/jaeger
+    # ports:
+    # - "16686:16686"  # UI port
+    # - "4317:4317"    # OTLP gRPC
+    # - "4318:4318"    # OTLP HTTP
+    volumes:
+      - jaeger_data:/badger  # Persist trace data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jaeger.rule=PathPrefix(`/jaeger`)"
+      - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
+      - "traefik.http.routers.jaeger.entrypoints=websecure"
+      - "traefik.http.routers.jaeger.tls=true"
+      - "traefik.http.routers.jaeger.middlewares=auth"
+
+  loki:
+    image: grafana/loki:3.3.2
+    command:
+      - "-config.file=/etc/loki/local-config.yaml"
+      - "-config.expand-env=true"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./infra/loki:/etc/loki
+      - loki_data:/loki
+    depends_on:
+      - minio-init
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+    - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    user: "0:0"
+    volumes:
+      - ./infra/promtail:/etc/promtail
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+    command:
+      - -config.file=/etc/promtail/config.yaml
+      - -config.expand-env=true
+      - -log.level=warn
+    security_opt:
+      - apparmor:unconfined
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:?}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?}
+      - GF_SERVER_ROOT_URL=${EXTERNAL_HOST:-https://localhost}/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SERVER_DOMAIN=${EXTERNAL_HOST:-https://localhost}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=PathPrefix(`/grafana`)"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.routers.grafana.middlewares=auth"
+    healthcheck:
+      test: ["CMD", "curl", "-sSf", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    volumes:
+      - ./infra/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.external-url=/prometheus/"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:9090/prometheus/-/healthy",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=PathPrefix(`/prometheus`)"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+      - "traefik.http.routers.prometheus.entrypoints=websecure"
+      - "traefik.http.routers.prometheus.tls=true"
+      - "traefik.http.routers.prometheus.middlewares=auth"
+
+  # Monitoring docker host metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+
+  # Monitoring container metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+
+  ############################
+  # CLI - Build only, not run
+  ############################
+  cli:
+    build:
+      context: .
+      dockerfile: ./projects/cli/Dockerfile
+      target: dev
+    network_mode: host # so we can submit to https://0.0.0.0.0:7443 easily
+    volumes:
+      # Mount source code directories (for development)
+      - ./libs/:/src/libs/
+      - ./projects/cli/cli:/src/projects/cli/cli
+      # Ensure that the container's venv is used and NOT the host's
+      - /src/projects/cli/.venv
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - LOG_LEVEL=DEBUG
