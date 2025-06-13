@@ -64,7 +64,7 @@ docker compose up
 Alternatively, you can use the `./tools/start.sh` script which automates all of this:
 
 ```bash
-./tools/script.sh dev
+./tools/start.sh dev
 ```
 
 #### For Production Deployments
