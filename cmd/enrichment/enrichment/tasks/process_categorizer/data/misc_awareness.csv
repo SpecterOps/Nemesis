@@ -1,5 +1,0 @@
-# Format: <program.exe>,<product> - <description>
-logonui.exe,Windows Logon User Interface Host
-scrnsave.exe,Screen Saver
-wmiprvse.exe,Microsoft Windows - WMI Provider Host
-werfault.exe,Windows Error Reporting - Did you crash a process?
