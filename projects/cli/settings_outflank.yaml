@@ -1,0 +1,22 @@
+cache_db_path: "/tmp/nemesis_connectors"
+conn_timeout_sec: 5
+validate_https_certs: true
+
+nemesis:
+  url: "https://nemesis.example.com"
+  credential:
+    username: "connector_bot"
+    password: "pass"
+  expiration_days: 100
+  max_file_size: 1000000000
+
+outflank:
+  - url: "https://stage1.example.com"
+    credential:
+      username: "nemesis_bot"
+      password: "outflank_password"
+
+    # Optional:
+    #   When set, stage1 downloads are retrieved from disk instead of stage1's API.
+    #   The connect must be able to read files from stage1's downloads folder.
+    # outflank_upload_path: "/opt/stage1/"

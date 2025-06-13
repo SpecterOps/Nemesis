@@ -1,0 +1,22 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.postgresql
+  version: v1
+  metadata:
+  - name: connectionString
+    secretKeyRef:
+      name: POSTGRES_CONNECTION_STRING
+      key: POSTGRES_CONNECTION_STRING
+  - name: actorStateStore
+    value: "true"
+  - name: table
+    value: "state"
+  - name: metadataTable
+    value: "metadata" 
+  - name: schema
+    value: "public"
+auth:
+  secretStore: nemesis-secret-store

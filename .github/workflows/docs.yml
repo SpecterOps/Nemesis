@@ -1,0 +1,53 @@
+name: Build documentation
+
+on:
+  push:
+    branches: [main]
+
+    # Only trigger workflow when documentation files are changed
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+
+    environment:
+      name: github-pages
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python virtualenv
+        run: |
+          pip install --upgrade pip
+          python -m venv env
+          source env/bin/activate
+          pip install -r docs/requirements.txt
+
+      - name: Build documentation
+        run: |
+          source env/bin/activate
+          mkdocs build
+
+      - name: Setup Github pages
+        uses: actions/configure-pages@v4
+
+      - name: Create Github pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy documentation to Github pages
+        uses: actions/deploy-pages@v4

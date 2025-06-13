@@ -1,0 +1,43 @@
+services:
+  web_api: # Isolate the nodeapp by removing its ports and taking it off the network
+    ports: !reset []
+    networks: !reset
+      - ""
+  web_api_dapr:
+    command: ["./daprd",
+     "--app-id", "web_api",
+     "--app-port", "8000", # This must match the port that your app is exposed on when debugging in the IDE
+     "--resources-path", "/dapr/components",
+     "--app-channel-address", "host.docker.internal"] # Make the sidecar look on the host for the App Channel
+    network_mode: !reset "" # Reset the network_mode...
+    networks: # ... so that the sidecar can go into the normal network
+      - hello-dapr
+    ports:
+      - "3500:3500"   # Expose the HTTP port to the host
+      - "50001:50001" # Expose the GRPC port to the host (Dapr Worfklows depends upon the GRPC channel)
+
+
+  # web_api_dapr:
+  #   image: "daprio/daprd:edge"
+  #   command: [
+  #     "./daprd",
+  #     "--app-id", "web_api",
+  #     "--app-port", "8000",
+  #     "--dapr-http-port", "3500",
+  #     "--dapr-grpc-port", "50001",
+  #     "--placement-host-address", "placement:50006",
+  #     "--scheduler-host-address", "scheduler:50007",
+  #     "--resources-path", "/dapr/components",
+  #     "--config", "/dapr/configuration/config.yaml"]
+  #   volumes:
+  #     - "./dapr/:/dapr"
+  #   depends_on:
+  #     web_api:
+  #       condition: service_started
+  #     placement:
+  #       condition: service_started
+  #     scheduler:
+  #       condition: service_started
+  #     rabbitmq:
+  #       condition: service_healthy # this is critical
+  #   network_mode: "service:web_api"

@@ -1,0 +1,47 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "CLI: Mythic Connector",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/cli/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "connect-mythic",
+                "--config",
+                "~/settings_mythic.yaml",
+            ]
+        },
+        {
+            "name": "CLI: Outflank C2 Connector",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/cli/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "connect",
+                "--config",
+                "~/nemesis_connector_settings.yml",
+                "--debug"
+            ],
+            "env": {}
+        },
+        {
+            "name": "CLI: Submit",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/cli/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "submit",
+                "/etc/issue"
+            ],
+            "env": {}
+        }
+    ]
+}

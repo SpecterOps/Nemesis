@@ -1,0 +1,68 @@
+site_name: Nemesis Documentation
+site_url: https://specterops.github.io/Nemesis/
+repo_url: https://github.com/SpecterOps/Nemesis
+repo_name: SpecterOps/Nemesis
+edit_uri: edit/main/docs/
+
+plugins:
+  - search
+
+exclude_docs: |
+  /requirements.txt
+
+nav:
+  - Nemesis: index.md
+  - Quickstart: quickstart.md
+  - Overview: overview.md
+
+  - Usage:
+    - usage_guide.md
+    - cli.md
+    - troubleshooting.md
+    - yara.md
+
+  - Services:
+    - dapr.md
+    - hasura.md
+    - jupyter.md
+    - housekeeping.md
+
+  - Developer:
+    - Adding File Enrichment Modules: file_enrichment_modules.md
+    - Adding Nosey Parker Rules: noseyparker_rules.md
+    - Operational Data Reference: odr.md
+
+theme:
+  name: material
+  locale: en
+  logo: images/logo.png
+  favicon: images/logo.png
+
+  features:
+    - navigation.sections
+    - content.code.copy
+
+  icon:
+    repo: fontawesome/brands/github
+
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: nemesis-light
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    - media: "(prefers-color-scheme: dark)"
+      scheme: nemesis-dark
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+extra_css:
+  - stylesheets/colors.css
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      use_pygments: true

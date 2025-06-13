@@ -1,0 +1,141 @@
+# hasura/metadata/tables.yaml
+- table:
+    name: document_search_results
+    schema: public
+- table:
+    name: workflows
+    schema: public
+- table:
+    name: enrichments
+    schema: public
+  object_relationships:
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: object_id
+- table:
+    name: files
+    schema: public
+- table:
+    name: file_tags
+    schema: public
+- table:
+    name: files_enriched
+    schema: public
+  object_relationships:
+  - name: files_feedback
+    using:
+      foreign_key_constraint_on:
+        column: object_id
+        table:
+          name: files_feedback
+          schema: public
+  - name: plaintext_content
+    using:
+      foreign_key_constraint_on:
+        column: object_id
+        table:
+          name: plaintext_content
+          schema: public
+  array_relationships:
+  - name: enrichments
+    using:
+      foreign_key_constraint_on:
+        column: object_id
+        table:
+          name: enrichments
+          schema: public
+  - name: files_view_histories
+    using:
+      foreign_key_constraint_on:
+        column: object_id
+        table:
+          name: files_view_history
+          schema: public
+  - name: findingsByObjectId
+    using:
+      foreign_key_constraint_on:
+        column: object_id
+        table:
+          name: findings
+          schema: public
+  - name: plaintext_contents
+    using:
+      foreign_key_constraint_on:
+        column: object_id
+        table:
+          name: plaintext_content
+          schema: public
+  - name: transforms
+    using:
+      foreign_key_constraint_on:
+        column: object_id
+        table:
+          name: transforms
+          schema: public
+- table:
+    name: files_enriched_dataset
+    schema: public
+- table:
+    name: files_feedback
+    schema: public
+  object_relationships:
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: object_id
+- table:
+    name: files_view_history
+    schema: public
+  object_relationships:
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: object_id
+- table:
+    name: findings
+    schema: public
+  object_relationships:
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: object_id
+  - name: findings_triage_history
+    using:
+      foreign_key_constraint_on: triage_id
+  array_relationships:
+  - name: finding_triage_histories
+    using:
+      foreign_key_constraint_on:
+        column: finding_id
+        table:
+          name: findings_triage_history
+          schema: public
+- table:
+    name: findings_triage_history
+    schema: public
+  object_relationships:
+  - name: finding
+    using:
+      foreign_key_constraint_on: finding_id
+  array_relationships:
+  - name: findings
+    using:
+      foreign_key_constraint_on:
+        column: triage_id
+        table:
+          name: findings
+          schema: public
+- table:
+    name: plaintext_content
+    schema: public
+  object_relationships:
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: object_id
+- table:
+    name: transforms
+    schema: public
+  object_relationships:
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: object_id
+- table:
+    name: yara_rules
+    schema: public

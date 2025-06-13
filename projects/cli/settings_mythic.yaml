@@ -1,0 +1,26 @@
+mythic:
+  url: "https://mythic.local:7443"
+
+  # Password auth
+  credential:
+    username: "a"
+    password: "a"
+
+  # Token auth
+  # credential:
+  #   token: "mythic_token"
+
+nemesis:
+  url: "https://nemesis.local:7443/"
+  credential:
+    username: "n"
+    password: "n"
+  expiration_days: 100 # After how many days will uploaded files be deleted
+  max_file_size: 1000000000 # 1GB
+
+db:
+  path: "mythic_sync.db"
+
+networking:
+  timeout_sec: 30
+  validate_https_certs: true

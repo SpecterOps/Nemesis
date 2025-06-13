@@ -1,0 +1,9 @@
+# Ignore common LevelDB file types
+**/*.ldb
+**/*.sst
+**/*.log
+**/MANIFEST-*
+**/CURRENT
+**/LOCK
+**/LOG
+**/LOG.old

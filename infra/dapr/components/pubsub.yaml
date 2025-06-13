@@ -1,0 +1,30 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: pubsub.rabbitmq
+  version: v1
+  metadata:
+    - name: connectionString
+      secretKeyRef:
+        name: RABBITMQ_CONNECTION_STRING
+        key: RABBITMQ_CONNECTION_STRING
+    - name: durable
+      value: "true"
+    - name: deletedWhenUnused
+      value: "false"
+    - name: autoAck
+      value: "false"
+    - name: reconnectWait
+      value: "5"
+    - name: concurrencyMode
+      value: parallel
+    # - name: backOffMaxRetries # doesn't appear to be a used value
+    #   value: "5"
+    # - name: backOffMaxInterval # doesn't appear to be a used value
+    #   value: "5s"
+    - name: prefetchCount
+      value: "10"              # Set to 1 for processing one message at a time
+auth:
+  secretStore: nemesis-secret-store
