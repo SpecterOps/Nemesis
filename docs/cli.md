@@ -5,6 +5,7 @@ The Nemesis CLI provides tools for interacting with the Nemesis platform, includ
 ## Overview
 
 The CLI supports four main operations:
+
 - **File Submission**: Upload files directly to Nemesis for processing
 - **Folder Monitoring**: Monitor a folder for new files and submit them to Nemesis for processing
 - **Mythic Connector**: Synchronize data between Mythic C2 and Nemesis
