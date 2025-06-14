@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: "specterops/nemesis-2.0" # ${{ github.repository }} causes issues as SpecterOps is not all lowercase
+  IMAGE_PREFIX: "specterops/nemesis" # ${{ github.repository }} causes issues as SpecterOps is not all lowercase
   PLATFORMS: linux/amd64,linux/arm64  # Added platforms (arm64 for Mac M1/M2/M3 and AWS images)
 
 jobs:
