@@ -6,7 +6,6 @@ For a general overview of the Nemesis project structure, see the [overview](over
 
 - [Nemesis Usage Guide](#nemesis-usage-guide)
   - [Data Ingestion](#data-ingestion)
-    - [CLI File Submission](#cli-file-submission)
     - [Nemesis C2 Connector Setup](#nemesis-c2-connector-setup)
   - [Nemesis Dashboard](#nemesis-dashboard)
     - [Files](#files)
@@ -115,7 +114,7 @@ Nemesis indexes the full text of any plaintext file, or the extracted plaintext 
 
 Clicking the topright filter icon will bring down filters you can apply for searches:
 
-![Nemesis Document Search Filter](images/nemesis-dashboard-docsearch.png)
+![Nemesis Document Search Filter](images/nemesis-dashboard-docsearch-filter.png)
 
 ### Findings
 
