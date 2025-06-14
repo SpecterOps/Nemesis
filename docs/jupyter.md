@@ -17,6 +17,8 @@ When Nemesis is running, Jupyter is available at:
 
 **URL**: `https://your-nemesis-host/jupyter/`
 
+![Jupyter](images/nemesis-jupyter-notebook1.png)
+
 This is also linked to by the Nemesis `Help` menu.
 
 ## Authentication
