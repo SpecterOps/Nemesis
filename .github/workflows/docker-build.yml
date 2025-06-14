@@ -114,7 +114,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-service-images:
-    # needs: build-base-images
+    needs: build-base-images
     runs-on: ubuntu-latest
     permissions:
       contents: read
