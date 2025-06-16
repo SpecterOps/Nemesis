@@ -20,11 +20,11 @@ services:
   file-enrichment:
     <<: *service-prod
     # image: ghcr.io/specterops/nemesis-2.0/file-enrichment:latest
-    volumes:
-      - ./libs/file_enrichment_modules/yara_rules/prod:/yara_rules/:ro
+    volumes: []
+    #  - ./libs/file_enrichment_modules/yara_rules/prod:/yara_rules/:ro
     environment:
       - LOG_LEVEL=INFO
-      - UVICORN_WORKERS=4
+      - UVICORN_WORKERS=2
 
   frontend:
     <<: *service-prod
