@@ -942,8 +942,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    ports:
-    - "3100:3100"
 
   promtail:
     image: grafana/promtail:3.3.2
