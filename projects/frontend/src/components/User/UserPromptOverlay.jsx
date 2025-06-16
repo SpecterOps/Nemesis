@@ -57,7 +57,7 @@ const UserPromptOverlay = () => {
               value={inputProject}
               onChange={(e) => setInputProject(e.target.value)}
               className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter project name"
+              placeholder="Enter project name (e.g. ASSESS-123)"
               required
             />
           </div>

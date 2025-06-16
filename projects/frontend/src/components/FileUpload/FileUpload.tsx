@@ -263,7 +263,7 @@ const FileUpload: React.FC = () => {
               required
               value={project}
               onChange={(e) => setProject(e.target.value)}
-              placeholder="Enter project name"
+              placeholder="Enter project name (e.g. ASSESS-123)"
             />
 
             <InputField
