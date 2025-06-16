@@ -270,10 +270,7 @@ docker compose run --rm \
 
 ### What Gets Synchronized
 
-- **Callbacks**: Agent information and metadata
-- **Tasks**: Command execution history
 - **File Downloads**: Agent-collected files
-- **Artifacts**: IOCs and observables
 - **Screenshots**: Visual captures from agents
 
 ## Outflank Connector
