@@ -21,6 +21,7 @@ services:
     <<: *service-prod
     # image: ghcr.io/specterops/nemesis-2.0/file-enrichment:latest
     volumes: []
+    #  Depending on RAM available, this may kill the UVICORN process, so disabling by default
     #  - ./libs/file_enrichment_modules/yara_rules/prod:/yara_rules/:ro
     environment:
       - LOG_LEVEL=INFO
