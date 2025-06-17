@@ -26,7 +26,7 @@ jobs:
         service:
           - name: noseyparker-scanner
             context: .
-            dockerfile: ./projects/noseyparker_scanner/Dockerfile.nemesis
+            dockerfile: ./projects/noseyparker_scanner/Dockerfile.new
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
