@@ -903,15 +903,14 @@ services:
 
   # UI to view traces
   jaeger:
-    image: jaegertracing/all-in-one
+    image: jaegertracing/jaeger:latest  # v2.x image
+    user: "0:0"
     environment:
       - QUERY_BASE_PATH=/jaeger
-    # ports:
-    # - "16686:16686"  # UI port
-    # - "4317:4317"    # OTLP gRPC
-    # - "4318:4318"    # OTLP HTTP
     volumes:
       - jaeger_data:/badger  # Persist trace data
+      - ./infra/jaeger/jaeger-config.yaml:/etc/jaeger/config.yaml
+    command: ["--config", "/etc/jaeger/config.yaml"]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.jaeger.rule=PathPrefix(`/jaeger`)"
@@ -919,6 +918,12 @@ services:
       - "traefik.http.routers.jaeger.entrypoints=websecure"
       - "traefik.http.routers.jaeger.tls=true"
       - "traefik.http.routers.jaeger.middlewares=auth"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:13133/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   loki:
     image: grafana/loki:3.3.2
