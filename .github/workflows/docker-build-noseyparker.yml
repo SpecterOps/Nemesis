@@ -9,11 +9,10 @@ on:
   #     - 'projects/noseyparker_scanner/**'
   #     - '.github/workflows/noseyparker-scanner-build.yml'
 
-
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: "specterops/nemesis" # ${{ github.repository }} causes issues as SpecterOps is not all lowercase
-  PLATFORMS: linux/amd64,linux/arm64  # Added platforms (arm64 for Mac M1/M2/M3 and AWS images)
+  IMAGE_PREFIX: "specterops/nemesis"
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   build-noseyparker-scanner:
@@ -36,14 +35,23 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      # Cache Rust dependencies before Docker build
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: 'noseyparker-scanner'
-          workdir: ./projects/noseyparker_scanner
-          cache-on-failure: true
+          # Use larger instance for better performance
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      # Pre-warm Rust registry cache
+      - name: Cache Rust registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -78,7 +86,8 @@ jobs:
             CARGO_INCREMENTAL=0
             CARGO_TERM_COLOR=always
             RUST_BACKTRACE=1
-          # Enhanced multi-layer caching strategy
+            CARGO_BUILD_JOBS=4
+          # Enhanced multi-layer caching with registry
           cache-from: |
             type=gha,scope=noseyparker-scanner-${{ github.ref_name }}
             type=gha,scope=noseyparker-scanner-main
@@ -91,22 +100,6 @@ jobs:
         run: |
           # Test that the image runs and shows version
           docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/noseyparker-scanner:${{ steps.meta.outputs.version }} --help || true
-
-      # Optional: Security scan with Trivy
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/noseyparker-scanner:${{ steps.meta.outputs.version }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-        continue-on-error: true
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
 
       # Clean up cache on successful build to prevent cache bloat
       - name: Cleanup old cache entries

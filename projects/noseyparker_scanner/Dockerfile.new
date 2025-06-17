@@ -2,7 +2,7 @@
 FROM lukemathwalker/cargo-chef:latest-rust-1.86.0-slim-bookworm AS chef
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies with optimizations
 RUN apt-get update && \
     apt-get install -y \
     build-essential \
@@ -11,54 +11,82 @@ RUN apt-get update && \
     pkg-config \
     libssl-dev \
     libboost-all-dev \
-    ragel && \
+    ragel \
+    ccache && \
     rm -rf /var/lib/apt/lists/*
+
+# Configure ccache for faster builds
+ENV CCACHE_DIR=/ccache
+ENV CC="ccache gcc"
+ENV CXX="ccache g++"
+RUN mkdir -p /ccache
 
 # Prepare recipe (cargo-chef planning phase)
 FROM chef AS planner
 COPY ./projects/noseyparker_scanner/ .
 RUN cargo chef prepare --recipe-path recipe.json
 
-# Build dependencies for dev
-FROM chef AS dev-deps
-COPY --from=planner /app/recipe.json recipe.json
-
-# Set optimization environment variables (from NoseyParker CI)
-ENV CARGO_INCREMENTAL=0 \
-    CARGO_TERM_COLOR=always \
-    RUST_BACKTRACE=1 \
-    CARGO_PROFILE_DEV_DEBUG=0
-
-# Build dependencies for dev
-RUN cargo chef cook --recipe-path recipe.json
-
-# Build dependencies for prod
+# Build dependencies for prod with maximum optimizations
 FROM chef AS prod-deps
 COPY --from=planner /app/recipe.json recipe.json
 
-# Set optimization environment variables (from NoseyParker CI)
+# Set aggressive optimization environment variables
 ENV CARGO_INCREMENTAL=0 \
     CARGO_TERM_COLOR=always \
     RUST_BACKTRACE=1 \
     CARGO_PROFILE_RELEASE_DEBUG=0 \
-    CARGO_PROFILE_RELEASE_LTO=false
+    CARGO_PROFILE_RELEASE_LTO=false \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+    CARGO_PROFILE_RELEASE_OPT_LEVEL=2 \
+    CARGO_NET_GIT_FETCH_WITH_CLI=true \
+    CARGO_HTTP_MULTIPLEXING=false \
+    CARGO_BUILD_JOBS=4
 
-# Build dependencies for prod with optimized flags
-RUN cargo chef cook --locked --profile release --recipe-path recipe.json
+# Use faster linker if available
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+        apt-get update && apt-get install -y lld && \
+        echo '[target.x86_64-unknown-linux-gnu]\nlinker = "clang"\nrustflags = ["-C", "link-arg=-fuse-ld=lld"]' > ~/.cargo/config.toml; \
+    fi
+
+# Build dependencies for prod with optimized flags and parallel compilation
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo chef cook --locked --profile release --recipe-path recipe.json
+
+# Development build target (optional, faster for testing)
+FROM chef AS dev-deps
+COPY --from=planner /app/recipe.json recipe.json
+
+ENV CARGO_INCREMENTAL=0 \
+    CARGO_TERM_COLOR=always \
+    RUST_BACKTRACE=1 \
+    CARGO_PROFILE_DEV_DEBUG=0 \
+    CARGO_BUILD_JOBS=4
+
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo chef cook --recipe-path recipe.json
 
 # Development build target
 FROM dev-deps AS dev
 COPY ./projects/noseyparker_scanner/ .
 
-# Build with optimizations
 ENV CARGO_INCREMENTAL=0 \
     CARGO_PROFILE_DEV_DEBUG=0 \
     RUST_LOG=debug
 
-RUN cargo build
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build && \
+    cp target/debug/noseyparker-scanner /usr/local/bin/
 
-# Use development binary
-CMD ["/app/target/debug/noseyparker-scanner", "--log-level", "debug"]
+CMD ["noseyparker-scanner", "--log-level", "debug"]
 
 # Production build target
 FROM prod-deps AS build-prod
@@ -67,9 +95,15 @@ COPY ./projects/noseyparker_scanner/ .
 # Set production build optimizations
 ENV CARGO_INCREMENTAL=0 \
     CARGO_PROFILE_RELEASE_DEBUG=0 \
-    CARGO_PROFILE_RELEASE_LTO=false
+    CARGO_PROFILE_RELEASE_LTO=false \
+    CARGO_BUILD_JOBS=4
 
-RUN cargo build --locked --release
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --locked --release && \
+    cp target/release/noseyparker-scanner /usr/local/bin/
 
 # Slim runtime image for production
 FROM debian:12-slim AS prod
@@ -83,13 +117,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the built binary from build stage
-COPY --from=build-prod /app/target/release/noseyparker-scanner /usr/local/bin/noseyparker-scanner
+COPY --from=build-prod /usr/local/bin/noseyparker-scanner /usr/local/bin/noseyparker-scanner
 
 ENV RUST_LOG=info
 
 # Use production binary
 CMD ["noseyparker-scanner", "--log-level", "info"]
-
 
 
 
