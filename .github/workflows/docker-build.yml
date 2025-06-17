@@ -125,9 +125,9 @@ jobs:
           - name: web-api
             context: .
             dockerfile: ./projects/web_api/Dockerfile
-          - name: noseyparker-scanner
-            context: .
-            dockerfile: ./projects/noseyparker_scanner/Dockerfile
+          # - name: noseyparker-scanner
+          #   context: .
+          #   dockerfile: ./projects/noseyparker_scanner/Dockerfile
           - name: dotnet-api
             context: .
             dockerfile: ./projects/dotnet_api/Dockerfile
@@ -159,7 +159,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # TODO: test if the noseyparker build takes too long for ARM
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -189,7 +188,7 @@ jobs:
           context: ${{ matrix.service.context }}
           file: ${{ matrix.service.dockerfile }}
           push: true
-          platforms: ${{ env.PLATFORMS }} # TODO: test if the noseyparker build takes too long for ARM
+          platforms: ${{ env.PLATFORMS }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
