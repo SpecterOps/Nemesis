@@ -42,12 +42,6 @@ ENV CARGO_INCREMENTAL=0 \
     CARGO_HTTP_MULTIPLEXING=false \
     CARGO_BUILD_JOBS=4
 
-# Use faster linker if available
-RUN if [ "$(uname -m)" = "x86_64" ]; then \
-        apt-get update && apt-get install -y lld && \
-        echo '[target.x86_64-unknown-linux-gnu]\nlinker = "clang"\nrustflags = ["-C", "link-arg=-fuse-ld=lld"]' > ~/.cargo/config.toml; \
-    fi
-
 # Build dependencies for prod with optimized flags and parallel compilation
 RUN --mount=type=cache,target=/ccache \
     --mount=type=cache,target=/usr/local/cargo/registry \
