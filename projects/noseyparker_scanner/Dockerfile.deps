@@ -1,0 +1,102 @@
+# Dockerfile.deps - Pre-compile dependencies (ultra-optimized)
+FROM lukemathwalker/cargo-chef:latest-rust-1.86.0-slim-bookworm AS chef
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    build-essential \
+    cmake \
+    g++ \
+    pkg-config \
+    libssl-dev \
+    libboost-all-dev \
+    ragel && \
+    rm -rf /var/lib/apt/lists/*
+
+# Prepare recipe (cargo-chef planning phase)
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Build dependencies
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+
+# Build only release dependencies (skip debug to save space)
+RUN cargo chef cook --locked --profile release --recipe-path recipe.json
+
+# Clean up aggressively to reduce size
+RUN find /app/target -name "incremental" -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/target -name "build" -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/target -name "examples" -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find /app/target -name "*.d" -delete 2>/dev/null || true && \
+    find /app/target -name "*.rlib" -delete 2>/dev/null || true
+
+# Final minimal image - start from scratch almost
+FROM rust:1.86.0-slim-bookworm AS deps
+
+WORKDIR /app
+
+# Install build tools needed for linking and native dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    build-essential \
+    cmake \
+    g++ \
+    pkg-config \
+    libssl-dev \
+    libboost-all-dev \
+    ragel && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy only the essential compiled artifacts
+COPY --from=builder /app/target/release/deps /app/target/release/deps
+COPY --from=builder /app/target/release/.fingerprint /app/target/release/.fingerprint
+
+# Copy minimal registry cache (only what's needed for linking)
+COPY --from=builder /usr/local/cargo/registry/index /usr/local/cargo/registry/index
+COPY --from=builder /usr/local/cargo/registry/cache /usr/local/cargo/registry/cache
+
+# Create necessary directories for cargo to work
+RUN mkdir -p /app/target/release/build && \
+    mkdir -p /app/target/debug/deps && \
+    mkdir -p /app/target/debug/.fingerprint
+
+
+
+
+# # Dockerfile.deps - Pre-compile all dependencies
+# FROM lukemathwalker/cargo-chef:latest-rust-1.86.0-slim-bookworm AS chef
+# WORKDIR /app
+
+# # Install build dependencies
+# RUN apt-get update && \
+#     apt-get install -y \
+#     build-essential \
+#     cmake \
+#     g++ \
+#     pkg-config \
+#     libssl-dev \
+#     libboost-all-dev \
+#     ragel && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # Prepare recipe (cargo-chef planning phase)
+# FROM chef AS planner
+# COPY Cargo.toml Cargo.lock ./
+# # Create minimal src structure for cargo chef to work
+# RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+# RUN cargo chef prepare --recipe-path recipe.json
+
+# # Build dependencies for both dev and prod
+# FROM chef AS deps
+# COPY --from=planner /app/recipe.json recipe.json
+
+# # Build dependencies for both profiles
+# RUN cargo chef cook --recipe-path recipe.json && \
+#     cargo chef cook --locked --profile release --recipe-path recipe.json
+
+# # This image now contains all compiled dependencies in /app/target/
+# # Both debug and release builds are ready
