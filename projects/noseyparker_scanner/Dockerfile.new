@@ -12,7 +12,9 @@ RUN apt-get update && \
     libssl-dev \
     libboost-all-dev \
     ragel \
-    ccache && \
+    ccache \
+    git \
+    ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 # Configure ccache for faster builds
@@ -40,7 +42,8 @@ ENV CARGO_INCREMENTAL=0 \
     CARGO_PROFILE_RELEASE_OPT_LEVEL=2 \
     CARGO_NET_GIT_FETCH_WITH_CLI=true \
     CARGO_HTTP_MULTIPLEXING=false \
-    CARGO_BUILD_JOBS=4
+    CARGO_BUILD_JOBS=4 \
+    GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no"
 
 # Build dependencies for prod with optimized flags and parallel compilation
 RUN --mount=type=cache,target=/ccache \
