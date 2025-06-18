@@ -59,6 +59,7 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.arch }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-cargo-registry-
+            ${{ runner.os }}-cargo-registry-
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -149,10 +150,12 @@ jobs:
       - name: Create and push multi-arch manifest
         run: |
           # Create multi-arch manifests for each tag
-          for tag in ${{ steps.meta.outputs.tags }}; do
-            echo "Creating manifest for: $tag"
-            docker buildx imagetools create \
-              --tag "$tag" \
-              "${tag}-amd64" \
-              "${tag}-arm64"
+          echo '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "Creating manifest for: $tag"
+              docker buildx imagetools create \
+                --tag "$tag" \
+                "${tag}-amd64" \
+                "${tag}-arm64"
+            fi
           done
