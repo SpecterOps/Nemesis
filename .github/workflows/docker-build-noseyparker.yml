@@ -48,7 +48,7 @@ jobs:
             image=moby/buildkit:latest
             network=host
 
-      # Pre-warm Rust registry cache
+      # Pre-warm Rust registry cache (architecture-specific)
       - name: Cache Rust registry
         uses: actions/cache@v4
         with:
@@ -82,6 +82,7 @@ jobs:
 
       - name: Build and push ${{ matrix.name }} image
         uses: docker/build-push-action@v5
+        timeout-minutes: 60  # 1 hour timeout
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -95,14 +96,12 @@ jobs:
             CARGO_TERM_COLOR=always
             RUST_BACKTRACE=1
             CARGO_BUILD_JOBS=4
-          # Enhanced multi-layer caching with registry
+          # Conditional caching - simpler for ARM64
           cache-from: |
             type=gha,scope=noseyparker-scanner-${{ matrix.arch }}-${{ github.ref_name }}
-            type=gha,scope=noseyparker-scanner-${{ matrix.arch }}-main
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/noseyparker-scanner:cache-${{ matrix.arch }}
+            ${{ matrix.arch == 'amd64' && 'type=gha,scope=noseyparker-scanner-amd64-main' || 'type=gha,scope=noseyparker-scanner-arm64-main' }}
           cache-to: |
-            type=gha,mode=max,scope=noseyparker-scanner-${{ matrix.arch }}-${{ github.ref_name }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/noseyparker-scanner:cache-${{ matrix.arch }},mode=max
+            type=gha,mode=${{ matrix.arch == 'arm64' && 'min' || 'max' }},scope=noseyparker-scanner-${{ matrix.arch }}-${{ github.ref_name }}
 
       - name: Test built image
         run: |
