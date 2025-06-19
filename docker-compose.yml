@@ -13,6 +13,7 @@ x-secrestore-variables: &secrestore-variables
     - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
     - GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER:?}
     - GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?}
+    - NEMESIS_PORT=${NEMESIS_PORT:-7443}
 
 volumes:
   postgres_data:
@@ -852,8 +853,9 @@ services:
       # Default username and pass are both the letter 'n'. User generate_start_command.sh otherwise.
       - "traefik.http.middlewares.auth.basicauth.users=${BASIC_AUTH_USERS:-n:$$apr1$$RbnOjtKr$$S706SPJ3KzCKIref.gRFT.}"
       - "traefik.http.routers.dashboard.tls=true"
+    <<: *secrestore-variables # common ENV variables for the secretstore
     ports:
-      - "7443:443"
+      - "${NEMESIS_PORT:-7443}:443"
       # - "8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
