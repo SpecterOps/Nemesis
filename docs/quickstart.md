@@ -45,6 +45,15 @@ export APPRISE_URLS=slack://Nemesis@T...6x/#nemesis-testing,slack://Nemesis@T...
 
 **NOTE:** for APPRISE_URLs, to route user feedback to a specific channel use `?tag=feedback` as shown above. Otherwise stock alerts will go to the first URL listed. See the [Alerting](./usage_guide.md#alerting) section of the Usage Guide for more information.
 
+#### Changing the Nemesis Port
+
+To change the port that Nemesis is hosted on, set a new port with `export NEMESIS_PORT=1234` before running Nemesis ensure the `NEMESIS_URL` ENV variable reflects the correct port.
+
+#### Using Other SSL Certficiates
+
+To use your own SSL certificates, simply replace the `server.crt` and `server.key` files at ../infra/traefik/certs/ before launching Nemesis.
+
+
 ### Step 3: Build and start Nemesis.
 
 #### For Development Deployments
