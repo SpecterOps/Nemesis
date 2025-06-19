@@ -96,6 +96,7 @@ class NetworkingConfig:
 
 @dataclass
 class Settings:
+    project: str
     mythic: MythicConfig
     nemesis: NemesisConfig
     db: DatabaseConfig
@@ -104,6 +105,7 @@ class Settings:
     @classmethod
     def from_dynaconf(cls, dynaconf: Dynaconf) -> "Settings":
         return cls(
+            project=dynaconf.project,
             mythic=MythicConfig.from_dict(dynaconf.mythic.to_dict()),
             nemesis=NemesisConfig.from_dict(dynaconf.nemesis.to_dict()),
             db=DatabaseConfig.from_dict(dynaconf.db.to_dict()),
@@ -113,6 +115,7 @@ class Settings:
 
 VALIDATORS = [
     # Mythic validators
+    Validator("project", default="ASSESS-TEST", is_type_of=str),
     Validator("mythic.url", must_exist=True),
     Validator("mythic.credential", must_exist=True),
     Validator(

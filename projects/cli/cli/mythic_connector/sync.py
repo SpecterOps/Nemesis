@@ -89,7 +89,9 @@ class SyncService:
             return True
 
         except Exception as e:
-            logger.error(f"Mythic initialization error. Mythic URL: {self.cfg.mythic.url}. Error: {e}")
+            logger.error(
+                f"Mythic initialization error. Mythic URL: {self.cfg.mythic.url}. Project: {self.cfg.project}. Error: {e}"
+            )
             return False
 
     def initialize_handlers(self) -> None:
