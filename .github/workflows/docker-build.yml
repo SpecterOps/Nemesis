@@ -33,33 +33,33 @@ jobs:
           - name: web-api
             context: .
             dockerfile: ./projects/web_api/Dockerfile
-          # - name: dotnet-api
-          #   context: .
-          #   dockerfile: ./projects/dotnet_api/Dockerfile
-          # - name: file-enrichment
-          #   context: .
-          #   dockerfile: ./projects/file_enrichment/Dockerfile
-          # - name: frontend
-          #   context: ./projects/frontend
-          #   dockerfile: ./projects/frontend/Dockerfile
-          # - name: jupyter
-          #   context: ./projects/jupyter
-          #   dockerfile: ./projects/jupyter/Dockerfile
-          # - name: alerting
-          #   context: .
-          #   dockerfile: ./projects/alerting/Dockerfile
-          # - name: triage
-          #   context: .
-          #   dockerfile: ./projects/triage/Dockerfile
-          # - name: cli
-          #   context: .
-          #   dockerfile: ./projects/cli/Dockerfile
-          # - name: housekeeping
-          #   context: .
-          #   dockerfile: ./projects/housekeeping/Dockerfile
-          # - name: document-conversion
-          #   context: .
-          #   dockerfile: ./projects/document_conversion/Dockerfile
+          - name: dotnet-api
+            context: .
+            dockerfile: ./projects/dotnet_api/Dockerfile
+          - name: file-enrichment
+            context: .
+            dockerfile: ./projects/file_enrichment/Dockerfile
+          - name: frontend
+            context: ./projects/frontend
+            dockerfile: ./projects/frontend/Dockerfile
+          - name: jupyter
+            context: ./projects/jupyter
+            dockerfile: ./projects/jupyter/Dockerfile
+          - name: alerting
+            context: .
+            dockerfile: ./projects/alerting/Dockerfile
+          - name: triage
+            context: .
+            dockerfile: ./projects/triage/Dockerfile
+          - name: cli
+            context: .
+            dockerfile: ./projects/cli/Dockerfile
+          - name: housekeeping
+            context: .
+            dockerfile: ./projects/housekeeping/Dockerfile
+          - name: document-conversion
+            context: .
+            dockerfile: ./projects/document_conversion/Dockerfile
 
     steps:
       - name: Checkout repository
@@ -117,15 +117,15 @@ jobs:
       matrix:
         service:
           - web-api
-          # - dotnet-api
-          # - file-enrichment
-          # - frontend
-          # - jupyter
-          # - alerting
-          # - triage
-          # - cli
-          # - housekeeping
-          # - document-conversion
+          - dotnet-api
+          - file-enrichment
+          - frontend
+          - jupyter
+          - alerting
+          - triage
+          - cli
+          - housekeeping
+          - document-conversion
 
     steps:
       - name: Log in to the Container registry
