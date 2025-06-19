@@ -25,8 +25,10 @@ jobs:
         include:
           - runner: ubuntu-22.04
             platform: linux/amd64
+            arch: amd64
           - runner: ubuntu-22.04-arm
             platform: linux/arm64
+            arch: arm64
         service:
           - name: web-api
             context: .
@@ -78,9 +80,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}
           tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short,suffix=-${{ matrix.arch }}
+            type=ref,event=branch,suffix=-${{ matrix.arch }}
+            type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
 
       - name: Build and push ${{ matrix.service.name }} image
         uses: docker/build-push-action@v5
@@ -95,9 +97,60 @@ jobs:
             PYTHON_BASE_DEV_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev:latest
             PYTHON_BASE_PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod:latest
             INSPECT_ASSEMBLY_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.service.name }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}-${{ matrix.arch }}
 
             # # If wanting to use the proper tag
             # PYTHON_BASE_DEV_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev:${{ needs.build-base-images.outputs.python-base-dev-tag }}
             # PYTHON_BASE_PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod:${{ needs.build-base-images.outputs.python-base-prod-tag }}
+
+  # Create multi-arch manifests
+  create-manifests:
+    needs: build-service-images
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - web-api
+          - dotnet-api
+          - file-enrichment
+          - frontend
+          - jupyter
+          - alerting
+          - triage
+          - cli
+          - housekeeping
+          - document-conversion
+
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for ${{ matrix.service }} manifest
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create and push ${{ matrix.service }} multi-arch manifest
+        run: |
+          echo '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "Creating manifest for: $tag"
+              docker buildx imagetools create \
+                --tag "$tag" \
+                "${tag}-amd64" \
+                "${tag}-arm64"
+            fi
+          done

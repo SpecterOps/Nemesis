@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: "specterops/nemesis"
+  IMAGE_PREFIX: "specterops/nemesis" # ${{ github.repository }} causes issues as SpecterOps is not all lowercase
 
 jobs:
   build-base-images:
