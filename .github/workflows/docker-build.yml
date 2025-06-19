@@ -82,6 +82,8 @@ jobs:
           tags: |
             type=sha,format=short,suffix=-${{ matrix.arch }}
             type=ref,event=branch,suffix=-${{ matrix.arch }}
+            type=ref,event=tag,suffix=-${{ matrix.arch }}
+            type=raw,value=${{ github.ref_name }}-${{ matrix.arch }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
 
       - name: Build and push ${{ matrix.service.name }} image
@@ -141,6 +143,8 @@ jobs:
           tags: |
             type=sha,format=short
             type=ref,event=branch
+            type=ref,event=tag
+            type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Create and push ${{ matrix.service }} multi-arch manifest
@@ -151,7 +155,7 @@ jobs:
           echo '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
             if [ -n "$tag" ]; then
               echo "Creating manifest for: $tag"
-              # Determine the tag suffix (e.g., "main", "sha-abc123", "latest")
+              # Determine the tag suffix (e.g., "main", "sha-abc123", "latest", "manual")
               TAG_SUFFIX=$(echo "$tag" | sed "s|${BASE_IMAGE}:||")
 
               docker buildx imagetools create \
