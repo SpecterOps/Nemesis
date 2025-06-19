@@ -145,12 +145,18 @@ jobs:
 
       - name: Create and push ${{ matrix.service }} multi-arch manifest
         run: |
+          # Get the base image name
+          BASE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}"
+
           echo '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
             if [ -n "$tag" ]; then
               echo "Creating manifest for: $tag"
+              # Determine the tag suffix (e.g., "main", "sha-abc123", "latest")
+              TAG_SUFFIX=$(echo "$tag" | sed "s|${BASE_IMAGE}:||")
+
               docker buildx imagetools create \
                 --tag "$tag" \
-                "${tag}-amd64" \
-                "${tag}-arm64"
+                "${BASE_IMAGE}:${TAG_SUFFIX}-amd64" \
+                "${BASE_IMAGE}:${TAG_SUFFIX}-arm64"
             fi
           done
