@@ -16,19 +16,13 @@ env:
 jobs:
 
   build-service-images:
-    runs-on: ${{ matrix.include.runner }}
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        include:
-          - runner: ubuntu-22.04
-            platform: linux/amd64
-            arch: amd64
-          - runner: ubuntu-22.04-arm
-            platform: linux/arm64
-            arch: arm64
+        runner: [ubuntu-22.04, ubuntu-22.04-arm]
         service:
           - name: web-api
             context: .
@@ -75,17 +69,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set platform variables
+        run: |
+          if [ "${{ matrix.runner }}" = "ubuntu-22.04" ]; then
+            echo "PLATFORM=linux/amd64" >> $GITHUB_ENV
+            echo "ARCH=amd64" >> $GITHUB_ENV
+          else
+            echo "PLATFORM=linux/arm64" >> $GITHUB_ENV
+            echo "ARCH=arm64" >> $GITHUB_ENV
+          fi
+
       - name: Extract metadata for ${{ matrix.service.name }} image
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}
           tags: |
-            type=sha,format=short,suffix=-${{ matrix.include.arch }}
-            type=ref,event=branch,suffix=-${{ matrix.include.arch }}
-            type=ref,event=pr,suffix=-${{ matrix.include.arch }}
-            type=raw,value=latest-${{ matrix.include.arch }},enable={{is_default_branch}}
-            type=raw,value=${{ github.ref_name }}-${{ matrix.include.arch }}
+            type=sha,format=short,suffix=-${{ env.ARCH }}
+            type=ref,event=branch,suffix=-${{ env.ARCH }}
+            type=ref,event=pr,suffix=-${{ env.ARCH }}
+            type=raw,value=latest-${{ env.ARCH }},enable={{is_default_branch}}
+            type=raw,value=${{ github.ref_name }}-${{ env.ARCH }}
 
       - name: Build and push ${{ matrix.service.name }} image
         uses: docker/build-push-action@v5
@@ -93,7 +97,7 @@ jobs:
           context: ${{ matrix.service.context }}
           file: ${{ matrix.service.dockerfile }}
           push: true
-          platforms: ${{ matrix.include.platform }}
+          platforms: ${{ env.PLATFORM }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -101,10 +105,10 @@ jobs:
             PYTHON_BASE_PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod:latest
             INSPECT_ASSEMBLY_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly:latest
           cache-from: |
-            type=gha,scope=${{ matrix.service.name }}-${{ matrix.include.arch }}-${{ github.ref_name }}
-            type=gha,scope=${{ matrix.service.name }}-${{ matrix.include.arch }}-main
+            type=gha,scope=${{ matrix.service.name }}-${{ env.ARCH }}-${{ github.ref_name }}
+            type=gha,scope=${{ matrix.service.name }}-${{ env.ARCH }}-main
           cache-to: |
-            type=gha,mode=max,scope=${{ matrix.service.name }}-${{ matrix.include.arch }}-${{ github.ref_name }}
+            type=gha,mode=max,scope=${{ matrix.service.name }}-${{ env.ARCH }}-${{ github.ref_name }}
 
   # Create multi-arch manifest
   create-manifest:
