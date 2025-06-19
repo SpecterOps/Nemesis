@@ -16,6 +16,10 @@ env:
 jobs:
 
   build-service-images:
+    runs-on: ${{ matrix.include.runner }}
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         include:
@@ -29,38 +33,33 @@ jobs:
           - name: web-api
             context: .
             dockerfile: ./projects/web_api/Dockerfile
-          - name: dotnet-api
-            context: .
-            dockerfile: ./projects/dotnet_api/Dockerfile
-          - name: file-enrichment
-            context: .
-            dockerfile: ./projects/file_enrichment/Dockerfile
-          - name: frontend
-            context: ./projects/frontend
-            dockerfile: ./projects/frontend/Dockerfile
-          - name: jupyter
-            context: ./projects/jupyter
-            dockerfile: ./projects/jupyter/Dockerfile
-          - name: alerting
-            context: .
-            dockerfile: ./projects/alerting/Dockerfile
-          - name: triage
-            context: .
-            dockerfile: ./projects/triage/Dockerfile
-          - name: cli
-            context: .
-            dockerfile: ./projects/cli/Dockerfile
-          - name: housekeeping
-            context: .
-            dockerfile: ./projects/housekeeping/Dockerfile
-          - name: document-conversion
-            context: .
-            dockerfile: ./projects/document_conversion/Dockerfile
-
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-      packages: write
+          # - name: dotnet-api
+          #   context: .
+          #   dockerfile: ./projects/dotnet_api/Dockerfile
+          # - name: file-enrichment
+          #   context: .
+          #   dockerfile: ./projects/file_enrichment/Dockerfile
+          # - name: frontend
+          #   context: ./projects/frontend
+          #   dockerfile: ./projects/frontend/Dockerfile
+          # - name: jupyter
+          #   context: ./projects/jupyter
+          #   dockerfile: ./projects/jupyter/Dockerfile
+          # - name: alerting
+          #   context: .
+          #   dockerfile: ./projects/alerting/Dockerfile
+          # - name: triage
+          #   context: .
+          #   dockerfile: ./projects/triage/Dockerfile
+          # - name: cli
+          #   context: .
+          #   dockerfile: ./projects/cli/Dockerfile
+          # - name: housekeeping
+          #   context: .
+          #   dockerfile: ./projects/housekeeping/Dockerfile
+          # - name: document-conversion
+          #   context: .
+          #   dockerfile: ./projects/document_conversion/Dockerfile
 
     steps:
       - name: Checkout repository
@@ -82,11 +81,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service.name }}
           tags: |
-            type=sha,format=short,suffix=-${{ matrix.arch }}
-            type=ref,event=branch,suffix=-${{ matrix.arch }}
-            type=ref,event=pr,suffix=-${{ matrix.arch }}
-            type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
-            type=raw,value=${{ github.ref_name }}-${{ matrix.arch }}
+            type=sha,format=short,suffix=-${{ matrix.include.arch }}
+            type=ref,event=branch,suffix=-${{ matrix.include.arch }}
+            type=ref,event=pr,suffix=-${{ matrix.include.arch }}
+            type=raw,value=latest-${{ matrix.include.arch }},enable={{is_default_branch}}
+            type=raw,value=${{ github.ref_name }}-${{ matrix.include.arch }}
 
       - name: Build and push ${{ matrix.service.name }} image
         uses: docker/build-push-action@v5
@@ -94,7 +93,7 @@ jobs:
           context: ${{ matrix.service.context }}
           file: ${{ matrix.service.dockerfile }}
           push: true
-          platforms: ${{ matrix.platform }}
+          platforms: ${{ matrix.include.platform }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -102,10 +101,10 @@ jobs:
             PYTHON_BASE_PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod:latest
             INSPECT_ASSEMBLY_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly:latest
           cache-from: |
-            type=gha,scope=${{ matrix.service.name }}-${{ matrix.arch }}-${{ github.ref_name }}
-            type=gha,scope=${{ matrix.service.name }}-${{ matrix.arch }}-main
+            type=gha,scope=${{ matrix.service.name }}-${{ matrix.include.arch }}-${{ github.ref_name }}
+            type=gha,scope=${{ matrix.service.name }}-${{ matrix.include.arch }}-main
           cache-to: |
-            type=gha,mode=max,scope=${{ matrix.service.name }}-${{ matrix.arch }}-${{ github.ref_name }}
+            type=gha,mode=max,scope=${{ matrix.service.name }}-${{ matrix.include.arch }}-${{ github.ref_name }}
 
   # Create multi-arch manifest
   create-manifest:
@@ -118,15 +117,15 @@ jobs:
       matrix:
         service:
           - web-api
-          - dotnet-api
-          - file-enrichment
-          - frontend
-          - jupyter
-          - alerting
-          - triage
-          - cli
-          - housekeeping
-          - document-conversion
+          # - dotnet-api
+          # - file-enrichment
+          # - frontend
+          # - jupyter
+          # - alerting
+          # - triage
+          # - cli
+          # - housekeeping
+          # - document-conversion
 
     steps:
       - name: Log in to the Container registry
@@ -154,9 +153,29 @@ jobs:
           echo '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
             if [ -n "$tag" ]; then
               echo "Creating manifest for: $tag"
-              docker buildx imagetools create \
-                --tag "$tag" \
-                "${tag}-amd64" \
-                "${tag}-arm64"
+
+              # Check which images actually exist
+              IMAGES=""
+              if docker buildx imagetools inspect "${tag}-amd64" > /dev/null 2>&1; then
+                IMAGES="$IMAGES ${tag}-amd64"
+                echo "Found AMD64 image: ${tag}-amd64"
+              else
+                echo "WARNING: AMD64 image not found: ${tag}-amd64"
+              fi
+
+              if docker buildx imagetools inspect "${tag}-arm64" > /dev/null 2>&1; then
+                IMAGES="$IMAGES ${tag}-arm64"
+                echo "Found ARM64 image: ${tag}-arm64"
+              else
+                echo "WARNING: ARM64 image not found: ${tag}-arm64"
+              fi
+
+              if [ -n "$IMAGES" ]; then
+                echo "Creating manifest with images:$IMAGES"
+                docker buildx imagetools create --tag "$tag" $IMAGES
+              else
+                echo "ERROR: No images found for $tag"
+                exit 1
+              fi
             fi
           done
