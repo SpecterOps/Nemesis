@@ -8,7 +8,7 @@
             "name": "CLI: Mythic Connector",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/cli/main.py",
+            "module": "cli",
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
@@ -24,7 +24,7 @@
             "program": "${workspaceFolder}/cli/main.py",
             "console": "integratedTerminal",
             "args": [
-                "connect",
+                "connect-outflank",
                 "--config",
                 "~/nemesis_connector_settings.yml",
                 "--debug"

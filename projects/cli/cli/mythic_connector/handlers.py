@@ -177,7 +177,7 @@ class FileHandler:
                 self._total_files_count += 1
                 metadata = FileMetadata(
                     agent_id="mythic",
-                    project="ASSESS-TEST",
+                    project=self.cfg.project,
                     timestamp=datetime.now(UTC),
                     expiration=datetime.now(UTC).replace(year=datetime.now().year + 1),
                     path=str(path),

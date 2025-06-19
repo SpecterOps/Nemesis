@@ -1,3 +1,5 @@
+project: "ASSESS-TEST"
+
 mythic:
   url: "https://mythic.local:7443"
 
