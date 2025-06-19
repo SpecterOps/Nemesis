@@ -83,7 +83,7 @@ jobs:
             type=sha,format=short,suffix=-${{ matrix.arch }}
             type=ref,event=branch,suffix=-${{ matrix.arch }}
             type=ref,event=tag,suffix=-${{ matrix.arch }}
-            type=raw,value=${{ github.ref_name }}-${{ matrix.arch }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ github.ref_name }}-${{ matrix.arch }}
             type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
 
       - name: Build and push ${{ matrix.service.name }} image
@@ -144,7 +144,7 @@ jobs:
             type=sha,format=short
             type=ref,event=branch
             type=ref,event=tag
-            type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ github.ref_name }}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Create and push ${{ matrix.service }} multi-arch manifest
