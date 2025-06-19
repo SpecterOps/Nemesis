@@ -16,10 +16,6 @@ env:
 jobs:
 
   build-service-images:
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-      packages: write
     strategy:
       matrix:
         include:
@@ -60,6 +56,12 @@ jobs:
           - name: document-conversion
             context: .
             dockerfile: ./projects/document_conversion/Dockerfile
+
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -82,9 +84,9 @@ jobs:
           tags: |
             type=sha,format=short,suffix=-${{ matrix.arch }}
             type=ref,event=branch,suffix=-${{ matrix.arch }}
-            type=ref,event=tag,suffix=-${{ matrix.arch }}
-            type=raw,value=${{ github.ref_name }}-${{ matrix.arch }}
+            type=ref,event=pr,suffix=-${{ matrix.arch }}
             type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
+            type=raw,value=${{ github.ref_name }}-${{ matrix.arch }}
 
       - name: Build and push ${{ matrix.service.name }} image
         uses: docker/build-push-action@v5
@@ -99,15 +101,14 @@ jobs:
             PYTHON_BASE_DEV_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev:latest
             PYTHON_BASE_PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod:latest
             INSPECT_ASSEMBLY_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly:latest
-          cache-from: type=gha,scope=${{ matrix.service.name }}-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}-${{ matrix.arch }}
+          cache-from: |
+            type=gha,scope=${{ matrix.service.name }}-${{ matrix.arch }}-${{ github.ref_name }}
+            type=gha,scope=${{ matrix.service.name }}-${{ matrix.arch }}-main
+          cache-to: |
+            type=gha,mode=max,scope=${{ matrix.service.name }}-${{ matrix.arch }}-${{ github.ref_name }}
 
-            # # If wanting to use the proper tag
-            # PYTHON_BASE_DEV_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev:${{ needs.build-base-images.outputs.python-base-dev-tag }}
-            # PYTHON_BASE_PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod:${{ needs.build-base-images.outputs.python-base-prod-tag }}
-
-  # Create multi-arch manifests
-  create-manifests:
+  # Create multi-arch manifest
+  create-manifest:
     needs: build-service-images
     runs-on: ubuntu-22.04
     permissions:
@@ -135,7 +136,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for ${{ matrix.service }} manifest
+      - name: Extract metadata for manifest
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -143,24 +144,19 @@ jobs:
           tags: |
             type=sha,format=short
             type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=${{ github.ref_name }}
+            type=ref,event=pr
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.ref_name }}
 
-      - name: Create and push ${{ matrix.service }} multi-arch manifest
+      - name: Create and push multi-arch manifest
         run: |
-          # Get the base image name
-          BASE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}"
-
+          # Create multi-arch manifests for each tag
           echo '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
             if [ -n "$tag" ]; then
               echo "Creating manifest for: $tag"
-              # Determine the tag suffix (e.g., "main", "sha-abc123", "latest", "manual")
-              TAG_SUFFIX=$(echo "$tag" | sed "s|${BASE_IMAGE}:||")
-
               docker buildx imagetools create \
                 --tag "$tag" \
-                "${BASE_IMAGE}:${TAG_SUFFIX}-amd64" \
-                "${BASE_IMAGE}:${TAG_SUFFIX}-arm64"
+                "${tag}-amd64" \
+                "${tag}-arm64"
             fi
           done
