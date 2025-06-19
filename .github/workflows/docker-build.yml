@@ -15,109 +15,7 @@ env:
 
 jobs:
 
-  ### These base images never really change much, so commented out for now
-  build-base-images:
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        include:
-          - runner: ubuntu-22.04
-            platform: linux/amd64
-          - runner: ubuntu-22.04-arm
-            platform: linux/arm64
-    outputs:
-      python-base-dev-tag: ${{ steps.meta-python-base-dev.outputs.version }}
-      python-base-prod-tag: ${{ steps.meta-python-base-prod.outputs.version }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Python Base Dev Image (needed for current Dockerfile builds)
-      #   TODO: conditional builds for Dockerfiles, so we can eliminate this dev build and save some time
-      - name: Extract metadata for Python base dev image
-        id: meta-python-base-dev
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev
-          tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Python base dev image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./infra/docker/python_base
-          file: ./infra/docker/python_base/dev.Dockerfile
-          push: true
-          platforms: ${{ matrix.platform }}
-          tags: ${{ steps.meta-python-base-dev.outputs.tags }}
-          labels: ${{ steps.meta-python-base-dev.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Python Base Prod Image
-      - name: Extract metadata for Python base prod image
-        id: meta-python-base-prod
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod
-          tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Python base prod image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./infra/docker/python_base
-          file: ./infra/docker/python_base/prod.Dockerfile
-          push: true
-          platforms: ${{ matrix.platform }}
-          tags: ${{ steps.meta-python-base-prod.outputs.tags }}
-          labels: ${{ steps.meta-python-base-prod.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # InspectAssembly Base Image
-      - name: Extract metadata for InspectAssembly image
-        id: meta-inspect-assembly
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly
-          tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push InspectAssembly image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./projects/InspectAssembly
-          file: ./projects/InspectAssembly/Dockerfile
-          push: true
-          platforms: ${{ matrix.platform }}
-          tags: ${{ steps.meta-inspect-assembly.outputs.tags }}
-          labels: ${{ steps.meta-inspect-assembly.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   build-service-images:
-    needs: build-base-images
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -133,9 +31,6 @@ jobs:
           - name: web-api
             context: .
             dockerfile: ./projects/web_api/Dockerfile
-          - name: noseyparker-scanner
-            context: .
-            dockerfile: ./projects/noseyparker_scanner/Dockerfile
           - name: dotnet-api
             context: .
             dockerfile: ./projects/dotnet_api/Dockerfile
