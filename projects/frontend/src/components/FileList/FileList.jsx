@@ -76,6 +76,7 @@ const Row = React.memo(({ index, style, data }) => {
             </div>
           }
           side="top"
+          align="start"
         >
           <span className="block truncate">{file.agent_id}</span>
         </Tooltip>
