@@ -3,18 +3,16 @@ name: Build and Publish Base Docker Images
 on:
   push:
     branches: [ "main" ]
-    # Trigger on changes to relevant base files
     paths:
       - 'infra/docker/python_base/**'
       - 'projects/InspectAssembly/**'
-  workflow_dispatch: # For manual triggering
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: "specterops/nemesis" # ${{ github.repository }} causes issues as SpecterOps is not all lowercase
+  IMAGE_PREFIX: "specterops/nemesis"
 
 jobs:
-
   build-base-images:
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -25,8 +23,10 @@ jobs:
         include:
           - runner: ubuntu-22.04
             platform: linux/amd64
+            arch: amd64
           - runner: ubuntu-22.04-arm
             platform: linux/arm64
+            arch: arm64
     outputs:
       python-base-dev-tag: ${{ steps.meta-python-base-dev.outputs.version }}
       python-base-prod-tag: ${{ steps.meta-python-base-prod.outputs.version }}
@@ -45,16 +45,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Python Base Dev Image (needed for current Dockerfile builds)
+      # Python Base Dev Image
       - name: Extract metadata for Python base dev image
         id: meta-python-base-dev
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev
           tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short,suffix=-${{ matrix.arch }}
+            type=ref,event=branch,suffix=-${{ matrix.arch }}
+            type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
 
       - name: Build and push Python base dev image
         uses: docker/build-push-action@v5
@@ -65,8 +65,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta-python-base-dev.outputs.tags }}
           labels: ${{ steps.meta-python-base-dev.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=python-base-dev-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=python-base-dev-${{ matrix.arch }}
 
       # Python Base Prod Image
       - name: Extract metadata for Python base prod image
@@ -75,9 +75,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod
           tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short,suffix=-${{ matrix.arch }}
+            type=ref,event=branch,suffix=-${{ matrix.arch }}
+            type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
 
       - name: Build and push Python base prod image
         uses: docker/build-push-action@v5
@@ -88,8 +88,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta-python-base-prod.outputs.tags }}
           labels: ${{ steps.meta-python-base-prod.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=python-base-prod-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=python-base-prod-${{ matrix.arch }}
 
       # InspectAssembly Base Image
       - name: Extract metadata for InspectAssembly image
@@ -98,9 +98,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly
           tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short,suffix=-${{ matrix.arch }}
+            type=ref,event=branch,suffix=-${{ matrix.arch }}
+            type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
 
       - name: Build and push InspectAssembly image
         uses: docker/build-push-action@v5
@@ -111,5 +111,90 @@ jobs:
           platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta-inspect-assembly.outputs.tags }}
           labels: ${{ steps.meta-inspect-assembly.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=inspect-assembly-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=inspect-assembly-${{ matrix.arch }}
+
+  # Create multi-arch manifests
+  create-manifests:
+    needs: build-base-images
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Python Base Dev Manifest
+      - name: Extract metadata for Python base dev manifest
+        id: meta-python-base-dev
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create and push Python base dev multi-arch manifest
+        run: |
+          echo '${{ steps.meta-python-base-dev.outputs.tags }}' | while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "Creating manifest for: $tag"
+              docker buildx imagetools create \
+                --tag "$tag" \
+                "${tag}-amd64" \
+                "${tag}-arm64"
+            fi
+          done
+
+      # Python Base Prod Manifest
+      - name: Extract metadata for Python base prod manifest
+        id: meta-python-base-prod
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create and push Python base prod multi-arch manifest
+        run: |
+          echo '${{ steps.meta-python-base-prod.outputs.tags }}' | while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "Creating manifest for: $tag"
+              docker buildx imagetools create \
+                --tag "$tag" \
+                "${tag}-amd64" \
+                "${tag}-arm64"
+            fi
+          done
+
+      # InspectAssembly Manifest
+      - name: Extract metadata for InspectAssembly manifest
+        id: meta-inspect-assembly
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create and push InspectAssembly multi-arch manifest
+        run: |
+          echo '${{ steps.meta-inspect-assembly.outputs.tags }}' | while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "Creating manifest for: $tag"
+              docker buildx imagetools create \
+                --tag "$tag" \
+                "${tag}-amd64" \
+                "${tag}-arm64"
+            fi
+          done
