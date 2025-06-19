@@ -68,7 +68,18 @@ const Row = React.memo(({ index, style, data }) => {
           {index === selectedIndex ? '✓' : ''}
         </div>
       )}
-      <div className="px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left">{file.agent_id}</div>
+      <div className="px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left">
+        <Tooltip
+          content={
+            <div onClick={handleTooltipClick} className="select-text">
+              {file.agent_id}
+            </div>
+          }
+          side="top"
+        >
+          <span className="block truncate">{file.agent_id}</span>
+        </Tooltip>
+      </div>
       <div className="px-2 flex-shrink-0 w-24 text-sm text-gray-500 dark:text-gray-400 text-left">{formatFileSize(file.size)}</div>
       <div className="px-2 flex-shrink-0 w-44 text-sm text-gray-500 dark:text-gray-400 text-left">{new Date(file.timestamp).toLocaleString()}</div>
       <div className="px-2 flex-shrink-0 w-48 text-sm text-sm text-gray-500 dark:text-gray-400 text-left">
@@ -288,12 +299,12 @@ const FileList = () => {
     setViewFilter(viewStateParam || 'unviewed_by_me');
     setObjectIdFilter(objectIdParam || '');
     setSelectedTag(tagParam || '');
-    
+
     // Update sort order from URL
     if (sortParam !== null) {
       setSortNewestFirst(sortParam === 'newest');
     }
-    
+
     // Update findings filter from URL
     setShowOnlyWithFindings(findingsParam === 'true');
   }, [searchParams]);
