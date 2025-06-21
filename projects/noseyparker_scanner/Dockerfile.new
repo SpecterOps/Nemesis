@@ -116,6 +116,11 @@ RUN apt-get update && \
 # Copy the built binary from build stage
 COPY --from=build-prod /usr/local/bin/noseyparker-scanner /usr/local/bin/noseyparker-scanner
 
+# Add GitHub Container Registry labels for linking to repository
+LABEL org.opencontainers.image.source=https://github.com/SpecterOps/Nemesis
+LABEL org.opencontainers.image.description="Nemesis Noseyparker Scanner"
+LABEL org.opencontainers.image.licenses=BSD-3-Clause
+
 ENV RUST_LOG=info
 
 # Use production binary
