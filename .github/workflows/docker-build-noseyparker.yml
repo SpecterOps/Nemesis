@@ -35,6 +35,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: write  # Added for cache cleanup
 
     steps:
       - name: Checkout repository
@@ -47,6 +48,13 @@ jobs:
           driver-opts: |
             image=moby/buildkit:latest
             network=host
+
+      # Create cargo directories to avoid cache warnings
+      - name: Create Cargo directories
+        run: |
+          mkdir -p ~/.cargo/registry/index/
+          mkdir -p ~/.cargo/registry/cache/
+          mkdir -p ~/.cargo/git/db/
 
       # Pre-warm Rust registry cache (architecture-specific)
       - name: Cache Rust registry
@@ -108,13 +116,13 @@ jobs:
           # Test that the image runs and shows version
           docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/noseyparker-scanner:${{ steps.meta.outputs.version }} --help || true
 
-      # Clean up cache on successful build to prevent cache bloat
-      - name: Cleanup old cache entries
+      # Simple cache cleanup - keep only the 2 most recent caches
+      - name: Simple cache cleanup
         if: success()
         run: |
-          # Clean up old GitHub Actions cache entries for this scope
           gh extension install actions/gh-actions-cache || true
-          gh actions-cache delete "noseyparker-scanner-${{ matrix.arch }}-${{ github.ref_name }}-*" --confirm || true
+          # Keep only the 2 most recent caches for this scope
+          gh actions-cache list --key "noseyparker-scanner-${{ matrix.arch }}-${{ github.ref_name }}" --sort created-at --order desc | tail -n +3 | cut -f1 | xargs -I {} gh actions-cache delete {} --confirm || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
