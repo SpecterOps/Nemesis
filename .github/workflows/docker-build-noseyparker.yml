@@ -7,7 +7,7 @@ on:
     # Trigger on changes to noseyparker-scanner files
     paths:
       - 'projects/noseyparker_scanner/**'
-      - '.github/workflows/noseyparker-scanner-build.yml'
+      - '.github/workflows/docker-build-noseyparker.yml'
 
 env:
   REGISTRY: ghcr.io
