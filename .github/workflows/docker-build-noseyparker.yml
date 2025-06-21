@@ -2,12 +2,12 @@ name: Build and Publish the noseyparker-scanner Docker Image
 
 on:
   workflow_dispatch: # For manual triggering
-  # push:
-  #   branches: [ "main" ]
-  #   # Trigger on changes to noseyparker-scanner files
-  #   paths:
-  #     - 'projects/noseyparker_scanner/**'
-  #     - '.github/workflows/noseyparker-scanner-build.yml'
+  push:
+    branches: [ "main" ]
+    # Trigger on changes to noseyparker-scanner files
+    paths:
+      - 'projects/noseyparker_scanner/**'
+      - '.github/workflows/noseyparker-scanner-build.yml'
 
 env:
   REGISTRY: ghcr.io
