@@ -1,7 +1,7 @@
 import MarkdownRenderer from '@/components/shared/MarkdownRenderer';
-import React, { useRef } from 'react';
+import { WrapText } from 'lucide-react';
+import React, { useRef, useState } from 'react';
 import { useFileNavigation } from './navigation';
-
 
 const FindingModal = ({
   isOpen,
@@ -9,6 +9,7 @@ const FindingModal = ({
   finding,
 }) => {
   const navigateToFile = useFileNavigation();
+  const [wordWrapEnabled, setWordWrapEnabled] = useState(false);
 
   const handleFileNavigation = () => {
     navigateToFile(finding);
@@ -43,17 +44,33 @@ const FindingModal = ({
               <p className="text-sm text-blue-600 dark:text-blue-400">
                 Use → to view to the file, ← or ESC to go back.
               </p>
-              <button
-                onClick={onClose}
-                className="p-1 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                aria-label="Close modal"
-              >
-                <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                  <path d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </button>
-            </div>
+              <div className="flex items-center space-x-2">
+                {/* Word Wrap Toggle Button */}
+                <button
+                  onClick={() => setWordWrapEnabled(!wordWrapEnabled)}
+                  className={`p-1 rounded-full transition-colors ${
+                    wordWrapEnabled
+                      ? 'bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-400'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400'
+                  } hover:bg-gray-200 dark:hover:bg-gray-600`}
+                  aria-label={wordWrapEnabled ? "Disable word wrap" : "Enable word wrap"}
+                  title={wordWrapEnabled ? "Disable word wrap" : "Enable word wrap"}
+                >
+                  <WrapText className="w-5 h-5" />
+                </button>
 
+                {/* Close Button */}
+                <button
+                  onClick={onClose}
+                  className="p-1 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  aria-label="Close modal"
+                >
+                  <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                    <path d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
 
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto" ref={contentRef}>
@@ -92,8 +109,26 @@ const FindingModal = ({
                     </div>
                   </div>
 
-                  {/* Finding Content */}
-                  <MarkdownRenderer content={readableData.data} />
+                  {/* Finding Content with conditional word wrap */}
+                  <div>
+                    {wordWrapEnabled && (
+                      <style dangerouslySetInnerHTML={{
+                        __html: `
+                          .word-wrap-container *,
+                          .word-wrap-container pre,
+                          .word-wrap-container code {
+                            word-break: break-all !important;
+                            overflow-wrap: anywhere !important;
+                            white-space: pre-wrap !important;
+                            word-wrap: break-word !important;
+                          }
+                        `
+                      }} />
+                    )}
+                    <div className={wordWrapEnabled ? 'word-wrap-container' : 'overflow-x-auto'}>
+                      <MarkdownRenderer content={readableData.data} />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
