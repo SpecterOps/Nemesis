@@ -1,0 +1,61 @@
+# Service configuration
+service:
+  extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+  pipelines:
+    traces:
+      receivers: [otlp, jaeger, zipkin]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+
+# Extensions
+extensions:
+  healthcheckv2:
+    use_v2: true
+    http:
+      endpoint: "0.0.0.0:13133"
+  jaeger_query:
+    storage:
+      traces: badger_store
+    base_path: /jaeger
+  jaeger_storage:
+    backends:
+      badger_store:
+        badger:
+          directories:
+            keys: "/badger/keys"
+            values: "/badger/values"
+          ephemeral: false
+          consistency: true
+          maintenance_interval: 1m0s
+
+# Receivers
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+  jaeger:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:14250"
+      thrift_http:
+        endpoint: "0.0.0.0:14268"
+      thrift_compact:
+        endpoint: "0.0.0.0:6831"
+      thrift_binary:
+        endpoint: "0.0.0.0:6832"
+
+  zipkin:
+    endpoint: "0.0.0.0:9411"
+
+# Processors
+processors:
+  batch:
+
+# Exporters
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: badger_store
