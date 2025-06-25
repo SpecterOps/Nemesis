@@ -6,6 +6,7 @@
 
 services:
   web-api:
+    image: !reset null
     build:
       context: .
       dockerfile: ./projects/web_api/Dockerfile
@@ -16,6 +17,7 @@ services:
       - /src/projects/web_api/.venv
 
   noseyparker-scanner:
+    image: !reset null
     build:
       context: .
       dockerfile: ./projects/noseyparker_scanner/Dockerfile
@@ -24,6 +26,7 @@ services:
       - RUST_LOG=debug
 
   dotnet-api:
+    image: !reset null
     build:
       context: .
       dockerfile: ./projects/dotnet_api/Dockerfile
@@ -34,6 +37,7 @@ services:
       - /src/projects/dotnet_api/.venv
 
   file-enrichment:
+    image: !reset null
     build:
       context: .
       dockerfile: ./projects/file_enrichment/Dockerfile
@@ -47,6 +51,7 @@ services:
       - ./libs/file_enrichment_modules/yara_rules/dev/:/yara_rules/:ro
 
   frontend:
+    image: !reset null
     build:
       context: ./projects/frontend/
       dockerfile: Dockerfile
@@ -61,15 +66,16 @@ services:
         npm run dev
       "
     volumes:
-      - ./projects/frontend/src:/app/src:ro
-      - ./projects/frontend/public:/app/public:ro
-      - ./projects/frontend/package.json:/app/package.json:ro
-      - ./projects/frontend/vite.config.js:/app/vite.config.js:ro
       - ./projects/frontend/index.html:/app/index.html:ro
+      - ./projects/frontend/package.json:/app/package.json:ro
+      - ./projects/frontend/public:/app/public:ro
+      - ./projects/frontend/src:/app/src:ro
+      - ./projects/frontend/vite.config.js:/app/vite.config.js:ro
     labels:
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
   jupyter:
+    image: !reset null
     # To develop jupyter itself, you would add a `build` block here
     # Since it's already using `build` in the base, this override isn't strictly
     # necessary unless you change the target or add more dev volumes.
@@ -78,18 +84,21 @@ services:
       dockerfile: Dockerfile
 
   alerting:
+    image: !reset null
     build:
       context: .
       dockerfile: ./projects/alerting/Dockerfile
       target: dev
 
   triage:
+    image: !reset null
     build:
       context: .
       dockerfile: ./projects/triage/Dockerfile
       target: dev
 
   housekeeping:
+    image: !reset null
     build:
       context: .
       dockerfile: ./projects/housekeeping/Dockerfile
@@ -102,6 +111,7 @@ services:
       - CLEANUP_SCHEDULE=*/3 * * * * # Test every 3 minutes
 
   document-conversion:
+    image: !reset null
     build:
       context: .
       dockerfile: ./projects/document_conversion/Dockerfile

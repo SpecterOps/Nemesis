@@ -1,3 +1,5 @@
+import { AlertTriangle } from 'lucide-react';
+
 const Alert = ({ title, children, variant = "error" }) => (
   <div className={`p-4 rounded-lg flex items-center space-x-2 ${variant === "error"
     ? "bg-red-50 dark:bg-red-900/20"
