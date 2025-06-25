@@ -287,7 +287,7 @@ services:
     environment:
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
       - HASURA_GRAPHQL_URL=http://hasura:8080/v1/graphql
-      - JUPYTER_PASSWORD=${JUPYTER_PASSWORD:?}
+      - JUPYTER_PASSWORD=${JUPYTER_PASSWORD:-}
     volumes:
     - "./projects/jupyter/notebooks:/home/jovyan/work"
     healthcheck:
@@ -767,8 +767,10 @@ services:
     profiles: ["monitoring"]
     image: grafana/grafana:11.4.0
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?}
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:?}
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      # - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
+      # - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-nemesis}
       - GF_SERVER_DOMAIN=${EXTERNAL_HOST:-https://localhost}
       - GF_SERVER_ROOT_URL=${EXTERNAL_HOST:-https://localhost}/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
