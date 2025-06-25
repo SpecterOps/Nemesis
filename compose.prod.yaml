@@ -1,0 +1,83 @@
+# docker-compose.override.yml
+# This file provides DEVELOPMENT-ONLY overrides. It is automatically loaded by 'docker compose up'.
+# - It REPLACES 'image' directives with 'build' directives for local development.
+# - It mounts local source code for live-reloading.
+# - It adjusts commands and environment for a better dev experience.
+
+services:
+  web-api:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: ./projects/web_api/Dockerfile
+      target: prod
+
+  noseyparker-scanner:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: ./projects/noseyparker_scanner/Dockerfile
+      target: prod
+
+  dotnet-api:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: ./projects/dotnet_api/Dockerfile
+      target: prod
+
+  file-enrichment:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: ./projects/file_enrichment/Dockerfile
+      target: prod
+
+  frontend:
+    image: !reset null
+    build:
+      context: ./projects/frontend/
+      dockerfile: Dockerfile
+      target: prod
+    command: >
+      sh -c "
+        SECRET=\"$$HASURA_ADMIN_SECRET\" &&
+        sed -i \"s/\\$$HASURA_ADMIN_SECRET/$$SECRET/g\" /usr/share/nginx/html/index.html &&
+        nginx -g 'daemon off;'
+      "
+    labels:
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+
+  jupyter:
+    image: !reset null
+    build:
+      context: ./projects/jupyter/
+      dockerfile: Dockerfile
+
+  alerting:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: ./projects/alerting/Dockerfile
+      target: prod
+
+  triage:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: ./projects/triage/Dockerfile
+      target: prod
+
+  housekeeping:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: ./projects/housekeeping/Dockerfile
+      target: prod
+
+  document-conversion:
+    image: !reset null
+    build:
+      context: .
+      dockerfile: ./projects/document_conversion/Dockerfile
+      target: prod
