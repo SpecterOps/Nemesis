@@ -281,7 +281,7 @@ services:
       - "traefik.http.routers.frontend.middlewares=auth"
 
   jupyter:
-    profiles: ["analysis"]
+    profiles: ["jupyter"]
     image: ghcr.io/specterops/nemesis/jupyter:latest
     depends_on: [postgres, hasura]
     environment:
@@ -723,8 +723,8 @@ services:
     environment:
       - QUERY_BASE_PATH=/jaeger
     volumes:
-      - jaeger_data:/badger  # Persist trace data
       - ./infra/jaeger/jaeger-config.yaml:/etc/jaeger/config.yaml
+      - jaeger_data:/badger  # Persist trace data
     command: ["--config", "/etc/jaeger/config.yaml"]
     labels:
       - "traefik.enable=true"
