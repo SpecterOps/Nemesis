@@ -1,15 +1,16 @@
 # enrichment_modules/container/analyzer.py
-import tempfile
-from datetime import UTC, datetime
-import zipfile
-import py7zr
 import tarfile
+import tempfile
+import zipfile
+from datetime import UTC, datetime
 
+import py7zr
 import structlog
+from common.helpers import is_container
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
-from common.helpers import is_container
 from common.storage import StorageMinio
+
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)
@@ -28,7 +29,7 @@ class ContainerAnalyzer(EnrichmentModule):
 
     def _format_size(self, size_in_bytes: int) -> str:
         """Convert size in bytes to human readable format."""
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
             if size_in_bytes < 1024:
                 return f"{size_in_bytes:.2f} {unit}"
             size_in_bytes //= 1024
@@ -45,7 +46,7 @@ class ContainerAnalyzer(EnrichmentModule):
             files = []
             for filename, info in sz.files.items():
                 # 7z files might not have size info for some files
-                size = info.uncompressed if hasattr(info, 'uncompressed') else 0
+                size = info.uncompressed if hasattr(info, "uncompressed") else 0
                 files.append((filename, size))
             return files
 
@@ -83,7 +84,7 @@ class ContainerAnalyzer(EnrichmentModule):
                     file_count = len(files)
 
                     # Add summary
-                    report_lines.append(f"\n## Summary")
+                    report_lines.append("\n## Summary")
                     report_lines.append(f"- Total files: {file_count}")
                     report_lines.append(f"- Total size: {self._format_size(total_size)}")
 

@@ -8,7 +8,6 @@ from fastapi import UploadFile
 from minio import Minio
 from minio.error import S3Error
 from urllib3 import PoolManager, Retry
-from typing import List
 
 logger = structlog.get_logger(module=__name__)
 
@@ -258,7 +257,7 @@ class StorageMinio:
             logger.exception(e, message="Failed to delete object from Minio", object_id=object_id)
             return False
 
-    def delete_objects(self, object_ids: List[str]) -> int:
+    def delete_objects(self, object_ids: list[str]) -> int:
         """Delete multiple objects from Minio storage.
 
         Args:

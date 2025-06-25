@@ -1,26 +1,23 @@
 # enrichment_modules/kdbx/analyzer.py
-from typing import Any
 import struct
-import uuid
 import tempfile
+import uuid
+from typing import Any
+
 import structlog
-from common.helpers import escape_markdown
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 
-from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.kdbx.keepass2john import process_database
+from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)
 
 
 def get_encryption_algorithm_name(uuid_str: str) -> str:
     """Map encryption algorithm UUID to human-readable name."""
-    uuid_map = {
-        "31c1f2e6-bf71-4350-be58-05216afc5aff": "AES-256",
-        "d6038a2b-8b6f-4cb5-a524-339a31dbb59a": "ChaCha20"
-    }
+    uuid_map = {"31c1f2e6-bf71-4350-be58-05216afc5aff": "AES-256", "d6038a2b-8b6f-4cb5-a524-339a31dbb59a": "ChaCha20"}
     return uuid_map.get(uuid_str.lower(), uuid_str)
 
 
@@ -29,7 +26,7 @@ def get_kdf_algorithm_name(uuid_str: str) -> str:
     uuid_map = {
         "c9d9f39a-628a-4460-bf74-0d08c18a4fea": "AES-KDF",
         "ef636ddf-8c29-444b-91f7-a9a403e30a0c": "Argon2d",
-        "9e298b19-56db-4773-b23d-fc3ec6f0a1e6": "Argon2id"
+        "9e298b19-56db-4773-b23d-fc3ec6f0a1e6": "Argon2id",
     }
     return uuid_map.get(uuid_str.lower(), uuid_str)
 
@@ -63,17 +60,17 @@ def parse_kdbx_file(file_path: str) -> dict[str, Any]:
     }
 
     try:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             # Read and verify KDBX signatures
-            sig1 = struct.unpack('<I', f.read(4))[0]
-            sig2 = struct.unpack('<I', f.read(4))[0]
+            sig1 = struct.unpack("<I", f.read(4))[0]
+            sig2 = struct.unpack("<I", f.read(4))[0]
 
             if sig1 != 0x9AA2D903 or sig2 != 0xB54BFB67:
                 parsed_data["error"] = "Invalid KDBX file signatures"
                 return parsed_data
 
             # Read format version
-            version = struct.unpack('<I', f.read(4))[0]
+            version = struct.unpack("<I", f.read(4))[0]
             parsed_data["format_version"] = version
             parsed_data["major_version"] = (version >> 16) & 0xFFFF
             parsed_data["minor_version"] = version & 0xFFFF
@@ -81,8 +78,8 @@ def parse_kdbx_file(file_path: str) -> dict[str, Any]:
             # Parse header fields
             header_data = {}
             while True:
-                field_id = struct.unpack('<B', f.read(1))[0]
-                field_size = struct.unpack('<I', f.read(4))[0]
+                field_id = struct.unpack("<B", f.read(1))[0]
+                field_size = struct.unpack("<I", f.read(4))[0]
                 field_data = f.read(field_size)
 
                 if field_id == 0:  # End of header
@@ -94,30 +91,32 @@ def parse_kdbx_file(file_path: str) -> dict[str, Any]:
                         parsed_data["encryption_algorithm"] = get_encryption_algorithm_name(uuid_str)
                 elif field_id == 3:  # Compression algorithm
                     if len(field_data) >= 4:
-                        compression = struct.unpack('<I', field_data[:4])[0]
+                        compression = struct.unpack("<I", field_data[:4])[0]
                         parsed_data["compression_algorithm"] = "GZip" if compression == 1 else "None"
                 elif field_id == 4:  # Master seed
                     parsed_data["master_seed"] = field_data.hex()
                 elif field_id == 11:  # KDF parameters (KDBX 4.x)
                     kdf_params = parse_variant_dictionary(field_data)
-                    if '$UUID' in kdf_params:
-                        kdf_uuid = kdf_params['$UUID']
+                    if "$UUID" in kdf_params:
+                        kdf_uuid = kdf_params["$UUID"]
                         if isinstance(kdf_uuid, bytes) and len(kdf_uuid) >= 16:
                             uuid_str = str(uuid.UUID(bytes=kdf_uuid[:16]))
                             parsed_data["kdf_algorithm"] = get_kdf_algorithm_name(uuid_str)
-                    if 'R' in kdf_params:
-                        parsed_data["kdf_rounds"] = kdf_params['R']
-                    if 'M' in kdf_params:
-                        parsed_data["kdf_memory"] = kdf_params['M']
-                    if 'P' in kdf_params:
-                        parsed_data["kdf_parallelism"] = kdf_params['P']
-                    if 'S' in kdf_params:
-                        parsed_data["transform_seed"] = kdf_params['S'].hex() if isinstance(kdf_params['S'], bytes) else kdf_params['S']
+                    if "R" in kdf_params:
+                        parsed_data["kdf_rounds"] = kdf_params["R"]
+                    if "M" in kdf_params:
+                        parsed_data["kdf_memory"] = kdf_params["M"]
+                    if "P" in kdf_params:
+                        parsed_data["kdf_parallelism"] = kdf_params["P"]
+                    if "S" in kdf_params:
+                        parsed_data["transform_seed"] = (
+                            kdf_params["S"].hex() if isinstance(kdf_params["S"], bytes) else kdf_params["S"]
+                        )
                 elif field_id == 5:  # Transform seed (KDBX 3.x)
                     parsed_data["transform_seed"] = field_data.hex()
                 elif field_id == 6:  # Transform rounds (KDBX 3.x)
                     if len(field_data) >= 8:
-                        parsed_data["kdf_rounds"] = struct.unpack('<Q', field_data[:8])[0]
+                        parsed_data["kdf_rounds"] = struct.unpack("<Q", field_data[:8])[0]
 
                 header_data[field_id] = field_data
 
@@ -153,7 +152,7 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
         # Read version
         if len(data) < 2:
             return result
-        version = struct.unpack('<H', data[offset:offset+2])[0]
+        version = struct.unpack("<H", data[offset : offset + 2])[0]
         offset += 2
 
         while offset < len(data):
@@ -170,39 +169,39 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
             # Read name size
             if offset + 4 > len(data):
                 break
-            name_size = struct.unpack('<I', data[offset:offset+4])[0]
+            name_size = struct.unpack("<I", data[offset : offset + 4])[0]
             offset += 4
 
             # Read name
             if offset + name_size > len(data):
                 break
-            name = data[offset:offset+name_size].decode('utf-8', errors='ignore')
+            name = data[offset : offset + name_size].decode("utf-8", errors="ignore")
             offset += name_size
 
             # Read value size
             if offset + 4 > len(data):
                 break
-            value_size = struct.unpack('<I', data[offset:offset+4])[0]
+            value_size = struct.unpack("<I", data[offset : offset + 4])[0]
             offset += 4
 
             # Read value
             if offset + value_size > len(data):
                 break
-            value_data = data[offset:offset+value_size]
+            value_data = data[offset : offset + value_size]
             offset += value_size
 
             # Parse value based on type
             if value_type == 0x04:  # UInt32
                 if len(value_data) >= 4:
-                    result[name] = struct.unpack('<I', value_data[:4])[0]
+                    result[name] = struct.unpack("<I", value_data[:4])[0]
             elif value_type == 0x05:  # UInt64
                 if len(value_data) >= 8:
-                    result[name] = struct.unpack('<Q', value_data[:8])[0]
+                    result[name] = struct.unpack("<Q", value_data[:8])[0]
             elif value_type == 0x08:  # Bool
                 if len(value_data) >= 1:
                     result[name] = value_data[0] != 0
             elif value_type == 0x0C:  # String
-                result[name] = value_data.decode('utf-8', errors='ignore')
+                result[name] = value_data.decode("utf-8", errors="ignore")
             elif value_type == 0x42:  # ByteArray
                 result[name] = value_data
             else:
@@ -226,8 +225,7 @@ class KDBXAnalyzer(EnrichmentModule):
         file_enriched = get_file_enriched(object_id)
 
         if file_enriched.magic_type:
-            should_run = ("keepass" in file_enriched.magic_type.lower() and
-                         "kdbx" in file_enriched.magic_type.lower())
+            should_run = "keepass" in file_enriched.magic_type.lower() and "kdbx" in file_enriched.magic_type.lower()
         else:
             should_run = False
 
@@ -254,7 +252,9 @@ class KDBXAnalyzer(EnrichmentModule):
 
                 # Add metadata if available
                 if analysis.get("format_version"):
-                    summary_parts.append(f"**Format Version:** {analysis['major_version']}.{analysis['minor_version']}  \n")
+                    summary_parts.append(
+                        f"**Format Version:** {analysis['major_version']}.{analysis['minor_version']}  \n"
+                    )
                 if analysis.get("encryption_algorithm"):
                     summary_parts.append(f"**Encryption Algorithm:** {analysis['encryption_algorithm']}  \n")
                 if analysis.get("kdf_algorithm"):

@@ -2,23 +2,18 @@
 import csv
 import tempfile
 from datetime import UTC, datetime
-import os
 
 import structlog
 import yara_x
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa, ec, dsa
-from cryptography.x509.oid import ExtensionOID, NameOID
-from cryptography.x509.extensions import SubjectAlternativeName
-from cryptography.hazmat.primitives.serialization import pkcs7
-from cryptography.exceptions import UnsupportedAlgorithm
-from cryptography.hazmat.primitives.serialization.pkcs12 import load_pkcs12
-import base64
-from common.models import EnrichmentResult, Transform, FileObject, Finding, FindingCategory, FindingOrigin
+from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import dsa, ec, rsa
+from cryptography.hazmat.primitives.serialization import pkcs7
+from cryptography.hazmat.primitives.serialization.pkcs12 import load_pkcs12
+from cryptography.x509.oid import ExtensionOID, NameOID
 
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -66,8 +61,12 @@ rule Certificate_File
             return True
 
         # Check MIME type
-        cert_mime_types = ["application/x-x509-ca-cert", "application/pkix-cert",
-                          "application/x-pkcs7-certificates", "application/x-pem-file"]
+        cert_mime_types = [
+            "application/x-x509-ca-cert",
+            "application/pkix-cert",
+            "application/x-pkcs7-certificates",
+            "application/x-pem-file",
+        ]
         if any(mime_type in file_enriched.mime_type.lower() for mime_type in cert_mime_types):
             return True
 
@@ -115,7 +114,7 @@ rule Certificate_File
                     "1.3.6.1.5.5.7.3.4": "emailProtection",
                     "1.3.6.1.5.5.7.3.8": "timeStamping",
                     "1.3.6.1.5.5.7.3.9": "OCSPSigning",
-                    "1.3.6.1.4.1.311.10.3.4": "Microsoft Document Encryption"
+                    "1.3.6.1.4.1.311.10.3.4": "Microsoft Document Encryption",
                     # Add more mappings as needed
                 }
 
@@ -175,7 +174,7 @@ rule Certificate_File
             for i in range(0, len(ext_str), 80):
                 if i > 0:
                     formatted += "\n  "
-                formatted += ext_str[i:i+80]
+                formatted += ext_str[i : i + 80]
             return formatted
 
         return ext_str
@@ -219,8 +218,20 @@ rule Certificate_File
             logger.debug(f"Not a valid PKCS#7 certificate store: {str(e)}")
 
         # Try PKCS#12 format (PFX/P12) with various passwords
-        passwords_to_try = [None, b"", b"12345", b"123456", b"12345678", b"123456789",
-                            b"password", b"password123", b"qwerty123", b"qwerty1", b"secret", b"123123"]
+        passwords_to_try = [
+            None,
+            b"",
+            b"12345",
+            b"123456",
+            b"12345678",
+            b"123456789",
+            b"password",
+            b"password123",
+            b"qwerty123",
+            b"qwerty1",
+            b"secret",
+            b"123123",
+        ]
 
         for password in passwords_to_try:
             try:
@@ -230,7 +241,7 @@ rule Certificate_File
                 else:
                     # Ensure password is bytes
                     if isinstance(password, str):
-                        password = password.encode('utf-8')
+                        password = password.encode("utf-8")
                     pkcs12_data = load_pkcs12(file_data, password=password)
 
                 certificates = []
@@ -251,7 +262,7 @@ rule Certificate_File
                     elif password == b"":
                         used_password = "Empty string"
                     else:
-                        used_password = password.decode('utf-8')
+                        used_password = password.decode("utf-8")
 
                     logger.info(f"Successfully loaded PKCS#12 file with password: {used_password}")
                     return certificates, used_password
@@ -272,7 +283,7 @@ rule Certificate_File
         current_section = ""
         in_cert = False
 
-        for line in data.decode('utf-8', errors='replace').splitlines():
+        for line in data.decode("utf-8", errors="replace").splitlines():
             if "-----BEGIN CERTIFICATE-----" in line:
                 current_section = line + "\n"
                 in_cert = True
@@ -287,7 +298,7 @@ rule Certificate_File
         # Process each PEM section
         for pem_data in pem_sections:
             try:
-                cert = x509.load_pem_x509_certificate(pem_data.encode('utf-8'), default_backend())
+                cert = x509.load_pem_x509_certificate(pem_data.encode("utf-8"), default_backend())
                 certs.append(cert)
             except Exception as e:
                 logger.debug(f"Failed to parse PEM certificate section: {str(e)}")
@@ -378,10 +389,7 @@ rule Certificate_File
         except Exception as e:
             logger.error(f"Error extracting certificate info: {str(e)}")
             # Return a minimal valid dictionary with error information
-            return {
-                "error": str(e),
-                "is_valid_now": False
-            }
+            return {"error": str(e), "is_valid_now": False}
 
     def _format_name(self, name):
         """Format a certificate name (subject or issuer)."""
@@ -496,9 +504,11 @@ rule Certificate_File
         try:
             if hash_algorithm == "sha1":
                 from cryptography.hazmat.primitives.hashes import SHA1
+
                 digest = SHA1()
             elif hash_algorithm == "sha256":
                 from cryptography.hazmat.primitives.hashes import SHA256
+
                 digest = SHA256()
             else:
                 return "Unsupported hash algorithm"
@@ -537,10 +547,7 @@ rule Certificate_File
                         except Exception as e:
                             logger.error(f"Error processing certificate: {str(e)}")
                             # Add a minimal cert_info with error details
-                            cert_info_list.append({
-                                "error": str(e),
-                                "is_valid_now": False
-                            })
+                            cert_info_list.append({"error": str(e), "is_valid_now": False})
 
                     # Generate summary report
                     report_lines = []
@@ -552,7 +559,9 @@ rule Certificate_File
 
                     # Add password info if it's a PKCS#12 file
                     if used_password is not None:
-                        report_lines.append(f"\n**Note**: Successfully decrypted PKCS#12/PFX file using password: '{used_password}'")
+                        report_lines.append(
+                            f"\n**Note**: Successfully decrypted PKCS#12/PFX file using password: '{used_password}'"
+                        )
 
                     # Certificate details
                     for i, cert_info in enumerate(cert_info_list, 1):
@@ -572,15 +581,19 @@ rule Certificate_File
                         report_lines.append(f"\n**Serial Number**: {cert_info['serial_number']}")
                         report_lines.append(f"\n**Valid From**: {cert_info['not_valid_before']}")
                         report_lines.append(f"\n**Valid To**: {cert_info['not_valid_after']}")
-                        report_lines.append(f"\n**Status**: {'Valid' if cert_info.get('is_valid_now', False) else 'Expired or Not Yet Valid'}")
+                        report_lines.append(
+                            f"\n**Status**: {'Valid' if cert_info.get('is_valid_now', False) else 'Expired or Not Yet Valid'}"
+                        )
                         report_lines.append(f"\n**Version**: {cert_info['version']}")
                         report_lines.append(f"\n**Signature Algorithm**: {cert_info['signature_algorithm']}")
-                        report_lines.append(f"\n**Public Key**: {cert_info['public_key_type']} ({cert_info['key_size']} bits)")
+                        report_lines.append(
+                            f"\n**Public Key**: {cert_info['public_key_type']} ({cert_info['key_size']} bits)"
+                        )
 
                         # Fingerprints with better formatting
-                        if cert_info['fingerprint_sha1']:
+                        if cert_info["fingerprint_sha1"]:
                             report_lines.append(f"\n**SHA-1 Fingerprint**:  \n{cert_info['fingerprint_sha1']}")
-                        if cert_info['fingerprint_sha256']:
+                        if cert_info["fingerprint_sha256"]:
                             report_lines.append(f"\n**SHA-256 Fingerprint**:  \n{cert_info['fingerprint_sha256']}")
 
                         # Subject Alternative Names with better formatting
@@ -588,15 +601,15 @@ rule Certificate_File
                             report_lines.append("\n**Subject Alternative Names**:")
                             for san in cert_info["subject_alternative_names"]:
                                 # Extract the SAN value and format it properly
-                                san_type = san.split(':', 1)[0] if ':' in san else 'Other'
-                                san_value = san.split(':', 1)[1] if ':' in san else san
+                                san_type = san.split(":", 1)[0] if ":" in san else "Other"
+                                san_value = san.split(":", 1)[1] if ":" in san else san
 
                                 # Format as a list item with link if it's a domain or email
-                                if san_type == 'DNS' or san_type == 'email':
+                                if san_type == "DNS" or san_type == "email":
                                     # Make email addresses and domains clickable if possible
-                                    if san_type == 'DNS':
+                                    if san_type == "DNS":
                                         report_lines.append(f"- **{san_type}**: [{san_value}](https://{san_value})")
-                                    elif san_type == 'email':
+                                    elif san_type == "email":
                                         report_lines.append(f"- **{san_type}**: [{san_value}](mailto:{san_value})")
                                     else:
                                         report_lines.append(f"- **{san_type}**: {san_value}")
@@ -646,9 +659,18 @@ rule Certificate_File
                     # Export certificate info to CSV
                     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_csv:
                         fieldnames = [
-                            "subject", "issuer", "serial_number", "not_valid_before",
-                            "not_valid_after", "is_valid_now", "version", "signature_algorithm",
-                            "public_key_type", "key_size", "fingerprint_sha1", "fingerprint_sha256"
+                            "subject",
+                            "issuer",
+                            "serial_number",
+                            "not_valid_before",
+                            "not_valid_after",
+                            "is_valid_now",
+                            "version",
+                            "signature_algorithm",
+                            "public_key_type",
+                            "key_size",
+                            "fingerprint_sha1",
+                            "fingerprint_sha256",
                         ]
 
                         # Add pkcs12_password field if applicable
@@ -703,10 +725,7 @@ rule Certificate_File
                             valid_summary += f"\n**Note**: Successfully decrypted PKCS#12/PFX file using password: '{used_password}'\n"
 
                         # Add the valid cert summary as a finding
-                        display_data = FileObject(
-                            type="finding_summary",
-                            metadata={"summary": valid_summary}
-                        )
+                        display_data = FileObject(type="finding_summary", metadata={"summary": valid_summary})
                         finding_data.append(display_data)
 
                         # Include password information in the finding if applicable
@@ -729,13 +748,14 @@ rule Certificate_File
 
                     # Create additional finding for PKCS#12 password if one was found
                     if used_password is not None and used_password not in ["None", "Empty string"]:
-                        password_finding_summary = f"## PKCS#12/PFX Password Discovered\n\n"
-                        password_finding_summary += f"Successfully decrypted PKCS#12/PFX file using password: **'{used_password}'**\n\n"
+                        password_finding_summary = "## PKCS#12/PFX Password Discovered\n\n"
+                        password_finding_summary += (
+                            f"Successfully decrypted PKCS#12/PFX file using password: **'{used_password}'**\n\n"
+                        )
                         password_finding_summary += "This password may be used for other encrypted files or systems."
 
                         password_display_data = FileObject(
-                            type="finding_summary",
-                            metadata={"summary": password_finding_summary}
+                            type="finding_summary", metadata={"summary": password_finding_summary}
                         )
 
                         password_finding = Finding(
@@ -762,7 +782,9 @@ rule Certificate_File
                     logger.exception(e, message=f"Error processing certificate file: {file_enriched.file_name}")
 
                     # Create an error report
-                    error_report = f"# Certificate Analysis Error\n\nFailed to analyze {file_enriched.file_name}: {str(e)}"
+                    error_report = (
+                        f"# Certificate Analysis Error\n\nFailed to analyze {file_enriched.file_name}: {str(e)}"
+                    )
 
                     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_error:
                         tmp_error.write(error_report)
@@ -786,6 +808,7 @@ rule Certificate_File
 
         except Exception as e:
             logger.exception(e, message="Error in certificate analyzer")
+
 
 def create_enrichment_module() -> EnrichmentModule:
     return CertificateAnalyzer()

@@ -1,19 +1,18 @@
 # enrichment_modules/office_doc/analyzer.py
 import datetime
+import tempfile
 import xml.dom.minidom
 import zipfile
 from typing import Any
-import os
+
 import msoffcrypto
 import olefile
 import structlog
-from oletools.olevba import VBA_Parser
-import tempfile
-
 from common.helpers import escape_markdown
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+from oletools.olevba import VBA_Parser
 
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.office_doc.office2john import extract_file_encryption_hash
@@ -43,6 +42,7 @@ The document is encrypted. Attempt to crack it using the following hash:
         data=[display_data],
     )
 
+
 def create_macro_finding(file_enriched, macro_count: int, module_name: str) -> Finding:
     """Create a standardized finding for documents containing macros."""
     summary_markdown = f"""
@@ -64,9 +64,10 @@ Review the extracted macro code in the document transforms for analysis.
         data=[display_data],
     )
 
+
 def create_rms_protection_finding(file_enriched, module_name: str) -> Finding:
     """Create a standardized finding for RMS protected Office documents."""
-    summary_markdown = f"""
+    summary_markdown = """
 # RMS Protected Document
 The document is likely protected by a Rights Management System.
 
@@ -84,6 +85,7 @@ Analyze any file in [0]DataSpaces/TransformInfo/DRMEncryptedTransform/* for more
         raw_data={},
         data=[display_data],
     )
+
 
 def check_encryption(file_path: str) -> tuple[bool, str | None]:
     """Check if an Office file is encrypted and return its hash if present."""
@@ -104,15 +106,16 @@ def check_encryption(file_path: str) -> tuple[bool, str | None]:
 
     return is_encrypted, enc_hash if is_encrypted else None
 
+
 def check_rms_protected(file_path):
     """Check if a file is RMS protected by looking for the DRMEncryptedTransform folder"""
     try:
-        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+        with zipfile.ZipFile(file_path, "r") as zip_ref:
             file_list = zip_ref.namelist()
 
             # Check for the specific folder path that indicates RMS protection
             for file in file_list:
-                if 'DRMEncryptedTransform' in file:
+                if "DRMEncryptedTransform" in file:
                     return True
 
     except:
@@ -122,13 +125,14 @@ def check_rms_protected(file_path):
     try:
         if olefile.isOleFile(file_path):
             ole = olefile.OleFileIO(file_path)
-            if ole.exists('\x06DataSpaces/TransformInfo/DRMEncryptedTransform'):
+            if ole.exists("\x06DataSpaces/TransformInfo/DRMEncryptedTransform"):
                 return True
             ole.close()
     except:
         pass
 
     return False
+
 
 def extract_macros(file_path: str) -> list[dict[str, Any]]:
     """Extract macro code from Office documents."""
@@ -137,19 +141,22 @@ def extract_macros(file_path: str) -> list[dict[str, Any]]:
     try:
         vba_parser = VBA_Parser(file_path)
         if vba_parser.detect_vba_macros():
-            for (filename, stream_path, vba_filename, vba_code) in vba_parser.extract_macros():
+            for filename, stream_path, vba_filename, vba_code in vba_parser.extract_macros():
                 if vba_code:
-                    macros.append({
-                        "filename": filename,
-                        "stream_path": stream_path,
-                        "vba_filename": vba_filename,
-                        "vba_code": vba_code
-                    })
+                    macros.append(
+                        {
+                            "filename": filename,
+                            "stream_path": stream_path,
+                            "vba_filename": vba_filename,
+                            "vba_code": vba_code,
+                        }
+                    )
         vba_parser.close()
     except Exception as e:
         logger.warning("Error extracting macros", error=str(e), file_path=file_path)
 
     return macros
+
 
 def parse_office_ole_file(file_path: str) -> dict[str, Any]:
     """
@@ -383,7 +390,6 @@ class OfficeAnalyzer(EnrichmentModule):
                     macro_text += macro["vba_code"] + "\n\n"
 
                 with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
-
                     tmp_display_file.write(macro_text)
                     tmp_display_file.flush()
                     object_id = self.storage.upload_file(tmp_display_file.name)
@@ -391,10 +397,7 @@ class OfficeAnalyzer(EnrichmentModule):
                     displayable_parsed = Transform(
                         type="extracted_macros",
                         object_id=f"{object_id}",
-                        metadata={
-                            "file_name": f"macros.vb",
-                            "display_type_in_dashboard": "monaco"
-                        },
+                        metadata={"file_name": "macros.vb", "display_type_in_dashboard": "monaco"},
                     )
                     enrichment_result.transforms = [displayable_parsed]
 

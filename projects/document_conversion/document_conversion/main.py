@@ -1,28 +1,28 @@
 import json
 import os
+import tempfile
+import zipfile
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Optional, List
+from typing import Optional
 
-import zipfile
-import olefile
-import msoffcrypto
-import psycopg
 import jpype
 import jpype.imports
+import msoffcrypto
+import olefile
+import psycopg
 import requests
 import structlog
-from common.models import FileEnriched, Transform, CloudEvent, File
+from common.helpers import can_convert_to_pdf, can_extract_plaintext, extract_all_strings
+from common.models import CloudEvent, File, FileEnriched, Transform
 from common.state_helpers import get_file_enriched
-from common.helpers import can_extract_plaintext, extract_all_strings, can_convert_to_pdf
 from common.storage import StorageMinio
-from dapr.ext.fastapi import DaprApp
 from dapr.clients import DaprClient
-from dapr.ext.workflow import WorkflowRuntime, DaprWorkflowClient, RetryPolicy, when_all, DaprWorkflowContext
-from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
+from dapr.ext.fastapi import DaprApp
+from dapr.ext.workflow import DaprWorkflowClient, DaprWorkflowContext, RetryPolicy, WorkflowRuntime, when_all
 from dapr.ext.workflow.logger.options import LoggerOptions
+from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from fastapi import FastAPI
-import tempfile
 from PyPDF2 import PdfReader
 
 logger = structlog.get_logger(module=__name__)

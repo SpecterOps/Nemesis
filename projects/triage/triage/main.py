@@ -1,25 +1,21 @@
 import asyncio
-import os
 import json
-import re
+import os
 from contextlib import asynccontextmanager
 from enum import Enum
-from typing import Optional
-from typing import Annotated
 
-import structlog
 import rigging as rg
-from common.models import CloudEvent
+import structlog
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from gql import Client, gql
 from gql.transport.websockets import WebsocketsTransport
-from pydantic import BaseModel
 
 logger = structlog.get_logger(module=__name__)
 storage = StorageMinio()
+
 
 # Define triage categories
 class TriageCategory(str, Enum):
@@ -34,7 +30,7 @@ class TriageCategory(str, Enum):
 with DaprClient() as client:
     secret = client.get_secret(store_name="nemesis-secret-store", key="HASURA_ADMIN_SECRET")
     hasura_admin_secret = secret.secret["HASURA_ADMIN_SECRET"]
-    logger.info(f"[triage] HASURA_ADMIN_SECRET retrieved")
+    logger.info("[triage] HASURA_ADMIN_SECRET retrieved")
 
 
 @asynccontextmanager
@@ -43,7 +39,7 @@ async def lifespan(app: FastAPI):
 
     try:
         # Check if rigging generator config is available
-        rigging_generator = os.getenv('RIGGING_GENERATOR_TRIAGE')
+        rigging_generator = os.getenv("RIGGING_GENERATOR_TRIAGE")
         if not rigging_generator:
             logger.warning("RIGGING_GENERATOR_TRIAGE environment variable not set - triage analysis disabled")
 
@@ -80,13 +76,13 @@ async def triage_finding(file_path, object_id, finding_data):
                     first_data = json.loads(first_data)
 
                 # Extract summary from metadata
-                if isinstance(first_data, dict) and 'metadata' in first_data:
-                    summary = first_data['metadata'].get('summary')
+                if isinstance(first_data, dict) and "metadata" in first_data:
+                    summary = first_data["metadata"].get("summary")
             except json.JSONDecodeError:
                 logger.error(f"Failed to parse finding data as JSON: {first_data}")
 
         if not summary:
-            logger.warning(f"No summary found in finding data, cannot triage")
+            logger.warning("No summary found in finding data, cannot triage")
             return TriageCategory.NOT_TRIAGED
 
         # any findings we can triage without an LLM
@@ -101,7 +97,7 @@ async def triage_finding(file_path, object_id, finding_data):
             else:
                 return TriageCategory.NEEDS_REVIEW
 
-        rigging_generator = os.getenv('RIGGING_GENERATOR_TRIAGE')
+        rigging_generator = os.getenv("RIGGING_GENERATOR_TRIAGE")
         if not rigging_generator:
             # logger.warning("RIGGING_GENERATOR_TRIAGE not set, cannot triage finding with LLM")
             return TriageCategory.NOT_TRIAGED
@@ -109,10 +105,11 @@ async def triage_finding(file_path, object_id, finding_data):
         generator = rg.get_generator(rigging_generator)
 
         # Send the data to the LLM for analysis
-        response = await generator.chat([
-            {
-                "role": "system",
-                "content": """You are a cybersecurity expert specializing in analyzing security findings.
+        response = await generator.chat(
+            [
+                {
+                    "role": "system",
+                    "content": """You are a cybersecurity expert specializing in analyzing security findings.
                 Your task is to triage security findings as either true positive, false positive, or needs review.
 
                 A true positive is a finding that accurately identifies a genuine security issue and is not derived
@@ -125,13 +122,14 @@ async def triage_finding(file_path, object_id, finding_data):
                 - true_positive
                 - false_positive
                 - needs_review
-                """
-            },
-            {
-                "role": "user",
-                "content": f"Please triage the following security finding derived from the file '{file_path}' (object_id={object_id}):\n\n{summary}"
-            }
-        ]).run()
+                """,
+                },
+                {
+                    "role": "user",
+                    "content": f"Please triage the following security finding derived from the file '{file_path}' (object_id={object_id}):\n\n{summary}",
+                },
+            ]
+        ).run()
 
         # Extract the result from the response
         triage_result = response.last.content
@@ -176,10 +174,7 @@ async def fetch_finding_details(session, finding_id):
     """)
 
     try:
-        result = await session.execute(
-            FINDING_DETAILS_QUERY,
-            variable_values={"finding_id": finding_id}
-        )
+        result = await session.execute(FINDING_DETAILS_QUERY, variable_values={"finding_id": finding_id})
 
         finding_details = result.get("findings_by_pk")
         if not finding_details:
@@ -228,7 +223,7 @@ async def handle_findings_subscription():
             transport = WebsocketsTransport(
                 url="ws://hasura:8080/v1/graphql",
                 headers={"x-hasura-admin-secret": hasura_admin_secret},
-                connect_args={"max_size": 20 * 1024 * 1024}
+                connect_args={"max_size": 20 * 1024 * 1024},
             )
 
             async with Client(
@@ -256,8 +251,11 @@ async def handle_findings_subscription():
 
                         # Triage the finding using LLM
                         triage_category = await triage_finding(file_path, object_id, finding_details["data"])
-                        if triage_category == TriageCategory.TRUE_POSITIVE or triage_category == TriageCategory.FALSE_POSITIVE or triage_category == TriageCategory.NEEDS_REVIEW:
-
+                        if (
+                            triage_category == TriageCategory.TRUE_POSITIVE
+                            or triage_category == TriageCategory.FALSE_POSITIVE
+                            or triage_category == TriageCategory.NEEDS_REVIEW
+                        ):
                             # Insert triage record
                             await session.execute(
                                 INSERT_TRIAGE,
@@ -265,8 +263,8 @@ async def handle_findings_subscription():
                                     "finding_id": finding_id,
                                     "username": "llm_triage",
                                     "value": triage_category,
-                                    "automated": True
-                                }
+                                    "automated": True,
+                                },
                             )
 
                             logger.info(f"Successfully triaged finding {finding_id} as {triage_category}")

@@ -3,12 +3,12 @@ import base64
 import json
 import re
 import tempfile
-from typing import List, Dict, Any, Tuple
+from typing import Any
 
 import structlog
-from common.models import EnrichmentResult, File, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched
 from common.helpers import is_plaintext
+from common.models import EnrichmentResult, File, Transform
+from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 
@@ -29,11 +29,11 @@ class Base64DecoderAnalyzer(EnrichmentModule):
 
         # Multi-tier pattern matching for efficiency
         # Tier 1: Short base64 (8-200 chars) - common for passwords, tokens, etc.
-        self.short_base64_pattern = re.compile(r'\b([A-Za-z0-9+/]{8,200}={0,2})\b')
+        self.short_base64_pattern = re.compile(r"\b([A-Za-z0-9+/]{8,200}={0,2})\b")
 
         # Tier 2: Long base64 (200+ chars) - files, certificates, etc.
         # Allow whitespace/newlines within long sequences
-        self.long_base64_pattern = re.compile(r'([A-Za-z0-9+/\s]{200,}={0,2})')
+        self.long_base64_pattern = re.compile(r"([A-Za-z0-9+/\s]{200,}={0,2})")
 
     def should_process(self, object_id: str) -> bool:
         """Determine if this module should run on plaintext files."""
@@ -44,7 +44,9 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         file_enriched = get_file_enriched(object_id)
 
         # skip carving if the file is not plaintext, of if it's an extracted strings.txt
-        if not file_enriched.is_plaintext or ((file_enriched.file_name.lower() == "strings.txt") and file_enriched.originating_object_id):
+        if not file_enriched.is_plaintext or (
+            (file_enriched.file_name.lower() == "strings.txt") and file_enriched.originating_object_id
+        ):
             return False
 
         if file_enriched.size > self.size_limit:
@@ -55,11 +57,13 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         try:
             num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
             file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
-            file_content = file_bytes.decode('utf-8', errors='ignore')
+            file_content = file_bytes.decode("utf-8", errors="ignore")
 
             # Quick check using efficient patterns
-            should_run = (self.short_base64_pattern.search(file_content) is not None or
-                         self.long_base64_pattern.search(file_content) is not None)
+            should_run = (
+                self.short_base64_pattern.search(file_content) is not None
+                or self.long_base64_pattern.search(file_content) is not None
+            )
 
             logger.debug(f"[base64_decoder] should_run: {should_run}")
             return should_run
@@ -78,7 +82,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
             has_upper = any(c.isupper() for c in candidate)
             has_lower = any(c.islower() for c in candidate)
             has_digit = any(c.isdigit() for c in candidate)
-            has_special = '+' in candidate or '/' in candidate
+            has_special = "+" in candidate or "/" in candidate
 
             # Need at least 2 types of characters for diversity
             char_types = sum([has_upper, has_lower, has_digit, has_special])
@@ -87,7 +91,18 @@ class Base64DecoderAnalyzer(EnrichmentModule):
 
         # Avoid obvious English words and common patterns
         lower_candidate = candidate.lower()
-        if lower_candidate in {'password', 'username', 'admin', 'test', 'example', 'sample', 'default', 'null', 'true', 'false'}:
+        if lower_candidate in {
+            "password",
+            "username",
+            "admin",
+            "test",
+            "example",
+            "sample",
+            "default",
+            "null",
+            "true",
+            "false",
+        }:
             return False
 
         # Avoid repetitive patterns
@@ -96,14 +111,14 @@ class Base64DecoderAnalyzer(EnrichmentModule):
 
         return True
 
-    def _try_decode_base64(self, encoded_str: str) -> Tuple[bool, bytes]:
+    def _try_decode_base64(self, encoded_str: str) -> tuple[bool, bytes]:
         """Attempt to decode a base64 string with validation."""
         try:
             # Clean the string (remove whitespace for long sequences)
-            cleaned_str = re.sub(r'\s+', '', encoded_str)
+            cleaned_str = re.sub(r"\s+", "", encoded_str)
 
             # Quick validation before decode attempt
-            if not re.match(r'^[A-Za-z0-9+/]*={0,2}$', cleaned_str):
+            if not re.match(r"^[A-Za-z0-9+/]*={0,2}$", cleaned_str):
                 return False, b""
 
             decoded = base64.b64decode(cleaned_str, validate=True)
@@ -116,30 +131,31 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         except Exception:
             return False, b""
 
-    def _remove_overlaps(self, matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _remove_overlaps(self, matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Remove overlapping matches, keeping longer/better ones"""
         if not matches:
             return matches
 
         # Sort by start position
-        sorted_matches = sorted(matches, key=lambda x: x['start'])
+        sorted_matches = sorted(matches, key=lambda x: x["start"])
         filtered = [sorted_matches[0]]
 
         for current in sorted_matches[1:]:
             last = filtered[-1]
 
             # Check for overlap
-            if current['start'] < last['end']:
+            if current["start"] < last["end"]:
                 # Keep the longer match, or the one with better characteristics
-                if (current['length'] > last['length'] or
-                    (current['length'] == last['length'] and current.get('has_special_chars', False))):
+                if current["length"] > last["length"] or (
+                    current["length"] == last["length"] and current.get("has_special_chars", False)
+                ):
                     filtered[-1] = current
             else:
                 filtered.append(current)
 
         return filtered
 
-    def _extract_base64_candidates(self, content: str) -> List[Dict[str, Any]]:
+    def _extract_base64_candidates(self, content: str) -> list[dict[str, Any]]:
         """Extract potential base64 encoded strings from content with efficient filtering."""
 
         candidates = []
@@ -150,42 +166,52 @@ class Base64DecoderAnalyzer(EnrichmentModule):
             candidate_str = match.group(1)
 
             if self._is_likely_base64(candidate_str):
-                candidates.append({
-                    'value': candidate_str,
-                    'start': match.start(1),
-                    'end': match.end(1),
-                    'length': len(candidate_str),
-                    'type': 'short',
-                    'has_special_chars': '+' in candidate_str or '/' in candidate_str
-                })
+                candidates.append(
+                    {
+                        "value": candidate_str,
+                        "start": match.start(1),
+                        "end": match.end(1),
+                        "length": len(candidate_str),
+                        "type": "short",
+                        "has_special_chars": "+" in candidate_str or "/" in candidate_str,
+                    }
+                )
 
             if len(candidates) >= max_initial_matches:
-                logger.warning(f"[base64_decoder] Reached initial extraction limit of {max_initial_matches} in short patterns")
+                logger.warning(
+                    f"[base64_decoder] Reached initial extraction limit of {max_initial_matches} in short patterns"
+                )
                 break
 
         # Process long patterns if we haven't hit the limit
         if len(candidates) < max_initial_matches:
             for match in self.long_base64_pattern.finditer(content):
-                candidate_str = re.sub(r'\s+', '', match.group(1))  # Clean whitespace
+                candidate_str = re.sub(r"\s+", "", match.group(1))  # Clean whitespace
 
                 if len(candidate_str) >= 200 and self._is_likely_base64(candidate_str):
-                    candidates.append({
-                        'value': candidate_str,
-                        'start': match.start(1),
-                        'end': match.end(1),
-                        'length': len(candidate_str),
-                        'type': 'long',
-                        'has_special_chars': '+' in candidate_str or '/' in candidate_str
-                    })
+                    candidates.append(
+                        {
+                            "value": candidate_str,
+                            "start": match.start(1),
+                            "end": match.end(1),
+                            "length": len(candidate_str),
+                            "type": "long",
+                            "has_special_chars": "+" in candidate_str or "/" in candidate_str,
+                        }
+                    )
 
                 if len(candidates) >= max_initial_matches:
-                    logger.warning(f"[base64_decoder] Reached initial extraction limit of {max_initial_matches} including long patterns")
+                    logger.warning(
+                        f"[base64_decoder] Reached initial extraction limit of {max_initial_matches} including long patterns"
+                    )
                     break
 
         # Remove overlapping matches
         candidates = self._remove_overlaps(candidates)
 
-        logger.info(f"[base64_decoder] Extracted {len(candidates)} base64 candidates after filtering (target: up to {max_initial_matches})")
+        logger.info(
+            f"[base64_decoder] Extracted {len(candidates)} base64 candidates after filtering (target: up to {max_initial_matches})"
+        )
         return candidates
 
     def process(self, object_id: str) -> EnrichmentResult | None:
@@ -197,7 +223,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
             # Download and read the file content (respect size limit)
             num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
             file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
-            file_content = file_bytes.decode('utf-8', errors='ignore')
+            file_content = file_bytes.decode("utf-8", errors="ignore")
 
             # Extract potential base64 candidates with efficient filtering
             base64_candidates = self._extract_base64_candidates(file_content)
@@ -206,7 +232,9 @@ class Base64DecoderAnalyzer(EnrichmentModule):
                 logger.info(f"[base64_decoder] No base64 candidates found in {file_enriched.object_id}")
                 return None
 
-            logger.info(f"[base64_decoder] Processing {len(base64_candidates)} base64 candidates, targeting up to {self.max_extractions} successful decodes")
+            logger.info(
+                f"[base64_decoder] Processing {len(base64_candidates)} base64 candidates, targeting up to {self.max_extractions} successful decodes"
+            )
 
             decoded_blobs = []
             modified_content = file_content
@@ -217,10 +245,12 @@ class Base64DecoderAnalyzer(EnrichmentModule):
             for candidate_info in base64_candidates:
                 # Stop processing if we've reached our successful decode limit
                 if successful_decodes >= self.max_extractions:
-                    logger.warning(f"[base64_decoder] Reached maximum successful decodes limit ({self.max_extractions}), stopping processing")
+                    logger.warning(
+                        f"[base64_decoder] Reached maximum successful decodes limit ({self.max_extractions}), stopping processing"
+                    )
                     break
 
-                candidate = candidate_info['value']
+                candidate = candidate_info["value"]
                 upload_file = False
                 success, decoded_bytes = self._try_decode_base64(candidate)
 
@@ -236,14 +266,14 @@ class Base64DecoderAnalyzer(EnrichmentModule):
                     "original_base64": candidate,
                     "decoded_length": len(decoded_bytes),
                     "is_plaintext": bytes_are_plaintext,
-                    "candidate_type": candidate_info['type'],
-                    "start_position": candidate_info['start'],
+                    "candidate_type": candidate_info["type"],
+                    "start_position": candidate_info["start"],
                 }
 
                 # If decoded text is plaintext and short, replace in content
                 if bytes_are_plaintext:
                     try:
-                        decoded_str = decoded_bytes.decode('utf-8', errors='ignore')
+                        decoded_str = decoded_bytes.decode("utf-8", errors="ignore")
                         if len(decoded_str) < 100:
                             replacement = f"[b64dec(val): {decoded_str}]"
                             modified_content = modified_content.replace(candidate, replacement, 1)
@@ -289,10 +319,10 @@ class Base64DecoderAnalyzer(EnrichmentModule):
                         uploaded_files.append(decoded_object_id)
 
                         logger.info(
-                            f"[base64_decoder] Uploaded decoded content as separate file",
+                            "[base64_decoder] Uploaded decoded content as separate file",
                             uploaded_object_id=decoded_object_id,
                             originating_object_id=file_enriched.object_id,
-                            candidate_type=candidate_info['type']
+                            candidate_type=candidate_info["type"],
                         )
 
                     except Exception as e:
@@ -323,7 +353,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
                     transforms.append(transform)
 
                     logger.info(
-                        f"[base64_decoder] Created modified file with inline replacements",
+                        "[base64_decoder] Created modified file with inline replacements",
                         modified_object_id=modified_object_id,
                         originating_object_id=file_enriched.object_id,
                     )
@@ -340,14 +370,14 @@ class Base64DecoderAnalyzer(EnrichmentModule):
                 "inline_replacements": sum(1 for blob in decoded_blobs if blob.get("action") == "replaced_inline"),
                 "max_extractions_limit": self.max_extractions,
                 "candidates_processed": successful_decodes,
-                "short_candidates": sum(1 for c in base64_candidates if c['type'] == 'short'),
-                "long_candidates": sum(1 for c in base64_candidates if c['type'] == 'long'),
+                "short_candidates": sum(1 for c in base64_candidates if c["type"] == "short"),
+                "long_candidates": sum(1 for c in base64_candidates if c["type"] == "long"),
                 "file_size_processed": num_bytes,
                 "processing_efficiency": {
                     "candidates_found": len(base64_candidates),
                     "successful_decode_rate": len(decoded_blobs) / len(base64_candidates) if base64_candidates else 0,
-                    "bytes_processed": num_bytes
-                }
+                    "bytes_processed": num_bytes,
+                },
             }
 
             if transforms:

@@ -3,11 +3,10 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Optional
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 import click
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from cli.log import setup_logging
 from cli.submit import submit_files

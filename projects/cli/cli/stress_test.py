@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -38,7 +38,7 @@ class APIStressTest:
             form.add_field("file", open(self.file_path, "rb"), filename=self.file_path.name)
 
             # Create metadata
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(UTC)
             metadata = {
                 "agent_id": f"stress-test-{submission_id}",
                 "project": "stress-test",

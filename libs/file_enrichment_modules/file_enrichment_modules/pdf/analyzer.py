@@ -1,7 +1,7 @@
 # enrichment_modules/pdf/analyzer.py
+from datetime import datetime
 from typing import Any
 
-from datetime import datetime
 import structlog
 from common.helpers import escape_markdown
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
@@ -68,14 +68,18 @@ def parse_pdf_file(file_path: str) -> dict[str, Any]:
                     parsed_data["created"] = f"{meta.creation_date}"
                 except:
                     try:
-                        parsed_data["created"] = f"{datetime.strptime(meta.creation_date.replace('D:', '').replace('Z', ''), '%Y%m%d%H%M%S')}"
+                        parsed_data["created"] = (
+                            f"{datetime.strptime(meta.creation_date.replace('D:', '').replace('Z', ''), '%Y%m%d%H%M%S')}"
+                        )
                     except:
                         pass
                 try:
                     parsed_data["modified"] = f"{meta.modification_date}"
                 except:
                     try:
-                        parsed_data["creamodifiedted"] = f"{datetime.strptime(meta.modification_date.replace('D:', '').replace('Z', ''), '%Y%m%d%H%M%S')}"
+                        parsed_data["creamodifiedted"] = (
+                            f"{datetime.strptime(meta.modification_date.replace('D:', '').replace('Z', ''), '%Y%m%d%H%M%S')}"
+                        )
                     except:
                         pass
 

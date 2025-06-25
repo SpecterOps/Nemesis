@@ -11,10 +11,10 @@ from threading import Event, Thread
 from typing import Optional
 
 import click
+import colorlog
 import requests
 import urllib3
 from tqdm import tqdm
-import colorlog
 
 # Disable SSL warnings for the submit functionality
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -172,7 +172,7 @@ def submit_main(
             username=username,
             password=password,
             project=project,
-            agent_id=agent_id
+            agent_id=agent_id,
         )
 
         if not success:

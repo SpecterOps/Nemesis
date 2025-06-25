@@ -1,13 +1,14 @@
 # enrichment_modules/sysprep/analyzer.py
-import re
 import tempfile
 import textwrap
 from pathlib import Path
+
 import structlog
 import yara_x
-from common.models import EnrichmentResult, Transform, Finding, FindingCategory, FindingOrigin, FileObject
+from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)
@@ -15,6 +16,7 @@ logger = structlog.get_logger(module=__name__)
 # Port of https://github.com/NetSPI/PowerHuntShares/blob/46238ba37dc85f65f2c1d7960f551ea3d80c236a/Scripts/ConfigParsers/parser-sysprep.inf.ps1
 #   Original Author: Scott Sutherland, NetSPI (@_nullbind / nullbind)
 #   License: BSD 3-clause
+
 
 class SysprepParser(EnrichmentModule):
     def __init__(self):
@@ -68,17 +70,14 @@ rule Windows_Unattended_Answer_File {
         file_enriched = get_file_enriched(object_id)
 
         # Check basic conditions first
-        if not (file_enriched.is_plaintext and
-                file_enriched.file_name.lower() == "sysprep.inf"):
+        if not (file_enriched.is_plaintext and file_enriched.file_name.lower() == "sysprep.inf"):
             return False
 
         # Run Yara scan
         file_bytes = self.storage.download_bytes(file_enriched.object_id)
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
 
-        logger.debug(
-            f"SysprepParser should_run: {should_run}, file: {file_enriched.file_name}"
-        )
+        logger.debug(f"SysprepParser should_run: {should_run}, file: {file_enriched.file_name}")
         return should_run
 
     def _parse_sysprep_config(self, config_content: str) -> dict:
@@ -90,18 +89,18 @@ rule Windows_Unattended_Answer_File {
             line = line.strip()
 
             # Skip empty lines and comments
-            if not line or line.startswith(';') or line.startswith('#'):
+            if not line or line.startswith(";") or line.startswith("#"):
                 continue
 
             # Check for section headers
-            if line.startswith('[') and line.endswith(']'):
+            if line.startswith("[") and line.endswith("]"):
                 current_section = line[1:-1]
                 config[current_section] = {}
                 continue
 
             # Parse key-value pairs
-            if '=' in line and current_section:
-                key, value = line.split('=', 1)
+            if "=" in line and current_section:
+                key, value = line.split("=", 1)
                 config[current_section][key.strip()] = value.strip()
 
         return config
@@ -111,36 +110,37 @@ rule Windows_Unattended_Answer_File {
         summary = "# Sysprep Credentials Detected\n\n"
 
         # Extract relevant sections
-        gui_unattended = config.get('GuiUnattended', {})
-        identification = config.get('Identification', {})
+        gui_unattended = config.get("GuiUnattended", {})
+        identification = config.get("Identification", {})
 
         # Add credentials if present
-        if gui_unattended.get('AdminPassword'):
+        if gui_unattended.get("AdminPassword"):
             summary += f"* **Local Admin Password**: `{gui_unattended['AdminPassword']}`\n"
 
         if identification:
-            if identification.get('JoinDomain'):
+            if identification.get("JoinDomain"):
                 summary += f"* **Domain**: `{identification['JoinDomain']}`\n"
-            if identification.get('DomainAdmin'):
+            if identification.get("DomainAdmin"):
                 summary += f"* **Domain Admin**: `{identification['DomainAdmin']}`\n"
-            if identification.get('DomainAdminPassword'):
+            if identification.get("DomainAdminPassword"):
                 summary += f"* **Domain Admin Password**: `{identification['DomainAdminPassword']}`\n"
 
         return summary
 
     def _has_real_credentials(self, config: dict) -> bool:
         """Check if the config contains actual credentials (not placeholder or asterisks)."""
-        def is_placeholder(value: str) -> bool:
-            return value.strip('*') == '' or value.lower() in ['yourpassword', 'password']
 
-        gui_unattended = config.get('GuiUnattended', {})
-        identification = config.get('Identification', {})
+        def is_placeholder(value: str) -> bool:
+            return value.strip("*") == "" or value.lower() in ["yourpassword", "password"]
+
+        gui_unattended = config.get("GuiUnattended", {})
+        identification = config.get("Identification", {})
 
         # Check each credential field
         credentials = [
-            gui_unattended.get('AdminPassword'),
-            identification.get('DomainAdmin'),
-            identification.get('DomainAdminPassword')
+            gui_unattended.get("AdminPassword"),
+            identification.get("DomainAdmin"),
+            identification.get("DomainAdminPassword"),
         ]
 
         # Return True if any credential is present and not a placeholder
@@ -150,14 +150,11 @@ rule Windows_Unattended_Answer_File {
         """Process sysprep config file and extract credentials."""
         try:
             file_enriched = get_file_enriched(object_id)
-            enrichment_result = EnrichmentResult(
-                module_name=self.name,
-                dependencies=self.dependencies
-            )
+            enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
             # Download and read the file
             with self.storage.download(file_enriched.object_id) as temp_file:
-                content = Path(temp_file.name).read_text(encoding='utf-8')
+                content = Path(temp_file.name).read_text(encoding="utf-8")
 
                 # Parse the configuration
                 config = self._parse_sysprep_config(content)
@@ -168,12 +165,7 @@ rule Windows_Unattended_Answer_File {
                     summary_markdown = self._create_finding_summary(config)
 
                     # Create display data
-                    display_data = FileObject(
-                        type="finding_summary",
-                        metadata={
-                            "summary": summary_markdown
-                        }
-                    )
+                    display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
 
                     # Create finding
                     finding = Finding(
@@ -184,7 +176,7 @@ rule Windows_Unattended_Answer_File {
                         object_id=file_enriched.object_id,
                         severity=8,
                         raw_data={"config": config},
-                        data=[display_data]
+                        data=[display_data],
                     )
 
                     # Add finding to enrichment result
@@ -193,7 +185,7 @@ rule Windows_Unattended_Answer_File {
                 enrichment_result.results = config
 
                 # Create a displayable version of the results
-                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8') as tmp_display_file:
+                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
                     # Convert config to YAML with custom formatting
                     yaml_output = []
                     yaml_output.append("Sysprep Configuration Analysis")
@@ -203,16 +195,13 @@ rule Windows_Unattended_Answer_File {
                         yaml_output.append(f"{section}:")
                         for key, value in values.items():
                             # Highlight sensitive fields
-                            if key in ['AdminPassword', 'DomainAdmin', 'DomainAdminPassword']:
+                            if key in ["AdminPassword", "DomainAdmin", "DomainAdminPassword"]:
                                 yaml_output.append(f"   {key}: !!! {value} !!!")
                             else:
                                 yaml_output.append(f"   {key}: {value}")
                         yaml_output.append("")  # Add empty line between sections
 
-                    display = textwrap.indent(
-                        "\n".join(yaml_output),
-                        "   "
-                    )
+                    display = textwrap.indent("\n".join(yaml_output), "   ")
                     tmp_display_file.write(display)
                     tmp_display_file.flush()
 
@@ -224,7 +213,7 @@ rule Windows_Unattended_Answer_File {
                         metadata={
                             "file_name": f"{file_enriched.file_name}_analysis.txt",
                             "display_type_in_dashboard": "monaco",
-                            "default_display": True
+                            "default_display": True,
                         },
                     )
                 enrichment_result.transforms = [displayable_parsed]
@@ -234,6 +223,7 @@ rule Windows_Unattended_Answer_File {
         except Exception as e:
             logger.exception(e, message="Error processing sysprep config file")
             return None
+
 
 def create_enrichment_module() -> EnrichmentModule:
     return SysprepParser()

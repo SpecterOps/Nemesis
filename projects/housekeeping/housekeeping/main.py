@@ -3,16 +3,15 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
-from fastapi import FastAPI, Query
-from pydantic import BaseModel
 
 import psycopg
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from dapr.clients import DaprClient
-
 from common.storage import StorageMinio
+from dapr.clients import DaprClient
+from fastapi import FastAPI, Query
+from pydantic import BaseModel
 
 # Configure structured logging
 logger = structlog.get_logger(module=__name__)
@@ -70,7 +69,7 @@ async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> 
                 FROM files
                 {where_clause}
                 """,
-                params
+                params,
             )
             expired_files = cur.fetchall()
 
@@ -81,7 +80,7 @@ async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> 
                 FROM files_enriched
                 {where_clause}
                 """,
-                params
+                params,
             )
             expired_files_enriched = cur.fetchall()
 
@@ -92,7 +91,7 @@ async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> 
                 FROM files_enriched_dataset
                 {where_clause}
                 """,
-                params
+                params,
             )
             expired_files_dataset = cur.fetchall()
 
@@ -131,7 +130,7 @@ async def get_transform_object_ids(object_ids: List[str]) -> List[str]:
                 FROM transforms
                 WHERE object_id = ANY(%s::uuid[])
                 """,
-                (object_ids,)
+                (object_ids,),
             )
             transform_records = cur.fetchall()
 
@@ -166,7 +165,7 @@ async def delete_database_entries(object_ids: List[str]) -> bool:
                 DELETE FROM files_enriched_dataset
                 WHERE object_id = ANY(%s::uuid[])
                 """,
-                (object_ids,)
+                (object_ids,),
             )
 
             # Delete from files_enriched (will cascade to transforms, enrichments, etc.)
@@ -175,7 +174,7 @@ async def delete_database_entries(object_ids: List[str]) -> bool:
                 DELETE FROM files_enriched
                 WHERE object_id = ANY(%s::uuid[])
                 """,
-                (object_ids,)
+                (object_ids,),
             )
 
             # Delete from files
@@ -184,7 +183,7 @@ async def delete_database_entries(object_ids: List[str]) -> bool:
                 DELETE FROM files
                 WHERE object_id = ANY(%s::uuid[])
                 """,
-                (object_ids,)
+                (object_ids,),
             )
 
         conn.commit()
@@ -209,9 +208,7 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
     """
     global storage, is_initialized
 
-    logger.info("Starting cleanup job",
-                custom_expiration=expiration_date is not None,
-                expiration_date=expiration_date)
+    logger.info("Starting cleanup job", custom_expiration=expiration_date is not None, expiration_date=expiration_date)
 
     # Check if the service is initialized
     if not is_initialized:
@@ -295,6 +292,7 @@ class CleanupRequest(BaseModel):
     # None means use current datetime, "all" means clean everything
     expiration: Optional[str] = None
 
+
 # Create FastAPI application with lifespan handler
 app = FastAPI(
     title="Housekeeping Service",
@@ -321,7 +319,7 @@ async def root():
         "name": "Housekeeping Service",
         "version": "0.1.0",
         "status": "operational",
-        "description": "Service for cleaning up expired files and database entries"
+        "description": "Service for cleaning up expired files and database entries",
     }
 
 
@@ -353,7 +351,7 @@ async def trigger_cleanup(request: CleanupRequest):
             except ValueError:
                 return {
                     "message": "Invalid expiration format. Use ISO format (YYYY-MM-DDTHH:MM:SS) or 'all'",
-                    "status": "error"
+                    "status": "error",
                 }
 
     # Trigger the cleanup job with the specified expiration
@@ -361,12 +359,14 @@ async def trigger_cleanup(request: CleanupRequest):
 
     return {
         "message": "Cleanup job triggered successfully",
-        "expiration_mode": "all" if expiration_date == datetime.max else
-                          ("custom" if expiration_date else "current_datetime")
+        "expiration_mode": "all"
+        if expiration_date == datetime.max
+        else ("custom" if expiration_date else "current_datetime"),
     }
 
 
 # Run this file directly for local testing
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

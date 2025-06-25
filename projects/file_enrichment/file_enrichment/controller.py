@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Optional
 
 import common.helpers as helpers
-from psycopg_pool import ConnectionPool
 import structlog
 from common.models import CloudEvent, File, NoseyParkerOutput
 from dapr.clients import DaprClient
@@ -23,6 +22,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.semconv.resource import ResourceAttributes
+from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 
 from file_enrichment.noseyparker import store_noseyparker_results
@@ -32,9 +32,9 @@ from .workflow import (
     enrichment_workflow,
     get_workflow_client,
     initialize_workflow_runtime,
+    reload_yara_rules,
     shutdown_workflow_runtime,
     workflow_runtime,
-    reload_yara_rules
 )
 
 configure_logging()
@@ -71,10 +71,9 @@ with DaprClient() as client:
     postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
 
 pool = ConnectionPool(
-    postgres_connection_string,
-    min_size=max_parallel_workflows,
-    max_size=(3 * max_parallel_workflows)
+    postgres_connection_string, min_size=max_parallel_workflows, max_size=(3 * max_parallel_workflows)
 )
+
 
 class EnrichmentRequest(BaseModel):
     object_id: str
@@ -114,6 +113,7 @@ class WorkflowManager:
             runtime_seconds: Runtime in seconds (optional)
             error_message: Error message to append to enrichments_failure (optional)
         """
+
         def _update_workflow_in_db():
             with pool.connection() as conn:
                 with conn.cursor() as cur:
@@ -149,14 +149,11 @@ class WorkflowManager:
                 instance_id=instance_id,
                 status=status,
                 runtime_seconds=runtime_seconds,
-                has_error=bool(error_message)
+                has_error=bool(error_message),
             )
         except Exception as e:
             logger.error(
-                "Failed to update workflow status in database",
-                instance_id=instance_id,
-                status=status,
-                error=str(e)
+                "Failed to update workflow status in database", instance_id=instance_id, status=status, error=str(e)
             )
 
     async def reset(self):
@@ -378,7 +375,9 @@ class WorkflowManager:
             # Wait for completion or timeout
             try:
                 # Use wait_for to implement a timeout
-                final_status = await asyncio.wait_for(self._wait_for_completion(instance_id), timeout=self.max_execution_time)
+                final_status = await asyncio.wait_for(
+                    self._wait_for_completion(instance_id), timeout=self.max_execution_time
+                )
 
                 processing_time = time.time() - start_time
 
@@ -392,7 +391,12 @@ class WorkflowManager:
                     # Check if we can process more from queue
                     self._check_queue()
 
-                logger.info("Workflow completed", instance_id=instance_id, processing_time=f"{processing_time:.2f}s", final_status=final_status)
+                logger.info(
+                    "Workflow completed",
+                    instance_id=instance_id,
+                    processing_time=f"{processing_time:.2f}s",
+                    final_status=final_status,
+                )
 
             except TimeoutError:
                 processing_time = time.time() - start_time
@@ -488,18 +492,10 @@ class WorkflowManager:
                             error_msg = state.failure_details.message
 
                         await self.update_workflow_status(
-                            instance_id,
-                            status,
-                            runtime_seconds,
-                            error_msg[:100] if error_msg else status.lower()
+                            instance_id, status, runtime_seconds, error_msg[:100] if error_msg else status.lower()
                         )
                     else:
-                        await self.update_workflow_status(
-                            instance_id,
-                            status,
-                            runtime_seconds,
-                            ""
-                        )
+                        await self.update_workflow_status(instance_id, status, runtime_seconds, "")
 
                     # Return the actual status so _monitor_workflow knows what happened
                     return status
@@ -790,8 +786,8 @@ async def process_yara(event: CloudEvent):
     """Handler Yara events"""
 
     try:
-        action = event.data['action']
-        if action == 'reload':
+        action = event.data["action"]
+        if action == "reload":
             reload_yara_rules()
         else:
             logger.warning(f"Unsupported yara action: {action}")
