@@ -130,10 +130,13 @@ fi
 # --- Execute Command ---
 echo
 echo "Running command:"
-# Use a subshell to echo the command as a single line for clarity
 (
-  set -x # This makes the shell print the command before executing it.
-  "${CMD_PREFIX[@]}" "${DOCKER_CMD[@]}"
+  set -x
+  if [ ${#CMD_PREFIX[@]} -eq 0 ]; then
+    "${DOCKER_CMD[@]}"
+  else
+    "${CMD_PREFIX[@]}" "${DOCKER_CMD[@]}"
+  fi
 )
 
 echo
