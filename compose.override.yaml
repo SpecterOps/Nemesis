@@ -1,0 +1,112 @@
+# docker-compose.override.yml
+# This file provides DEVELOPMENT-ONLY overrides. It is automatically loaded by 'docker compose up'.
+# - It REPLACES 'image' directives with 'build' directives for local development.
+# - It mounts local source code for live-reloading.
+# - It adjusts commands and environment for a better dev experience.
+
+services:
+  web-api:
+    build:
+      context: .
+      dockerfile: ./projects/web_api/Dockerfile
+      target: dev
+    volumes:
+      - ./libs/:/src/libs/
+      - ./projects/web_api/web_api:/src/projects/web_api/web_api
+      - /src/projects/web_api/.venv
+
+  noseyparker-scanner:
+    build:
+      context: .
+      dockerfile: ./projects/noseyparker_scanner/Dockerfile
+      target: dev
+    environment:
+      - RUST_LOG=debug
+
+  dotnet-api:
+    build:
+      context: .
+      dockerfile: ./projects/dotnet_api/Dockerfile
+      target: dev
+    volumes:
+      - ./libs/:/src/libs/
+      - ./projects/dotnet_api/dotnet_api:/src/projects/dotnet_api/dotnet_api
+      - /src/projects/dotnet_api/.venv
+
+  file-enrichment:
+    build:
+      context: .
+      dockerfile: ./projects/file_enrichment/Dockerfile
+      target: dev
+    environment:
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./libs/:/src/libs/
+      - ./projects/file_enrichment/file_enrichment:/src/projects/file_enrichment/file_enrichment
+      - /src/projects/file_enrichment/.venv
+      - ./libs/file_enrichment_modules/yara_rules/dev/:/yara_rules/:ro
+
+  frontend:
+    build:
+      context: ./projects/frontend/
+      dockerfile: Dockerfile
+      target: dev
+    command: >
+      sh -c "
+        mkdir -p /app-runtime &&
+        cp -r /app/* /app-runtime/ &&
+        SECRET=\"$$HASURA_ADMIN_SECRET\" &&
+        sed -i \"s/\\$$HASURA_ADMIN_SECRET/$$SECRET/g\" /app-runtime/index.html &&
+        cd /app-runtime &&
+        npm run dev
+      "
+    volumes:
+      - ./projects/frontend/src:/app/src:ro
+      - ./projects/frontend/public:/app/public:ro
+      - ./projects/frontend/package.json:/app/package.json:ro
+      - ./projects/frontend/vite.config.js:/app/vite.config.js:ro
+      - ./projects/frontend/index.html:/app/index.html:ro
+    labels:
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+
+  jupyter:
+    # To develop jupyter itself, you would add a `build` block here
+    # Since it's already using `build` in the base, this override isn't strictly
+    # necessary unless you change the target or add more dev volumes.
+    build:
+      context: ./projects/jupyter/
+      dockerfile: Dockerfile
+
+  alerting:
+    build:
+      context: .
+      dockerfile: ./projects/alerting/Dockerfile
+      target: dev
+
+  triage:
+    build:
+      context: .
+      dockerfile: ./projects/triage/Dockerfile
+      target: dev
+
+  housekeeping:
+    build:
+      context: .
+      dockerfile: ./projects/housekeeping/Dockerfile
+      target: dev
+    volumes:
+      - ./libs/:/src/libs/
+      - ./projects/housekeeping/housekeeping:/src/projects/housekeeping/housekeeping
+      - /src/projects/housekeeping/.venv
+    environment:
+      - CLEANUP_SCHEDULE=*/3 * * * * # Test every 3 minutes
+
+  document-conversion:
+    build:
+      context: .
+      dockerfile: ./projects/document_conversion/Dockerfile
+      target: dev
+    volumes:
+      - ./libs/:/src/libs/
+      - ./projects/document_conversion/document_conversion:/src/projects/document_conversion/document_conversion
+      - /src/projects/document_conversion/.venv

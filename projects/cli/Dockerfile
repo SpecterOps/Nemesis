@@ -51,4 +51,6 @@ RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
 
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
+COPY --from=bundle /venv /venv
+
 ENTRYPOINT ["/venv/bin/python", "-m", "cli"]

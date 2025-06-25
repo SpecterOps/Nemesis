@@ -1,0 +1,16 @@
+name: nemesis
+services:
+  cli:
+    build:
+      context: .
+      dockerfile: ./projects/cli/Dockerfile
+      target: dev
+    network_mode: host
+    volumes:
+      - ./libs/:/src/libs/
+      - ./projects/cli/cli:/src/projects/cli/cli
+      - /src/projects/cli/.venv
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - LOG_LEVEL=DEBUG
