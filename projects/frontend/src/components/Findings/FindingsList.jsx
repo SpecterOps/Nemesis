@@ -43,6 +43,40 @@ const FindingsList = () => {
   const lastDirection = useRef('down');
   const listRef = useRef();
 
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState(() => searchParams.get('sort_column') || 'created_at');
+  const [sortDirection, setSortDirection] = useState(() => searchParams.get('sort_direction') || 'desc');
+
+  // Handle column sorting
+  const handleSort = (column, direction) => {
+    setSortColumn(column);
+    setSortDirection(direction);
+  };
+
+  // Update URL parameters when sort changes
+  useEffect(() => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set('sort_column', sortColumn);
+    newParams.set('sort_direction', sortDirection);
+    
+    if (newParams.toString() !== searchParams.toString()) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [sortColumn, sortDirection, searchParams, setSearchParams]);
+
+  // Update sort state when URL parameters change
+  useEffect(() => {
+    const urlSortColumn = searchParams.get('sort_column');
+    const urlSortDirection = searchParams.get('sort_direction');
+    
+    if (urlSortColumn && urlSortColumn !== sortColumn) {
+      setSortColumn(urlSortColumn);
+    }
+    if (urlSortDirection && urlSortDirection !== sortDirection) {
+      setSortDirection(urlSortDirection);
+    }
+  }, [searchParams]);
+
   // Function to handle multi-selection triage
   const handleBulkTriage = (value) => {
     selectedFindings.forEach(findingId => {
@@ -494,12 +528,19 @@ const FindingsList = () => {
       <FindingsFilters
         findings={findings}
         onFilteredDataChange={setFilteredFindings}
+        sortColumn={sortColumn}
+        sortDirection={sortDirection}
       />
 
       {/* Findings Table */}
       <div className="overflow-x-auto">
         {/* Headers - Keep these outside the virtualized area */}
-        <TableHeaders isTriageMode={isTriageMode} />
+        <TableHeaders 
+          isTriageMode={isTriageMode} 
+          sortColumn={sortColumn}
+          sortDirection={sortDirection}
+          onSort={handleSort}
+        />
 
         {/* Virtualized List or No Findings Message */}
         {isLoading ? (

@@ -671,7 +671,9 @@ const StatsOverview = () => {
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">Status: {detail.status}</div>
                 </div>
-                <div className="text-sm font-medium text-blue-500">{detail.runtime_seconds.toFixed(2)}s</div>
+                <div className="text-sm font-medium text-blue-500">
+                  {detail.runtime_seconds ? detail.runtime_seconds.toFixed(2) : '0.00'}s
+                </div>
               </div>
             ))}
 
@@ -704,7 +706,9 @@ const StatsOverview = () => {
                 )}
               </div>
               <div className="text-right">
-                <div className="text-sm font-medium text-red-500">{workflow.runtime_seconds?.toFixed(2)}s</div>
+                <div className="text-sm font-medium text-red-500">
+                  {workflow.runtime_seconds ? workflow.runtime_seconds.toFixed(2) : '0.00'}s
+                </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   {new Date(workflow.timestamp).toLocaleTimeString()}
                 </div>
