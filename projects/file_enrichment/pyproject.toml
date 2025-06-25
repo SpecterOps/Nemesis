@@ -38,6 +38,7 @@ pyarrow = "^19.0.1"
 impacket = "^0.12.0"
 msoffcrypto-tool = "^5.4.2"
 oletools = "^0.60.2"
+pypykatz = "^0.6.11"
 
 
 [tool.poetry.group.dev.dependencies]

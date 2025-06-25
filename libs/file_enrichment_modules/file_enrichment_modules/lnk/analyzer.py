@@ -102,8 +102,6 @@ class LnkParser(EnrichmentModule):
 
                 enrichment_result.results = convert_datetime(lnk.get_json())
 
-                logger.info(f"lnk 3: {enrichment_result.results}")
-
                 with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
                     display = get_lnk_file_display(lnk)
                     tmp_display_file.write(display)
