@@ -2,7 +2,7 @@ import Tooltip from '@/components/shared/Tooltip2';
 import { useTriageMode } from '@/contexts/TriageModeContext';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from 'graphql-ws';
-import { AlertTriangle, ChevronDown, Clock, Eye, Search, Tag, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Clock, Eye, Search, Tag, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
@@ -120,6 +120,32 @@ const Row = React.memo(({ index, style, data }) => {
   );
 });
 
+// Sortable header component
+const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
+  const isActive = currentSort === column;
+  const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
+  
+  return (
+    <div 
+      className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
+      onClick={() => onSort(column, nextDirection)}
+    >
+      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{children}</span>
+      <div className="ml-1 flex flex-col">
+        {isActive ? (
+          currentDirection === 'asc' ? (
+            <ChevronUp className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+          ) : (
+            <ChevronDown className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+          )
+        ) : (
+          <div className="w-3 h-3" />
+        )}
+      </div>
+    </div>
+  );
+};
+
 
 const FileList = () => {
   const navigate = useNavigate();
@@ -138,7 +164,8 @@ const FileList = () => {
   const [agentIdFilter, setAgentIdFilter] = useState(() => searchParams.get('agent_id') || '');
   const [pathFilter, setPathFilter] = useState(() => searchParams.get('path') || '');
   const [objectIdFilter, setObjectIdFilter] = useState(() => searchParams.get('object_id') || '');
-  const [sortNewestFirst, setSortNewestFirst] = useState(true);
+  const [sortColumn, setSortColumn] = useState(() => searchParams.get('sort_column') || 'timestamp');
+  const [sortDirection, setSortDirection] = useState(() => searchParams.get('sort_direction') || 'desc');
   const [viewFilter, setViewFilter] = useState(() => searchParams.get('view_state') || 'unviewed_by_me');
   const [showOnlyWithFindings, setShowOnlyWithFindings] = useState(false);
 
@@ -146,6 +173,12 @@ const FileList = () => {
   const [selectedTag, setSelectedTag] = useState('');
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
   const tagDropdownRef = useRef(null);
+
+  // Handle column sorting
+  const handleSort = (column, direction) => {
+    setSortColumn(column);
+    setSortDirection(direction);
+  };
 
   const handleRowClick = (e, file, index) => {
     if (isTriageMode) {
@@ -269,8 +302,9 @@ const FileList = () => {
       params.set('tag', selectedTag);
     }
 
-    // Add sort order to URL params
-    params.set('sort', sortNewestFirst ? 'newest' : 'oldest');
+    // Add sort column and direction to URL params
+    params.set('sort_column', sortColumn);
+    params.set('sort_direction', sortDirection);
 
     // Add findings filter to URL params
     if (showOnlyWithFindings) {
@@ -279,7 +313,7 @@ const FileList = () => {
 
     // Use replace: true to avoid adding to browser history for every filter change
     setSearchParams(params, { replace: true });
-  }, [fileTypeFilter, agentIdFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortNewestFirst, showOnlyWithFindings]);
+  }, [fileTypeFilter, agentIdFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings]);
 
   // Watch for URL changes and update the state
   useEffect(() => {
@@ -290,7 +324,8 @@ const FileList = () => {
     const viewStateParam = searchParams.get('view_state');
     const objectIdParam = searchParams.get('object_id');
     const tagParam = searchParams.get('tag');
-    const sortParam = searchParams.get('sort');
+    const sortColumnParam = searchParams.get('sort_column');
+    const sortDirectionParam = searchParams.get('sort_direction');
     const findingsParam = searchParams.get('findings');
 
     // Update component state based on URL params
@@ -301,9 +336,12 @@ const FileList = () => {
     setObjectIdFilter(objectIdParam || '');
     setSelectedTag(tagParam || '');
 
-    // Update sort order from URL
-    if (sortParam !== null) {
-      setSortNewestFirst(sortParam === 'newest');
+    // Update sort column and direction from URL
+    if (sortColumnParam !== null) {
+      setSortColumn(sortColumnParam);
+    }
+    if (sortDirectionParam !== null) {
+      setSortDirection(sortDirectionParam);
     }
 
     // Update findings filter from URL
@@ -422,9 +460,32 @@ const FileList = () => {
       return true;
     })
     .sort((a, b) => {
-      const dateA = new Date(a.timestamp);
-      const dateB = new Date(b.timestamp);
-      return sortNewestFirst ? dateB - dateA : dateA - dateB;
+      let comparison = 0;
+      
+      switch (sortColumn) {
+        case 'agent_id':
+          comparison = a.agent_id.toString().localeCompare(b.agent_id.toString());
+          break;
+        case 'size':
+          comparison = a.size - b.size;
+          break;
+        case 'timestamp':
+          comparison = new Date(a.timestamp) - new Date(b.timestamp);
+          break;
+        case 'magic_type':
+          comparison = (a.magic_type || '').localeCompare(b.magic_type || '');
+          break;
+        case 'findings':
+          comparison = a.findingsByObjectId_aggregate.aggregate.count - b.findingsByObjectId_aggregate.aggregate.count;
+          break;
+        case 'path':
+          comparison = a.path.localeCompare(b.path);
+          break;
+        default:
+          comparison = new Date(a.timestamp) - new Date(b.timestamp);
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
 
 
@@ -806,17 +867,6 @@ const FileList = () => {
             />
           </div>
 
-          <Tooltip content={sortNewestFirst ? "Showing newest first" : "Showing oldest first"}>
-            <button
-              className="flex items-center space-x-2 px-3 py-2 border dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              onClick={() => setSortNewestFirst(!sortNewestFirst)}
-            >
-              <Clock className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              <span className="text-sm text-gray-700 dark:text-gray-300">
-                {sortNewestFirst ? "Newest First" : "Oldest First"}
-              </span>
-            </button>
-          </Tooltip>
 
           <div className="relative" ref={tagDropdownRef}>
             <button
@@ -894,12 +944,60 @@ const FileList = () => {
         {isTriageMode && (
           <div className="w-8 px-2 py-2"></div>
         )}
-        <div className="px-2 flex-shrink-0 w-32 text-sm font-medium text-gray-500 dark:text-gray-400 text-left">Agent ID</div>
-        <div className="px-2 flex-shrink-0 w-24 text-sm font-medium text-gray-500 dark:text-gray-400 text-left">Size</div>
-        <div className="px-2 flex-shrink-0 w-44 text-sm font-medium text-gray-500 dark:text-gray-400 text-left">Time Uploaded</div>
-        <div className="px-2 flex-shrink-0 w-48 text-sm font-medium text-gray-500 dark:text-gray-400 text-left">Magic Type</div>
-        <div className="px-2 flex-shrink-0 w-12 text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center justify-center">Findings</div>
-        <div className="px-6 flex-grow text-sm font-medium text-gray-500 dark:text-gray-400 text-left">Path</div>
+        <SortableHeader 
+          column="agent_id" 
+          currentSort={sortColumn} 
+          currentDirection={sortDirection} 
+          onSort={handleSort}
+          className="flex-shrink-0 w-32"
+        >
+          Agent ID
+        </SortableHeader>
+        <SortableHeader 
+          column="size" 
+          currentSort={sortColumn} 
+          currentDirection={sortDirection} 
+          onSort={handleSort}
+          className="flex-shrink-0 w-24"
+        >
+          Size
+        </SortableHeader>
+        <SortableHeader 
+          column="timestamp" 
+          currentSort={sortColumn} 
+          currentDirection={sortDirection} 
+          onSort={handleSort}
+          className="flex-shrink-0 w-44"
+        >
+          Time Uploaded
+        </SortableHeader>
+        <SortableHeader 
+          column="magic_type" 
+          currentSort={sortColumn} 
+          currentDirection={sortDirection} 
+          onSort={handleSort}
+          className="flex-shrink-0 w-48"
+        >
+          Magic Type
+        </SortableHeader>
+        <SortableHeader 
+          column="findings" 
+          currentSort={sortColumn} 
+          currentDirection={sortDirection} 
+          onSort={handleSort}
+          className="flex-shrink-0 w-12 justify-center"
+        >
+          Findings
+        </SortableHeader>
+        <SortableHeader 
+          column="path" 
+          currentSort={sortColumn} 
+          currentDirection={sortDirection} 
+          onSort={handleSort}
+          className="flex-grow px-4"
+        >
+          Path
+        </SortableHeader>
       </div>
 
 
