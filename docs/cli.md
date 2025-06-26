@@ -12,26 +12,26 @@ The CLI supports four main operations:
 - **Outflank Connector**: Ingest data from Outflank Stage1 C2 into Nemesis
 
 ## Installation & Setup
+You can use the Nemesis CLI via its published docker image or building/running the python project locally.
 
 ### Docker Method (Recommended)
 
-The CLI is containerized and auto-built with the rest of the containers on `docker compose up`.
-
-The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker compose syntax for ease of use.
-
-After building, commands can be run with:
-
+You can pull the latest version of the Nemesis CLI docker image with the following command:
 ```bash
-# Run CLI commands
-docker compose run --rm cli <command>
+docker pull ghcr.io/specterops/nemesis/cli:latest
+```
+You can then manually invoke it using `docker run`. For example, the following mounts a folder into the container and submits a file:
+```bash
+docker run --rm --network host -v /tmp/:/data ghcr.io/specterops/nemesis/cli:latest submit /data -r
 ```
 
-### Poetry Method (Development)
+The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker syntax for ease of use.
 
-For development or local installation:
+### Poetry Method (Local Usage or Development)
+To use the Nemesis CLI locally or for development, install at least Python 3.12.8 and [install Poetry](https://python-poetry.org/docs/#installation). Then, run the following:
 
 ```bash
-cd projects/cli
+cd Nemesis/projects/cli
 poetry install
 poetry run python -m cli <command>
 ```
@@ -57,39 +57,15 @@ The `./tools/submit.sh` script wraps the docker compose syntax automatically.
 
 # Submit directory recursively (-r or --recursive)
 ./tools/submit.sh -r /path/to/directory/
-```
 
-**docker compose :**
-```bash
-# Submit a single file
-docker compose run --rm -v /path/to/file:/data/file cli submit /data/file
-
-# Submit multiple files
-docker compose run --rm -v /path/to/directory:/data cli submit /data/file1 /data/file2
-
-# Submit directory recursively
-docker compose run --rm -v /path/to/directory:/data cli submit /data --recursive
-```
-
-**Poetry :**
-```bash
-# Submit a single file w/ Poetry env
-poetry run python -m cli submit /data/file
-```
-
-### Advanced Options
-
-**./tools/submit.sh (easiest option, preferred) :**
-```bash
-./tools/submit.sh /data/file \
+# Submit directory, changing the Nemesis server (default is localhost) and credentials (default is n:n)
+./tools/submit.sh /path/to/directory/ \
   --host nemesis.example.com:7443 \
   --username your-username \
-  --password your-password \
-```
+  --password your-password
 
-**docker compose :**
-```bash
-docker compose run --rm -v /path/to/files:/data cli submit /data \
+# Submit files customizing various options and use debug logging
+./tools/submit.sh submit /path/file1 /path/file2  \
   --host nemesis.example.com:7443 \
   --username your-username \
   --password your-password \
@@ -98,6 +74,13 @@ docker compose run --rm -v /path/to/files:/data cli submit /data \
   --workers 5 \
   --recursive \
   --debug
+```
+
+**Poetry :**
+```bash
+# Submit a single file w/ Poetry env
+cd Nemesis/projects/cli
+poetry run python -m cli submit /data/file
 ```
 
 ### Options Reference
