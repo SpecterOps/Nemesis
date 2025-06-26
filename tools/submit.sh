@@ -1,18 +1,9 @@
 #!/bin/bash
-
 # Wrapper script to submit a job to the Nemesis CLI using Docker
 # Added into the tools/ dir for convenience (near project root)
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-COMPOSE_DIR="$( dirname "$SCRIPT_DIR" )"
-
-cd "${COMPOSE_DIR}"
-
-# Check if compose.cli.yaml exists
-if [ ! -f compose.cli.yaml ]; then
-    echo "Error: compose.cli.yaml not found in ${COMPOSE_DIR}"
-    exit 1
-fi
+# Default image, can be overridden with NEMESIS_CLI_IMAGE env var
+NEMESIS_CLI_IMAGE="${NEMESIS_CLI_IMAGE:-ghcr.io/specterops/nemesis/cli:latest}"
 
 # Parse arguments to handle volume mounting and CLI options
 DOCKER_ARGS=""
@@ -38,4 +29,4 @@ for arg in "$@"; do
 done
 
 # Run the Docker command
-docker compose -f compose.cli.dev.yaml run --rm $DOCKER_ARGS cli submit $SUBMIT_ARGS $CLI_OPTIONS | sed '/^\[+\] Building/d'
+docker run --network host --rm $DOCKER_ARGS "$NEMESIS_CLI_IMAGE" submit $SUBMIT_ARGS $CLI_OPTIONS
