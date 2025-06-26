@@ -51,6 +51,13 @@ RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
 
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
+# Install ONLY runtime dependencies for plyvel (not build dependencies)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libleveldb1d && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY --from=bundle /venv /venv
 
 ENV PYTHONUNBUFFERED=1
