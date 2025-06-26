@@ -53,4 +53,8 @@ FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
 COPY --from=bundle /venv /venv
 
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV LOG_LEVEL=INFO
+
 ENTRYPOINT ["/venv/bin/python", "-m", "cli"]

@@ -1,8 +1,5 @@
-# docker-compose.override.yml
-# This file provides DEVELOPMENT-ONLY overrides. It is automatically loaded by 'docker compose up'.
+# This file provides overrides for manually building and using the PRODUCTION containers.
 # - It REPLACES 'image' directives with 'build' directives for local development.
-# - It mounts local source code for live-reloading.
-# - It adjusts commands and environment for a better dev experience.
 
 services:
   web-api:

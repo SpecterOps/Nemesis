@@ -54,3 +54,67 @@ Ingest data from Outflank Stage1 C2 into Nemesis.
 ## Authentication
 
 All commands support basic authentication with configurable username and password options (default: n/n).
+
+# Manually running with Python
+1. Navigate to the cli directory. Perform all the following steps from this directory.
+```bash
+cd Nemesis/projects/cli
+```
+
+2. Install dependencies and run it:
+```bash
+poetry install
+poetry run python -m cli
+```
+
+# Manually Building and Using with Docker
+1. Navigate to the cli directory. Perform all the following steps from this directory.
+```bash
+cd Nemesis/projects/cli
+```
+
+2. Build the base images:
+```bash
+docker compose -f ../../compose.base.yaml build
+```
+
+3. Build the nemesis-cli image:
+```bash
+docker build -t nemesis-cli --target prod --no-cache -f Dockerfile ../..
+```
+Validate `--target` arguments are `prod` or `dev`.
+
+
+4. Run the nemesis-cli container:
+```bash
+docker run -v /:/data --rm nemesis-cli submit /data/etc/issue
+```
+
+# Manually Building and Using with Docker Compose
+1. Navigate to the cli directory. Perform all the following steps from this directory.
+```bash
+cd Nemesis/projects/cli
+```
+
+2. Build the base images:
+```bash
+docker compose -f ../../compose.base.yaml build
+```
+
+3. Build and run the images. Here's different examples of how to run it:
+ - Pull the published production container and run it:
+```bash
+docker compose -f compose.yaml run --rm cli
+```
+
+ - Run in development mode. This mounts code into container and uses the dev base image. It implicitly merges compose.yaml and compose.override.yaml.
+```bash
+docker compose run --rm cli
+```
+
+
+
+ - Build the production container and run it:
+```bash
+docker compose -f compose.yaml -f compose.prod.build.yaml run --rm cli
+```

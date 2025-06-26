@@ -1,14 +1,16 @@
 name: nemesis
+
 services:
   cli:
+    image: !reset null
     build:
-      context: .
+      context: ../..
       dockerfile: ./projects/cli/Dockerfile
       target: dev
     network_mode: host
     volumes:
-      - ./libs/:/src/libs/
-      - ./projects/cli/cli:/src/projects/cli/cli
+      - ../../libs/:/src/libs/
+      - ../../projects/cli/cli:/src/projects/cli/cli
       - /src/projects/cli/.venv
     environment:
       - PYTHONUNBUFFERED=1

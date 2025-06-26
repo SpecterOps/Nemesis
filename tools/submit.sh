@@ -38,4 +38,4 @@ for arg in "$@"; do
 done
 
 # Run the Docker command
-docker compose -f compose.cli.yaml run --rm $DOCKER_ARGS cli submit $SUBMIT_ARGS $CLI_OPTIONS | sed '/^\[+\] Building/d'
+docker compose -f compose.cli.dev.yaml run --rm $DOCKER_ARGS cli submit $SUBMIT_ARGS $CLI_OPTIONS | sed '/^\[+\] Building/d'
