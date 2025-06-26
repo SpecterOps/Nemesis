@@ -165,9 +165,17 @@ fi
 # --- Execute Command ---
 echo
 echo "Running command:"
+
+# Determine the final command outside the subshell
+if [ ${#CMD_PREFIX[@]} -eq 0 ]; then
+  FINAL_CMD=("${DOCKER_CMD[@]}")
+else
+  FINAL_CMD=("${CMD_PREFIX[@]}" "${DOCKER_CMD[@]}")
+fi
+
 (
   set -x # This makes the shell print the exact command before executing it.
-  "${CMD_PREFIX[@]}" "${DOCKER_CMD[@]}"
+  "${FINAL_CMD[@]}"
 )
 
 echo
