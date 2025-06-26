@@ -1,5 +1,6 @@
 # This file provides overrides for manually building and using the PRODUCTION containers.
-# - It REPLACES 'image' directives with 'build' directives for local development.
+# - It REPLACES 'image' directives with 'build' directives
+# - Sets the Docke build target to "prod"
 
 services:
   web-api:

@@ -79,13 +79,15 @@ poetry run uvicorn web_api.main:app --reload
 ```
 
 ### Debugging
+**NOTE:** These instructions need to be updated!
+
 1. Open the `web_api` folder in VS Code
 2. Hit `F5` to launch the application with the debugger attached
-3. Start up all the services, enabling debugging for the web_api:
+3. Start up Nemesis in dev mode, enabling debugging for the web_api:
 
 ```bash
-cd nemesis
-./tools/start.sh dev -f ./projects/web_api/docker-compose.debug.yml
+cd Nemesis
+docker compose up -f compose.yaml -f compose.override.yaml -f ./projects/web_api/docker-compose.debug.yml
 ```
 
 This exposes Minio's port so the `web_api` can upload files outside the cluster. In addition, it isolates the `web_api` instance deployed by `docker compose` and informs its sidecar about the debugged `web_api` instance that's running in VS Code.

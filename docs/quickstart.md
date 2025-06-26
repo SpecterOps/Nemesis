@@ -51,7 +51,7 @@ If you'd like to install the monitoring services and/or jupyter notebooks, use t
 ```bash
 ./tools/nemesis-ctl.sh start prod --monitoring --jupyter
 ```
-`nemesis-ctl.sh` effectively is a wrapper for `docker compose` commands and is in charge of pulling and starting the appropriate published Nemesis docker images. In general, we recommend people use `nemesis-ctl.sh`. For more complex deployment scenarios, see Nemesis's [Docker Compose documentation](docker_compose.md) to understand what `nemesis-ctl.sh` does underneath.
+`nemesis-ctl.sh` effectively is a wrapper for `docker compose` commands and is in charge of pulling and starting the appropriate published Nemesis docker images. In general, we recommend people use `nemesis-ctl.sh` instead of manually invoking `docker compose`. For more complex deployment scenarios, see Nemesis's [Docker Compose documentation](docker_compose.md) to understand what `nemesis-ctl.sh` does underneath.
 
 ### Step 4: Access the Web Dashboard
 
