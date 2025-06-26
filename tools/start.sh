@@ -10,22 +10,34 @@ usage() {
   cat << EOF
 Helper script to manage development and production services.
 
-Usage: $0 {dev|prod} [options]
+Usage: $0 <action> <environment> [options]
+
+Actions:
+  start           Build (optional) and start services in the background.
+  stop            Stop and remove services (containers and networks).
+  clean           Stop and remove services AND delete associated data volumes.
+
+Environments:
+  dev             Development environment.
+  prod            Production environment.
 
 Options:
-  --build         Build images before starting (includes base images for prod).
+  --build         Build images before starting (not for 'stop' or 'clean' actions).
   --monitoring    Enable the monitoring profile (Grafana, Prometheus).
   --jupyter       Enable the Jupyter profile.
 
 Examples:
-  # Start production services from pre-built images
-  $0 prod
+  # Start production services with monitoring
+  $0 start prod --monitoring
 
-  # Build and start production services with monitoring
-  $0 prod --build --monitoring
+  # Stop all production services that were started with the monitoring profile
+  $0 stop prod --monitoring
 
-  # Start development services with monitoring and jupyter
-  $0 dev --monitoring --jupyter
+  # Stop services and remove all associated data volumes for the dev environment
+  $0 clean dev
+
+  # Build and start all development services
+  $0 start dev --build
 EOF
   exit 1
 }
@@ -36,14 +48,30 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 COMPOSE_DIR="$( dirname "$SCRIPT_DIR" )"
 
 # --- Argument Parsing ---
-if [[ $# -eq 0 || ( "$1" != "dev" && "$1" != "prod" ) ]]; then
-  echo "Error: First argument must be 'dev' or 'prod'." >&2
+if [[ $# -lt 2 ]]; then
+  echo "Error: Missing required arguments." >&2
   echo "" >&2
   usage
 fi
 
+ACTION=$1
+shift
 ENVIRONMENT=$1
 shift
+
+# Validate action
+if [[ "$ACTION" != "start" && "$ACTION" != "stop" && "$ACTION" != "clean" ]]; then
+  echo "Error: Invalid action '$ACTION'. Must be 'start', 'stop', or 'clean'." >&2
+  echo "" >&2
+  usage
+fi
+
+# Validate environment
+if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prod" ]]; then
+  echo "Error: Invalid environment '$ENVIRONMENT'. Must be 'dev' or 'prod'." >&2
+  echo "" >&2
+  usage
+fi
 
 BUILD=false
 MONITORING=false
@@ -59,30 +87,34 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
-# --- Main Logic ---
-cd "${COMPOSE_DIR}"
-
-# --- Pre-flight Checks ---
-if [ ! -f ".env" ]; then
-  echo "Error: Configuration file '.env' not found in ${COMPOSE_DIR}" >&2
-  echo "Please create one by copying the example file:" >&2
-  echo "" >&2
-  echo "  cp env.example .env" >&2
-  echo "" >&2
-  echo "Then, review and customize the variables within it before running this script again." >&2
+# Validate flag combinations
+if ( [ "$ACTION" = "stop" ] || [ "$ACTION" = "clean" ] ) && [ "$BUILD" = "true" ]; then
+  echo "Error: The --build flag cannot be used with the 'stop' or 'clean' actions." >&2
   exit 1
 fi
 
-# Array to hold the docker compose command and its arguments
-declare -a DOCKER_CMD=("docker" "compose")
-# Array to hold a command prefix, e.g., for setting environment variables.
-declare -a CMD_PREFIX=()
+# --- Main Logic ---
+cd "${COMPOSE_DIR}"
 
-# --- Build Command based on Flags ---
+# --- Pre-flight Checks (only for 'start' action) ---
+if [ "$ACTION" = "start" ]; then
+  if [ ! -f ".env" ]; then
+    echo "Error: Configuration file '.env' not found in ${COMPOSE_DIR}" >&2
+    echo "Please create one by copying the example file:" >&2
+    echo "" >&2
+    echo "  cp env.example .env" >&2
+    echo "" >&2
+    echo "Then, review and customize the variables within it before running this script again." >&2
+    exit 1
+  fi
+fi
+
+# --- Build Command ---
+declare -a DOCKER_CMD=("docker" "compose")
+declare -a CMD_PREFIX=()
 
 # 1. Handle Profiles and associated Environment Variables
 if [ "$MONITORING" = "true" ]; then
-  # Use the `env` utility to set the variable for the child process.
   CMD_PREFIX=( "env" "NEMESIS_MONITORING=enabled" )
   DOCKER_CMD+=("--profile" "monitoring")
 fi
@@ -91,53 +123,58 @@ if [ "$JUPYTER" = "true" ]; then
   DOCKER_CMD+=("--profile" "jupyter")
 fi
 
-# 2. Handle Environment-specific files and build steps
+# 2. Handle Environment-specific files
 if [ "$ENVIRONMENT" = "prod" ]; then
-  echo "--- Preparing Production Environment ---"
   DOCKER_CMD+=("-f" "compose.yaml")
+  # Production build file is only needed for a build+start command
+  if [ "$ACTION" = "start" ] && [ "$BUILD" = "true" ]; then
+    DOCKER_CMD+=("-f" "compose.prod.build.yaml")
+  fi
+else
+  # Always build in dev environment to catch local changes.
+  # This only affects the `start` action, as validated earlier.
+  BUILD=true
+fi
+
+# 3. Handle Action
+if [ "$ACTION" = "start" ]; then
+  echo "--- Preparing to Start Services for '$ENVIRONMENT' environment ---"
 
   if [ "$BUILD" = "true" ]; then
-    echo "Build flag detected. Building images..."
-    # Step 1: Build base images first, as per documentation
-    echo "Building base images..."
+    # Base images must be built for both dev and prod before starting
+    echo "Ensuring base images are built..."
     docker compose -f compose.base.yaml build
 
-    # Add the production build file and --build flag
-    DOCKER_CMD+=("-f" "compose.prod.build.yaml")
+    echo "Building and starting services..."
     DOCKER_CMD+=("up" "--build" "-d")
   else
-    echo "Starting pre-built images..."
+    echo "Starting services..."
     DOCKER_CMD+=("up" "-d")
   fi
 
-elif [ "$ENVIRONMENT" = "dev" ]; then
-  echo "--- Preparing Development Environment ---"
+elif [ "$ACTION" = "stop" ]; then
+  echo "--- Preparing to Stop Services for '$ENVIRONMENT' environment ---"
+  DOCKER_CMD+=("down")
 
-  # CORRECTED: Dev environment also depends on base images, so build them first.
-  echo "Ensuring base images are built..."
-  docker compose -f compose.base.yaml build
-
-  # For dev, Docker Compose automatically uses `compose.yaml` and `compose.override.yaml`.
-  if [ "$BUILD" = "true" ]; then
-    echo "Build flag detected. Building and starting dev-specific services..."
-    DOCKER_CMD+=("up" "--build" "-d")
-  else
-    echo "Starting services (building dev-specific images if necessary)..."
-    DOCKER_CMD+=("up" "-d")
-  fi
+elif [ "$ACTION" = "clean" ]; then
+  echo "--- Preparing to Clean Services and Volumes for '$ENVIRONMENT' environment ---"
+  # The --volumes flag removes named volumes defined in the compose file.
+  DOCKER_CMD+=("down" "--volumes")
 fi
 
 # --- Execute Command ---
 echo
 echo "Running command:"
 (
-  set -x
-  if [ ${#CMD_PREFIX[@]} -eq 0 ]; then
-    "${DOCKER_CMD[@]}"
-  else
-    "${CMD_PREFIX[@]}" "${DOCKER_CMD[@]}"
-  fi
+  set -x # This makes the shell print the exact command before executing it.
+  "${CMD_PREFIX[@]}" "${DOCKER_CMD[@]}"
 )
 
 echo
-echo '[+] start.sh script completed.'
+if [ "$ACTION" = "start" ]; then
+  echo "Services are up and running."
+elif [ "$ACTION" = "clean" ]; then
+  echo "Services, containers, and volumes have been stopped and removed."
+else
+  echo "Services and containers have been stopped and removed."
+fi
