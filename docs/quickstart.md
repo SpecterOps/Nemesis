@@ -40,17 +40,18 @@ This file contains passwords and configuration that Nemesis uses. You should ran
 
 
 ### Step 3: Start Nemesis
-To start Nemesis's core services, run the `./tools/start.sh` script:
+To start Nemesis's core services, run the `./tools/nemesis-ctl.sh` script:
 
 ```bash
-./tools/start.sh start prod
+./tools/nemesis-ctl.sh start prod
 ```
 
 If you'd like to install the monitoring services and/or jupyter notebooks, use the associated optional command line arguments:
 
 ```bash
-./tools/start.sh start prod --monitoring --jupyter
+./tools/nemesis-ctl.sh start prod --monitoring --jupyter
 ```
+`nemesis-ctl.sh` effectively is a wrapper for `docker compose` and pull and start the appropriate published Nemesis docker images. We recommend using `nemesis-ctl.sh`, but for more complex deployment scenarios see [startup.md](startup.md).
 
 ### Step 4: Access the Web Dashboard
 
@@ -68,15 +69,15 @@ After entering your information, you will then be shown the main Nemesis dashboa
 
 ### Step 5: Upload File for Analysis
 
-To manually upload files into Nemesis, click on the "File Upload" link in the sidebar:
+To manually upload files into Nemesis, click on the "File Upload" link in the sidebar. On this page you can upload one or more files into Nemesis:
 
 ![file analysis](images/nemesis-dashboard-file-upload_success.png)
 
-After uploading files, click on the "Files" link in the sidebar. Once Nemesis processes the files, they will appear in the table:
+After uploading the files, click on the "Files" link in the sidebar. Once Nemesis processes the files, they will appear in the table:
 
 ![file listing](images/nemesis-dashboard-files.png)
 
-Click on the table row to to view the file's:
+Click on the table row to to view the file's details:
 ![Nemesis File Details](images/nemesis-dashboard-file-details.png)
 
 See [Data Ingestion](./usage_guide.md#data-ingestion) for additional ways to ingest data into Nemesis besides manually uploading files through the web interface.
@@ -85,17 +86,19 @@ See [Data Ingestion](./usage_guide.md#data-ingestion) for additional ways to ing
 
 Click on the "Help" button on the bottom left to view the additionally exposed Nemesis services. Each route listed is a hyperlink to the service. For logins, refer to the environment variables set.
 
+**NOTE:** The monitoring services (Grafana, Jaeger, and Prometheus) will only be available if you started with them enabled.
+
 ![Nemesis services](images/nemesis-dashboard-services.png)
 
 ### Step 7: Shutting Nemesis Down
 
-To shutdown Nemesis, use the `start.sh` script's `stop` or `clean` commands with the same arguments you used to start it. For example, if you started it with monitoring and jupyter enabled, then run the following:
+To shutdown Nemesis, use the `nemesis-ctl.sh` script's `stop` or `clean` commands with the same arguments you used to start it. For example, if you started it with monitoring and jupyter enabled, then run the following:
 - To stop Nemesis containers:
 ```bash
-./tools/start.sh stop prod --monitoring --jupyter
+./tools/nemesis-ctl.sh stop prod --monitoring --jupyter
 ```
 
-- To stop Nemesis containers and delete associated volumes:
+- To stop Nemesis containers and delete their associated volumes:
 ```bash
-./tools/start.sh clean prod --monitoring --jupyter
+./tools/nemesis-ctl.sh clean prod --monitoring --jupyter
 ```
