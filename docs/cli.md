@@ -12,7 +12,7 @@ The CLI supports four main operations:
 - **Outflank Connector**: Ingest data from Outflank Stage1 C2 into Nemesis
 
 ## Installation & Setup
-You can use the Nemesis CLI via its published docker image or building/running the python project locally.
+You can use the Nemesis CLI via its published docker image or building/running the python project locally. In general, the easiest way to use it is using docker helper scripts found in the `./tools/` folder that are detailed below.
 
 ### Docker Method (Recommended)
 
