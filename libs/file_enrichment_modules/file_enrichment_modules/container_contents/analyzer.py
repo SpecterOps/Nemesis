@@ -1,18 +1,16 @@
 # enrichment_modules/container_contents/analyzer.py
 import os
 import tempfile
-import json
-from datetime import datetime
 
 import structlog
-from common.models import EnrichmentResult, Transform, File
+from common.helpers import is_container
+from common.models import EnrichmentResult, File, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from common.helpers import is_container
 from dapr.clients import DaprClient
 
-from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.container_contents.containers import ContainerExtractor
+from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)
 
@@ -35,7 +33,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
         logger.info(
             f"ContainerContentsAnalyzer should_run: {should_run}",
             mime_type=file_enriched.mime_type,
-            path=file_enriched.path
+            path=file_enriched.path,
         )
         return should_run
 
@@ -113,7 +111,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
                             type="extraction_summary",
                             object_id=str(summary_object_id),
                             metadata={
-                                "file_name": f"container_contents.md",
+                                "file_name": "container_contents.md",
                                 "display_type_in_dashboard": "markdown",
                                 "default_display": True,
                             },

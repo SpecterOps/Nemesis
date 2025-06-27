@@ -1,0 +1,9 @@
+name: nemesis
+services:
+  cli:
+    image: !reset null
+    build:
+      context: ../..
+      dockerfile: ./projects/cli/Dockerfile
+      target: prod
+    network_mode: host

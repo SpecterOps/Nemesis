@@ -3,10 +3,12 @@ import re
 import tempfile
 import textwrap
 from pathlib import Path
+
 import structlog
-from common.models import EnrichmentResult, Transform, Finding, FindingCategory, FindingOrigin, FileObject
+from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)
@@ -14,6 +16,7 @@ logger = structlog.get_logger(module=__name__)
 # Port of https://github.com/NetSPI/PowerHuntShares/blob/46238ba37dc85f65f2c1d7960f551ea3d80c236a/Scripts/ConfigParsers/parser-gitcredentials.ps1
 #   Original Author: Scott Sutherland, NetSPI (@_nullbind / nullbind)
 #   License: BSD 3-clause
+
 
 class GitCredentialsParser(EnrichmentModule):
     def __init__(self):
@@ -26,35 +29,32 @@ class GitCredentialsParser(EnrichmentModule):
         """Determine if this module should run based on file type."""
         file_enriched = get_file_enriched(object_id)
         # Check if file is a Git credentials file
-        should_run = (
-            file_enriched.is_plaintext and
-            (file_enriched.file_name.lower() in ['.git-credentials', '.gitcredentials'])
+        should_run = file_enriched.is_plaintext and (
+            file_enriched.file_name.lower() in [".git-credentials", ".gitcredentials"]
         )
-        logger.debug(
-            f"GitCredentialsParser should_run: {should_run}, file_name: {file_enriched.file_name}"
-        )
+        logger.debug(f"GitCredentialsParser should_run: {should_run}, file_name: {file_enriched.file_name}")
         return should_run
 
     def _parse_credentials(self, content: str) -> list[dict]:
         """Parse Git credentials from file content."""
         credentials = []
-        pattern = re.compile(r'https://([^:]+):([^@]+)@(.*)')
+        pattern = re.compile(r"https://([^:]+):([^@]+)@(.*)")
 
         for line in content.splitlines():
             line = line.strip()
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
 
             match = pattern.match(line)
             if match:
                 username, token, target_url = match.groups()
-                target_server = target_url.split('/')[0]
+                target_server = target_url.split("/")[0]
 
                 credential = {
-                    'username': username,
-                    'token': token,
-                    'target_url': target_url,
-                    'target_server': target_server
+                    "username": username,
+                    "token": token,
+                    "target_url": target_url,
+                    "target_server": target_server,
                 }
                 credentials.append(credential)
 
@@ -77,14 +77,11 @@ class GitCredentialsParser(EnrichmentModule):
         """Process Git credentials file and extract credentials."""
         try:
             file_enriched = get_file_enriched(object_id)
-            enrichment_result = EnrichmentResult(
-                module_name=self.name,
-                dependencies=self.dependencies
-            )
+            enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
             # Download and read the file
             with self.storage.download(file_enriched.object_id) as temp_file:
-                content = Path(temp_file.name).read_text(encoding='utf-8')
+                content = Path(temp_file.name).read_text(encoding="utf-8")
 
                 # Parse the credentials
                 credentials = self._parse_credentials(content)
@@ -94,12 +91,7 @@ class GitCredentialsParser(EnrichmentModule):
                     summary_markdown = self._create_finding_summary(credentials)
 
                     # Create display data
-                    display_data = FileObject(
-                        type="finding_summary",
-                        metadata={
-                            "summary": summary_markdown
-                        }
-                    )
+                    display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
 
                     # Create finding
                     finding = Finding(
@@ -110,7 +102,7 @@ class GitCredentialsParser(EnrichmentModule):
                         object_id=file_enriched.object_id,
                         severity=7,
                         raw_data={"credentials": credentials},
-                        data=[display_data]
+                        data=[display_data],
                     )
 
                     # Add finding to enrichment result
@@ -118,7 +110,7 @@ class GitCredentialsParser(EnrichmentModule):
                     enrichment_result.results = {"credentials": credentials}
 
                     # Create a displayable version of the results
-                    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8') as tmp_display_file:
+                    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
                         yaml_output = []
                         yaml_output.append("Git Credentials Analysis")
                         yaml_output.append("========================\n")
@@ -129,10 +121,7 @@ class GitCredentialsParser(EnrichmentModule):
                                 yaml_output.append(f"   {key}: {value}")
                             yaml_output.append("")  # Add empty line between sets
 
-                        display = textwrap.indent(
-                            "\n".join(yaml_output),
-                            "   "
-                        )
+                        display = textwrap.indent("\n".join(yaml_output), "   ")
                         tmp_display_file.write(display)
                         tmp_display_file.flush()
 
@@ -144,7 +133,7 @@ class GitCredentialsParser(EnrichmentModule):
                             metadata={
                                 "file_name": f"{file_enriched.file_name}_analysis.txt",
                                 "display_type_in_dashboard": "monaco",
-                                "default_display": True
+                                "default_display": True,
                             },
                         )
                         enrichment_result.transforms = [displayable_parsed]
@@ -154,6 +143,7 @@ class GitCredentialsParser(EnrichmentModule):
         except Exception as e:
             logger.exception(e, message="Error processing Git credentials file")
             return None
+
 
 def create_enrichment_module() -> EnrichmentModule:
     return GitCredentialsParser()

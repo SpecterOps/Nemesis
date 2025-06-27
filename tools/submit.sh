@@ -1,31 +1,9 @@
 #!/bin/bash
-
 # Wrapper script to submit a job to the Nemesis CLI using Docker
 # Added into the tools/ dir for convenience (near project root)
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-COMPOSE_DIR="$( dirname "$SCRIPT_DIR" )"
-
-cd "${COMPOSE_DIR}"
-
-# Check if docker-compose.yml exists
-if [ ! -f docker-compose.yml ]; then
-    echo "Error: docker-compose.yml not found in ${COMPOSE_DIR}"
-    exit 1
-fi
-
-# Set dummy values for required variables if they're not already set
-# This allows the CLI to run without requiring all the main stack variables
-export GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-dummy}"
-export GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-dummy}"
-export MINIO_ROOT_USER="${MINIO_ROOT_USER:-dummy}"
-export MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-dummy}"
-export RABBITMQ_USER="${RABBITMQ_USER:-dummy}"
-export RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-dummy}"
-export POSTGRES_USER="${POSTGRES_USER:-dummy}"
-export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-dummy}"
-export JUPYTER_PASSWORD="${JUPYTER_PASSWORD:-dummy}"
-export NEMESIS_URL="${NEMESIS_URL:-https://localhost:7443}"
+# Default image, can be overridden with NEMESIS_CLI_IMAGE env var
+NEMESIS_CLI_IMAGE="${NEMESIS_CLI_IMAGE:-ghcr.io/specterops/nemesis/cli:latest}"
 
 # Parse arguments to handle volume mounting and CLI options
 DOCKER_ARGS=""
@@ -51,4 +29,4 @@ for arg in "$@"; do
 done
 
 # Run the Docker command
-docker compose run --rm $DOCKER_ARGS cli submit $SUBMIT_ARGS $CLI_OPTIONS | sed '/^\[+\] Building/d'
+docker run --network host --rm $DOCKER_ARGS "$NEMESIS_CLI_IMAGE" submit $SUBMIT_ARGS $CLI_OPTIONS

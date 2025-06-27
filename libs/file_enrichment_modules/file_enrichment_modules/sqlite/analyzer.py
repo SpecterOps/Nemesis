@@ -1,14 +1,14 @@
 # enrichment_modules/sqlite/analyzer.py
-import re
+import base64
 import sqlite3
 import tempfile
-import base64
-from typing import List, Any
+from typing import Any
 
 import structlog
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)
@@ -29,7 +29,7 @@ def safe_str_conversion(value: Any) -> str:
     # For bytes, try to decode as UTF-8, fallback to base64
     if isinstance(value, bytes):
         try:
-            return value.decode('utf-8')
+            return value.decode("utf-8")
         except UnicodeDecodeError:
             return f"<binary:{base64.b64encode(value).decode('ascii')}>"
 
@@ -55,19 +55,10 @@ def get_table_data(cursor: sqlite3.Cursor, table: str, sample_size: int = 3) -> 
             safe_row = [safe_str_conversion(value) for value in row]
             rows.append(safe_row)
 
-        return {
-            "schema": columns,
-            "column_types": column_types,
-            "data": rows
-        }
+        return {"schema": columns, "column_types": column_types, "data": rows}
     except sqlite3.OperationalError as e:
         logger.warning(f"Error getting data for table {table}: {str(e)}")
-        return {
-            "schema": [],
-            "column_types": [],
-            "data": [],
-            "error": str(e)
-        }
+        return {"schema": [], "column_types": [], "data": [], "error": str(e)}
 
 
 def format_sqlite_data(database_data: dict) -> str:
@@ -82,7 +73,7 @@ def format_sqlite_data(database_data: dict) -> str:
             continue
 
         # Show schema with column types
-        schema_with_types = [f"{col} ({type_})" for col, type_ in zip(data['schema'], data['column_types'])]
+        schema_with_types = [f"{col} ({type_})" for col, type_ in zip(data["schema"], data["column_types"])]
         output.append(f"Schema: {', '.join(schema_with_types)}")
 
         output.append("Data:")
@@ -112,8 +103,8 @@ class SqliteParser(EnrichmentModule):
         """Determine if this module should run."""
         file_enriched = get_file_enriched(object_id)
         should_run = (
-            "sqlite 3.x database" in file_enriched.magic_type.lower() or
-            file_enriched.file_name.lower().endswith(".sqlite")
+            "sqlite 3.x database" in file_enriched.magic_type.lower()
+            or file_enriched.file_name.lower().endswith(".sqlite")
         )
         logger.debug(f"SqliteParser should_run: {should_run}, magic_type: {file_enriched.magic_type.lower()}")
         return should_run
@@ -156,7 +147,7 @@ class SqliteParser(EnrichmentModule):
                         metadata={
                             "file_name": f"{file_enriched.file_name}.txt",
                             "display_type_in_dashboard": "monaco",
-                            "default_display": True
+                            "default_display": True,
                         },
                     )
                 enrichment_result.transforms = [displayable_parsed]

@@ -106,9 +106,7 @@ async def carve_dpapi_blobs_from_bytes(
     return dpapi_blobs
 
 
-async def carve_dpapi_blobs_from_file(
-    file_name: str, object_id: str = "", max_blobs: int = 1000
-) -> list[dict]:
+async def carve_dpapi_blobs_from_file(file_name: str, object_id: str = "", max_blobs: int = 1000) -> list[dict]:
     """
     Helper that _just_ carves raw DPAPI blobs from a file,
     returning a list of dicts {dpapi_master_key_guid, dpapi_data_b64}

@@ -22,9 +22,9 @@ def yara_match_to_markdown(match):
     for string_match in match["rule_string_matches"]:
         markdown.append(f"\n**Yara Rule Identifier:** `{string_match['identifier']}`\n```text")
         for instance in string_match["yara_string_match_instances"]:
-            if 'matched_data_text' in instance:
+            if "matched_data_text" in instance:
                 markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_text']}"])
-            elif 'matched_data_hex' in instance:
+            elif "matched_data_hex" in instance:
                 markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_hex']}"])
             else:
                 markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_b64']}"])
@@ -36,9 +36,9 @@ def yara_match_to_markdown(match):
 
 def format_hex_like_xxd(data):
     """Format binary data as hex string similar to xxd output."""
-    hex_str = binascii.hexlify(data).decode('ascii')
+    hex_str = binascii.hexlify(data).decode("ascii")
     # Group hex bytes in pairs of 4 (8 characters)
-    return ' '.join(hex_str[i:i+8] for i in range(0, len(hex_str), 8))
+    return " ".join(hex_str[i : i + 8] for i in range(0, len(hex_str), 8))
 
 
 class YaraScanner(EnrichmentModule):
@@ -96,23 +96,33 @@ class YaraScanner(EnrichmentModule):
                                         }
 
                                         # Always include base64 representation for compatibility
-                                        string_match_instance["matched_data_b64"] = base64.b64encode(matched_data).decode("utf-8")
+                                        string_match_instance["matched_data_b64"] = base64.b64encode(
+                                            matched_data
+                                        ).decode("utf-8")
 
                                         # Format differently based on file type
-                                        if hasattr(file_enriched, 'is_plaintext') and file_enriched.is_plaintext:
+                                        if hasattr(file_enriched, "is_plaintext") and file_enriched.is_plaintext:
                                             try:
                                                 # Try to decode as UTF-8
-                                                string_match_instance["matched_data_text"] = matched_data.decode('utf-8')
+                                                string_match_instance["matched_data_text"] = matched_data.decode(
+                                                    "utf-8"
+                                                )
                                             except UnicodeDecodeError:
                                                 try:
                                                     # Fallback to a more lenient encoding
-                                                    string_match_instance["matched_data_text"] = matched_data.decode('unicode_escape')
+                                                    string_match_instance["matched_data_text"] = matched_data.decode(
+                                                        "unicode_escape"
+                                                    )
                                                 except:
                                                     # If both decodings fail, use hex format
-                                                    string_match_instance["matched_data_hex"] = format_hex_like_xxd(matched_data)
+                                                    string_match_instance["matched_data_hex"] = format_hex_like_xxd(
+                                                        matched_data
+                                                    )
                                         else:
                                             # Binary file - format as hex
-                                            string_match_instance["matched_data_hex"] = format_hex_like_xxd(matched_data)
+                                            string_match_instance["matched_data_hex"] = format_hex_like_xxd(
+                                                matched_data
+                                            )
                                 else:
                                     logger.warning(
                                         f"Yara match for rule '{rule.identifier}' is length {match.length}, not including in base64 data"

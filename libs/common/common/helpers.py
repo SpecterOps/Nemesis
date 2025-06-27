@@ -55,7 +55,7 @@ def is_container(mime_type: str) -> bool:
         "application/x-tar",  # .tar
         # 'application/x-bzip2',
         "application/x-gzip",  # .tar.gz
-        "application/gzip",    # .tar.gz
+        "application/gzip",  # .tar.gz
         # 'application/java-archive', # .JAR
         "application/vnd.microsoft-cab",  # .cab
         # 'application/x-iso9660-image',
@@ -194,6 +194,7 @@ def is_text_file(file_path: str, sample_size: int = 1024):
     except OSError:
         return False
 
+
 def is_plaintext(data: bytes, sample_size: int = 1024) -> bool:
     """
     Determines if raw bytes represent plaintext by checking for binary characters
@@ -222,6 +223,7 @@ def is_plaintext(data: bytes, sample_size: int = 1024) -> bool:
         return True
     except UnicodeDecodeError:
         return False
+
 
 def sanitize_file_path(file_path: str, num_chars=4):
     """

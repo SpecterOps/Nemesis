@@ -56,7 +56,7 @@ class FilenameScanner(EnrichmentModule):
             # Get the current file_enriched from the database backend
             file_enriched = get_file_enriched(object_id)
 
-            logger.debug(f"process object_id: {object_id}, filename: {file_enriched.file_name}")
+            logger.debug(f"scanning filename of object_id: {object_id}, filename: {file_enriched.file_name}")
 
             matches = []
             filename_lower = file_enriched.file_name.lower()

@@ -1,0 +1,4 @@
+name: nemesis
+services:
+  cli:
+    image: ghcr.io/specterops/nemesis/cli:latest

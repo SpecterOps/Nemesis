@@ -1,0 +1,20 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: schedulerconfig
+spec:
+  tracing:
+    expandParams: true
+    samplingRate: "1"
+    otel:
+      protocol: grpc
+      endpointAddress: "otel-collector:4317"
+      isSecure: false
+  metric:
+    enabled: true
+  httpPipeline:
+    handlers:
+    - name: maximum-request-size
+      type: middleware.http.requestsize
+      properties:
+        maxBodySize: "300MB"

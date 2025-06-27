@@ -20,11 +20,13 @@ logger = structlog.get_logger(module=__name__)
 
 class FileNotSupportedException(Exception):
     """Raised when a file is not supported"""
+
     pass
 
 
 class ArchiveExtractionError(Exception):
     """Raised when there's an error during archive extraction"""
+
     pass
 
 
@@ -59,7 +61,7 @@ def estimate_container_size(path: str) -> int:
                 total_size = sum(zinfo.file_size for zinfo in f.filelist)
                 compressed_size = sum(zinfo.compress_size for zinfo in f.filelist)
                 if compressed_size > 0 and total_size / compressed_size > 1000:
-                    logger.warning(f"Suspicious compression ratio detected: {total_size/compressed_size}")
+                    logger.warning(f"Suspicious compression ratio detected: {total_size / compressed_size}")
                 return total_size
         elif py7zr.is_7zfile(path):
             with py7zr.SevenZipFile(path) as f:
@@ -101,7 +103,7 @@ def estimate_uncompressed_gz_size(filename) -> int:
 
         # Check for unreasonable compression ratio
         if compressed_len > 0 and decompressed_len / compressed_len > 1000:
-            logger.warning(f"Suspicious compression ratio detected: {decompressed_len/compressed_len}")
+            logger.warning(f"Suspicious compression ratio detected: {decompressed_len / compressed_len}")
             return -1
 
         estimate = int(file_size * decompressed_len / compressed_len)
@@ -144,7 +146,7 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
                 # Filter out unsafe paths
                 safe_members = []
                 for member in zf.infolist():
-                    if member.filename.startswith('/') or '..' in member.filename:
+                    if member.filename.startswith("/") or ".." in member.filename:
                         logger.warning(f"Unsafe path in archive: {member.filename}")
                         continue
 
@@ -185,7 +187,7 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
                 # Filter out unsafe paths
                 safe_members = []
                 for filename in file_list:
-                    if filename.startswith('/') or '..' in filename:
+                    if filename.startswith("/") or ".." in filename:
                         logger.warning(f"Unsafe path in archive: {filename}")
                         continue
 
@@ -222,7 +224,7 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
                 safe_members = []
                 for member in members:
                     # Check for absolute paths and path traversal
-                    if member.name.startswith('/') or '..' in member.name:
+                    if member.name.startswith("/") or ".." in member.name:
                         logger.warning(f"Unsafe path in archive: {member.name}")
                         continue
 
@@ -347,10 +349,7 @@ class ContainerExtractor:
 
             # Reject paths that try to go up the directory tree
             if rel_path.startswith(".."):
-                logger.warning(
-                    f"Rejecting suspicious relative path: {rel_path}",
-                    archive_file_path=file_enriched.path
-                )
+                logger.warning(f"Rejecting suspicious relative path: {rel_path}", archive_file_path=file_enriched.path)
                 return None
 
             # Join with the destination base path
@@ -367,7 +366,7 @@ class ContainerExtractor:
                 e,
                 message="Error calculating real path",
                 extracted_path=extracted_path,
-                archive_file_path=file_enriched.path
+                archive_file_path=file_enriched.path,
             )
             return None
 
@@ -391,8 +390,7 @@ class ContainerExtractor:
             # Verify path is safe
             if not is_safe_path(tmp_dir, extracted_file_path):
                 logger.warning(
-                    f"Possible path traversal attempt: {extracted_file_path}",
-                    archive_file_path=file_enriched.path
+                    f"Possible path traversal attempt: {extracted_file_path}", archive_file_path=file_enriched.path
                 )
                 return False
 
@@ -402,15 +400,14 @@ class ContainerExtractor:
                 if not is_safe_path(tmp_dir, link_target):
                     logger.warning(
                         f"Potentially unsafe symbolic link: {extracted_file_path} -> {link_target}",
-                        archive_file_path=file_enriched.path
+                        archive_file_path=file_enriched.path,
                     )
                     return False
 
             # Check filename length
             if len(os.path.basename(extracted_file_path)) > 255:
                 logger.warning(
-                    f"Filename too long, may be malicious: {extracted_file_path}",
-                    archive_file_path=file_enriched.path
+                    f"Filename too long, may be malicious: {extracted_file_path}", archive_file_path=file_enriched.path
                 )
                 return False
 
@@ -421,7 +418,7 @@ class ContainerExtractor:
                     logger.warning(
                         f"File has disallowed extension: {file_ext}",
                         extracted_file_path=extracted_file_path,
-                        archive_file_path=file_enriched.path
+                        archive_file_path=file_enriched.path,
                     )
                     return False
 
@@ -491,7 +488,7 @@ class ContainerExtractor:
                         if processed_files >= max_files_to_process:
                             logger.warning(
                                 f"Reached maximum number of files to process ({max_files_to_process})",
-                                archive_file_path=file_enriched.path
+                                archive_file_path=file_enriched.path,
                             )
                             break
 

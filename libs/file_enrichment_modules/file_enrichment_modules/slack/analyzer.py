@@ -3,6 +3,7 @@ import csv
 import json
 import tempfile
 from datetime import datetime
+
 import structlog
 import yara_x
 from common.models import EnrichmentResult, Transform
@@ -85,36 +86,33 @@ rule Detect_Slack_RootState {
 
             with self.storage.download(file_enriched.object_id) as temp_file:
                 # Load JSON data
-                with open(temp_file.name, 'r', encoding='utf-8') as f:
+                with open(temp_file.name, encoding="utf-8") as f:
                     data = json.load(f)
 
                 # Extract workspaces data
                 workspaces_data = []
-                workspaces = data.get('workspaces', {})
+                workspaces = data.get("workspaces", {})
 
                 for workspace_id, workspace_info in workspaces.items():
-                    workspaces_data.append({
-                        'domain': workspace_info.get('domain', ''),
-                        'id': workspace_info.get('id', workspace_id),
-                        'name': workspace_info.get('name', ''),
-                        'url': workspace_info.get('url', '')
-                    })
+                    workspaces_data.append(
+                        {
+                            "domain": workspace_info.get("domain", ""),
+                            "id": workspace_info.get("id", workspace_id),
+                            "name": workspace_info.get("name", ""),
+                            "url": workspace_info.get("url", ""),
+                        }
+                    )
 
                 # Create workspaces CSV
                 with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_workspaces_csv:
                     writer = csv.writer(tmp_workspaces_csv)
 
                     # Write header
-                    writer.writerow(['domain', 'id', 'name', 'url'])
+                    writer.writerow(["domain", "id", "name", "url"])
 
                     # Write workspace data
                     for workspace in workspaces_data:
-                        writer.writerow([
-                            workspace['domain'],
-                            workspace['id'],
-                            workspace['name'],
-                            workspace['url']
-                        ])
+                        writer.writerow([workspace["domain"], workspace["id"], workspace["name"], workspace["url"]])
 
                     tmp_workspaces_csv.flush()
                     workspaces_csv_id = self.storage.upload_file(tmp_workspaces_csv.name)
@@ -132,45 +130,61 @@ rule Detect_Slack_RootState {
 
                 # Extract downloads data
                 downloads_data = []
-                downloads = data.get('downloads', {})
+                downloads = data.get("downloads", {})
 
                 # Create team name lookup for correlation
-                team_name_lookup = {ws['id']: ws['name'] for ws in workspaces_data}
+                team_name_lookup = {ws["id"]: ws["name"] for ws in workspaces_data}
 
                 for team_id, team_downloads in downloads.items():
                     for download_id, download_info in team_downloads.items():
-                        downloads_data.append({
-                            'id': download_info.get('id', download_id),
-                            'teamId': download_info.get('teamId', team_id),
-                            'team_name': team_name_lookup.get(download_info.get('teamId', team_id), ''),
-                            'userId': download_info.get('userId', ''),
-                            'downloadPath': download_info.get('downloadPath', ''),
-                            'url': download_info.get('url', ''),
-                            'downloadState': download_info.get('downloadState', ''),
-                            'startTime': self._parse_timestamp(download_info.get('startTime')),
-                            'endTime': self._parse_timestamp(download_info.get('endTime'))
-                        })
+                        downloads_data.append(
+                            {
+                                "id": download_info.get("id", download_id),
+                                "teamId": download_info.get("teamId", team_id),
+                                "team_name": team_name_lookup.get(download_info.get("teamId", team_id), ""),
+                                "userId": download_info.get("userId", ""),
+                                "downloadPath": download_info.get("downloadPath", ""),
+                                "url": download_info.get("url", ""),
+                                "downloadState": download_info.get("downloadState", ""),
+                                "startTime": self._parse_timestamp(download_info.get("startTime")),
+                                "endTime": self._parse_timestamp(download_info.get("endTime")),
+                            }
+                        )
 
                 # Create downloads CSV
                 with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_downloads_csv:
                     writer = csv.writer(tmp_downloads_csv)
 
                     # Write header
-                    writer.writerow(['id', 'teamId', 'team_name', 'userId', 'downloadPath', 'url', 'downloadState', 'startTime', 'endTime'])
+                    writer.writerow(
+                        [
+                            "id",
+                            "teamId",
+                            "team_name",
+                            "userId",
+                            "downloadPath",
+                            "url",
+                            "downloadState",
+                            "startTime",
+                            "endTime",
+                        ]
+                    )
 
                     # Write downloads data
                     for download in downloads_data:
-                        writer.writerow([
-                            download['id'],
-                            download['teamId'],
-                            download['team_name'],
-                            download['userId'],
-                            download['downloadPath'],
-                            download['url'],
-                            download['downloadState'],
-                            download['startTime'],
-                            download['endTime']
-                        ])
+                        writer.writerow(
+                            [
+                                download["id"],
+                                download["teamId"],
+                                download["team_name"],
+                                download["userId"],
+                                download["downloadPath"],
+                                download["url"],
+                                download["downloadState"],
+                                download["startTime"],
+                                download["endTime"],
+                            ]
+                        )
 
                     tmp_downloads_csv.flush()
                     downloads_csv_id = self.storage.upload_file(tmp_downloads_csv.name)

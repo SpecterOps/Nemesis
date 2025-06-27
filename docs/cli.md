@@ -12,26 +12,28 @@ The CLI supports four main operations:
 - **Outflank Connector**: Ingest data from Outflank Stage1 C2 into Nemesis
 
 ## Installation & Setup
+You can run the Nemesis CLI via its published docker image or by building/running the python project locally. In general, the easiest way to use it is with the docker helper scripts found in the `./tools/` folder that are detailed below.
 
 ### Docker Method (Recommended)
 
-The CLI is containerized and auto-built with the rest of the containers on `docker compose up`.
-
-The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker compose syntax for ease of use.
-
-After building, commands can be run with:
-
+You can pull and run the latest version of the Nemesis CLI docker image with the following command:
 ```bash
-# Run CLI commands
-docker compose run --rm cli <command>
+docker run ghcr.io/specterops/nemesis/cli
+```
+You can then manually invoke it using `docker run`. For example, the following mounts a folder into the container and submits a file:
+```bash
+docker run --rm --network host -v /tmp/:/data ghcr.io/specterops/nemesis/cli submit /data -r
 ```
 
-### Poetry Method (Development)
+The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker syntax for ease of use.
 
-For development or local installation:
+If you want to manually build the docker images, see [the Nemesis CLI project's README](../projects/cli/README.md).
+
+### Poetry Method (Local Usage or Development)
+To use the Nemesis CLI locally or for development, install at least Python 3.12.8 and [install Poetry](https://python-poetry.org/docs/#installation). Then, run the following:
 
 ```bash
-cd projects/cli
+cd Nemesis/projects/cli
 poetry install
 poetry run python -m cli <command>
 ```
@@ -40,7 +42,7 @@ poetry run python -m cli <command>
 
 Submit files to Nemesis for processing and enrichment.
 
-The `./tools/submit.sh` script wraps the docker compose syntax automatically.
+The `./tools/submit.sh` script wraps the docker syntax automatically.
 
 ### Basic Usage
 
@@ -57,39 +59,15 @@ The `./tools/submit.sh` script wraps the docker compose syntax automatically.
 
 # Submit directory recursively (-r or --recursive)
 ./tools/submit.sh -r /path/to/directory/
-```
 
-**docker compose :**
-```bash
-# Submit a single file
-docker compose run --rm -v /path/to/file:/data/file cli submit /data/file
-
-# Submit multiple files
-docker compose run --rm -v /path/to/directory:/data cli submit /data/file1 /data/file2
-
-# Submit directory recursively
-docker compose run --rm -v /path/to/directory:/data cli submit /data --recursive
-```
-
-**Poetry :**
-```bash
-# Submit a single file w/ Poetry env
-poetry run python -m cli submit /data/file
-```
-
-### Advanced Options
-
-**./tools/submit.sh (easiest option, preferred) :**
-```bash
-./tools/submit.sh /data/file \
+# Submit directory, changing the Nemesis server (default is localhost) and credentials (default is n:n)
+./tools/submit.sh /path/to/directory/ \
   --host nemesis.example.com:7443 \
   --username your-username \
-  --password your-password \
-```
+  --password your-password
 
-**docker compose :**
-```bash
-docker compose run --rm -v /path/to/files:/data cli submit /data \
+# Submit files customizing various options and use debug logging
+./tools/submit.sh submit /path/file1 /path/file2  \
   --host nemesis.example.com:7443 \
   --username your-username \
   --password your-password \
@@ -98,6 +76,13 @@ docker compose run --rm -v /path/to/files:/data cli submit /data \
   --workers 5 \
   --recursive \
   --debug
+```
+
+**Poetry :**
+```bash
+# Submit a single file w/ Poetry env
+cd Nemesis/projects/cli
+poetry run python -m cli submit /data/file
 ```
 
 ### Options Reference
@@ -140,7 +125,7 @@ Options:
 
 Monitor a folder for new files and automatically submit them to Nemesis for processing. This includes both existing files (optional) and any new files added to the folder while monitoring is active.
 
-The `./tools/monitor_folder.sh` script wraps the docker compose syntax automatically.
+The `./tools/monitor_folder.sh` script wraps the docker syntax automatically.
 
 ### Basic Usage
 
@@ -151,27 +136,8 @@ The `./tools/monitor_folder.sh` script wraps the docker compose syntax automatic
 
 # Monitor only for new files (skip existing files)
 ./tools/monitor_folder.sh /path/to/directory --only-monitor
-```
 
-**docker compose :**
-```bash
-# Monitor a directory
-docker compose run --rm -v /path/to/directory:/data/directory cli monitor /data/directory
-
-# Monitor only for new files (skip existing)
-docker compose run --rm -v /path/to/directory:/data/directory cli monitor /data/directory --only-monitor
-```
-
-**Poetry :**
-```bash
-# Monitor a directory w/ Poetry env
-poetry run python -m cli monitor /path/to/directory
-```
-
-### Advanced Options
-
-**./tools/monitor_folder.sh (easiest option, preferred) :**
-```bash
+# Monitor a directory upload files to a nemesis server
 ./tools/monitor_folder.sh /path/to/directory \
   --host nemesis.example.com:7443 \
   --username your-username \
@@ -179,17 +145,47 @@ poetry run python -m cli monitor /path/to/directory
   --only-monitor
 ```
 
-**docker compose :**
+**docker:**
 ```bash
-docker compose run --rm -v /path/to/directory:/data/directory cli monitor /data/directory \
+# Monitor a directory
+docker run \
+  --rm -ti \
+  --network host \
+  -v /path/to/directory:/data/directory \
+  ghcr.io/specterops/nemesis/cli \
+  monitor /data/directory
+
+# Monitor only for new files (skip existing)
+docker run \
+  --rm -ti \
+  --network host \
+  -v /path/to/directory:/data/directory \
+  ghcr.io/specterops/nemesis/cli \
+  monitor /data/directory --only-monitor
+
+# Monitor a directory with advanced configuration
+docker run \
+  --rm -ti \
+  --network host \
+  -v /path/to/directory:/data/directory \
+  ghcr.io/specterops/nemesis/cli \
+  monitor /data/directory \
   --host nemesis.example.com:7443 \
   --username your-username \
   --password your-password \
   --project my-project \
   --agent-id my-agent \
-  --workers 5 \
+  --workers 5  \
   --only-monitor \
   --debug
+```
+
+**Poetry :**
+```bash
+# Monitor a directory w/ Poetry env
+cd Nemesis/projects/cli
+poetry install
+poetry run python -m cli monitor /path/to/directory
 ```
 
 ### Options Reference
@@ -210,7 +206,7 @@ docker compose run --rm -v /path/to/directory:/data/directory cli monitor /data/
 
 Synchronize data between Mythic C2 and Nemesis, including callbacks, tasks, and file downloads.
 
-The `./tools/mythic_connect.sh` script wraps the docker compose syntax automatically.
+The `./tools/mythic_connect.sh` script wraps the docker syntax automatically.
 
 ### Configuration
 
@@ -252,20 +248,23 @@ networking:
 ./tools/mythic_connect.sh /path/to/settings_mythic.yaml
 ```
 
-**docker compose :**
+**docker :**
 ```bash
 # Run with mounted config file
-docker compose run --rm \
+docker run \
+  --rm -ti \
   -v /path/to/settings_mythic.yaml:/config/settings_mythic.yaml \
-  cli connect-mythic -c /config/settings_mythic.yaml
+  ghcr.io/specterops/nemesis/cli \
+  connect-mythic -c /config/settings_mythic.yaml
 
 # Show example configuration
-docker compose run --rm cli connect-mythic --showconfig
+docker run --rm ghcr.io/specterops/nemesis/cli connect-mythic --showconfig
 
 # Enable debug logging
-docker compose run --rm \
+docker run --rm -ti \
   -v /path/to/settings_mythic.yaml:/config/settings_mythic.yaml \
-  cli connect-mythic -c /config/settings_mythic.yaml --debug
+  ghcr.io/specterops/nemesis/cli \
+  connect-mythic -c /config/settings_mythic.yaml --debug
 ```
 
 ### What Gets Synchronized
@@ -308,17 +307,20 @@ outflank:
 
 ```bash
 # Run with mounted config file
-docker compose run --rm \
+docker run \
+  --rm -ti \
   -v /path/to/settings_outflank.yaml:/config/settings_outflank.yaml \
-  cli connect-outflank -c /config/settings_outflank.yaml
+  ghcr.io/specterops/nemesis/cli \
+  connect-outflank -c /config/settings_outflank.yaml
 
 # Show example configuration
-docker compose run --rm cli connect-outflank --showconfig
+docker run --rm ghcr.io/specterops/nemesis/cli connect-outflank --showconfig
 
 # Enable debug logging
-docker compose run --rm \
+docker run --rm \
   -v /path/to/settings_outflank.yaml:/config/settings_outflank.yaml \
-  cli connect-outflank -c /config/settings_outflank.yaml --debug
+  ghcr.io/specterops/nemesis/cli \
+  connect-outflank -c /config/settings_outflank.yaml --debug
 ```
 
 ## Common Docker Patterns
@@ -341,9 +343,10 @@ docker compose run --rm \
 Use `--network host` if the CLI needs to access services on the host network:
 
 ```bash
-docker compose run --rm --network host \
+docker run --rm --network host \
   -v /path/to/config.yaml:/config/config.yaml \
-  cli connect-mythic -c /config/config.yaml
+  ghcr.io/specterops/nemesis/cli \
+  connect-mythic -c /config/config.yaml
 ```
 
 ### Environment Variables
@@ -351,10 +354,11 @@ docker compose run --rm --network host \
 Pass environment variables for dynamic configuration:
 
 ```bash
-docker compose run --rm \
+docker run --rm \
   -e NEMESIS_HOST=nemesis.example.com \
   -e NEMESIS_USER=myuser \
-  cli submit /data/file --host $NEMESIS_HOST --username $NEMESIS_USER
+  ghcr.io/specterops/nemesis/cli \
+  submit /data/file --host $NEMESIS_HOST --username $NEMESIS_USER
 ```
 
 ## Troubleshooting
@@ -378,18 +382,6 @@ cli connect-mythic -c config.yaml --debug
 cli submit /data/files --debug
 ```
 
-### Logs
-
-View container logs:
-
-```bash
-# View logs from running container
-docker compose logs cli
-
-# Follow logs in real-time
-docker compose logs -f cli
-```
-
 ## Performance Tuning
 
 ### File Submission
@@ -402,4 +394,4 @@ docker compose logs -f cli
 
 - Adjust `timeout_sec` based on network conditions
 - Use `outflank_upload_path` for better performance with Outflank
-- Monitor database size and clean up periodically
+

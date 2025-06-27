@@ -9,7 +9,6 @@ from common.dependency_checks import check_file_exists, find_missing_path_depend
 from common.storage import StorageMinio
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from dapr.clients import DaprClient
 
 INSPECT_ASSEMBLY_PATH = os.getenv("INSPECT_ASSEMBLY_PATH", "/opt/InspectAssembly/InspectAssembly.dll")
 

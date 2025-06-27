@@ -646,7 +646,6 @@ const NoFilteredFindings = () => {
         <button
           onClick={handleViewAllFindings}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors inline-flex items-center"
-          replace={false}
         >
           View All Findings
         </button>

@@ -3,7 +3,7 @@ import os
 import urllib.parse
 import uuid
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated
 
 import requests
 import structlog
@@ -61,46 +61,46 @@ class EnrichmentsListResponse(BaseModel):
 
 
 class CleanupRequest(BaseModel):
-    expiration: Optional[str] = None  # ISO datetime or "all"
+    expiration: str | None = None  # ISO datetime or "all"
 
 
 class WorkflowProcessingStats(BaseModel):
-    avg_seconds: Optional[float] = None
-    min_seconds: Optional[float] = None
-    max_seconds: Optional[float] = None
-    p50_seconds: Optional[float] = None
-    p90_seconds: Optional[float] = None
-    p95_seconds: Optional[float] = None
-    p99_seconds: Optional[float] = None
-    samples_count: Optional[int] = None
+    avg_seconds: float | None = None
+    min_seconds: float | None = None
+    max_seconds: float | None = None
+    p50_seconds: float | None = None
+    p90_seconds: float | None = None
+    p95_seconds: float | None = None
+    p99_seconds: float | None = None
+    samples_count: int | None = None
 
 
 class WorkflowMetrics(BaseModel):
     completed_count: int
     failed_count: int
     total_processed: int
-    success_rate: Optional[float] = None
-    processing_times: Optional[WorkflowProcessingStats] = None
+    success_rate: float | None = None
+    processing_times: WorkflowProcessingStats | None = None
 
 
 class ActiveWorkflowDetail(BaseModel):
     id: str
     status: str
-    filename: Optional[str] = None
-    object_id: Optional[str] = None
-    timestamp: Optional[datetime] = None
-    runtime_seconds: Optional[float] = None
-    error: Optional[str] = None
+    filename: str | None = None
+    object_id: str | None = None
+    timestamp: datetime | None = None
+    runtime_seconds: float | None = None
+    error: str | None = None
 
 
 class WorkflowStatusResponse(BaseModel):
     queued_files: int
     active_workflows: int
-    status_counts: Optional[dict[str, int]] = None
+    status_counts: dict[str, int] | None = None
     active_details: list[ActiveWorkflowDetail] = []
     metrics: WorkflowMetrics
     timestamp: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class FailedWorkflowsResponse(BaseModel):

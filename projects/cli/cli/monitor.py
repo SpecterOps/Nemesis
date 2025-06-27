@@ -3,11 +3,10 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Optional
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 import click
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from cli.log import setup_logging
 from cli.submit import submit_files
@@ -110,6 +109,10 @@ def monitor_main(
                 project=project,
                 agent_id=agent_id,
             )
+
+            if not success:
+                logger.error("Failed to submit existing files. Exiting.")
+                sys.exit(1)
 
         else:
             logger.info("Skipping existing files (--only-monitor enabled)")

@@ -1,10 +1,8 @@
 # enrichment_modules/parquet/analyzer.py
 import csv
 import tempfile
-from datetime import datetime
 
 import pyarrow.parquet as pq
-import pyarrow as pa
 import structlog
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
@@ -37,11 +35,7 @@ class ParquetFileParser(EnrichmentModule):
         """Extract readable schema information from PyArrow schema."""
         schema_info = []
         for field in schema:
-            schema_info.append({
-                "name": field.name,
-                "type": str(field.type),
-                "nullable": field.nullable
-            })
+            schema_info.append({"name": field.name, "type": str(field.type), "nullable": field.nullable})
         return schema_info
 
     def process(self, object_id: str) -> EnrichmentResult | None:

@@ -1,12 +1,13 @@
 # src/common/models.py
 from datetime import datetime
 from enum import Enum
-from typing import Any, Generic, TypeVar, List
+from typing import Any, Generic, TypeVar
+
 import structlog
 from pydantic import BaseModel, Field
 
-
 logger = structlog.get_logger(module=__name__)
+
 
 ##########################################
 #
@@ -64,12 +65,15 @@ class Alert(BaseModel):
 #
 ##########################################
 
+
 class NoseyParkerInput(BaseModel):
     object_id: str
+
 
 class MatchLocation(BaseModel):
     line: int
     column: int
+
 
 class MatchInfo(BaseModel):
     rule_name: str
@@ -77,6 +81,7 @@ class MatchInfo(BaseModel):
     matched_content: str
     location: MatchLocation
     snippet: str
+
 
 class ScanStats(BaseModel):
     blobs_seen: int
@@ -90,15 +95,17 @@ class ScanStats(BaseModel):
         populate_by_name = True
         extra = "ignore"  # Ignore extra fields
 
+
 class ScanResults(BaseModel):
     scan_duration_ms: int
     bytes_scanned: int
-    matches: List[MatchInfo] = []  # Default to empty list
+    matches: list[MatchInfo] = []  # Default to empty list
     stats: ScanStats
 
     class Config:
         populate_by_name = True
         extra = "ignore"  # Ignore extra fields
+
 
 class NoseyParkerOutput(BaseModel):
     object_id: str
@@ -118,19 +125,19 @@ class NoseyParkerOutput(BaseModel):
             logger.warning(f"Error creating NoseyParkerOutput from dict: {e}")
             # Try to construct with just the required fields
             return cls(
-                object_id=data.get('object_id', ''),
+                object_id=data.get("object_id", ""),
                 scan_result=ScanResults(
-                    scan_duration_ms=data.get('scan_result', {}).get('scan_duration_ms', 0),
-                    bytes_scanned=data.get('scan_result', {}).get('bytes_scanned', 0),
-                    matches=data.get('scan_result', {}).get('matches', []),
+                    scan_duration_ms=data.get("scan_result", {}).get("scan_duration_ms", 0),
+                    bytes_scanned=data.get("scan_result", {}).get("bytes_scanned", 0),
+                    matches=data.get("scan_result", {}).get("matches", []),
                     stats=ScanStats(
-                        blobs_seen=data.get('scan_result', {}).get('stats', {}).get('blobs_seen', 0),
-                        blobs_scanned=data.get('scan_result', {}).get('stats', {}).get('blobs_scanned', 0),
-                        bytes_seen=data.get('scan_result', {}).get('stats', {}).get('bytes_seen', 0),
-                        bytes_scanned=data.get('scan_result', {}).get('stats', {}).get('bytes_scanned', 0),
-                        matches_found=data.get('scan_result', {}).get('stats', {}).get('matches_found', 0)
-                    )
-                )
+                        blobs_seen=data.get("scan_result", {}).get("stats", {}).get("blobs_seen", 0),
+                        blobs_scanned=data.get("scan_result", {}).get("stats", {}).get("blobs_scanned", 0),
+                        bytes_seen=data.get("scan_result", {}).get("stats", {}).get("bytes_seen", 0),
+                        bytes_scanned=data.get("scan_result", {}).get("stats", {}).get("bytes_scanned", 0),
+                        matches_found=data.get("scan_result", {}).get("stats", {}).get("matches_found", 0),
+                    ),
+                ),
             )
 
 

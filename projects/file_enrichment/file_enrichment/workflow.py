@@ -4,7 +4,7 @@ import json
 import ntpath
 import os
 import pathlib
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import BinaryIO
 
 import common.helpers as helpers
@@ -12,10 +12,10 @@ import dapr.ext.workflow as wf
 import magic
 import psycopg
 import structlog
-from common.models import Alert, EnrichmentResult, File, FileEnriched, Transform, NoseyParkerInput
+from common.helpers import is_container
+from common.models import Alert, EnrichmentResult, File, NoseyParkerInput
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from common.helpers import is_container
 from dapr.clients import DaprClient
 from dapr.ext.workflow.logger.options import LoggerOptions
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
@@ -46,7 +46,9 @@ storage = StorageMinio()
 
 dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
 gotenberg_url = f"http://localhost:{dapr_port}/v1.0/invoke/gotenberg/method/forms/libreoffice/convert"
-max_parallel_enrichment_modules = int(os.getenv("MAX_PARALLEL_ENRICHMENT_MODULES", 5)) # maximum workflows that can run at a time
+max_parallel_enrichment_modules = int(
+    os.getenv("MAX_PARALLEL_ENRICHMENT_MODULES", 5)
+)  # maximum workflows that can run at a time
 container_nesting_limit = 2
 
 logger.info(f"max_parallel_enrichment_modules: {max_parallel_enrichment_modules}")
@@ -64,6 +66,7 @@ with DaprClient() as client:
 # region Helper functions
 #
 ##########################################
+
 
 def create_enrichment_activity(module_name: str):
     """Creates a unique activity function for each module"""
@@ -152,7 +155,7 @@ def create_enrichment_activity(module_name: str):
                             SET enrichments_success = array_append(enrichments_success, %s)
                             WHERE object_id = %s
                             """,
-                            (module_name, object_id)
+                            (module_name, object_id),
                         )
 
                     conn.commit()
@@ -180,7 +183,7 @@ def create_enrichment_activity(module_name: str):
                             SET enrichments_failure = array_append(enrichments_failure, %s)
                             WHERE object_id = %s
                             """,
-                            (f"{module_name}:{str(e)[:100]}", object_id)
+                            (f"{module_name}:{str(e)[:100]}", object_id),
                         )
                         conn.commit()
             except Exception as db_error:
@@ -404,11 +407,11 @@ def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, max_chun
                 chunk_content = file_content[i:chunk_end]
 
                 # If chunk is still too big in bytes, trim it down
-                while len(chunk_content.encode('utf-8')) > max_chunk_bytes and chunk_content:
+                while len(chunk_content.encode("utf-8")) > max_chunk_bytes and chunk_content:
                     chunk_content = chunk_content[:-100]  # Remove 100 chars at a time
 
                 if chunk_content:  # Only insert non-empty chunks
-                    actual_bytes = len(chunk_content.encode('utf-8'))
+                    actual_bytes = len(chunk_content.encode("utf-8"))
                     logger.debug(f"Inserting chunk {chunk_number} with {actual_bytes} bytes")
                     cur.execute(insert_query, (object_id, chunk_number, chunk_content))
                     chunk_number += 1
@@ -419,6 +422,7 @@ def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, max_chun
             conn.commit()
 
         logger.debug("Indexed chunked content", object_id=object_id, num_chunks=chunk_number)
+
 
 # endregion
 
@@ -700,7 +704,6 @@ def publish_enriched_file(ctx, activity_input):
 
     try:
         with DaprClient() as client:
-
             data = file_enriched.model_dump(
                 exclude_unset=True,
                 mode="json",
@@ -711,7 +714,7 @@ def publish_enriched_file(ctx, activity_input):
                 pubsub_name="pubsub",
                 topic_name="file_enriched",
                 data=json.dumps(data),
-                data_content_type="application/json"
+                data_content_type="application/json",
             )
 
             return True
@@ -746,6 +749,7 @@ def create_text_reader(binary_file: BinaryIO) -> io.TextIOWrapper:
 #
 ##########################################
 
+
 @workflow_runtime.workflow
 def enrichment_module_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
     """Child workflow that runs enrichment modules with a rolling window of parallel tasks."""
@@ -777,19 +781,11 @@ def enrichment_module_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 
                 try:
                     result = completed_task.get_result()
-                    logger.debug(
-                        "Module completed",
-                        module_name=completed_module,
-                        result=result
-                    )
+                    logger.debug("Module completed", module_name=completed_module, result=result)
                     results.append((completed_module, result))
                     logger.debug(f"Module COMPLETED: {completed_module}")
                 except Exception as e:
-                    logger.exception(
-                        e,
-                        message="Error in module execution",
-                        module_name=completed_module
-                    )
+                    logger.exception(e, message="Error in module execution", module_name=completed_module)
                     # Continue with other modules even if one fails
                     results.append((completed_module, None))
                     logger.error(f"Module ERROR: {completed_module}")
@@ -798,10 +794,7 @@ def enrichment_module_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
                 del in_flight_tasks[completed_task]
 
             # Start new task
-            task = ctx.call_activity(
-                activity_functions[activity_name],
-                input={"object_id": object_id}
-            )
+            task = ctx.call_activity(activity_functions[activity_name], input={"object_id": object_id})
             in_flight_tasks[task] = module_name
             logger.debug("Started task for module", module_name=module_name)
 
@@ -812,29 +805,17 @@ def enrichment_module_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 
             try:
                 result = completed_task.get_result()
-                logger.debug(
-                    "Module completed",
-                    module_name=completed_module,
-                    result=result
-                )
+                logger.debug("Module completed", module_name=completed_module, result=result)
                 results.append((completed_module, result))
                 logger.debug(f"Module COMPLETED: {completed_module}")
             except Exception as e:
-                logger.exception(
-                    e,
-                    message="Error in module execution",
-                    module_name=completed_module
-                )
+                logger.exception(e, message="Error in module execution", module_name=completed_module)
                 results.append((completed_module, None))
                 logger.warning(f"Module ERROR: {completed_module}")
 
             del in_flight_tasks[completed_task]
 
-        logger.info(
-            "All modules completed",
-            total_modules=len(results),
-            results=results
-        )
+        logger.info("All modules completed", total_modules=len(results), results=results)
 
         return results
 
@@ -855,10 +836,9 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
 
         logger.debug("Workflow input", object_id=object_id, workflow_input=workflow_input, instance_id=ctx.instance_id)
 
-
         initial_tasks = [
             ctx.call_activity(index_file_message, input=input_file),
-            ctx.call_activity(get_basic_analysis, input=input_file)
+            ctx.call_activity(get_basic_analysis, input=input_file),
         ]
 
         try:
@@ -868,7 +848,6 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
         except Exception as e:
             logger.exception("Error in index_file_message or get_basic_analysis", error=str(e))
             raise
-
 
         # create file_enriched object
         file_enriched = {
@@ -881,36 +860,42 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
             yield ctx.call_activity(store_file_enriched, input=file_enriched)
             logger.debug("Stored file_enriched in PostgreSQL")
         except Exception:
-            logger.exception("Error in initial tasks - calling store_file_enriched_postgres", store_file_enriched=store_file_enriched)
+            logger.exception(
+                "Error in initial tasks - calling store_file_enriched_postgres", store_file_enriched=store_file_enriched
+            )
             raise
-
 
         enrichment_tasks = [
             ctx.call_activity(handle_file_if_plaintext, input=file_enriched),
-            ctx.call_child_workflow(workflow=enrichment_module_workflow, input=workflow_input)
+            ctx.call_child_workflow(workflow=enrichment_module_workflow, input=workflow_input),
         ]
 
         try:
             yield wf.when_all(enrichment_tasks)
             logger.debug("Enrichment tasks complete - handle_file_if_plaintext, enrichment_module_workflow")
         except Exception as e:
-            logger.exception("Error in enrichment tasks - handle_file_if_plaintext or enrichment_module_workflow", error=str(e))
+            logger.exception(
+                "Error in enrichment tasks - handle_file_if_plaintext or enrichment_module_workflow", error=str(e)
+            )
             raise
-
 
         final_tasks = [
             ctx.call_activity(publish_enriched_file, input={"object_id": object_id}),
             ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
-            ctx.call_activity(publish_findings_alerts, input={"object_id": object_id})
+            ctx.call_activity(publish_findings_alerts, input={"object_id": object_id}),
         ]
 
         try:
             yield wf.when_all(final_tasks)
-            logger.debug("Final tasks complete - publish_enriched_file, extract_and_store_features, publish_findings_alerts")
+            logger.debug(
+                "Final tasks complete - publish_enriched_file, extract_and_store_features, publish_findings_alerts"
+            )
         except Exception as e:
-            logger.exception("Error in final tasks - publish_enriched_file, extract_and_store_features, publish_findings_alerts", error=str(e))
+            logger.exception(
+                "Error in final tasks - publish_enriched_file, extract_and_store_features, publish_findings_alerts",
+                error=str(e),
+            )
             raise
-
 
         logger.info("Workflow completed successfully", object_id=object_id)
         return {}
@@ -928,6 +913,7 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
 #
 ##########################################
 
+
 async def initialize_workflow_runtime():
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
     global workflow_runtime, workflow_client
@@ -940,8 +926,9 @@ async def initialize_workflow_runtime():
     # Filter modules by workflow and determine execution order
     workflow_name = "default"  # This could be made configurable later
     available_modules = {
-        name: module for name, module in workflow_runtime.modules.items()
-        if hasattr(module, 'workflows') and workflow_name in module.workflows
+        name: module
+        for name, module in workflow_runtime.modules.items()
+        if hasattr(module, "workflows") and workflow_name in module.workflows
     }
 
     # Build dependency graph from filtered modules
@@ -952,7 +939,7 @@ async def initialize_workflow_runtime():
         execution_order=execution_order,
         workflow=workflow_name,
         total_modules=len(available_modules),
-        filtered_from=len(workflow_runtime.modules)
+        filtered_from=len(workflow_runtime.modules),
     )
 
     # Register each module as an activity

@@ -6,108 +6,60 @@ Here's a quickstart guide to setting up the Nemesis platform.
 
 Ensure your machine meets the following requirements:
 
-- **OS**: Windows, Linux, or macOS
-- **Processors**: 4 cores (3 can work with adjustments)
-- **Memory**: 8 GB RAM (12+ GB recommended)
+- **OS**: Linux (use Debian 12) or macOS
+- **Processors**: 4 cores
+- **Memory**: 12+ GB RAM
 - **Disk Space**: 100 GB
 - **Architecture**: x64 or Arm
+- **Disk:** 80 GB
 
-### Step 1: Install Docker/Docker-Compose
-
-We recommend [Docker Desktop](https://www.docker.com/products/docker-desktop/) with the following minimum resources:
-
-**Memory limit:** 8 GB
-**Swap:** 2 GB
-**Virtual Disk:** 80 GB
+Docker/Docker-Compose:
+- Docker version 28.0.0 or higher is recommended. See [Docker's installation instructions](https://docs.docker.com/engine/install/) for instructions on installing docker. Running the Docker Engine on Linux or on OS X via Docker Desktop is recommended. If using Docker Desktop, ensure that the VM is configured with sufficient RAM/Disk/swap.
 
 
-### Step 2: Export necessary environment variables (required)
-
+### Step 1: Clone the Nemesis Repository
 ```bash
-export NEMESIS_URL=https://localhost:7443/
-export GRAFANA_ADMIN_PASSWORD=Qwerty12345
-export GRAFANA_ADMIN_USER=nemesis
-export JUPYTER_PASSWORD=Qwerty12345
-export MINIO_ROOT_PASSWORD=Qwerty12345
-export MINIO_ROOT_USER=nemesis
-export POSTGRES_PASSWORD=Qwerty12345
-export POSTGRES_USER=nemesis
-export RABBITMQ_PASSWORD=Qwerty12345
-export RABBITMQ_USER=nemesis
-
-# Optional
-export APPRISE_URLS=slack://Nemesis@T...6x/#nemesis-testing,slack://Nemesis@T...k/#nemesis-feedback?tag=feedback
+git clone https://github.com/SpecterOps/Nemesis
+cd Nemesis
 ```
 
-**NOTE:** you should randomize these password values for production deployments!
+### Step 2: Configuration
+Create a `.env` file using the provided example as a template:
+```bash
+cp env.example .env
+```
+Then configure the values in the `.env` file with a text editor.
 
-**NOTE:** `NEMESIS_URL` _is used to construct the appropriate absolute hyperlinks for findings and Apprise alerts. It does not affect the hosting of Nemesis itself._
+This file contains passwords and configuration that Nemesis uses. You should randomize these password values for your deployment!
+
+**NOTE:** `NEMESIS_URL` is used to construct the appropriate absolute hyperlinks for findings and Apprise alerts. It does not affect the hosting of Nemesis itself.
 
 **NOTE:** for APPRISE_URLs, to route user feedback to a specific channel use `?tag=feedback` as shown above. Otherwise stock alerts will go to the first URL listed. See the [Alerting](./usage_guide.md#alerting) section of the Usage Guide for more information.
 
-#### Changing the Nemesis Port
-
-To change the port that Nemesis is hosted on, set a new port with `export NEMESIS_PORT=1234` before running Nemesis ensure the `NEMESIS_URL` ENV variable reflects the correct port.
-
-#### Using Other SSL Certficiates
-
-To use your own SSL certificates, simply replace the `server.crt` and `server.key` files at ../infra/traefik/certs/ before launching Nemesis.
+**NOTE:** To use your own SSL certificates, simply replace the `server.crt` and `server.key` files at ./infra/traefik/certs/ before launching Nemesis.
 
 
-### Step 3: Build and start Nemesis.
-
-#### For Development Deployments
-
-This will build all of the images instead of pulling the prebuilt images.
+### Step 3: Start Nemesis
+To start Nemesis's core services, run the `./tools/nemesis-ctl.sh` script:
 
 ```bash
-export ENVIRONMENT=dev
-
-# build the base images
-docker compose -f docker-compose.base.yml build
-
-# build/stand up everything
-docker compose up
+./tools/nemesis-ctl.sh start prod
 ```
 
-Alternatively, you can use the `./tools/start.sh` script which automates all of this:
+If you'd like to install the monitoring services and/or jupyter notebooks, use the associated optional command line arguments:
 
 ```bash
-./tools/start.sh dev
+./tools/nemesis-ctl.sh start prod --monitoring --jupyter
 ```
+`nemesis-ctl.sh` effectively is a wrapper for `docker compose` commands and is in charge of pulling and starting the appropriate published Nemesis docker images. In general, we recommend people use `nemesis-ctl.sh` instead of manually invoking `docker compose`. For more complex deployment scenarios, see Nemesis's [Docker Compose documentation](docker_compose.md) to understand what `nemesis-ctl.sh` does underneath.
 
-#### For Production Deployments
+### Step 4: Access the Web Dashboard
 
-For prod deployments or instructions on how to add users for basic auth, run `./tools/generate_start_command.sh`:
-
-```bash
-% ./tools/generate_start_command.sh
-
-To start Nemesis, run the following:
-
-    # No users specified. Default user & pass are both the letter 'n')
-    export ENVIRONMENT=prod
-    docker compose -f docker-compose.base.yml build
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml up
-
-
-To add users, set the USERS (comma-separated) and PASSWORD environment variables and re-run this script.
-Note: All users will share the same password.
-Example:
-
-    USERS='alice,bob,carol' PASSWORD='password' ./tools/generate_start_command.sh
-```
-
-***Note: In production mode, the "latest" tagged containers will eventually be pulled (but are not currently)!***
-
-### Step 4: Logging into the Dashboard
-
-Open up `https://localhost:7443/` (or the URL Nemesis is hosted on) for the main Nemesis interface. Use `n:n` for basic auth unless you specified users via the `./tools/generate_start_command.sh` command. You will then need to enter your username and project name which are saved in your browser cache:
+In a web browser, open `https://localhost:7443/` (or the URL Nemesis is hosted on) to access the main Nemesis web interface. Use `n:n` for basic auth unless you specified users. Upon logging in, you will enter your username and project:
 
 ![Nemesis Username and Project](images/nemesis-dashboard-username-and-project.png)
 
-This can be changed by clicking the "Settings" tab on the lower left:
+If needed, you can change these values by clicking the "Settings" tab on the lower left:
 
 ![Nemesis Settings](images/nemesis-dashboard-settings.png)
 
@@ -117,14 +69,15 @@ After entering your information, you will then be shown the main Nemesis dashboa
 
 ### Step 5: Upload File for Analysis
 
-To manually upload a file into Nemesis, click on the "File Upload" link in the sidebar:
+To manually upload files into Nemesis, click on the "File Upload" link in the sidebar. On this page you can upload one or more files into Nemesis:
 
 ![file analysis](images/nemesis-dashboard-file-upload_success.png)
 
-Then view the file after analysis (click on the file entry for more details):
+After uploading the files, click on the "Files" link in the sidebar. Once Nemesis processes the files, they will appear in the table:
 
 ![file listing](images/nemesis-dashboard-files.png)
 
+Click on the table row to to view the file's details:
 ![Nemesis File Details](images/nemesis-dashboard-file-details.png)
 
 See [Data Ingestion](./usage_guide.md#data-ingestion) for additional ways to ingest data into Nemesis besides manually uploading files through the web interface.
@@ -133,8 +86,19 @@ See [Data Ingestion](./usage_guide.md#data-ingestion) for additional ways to ing
 
 Click on the "Help" button on the bottom left to view the additionally exposed Nemesis services. Each route listed is a hyperlink to the service. For logins, refer to the environment variables set.
 
+**NOTE:** The monitoring services (Grafana, Jaeger, and Prometheus) will only be available if you started with them enabled.
+
 ![Nemesis services](images/nemesis-dashboard-services.png)
 
 ### Step 7: Shutting Nemesis Down
 
-If you used `docker compose up` without `-d`, just ctrl + c to bring Nemesis down. To wipe the data stores for a fresh start, after bringing it down run `docker compose down -v`.
+To shutdown Nemesis, use the `nemesis-ctl.sh` script's `stop` or `clean` commands with the same arguments you used to start it. For example, if you started it with monitoring and jupyter enabled, then run the following:
+- To stop Nemesis containers:
+```bash
+./tools/nemesis-ctl.sh stop prod --monitoring --jupyter
+```
+
+- To stop Nemesis containers and delete their associated volumes:
+```bash
+./tools/nemesis-ctl.sh clean prod --monitoring --jupyter
+```

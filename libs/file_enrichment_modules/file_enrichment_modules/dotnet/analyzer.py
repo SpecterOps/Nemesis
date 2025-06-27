@@ -216,7 +216,7 @@ class DotNetAnalyzer(EnrichmentModule):
                     )
 
                 logger.info(
-                    f"Submitted decompiled source ZIP to Nemesis",
+                    "Submitted decompiled source ZIP to Nemesis",
                     decompiled_object_id=decompiled_object_id,
                     originating_object_id=file_enriched.object_id,
                 )
