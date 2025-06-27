@@ -27,7 +27,7 @@ docker run --rm --network host -v /tmp/:/data ghcr.io/specterops/nemesis/cli sub
 
 The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker syntax for ease of use and are highly recommended.
 
-If you want to manually build the docker images, see [the Nemesis CLI project's README]([../projects/cli/README.md](https://github.com/SpecterOps/Nemesis/blob/main/projects/cli/README.md)).
+If you want to manually build the docker images, see [the Nemesis CLI project's README](https://github.com/SpecterOps/Nemesis/blob/main/projects/cli/README.md).
 
 ### Poetry Method (Local Usage or Development)
 To use the Nemesis CLI locally or for development, install at least Python 3.12.8 and [install Poetry](https://python-poetry.org/docs/#installation). Then, run the following:
