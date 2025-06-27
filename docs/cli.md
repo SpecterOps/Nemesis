@@ -16,9 +16,9 @@ You can use the Nemesis CLI via its published docker image or building/running t
 
 ### Docker Method (Recommended)
 
-You can pull the latest version of the Nemesis CLI docker image with the following command:
+You can pull and run the latest version of the Nemesis CLI docker image with the following command:
 ```bash
-docker pull ghcr.io/specterops/nemesis/cli:latest
+docker run ghcr.io/specterops/nemesis/cli:latest
 ```
 You can then manually invoke it using `docker run`. For example, the following mounts a folder into the container and submits a file:
 ```bash
@@ -26,6 +26,8 @@ docker run --rm --network host -v /tmp/:/data ghcr.io/specterops/nemesis/cli:lat
 ```
 
 The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker syntax for ease of use.
+
+If you want to manually build the docker images, see [the Nemesis CLI project's README](../projects/cli/README.md).
 
 ### Poetry Method (Local Usage or Development)
 To use the Nemesis CLI locally or for development, install at least Python 3.12.8 and [install Poetry](https://python-poetry.org/docs/#installation). Then, run the following:

@@ -110,6 +110,10 @@ def monitor_main(
                 agent_id=agent_id,
             )
 
+            if not success:
+                logger.error("Failed to submit existing files. Exiting.")
+                sys.exit(1)
+
         else:
             logger.info("Skipping existing files (--only-monitor enabled)")
 

@@ -3,8 +3,10 @@ In general, we recommend that people use the `./tools/nemesis-ctl.sh` script to 
 
 # Use Published Production Docker Images
 ## Step 1 - Configure environment variables
+```bash
 cp env.example .env
 vim .env
+```
 
 ## Step 2 - Pull and start the images
 The examples below show various ways you can pull and start Nemesis.
