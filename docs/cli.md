@@ -18,11 +18,11 @@ You can use the Nemesis CLI via its published docker image or building/running t
 
 You can pull and run the latest version of the Nemesis CLI docker image with the following command:
 ```bash
-docker run ghcr.io/specterops/nemesis/cli:latest
+docker run ghcr.io/specterops/nemesis/cli
 ```
 You can then manually invoke it using `docker run`. For example, the following mounts a folder into the container and submits a file:
 ```bash
-docker run --rm --network host -v /tmp/:/data ghcr.io/specterops/nemesis/cli:latest submit /data -r
+docker run --rm --network host -v /tmp/:/data ghcr.io/specterops/nemesis/cli submit /data -r
 ```
 
 The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker syntax for ease of use.
