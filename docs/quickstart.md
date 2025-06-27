@@ -33,7 +33,7 @@ Then configure the values in the `.env` file with a text editor.
 
 This file contains passwords and configuration that Nemesis uses. You should randomize these password values for your deployment!
 
-**NOTE:** `NEMESIS_URL` is used to construct the appropriate absolute hyperlinks for findings and Apprise alerts. It does not affect the hosting of Nemesis itself.
+**NOTE:** `NEMESIS_URL` is used to construct the appropriate absolute hyperlinks for findings and Apprise alerts. It does not affect the hosting of Nemesis itself. If using a hostname, a FQDN is preferred.
 
 **NOTE:** for `APPRISE_URLs` to route user feedback to a specific channel use `?tag=feedback` as shown in the example .env file. Otherwise stock alerts will go to the first URL listed. See the [Alerting](./usage_guide.md#alerting) section of the Usage Guide for more information.
 
