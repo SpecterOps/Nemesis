@@ -14,7 +14,8 @@ Ensure your machine meets the following requirements:
 - **Disk:** 80 GB
 
 Docker/Docker-Compose:
-- Docker version 28.0.0 or higher is recommended. See [Docker's installation instructions](https://docs.docker.com/engine/install/) for instructions on installing docker. Running the Docker Engine on Linux or on OS X via Docker Desktop is recommended. If using Docker Desktop, ensure that the VM is configured with sufficient RAM/Disk/swap.
+
+- Docker version 28.0.0 or higher is recommended. See [Docker's installation instructions](https://docs.docker.com/engine/install/) for instructions on installing Docker. Running the Docker Engine on Linux or on OS X via Docker Desktop is recommended. If using Docker Desktop, ensure that the VM is configured with sufficient RAM/Disk/swap.
 
 
 ### Step 1: Clone the Nemesis Repository
@@ -34,9 +35,9 @@ This file contains passwords and configuration that Nemesis uses. You should ran
 
 **NOTE:** `NEMESIS_URL` is used to construct the appropriate absolute hyperlinks for findings and Apprise alerts. It does not affect the hosting of Nemesis itself.
 
-**NOTE:** for APPRISE_URLs, to route user feedback to a specific channel use `?tag=feedback` as shown above. Otherwise stock alerts will go to the first URL listed. See the [Alerting](./usage_guide.md#alerting) section of the Usage Guide for more information.
+**NOTE:** for `APPRISE_URLs` to route user feedback to a specific channel use `?tag=feedback` as shown in the example .env file. Otherwise stock alerts will go to the first URL listed. See the [Alerting](./usage_guide.md#alerting) section of the Usage Guide for more information.
 
-**NOTE:** To use your own SSL certificates, simply replace the `server.crt` and `server.key` files at ./infra/traefik/certs/ before launching Nemesis.
+**NOTE:** To use your own SSL certificates, simply replace the `server.crt` and `server.key` files at `./infra/traefik/certs/` before launching Nemesis.
 
 
 ### Step 3: Start Nemesis
@@ -55,11 +56,11 @@ If you'd like to install the monitoring services and/or jupyter notebooks, use t
 
 ### Step 4: Access the Web Dashboard
 
-In a web browser, open `https://localhost:7443/` (or the URL Nemesis is hosted on) to access the main Nemesis web interface. Use `n:n` for basic auth unless you specified users. Upon logging in, you will enter your username and project:
+In a web browser, open `https://localhost:7443/` (or the URL Nemesis is hosted on) to access the main Nemesis web interface. Use `n:n` for basic auth unless you specified users. Upon logging in, you will enter your username and project (this is saved in your browser cache and only needed once):
 
 ![Nemesis Username and Project](images/nemesis-dashboard-username-and-project.png)
 
-If needed, you can change these values by clicking the "Settings" tab on the lower left:
+If needed, you can change these values by clicking the **Settings** tab on the lower left:
 
 ![Nemesis Settings](images/nemesis-dashboard-settings.png)
 
@@ -86,13 +87,15 @@ See [Data Ingestion](./usage_guide.md#data-ingestion) for additional ways to ing
 
 Click on the "Help" button on the bottom left to view the additionally exposed Nemesis services. Each route listed is a hyperlink to the service. For logins, refer to the environment variables set.
 
-**NOTE:** The monitoring services (Grafana, Jaeger, and Prometheus) will only be available if you started with them enabled.
+**NOTE:** The monitoring services (Grafana, Jaeger, and Prometheus) will only be available if you started with them enabled (`--monitoring`).
+
+**NOTE:** The /jupyter/ route will only be available if you started with it enabled (`--jupyter`).
 
 ![Nemesis services](images/nemesis-dashboard-services.png)
 
 ### Step 7: Shutting Nemesis Down
 
-To shutdown Nemesis, use the `nemesis-ctl.sh` script's `stop` or `clean` commands with the same arguments you used to start it. For example, if you started it with monitoring and jupyter enabled, then run the following:
+To shutdown Nemesis, use the `nemesis-ctl.sh` script's `stop` or `clean` commands ***with the same arguments you used to start it***. For example, if you started it with monitoring and jupyter enabled, then run the following:
 - To stop Nemesis containers:
 ```bash
 ./tools/nemesis-ctl.sh stop prod --monitoring --jupyter
