@@ -141,7 +141,7 @@ async def handle_feedback_subscription():
                     # Construct markdown message
                     message_parts = []
                     object_id = feedback["object_id"]
-                    nemesis_file_url = f"{nemesis_url}files?object_id={object_id}"
+                    nemesis_file_url = f"{nemesis_url}files/{object_id}"
                     message_parts.append(f"*object_id:* <{nemesis_file_url}|{object_id}>")
                     message_parts.append(f"*user*: {feedback['username']}")
 
@@ -158,12 +158,7 @@ async def handle_feedback_subscription():
                     logger.info(f"Nemesis feedback: {body}")
 
                     # Create an Alert object and process it through the rate-limited handler
-                    alert = Alert(
-                        title="Nemesis Feedback",
-                        body=body,
-                        tag="feedback",
-                        service="feedback"
-                    )
+                    alert = Alert(title="Nemesis Feedback", body=body, tag="feedback", service="feedback")
 
                     # Use the send_alert function but handle the result specifically for feedback
                     success = await send_alert_with_retries(alert)
@@ -241,11 +236,7 @@ async def send_alert_with_retries(alert):
     if alert.service:
         title = f"[{alert.service}] {alert.title}"
 
-    kwargs = {
-        "body": alert.body,
-        "title": title,
-        "notify_type": apprise.NotifyType.WARNING
-    }
+    kwargs = {"body": alert.body, "title": title, "notify_type": apprise.NotifyType.WARNING}
 
     if alert.tag:
         kwargs["tag"] = alert.tag
@@ -263,17 +254,12 @@ async def send_alert_with_retries(alert):
                     return True
 
                 retry_count += 1
-                logger.warning(
-                    f"Failed to send alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})",
-                    title=title
-                )
+                logger.warning(f"Failed to send alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})", title=title)
                 await asyncio.sleep(RETRY_DELAY_SECONDS)
             except Exception as e:
                 retry_count += 1
                 logger.error(
-                    f"Error sending alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})",
-                    error=str(e),
-                    title=title
+                    f"Error sending alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})", error=str(e), title=title
                 )
                 await asyncio.sleep(RETRY_DELAY_SECONDS)
 
