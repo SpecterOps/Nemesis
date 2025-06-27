@@ -190,6 +190,11 @@ async def fetch_finding_details(session, finding_id):
 async def handle_findings_subscription():
     """Sets up and handles subscription to findings table in Hasura using a lightweight approach"""
     # Lightweight subscription that only returns finding_ids
+
+    if not os.getenv('RIGGING_GENERATOR_TRIAGE'):
+        logger.info("RIGGING_GENERATOR_TRIAGE not set, skipping subscription")
+        return
+
     SUBSCRIPTION = gql("""
         subscription NewFindingIds {
             findings(
@@ -270,6 +275,8 @@ async def handle_findings_subscription():
                             logger.info(f"Successfully triaged finding {finding_id} as {triage_category}")
                         else:
                             logger.warning(f"Unsuccessfully triaged finding {finding_id} as {triage_category}")
+
+                        del finding_details
 
         except Exception as e:
             logger.exception(e, message="Error in findings subscription, reconnecting in 5 seconds...")

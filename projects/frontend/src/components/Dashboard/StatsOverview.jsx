@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   AlertTriangle,
+  CheckCircle,
   ArrowUpRight,
+  Eye,
   FileArchive,
   FileText,
   Layers,
@@ -29,14 +31,57 @@ import {
 } from 'recharts';
 
 // Custom tooltip component that can be reused
+// Custom tooltip component with dynamic positioning
 const CustomTooltip = ({ children, content }) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState('right');
+  const tooltipRef = useRef(null);
+  const containerRef = useRef(null);
+
+  const updatePosition = useCallback(() => {
+    if (containerRef.current && tooltipRef.current) {
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+
+      // Check if there's enough space on the right side
+      const spaceOnRight = viewportWidth - containerRect.right;
+      const tooltipWidth = 288; // max-w-xs is roughly 288px
+
+      if (spaceOnRight < tooltipWidth) {
+        setPosition('left');
+      } else {
+        setPosition('right');
+      }
+    }
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    setIsVisible(true);
+    // Small delay to ensure the tooltip is rendered before positioning
+    setTimeout(updatePosition, 0);
+  }, [updatePosition]);
+
+  const handleMouseLeave = useCallback(() => {
+    setIsVisible(false);
+  }, []);
 
   return (
-    <div className="relative" onMouseEnter={() => setIsVisible(true)} onMouseLeave={() => setIsVisible(false)}>
+    <div
+      ref={containerRef}
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       {children}
       {isVisible && (
-        <div className="absolute z-10 p-2 text-sm bg-gray-800 text-white rounded shadow-lg max-w-xs -mt-2 left-full ml-2">
+        <div
+          ref={tooltipRef}
+          className={`absolute z-10 p-2 text-sm bg-gray-800 text-white rounded shadow-lg max-w-xs -mt-2 ${
+            position === 'right'
+              ? 'left-full ml-2'
+              : 'right-full mr-2'
+          }`}
+        >
           {content}
         </div>
       )}
@@ -145,8 +190,28 @@ const StatsOverview = () => {
                 count
               }
             }
-            files_from_containers: files_enriched_aggregate(
-              where: {originating_object_id: {_is_null: false}, nesting_level: {_gt: 0}}
+            unviewed_files: files_enriched_aggregate(
+              where: {
+                _and: [
+                  {
+                    _or: [
+                      { originating_object_id: { _is_null: true } },
+                      {
+                        _and: [
+                          { originating_object_id: { _is_null: false } },
+                          { nesting_level: { _is_null: false } },
+                          { nesting_level: { _gt: 0 } }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    _not: {
+                      files_view_histories: {}
+                    }
+                  }
+                ]
+              }
             ) {
               aggregate {
                 count
@@ -178,6 +243,24 @@ const StatsOverview = () => {
                 count
               }
             }
+            untriaged_findings: findings_aggregate(
+              where: {
+                _not: {
+                  finding_triage_histories: {}
+                }
+              }
+            ) {
+              aggregate {
+                count
+              }
+            }
+            latest_triage_entries: findings_triage_history(
+              distinct_on: finding_id
+              order_by: [{ finding_id: asc }, { timestamp: desc }]
+            ) {
+              finding_id
+              value
+            }
           }
         `,
         variables: {}
@@ -205,15 +288,26 @@ const StatsOverview = () => {
       const noseyParkerCount = result.data.noseyparker_findings.aggregate.count;
       const yaraCount = result.data.yara_findings.aggregate.count;
 
+      // Process latest triage entries to get counts by value
+      const latestTriageEntries = result.data.latest_triage_entries || [];
+      const triageCounts = latestTriageEntries.reduce((acc, entry) => {
+        acc[entry.value] = (acc[entry.value] || 0) + 1;
+        return acc;
+      }, {});
+
       setStats({
         totalFiles: result.data.files_enriched_aggregate.aggregate.count,
         submittedFiles: result.data.submitted_files.aggregate.count,
         containersProcessed: result.data.containers_processed.aggregate.count,
-        filesFromContainers: result.data.files_from_containers.aggregate.count,
+        unviewedFiles: result.data.unviewed_files.aggregate.count,
         totalFindings: result.data.findings_aggregate.aggregate.count,
         noseyParkerMatches: noseyParkerCount,
         yaraMatches: yaraCount,
-        enabledYaraRules: result.data.yara_rules_aggregate.aggregate.count
+        enabledYaraRules: result.data.yara_rules_aggregate.aggregate.count,
+        untriagedFindings: result.data.untriaged_findings.aggregate.count,
+        truePositiveFindings: triageCounts.true_positive || 0,
+        falsePositiveFindings: triageCounts.false_positive || 0,
+        needsReviewFindings: triageCounts.needs_review || 0
       });
 
 
@@ -489,12 +583,20 @@ const StatsOverview = () => {
               tooltip="Total files submitted to Nemesis"
             />
             <StatCard
-              title="Total Files"
+              title="Total Processed Files"
               value={stats?.totalFiles ?? 0}
               icon={Layers}
               isLoading={isLoading}
               onClick={() => handleNavigation('/files')}
               tooltip="Total files processed by Nemesis, including derived files"
+            />
+            <StatCard
+              title="Unviewed Files"
+              value={stats?.unviewedFiles ?? 0}
+              icon={Eye}
+              isLoading={isLoading}
+              onClick={() => handleNavigation('/files?view_state=unviewed')}
+              tooltip="Files that haven't been viewed by anyone"
             />
             <StatCard
               title="Containers Processed"
@@ -503,14 +605,6 @@ const StatsOverview = () => {
               isLoading={isLoading}
               onClick={() => handleNavigation('/files')}
               tooltip="Archive files (.zip, .7z, etc.) processed"
-            />
-            <StatCard
-              title="Files From Containers"
-              value={stats?.filesFromContainers ?? 0}
-              icon={FileText}
-              isLoading={isLoading}
-              onClick={() => handleNavigation('/files')}
-              tooltip="Files extracted from containers"
             />
           </div>
 
@@ -584,25 +678,40 @@ const StatsOverview = () => {
             />
           </div>
 
-          {!isTimeSeriesLoading && findingsOverTime && findingsOverTime.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm text-gray-500 mb-2">Findings over time</p>
-              <div className="h-24">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={findingsOverTime}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#6B7280" />
-                    <YAxis tick={{ fontSize: 10 }} stroke="#6B7280" />
-                    <RechartsTooltip
-                      formatter={(value) => [`${value} findings`, 'Count']}
-                      labelFormatter={(label) => `Date: ${label}`}
-                    />
-                    <Line type="monotone" dataKey="count" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+            <StatCard
+              title="Untriaged Findings"
+              value={stats?.untriagedFindings ?? 0}
+              icon={AlertTriangle}
+              isLoading={isLoading}
+              onClick={() => handleNavigation('/findings?triage_state=untriaged')}
+              tooltip="Findings that have not been triaged yet"
+            />
+            <StatCard
+              title="True Positives"
+              value={stats?.truePositiveFindings ?? 0}
+              icon={CheckCircle}
+              isLoading={isLoading}
+              onClick={() => handleNavigation('/findings?triage_state=true_positive')}
+              tooltip="Findings marked as true positives"
+            />
+            <StatCard
+              title="False Positives"
+              value={stats?.falsePositiveFindings ?? 0}
+              icon={X}
+              isLoading={isLoading}
+              onClick={() => handleNavigation('/findings?triage_state=false_positive')}
+              tooltip="Findings marked as false positives"
+            />
+            <StatCard
+              title="Needs Review"
+              value={stats?.needsReviewFindings ?? 0}
+              icon={Clock}
+              isLoading={isLoading}
+              onClick={() => handleNavigation('/findings?triage_state=needs_review')}
+              tooltip="Findings that need further review"
+            />
+          </div>
 
 
         </DashboardSection>
@@ -671,7 +780,9 @@ const StatsOverview = () => {
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">Status: {detail.status}</div>
                 </div>
-                <div className="text-sm font-medium text-blue-500">{detail.runtime_seconds.toFixed(2)}s</div>
+                <div className="text-sm font-medium text-blue-500">
+                  {detail.runtime_seconds ? detail.runtime_seconds.toFixed(2) : '0.00'}s
+                </div>
               </div>
             ))}
 
@@ -704,7 +815,9 @@ const StatsOverview = () => {
                 )}
               </div>
               <div className="text-right">
-                <div className="text-sm font-medium text-red-500">{workflow.runtime_seconds?.toFixed(2)}s</div>
+                <div className="text-sm font-medium text-red-500">
+                  {workflow.runtime_seconds ? workflow.runtime_seconds.toFixed(2) : '0.00'}s
+                </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   {new Date(workflow.timestamp).toLocaleTimeString()}
                 </div>

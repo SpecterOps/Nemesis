@@ -4,7 +4,9 @@ import { useSearchParams } from 'react-router-dom';
 
 const FindingsFilters = ({
     findings,
-    onFilteredDataChange
+    onFilteredDataChange,
+    sortColumn,
+    sortDirection
 }) => {
     const [searchParams, setSearchParams] = useSearchParams();
 
@@ -121,9 +123,9 @@ const FindingsFilters = ({
         }
     }, [categoryFilter, severityFilter, originFilter, triageFilter, triageSourceFilter, objectIdFilter, setSearchParams, searchParams]);
 
-    // Memoized filtered findings calculation
+    // Memoized filtered and sorted findings calculation
     const filteredFindings = useMemo(() => {
-        return findings.filter(finding => {
+        const filtered = findings.filter(finding => {
             // Category filter
             if (categoryFilter !== 'all' && finding.category !== categoryFilter) return false;
 
@@ -173,7 +175,44 @@ const FindingsFilters = ({
 
             return true;
         });
-    }, [findings, categoryFilter, severityFilter, originFilter, triageFilter, triageSourceFilter, objectIdFilter]);
+
+        // Apply sorting
+        return filtered.sort((a, b) => {
+            let comparison = 0;
+            
+            switch (sortColumn) {
+                case 'severity':
+                    comparison = a.severity - b.severity;
+                    break;
+                case 'created_at':
+                    comparison = new Date(a.created_at) - new Date(b.created_at);
+                    break;
+                case 'finding_name':
+                    comparison = a.finding_name.localeCompare(b.finding_name);
+                    break;
+                case 'category':
+                    comparison = a.category.localeCompare(b.category);
+                    break;
+                case 'origin_name':
+                    comparison = a.origin_name.localeCompare(b.origin_name);
+                    break;
+                case 'file_path':
+                    const pathA = a.files_enriched?.path || '';
+                    const pathB = b.files_enriched?.path || '';
+                    comparison = pathA.localeCompare(pathB);
+                    break;
+                case 'triage_value':
+                    const triageA = a.finding_triage_histories.length > 0 ? a.finding_triage_histories[0].value : '';
+                    const triageB = b.finding_triage_histories.length > 0 ? b.finding_triage_histories[0].value : '';
+                    comparison = triageA.localeCompare(triageB);
+                    break;
+                default:
+                    comparison = new Date(a.created_at) - new Date(b.created_at);
+            }
+            
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    }, [findings, categoryFilter, severityFilter, originFilter, triageFilter, triageSourceFilter, objectIdFilter, sortColumn, sortDirection]);
 
     // Notify parent component of filtered data changes
     useEffect(() => {

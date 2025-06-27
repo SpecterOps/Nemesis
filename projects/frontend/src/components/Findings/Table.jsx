@@ -1,36 +1,104 @@
 import Tooltip from '@/components/shared/Tooltip2';
-import { Bot, HelpCircle, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Bot, ChevronDown, ChevronUp, HelpCircle, ThumbsDown, ThumbsUp } from 'lucide-react';
 import React from 'react';
 import { useFileNavigation } from './navigation';
 
+// Sortable header component
+const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
+  const isActive = currentSort === column;
+  const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
+  
+  return (
+    <div 
+      className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
+      onClick={() => onSort(column, nextDirection)}
+    >
+      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{children}</span>
+      <div className="ml-1 flex flex-col">
+        {isActive ? (
+          currentDirection === 'asc' ? (
+            <ChevronUp className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+          ) : (
+            <ChevronDown className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+          )
+        ) : (
+          <div className="w-3 h-3" />
+        )}
+      </div>
+    </div>
+  );
+};
 
-export const TableHeaders = ({ isTriageMode }) => (
+
+export const TableHeaders = ({ isTriageMode, sortColumn, sortDirection, onSort }) => (
     <div className="min-w-full">
         <div className="flex bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
             {isTriageMode && (
                 <div className="flex-shrink-0 w-8 text-sm font-medium text-gray-500 dark:text-gray-400 text-center" />
             )}
-            <div className="flex-shrink-0 w-16 text-sm font-medium text-gray-500 dark:text-gray-400 text-center">
+            <SortableHeader
+                column="severity"
+                currentSort={sortColumn}
+                currentDirection={sortDirection}
+                onSort={onSort}
+                className="flex-shrink-0 w-16 justify-center"
+            >
                 Severity
-            </div>
-            <div className="flex-shrink-0 w-40 text-sm font-medium text-gray-500 dark:text-gray-400 text-left">
+            </SortableHeader>
+            <SortableHeader
+                column="created_at"
+                currentSort={sortColumn}
+                currentDirection={sortDirection}
+                onSort={onSort}
+                className="flex-shrink-0 w-40"
+            >
                 Timestamp
-            </div>
-            <div className="flex-shrink-0 w-48 text-sm font-medium text-gray-500 dark:text-gray-400 text-left">
+            </SortableHeader>
+            <SortableHeader
+                column="finding_name"
+                currentSort={sortColumn}
+                currentDirection={sortDirection}
+                onSort={onSort}
+                className="flex-shrink-0 w-48"
+            >
                 Name
-            </div>
-            <div className="flex-shrink-0 w-40 text-sm font-medium text-gray-500 dark:text-gray-400 text-left">
+            </SortableHeader>
+            <SortableHeader
+                column="category"
+                currentSort={sortColumn}
+                currentDirection={sortDirection}
+                onSort={onSort}
+                className="flex-shrink-0 w-40"
+            >
                 Category
-            </div>
-            <div className="flex-shrink-0 w-40 text-sm font-medium text-gray-500 dark:text-gray-400 text-left">
+            </SortableHeader>
+            <SortableHeader
+                column="origin_name"
+                currentSort={sortColumn}
+                currentDirection={sortDirection}
+                onSort={onSort}
+                className="flex-shrink-0 w-40"
+            >
                 Origin
-            </div>
-            <div className="flex-grow min-w-[300px] text-sm font-medium text-gray-500 dark:text-gray-400 text-left">
+            </SortableHeader>
+            <SortableHeader
+                column="file_path"
+                currentSort={sortColumn}
+                currentDirection={sortDirection}
+                onSort={onSort}
+                className="flex-grow min-w-[300px]"
+            >
                 File Path
-            </div>
-            <div className="flex-shrink-0 w-[140px] text-sm font-medium text-gray-500 dark:text-gray-400 text-center">
-                <div className="mr-6">Actions</div>
-            </div>
+            </SortableHeader>
+            <SortableHeader
+                column="triage_value"
+                currentSort={sortColumn}
+                currentDirection={sortDirection}
+                onSort={onSort}
+                className="flex-shrink-0 w-[140px] justify-center"
+            >
+                Actions
+            </SortableHeader>
         </div>
     </div>
 );
