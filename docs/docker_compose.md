@@ -1,14 +1,17 @@
 # Deploying Nemesis with Docker Compose
+
 In general, we recommend that people use the `./tools/nemesis-ctl.sh` script to deploy Nemesis. However, more complex deployment scenarios will require understanding how to deploy Nemesis components manually using Docker Compose. The documentation below details how you can launch Nemesis in a variety
 
-# Use Published Production Docker Images
-## Step 1 - Configure environment variables
+## Use Published Production Docker Images
+
+### Step 1 - Configure environment variables
 ```bash
 cp env.example .env
 vim .env
 ```
 
-## Step 2 - Pull and start the images
+### Step 2 - Pull and start the images
+
 The examples below show various ways you can pull and start Nemesis.
 
 **Example 1: Start production images (no monitoring/jupyter)**
@@ -37,14 +40,14 @@ docker compose \
 ```
 
 
-# Building and Using Production Images Locally
+## Building and Using Production Images Locally
 
-**Step 1 - Build base images**
+### Step 1 - Build base images
 ```bash
 docker compose -f compose.base.yaml build
 ```
 
-## Step 2 - Build & then start production images
+### Step 2 - Build & then start production images
 **Example 4: Build & then start production images without monitoring/jupyter**
 ```bash
 docker compose \
@@ -64,7 +67,7 @@ docker compose \
 ```
 
 
-# Building and Using Development Images
+## Building and Using Development Images
 
 Development images are not published and must be built locally. If you make any local modifications to project code, you need to build + run the development images.
 
@@ -73,19 +76,19 @@ The easiest method to build + run dev images is to just use the `dev` target ins
 ./tools/nemesis-ctl.sh start dev [--monitoring] [--jupyter]
 ```
 
-## Step 1 - Configure environment variables
+### Step 1 - Configure environment variables
 ```bash
 cp env.example .env
 vim .env
 ```
 
-## Step 2 - Build base images
+### Step 2 - Build base images
 ```bash
 docker compose -f compose.base.yaml build
 ```
 
-## Step 3 - Build and start dev images
-**Example 6: Build and start dev images (implicitly merges compose.yaml and compose.override.yaml)**
+### Step 3 - Build and start dev images
+**Example 6: Build and start dev images without monitoring/jupyter (implicitly merges compose.yaml and compose.override.yaml)**
 ```bash
 docker compose up -d
 ```
