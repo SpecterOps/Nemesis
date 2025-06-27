@@ -42,7 +42,7 @@ poetry run python -m cli <command>
 
 Submit files to Nemesis for processing and enrichment.
 
-The `./tools/submit.sh` script wraps the docker compose syntax automatically.
+The `./tools/submit.sh` script wraps the docker syntax automatically.
 
 ### Basic Usage
 
@@ -125,7 +125,7 @@ Options:
 
 Monitor a folder for new files and automatically submit them to Nemesis for processing. This includes both existing files (optional) and any new files added to the folder while monitoring is active.
 
-The `./tools/monitor_folder.sh` script wraps the docker compose syntax automatically.
+The `./tools/monitor_folder.sh` script wraps the docker syntax automatically.
 
 ### Basic Usage
 
@@ -206,7 +206,7 @@ poetry run python -m cli monitor /path/to/directory
 
 Synchronize data between Mythic C2 and Nemesis, including callbacks, tasks, and file downloads.
 
-The `./tools/mythic_connect.sh` script wraps the docker compose syntax automatically.
+The `./tools/mythic_connect.sh` script wraps the docker syntax automatically.
 
 ### Configuration
 
@@ -248,7 +248,7 @@ networking:
 ./tools/mythic_connect.sh /path/to/settings_mythic.yaml
 ```
 
-**docker compose :**
+**docker :**
 ```bash
 # Run with mounted config file
 docker run \
