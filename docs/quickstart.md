@@ -25,7 +25,7 @@ cd Nemesis
 ```
 
 ### Step 2: Configuration
-Create a `.env` file using the provided example as a template:
+Create a `.env` file using the provided [env.example](../env.example) as a template:
 ```bash
 cp env.example .env
 ```
