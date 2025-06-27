@@ -65,7 +65,13 @@ docker compose \
 
 
 # Building and Using Development Images
-Development images are not published and must be built locally. The instructions below detail how.
+
+Development images are not published and must be built locally. If you make any local modifications to project code, you need to build + run the development images.
+
+The easiest method to build + run dev images is to just use the `dev` target instead of `prod` with `./tools/nemesis-ctl.sh` :
+```bash
+./tools/nemesis-ctl.sh start dev [--monitoring] [--jupyter]
+```
 
 ## Step 1 - Configure environment variables
 ```bash
