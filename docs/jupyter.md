@@ -25,7 +25,7 @@ This is also linked to by the Nemesis `Help` menu.
 
 ### Environment Variable Password
 
-Use the `JUPYTER_PASSWORD` environment variable password to log in.
+Use the `JUPYTER_PASSWORD` value in .env (or ENV variable) to log in. If this value is not set, you can discover the randomized value by running `docker compose logs jupyter | grep PASS` .
 
 ## Getting Started
 
@@ -34,6 +34,7 @@ Use the `JUPYTER_PASSWORD` environment variable password to log in.
 The service comes with pre-configured sample notebooks:
 
 - **`1_getting_started.ipynb`**: Introduction to querying Nemesis data with examples
+- **`2_triage_false_positive_findings.ipynb`**: Marking findings with specific criteria as false positives
 
 ### 2. Pre-installed Libraries
 

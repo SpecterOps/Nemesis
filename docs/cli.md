@@ -12,7 +12,7 @@ The CLI supports four main operations:
 - **Outflank Connector**: Ingest data from Outflank Stage1 C2 into Nemesis
 
 ## Installation & Setup
-You can run the Nemesis CLI via its published docker image or by building/running the python project locally. In general, the easiest way to use it is with the docker helper scripts found in the `./tools/` folder that are detailed below.
+You can run the Nemesis CLI via its published docker image or by building/running the Python project locally. In general, the easiest way to use it is with the docker helper scripts found in the `./tools/` folder that are detailed below.
 
 ### Docker Method (Recommended)
 
@@ -25,9 +25,9 @@ You can then manually invoke it using `docker run`. For example, the following m
 docker run --rm --network host -v /tmp/:/data ghcr.io/specterops/nemesis/cli submit /data -r
 ```
 
-The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker syntax for ease of use.
+The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tools/mythic_connect.sh` wrap the required docker syntax for ease of use and are highly recommended.
 
-If you want to manually build the docker images, see [the Nemesis CLI project's README](../projects/cli/README.md).
+If you want to manually build the docker images, see [the Nemesis CLI project's README]([../projects/cli/README.md](https://github.com/SpecterOps/Nemesis/blob/main/projects/cli/README.md)).
 
 ### Poetry Method (Local Usage or Development)
 To use the Nemesis CLI locally or for development, install at least Python 3.12.8 and [install Poetry](https://python-poetry.org/docs/#installation). Then, run the following:
@@ -110,16 +110,16 @@ Options:
   --help                 Show this message and exit.
 ```
 
-| Option        | Default               | Description                  |
-| ------------- | --------------------- | ---------------------------- |
-| `--host`      | `0.0.0.0:7443`        | Nemesis host and port        |
-| `--recursive` | `false`               | Process subdirectories       |
-| `--workers`   | `10`                  | Number of upload threads     |
-| `--username`  | `n`                   | Basic auth username          |
-| `--password`  | `n`                   | Basic auth password          |
-| `--project`   | `assess-test`         | Project name for metadata    |
-| `--agent-id`  | `submit<user>@<host>` | Agent ID for metadata        |
-| `--debug`     | `false`               | Enable debug logging         |
+| Option        | Default               | Description               |
+| ------------- | --------------------- | ------------------------- |
+| `--host`      | `0.0.0.0:7443`        | Nemesis host and port     |
+| `--recursive` | `false`               | Process subdirectories    |
+| `--workers`   | `10`                  | Number of upload threads  |
+| `--username`  | `n`                   | Basic auth username       |
+| `--password`  | `n`                   | Basic auth password       |
+| `--project`   | `assess-test`         | Project name for metadata |
+| `--agent-id`  | `submit<user>@<host>` | Agent ID for metadata     |
+| `--debug`     | `false`               | Enable debug logging      |
 
 ## Folder Monitoring
 
@@ -137,12 +137,11 @@ The `./tools/monitor_folder.sh` script wraps the docker syntax automatically.
 # Monitor only for new files (skip existing files)
 ./tools/monitor_folder.sh /path/to/directory --only-monitor
 
-# Monitor a directory upload files to a nemesis server
+# Monitor a directory upload files to a Nemesis server
 ./tools/monitor_folder.sh /path/to/directory \
   --host nemesis.example.com:7443 \
   --username your-username \
   --password your-password \
-  --only-monitor
 ```
 
 **docker:**
@@ -176,7 +175,6 @@ docker run \
   --project my-project \
   --agent-id my-agent \
   --workers 5  \
-  --only-monitor \
   --debug
 ```
 
@@ -190,16 +188,16 @@ poetry run python -m cli monitor /path/to/directory
 
 ### Options Reference
 
-| Option          | Default                   | Description                                    |
-| --------------- | ------------------------- | ---------------------------------------------- |
-| `--host`        | `0.0.0.0:7443`            | Nemesis host and port                          |
-| `--username`    | `n`                       | Basic auth username                            |
-| `--password`    | `n`                       | Basic auth password                            |
-| `--project`     | `assess-test`             | Project name for metadata                      |
-| `--agent-id`    | `monitor<user>@<host>`    | Agent ID for metadata                          |
-| `--workers`     | `10`                      | Number of upload threads for initial submission |
-| `--only-monitor`| `false`                   | Skip existing files, only monitor for new ones |
-| `--debug`       | `false`                   | Enable debug logging                           |
+| Option           | Default                | Description                                     |
+| ---------------- | ---------------------- | ----------------------------------------------- |
+| `--host`         | `0.0.0.0:7443`         | Nemesis host and port                           |
+| `--username`     | `n`                    | Basic auth username                             |
+| `--password`     | `n`                    | Basic auth password                             |
+| `--project`      | `assess-test`          | Project name for metadata                       |
+| `--agent-id`     | `monitor<user>@<host>` | Agent ID for metadata                           |
+| `--workers`      | `10`                   | Number of upload threads for initial submission |
+| `--only-monitor` | `false`                | Skip existing files, only monitor for new ones  |
+| `--debug`        | `false`                | Enable debug logging                            |
 
 
 ## Mythic Connector

@@ -15,6 +15,7 @@ provides automated analysis and assists with triage.
 ## Design Choices
 
 Many of the decisions made with Nemesis 1.X resulted in an over-engineered system that was less flexible and difficult to expand/maintain. Nemesis 2.0 aims to take lessons learned and simplifies the entire architecture:
+
 - Docker/Docker-Compose is used instead of k8s for speed of development
 and general ease of use, especially as we didn't experiment with scaling in the
 previous version (we may move back to k8s at some point).

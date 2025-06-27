@@ -58,6 +58,8 @@ When clicking on a file entry, you will be brought to the [File Details](#file-d
 
 ![Nemesis Dashboard File View State](images/nemesis-dashboard-files-view-state.png)
 
+Also, clicking any column will sort by that column's values.
+
 #### File Triage Mode
 
 In the main files view, type `t` to enter file triage mode:
@@ -139,6 +141,8 @@ As the text details, use ↑↓ to navigate findings, → to view finding detail
 ![Nemesis Finding Triage](images/nemesis-dashboard-finding-triage2.png)
 
 When combined with the default "Untriaged Only" filter, this allows you to easily and collaboratively triage a large number of findings.
+
+Also, clicking any column will sort by that column's values.
 
 ### Dashboard Settings
 
