@@ -718,6 +718,7 @@ services:
     depends_on: [jaeger]
 
   jaeger:
+    profiles: ["monitoring"]
     image: jaegertracing/jaeger:latest  # v2.x image
     user: "0:0"
     environment:
