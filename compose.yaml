@@ -129,6 +129,7 @@ services:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     depends_on: [noseyparker-scanner, placement]
     network_mode: "service:noseyparker-scanner"
