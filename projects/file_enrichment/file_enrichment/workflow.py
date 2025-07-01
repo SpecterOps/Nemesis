@@ -22,7 +22,7 @@ from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from file_enrichment_modules.module_loader import ModuleLoader
 
 from .file_feature_extractor import FileFeatureExtractor
-from .logging import configure_logging
+from .logger import configure_logging
 
 logger = structlog.get_logger(module=__name__)
 
