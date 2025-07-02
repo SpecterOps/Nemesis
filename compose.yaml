@@ -196,8 +196,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    volumes:
-      - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
+    volumes: []
+      # Uncomment the following line to use custom YARA rules
+      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
     environment:
       - APP_ID=file-enrichment
       - DAPR_GRPC_PORT=50003
@@ -781,9 +782,9 @@ services:
     profiles: ["monitoring"]
     image: grafana/grafana:11.4.0
     environment:
-      # - GF_AUTH_ANONYMOUS_ENABLED=true
-      # - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      # - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Editor
+      # - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-Qwerty12345}
       # - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-nemesis}
       - GF_SERVER_DOMAIN=${EXTERNAL_HOST:-https://localhost}
       - GF_SERVER_ROOT_URL=${EXTERNAL_HOST:-https://localhost}/grafana
