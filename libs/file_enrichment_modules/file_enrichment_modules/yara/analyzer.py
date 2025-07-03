@@ -15,22 +15,33 @@ logger = structlog.get_logger(module=__name__)
 def yara_match_to_markdown(match):
     markdown = [
         f"# Yara Rule: {match['rule_name']}",
-        f"{match['rule_description']}\n",
-        '### Matches\nMatching strings in the form of "<offset>: <matched data>".',
     ]
+    try:
+        if 'rule_description' in match and match['rule_description']:
+            markdown.append(f"{match['rule_description']}\n")
 
-    for string_match in match["rule_string_matches"]:
-        markdown.append(f"\n**Yara Rule Identifier:** `{string_match['identifier']}`\n```text")
-        for instance in string_match["yara_string_match_instances"]:
-            if "matched_data_text" in instance:
-                markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_text']}"])
-            elif "matched_data_hex" in instance:
-                markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_hex']}"])
-            else:
-                markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_b64']}"])
+        markdown.append('### Matches\nMatching strings in the form of "<offset>: <matched data>".')
 
-    markdown.extend(["```\n# Rule Text", f"```yara\n{match['rule_text']}"])
+        for string_match in match["rule_string_matches"]:
+            markdown.append(f"\n**Yara Rule Identifier:** `{string_match['identifier']}`\n```text")
+            for instance in string_match["yara_string_match_instances"]:
+                if "matched_data_text" in instance:
+                    markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_text']}"])
+                elif "matched_data_hex" in instance:
+                    markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_hex']}"])
+                else:
+                    markdown.extend([f"0x{instance['offset']:08x}: {instance['matched_data_b64']}"])
 
+        markdown.append("```\n")
+
+        if 'rule_text' in match and match['rule_text']:
+            markdown.extend(["# Rule Text", f"```yara\n{match['rule_text']}"])
+        else:
+            markdown.extend(["# Rule Text", "```text\n*Rule text not available*"])
+
+        markdown.append("```")
+    except Exception as e:
+        markdown.append(f"\n**Error in building markdown from Yara-x match in `yara` file_enrichment module:** {e}")
     return "\n".join(markdown)
 
 

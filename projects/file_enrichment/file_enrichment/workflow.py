@@ -765,7 +765,7 @@ def enrichment_module_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
         # Track in-flight tasks with their module names
         in_flight_tasks = {}  # task -> module_name mapping
 
-        # execution_order = ["filename"] # for testing a single specific module
+        # execution_order = ["yara"] # for testing a single specific module
 
         # Process modules with rolling window
         for module_name in execution_order:
