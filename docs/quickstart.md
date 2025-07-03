@@ -13,9 +13,8 @@ Ensure your machine meets the following requirements:
 - **Architecture**: x64 or Arm
 - **Disk:** 80 GB
 
-Docker/Docker-Compose:
-
-- Docker version 28.0.0 or higher is recommended. See [Docker's installation instructions](https://docs.docker.com/engine/install/) for instructions on installing Docker. Running the Docker Engine on Linux or on OS X via Docker Desktop is recommended. If using Docker Desktop, ensure that the VM is configured with sufficient RAM/Disk/swap.
+- **Docker/Docker-Compose:**
+  - Docker version 28.0.0 or higher is recommended. See [Docker's installation instructions](https://docs.docker.com/engine/install/) for instructions on installing Docker. Running the Docker Engine on Linux or on OS X via Docker Desktop is recommended. If using Docker Desktop, ensure that the VM is configured with sufficient RAM/Disk/swap.
 
 
 ### Step 1: Clone the Nemesis Repository
