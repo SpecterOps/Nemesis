@@ -66,6 +66,8 @@ const YaraRulesManager = () => {
   const [isNewRule, setIsNewRule] = useState(false);
   const [newRuleSource, setNewRuleSource] = useState('');
   const [needsReload, setNeedsReload] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
+  const [showReloadAlert, setShowReloadAlert] = useState(false);
 
   // Set source to username when creating a new rule
   useEffect(() => {
@@ -186,6 +188,7 @@ const YaraRulesManager = () => {
         r.name === rule.name ? { ...r, content: newContent } : r
       ));
       setNeedsReload(true);
+      setShowReloadAlert(true);
       setIsEditorOpen(false);
     } catch (err) {
       setError(`Failed to update rule: ${err.message}`);
@@ -248,6 +251,7 @@ const YaraRulesManager = () => {
       // Update local state
       setRules([...rules, result.data.insert_yara_rules_one]);
       setNeedsReload(true);
+      setShowReloadAlert(true);
       setIsEditorOpen(false);
       setIsNewRule(false);
       setNewRuleSource('');
@@ -296,6 +300,7 @@ const YaraRulesManager = () => {
         r.name === rule.name ? { ...r, enabled: !r.enabled } : r
       ));
       setNeedsReload(true);
+      setShowReloadAlert(true);
     } catch (err) {
       setError(`Failed to toggle rule: ${err.message}`);
     }
@@ -304,10 +309,18 @@ const YaraRulesManager = () => {
   // Add reload handler
   const handleReload = async () => {
     try {
+      setIsReloading(true);
+      setShowReloadAlert(false);
       await fetch('/api/system/yara/reload', { method: 'POST' });
       setNeedsReload(false);
+
+      // Show reload notification for 20 seconds
+      setTimeout(() => {
+        setIsReloading(false);
+      }, 20000);
     } catch (err) {
       setError(`Failed to reload Yara engine: ${err.message}`);
+      setIsReloading(false);
     }
   };
 
@@ -326,9 +339,10 @@ const YaraRulesManager = () => {
   return (
     <div className="space-y-6 w-full overflow-x-hidden">
       <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-lg overflow-hidden w-full">
-        <div className="px-6 py-4 border-b dark:border-gray-700 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Yara Rules</h2>
-          <div className="flex space-x-2">
+        <div className="px-6 py-4 border-b dark:border-gray-700">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Yara Rules</h2>
+            <div className="flex space-x-2">
             <button
               onClick={() => {
                 setIsNewRule(true);
@@ -343,7 +357,7 @@ const YaraRulesManager = () => {
             <Tooltip content="Signal the Nemesis Yara engine to reload the modified rule set">
               <button
                 onClick={handleReload}
-                disabled={!needsReload}
+                disabled={!needsReload || isReloading}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${needsReload
                   ? 'bg-green-600 text-white hover:bg-green-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
@@ -353,7 +367,27 @@ const YaraRulesManager = () => {
                 <span>Reload Yara Engine</span>
               </button>
             </Tooltip>
+            </div>
           </div>
+
+          {/* Alert Messages */}
+          {showReloadAlert && needsReload && !isReloading && (
+            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+              <span className="text-yellow-800 dark:text-yellow-300 font-medium">
+                Click 'Reload Yara Engine' to Register Rule Changes
+              </span>
+            </div>
+          )}
+
+          {isReloading && (
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 dark:border-blue-400"></div>
+              <span className="text-blue-800 dark:text-blue-300 font-medium">
+                Yara Engine is Reloading...
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="p-6">

@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1]
+
+### Changed
+
+- Conditionally start trace logging
+- Reverted Grafana to anonymous auth (still behind common basic auth)
+- Dashboard status updates on Yara engine reloads for rule changes
+
+### Fixed
+
+- Yara rule match errors when a rule description wasn't present
+- Don't exit when `cli` folder monitoring starts on an empty folder
+
+
 ## [2.0.0] - 2025-06-27
 
 Complete, nearly ground-up rewrite of the 1.0 branch.
