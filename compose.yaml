@@ -675,9 +675,13 @@ services:
     image: traefik:v3.3.2
     command:
       - "--api.insecure=true"
+      # - "--log.level=DEBUG"
       - "--log.level=WARN"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.file=true"
+      - "--providers.file.directory=/config"
+      - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
@@ -695,7 +699,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./auth:/auth:ro
       - ./infra/traefik/certs:/certs:ro
-
+      - ./infra/traefik/config:/config:ro
   placement:
     image: "daprio/dapr:1.15.5"
     command: ["./placement", "-port", "50006"]
