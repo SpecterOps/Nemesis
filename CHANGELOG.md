@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Yara rule match errors when a rule description wasn't present
 - Don't exit when `cli` folder monitoring starts on an empty folder
+- Fix for using custom SSL certificates
 
 
 ## [2.0.0] - 2025-06-27
