@@ -124,7 +124,7 @@ async def store_noseyparker_results(
                     cur.execute(
                         """
                         UPDATE workflows
-                        SET enrichments_success = array_append(enrichments_failure, %s)
+                        SET enrichments_success = array_append(enrichments_success, %s)
                         WHERE object_id = %s
                         """,
                         ("noseyparker", object_id),
