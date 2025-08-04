@@ -281,8 +281,11 @@ AS $$
             ) as rn
         FROM document_search_results
         WHERE
-            content_vector @@ plainto_tsquery('simple', search_query)
-            AND (path_pattern IS NULL OR path LIKE path_pattern)
+            (
+                content_vector @@ plainto_tsquery('simple', search_query)
+                OR content ILIKE '%' || search_query || '%'
+                OR file_name ILIKE '%' || search_query || '%'
+            )            AND (path_pattern IS NULL OR path LIKE path_pattern)
             AND (agent_pattern IS NULL OR agent_id LIKE agent_pattern)
             AND (project_name IS NULL OR project = project_name)
             AND (start_date IS NULL OR "timestamp" >= start_date)
