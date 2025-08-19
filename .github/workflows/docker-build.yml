@@ -58,6 +58,36 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git info
+
+      - name: Generate version.json
+        run: |
+          cat > version.json << EOF
+          {
+            "git": {
+              "sha": "${{ github.sha }}",
+              "shaShort": "$(echo ${{ github.sha }} | cut -c1-7)",
+              "branch": "${{ github.ref_name }}",
+              "tag": "${{ github.ref_type == 'tag' && github.ref_name || '' }}",
+              "dirty": false,
+              "commitTimestamp": "$(git log -1 --format=%cI)",
+              "commitMessage": "$(git log -1 --pretty=%B | head -n 1)",
+              "commitAuthor": "$(git log -1 --pretty=format:'%an')"
+            },
+            "build": {
+              "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+              "source": "GitHub Actions"
+            }
+          }
+          EOF
+          echo "Generated version.json:"
+          cat version.json
+          # Copy to frontend public directory for frontend service
+          if [ "${{ matrix.service.name }}" = "frontend" ]; then
+            cp version.json ./projects/frontend/public/version.json
+            echo "Copied version.json to frontend public directory"
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
