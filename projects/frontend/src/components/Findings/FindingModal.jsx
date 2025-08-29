@@ -24,7 +24,18 @@ const FindingModal = ({
     : { type: 'string', data: 'No data available' };
   
   // Handle case where data is an array (common format) - take first element
-  const findingData = Array.isArray(parsedData) ? parsedData[0] : parsedData;
+  let findingData = Array.isArray(parsedData) ? parsedData[0] : parsedData;
+  
+  // Handle double JSON encoding - if findingData is still a string, parse it again
+  if (typeof findingData === 'string') {
+    try {
+      findingData = JSON.parse(findingData);
+    } catch (e) {
+      // If parsing fails, treat it as plain text
+      findingData = { type: 'string', data: findingData };
+    }
+  }
+  
   const readableData = findingData.type === 'finding_summary'
     ? { type: 'string', data: findingData.metadata.summary }
     : findingData;
