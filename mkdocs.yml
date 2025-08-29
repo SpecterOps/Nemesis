@@ -18,11 +18,12 @@ nav:
   - Usage:
     - usage_guide.md
     - cli.md
+    - containers.md
+    - agents.md
     - troubleshooting.md
     - performance.md
     - yara.md
     - chromium.md
-    - agents.md
 
   - Services:
     - dapr.md
