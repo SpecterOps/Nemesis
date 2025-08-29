@@ -28,6 +28,8 @@ class CertificateAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
+        self.size_limit = 50000000  # only check the first 50 megs, for efficiency
+
         # Yara rule to check for certificate content
         self.yara_rule = yara_x.compile("""
 rule Certificate_File
@@ -51,8 +53,13 @@ rule Certificate_File
 }
         """)
 
-    def should_process(self, object_id: str) -> bool:
-        """Determine if this module should run."""
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+        """Determine if this module should run.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+        """
         file_enriched = get_file_enriched(object_id)
 
         # Check file extension first
@@ -76,10 +83,18 @@ rule Certificate_File
             return True
 
         # Check using Yara rule as a fallback
-        file_bytes = self.storage.download_bytes(file_enriched.object_id)
+        if file_path:
+            # Use provided file path
+            with open(file_path, "rb") as f:
+                num_bytes = min(file_enriched.size, self.size_limit)
+                file_bytes = f.read(num_bytes)
+        else:
+            # Fallback to downloading the file itself
+            num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
+            file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
+
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
 
-        logger.debug(f"CertificateAnalyzer should_run: {should_run}")
         return should_run
 
     def _format_extension_value(self, ext_name, ext_value):
@@ -273,6 +288,7 @@ rule Certificate_File
 
         # If we get here, we couldn't parse the certificate
         logger.error("Could not parse certificate file in any known format!")
+        return None, None
 
     def _load_pem_certificates(self, data):
         """Load one or more PEM certificates from data."""
@@ -519,7 +535,7 @@ rule Certificate_File
             logger.error(f"Error getting fingerprint: {str(e)}")
             return "Unknown"
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process certificate file."""
         try:
             file_enriched = get_file_enriched(object_id)
@@ -527,9 +543,36 @@ rule Certificate_File
             transforms = []
             findings = []
 
-            with self.storage.download(file_enriched.object_id) as temp_file:
+            logger.debug(f"CERT file_path: {file_path}")
+
+            certificates = None
+            used_password = None
+
+            if file_path:
                 try:
-                    certificates, used_password = self._load_certificates(temp_file.name)
+                    certificates, used_password = self._load_certificates(file_path)
+                except Exception as e:
+                    logger.exception(
+                        e,
+                        message="Error loading certificate file from passed file",
+                        object_id=file_enriched.object_id,
+                        file_name=file_enriched.file_name,
+                        file_path=file_path,
+                    )
+            else:
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    try:
+                        certificates, used_password = self._load_certificates(temp_file.name)
+                    except Exception as e:
+                        logger.exception(
+                            e,
+                            message="Error loading certificate file from downloaded file",
+                            object_id=file_enriched.object_id,
+                            file_name=file_enriched.file_name,
+                        )
+
+            if certificates:
+                try:
                     cert_info_list = []
                     expired_certs = []
 

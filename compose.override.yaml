@@ -14,6 +14,8 @@ services:
       - ./libs/:/src/libs/
       - ./projects/web_api/web_api:/src/projects/web_api/web_api
       - /src/projects/web_api/.venv
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
 
   noseyparker-scanner:
     image: !reset null
@@ -24,16 +26,14 @@ services:
     environment:
       - RUST_LOG=debug
 
-  dotnet-api:
+  dotnet-service:
     image: !reset null
     build:
       context: .
-      dockerfile: ./projects/dotnet_api/Dockerfile
+      dockerfile: ./projects/dotnet_service/Dockerfile
       target: dev
-    volumes:
-      - ./libs/:/src/libs/
-      - ./projects/dotnet_api/dotnet_api:/src/projects/dotnet_api/dotnet_api
-      - /src/projects/dotnet_api/.venv
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
 
   file-enrichment:
     image: !reset null
@@ -42,7 +42,7 @@ services:
       dockerfile: ./projects/file_enrichment/Dockerfile
       target: dev
     environment:
-      - LOG_LEVEL=DEBUG
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
     volumes:
       - ./libs/:/src/libs/
       - ./projects/file_enrichment/file_enrichment:/src/projects/file_enrichment/file_enrichment
@@ -57,19 +57,19 @@ services:
       target: dev
     command: >
       sh -c "
-        mkdir -p /app-runtime &&
-        cp -r /app/* /app-runtime/ &&
+        if [ -f /version.json ]; then cp /version.json /app/public/version.json; fi &&
         SECRET=\"$$HASURA_ADMIN_SECRET\" &&
-        sed -i \"s/\\$$HASURA_ADMIN_SECRET/$$SECRET/g\" /app-runtime/index.html &&
-        cd /app-runtime &&
+        echo \"window.ENV = { HASURA_ADMIN_SECRET: '$$SECRET' };\" > /app/public/env.js &&
+        cd /app &&
         npm run dev
       "
     volumes:
       - ./projects/frontend/index.html:/app/index.html:ro
       - ./projects/frontend/package.json:/app/package.json:ro
-      - ./projects/frontend/public:/app/public:ro
+      - ./projects/frontend/public:/app/public
       - ./projects/frontend/src:/app/src:ro
       - ./projects/frontend/vite.config.js:/app/vite.config.js:ro
+      - ./version.json:/version.json:ro
     labels:
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
@@ -88,13 +88,21 @@ services:
       context: .
       dockerfile: ./projects/alerting/Dockerfile
       target: dev
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
 
-  triage:
+  agents:
     image: !reset null
     build:
       context: .
-      dockerfile: ./projects/triage/Dockerfile
+      dockerfile: ./projects/agents/Dockerfile
       target: dev
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+    volumes:
+      - ./libs/:/src/libs/
+      - ./projects/agents/agents:/src/projects/agents/agents
+      - /src/projects/agents/.venv
 
   housekeeping:
     image: !reset null
@@ -108,6 +116,7 @@ services:
       - /src/projects/housekeeping/.venv
     environment:
       - CLEANUP_SCHEDULE=*/3 * * * * # Test every 3 minutes
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
 
   document-conversion:
     image: !reset null
@@ -119,3 +128,5 @@ services:
       - ./libs/:/src/libs/
       - ./projects/document_conversion/document_conversion:/src/projects/document_conversion/document_conversion
       - /src/projects/document_conversion/.venv
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}

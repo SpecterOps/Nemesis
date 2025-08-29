@@ -8,7 +8,6 @@ from typing import Any
 import msoffcrypto
 import olefile
 import structlog
-from common.helpers import escape_markdown
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
@@ -26,7 +25,7 @@ def create_encryption_finding(file_enriched, encryption_hash: str, module_name: 
 # Encrypted Document
 The document is encrypted. Attempt to crack it using the following hash:
 ```
-{escape_markdown(encryption_hash)}
+{encryption_hash}
 ```
 """
     display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
@@ -332,7 +331,7 @@ class OfficeAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file extension and type."""
         file_enriched = get_file_enriched(object_id)
 
@@ -350,24 +349,29 @@ class OfficeAnalyzer(EnrichmentModule):
         should_run = has_valid_extension or is_office_type
         return should_run
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process Office file using the storage system."""
-        file_enriched = get_file_enriched(object_id)
-        path = file_enriched.path.lower() if file_enriched.path else ""
+    def _analyze_office_document(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze Office document and generate enrichment result.
 
+        Args:
+            file_path: Path to the Office document to analyze
+            file_enriched: File enrichment data
+
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
         enrichment_result = EnrichmentResult(module_name=self.name)
 
-        with self.storage.download(file_enriched.object_id) as file:
+        try:
             # Determine file type and use appropriate parser
             if "openxmlformats" in file_enriched.mime_type.lower():
-                analysis = parse_office_new_file(file.name)
+                analysis = parse_office_new_file(file_path)
             else:
-                analysis = parse_office_ole_file(file.name)
+                analysis = parse_office_ole_file(file_path)
 
             enrichment_result.results = analysis
 
             findings = []
-            transforms = []
+            # transforms = []
 
             # Create finding if document is encrypted
             if analysis.get("encryption_hash"):
@@ -407,7 +411,35 @@ class OfficeAnalyzer(EnrichmentModule):
 
             enrichment_result.findings = findings
 
-        return enrichment_result
+            return enrichment_result
+
+        except Exception as e:
+            logger.exception(e, message=f"Error analyzing Office document for {file_enriched.file_name}")
+            return None
+
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process Office file using the storage system.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+        try:
+            file_enriched = get_file_enriched(object_id)
+
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_office_document(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as file:
+                    return self._analyze_office_document(file.name, file_enriched)
+
+        except Exception as e:
+            logger.exception(e, message="Error processing Office file")
+            return None
 
 
 def create_enrichment_module() -> EnrichmentModule:

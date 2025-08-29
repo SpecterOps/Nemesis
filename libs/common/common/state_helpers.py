@@ -1,12 +1,13 @@
 import json
 
 import psycopg
-import structlog
 from dapr.clients import DaprClient
 
 from common.models import FileEnriched
 
-logger = structlog.get_logger(module=__name__)
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 with DaprClient() as client:
@@ -23,8 +24,8 @@ def get_file_enriched(object_id: str) -> FileEnriched:
                 cur.execute(
                     """
                     SELECT
-                        object_id, agent_id, project, timestamp, expiration, path,
-                        file_name, extension, size, magic_type, mime_type,
+                        object_id, agent_id, source, project, timestamp, expiration,
+                        path, file_name, extension, size, magic_type, mime_type,
                         is_plaintext, is_container, originating_object_id,
                         nesting_level, file_creation_time, file_access_time,
                         file_modification_time, security_info, hashes

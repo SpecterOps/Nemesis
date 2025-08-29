@@ -19,8 +19,12 @@ const FindingModal = ({
 
   if (!isOpen || !finding) return null;
 
-  const parsedData = finding.data ? JSON.parse(finding.data) : { type: 'string', data: 'No data available' };
-  const findingData = parsedData;
+  const parsedData = finding.data ? 
+    (typeof finding.data === 'string' ? JSON.parse(finding.data) : finding.data) 
+    : { type: 'string', data: 'No data available' };
+  
+  // Handle case where data is an array (common format) - take first element
+  const findingData = Array.isArray(parsedData) ? parsedData[0] : parsedData;
   const readableData = findingData.type === 'finding_summary'
     ? { type: 'string', data: findingData.metadata.summary }
     : findingData;
@@ -102,12 +106,79 @@ const FindingModal = ({
                       </span>
                     </div>
                     <div className="flex items-center">
+                      <span className="w-32 font-semibold text-gray-700 dark:text-gray-300">Source:</span>
+                      <span className="text-gray-900 dark:text-gray-100">
+                        {finding.files_enriched?.source || 'Unknown'}
+                      </span>
+                    </div>
+                    <div className="flex items-center">
                       <span className="w-32 font-semibold text-gray-700 dark:text-gray-300">Magic Type:</span>
                       <span className="text-gray-900 dark:text-gray-100">
                         {finding.files_enriched?.magic_type || 'N/A'}
                       </span>
                     </div>
                   </div>
+
+                  {/* Triage Details Card */}
+                  {finding.finding_triage_histories && finding.finding_triage_histories.length > 0 && (
+                    <div className="mb-6 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-0">
+                      {(() => {
+                        const triage = finding.finding_triage_histories[0];
+                        return (
+                          <>
+                            <div className="flex items-center">
+                              <span className="w-32 font-semibold text-gray-700 dark:text-gray-300">Status:</span>
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                triage.value === 'true_positive' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                                triage.value === 'false_positive' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                                triage.value === 'informational' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
+                                'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                              }`}>
+                                {triage.value.replace('_', ' ').toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="w-32 font-semibold text-gray-700 dark:text-gray-300">Triaged By:</span>
+                              <span className="text-gray-900 dark:text-gray-100">
+                                {triage.username}
+                                {triage.automated && (
+                                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Automated)</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="w-32 font-semibold text-gray-700 dark:text-gray-300">Timestamp:</span>
+                              <span className="text-gray-900 dark:text-gray-100">
+                                {new Date(triage.timestamp).toLocaleString()}
+                              </span>
+                            </div>
+                            {triage.confidence && triage.confidence !== '' && (
+                              <div className="flex items-center">
+                                <span className="w-32 font-semibold text-gray-700 dark:text-gray-300">Confidence:</span>
+                                <span className="text-gray-900 dark:text-gray-100">{triage.confidence}</span>
+                              </div>
+                            )}
+                            {triage.explanation && triage.explanation !== '' && (
+                              <div className="flex flex-col mt-2">
+                                <span className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Explanation:</span>
+                                <div className="p-2 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
+                                  <span className="text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{triage.explanation}</span>
+                                </div>
+                              </div>
+                            )}
+                            {triage.true_positive_context && triage.true_positive_context !== '' && (
+                              <div className="flex flex-col mt-2">
+                                <span className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Risk Context:</span>
+                                <div className="p-2 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
+                                  <span className="text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{triage.true_positive_context}</span>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
 
                   {/* Finding Content with conditional word wrap */}
                   <div>

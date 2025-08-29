@@ -39,7 +39,7 @@ const FindingsFilters = ({
     );
 
     const [triageFilter, setTriageFilter] = React.useState(() =>
-        getFilterFromUrl('triage_state', 'untriaged')
+        getFilterFromUrl('triage_state', 'untriaged_and_actionable')
     );
 
     const [triageSourceFilter, setTriageSourceFilter] = React.useState(() =>
@@ -67,7 +67,7 @@ const FindingsFilters = ({
         return categoryFilter !== 'all' ||
             severityFilter !== 'all' ||
             originFilter !== '' ||
-            triageFilter !== 'untriaged' ||
+            triageFilter !== 'untriaged_and_actionable' ||
             triageSourceFilter !== 'all' ||
             objectIdFilter !== '';
     }, [categoryFilter, severityFilter, originFilter, triageFilter, triageSourceFilter, objectIdFilter]);
@@ -77,7 +77,7 @@ const FindingsFilters = ({
         setCategoryFilter('all');
         setSeverityFilter('all');
         setOriginFilter('');
-        setTriageFilter('untriaged');
+        setTriageFilter('untriaged_and_actionable');
         setTriageSourceFilter('all');
         setObjectIdFilter('');
     };
@@ -151,6 +151,15 @@ const FindingsFilters = ({
                 switch (triageFilter) {
                     case 'untriaged':
                         if (hasTriage) return false;
+                        break;
+                    case 'untriaged_and_actionable':
+                        // Show untriaged files OR files triaged as true_positive or needs_review from automated sources
+                        if (hasTriage) {
+                            const isAutomated = finding.finding_triage_histories[0].automated;
+                            if (!isAutomated || (latestTriage !== 'true_positive' && latestTriage !== 'needs_review')) {
+                                return false;
+                            }
+                        }
                         break;
                     case 'triaged':
                         if (!hasTriage) return false;
@@ -250,6 +259,7 @@ const FindingsFilters = ({
                         value={triageFilter}
                         onChange={handleTriageStateChange}
                     >
+                        <option value="untriaged_and_actionable">Untriaged + Actionable</option>
                         <option value="all">All Triage States</option>
                         <option value="untriaged">Untriaged Only</option>
                         <option value="triaged">Triaged Only</option>

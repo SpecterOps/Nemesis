@@ -1,4 +1,5 @@
 .DS_STORE
+version.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -175,3 +176,9 @@ cython_debug/
 old/
 
 
+projects/dotnet_service/obj/
+projects/dotnet_service/bin/
+
+projects/jupyter/notebooks/*.csv
+
+projects/frontend/public/env.js

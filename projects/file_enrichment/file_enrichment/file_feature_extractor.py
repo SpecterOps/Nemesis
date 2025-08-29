@@ -9,10 +9,10 @@ from collections import Counter
 from datetime import datetime
 from typing import Optional
 
-import structlog
+from common.logger import get_logger
 
-logger = structlog.get_logger(module=__name__)
-
+# logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 # unix epoch for a default
 DEFAULT_TIMESTAMP = datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.now().astimezone().tzinfo)
 

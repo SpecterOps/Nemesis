@@ -2,45 +2,43 @@
 import asyncio
 import json
 import os
-import time
+import random
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Optional
 
 import common.helpers as helpers
-import structlog
-from common.models import CloudEvent, File, NoseyParkerOutput
+import psycopg
+from common.logger import get_logger
+from common.models import CloudEvent, DotNetOutput, File, NoseyParkerOutput
+from common.state_helpers import get_file_enriched
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
-from dapr.ext.workflow.workflow_state import WorkflowStatus
 from fastapi import Body, FastAPI, HTTPException, Path
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 
+from file_enrichment.dotnet import store_dotnet_results
 from file_enrichment.noseyparker import store_noseyparker_results
 
-from .logger import configure_logging, get_tracer
 from .workflow import (
-    enrichment_workflow,
     get_workflow_client,
     initialize_workflow_runtime,
     reload_yara_rules,
     shutdown_workflow_runtime,
     workflow_runtime,
 )
+from .workflow_manager import WorkflowManager
 
-configure_logging()
-logger = structlog.get_logger(module=__name__)
-tracer = get_tracer(__name__, os.getenv("NEMESIS_MONITORING", "").lower() == "enabled")
+logger = get_logger(__name__)
 
 max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 3))  # maximum workflows that can run at a time
 max_workflow_execution_time = int(
     os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300)
 )  # maximum time (in seconds) until a workflow is killed
-logger.info(f"max_parallel_workflows: {max_parallel_workflows}")
-logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}")
+
+logger.info(f"max_parallel_workflows: {max_parallel_workflows}", pid=os.getpid())
+logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
 
 with DaprClient() as client:
     secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
@@ -55,687 +53,276 @@ class EnrichmentRequest(BaseModel):
     object_id: str
 
 
-class WorkflowManager:
-    """Manages workflow execution with a simple queue system"""
-
-    def __init__(self, max_concurrent=3, max_execution_time=300):
-        """Initialize the workflow manager"""
-        self.active_workflows = set()  # Set of active workflow IDs
-        self.workflow_queue = asyncio.Queue()  # Queue for pending workflows
-        self.max_concurrent = max_concurrent  # Maximum concurrent workflows
-        self.lock = asyncio.Lock()  # For synchronizing access to shared state
-        self.max_execution_time = max_execution_time  # max time (in seconds) until a workflow is killed
-
-        logger.info("WorkflowManager initialized", max_concurrent=max_concurrent, max_execution_time=max_execution_time)
-
-    def _get_status_string(self, state_obj):
-        """Convert workflow state to string"""
-        if state_obj.runtime_status == WorkflowStatus.FAILED:
-            logger.warning(
-                "Workflow failed",
-                instance_id=state_obj.instance_id,
-                error=state_obj.failure_details.message if state_obj.failure_details else "Unknown",
-            )
-
-        return state_obj.runtime_status.name
-
-    async def update_workflow_status(self, instance_id, status, runtime_seconds=None, error_message=None):
-        """
-        Generalized function to update workflow status in database.
-
-        Args:
-            instance_id: The workflow instance ID
-            status: The status to set (COMPLETED, FAILED, ERROR, TIMEOUT, etc.)
-            runtime_seconds: Runtime in seconds (optional)
-            error_message: Error message to append to enrichments_failure (optional)
-        """
-
-        def _update_workflow_in_db():
-            with pool.connection() as conn:
-                with conn.cursor() as cur:
-                    if error_message:
-                        # Update with error message appended to enrichments_failure
-                        cur.execute(
-                            """
-                            UPDATE workflows
-                            SET status = %s,
-                                runtime_seconds = COALESCE(%s, runtime_seconds),
-                                enrichments_failure = array_append(enrichments_failure, %s)
-                            WHERE wf_id = %s
-                            """,
-                            (status, runtime_seconds, error_message[:100], instance_id),
-                        )
-                    else:
-                        # Update without modifying enrichments_failure
-                        cur.execute(
-                            """
-                            UPDATE workflows
-                            SET status = %s,
-                                runtime_seconds = COALESCE(%s, runtime_seconds)
-                            WHERE wf_id = %s
-                            """,
-                            (status, runtime_seconds, instance_id),
-                        )
-                    conn.commit()
-
-        try:
-            await asyncio.to_thread(_update_workflow_in_db)
-            logger.debug(
-                "Updated workflow status",
-                instance_id=instance_id,
-                status=status,
-                runtime_seconds=runtime_seconds,
-                has_error=bool(error_message),
-            )
-        except Exception as e:
-            logger.error(
-                "Failed to update workflow status in database", instance_id=instance_id, status=status, error=str(e)
-            )
-
-    async def reset(self):
-        """Reset the workflow manager's state."""
-        async with self.lock:
-            # Clear active workflows
-            self.active_workflows.clear()
-
-            # Clear the workflow queue
-            while not self.workflow_queue.empty():
-                try:
-                    self.workflow_queue.get_nowait()
-                    self.workflow_queue.task_done()
-                except asyncio.QueueEmpty:
-                    break
-
-            # Reset workflows in database
-            try:
-
-                def reset_db_workflows():
-                    with pool.connection() as conn:
-                        with conn.cursor() as cur:
-                            # Clear existing workflows
-                            cur.execute("DELETE FROM workflows")
-                            conn.commit()
-
-                await asyncio.to_thread(reset_db_workflows)
-            except Exception as e:
-                logger.exception(e, message="Error resetting workflows in database")
-
-            logger.warning(
-                "WorkflowManager reset", active_count=len(self.active_workflows), queue_size=self.workflow_queue.qsize()
-            )
-
-            return {
-                "status": "success",
-                "message": "Workflow manager reset successfully",
-                "timestamp": datetime.now().isoformat(),
-            }
-
-    async def start_workflow(self, workflow_input):
-        """Start a workflow or queue it if at capacity"""
-        async with self.lock:
-            # Check if we're at capacity
-            if len(self.active_workflows) >= self.max_concurrent:
-                # Queue the workflow and return
-                await self.workflow_queue.put(workflow_input)
-                logger.info(
-                    "Queued workflow - at capacity",
-                    queue_size=self.workflow_queue.qsize(),
-                    object_id=workflow_input["file"].get("object_id"),
-                )
-                return f"queued-{uuid.uuid4()}"
-
-            # If not at capacity, then start the workflow immediately
-            try:
-                start_time = time.time()
-
-                client = get_workflow_client()
-                if client is None:
-                    raise ValueError("Workflow client is None")
-
-                # Start the workflow
-                instance_id = client.schedule_new_workflow(workflow=enrichment_workflow, input=workflow_input)
-
-                with tracer.start_as_current_span("start_workflow") as current_span:
-                    # Add workflow ID to trace for Jaeger queries
-                    current_span.set_attribute("workflow.instance_id", instance_id)
-                    current_span.set_attribute("workflow.start", True)
-                    current_span.set_attribute("workflow.type", "enrichment_workflow")
-                    if "file" in workflow_input and "object_id" in workflow_input["file"]:
-                        current_span.set_attribute("workflow.object_id", workflow_input["file"]["object_id"])
-
-                    # Extract and store metadata for tracking
-                    base_filename = None
-                    object_id = None
-                    if "file" in workflow_input:
-                        if "path" in workflow_input["file"]:
-                            filepath = workflow_input["file"]["path"]
-                            base_filename = os.path.basename(filepath)
-                        if "object_id" in workflow_input["file"]:
-                            object_id = workflow_input["file"].get("object_id")
-
-                    # Store workflow in database
-                    def store_workflow():
-                        with pool.connection() as conn:
-                            with conn.cursor() as cur:
-                                cur.execute(
-                                    """
-                                    INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                                    VALUES (%s, %s, %s, %s, %s)
-                                    """,
-                                    (
-                                        instance_id,
-                                        object_id,
-                                        base_filename,
-                                        "RUNNING",
-                                        datetime.fromtimestamp(start_time),
-                                    ),
-                                )
-                                conn.commit()
-
-                    await asyncio.to_thread(store_workflow)
-
-                    # Add to active set
-                    self.active_workflows.add(instance_id)
-
-                    logger.info(
-                        "Started workflow",
-                        instance_id=instance_id,
-                        object_id=object_id,
-                        active_count=len(self.active_workflows),
-                    )
-
-                    # Start a task to monitor this workflow
-                    asyncio.create_task(self._monitor_workflow(instance_id, start_time))
-
-                    # Check queue for more work
-                    self._check_queue()
-
-                    return instance_id
-
-            except Exception as e:
-                logger.exception(e, message="Error starting workflow")
-                raise
-
-    def _check_queue(self):
-        """Check if we can process more workflows from the queue"""
-        # Schedule as a task so it doesn't block
-        asyncio.create_task(self._process_queue())
-
-    async def _process_queue(self) -> None:
-        """Process pending workflows from the queue"""
-
-        def store_workflow(
-            instance_id: str,
-            object_id: Optional[str],
-            base_filename: Optional[str],
-            start_time: float,
-        ) -> None:
-            with pool.connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        (
-                            instance_id,
-                            object_id,
-                            base_filename,
-                            "RUNNING",
-                            datetime.fromtimestamp(start_time),
-                        ),
-                    )
-                    conn.commit()
-
-        async with self.lock:
-            # Process as many as we can from the queue
-            while not self.workflow_queue.empty() and len(self.active_workflows) < self.max_concurrent:
-                try:
-                    # Get the next workflow input
-                    workflow_input: dict = self.workflow_queue.get_nowait()
-
-                    # Start the workflow
-                    start_time: float = time.time()
-                    client = get_workflow_client()
-
-                    instance_id: str = client.schedule_new_workflow(workflow=enrichment_workflow, input=workflow_input)
-
-                    # Add tracing for queued workflows
-                    with tracer.start_as_current_span("store_workflow") as current_span:
-                        current_span.set_attribute("workflow.instance_id", instance_id)
-                        current_span.set_attribute("workflow.start", True)
-                        current_span.set_attribute("workflow.type", "enrichment_workflow")
-                        current_span.set_attribute("workflow.queued", True)
-                        if "file" in workflow_input and "object_id" in workflow_input["file"]:
-                            current_span.set_attribute("workflow.object_id", workflow_input["file"]["object_id"])
-
-                        # Extract and store metadata for tracking
-                        base_filename: Optional[str] = None
-                        object_id: Optional[str] = None
-                        if "file" in workflow_input:
-                            if "path" in workflow_input["file"]:
-                                filepath: str = workflow_input["file"]["path"]
-                                base_filename = os.path.basename(filepath)
-                            if "object_id" in workflow_input["file"]:
-                                object_id = workflow_input["file"].get("object_id")
-
-                        # Store workflow in database
-                        await asyncio.to_thread(store_workflow, instance_id, object_id, base_filename, start_time)
-
-                        # Add to active set
-                        self.active_workflows.add(instance_id)
-
-                        logger.info(
-                            "Started queued workflow",
-                            instance_id=instance_id,
-                            object_id=object_id,
-                            queue_remaining=self.workflow_queue.qsize(),
-                        )
-
-                        # Create monitoring task
-                        asyncio.create_task(self._monitor_workflow(instance_id, start_time))
-
-                        # Mark as done
-                        self.workflow_queue.task_done()
-
-                except asyncio.QueueEmpty:
-                    break
-                except Exception as e:
-                    logger.exception(e, message="Error starting queued workflow")
-                    self.workflow_queue.task_done()  # Mark as done despite error
-
-    async def _monitor_workflow(self, instance_id, start_time):
-        """Monitor a workflow until completion or timeout"""
-
-        with tracer.start_as_current_span("monitor_workflow") as current_span:
-            current_span.set_attribute("workflow.instance_id", instance_id)
-            current_span.set_attribute("workflow.monitor", True)
-
-            try:
-                # Wait for completion or timeout
-                try:
-                    # Use wait_for to implement a timeout
-                    final_status = await asyncio.wait_for(
-                        self._wait_for_completion(instance_id), timeout=self.max_execution_time
-                    )
-
-                    processing_time = time.time() - start_time
-
-                    await self.update_workflow_status(instance_id, final_status, processing_time)
-
-                    # Remove from active set
-                    async with self.lock:
-                        if instance_id in self.active_workflows:
-                            self.active_workflows.remove(instance_id)
-
-                        # Check if we can process more from queue
-                        self._check_queue()
-
-                    logger.info(
-                        "Workflow completed",
-                        instance_id=instance_id,
-                        processing_time=f"{processing_time:.2f}s",
-                        final_status=final_status,
-                    )
-
-                except TimeoutError:
-                    processing_time = time.time() - start_time
-
-                    logger.warning(
-                        "Workflow timed out after exceeding maximum execution time",
-                        instance_id=instance_id,
-                        max_execution_time=f"{self.max_execution_time}s",
-                        actual_time=f"{processing_time:.2f}s",
-                    )
-
-                    # Try to terminate the workflow
-                    try:
-                        client = get_workflow_client()
-                        if client:
-                            client.terminate_workflow(instance_id)
-                            logger.info("Workflow terminated due to timeout", instance_id=instance_id)
-                    except Exception as e:
-                        logger.error("Failed to terminate timed-out workflow", instance_id=instance_id, error=str(e))
-
-                    # Update workflow status for timeout
-                    await self.update_workflow_status(instance_id, "TIMEOUT", processing_time, "timeout")
-
-                    # Remove from active set
-                    async with self.lock:
-                        if instance_id in self.active_workflows:
-                            self.active_workflows.remove(instance_id)
-
-                        # Check if we can process more from queue
-                        self._check_queue()
-
-            except Exception as e:
-                # Handle other failures
-                processing_time = time.time() - start_time
-
-                logger.exception(
-                    "Workflow monitoring failed",
-                    instance_id=instance_id,
-                    processing_time=f"{processing_time:.2f}s",
-                    error=str(e),
-                )
-
-                # Update workflow status for error
-                await self.update_workflow_status(instance_id, "ERROR", processing_time, str(e))
-
-                # Remove from active set and check queue
-                async with self.lock:
-                    if instance_id in self.active_workflows:
-                        self.active_workflows.remove(instance_id)
-
-                    # Check if we can process more from queue
-                    self._check_queue()
-
-    async def _wait_for_completion(self, instance_id):
-        """Wait for workflow to complete and return the final status"""
-        start_time = datetime.now()
-        error_count = 0
-
-        client = get_workflow_client()
-
-        # Add trace attributes for workflow status monitoring
-        with tracer.start_as_current_span("wait_for_completion") as current_span:
-            current_span.set_attribute("workflow.instance_id", instance_id)
-            current_span.set_attribute("workflow.wait_for_completion", True)
-
-            while True:
-                try:
-                    state = await asyncio.to_thread(client.get_workflow_state, instance_id)
-                    status = self._get_status_string(state)
-                    error_count = 0  # Reset on successful check
-
-                    logger.debug(
-                        "Workflow status check",
-                        instance_id=instance_id,
-                        status=status,
-                        runtime=str(datetime.now() - start_time),
-                    )
-
-                    if status in ["COMPLETED", "FAILED", "TERMINATED", "ERROR"]:
-                        runtime_seconds = (datetime.now() - start_time).total_seconds()
-                        logger.info(
-                            "Workflow finished",
-                            instance_id=instance_id,
-                            final_status=status,
-                            runtime=str(datetime.now() - start_time),
-                        )
-
-                        # For failed workflows, capture the error message and update status
-                        if status in ["FAILED", "TERMINATED", "ERROR"]:
-                            error_msg = ""
-                            if status == "FAILED" and state.failure_details:
-                                error_msg = state.failure_details.message
-
-                            await self.update_workflow_status(
-                                instance_id, status, runtime_seconds, error_msg[:100] if error_msg else status.lower()
-                            )
-                        else:
-                            await self.update_workflow_status(instance_id, status, runtime_seconds, "")
-
-                        # Return the actual status so _monitor_workflow knows what happened
-                        return status
-
-                    await asyncio.sleep(0.1)
-
-                except Exception as e:
-                    error_count += 1
-                    logger.warning(
-                        f"Error checking workflow status: {str(e)}", instance_id=instance_id, error_count=error_count
-                    )
-
-                    if error_count >= 3:  # Break after 3 consecutive errors
-                        logger.error(
-                            "Too many consecutive errors checking workflow status",
-                            instance_id=instance_id,
-                            error_count=error_count,
-                        )
-                        # Return ERROR status so the monitoring can handle it appropriately
-                        return "ERROR"
-
-                    await asyncio.sleep(0.5)
-
-    async def get_status(self):
-        """Get current status information with enhanced metrics from database"""
-        try:
-            async with self.lock:
-                active_ids = list(self.active_workflows)
-                current_queue_size = self.workflow_queue.qsize()
-
-            logger.debug("Getting status", active_count=len(active_ids), queue_size=current_queue_size)
-
-            # Get metrics and workflow information from database
-            def get_db_metrics():
-                with pool.connection() as conn:
-                    with conn.cursor() as cur:
-                        # Get metrics: counts and processing times
-                        cur.execute("""
-                            SELECT
-                                COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed_count,
-                                COUNT(*) FILTER (WHERE status IN ('FAILED', 'TERMINATED', 'ERROR', 'TIMEOUT')) as failed_count,
-                                AVG(runtime_seconds) as avg_time,
-                                MIN(runtime_seconds) as min_time,
-                                MAX(runtime_seconds) as max_time,
-                                COUNT(runtime_seconds) as samples_count
-                            FROM workflows
-                            WHERE runtime_seconds IS NOT NULL
-                        """)
-                        metrics_row = cur.fetchone()
-                        completed_count, failed_count, avg_time, min_time, max_time, samples_count = metrics_row
-
-                        # Get active workflow details from database
-                        cur.execute("""
-                            SELECT
-                                wf_id,
-                                object_id,
-                                status,
-                                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - start_time)) as runtime_seconds,
-                                enrichments_success,
-                                enrichments_failure,
-                                filename
-                            FROM workflows
-                            WHERE status = 'RUNNING'
-                        """)
-                        active_workflows_db = []
-                        for row in cur.fetchall():
-                            wf_id, object_id, status, runtime_seconds, success_modules, failure_modules, filename = row
-
-                            active_workflows_db.append(
-                                {
-                                    "id": wf_id,
-                                    "status": status,
-                                    "runtime_seconds": runtime_seconds,
-                                    "filename": filename,
-                                    "object_id": object_id,
-                                    "success_modules": success_modules,
-                                    "failure_modules": failure_modules,
-                                }
-                            )
-
-                        # Get status counts
-                        cur.execute("""
-                            SELECT status, COUNT(*) FROM workflows GROUP BY status
-                        """)
-                        status_counts = {row[0]: row[1] for row in cur.fetchall()}
-
-                        # Calculate percentiles
-                        percentiles = {}
-                        if samples_count >= 5:
-                            cur.execute("""
-                                SELECT
-                                    percentile_cont(0.5) WITHIN GROUP (ORDER BY runtime_seconds) as p50,
-                                    percentile_cont(0.9) WITHIN GROUP (ORDER BY runtime_seconds) as p90,
-                                    percentile_cont(0.95) WITHIN GROUP (ORDER BY runtime_seconds) as p95,
-                                    percentile_cont(0.99) WITHIN GROUP (ORDER BY runtime_seconds) as p99
-                                FROM workflows
-                                WHERE runtime_seconds IS NOT NULL
-                            """)
-
-                            result = cur.fetchone()
-                            if result:
-                                p50, p90, p95, p99 = result
-                                percentiles = {
-                                    "p50_seconds": round(float(p50), 2) if p50 is not None else None,
-                                    "p90_seconds": round(float(p90), 2) if p90 is not None else None,
-                                    "p95_seconds": round(float(p95), 2) if p95 is not None else None,
-                                    "p99_seconds": round(float(p99), 2) if p99 is not None else None,
-                                }
-
-                        return {
-                            "metrics": {
-                                "completed_count": completed_count or 0,
-                                "failed_count": failed_count or 0,
-                                "total_processed": (completed_count or 0) + (failed_count or 0),
-                                "success_rate": round(
-                                    (completed_count or 0) / ((completed_count or 0) + (failed_count or 0)) * 100, 2
-                                )
-                                if ((completed_count or 0) + (failed_count or 0)) > 0
-                                else None,
-                                "processing_times": {
-                                    "avg_seconds": round(avg_time, 2) if avg_time else None,
-                                    "min_seconds": round(min_time, 2) if min_time else None,
-                                    "max_seconds": round(max_time, 2) if max_time else None,
-                                    "samples_count": samples_count or 0,
-                                    **percentiles,
-                                },
-                            },
-                            "status_counts": status_counts,
-                            "active_workflows_db": active_workflows_db,
-                        }
-
-            # Get database metrics and status information
-            db_info = await asyncio.to_thread(get_db_metrics)
-            metrics = db_info["metrics"]
-            status_counts = db_info["status_counts"]
-            db_active_workflows = db_info["active_workflows_db"]
-
-            # Get status for each active workflow from Dapr client as well (for comparison)
-            active_statuses = []
-            if active_ids:
-                try:
-                    client = get_workflow_client()
-                    if client is None:
-                        raise ValueError("Could not get workflow client")
-
-                    for wf_id in active_ids:
-                        try:
-                            state = client.get_workflow_state(wf_id)
-                            status = self._get_status_string(state)
-                            # Get runtime for active workflows
-                            if hasattr(state, "created_at") and state.created_at:
-                                runtime = datetime.now() - state.created_at
-                                runtime_seconds = runtime.total_seconds()
-                            else:
-                                runtime_seconds = None
-
-                            # Find this workflow in our DB results
-                            matching_db_workflow = next((w for w in db_active_workflows if w["id"] == wf_id), None)
-
-                            # Combine information from both sources
-                            workflow_info = {"id": wf_id, "status": status, "runtime_seconds": runtime_seconds}
-
-                            if matching_db_workflow:
-                                workflow_info["object_id"] = matching_db_workflow["object_id"]
-                                workflow_info["filename"] = matching_db_workflow["filename"]
-                                workflow_info["success_modules"] = matching_db_workflow["success_modules"]
-                                workflow_info["failure_modules"] = matching_db_workflow["failure_modules"]
-
-                            active_statuses.append(workflow_info)
-                        except Exception as e:
-                            logger.error("Error getting workflow state", workflow_id=wf_id, error=str(e))
-                            active_statuses.append({"id": wf_id, "status": "ERROR", "error": str(e)})
-                except Exception as e:
-                    logger.error("Error getting workflow client", error=str(e))
-                    # Use only database-based active workflows
-                    active_statuses = db_active_workflows
-
-            # If we have no active statuses from the client but do have from DB, use DB ones
-            if not active_statuses and db_active_workflows:
-                active_statuses = db_active_workflows
-
-            status = {
-                "queued_files": current_queue_size,
-                "active_workflows": len(active_ids),
-                "status_counts": status_counts,
-                "active_details": active_statuses,
-                "metrics": metrics,
-                "timestamp": datetime.now().isoformat(),
-            }
-
-            logger.debug("Status response", status=status)
-            return status
-
-        except Exception as e:
-            logger.exception(e, message="Error getting workflow status")
-            # Try to get basic queue info even if other parts fail
-            try:
-                return {
-                    "error": str(e),
-                    "queued_files": self.workflow_queue.qsize(),
-                    "active_workflows": len(self.active_workflows),
-                    "active_details": [],
-                    "metrics": {},
-                    "timestamp": datetime.now().isoformat(),
-                }
-            except Exception as ee:
-                return {
-                    "error": f"Complete status failure: {ee}",
-                    "queued_files": 0,
-                    "active_workflows": 0,
-                    "active_details": [],
-                    "metrics": {},
-                    "timestamp": datetime.now().isoformat(),
-                }
-
-
 module_execution_order = []
 workflow_manager: WorkflowManager = None
+
+# Global tracking for bulk enrichment processes
+bulk_enrichment_tasks = {}  # {enrichment_name: task_info}
+bulk_enrichment_lock = asyncio.Lock()
+
+# PostgreSQL LISTEN/NOTIFY client
+notify_listener_task = None
+
+
+async def recover_interrupted_workflows():
+    """
+    Recover workflows that were interrupted during system shutdown.
+
+    NOTE/TODO:  if using multiple replicas or k8s, this process should be moved
+                into a single instance and not replicated multiple times
+    """
+    try:
+        # Tandom sleep delay to help with the worker overlap on recovery
+        #   This, combined with the single atomic DELETE query, should
+        #   ensure that only one worker will recover the workflows.
+        delay = random.uniform(0, 10)
+        logger.info(f"Workflow recovery starting in {delay:.1f} seconds...", pid=os.getpid())
+        await asyncio.sleep(delay)
+
+        logger.info("Starting workflow recovery process...", pid=os.getpid())
+
+        def get_and_delete_running_workflows():
+            with pool.connection() as conn:
+                with conn.cursor() as cur:
+                    # Atomic DELETE with RETURNING - only one worker will get the interrupted workflows
+                    cur.execute("""
+                        DELETE FROM workflows
+                        WHERE status = 'RUNNING'
+                        RETURNING object_id
+                    """)
+                    running_ids = [row[0] for row in cur.fetchall()]
+                    conn.commit()
+
+                    if running_ids:
+                        logger.info(f"Atomically claimed {len(running_ids)} interrupted workflows", pid=os.getpid())
+
+                    return running_ids
+
+        def get_file_data_and_cleanup(object_ids):
+            recovered_files = []
+            with pool.connection() as conn:
+                with conn.cursor() as cur:
+                    for object_id in object_ids:
+                        # Get file data for reconstruction
+                        cur.execute(
+                            """
+                            SELECT object_id, agent_id, source, project, timestamp, expiration,
+                                   path, originating_object_id, originating_container_id, nesting_level,
+                                   file_creation_time, file_access_time, file_modification_time
+                            FROM files WHERE object_id = %s
+                        """,
+                            (object_id,),
+                        )
+
+                        row = cur.fetchone()
+                        if row:
+                            # Convert database row to File-compatible dict
+                            file_data = {
+                                "object_id": str(row[0]),
+                                "agent_id": row[1],
+                                "source": row[2],
+                                "project": row[3],
+                                "timestamp": row[4],
+                                "expiration": row[5],
+                                "path": row[6],
+                                "originating_object_id": str(row[7]) if row[7] else None,
+                                "originating_container_id": str(row[8]) if row[8] else None,
+                                "nesting_level": row[9],
+                                "creation_time": row[10].isoformat() if row[10] else None,
+                                "access_time": row[11].isoformat() if row[11] else None,
+                                "modification_time": row[12].isoformat() if row[12] else None,
+                            }
+                            recovered_files.append(file_data)
+                            logger.debug("Recovered file data for workflow", object_id=object_id, pid=os.getpid())
+                        else:
+                            logger.warning("No file data found for workflow", object_id=object_id, pid=os.getpid())
+
+                    conn.commit()
+
+            return recovered_files
+
+        # Get interrupted workflows
+        running_object_ids = await asyncio.to_thread(get_and_delete_running_workflows)
+
+        if not running_object_ids:
+            logger.info("No interrupted workflows found", pid=os.getpid())
+            return
+
+        logger.info(f"Found {len(running_object_ids)} interrupted workflows to recover", pid=os.getpid())
+
+        # Get file data and clean up partial results
+        recovered_files = await asyncio.to_thread(get_file_data_and_cleanup, running_object_ids)
+
+        if not recovered_files:
+            logger.warning("No file data found for interrupted workflows", pid=os.getpid())
+            return
+
+        # Republish recovered files with priority
+        with DaprClient() as client:
+            for file_data in recovered_files:
+                try:
+                    # Filter out None values for File object creation
+                    clean_file_data = {k: v for k, v in file_data.items() if v is not None}
+
+                    # Create File object from recovered data
+                    file_obj = File(**clean_file_data)
+
+                    # Publish with priority=3 for immediate processing
+                    client.publish_event(
+                        pubsub_name="pubsub",
+                        topic_name="file",
+                        data=json.dumps(file_obj.model_dump(exclude_unset=True, mode="json")),
+                        data_content_type="application/json",
+                        metadata=[("priority", "3")],
+                    )
+
+                    logger.info("Republished interrupted workflow", object_id=file_data["object_id"], pid=os.getpid())
+
+                except Exception as e:
+                    logger.exception(f"Failed to republish workflow {file_data['object_id']}: {e}")
+                    logger.error("File data that caused error", file_data=file_data)
+
+        logger.info(f"Successfully recovered {len(recovered_files)} interrupted workflows", pid=os.getpid())
+
+    except Exception as e:
+        logger.exception("Error during workflow recovery", error=str(e), pid=os.getpid())
+        # Don't raise - we want the service to continue even if recovery fails
+
+
+async def postgres_notify_listener():
+    """
+    Listen for PostgreSQL NOTIFY events for yara reload and workflow reset.
+    Runs in background task to handle notifications across all workers/replicas.
+    """
+    global workflow_manager
+
+    logger.info("Starting PostgreSQL NOTIFY listener...", pid=os.getppid())
+
+    retry_delay = 1  # Start with 1 second retry delay
+    max_retry_delay = 60  # Max 60 seconds between retries
+
+    while True:
+        try:
+            # Use async connection for LISTEN
+            async with await psycopg.AsyncConnection.connect(postgres_connection_string, autocommit=True) as conn:
+                logger.info("Connected to PostgreSQL for NOTIFY listening", pid=os.getppid())
+                retry_delay = 1  # Reset retry delay on successful connection
+
+                # Listen to our notification channels
+                await conn.execute("LISTEN nemesis_yara_reload")
+                await conn.execute("LISTEN nemesis_workflow_reset")
+
+                logger.info(
+                    "Listening for PostgreSQL notifications on nemesis_yara_reload and nemesis_workflow_reset",
+                    pid=os.getppid(),
+                )
+
+                # Process notifications with timeout to prevent hanging
+                try:
+                    async for notify in conn.notifies():
+                        try:
+                            logger.info(
+                                f"Received PostgreSQL notification: channel={notify.channel}, payload={notify.payload}, pid={os.getpid()}"
+                            )
+
+                            if notify.channel == "nemesis_yara_reload":
+                                logger.info("Processing yara reload notification", pid=os.getppid())
+                                reload_yara_rules()
+
+                            elif notify.channel == "nemesis_workflow_reset":
+                                logger.info("Processing workflow reset notification", pid=os.getppid())
+                                if workflow_manager is not None:
+                                    result = await workflow_manager.reset()
+                                    logger.info("Workflow manager reset completed", result=result)
+                                else:
+                                    logger.warning("Workflow manager not initialized, skipping reset")
+
+                        except Exception as e:
+                            logger.exception(
+                                "Error processing PostgreSQL notification",
+                                channel=notify.channel,
+                                payload=notify.payload,
+                                error=str(e),
+                                pid=os.getpid(),
+                            )
+                except asyncio.CancelledError:
+                    logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
+                    break
+                except Exception as e:
+                    logger.exception("Error in notification loop", error=str(e), pid=os.getpid())
+                    raise
+
+        except Exception as e:
+            logger.exception("PostgreSQL NOTIFY listener connection error", error=str(e), pid=os.getppid())
+
+            # Exponential backoff with jitter
+            await asyncio.sleep(retry_delay + (retry_delay * 0.1))  # Add 10% jitter
+            retry_delay = min(retry_delay * 2, max_retry_delay)
+
+            logger.info(f"Retrying PostgreSQL NOTIFY listener in {retry_delay} seconds...", pid=os.getppid())
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager for workflow runtime setup/teardown"""
-    global module_execution_order, workflow_manager
+    global module_execution_order, workflow_manager, notify_listener_task
 
-    logger.info("Initializing workflow runtime...")
+    logger.info("Initializing workflow runtime...", pid=os.getpid())
 
     try:
         # Initialize workflow runtime and modules
         module_execution_order = await initialize_workflow_runtime()
-        # Wait for runtime to initialize
+
+        # Wait a bit for runtime to initialize
         await asyncio.sleep(5)
 
-        # Test workflow client
         client = get_workflow_client()
         if client is None:
             raise ValueError("Workflow client not available after initialization")
 
-        # Initialize workflow manager with our global ENV variables
         workflow_manager = WorkflowManager(
             max_concurrent=max_parallel_workflows, max_execution_time=max_workflow_execution_time
         )
+
+        # Start PostgreSQL NOTIFY listener in background
+        notify_listener_task = asyncio.create_task(postgres_notify_listener())
+        logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
+
+        # Recover any interrupted workflows before starting normal processing
+        await recover_interrupted_workflows()
 
         logger.info(
             "Workflow runtime initialized successfully",
             module_execution_order=module_execution_order,
             client_available=client is not None,
+            pid=os.getpid(),
         )
 
     except Exception as e:
-        logger.error("Failed to initialize workflow runtime", error=str(e))
+        logger.error("Failed to initialize workflow runtime", error=str(e), pid=os.getpid())
         raise
 
     yield
 
-    # Cleanup
     try:
-        logger.info("Shutting down workflow runtime...")
+        logger.info("Shutting down workflow runtime...", pid=os.getpid())
+
+        # Cancel PostgreSQL NOTIFY listener
+        if notify_listener_task and not notify_listener_task.done():
+            logger.info("Cancelling PostgreSQL NOTIFY listener...", pid=os.getppid())
+            notify_listener_task.cancel()
+            try:
+                await notify_listener_task
+            except asyncio.CancelledError:
+                logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
+
+        # Clean up workflow manager background tasks
+        if workflow_manager:
+            await workflow_manager.cleanup()
+
         shutdown_workflow_runtime()
     except Exception as e:
-        logger.error("Error during workflow runtime shutdown", error=str(e))
+        logger.error("Error during workflow runtime shutdown", error=str(e), pid=os.getpid())
 
 
 # Initialize FastAPI app with lifespan manager
@@ -743,35 +330,158 @@ app = FastAPI(lifespan=lifespan)
 dapr_app = DaprApp(app)
 
 
+async def save_file_message(file: File):
+    """Save the file message to the database for recovery purposes"""
+    try:
+        # Only save files that are not nested (originating files)
+        if file.nesting_level and file.nesting_level > 0:
+            logger.debug(
+                "nesting_level > 0, not saving file message",
+                nesting_level=file.nesting_level,
+                object_id=file.object_id,
+                pid=os.getpid(),
+            )
+            return
+
+        def save_to_db():
+            with pool.connection() as conn:
+                with conn.cursor() as cur:
+                    query = """
+                    INSERT INTO files (
+                        object_id, agent_id, source, project, timestamp, expiration,
+                        path, originating_object_id, originating_container_id, nesting_level,
+                        file_creation_time, file_access_time, file_modification_time
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    ) ON CONFLICT (object_id) DO UPDATE SET
+                        agent_id = EXCLUDED.agent_id,
+                        source = EXCLUDED.source,
+                        project = EXCLUDED.project,
+                        timestamp = EXCLUDED.timestamp,
+                        expiration = EXCLUDED.expiration,
+                        path = EXCLUDED.path,
+                        originating_object_id = EXCLUDED.originating_object_id,
+                        originating_container_id = EXCLUDED.originating_container_id,
+                        nesting_level = EXCLUDED.nesting_level,
+                        file_creation_time = EXCLUDED.file_creation_time,
+                        file_access_time = EXCLUDED.file_access_time,
+                        file_modification_time = EXCLUDED.file_modification_time,
+                        updated_at = CURRENT_TIMESTAMP;
+                    """
+
+                    cur.execute(
+                        query,
+                        (
+                            file.object_id,
+                            file.agent_id,
+                            file.source,
+                            file.project,
+                            file.timestamp,
+                            file.expiration,
+                            file.path,
+                            file.originating_object_id,
+                            getattr(file, "originating_container_id", None),
+                            file.nesting_level,
+                            datetime.fromisoformat(file.creation_time) if file.creation_time else None,
+                            datetime.fromisoformat(file.access_time) if file.access_time else None,
+                            datetime.fromisoformat(file.modification_time) if file.modification_time else None,
+                        ),
+                    )
+                    conn.commit()
+
+        await asyncio.to_thread(save_to_db)
+        logger.debug("Successfully saved file message to database", object_id=file.object_id, pid=os.getpid())
+
+    except Exception as e:
+        logger.exception(e, message="Error saving file message to database", object_id=file.object_id, pid=os.getpid())
+        raise
+
+
 @dapr_app.subscribe(pubsub="pubsub", topic="file")
 async def process_file(event: CloudEvent[File]):
     """Handler for incoming file events"""
-
+    global workflow_manager
     try:
         file = event.data
+
+        # Save the file message to database first for recovery purposes
+        await save_file_message(file)
+
         workflow_input = {
             "file": file.model_dump(exclude_unset=True, mode="json"),
             "execution_order": module_execution_order,
         }
 
+        # This will block if we're at max capacity, providing natural backpressure
         await workflow_manager.start_workflow(workflow_input)
 
     except Exception as e:
-        logger.exception(e, message="Error processing file event", cloud_event=event)
+        logger.exception(e, message="Error processing file event", cloud_event=event, pid=os.getpid())
 
 
-@dapr_app.subscribe(pubsub="pubsub", topic="yara")
-async def process_yara(event: CloudEvent):
-    """Handler Yara events"""
+# Removed process_yara - replaced by PostgreSQL NOTIFY listener
 
+
+@dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")
+async def process_dotnet_results(event: CloudEvent):
+    """Handler for incoming .NET processing results from the dotnet_service."""
     try:
-        action = event.data["action"]
-        if action == "reload":
-            reload_yara_rules()
-        else:
-            logger.warning(f"Unsupported yara action: {action}")
+        raw_data = event.data
+        logger.debug(f"Received DotNet output event: {raw_data}", pid=os.getpid())
+
+        # Try to parse the event data into our DotNetOutput model
+        try:
+            # If it's already a dict, use it directly
+            if isinstance(raw_data, dict):
+                dotnet_output = DotNetOutput(**raw_data)
+            # If it's a string, try to parse it as JSON
+            elif isinstance(raw_data, str):
+                import json
+
+                parsed_data = json.loads(raw_data)
+                dotnet_output = DotNetOutput(**parsed_data)
+            else:
+                logger.warning(f"Unexpected data type: {type(raw_data)}", pid=os.getpid())
+                return
+
+            object_id = dotnet_output.object_id
+            decompilation_object_id = dotnet_output.decompilation
+            analysis = dotnet_output.get_parsed_analysis()
+
+            logger.debug(f"Processing dotnet results for object {object_id}", pid=os.getpid())
+
+            # Get the file enriched data for creating transforms
+            file_enriched = None
+            try:
+                file_enriched = get_file_enriched(object_id)
+            except Exception as e:
+                logger.warning(f"Could not get file_enriched for {object_id}: {e}", pid=os.getpid())
+
+            # Store the results in the database using our helper function
+            await store_dotnet_results(
+                object_id=object_id,
+                decompilation_object_id=decompilation_object_id,
+                analysis=analysis,
+                postgres_connection_string=postgres_connection_string,
+                file_enriched=file_enriched,
+            )
+
+        except Exception as parsing_error:
+            # If parsing fails, log the error and try to extract what we can
+            logger.warning(f"Error parsing DotNet output as model: {parsing_error}", pid=os.getpid())
+            logger.debug(f"Raw data: {raw_data}", pid=os.getpid())
+
+            # Try to extract object_id at minimum for logging
+            object_id = None
+            if hasattr(raw_data, "get"):
+                object_id = raw_data.get("object_id")
+            elif isinstance(raw_data, dict):
+                object_id = raw_data.get("object_id")
+
+            logger.error(f"Failed to process DotNet output for object_id: {object_id}", pid=os.getpid())
+
     except Exception as e:
-        logger.exception(e, message="Error processing Yara event", cloud_event=event)
+        logger.exception(e, message="Error processing DotNet output event", pid=os.getpid())
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")
@@ -780,7 +490,7 @@ async def process_nosey_parker_results(event: CloudEvent):
     try:
         # Extract the raw data
         raw_data = event.data
-        logger.warning("Received NoseyParker output event")
+        # logger.debug(f"Received NoseyParker output event: {raw_data}", pid=os.getpid())
 
         # Try to parse the event data into our NoseyParkerOutput model
         try:
@@ -794,7 +504,7 @@ async def process_nosey_parker_results(event: CloudEvent):
                 parsed_data = json.loads(raw_data)
                 nosey_output = NoseyParkerOutput.from_dict(parsed_data)
             else:
-                logger.warning(f"Unexpected data type: {type(raw_data)}")
+                logger.warning(f"Unexpected data type: {type(raw_data)}", pid=os.getpid())
                 return
 
             # Now process the properly parsed output
@@ -802,7 +512,7 @@ async def process_nosey_parker_results(event: CloudEvent):
             matches = nosey_output.scan_result.matches
             stats = nosey_output.scan_result.stats
 
-            logger.debug(f"Found {len(matches)} matches for object {object_id}")
+            logger.debug(f"Found {len(matches)} matches for object {object_id}", pid=os.getpid())
 
             # Store the findings in the database using our helper function
             await store_noseyparker_results(
@@ -814,7 +524,7 @@ async def process_nosey_parker_results(event: CloudEvent):
 
         except Exception as parsing_error:
             # If parsing fails, fall back to direct dictionary access
-            logger.warning(f"Error parsing NoseyParker output as model: {parsing_error}")
+            logger.warning(f"Error parsing NoseyParker output as model: {parsing_error}", pid=os.getpid())
 
             if hasattr(raw_data, "get"):
                 object_id = raw_data.get("object_id")
@@ -822,7 +532,7 @@ async def process_nosey_parker_results(event: CloudEvent):
                 matches = scan_result.get("matches", [])
                 stats = scan_result.get("stats", {})
 
-                logger.debug(f"Using dict access: Found {len(matches)} matches for {object_id}")
+                logger.debug(f"Using dict access: Found {len(matches)} matches for {object_id}", pid=os.getpid())
 
                 # Store the findings using direct dict access
                 await store_noseyparker_results(
@@ -833,18 +543,40 @@ async def process_nosey_parker_results(event: CloudEvent):
                 )
 
     except Exception as e:
-        logger.exception(e, message="Error processing Nosey Parker output event")
+        logger.exception(e, message="Error processing Nosey Parker output event", pid=os.getpid())
 
 
-@app.get("/status")
-async def get_workflow_status():
-    """Get current workflow system status."""
+@dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")
+async def process_bulk_enrichment_task(event: CloudEvent):
+    """Handler for individual bulk enrichment tasks"""
+    global workflow_manager
     try:
-        status = await workflow_manager.get_status()
-        return status
+        data = event.data
+        enrichment_name = data.get("enrichment_name")
+        object_id = data.get("object_id")
+        bulk_id = data.get("bulk_id")
+
+        logger.debug(
+            "Received bulk enrichment task", enrichment_name=enrichment_name, object_id=object_id, bulk_id=bulk_id
+        )
+
+        # Check if module exists
+        if not workflow_runtime or not workflow_runtime.modules:
+            logger.error("Workflow runtime or modules not initialized")
+            return
+
+        if enrichment_name not in workflow_runtime.modules:
+            logger.error(f"Enrichment module '{enrichment_name}' not found")
+            return
+
+        # Prepare workflow input for single enrichment
+        workflow_input = {"enrichment_name": enrichment_name, "object_id": object_id, "bulk_id": bulk_id}
+
+        # This will block if we're at max capacity, providing natural backpressure
+        await workflow_manager.start_workflow_single_enrichment(workflow_input)
+
     except Exception as e:
-        logger.exception(e, message="Error getting workflow status")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
+        logger.exception("Error processing bulk enrichment task", cloud_event=event, error=str(e))
 
 
 @app.get("/llm_enrichments")
@@ -865,7 +597,7 @@ async def list_enabled_llm_enrichments():
         return {"modules": llm_enrichments}
 
     except Exception as e:
-        logger.exception(e, message="Error listing enabled LLM enrichment modules")
+        logger.exception(e, message="Error listing enabled LLM enrichment modules", pid=os.getpid())
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
@@ -880,7 +612,7 @@ async def list_enrichments():
         return {"modules": modules}
 
     except Exception as e:
-        logger.exception(e, message="Error listing enrichment modules")
+        logger.exception(e, message="Error listing enrichment modules", pid=os.getpid())
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
@@ -964,7 +696,7 @@ async def run_enrichment(
                                         finding.origin_type,
                                         finding.origin_name,
                                         json.dumps(finding.raw_data),
-                                        json.dumps([obj.model_dump() for obj in finding.data]),
+                                        json.dumps([obj.model_dump_json() for obj in finding.data]),
                                     ),
                                 )
 
@@ -984,82 +716,52 @@ async def run_enrichment(
         raise
     except Exception as e:
         logger.exception(
-            e, message="Error running enrichment module", enrichment_name=enrichment_name, object_id=request.object_id
+            e,
+            message="Error running enrichment module",
+            enrichment_name=enrichment_name,
+            object_id=request.object_id,
+            pid=os.getpid(),
         )
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
-@app.get("/failed")
-async def get_failed_workflows():
-    """Get information about failed, error, and timed-out workflows from database."""
-    try:
-        # Query failed workflows from database
-        def get_failed_workflows_from_db():
-            with pool.connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        SELECT
-                            wf_id as id,
-                            object_id,
-                            status,
-                            runtime_seconds,
-                            start_time,
-                            enrichments_failure,
-                            filename
-                        FROM workflows
-                        WHERE status IN ('FAILED', 'ERROR', 'TIMEOUT', 'TERMINATED')
-                        ORDER BY start_time DESC
-                        LIMIT 100
-                    """)
-                    columns = [desc[0] for desc in cur.description]
-                    failed_workflows = []
-
-                    for row in cur.fetchall():
-                        workflow_dict = dict(zip(columns, row))
-
-                        # Convert datetime to string
-                        if "start_time" in workflow_dict:
-                            workflow_dict["timestamp"] = workflow_dict["start_time"].isoformat()
-                            del workflow_dict["start_time"]
-
-                        # Add error from failure list if available
-                        if workflow_dict.get("enrichments_failure") and len(workflow_dict["enrichments_failure"]) > 0:
-                            workflow_dict["error"] = workflow_dict["enrichments_failure"][-1]  # Most recent failure
-
-                        failed_workflows.append(workflow_dict)
-
-                    return failed_workflows
-
-        failed_workflows = await asyncio.to_thread(get_failed_workflows_from_db)
-
-        return {
-            "failed_count": len(failed_workflows),
-            "workflows": failed_workflows,
-            "timestamp": datetime.now().isoformat(),
-        }
-    except Exception as e:
-        logger.exception(e, message="Error getting failed workflow information")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
+@app.post("/enrichments/{enrichment_name}/bulk")
+async def run_bulk_enrichment(
+    enrichment_name: str = Path(..., description="Name of the enrichment module to run"),
+):
+    """Bulk enrichment is now handled by the web API using distributed processing."""
+    raise HTTPException(
+        status_code=501,
+        detail="Bulk enrichment has been moved to the web API for distributed processing. Please use the main API endpoint.",
+    )
 
 
-@app.post("/reset")
-async def reset_workflow_manager():
-    """Reset the workflow manager's state."""
-    try:
-        if workflow_manager is None:
-            raise HTTPException(status_code=503, detail="Workflow manager not initialized")
+@app.get("/enrichments/{enrichment_name}/bulk/status")
+async def get_bulk_enrichment_status(
+    enrichment_name: str = Path(..., description="Name of the enrichment module to check status for"),
+):
+    """Bulk enrichment status is now handled by the web API."""
+    raise HTTPException(
+        status_code=501,
+        detail="Bulk enrichment status is now handled by the web API. Please use the main API endpoint.",
+    )
 
-        result = await workflow_manager.reset()
-        return result
-    except Exception as e:
-        logger.exception(e, message="Error resetting workflow manager")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
+
+@app.post("/enrichments/{enrichment_name}/bulk/stop")
+async def stop_bulk_enrichment(
+    enrichment_name: str = Path(..., description="Name of the enrichment module to stop"),
+):
+    """Bulk enrichment stopping is now handled by the web API."""
+    raise HTTPException(
+        status_code=501,
+        detail="Bulk enrichment stopping is now handled by the web API. Please use the main API endpoint.",
+    )
+
+
+# Removed /reset route - replaced by PostgreSQL NOTIFY listener
 
 
 @app.api_route("/healthz", methods=["GET", "HEAD"])
 async def healthcheck():
     """Health check endpoint for Docker healthcheck."""
     return {"status": "healthy"}
-
-
-FastAPIInstrumentor.instrument_app(app, excluded_urls="healthz")

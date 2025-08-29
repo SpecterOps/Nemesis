@@ -2,7 +2,7 @@ import Tooltip from '@/components/shared/Tooltip2';
 import { useTriageMode } from '@/contexts/TriageModeContext';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from 'graphql-ws';
-import { AlertTriangle, ChevronDown, ChevronUp, Clock, Eye, Search, Tag, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Clock, Eye, Search, Tag, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
@@ -23,6 +23,8 @@ const wsClient = createClient({
 });
 
 const ROW_HEIGHT = 48;
+const PAGINATION_THRESHOLD = 10000;
+const PAGE_SIZE = 100;
 
 export const formatFileSize = (bytes, decimals = 2) => {
   if (bytes === 0) return '0 Bytes';
@@ -81,6 +83,19 @@ const Row = React.memo(({ index, style, data }) => {
           <span className="block truncate">{file.agent_id}</span>
         </Tooltip>
       </div>
+      <div className="px-2 flex-shrink-0 w-40 text-sm text-gray-500 dark:text-gray-400 text-left">
+        <Tooltip
+          content={
+            <div onClick={handleTooltipClick} className="select-text">
+              {file.source || 'Unknown'}
+            </div>
+          }
+          side="top"
+          align="start"
+        >
+          <span className="block truncate">{file.source || 'Unknown'}</span>
+        </Tooltip>
+      </div>
       <div className="px-2 flex-shrink-0 w-24 text-sm text-gray-500 dark:text-gray-400 text-left">{formatFileSize(file.size)}</div>
       <div className="px-2 flex-shrink-0 w-44 text-sm text-gray-500 dark:text-gray-400 text-left">{new Date(file.timestamp).toLocaleString()}</div>
       <div className="px-2 flex-shrink-0 w-48 text-sm text-sm text-gray-500 dark:text-gray-400 text-left">
@@ -124,9 +139,9 @@ const Row = React.memo(({ index, style, data }) => {
 const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
   const isActive = currentSort === column;
   const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
-  
+
   return (
-    <div 
+    <div
       className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
       onClick={() => onSort(column, nextDirection)}
     >
@@ -146,6 +161,115 @@ const SortableHeader = ({ children, column, currentSort, currentDirection, onSor
   );
 };
 
+// Pagination controls component
+const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange }) => {
+  const maxVisiblePages = 7;
+  const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+  const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  
+  const pageNumbers = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t dark:border-gray-700">
+      <div className="flex-1 flex justify-between sm:hidden">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="relative inline-flex items-center px-4 py-2 border dark:border-gray-700 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-secondary hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Previous
+        </button>
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="ml-3 relative inline-flex items-center px-4 py-2 border dark:border-gray-700 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-secondary hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Next
+        </button>
+      </div>
+      <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Showing <span className="font-medium">{(currentPage - 1) * PAGE_SIZE + 1}</span> to{' '}
+            <span className="font-medium">
+              {Math.min(currentPage * PAGE_SIZE, totalCount)}
+            </span>{' '}
+            of <span className="font-medium">{totalCount.toLocaleString()}</span> results
+          </p>
+        </div>
+        <div>
+          <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+            <button
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center px-2 py-2 rounded-l-md border dark:border-gray-700 bg-white dark:bg-dark-secondary text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            
+            {startPage > 1 && (
+              <>
+                <button
+                  onClick={() => onPageChange(1)}
+                  className="bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 relative inline-flex items-center px-4 py-2 text-sm font-medium"
+                >
+                  1
+                </button>
+                {startPage > 2 && (
+                  <span className="relative inline-flex items-center px-4 py-2 border dark:border-gray-700 bg-white dark:bg-dark-secondary text-sm font-medium text-gray-700 dark:text-gray-300">
+                    ...
+                  </span>
+                )}
+              </>
+            )}
+            
+            {pageNumbers.map((page) => (
+              <button
+                key={page}
+                onClick={() => onPageChange(page)}
+                className={`${
+                  currentPage === page
+                    ? 'z-10 bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                    : 'bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                } relative inline-flex items-center px-4 py-2 text-sm font-medium`}
+              >
+                {page}
+              </button>
+            ))}
+            
+            {endPage < totalPages && (
+              <>
+                {endPage < totalPages - 1 && (
+                  <span className="relative inline-flex items-center px-4 py-2 border dark:border-gray-700 bg-white dark:bg-dark-secondary text-sm font-medium text-gray-700 dark:text-gray-300">
+                    ...
+                  </span>
+                )}
+                <button
+                  onClick={() => onPageChange(totalPages)}
+                  className="bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 relative inline-flex items-center px-4 py-2 text-sm font-medium"
+                >
+                  {totalPages}
+                </button>
+              </>
+            )}
+            
+            <button
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="relative inline-flex items-center px-2 py-2 rounded-r-md border dark:border-gray-700 bg-white dark:bg-dark-secondary text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const FileList = () => {
   const navigate = useNavigate();
@@ -158,10 +282,15 @@ const FileList = () => {
   const selectedRowRef = useRef(null);
   const lastDirection = useRef('down');
   const { username } = useUser();
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isPaginated, setIsPaginated] = useState(false);
 
   // Filter states initialized from URL parameters
   const [fileTypeFilter, setFileTypeFilter] = useState(() => searchParams.get('type') || 'all');
-  const [agentIdFilter, setAgentIdFilter] = useState(() => searchParams.get('agent_id') || '');
+  const [sourceFilter, setSourceFilter] = useState(() => searchParams.get('source') || '');
   const [pathFilter, setPathFilter] = useState(() => searchParams.get('path') || '');
   const [objectIdFilter, setObjectIdFilter] = useState(() => searchParams.get('object_id') || '');
   const [sortColumn, setSortColumn] = useState(() => searchParams.get('sort_column') || 'timestamp');
@@ -174,22 +303,52 @@ const FileList = () => {
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
   const tagDropdownRef = useRef(null);
 
+  // Calculate total pages
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
   // Handle column sorting
   const handleSort = (column, direction) => {
     setSortColumn(column);
     setSortDirection(direction);
+    setCurrentPage(1); // Reset to first page on sort change
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      setSelectedIndex(-1); // Reset selection when changing pages
+      setSelectedFiles(new Set());
+    }
   };
 
   const handleRowClick = (e, file, index) => {
     if (isTriageMode) {
+      const actualIndex = isPaginated ? (currentPage - 1) * PAGE_SIZE + index : index;
+      
       if (e.shiftKey && selectedIndex !== -1) {
-        const start = Math.min(selectedIndex, index);
-        const end = Math.max(selectedIndex, index);
-        const newSelection = new Set(selectedFiles);
-        for (let i = start; i <= end; i++) {
-          newSelection.add(filteredFiles[i].object_id);
+        // For paginated mode, only allow shift selection within current page
+        if (isPaginated) {
+          const pageStartIndex = (currentPage - 1) * PAGE_SIZE;
+          const pageEndIndex = Math.min(pageStartIndex + PAGE_SIZE, totalCount);
+          
+          if (selectedIndex >= pageStartIndex && selectedIndex < pageEndIndex) {
+            const start = Math.min(selectedIndex - pageStartIndex, index);
+            const end = Math.max(selectedIndex - pageStartIndex, index);
+            const newSelection = new Set(selectedFiles);
+            for (let i = start; i <= end; i++) {
+              newSelection.add(files[i].object_id);
+            }
+            setSelectedFiles(newSelection);
+          }
+        } else {
+          const start = Math.min(selectedIndex, actualIndex);
+          const end = Math.max(selectedIndex, actualIndex);
+          const newSelection = new Set(selectedFiles);
+          for (let i = start; i <= end; i++) {
+            newSelection.add(files[i].object_id);
+          }
+          setSelectedFiles(newSelection);
         }
-        setSelectedFiles(newSelection);
       } else if (e.ctrlKey || e.metaKey) {
         const newSelection = new Set(selectedFiles);
         if (newSelection.has(file.object_id)) {
@@ -201,7 +360,7 @@ const FileList = () => {
       } else {
         setSelectedFiles(new Set([file.object_id]));
       }
-      setSelectedIndex(index);
+      setSelectedIndex(actualIndex);
     } else if (!e.target.closest('button')) {
       // Get current search params to preserve them
       const currentSearch = searchParams.toString();
@@ -215,11 +374,121 @@ const FileList = () => {
 
   const listRef = useRef();
   useEffect(() => {
-    if (listRef.current && isTriageMode && selectedIndex >= 0) {
+    if (listRef.current && isTriageMode && selectedIndex >= 0 && !isPaginated) {
       listRef.current.scrollToItem(selectedIndex, 'center');
     }
-  }, [selectedIndex, isTriageMode]);
+  }, [selectedIndex, isTriageMode, isPaginated]);
 
+  // Build where clause for queries
+  const buildWhereClause = () => {
+    const conditions = [];
+    
+    // Base condition for files
+    conditions.push({
+      _or: [
+        { originating_object_id: { _is_null: true } },
+        {
+          _and: [
+            { originating_object_id: { _is_null: false } },
+            { nesting_level: { _is_null: false } },
+            { nesting_level: { _gt: 0 } }
+          ]
+        }
+      ]
+    });
+
+    // Add filter conditions
+    if (showOnlyWithFindings) {
+      conditions.push({
+        findingsByObjectId_aggregate: {
+          count: {
+            predicate: { _gt: 0 }
+          }
+        }
+      });
+    }
+
+    if (objectIdFilter) {
+      conditions.push({ object_id: { _eq: objectIdFilter } });
+    }
+
+    if (fileTypeFilter === 'plaintext') {
+      conditions.push({ is_plaintext: { _eq: true } });
+    } else if (fileTypeFilter === 'binary') {
+      conditions.push({ is_plaintext: { _eq: false } });
+    } else if (fileTypeFilter === 'source') {
+      conditions.push({ extension: { _in: SOURCE_CODE_EXTENSIONS } });
+    } else if (fileTypeFilter === 'office') {
+      conditions.push({ extension: { _in: OFFICE_EXTENSIONS } });
+    } else if (fileTypeFilter === 'config') {
+      conditions.push({ extension: { _in: CONFIG_FILE_EXTENSIONS } });
+    }
+
+    if (sourceFilter) {
+      conditions.push({ source: { _ilike: sourceFilter.replace(/\*/g, '%') } });
+    }
+
+    if (pathFilter) {
+      conditions.push({ path: { _ilike: pathFilter.replace(/\*/g, '%') } });
+    }
+
+    if (selectedTag) {
+      conditions.push({ file_tags: { _contains: selectedTag } });
+    }
+
+    if (viewFilter !== 'all') {
+      if (viewFilter === 'unviewed') {
+        conditions.push({
+          _not: {
+            files_view_histories: {}
+          }
+        });
+      } else if (viewFilter === 'unviewed_by_me') {
+        conditions.push({
+          _not: {
+            files_view_histories: {
+              username: { _eq: username }
+            }
+          }
+        });
+      }
+    }
+
+    return conditions.length > 1 ? { _and: conditions } : conditions[0];
+  };
+
+  // Build order by clause
+  const buildOrderByClause = () => {
+    const orderBy = {};
+    
+    switch (sortColumn) {
+      case 'agent_id':
+        orderBy.agent_id = sortDirection;
+        break;
+      case 'source':
+        orderBy.source = sortDirection;
+        break;
+      case 'size':
+        orderBy.size = sortDirection;
+        break;
+      case 'timestamp':
+        orderBy.timestamp = sortDirection;
+        break;
+      case 'magic_type':
+        orderBy.magic_type = sortDirection;
+        break;
+      case 'findings':
+        orderBy.findingsByObjectId_aggregate = { count: sortDirection };
+        break;
+      case 'path':
+        orderBy.path = sortDirection;
+        break;
+      default:
+        orderBy.timestamp = sortDirection;
+    }
+    
+    return orderBy;
+  };
 
   useEffect(() => {
     const fetchAvailableTags = async () => {
@@ -284,8 +553,8 @@ const FileList = () => {
       params.set('type', fileTypeFilter);
     }
 
-    if (agentIdFilter) {
-      params.set('agent_id', agentIdFilter);
+    if (sourceFilter) {
+      params.set('source', sourceFilter);
     }
 
     if (pathFilter) {
@@ -313,40 +582,9 @@ const FileList = () => {
 
     // Use replace: true to avoid adding to browser history for every filter change
     setSearchParams(params, { replace: true });
-  }, [fileTypeFilter, agentIdFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings]);
+  }, [fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings]);
 
-  // Watch for URL changes and update the state
-  useEffect(() => {
-    // Get values from URL params
-    const typeParam = searchParams.get('type');
-    const agentIdParam = searchParams.get('agent_id');
-    const pathParam = searchParams.get('path');
-    const viewStateParam = searchParams.get('view_state');
-    const objectIdParam = searchParams.get('object_id');
-    const tagParam = searchParams.get('tag');
-    const sortColumnParam = searchParams.get('sort_column');
-    const sortDirectionParam = searchParams.get('sort_direction');
-    const findingsParam = searchParams.get('findings');
-
-    // Update component state based on URL params
-    setFileTypeFilter(typeParam || 'all');
-    setAgentIdFilter(agentIdParam || '');
-    setPathFilter(pathParam || '');
-    setViewFilter(viewStateParam || 'unviewed_by_me');
-    setObjectIdFilter(objectIdParam || '');
-    setSelectedTag(tagParam || '');
-
-    // Update sort column and direction from URL
-    if (sortColumnParam !== null) {
-      setSortColumn(sortColumnParam);
-    }
-    if (sortDirectionParam !== null) {
-      setSortDirection(sortDirectionParam);
-    }
-
-    // Update findings filter from URL
-    setShowOnlyWithFindings(findingsParam === 'true');
-  }, [searchParams]);
+  // Removed the useEffect that was syncing from URL params to avoid circular updates
 
   const handleBulkRecordFileView = (value) => {
     selectedFiles.forEach(fileId => {
@@ -402,93 +640,6 @@ const FileList = () => {
     return new RegExp('^' + escapedWildcard.replace(/\\\*/g, '.*') + '$');
   };
 
-  // Create filteredFiles here so it's available throughout the component
-  const filteredFiles = files
-    .filter(file => {
-      if (showOnlyWithFindings && file.findingsByObjectId_aggregate.aggregate.count === 0) return false;
-      if (objectIdFilter && file.object_id !== objectIdFilter) return false;
-      if (fileTypeFilter === 'plaintext' && !file.is_plaintext) return false;
-      if (fileTypeFilter === 'binary' && file.is_plaintext) return false;
-      if (fileTypeFilter === 'source' && !SOURCE_CODE_EXTENSIONS.includes(file.extension?.toLowerCase())) return false;
-      if (fileTypeFilter === 'office' && !OFFICE_EXTENSIONS.includes(file.extension?.toLowerCase())) return false;
-      if (fileTypeFilter === 'config' && !CONFIG_FILE_EXTENSIONS.includes(file.extension?.toLowerCase())) return false;
-      if (agentIdFilter && !file.agent_id.toString().includes(agentIdFilter)) return false;
-      if (pathFilter) {
-        const pathRegex = wildcardToRegExp(pathFilter);
-        if (!pathRegex.test(file.path)) return false;
-      }
-
-      if (selectedTag && selectedTag.trim() !== '') {
-        // Make sure we're working with arrays and handle different possible structures
-        let fileTags = [];
-
-        if (file.file_tags) {
-          if (Array.isArray(file.file_tags)) {
-            fileTags = file.file_tags;
-          } else if (typeof file.file_tags === 'string') {
-            // Handle case where tags might be a comma-separated string
-            fileTags = file.file_tags.split(',').map(tag => tag.trim());
-          }
-        }
-
-        // Normalize tags for comparison (trim whitespace, lowercase)
-        const normalizedTags = fileTags.map(tag =>
-          typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag).trim().toLowerCase()
-        );
-        const normalizedSelectedTag = selectedTag.trim().toLowerCase();
-
-        // Check if normalized tags include the normalized selected tag
-        if (!normalizedTags.includes(normalizedSelectedTag)) {
-          return false;
-        }
-      }
-
-      if (viewFilter !== 'all') {
-        const hasBeenViewed = file.files_view_histories && file.files_view_histories.length > 0;
-        const viewedByMe = file.files_view_histories?.some(h => h.username === username);
-
-        switch (viewFilter) {
-          case 'unviewed':
-            if (hasBeenViewed) return false;
-            break;
-          case 'unviewed_by_me':
-            if (viewedByMe) return false;
-            break;
-        }
-      }
-
-      return true;
-    })
-    .sort((a, b) => {
-      let comparison = 0;
-      
-      switch (sortColumn) {
-        case 'agent_id':
-          comparison = a.agent_id.toString().localeCompare(b.agent_id.toString());
-          break;
-        case 'size':
-          comparison = a.size - b.size;
-          break;
-        case 'timestamp':
-          comparison = new Date(a.timestamp) - new Date(b.timestamp);
-          break;
-        case 'magic_type':
-          comparison = (a.magic_type || '').localeCompare(b.magic_type || '');
-          break;
-        case 'findings':
-          comparison = a.findingsByObjectId_aggregate.aggregate.count - b.findingsByObjectId_aggregate.aggregate.count;
-          break;
-        case 'path':
-          comparison = a.path.localeCompare(b.path);
-          break;
-        default:
-          comparison = new Date(a.timestamp) - new Date(b.timestamp);
-      }
-      
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-
-
   // Scroll handling
   useEffect(() => {
     if (selectedRowRef.current && isTriageMode && selectedIndex >= 0) {
@@ -513,7 +664,8 @@ const FileList = () => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault();
         if (isTriageMode) {
-          const newSelection = new Set(filteredFiles.map(f => f.object_id));
+          // In paginated mode, only select files on current page
+          const newSelection = new Set(files.map(f => f.object_id));
           setSelectedFiles(newSelection);
         }
         return;
@@ -523,7 +675,7 @@ const FileList = () => {
         setIsTriageMode(prev => {
           const newMode = !prev;
           if (newMode && selectedIndex === -1) {
-            setSelectedIndex(0);
+            setSelectedIndex(isPaginated ? (currentPage - 1) * PAGE_SIZE : 0);
           }
           return newMode;
         });
@@ -532,35 +684,54 @@ const FileList = () => {
 
       if (!isTriageMode) return;
 
-      const filteredFilesLength = filteredFiles.length;
+      const filesLength = files.length;
+      const currentPageSelectedIndex = isPaginated ? selectedIndex - (currentPage - 1) * PAGE_SIZE : selectedIndex;
 
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault();
           lastDirection.current = 'up';
-          if (e.shiftKey) {
-            const prevIndex = Math.max(0, selectedIndex - 1);
-            const newSelection = new Set(selectedFiles);
-            newSelection.add(filteredFiles[selectedIndex].object_id);
-            newSelection.add(filteredFiles[prevIndex].object_id);
-            setSelectedFiles(newSelection);
-            setSelectedIndex(prevIndex);
+          if (isPaginated) {
+            if (currentPageSelectedIndex > 0) {
+              setSelectedIndex(selectedIndex - 1);
+            } else if (currentPage > 1) {
+              handlePageChange(currentPage - 1);
+              setSelectedIndex((currentPage - 2) * PAGE_SIZE + PAGE_SIZE - 1);
+            }
           } else {
-            setSelectedIndex(prev => Math.max(0, prev - 1));
+            if (e.shiftKey) {
+              const prevIndex = Math.max(0, selectedIndex - 1);
+              const newSelection = new Set(selectedFiles);
+              newSelection.add(files[selectedIndex].object_id);
+              newSelection.add(files[prevIndex].object_id);
+              setSelectedFiles(newSelection);
+              setSelectedIndex(prevIndex);
+            } else {
+              setSelectedIndex(prev => Math.max(0, prev - 1));
+            }
           }
           break;
         case 'ArrowDown':
           e.preventDefault();
           lastDirection.current = 'down';
-          if (e.shiftKey) {
-            const nextIndex = Math.min(filteredFilesLength - 1, selectedIndex + 1);
-            const newSelection = new Set(selectedFiles);
-            newSelection.add(filteredFiles[selectedIndex].object_id);
-            newSelection.add(filteredFiles[nextIndex].object_id);
-            setSelectedFiles(newSelection);
-            setSelectedIndex(nextIndex);
+          if (isPaginated) {
+            if (currentPageSelectedIndex < filesLength - 1) {
+              setSelectedIndex(selectedIndex + 1);
+            } else if (currentPage < totalPages) {
+              handlePageChange(currentPage + 1);
+              setSelectedIndex((currentPage) * PAGE_SIZE);
+            }
           } else {
-            setSelectedIndex(prev => Math.min(filteredFilesLength - 1, prev + 1));
+            if (e.shiftKey) {
+              const nextIndex = Math.min(filesLength - 1, selectedIndex + 1);
+              const newSelection = new Set(selectedFiles);
+              newSelection.add(files[selectedIndex].object_id);
+              newSelection.add(files[nextIndex].object_id);
+              setSelectedFiles(newSelection);
+              setSelectedIndex(nextIndex);
+            } else {
+              setSelectedIndex(prev => Math.min(filesLength - 1, prev + 1));
+            }
           }
           break;
         case 'Escape':
@@ -574,14 +745,14 @@ const FileList = () => {
           break;
         case 'ArrowRight':
           e.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < filteredFilesLength) {
-            navigate(`/files/${filteredFiles[selectedIndex].object_id}`);
+          if (selectedIndex >= 0 && currentPageSelectedIndex >= 0 && currentPageSelectedIndex < filesLength) {
+            navigate(`/files/${files[currentPageSelectedIndex].object_id}`);
           }
           break;
         case 'v':
           e.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < filteredFilesLength) {
-            recordFileView(filteredFiles[selectedIndex].object_id);
+          if (selectedIndex >= 0 && currentPageSelectedIndex >= 0 && currentPageSelectedIndex < filesLength) {
+            recordFileView(files[currentPageSelectedIndex].object_id);
           }
           break;
       }
@@ -599,7 +770,7 @@ const FileList = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTriageMode, selectedIndex, filteredFiles, navigate, setIsTriageMode, setSelectedIndex, selectedFiles]);
+  }, [isTriageMode, selectedIndex, files, navigate, setIsTriageMode, setSelectedIndex, selectedFiles, isPaginated, currentPage, totalPages]);
 
   // Handle maintained triage mode state
   useEffect(() => {
@@ -611,75 +782,162 @@ const FileList = () => {
     }
   }, [location.state, setIsTriageMode, setSelectedIndex]);
 
-  // Initial data fetch
+  // Fetch data based on count
   useEffect(() => {
-    const fetchFiles = async () => {
-      const query = {
-        query: `
-          query GetFiles {
-            files_enriched(
-            where: {
-              _or: [
-                { originating_object_id: { _is_null: true } },
-                {
-                  _and: [
-                    { originating_object_id: { _is_null: false } },
-                    { nesting_level: { _is_null: false } },
-                    { nesting_level: { _gt: 0 } }
-                  ]
-                }
-              ]
-            }
-            ) {
-              object_id
-              agent_id
-              file_name
-              size
-              path
-              timestamp
-              extension
-              magic_type
-              mime_type
-              is_plaintext
-              hashes
-              file_tags
-              findingsByObjectId_aggregate {
-                aggregate{
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // First, get the count
+        const countQuery = {
+          query: `
+            query GetFileCount($where: files_enriched_bool_exp) {
+              files_enriched_aggregate(where: $where) {
+                aggregate {
                   count
                 }
               }
-              files_view_histories(
-                distinct_on: username
-                order_by: [{ username: asc }, { timestamp: desc }]
-              ) {
-                username
-                timestamp
-              }
             }
+          `,
+          variables: {
+            where: buildWhereClause()
           }
-        `
-      };
+        };
 
-      try {
-        const response = await fetch('/hasura/v1/graphql', {
+        const countResponse = await fetch('/hasura/v1/graphql', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
           },
-          body: JSON.stringify(query)
+          body: JSON.stringify(countQuery)
         });
 
-        if (!response.ok) {
-          throw new Error(`Network response error: ${response.status}`);
+        if (!countResponse.ok) {
+          throw new Error(`Network response error: ${countResponse.status}`);
         }
 
-        const result = await response.json();
-        if (result.errors) {
-          throw new Error(result.errors[0].message);
+        const countResult = await countResponse.json();
+        if (countResult.errors) {
+          throw new Error(countResult.errors[0].message);
         }
 
-        setFiles(result.data.files_enriched);
+        const count = countResult.data.files_enriched_aggregate.aggregate.count;
+        setTotalCount(count);
+        setIsPaginated(count > PAGINATION_THRESHOLD);
+
+        // Now fetch the actual data
+        let dataQuery;
+        if (count > PAGINATION_THRESHOLD) {
+          // Paginated query
+          dataQuery = {
+            query: `
+              query GetFilesPaginated($where: files_enriched_bool_exp, $limit: Int!, $offset: Int!, $order_by: [files_enriched_order_by!]) {
+                files_enriched(
+                  where: $where,
+                  limit: $limit,
+                  offset: $offset,
+                  order_by: $order_by
+                ) {
+                  object_id
+                  agent_id
+                  source
+                  file_name
+                  size
+                  path
+                  timestamp
+                  extension
+                  magic_type
+                  mime_type
+                  is_plaintext
+                  hashes
+                  file_tags
+                  findingsByObjectId_aggregate {
+                    aggregate {
+                      count
+                    }
+                  }
+                  files_view_histories(
+                    distinct_on: username
+                    order_by: [{ username: asc }, { timestamp: desc }]
+                  ) {
+                    username
+                    timestamp
+                  }
+                }
+              }
+            `,
+            variables: {
+              where: buildWhereClause(),
+              limit: PAGE_SIZE,
+              offset: (currentPage - 1) * PAGE_SIZE,
+              order_by: buildOrderByClause()
+            }
+          };
+        } else {
+          // Non-paginated query - get all data
+          dataQuery = {
+            query: `
+              query GetFilesAll($where: files_enriched_bool_exp, $order_by: [files_enriched_order_by!]) {
+                files_enriched(
+                  where: $where,
+                  order_by: $order_by
+                ) {
+                  object_id
+                  agent_id
+                  source
+                  file_name
+                  size
+                  path
+                  timestamp
+                  extension
+                  magic_type
+                  mime_type
+                  is_plaintext
+                  hashes
+                  file_tags
+                  findingsByObjectId_aggregate {
+                    aggregate {
+                      count
+                    }
+                  }
+                  files_view_histories(
+                    distinct_on: username
+                    order_by: [{ username: asc }, { timestamp: desc }]
+                  ) {
+                    username
+                    timestamp
+                  }
+                }
+              }
+            `,
+            variables: {
+              where: buildWhereClause(),
+              order_by: buildOrderByClause()
+            }
+          };
+        }
+
+        const dataResponse = await fetch('/hasura/v1/graphql', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+          },
+          body: JSON.stringify(dataQuery)
+        });
+
+        if (!dataResponse.ok) {
+          throw new Error(`Network response error: ${dataResponse.status}`);
+        }
+
+        const dataResult = await dataResponse.json();
+        if (dataResult.errors) {
+          throw new Error(dataResult.errors[0].message);
+        }
+
+        setFiles(dataResult.data.files_enriched);
       } catch (err) {
         console.error('Error fetching files:', err);
         setError(err.message);
@@ -688,30 +946,23 @@ const FileList = () => {
       }
     };
 
-    fetchFiles();
-  }, []);
+    fetchData();
+  }, [currentPage, fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings, username]);
 
-  // Set up subscription
+  // Set up subscription (only for non-paginated mode)
   useEffect(() => {
+    if (isPaginated) return; // Don't use subscriptions in paginated mode
+
     const subscription = {
       query: `
-        subscription WatchFiles {
+        subscription WatchFiles($where: files_enriched_bool_exp, $order_by: [files_enriched_order_by!]) {
           files_enriched(
-            where: {
-              _or: [
-                { originating_object_id: { _is_null: true } },
-                {
-                  _and: [
-                    { originating_object_id: { _is_null: false } },
-                    { nesting_level: { _is_null: false } },
-                    { nesting_level: { _gt: 0 } }
-                  ]
-                }
-              ]
-            }
+            where: $where,
+            order_by: $order_by
           ) {
             object_id
             agent_id
+            source
             file_name
             size
             path
@@ -723,7 +974,7 @@ const FileList = () => {
             hashes
             file_tags
             findingsByObjectId_aggregate {
-              aggregate{
+              aggregate {
                 count
               }
             }
@@ -736,7 +987,11 @@ const FileList = () => {
             }
           }
         }
-      `
+      `,
+      variables: {
+        where: buildWhereClause(),
+        order_by: buildOrderByClause()
+      }
     };
 
     let unsubscribe;
@@ -748,6 +1003,7 @@ const FileList = () => {
           next: ({ data }) => {
             if (data?.files_enriched) {
               setFiles(data.files_enriched);
+              setTotalCount(data.files_enriched.length);
             }
           },
           error: (err) => {
@@ -766,34 +1022,14 @@ const FileList = () => {
         unsubscribe();
       }
     };
-  }, []);
-
-  if (error) {
-    return (
-      <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg flex items-center space-x-2">
-        <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400" />
-        <div className="flex flex-col">
-          <span className="text-red-600 dark:text-red-400">Error loading files: {error}</span>
-          <span className="text-sm text-red-500 dark:text-red-400">Check browser console for details</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
-      </div>
-    );
-  }
+  }, [isPaginated, fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings, username]);
 
   return (
     <div className="bg-white dark:bg-dark-secondary rounded-lg shadow">
       {isTriageMode && (
         <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
           <p className="text-sm text-blue-600 dark:text-blue-400">
-            Triage Mode Active - Use ↑↓ to navigate. Use Shift+↑↓ to select multiple rows. Ctrl/Cmd+A to select all.
+            Triage Mode Active - Use ↑↓ to navigate{isPaginated ? ' (across pages)' : ''}. Use Shift+↑↓ to select multiple rows. Ctrl/Cmd+A to select all{isPaginated ? ' on current page' : ''}.
             'v' to mark{selectedFiles.size > 0 ? ' selected files' : ''} as viewed,
             or ESC to exit
           </p>
@@ -808,7 +1044,10 @@ const FileList = () => {
             <select
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
               value={viewFilter}
-              onChange={(e) => setViewFilter(e.target.value)}
+              onChange={(e) => {
+                setViewFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             >
               <option value="unviewed">Unviewed Files</option>
               <option value="unviewed_by_me">Files Unviewed by Me</option>
@@ -816,26 +1055,13 @@ const FileList = () => {
             </select>
           </div>
 
-          {/* <div className="flex items-center space-x-2">
-            <Filter className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            <select
-              className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-              value={fileTypeFilter}
-              onChange={(e) => setFileTypeFilter(e.target.value)}
-            >
-              <option value="all">All File Types</option>
-              <option value="plaintext">Plaintext Files</option>
-              <option value="binary">Binary Files</option>
-              <option value="source">Source Code Files</option>
-              <option value="config">Configuration Files</option>
-              <option value="office">Office Documents</option>
-            </select>
-          </div> */}
-
           <Tooltip content={showOnlyWithFindings ? "Click to show all files" : "Click to show only files with findings"}>
             <button
               className="flex items-center space-x-2 px-3 py-2 border dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              onClick={() => setShowOnlyWithFindings(!showOnlyWithFindings)}
+              onClick={() => {
+                setShowOnlyWithFindings(!showOnlyWithFindings);
+                setCurrentPage(1);
+              }}
             >
               <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -844,7 +1070,6 @@ const FileList = () => {
             </button>
           </Tooltip>
 
-
           <div className="flex items-center space-x-2">
             <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             <input
@@ -852,7 +1077,10 @@ const FileList = () => {
               placeholder="Filter by path (e.g. *.txt)"
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
               value={pathFilter}
-              onChange={(e) => setPathFilter(e.target.value)}
+              onChange={(e) => {
+                setPathFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
 
@@ -860,13 +1088,15 @@ const FileList = () => {
             <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             <input
               type="text"
-              placeholder="Filter by Agent ID"
+              placeholder="Filter by source"
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-              value={agentIdFilter}
-              onChange={(e) => setAgentIdFilter(e.target.value)}
+              value={sourceFilter}
+              onChange={(e) => {
+                setSourceFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
-
 
           <div className="relative" ref={tagDropdownRef}>
             <button
@@ -883,6 +1113,7 @@ const FileList = () => {
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedTag('');
+                    setCurrentPage(1);
                   }}
                 >
                   <X className="w-4 h-4" />
@@ -904,6 +1135,7 @@ const FileList = () => {
                     className={`w-full text-left px-4 py-2 text-sm ${!selectedTag ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                     onClick={() => {
                       setSelectedTag('');
+                      setCurrentPage(1);
                       setIsTagDropdownOpen(false);
                     }}
                   >
@@ -917,6 +1149,7 @@ const FileList = () => {
                         className={`w-full text-left px-4 py-2 text-sm ${selectedTag === tag ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                         onClick={() => {
                           setSelectedTag(tag);
+                          setCurrentPage(1);
                           setIsTagDropdownOpen(false);
                         }}
                       >
@@ -934,7 +1167,8 @@ const FileList = () => {
           </div>
 
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            {filteredFiles.length} file{filteredFiles.length !== 1 ? 's' : ''} found
+            {totalCount.toLocaleString()} file{totalCount !== 1 ? 's' : ''} found
+            {isPaginated && ` (showing ${files.length})`}
           </span>
         </div>
       </div>
@@ -944,55 +1178,64 @@ const FileList = () => {
         {isTriageMode && (
           <div className="w-8 px-2 py-2"></div>
         )}
-        <SortableHeader 
-          column="agent_id" 
-          currentSort={sortColumn} 
-          currentDirection={sortDirection} 
+        <SortableHeader
+          column="agent_id"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
           onSort={handleSort}
           className="flex-shrink-0 w-32"
         >
           Agent ID
         </SortableHeader>
-        <SortableHeader 
-          column="size" 
-          currentSort={sortColumn} 
-          currentDirection={sortDirection} 
+        <SortableHeader
+          column="source"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
+          onSort={handleSort}
+          className="flex-shrink-0 w-40"
+        >
+          Source
+        </SortableHeader>
+        <SortableHeader
+          column="size"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
           onSort={handleSort}
           className="flex-shrink-0 w-24"
         >
           Size
         </SortableHeader>
-        <SortableHeader 
-          column="timestamp" 
-          currentSort={sortColumn} 
-          currentDirection={sortDirection} 
+        <SortableHeader
+          column="timestamp"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
           onSort={handleSort}
           className="flex-shrink-0 w-44"
         >
           Time Uploaded
         </SortableHeader>
-        <SortableHeader 
-          column="magic_type" 
-          currentSort={sortColumn} 
-          currentDirection={sortDirection} 
+        <SortableHeader
+          column="magic_type"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
           onSort={handleSort}
           className="flex-shrink-0 w-48"
         >
           Magic Type
         </SortableHeader>
-        <SortableHeader 
-          column="findings" 
-          currentSort={sortColumn} 
-          currentDirection={sortDirection} 
+        <SortableHeader
+          column="findings"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
           onSort={handleSort}
           className="flex-shrink-0 w-12 justify-center"
         >
           Findings
         </SortableHeader>
-        <SortableHeader 
-          column="path" 
-          currentSort={sortColumn} 
-          currentDirection={sortDirection} 
+        <SortableHeader
+          column="path"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
           onSort={handleSort}
           className="flex-grow px-4"
         >
@@ -1000,11 +1243,29 @@ const FileList = () => {
         </SortableHeader>
       </div>
 
+      {/* Error state */}
+      {error && (
+        <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg flex items-center space-x-2 m-4">
+          <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400" />
+          <div className="flex flex-col">
+            <span className="text-red-600 dark:text-red-400">Error loading files: {error}</span>
+            <span className="text-sm text-red-500 dark:text-red-400">Check browser console for details</span>
+          </div>
+        </div>
+      )}
 
-      {filteredFiles.length === 0 && (
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex justify-center items-center h-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+        </div>
+      )}
+
+      {/* No results state */}
+      {!isLoading && !error && files.length === 0 && totalCount === 0 && (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <div className="text-gray-500 dark:text-gray-400 mb-6">
-            {files.length > 0 ? (
+            {totalCount > 0 ? (
               <>
                 <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <h3 className="text-lg font-medium mb-2">No matching files found</h3>
@@ -1035,7 +1296,7 @@ const FileList = () => {
               </>
             )}
           </div>
-          {files.length > 0 && (
+          {totalCount > 0 && (
             <Link
               to="/files?view_state=all"
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors inline-flex items-center"
@@ -1046,33 +1307,69 @@ const FileList = () => {
         </div>
       )}
 
-
-      {/* Virtualized List */}
-      {filteredFiles.length > 0 && (
-        <div className="h-[calc(100vh-150px)]">
-          <AutoSizer>
-            {({ height, width }) => (
-              <List
-                ref={listRef}
-                height={height}
-                width={width}
-                itemCount={filteredFiles.length}
-                itemSize={ROW_HEIGHT}
-                itemData={{
-                  files: filteredFiles,
-                  isTriageMode,
-                  selectedIndex,
-                  selectedFiles,
-                  handleRowClick,
-                  navigate,
-                  username
-                }}
-              >
-                {Row}
-              </List>
-            )}
-          </AutoSizer>
-        </div>
+      {/* List or Table based on pagination */}
+      {!isLoading && !error && files.length > 0 && (
+        <>
+          {isPaginated ? (
+            // Paginated table view
+            <div className="overflow-x-auto">
+              <div className="min-w-full">
+                {files.map((file, index) => (
+                  <Row
+                    key={file.object_id}
+                    index={index}
+                    style={{ height: ROW_HEIGHT }}
+                    data={{
+                      files,
+                      isTriageMode,
+                      selectedIndex: selectedIndex - (currentPage - 1) * PAGE_SIZE,
+                      selectedFiles,
+                      handleRowClick,
+                      navigate,
+                      username
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            // Virtualized list view
+            <div className="h-[calc(100vh-150px)]">
+              <AutoSizer>
+                {({ height, width }) => (
+                  <List
+                    ref={listRef}
+                    height={height}
+                    width={width}
+                    itemCount={files.length}
+                    itemSize={ROW_HEIGHT}
+                    itemData={{
+                      files,
+                      isTriageMode,
+                      selectedIndex,
+                      selectedFiles,
+                      handleRowClick,
+                      navigate,
+                      username
+                    }}
+                  >
+                    {Row}
+                  </List>
+                )}
+              </AutoSizer>
+            </div>
+          )}
+          
+          {/* Pagination controls */}
+          {isPaginated && (
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              onPageChange={handlePageChange}
+            />
+          )}
+        </>
       )}
     </div>
   );

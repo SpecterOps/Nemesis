@@ -21,6 +21,8 @@ nav:
     - troubleshooting.md
     - performance.md
     - yara.md
+    - chromium.md
+    - agents.md
 
   - Services:
     - dapr.md

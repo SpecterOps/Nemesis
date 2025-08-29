@@ -81,49 +81,77 @@ class LnkParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        # get the current `file_enriched` from the Dapr statestore
         file_enriched = get_file_enriched(object_id)
-        should_run = "ms windows shortcut" in file_enriched.magic_type.lower()
-        return should_run
+        return "ms windows shortcut" in file_enriched.magic_type.lower()
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process file."""
+    def _analyze_lnk(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze LNK file and generate enrichment result.
+
+        Args:
+            file_path: Path to the LNK file to analyze
+            file_enriched: File enrichment data
+
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
+        enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
+
         try:
-            # get the current `file_enriched` FileEnriched object from the database backend
-            file_enriched = get_file_enriched(object_id)
+            with open(file_path, "rb") as f:
+                lnk = LnkParse3.lnk_file(f)
 
-            enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
+            enrichment_result.results = convert_datetime(lnk.get_json())
 
-            with self.storage.download(file_enriched.object_id) as temp_file:
-                with open(temp_file.name, "rb") as f:
-                    lnk = LnkParse3.lnk_file(f)
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
+                display = get_lnk_file_display(lnk)
+                tmp_display_file.write(display)
+                tmp_display_file.flush()
 
-                enrichment_result.results = convert_datetime(lnk.get_json())
+                object_id = self.storage.upload_file(tmp_display_file.name)
 
-                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
-                    display = get_lnk_file_display(lnk)
-                    tmp_display_file.write(display)
-                    tmp_display_file.flush()
-
-                    object_id = self.storage.upload_file(tmp_display_file.name)
-
-                    displayable_parsed = Transform(
-                        type="displayable_parsed",
-                        object_id=f"{object_id}",
-                        metadata={
-                            "file_name": f"{file_enriched.file_name}.txt",
-                            "display_type_in_dashboard": "monaco",
-                            "default_display": True,
-                        },
-                    )
-                enrichment_result.transforms = [displayable_parsed]
+                displayable_parsed = Transform(
+                    type="displayable_parsed",
+                    object_id=f"{object_id}",
+                    metadata={
+                        "file_name": f"{file_enriched.file_name}.txt",
+                        "display_type_in_dashboard": "monaco",
+                        "default_display": True,
+                    },
+                )
+            enrichment_result.transforms = [displayable_parsed]
 
             return enrichment_result
 
         except Exception as e:
+            logger.exception(e, message=f"Error analyzing LNK file for {file_enriched.file_name}")
+            return None
+
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process file.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+        try:
+            # get the current `file_enriched` FileEnriched object from the database backend
+            file_enriched = get_file_enriched(object_id)
+
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_lnk(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    return self._analyze_lnk(temp_file.name, file_enriched)
+
+        except Exception as e:
             logger.exception(e, message="Error processing file", file_object_id=object_id)
+            return None
 
 
 def create_enrichment_module() -> EnrichmentModule:

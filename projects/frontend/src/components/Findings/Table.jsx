@@ -256,7 +256,17 @@ const TriageActions = ({ finding, handleTriage, triageStates }) => (
             <div className="flex items-center justify-center">
                 {finding.finding_triage_histories.length > 0 &&
                     finding.finding_triage_histories[0].automated ? (
-                    <Tooltip content="Automated triage" side="top">
+                    <Tooltip 
+                        content={
+                            <>
+                                {finding.finding_triage_histories[0].explanation || "No explanation provided"}
+                                {finding.finding_triage_histories[0].confidence && finding.finding_triage_histories[0].confidence > 0 && (
+                                    <span> (confidence: <strong>{finding.finding_triage_histories[0].confidence}</strong>)</span>
+                                )}
+                            </>
+                        } 
+                        side="top"
+                    >
                         <span>
                             <Bot className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                         </span>

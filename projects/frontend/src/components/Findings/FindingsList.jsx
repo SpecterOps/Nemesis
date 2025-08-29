@@ -194,6 +194,9 @@ const FindingsList = () => {
                 automated
                 username
                 value
+                explanation
+                confidence
+                true_positive_context
                 timestamp
               }
             }
@@ -266,6 +269,9 @@ const FindingsList = () => {
               automated
               username
               value
+              explanation
+              confidence
+              true_positive_context
               timestamp
             }
           }
@@ -616,8 +622,8 @@ const NoFilteredFindings = () => {
     // Get the current search params
     const newParams = new URLSearchParams(searchParams);
 
-    // Explicitly set triage_state to "all"
-    newParams.set('triage_state', 'all');
+    // Explicitly set triage_state to "untriaged_and_actionable" (the new default)
+    newParams.set('triage_state', 'untriaged_and_actionable');
 
     // Clear other filter parameters that might be causing the filtering
     newParams.delete('category');
@@ -641,13 +647,13 @@ const NoFilteredFindings = () => {
           No findings match your current filters
         </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Adjust the filters or click below to view all findings.
+          Adjust the filters or click below to view default findings.
         </p>
         <button
           onClick={handleViewAllFindings}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors inline-flex items-center"
         >
-          View All Findings
+          View Default Findings
         </button>
       </div>
     </div>

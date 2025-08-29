@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 
-const Tooltip = ({ children, content }) => {
+const Tooltip = ({ children, content, position = 'top' }) => {
   const [isVisible, setIsVisible] = useState(false);
   return (
     <div className="relative inline-block"
@@ -22,9 +22,13 @@ const Tooltip = ({ children, content }) => {
       onMouseLeave={() => setIsVisible(false)}>
       {children}
       {isVisible && (
-        <div className="absolute z-10 px-2 py-1 text-sm text-white bg-gray-900 rounded-md whitespace-nowrap -top-8 left-1/2 transform -translate-x-1/2">
+        <div className={`absolute z-10 px-2 py-1 text-sm text-white bg-gray-900 rounded-md whitespace-nowrap left-1/2 transform -translate-x-1/2 ${
+          position === 'bottom' ? 'top-full mt-2' : '-top-8'
+        }`}>
           {content}
-          <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+          <div className={`absolute left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 ${
+            position === 'bottom' ? '-top-1' : '-bottom-1'
+          }`}></div>
         </div>
       )}
     </div>
@@ -68,6 +72,7 @@ const YaraRulesManager = () => {
   const [needsReload, setNeedsReload] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
   const [showReloadAlert, setShowReloadAlert] = useState(false);
+  const [isBulkRunning, setIsBulkRunning] = useState(false);
 
   // Set source to username when creating a new rule
   useEffect(() => {
@@ -324,6 +329,22 @@ const YaraRulesManager = () => {
     }
   };
 
+  // Add bulk re-run handler
+  const handleBulkRerun = async () => {
+    try {
+      setIsBulkRunning(true);
+      await fetch('/api/enrichments/yara/bulk', { method: 'POST' });
+
+      // Show bulk re-run notification for 20 seconds
+      setTimeout(() => {
+        setIsBulkRunning(false);
+      }, 20000);
+    } catch (err) {
+      setError(`Failed to trigger bulk Yara re-run: ${err.message}`);
+      setIsBulkRunning(false);
+    }
+  };
+
   if (error) {
     return (
       <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg flex items-center space-x-2">
@@ -354,7 +375,7 @@ const YaraRulesManager = () => {
               <PlusCircle className="w-4 h-4" />
               <span>New Rule</span>
             </button>
-            <Tooltip content="Signal the Nemesis Yara engine to reload the modified rule set">
+            <Tooltip content="Signal the Nemesis Yara engine to reload the modified rule set" position="bottom">
               <button
                 onClick={handleReload}
                 disabled={!needsReload || isReloading}
@@ -365,6 +386,19 @@ const YaraRulesManager = () => {
               >
                 <Clock className="w-4 h-4" />
                 <span>Reload Yara Engine</span>
+              </button>
+            </Tooltip>
+            <Tooltip content="Trigger a bulk re-run of all Yara rules against all files in the system" position="bottom">
+              <button
+                onClick={handleBulkRerun}
+                disabled={isBulkRunning}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${isBulkRunning
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
+                  : 'bg-orange-600 text-white hover:bg-orange-700'
+                  }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span>Re-run Yara Rules</span>
               </button>
             </Tooltip>
             </div>
@@ -385,6 +419,15 @@ const YaraRulesManager = () => {
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 dark:border-blue-400"></div>
               <span className="text-blue-800 dark:text-blue-300 font-medium">
                 Yara Engine is Reloading...
+              </span>
+            </div>
+          )}
+
+          {isBulkRunning && (
+            <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-600 dark:border-orange-400"></div>
+              <span className="text-orange-800 dark:text-orange-300 font-medium">
+                Re-running Yara Rules...
               </span>
             </div>
           )}

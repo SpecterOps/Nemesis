@@ -3,6 +3,9 @@
     name: document_search_results
     schema: public
 - table:
+    name: container_processing
+    schema: public
+- table:
     name: workflows
     schema: public
 - table:
@@ -139,3 +142,45 @@
 - table:
     name: yara_rules
     schema: public
+- table:
+    name: agent_prompts
+    schema: public
+- table:
+    name: file_linkings
+    schema: public
+- table:
+    name: file_listings
+    schema: public
+
+# `chromium` schema
+- table:
+    name: history
+    schema: chromium
+  object_relationships:
+    - name: files_enriched
+      using:
+        foreign_key_constraint_on: originating_object_id
+- table:
+    name: downloads
+    schema: chromium
+  object_relationships:
+    - name: files_enriched
+      using:
+        foreign_key_constraint_on: originating_object_id
+- table:
+    name: logins
+    schema: chromium
+  object_relationships:
+    - name: files_enriched
+      using:
+        foreign_key_constraint_on: originating_object_id
+- table:
+    name: cookies
+    schema: chromium
+  object_relationships:
+    - name: files_enriched
+      using:
+        foreign_key_constraint_on: originating_object_id
+- table:
+    name: state_keys
+    schema: chromium

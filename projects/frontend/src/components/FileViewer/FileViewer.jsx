@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Dialog from "@/components/ui/dialog";
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from 'graphql-ws';
 import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileText, Image } from 'lucide-react';
@@ -258,7 +259,10 @@ const FileViewer = () => {
   const [containerAnalysisStarted, setContainerAnalysisStarted] = useState(false);
   const [summarizationStarted, setSummarizationStarted] = useState(false);
   const [credentialAnalysisStarted, setCredentialAnalysisStarted] = useState(false);
-  const [availableLLMEnrichments, setAvailableLLMEnrichments] = useState([]);
+  const [dotnetAnalysisStarted, setDotnetAnalysisStarted] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [isLiteLLMAvailable, setIsLiteLLMAvailable] = useState(false);
 
   // Determine where we came from
   const isFromSearch = location.state?.from === 'search';
@@ -318,21 +322,21 @@ const FileViewer = () => {
     }
   };
 
-  // check which LLM enrichments are available
+  // check if LiteLLM service is available
   useEffect(() => {
-    const fetchAvailableLLMEnrichments = async () => {
+    const checkLiteLLMAvailability = async () => {
       try {
-        const response = await fetch('/api/enrichments/llm');
+        const response = await fetch('/api/system/available-services');
         if (response.ok) {
           const data = await response.json();
-          setAvailableLLMEnrichments(data.modules || []);
+          setIsLiteLLMAvailable(data.services?.includes('/llm') || false);
         }
       } catch (error) {
-        console.error('Error fetching available LLM enrichments:', error);
+        console.error('Error checking LiteLLM availability:', error);
       }
     };
 
-    fetchAvailableLLMEnrichments();
+    checkLiteLLMAvailability();
   }, []);
 
   // record that a user viewed this file
@@ -556,19 +560,14 @@ const FileViewer = () => {
   };
 
   const shouldShowSummarizationButton = () => {
-    if (!availableLLMEnrichments.includes('text_summarizer') || summarizationStarted) return false;
-
-    // Check if text_summarizer enrichment already exists
-    const hasSummarizerEnrichment = fileData?.enrichments?.some(enrichment =>
-      enrichment.module_name === 'text_summarizer'
-    );
+    if (!isLiteLLMAvailable || summarizationStarted) return false;
 
     // Check if a text_summary transform already exists
     const hasTextSummaryTransform = fileData?.transforms?.some(transform =>
       transform.type === 'text_summary'
     );
 
-    if (hasSummarizerEnrichment || hasTextSummaryTransform) return false;
+    if (hasTextSummaryTransform) return false;
 
     // Check if file is plaintext OR has an extracted_text transform
     const hasExtractedTextTransform = fileData?.transforms?.some(transform =>
@@ -579,19 +578,14 @@ const FileViewer = () => {
   };
 
   const shouldShowCredentialAnalysisButton = () => {
-    if (!availableLLMEnrichments.includes('llm_credential_analysis') || credentialAnalysisStarted) return false;
-
-    // Check if llm_credential_analysis enrichment result already exists
-    const hasCredentialAnalysisEnrichment = fileData?.enrichments?.some(enrichment =>
-      enrichment.module_name === 'llm_credential_analysis'
-    );
+    if (!isLiteLLMAvailable || credentialAnalysisStarted) return false;
 
     // Check if a llm_extracted_credentials transform already exists
     const hasExtractedCredentialTransform = fileData?.transforms?.some(transform =>
       transform.type === 'llm_extracted_credentials'
     );
 
-    if (hasCredentialAnalysisEnrichment || hasExtractedCredentialTransform) return false;
+    if (hasExtractedCredentialTransform) return false;
 
     // Check if file is plaintext OR has an extracted_text transform
     const hasExtractedTextTransform = fileData?.transforms?.some(transform =>
@@ -599,6 +593,20 @@ const FileViewer = () => {
     );
 
     return fileData?.is_plaintext || hasExtractedTextTransform;
+  };
+
+  const shouldShowDotNetAnalysisButton = () => {
+    if (!isLiteLLMAvailable || dotnetAnalysisStarted) return false;
+
+    // Check if a dotnet_analysis transform already exists
+    const hasDotNetAnalysisTransform = fileData?.transforms?.some(transform =>
+      transform.type === 'dotnet_analysis'
+    );
+
+    if (hasDotNetAnalysisTransform) return false;
+
+    // Check if file is a .NET assembly based on magic_type
+    return fileData?.magic_type && fileData.magic_type.toLowerCase().includes('mono/.net assembly');
   };
 
   // Start with hex as fallback
@@ -681,6 +689,7 @@ useEffect(() => {
               files_enriched(where: {object_id: {_eq: $objectId}}) {
                 object_id
                 agent_id
+                source
                 project
                 timestamp
                 expiration
@@ -692,6 +701,7 @@ useEffect(() => {
                 is_plaintext
                 is_container
                 originating_object_id
+                originating_container_id
                 nesting_level
                 hashes
                 file_tags
@@ -965,7 +975,8 @@ useEffect(() => {
         objectIdToSummarize = fileData.object_id;
       }
 
-      const response = await fetch(`/api/enrichments/text_summarizer`, {
+      // Fire-and-forget: don't await the response since analysis runs in background
+      fetch(`/api/agents/text_summarizer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -973,11 +984,15 @@ useEffect(() => {
         body: JSON.stringify({
           object_id: objectIdToSummarize
         })
+      }).then(response => {
+        if (!response.ok) {
+          console.error('Text summarization request failed:', response.status);
+        } else {
+          console.log('Text summarization started successfully');
+        }
+      }).catch(error => {
+        console.error('Error triggering text summarization:', error);
       });
-
-      if (!response.ok) {
-        throw new Error('Summarization request failed');
-      }
     } catch (error) {
       console.error('Error triggering text summarization:', error);
       // Still keeping the button hidden as the request was made
@@ -1003,7 +1018,9 @@ useEffect(() => {
         objectIdToAnalyze = fileData.object_id;
       }
       console.error("objectIdToAnalyze", objectIdToAnalyze);
-      const response = await fetch(`/api/enrichments/llm_credential_analysis`, {
+      
+      // Fire-and-forget: don't await the response since analysis runs in background
+      fetch(`/api/agents/llm_credential_analysis`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1011,15 +1028,61 @@ useEffect(() => {
         body: JSON.stringify({
           object_id: objectIdToAnalyze
         })
+      }).then(response => {
+        if (!response.ok) {
+          console.error('LLM credential analysis request failed:', response.status);
+        } else {
+          console.log('LLM credential analysis started successfully');
+        }
+      }).catch(error => {
+        console.error('Error triggering LLM credential analysis:', error);
       });
-
-      if (!response.ok) {
-        throw new Error('LLM credential analysis failed');
-      }
     } catch (error) {
       console.error('Error triggering LLM credential analysis:', error);
       // Still keeping the button hidden as the request was made
     }
+  };
+
+  const handleDotNetAnalysis = () => {
+    // Show confirmation dialog
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmAnalysis = async () => {
+    setShowConfirmDialog(false);
+    
+    try {
+      setDotnetAnalysisStarted(true);
+
+      // Show success message immediately
+      setShowSuccessDialog(true);
+
+      // Fire-and-forget: don't await the response since analysis runs in background
+      fetch(`/api/agents/dotnet_analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          object_id: fileData.object_id
+        })
+      }).then(response => {
+        if (!response.ok) {
+          console.error('.NET analysis request failed:', response.status);
+        } else {
+          console.log('.NET analysis started successfully');
+        }
+      }).catch(error => {
+        console.error('Error triggering .NET analysis:', error);
+      });
+
+    } catch (error) {
+      console.error('Error triggering .NET analysis:', error);
+    }
+  };
+
+  const handleCancelAnalysis = () => {
+    setShowConfirmDialog(false);
   };
 
   const renderContentTruncationAlert = () => {
@@ -1150,6 +1213,14 @@ useEffect(() => {
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
                 >
                   Use LLM to Extract Credentials
+                </button>
+              )}
+              {shouldShowDotNetAnalysisButton() && (
+                <button
+                  onClick={handleDotNetAnalysis}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
+                >
+                  Analyze .NET Assembly (with a LLM)
                 </button>
               )}
             </div>
@@ -1303,6 +1374,50 @@ useEffect(() => {
       </div>
 
       <EnrichmentStatusSection objectId={objectId} />
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Confirm .NET Analysis
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            This could take a bit of time and tokens, continue?
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={handleCancelAnalysis}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg transition-colors"
+            >
+              No
+            </button>
+            <button
+              onClick={handleConfirmAnalysis}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              Yes
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Success Dialog */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Analysis Started
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            Analysis started, results will appear here when completed
+          </p>
+          <button
+            onClick={() => setShowSuccessDialog(false)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            OK
+          </button>
+        </div>
+      </Dialog>
     </div>
   );
 };

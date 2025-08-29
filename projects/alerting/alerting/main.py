@@ -288,6 +288,42 @@ async def handle_alert(event: CloudEvent[Alert]):
         raise
 
 
+@app.get("/apprise-info")
+async def get_apprise_info():
+    """Get information about configured Apprise URLs, specifically Slack channels."""
+    apprise_urls = os.getenv("APPRISE_URLS", "")
+    
+    if not apprise_urls:
+        return {"channels": []}
+    
+    channels = []
+    
+    for apprise_url in apprise_urls.split(","):
+        url, tag = process_apprise_url(apprise_url)
+        
+        # Only process Slack URLs
+        if url.startswith("slack://"):
+            # Extract channel name from Slack URL format: slack://TOKEN@WORKSPACE/#channel
+            import re
+            channel_match = re.search(r'#([^?]+)', url)
+            if channel_match:
+                channel_name = channel_match.group(1)
+                
+                if tag and tag != "default":
+                    channels.append({
+                        "name": channel_name,
+                        "type": "tagged",
+                        "tag": tag
+                    })
+                else:
+                    channels.append({
+                        "name": channel_name,
+                        "type": "main"
+                    })
+    
+    return {"channels": channels}
+
+
 @app.api_route("/healthz", methods=["GET", "HEAD"])
 async def healthcheck():
     """Health check endpoint for Docker healthcheck."""

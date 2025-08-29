@@ -6,7 +6,10 @@ from typing import Union
 
 import dnfile
 import structlog
-from common.models import EnrichmentResult, File, FileObject, Finding, FindingCategory, FindingOrigin, Transform
+from common.models import (
+    DotNetInput,
+    EnrichmentResult,
+)
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
@@ -107,37 +110,6 @@ def parse_dotnet_assembly(filename: Union[str, Path]) -> dict:
     return result
 
 
-def dict_to_markdown(data):
-    """Generates a markdown report from inspect_assembly data."""
-    report = []
-
-    for section, content in data.items():
-        if content and content != {} and content != []:
-            report.append(f"# {section}")
-
-            if isinstance(content, dict):
-                for key, items in content.items():
-                    report.append(f"\n### {key}")
-                    for item in items:
-                        method = item.get("MethodName", "Unknown - Error obtaining method")
-                        report.append(f"- Location in Assembly: `{method}`")
-
-                        for key, value in item.items():
-                            if key == "MethodName" or not value:
-                                continue
-                            report.append(f"- {key}: {value}")
-
-            elif isinstance(content, list):
-                for item in content:
-                    report.append(f"- {item}")
-
-    return "\n".join(report)
-
-
-def get_non_null_sections(data):
-    return {k: v for k, v in data.items() if v and v != {} and v != []}
-
-
 class DotNetAnalyzer(EnrichmentModule):
     def __init__(self):
         super().__init__("dotnet_analyzer", dependencies=["pe"])
@@ -145,109 +117,38 @@ class DotNetAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         # get the current `file_enriched` from the database backend
         file_enriched = get_file_enriched(object_id)
         should_run = "mono/.net assembly" in file_enriched.magic_type.lower()
-        logger.debug(f"DotNetAnalyzer should_run: {should_run}")
+
         return should_run
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file using the dotnet service."""
         try:
             # get the current `file_enriched` FileEnriched object from the database backend
             file_enriched = get_file_enriched(object_id)
 
+            # publish a `dotnet-input` message for the process-heavy decompilation and InspectAssembly analysis in `dotnet_service`
+            dotnet_input = DotNetInput(object_id=object_id)
+            with DaprClient() as client:
+                client.publish_event(
+                    pubsub_name="pubsub",
+                    topic_name="dotnet-input",
+                    data=json.dumps(dotnet_input.model_dump()),
+                    data_content_type="application/json",
+                )
+
             enrichment = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
-            # Step 1 - Get results from local parsing
-            with self.storage.download(file_enriched.object_id) as temp_file:
-                enrichment.results = {"parsed": parse_dotnet_assembly(temp_file.name)}
-
-            # Step 2 - call the DotNet API using Dapr SDK
-            with DaprClient() as dapr_client:
-                response = dapr_client.invoke_method(
-                    app_id="dotnet-api",
-                    method_name=f"file/{file_enriched.object_id}",
-                    http_verb="get",
-                    timeout=180,
-                )
-            service_results = json.loads(response.data)
-
-            # Step 3 - handle any decompilation results
-            if (
-                "decompilation" in service_results
-                and "object_id" in service_results["decompilation"]
-                and service_results["decompilation"]["object_id"]
-            ):
-                decompiled_object_id = service_results["decompilation"]["object_id"]
-
-                # enrichment_result
-                decompilation = Transform(
-                    type="decompilation",
-                    object_id=service_results["decompilation"]["object_id"],
-                    metadata={
-                        "file_name": f"{file_enriched.file_name}.zip",
-                        "offer_as_download": True,
-                        "display_title": "Decompiled Source Code",
-                    },
-                )
-                enrichment.transforms = [decompilation]
-
-                file_message = File(
-                    object_id=decompiled_object_id,
-                    agent_id=file_enriched.agent_id,
-                    project=file_enriched.project,
-                    timestamp=file_enriched.timestamp,
-                    expiration=file_enriched.expiration,
-                    path=f"{file_enriched.path}/decompiled.zip",
-                    originating_object_id=file_enriched.object_id,
-                    nesting_level=(file_enriched.nesting_level or 0) + 1,
-                )
-
-                with DaprClient() as dapr_client:
-                    data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
-                    dapr_client.publish_event(
-                        pubsub_name="pubsub",
-                        topic_name="file",
-                        data=data,
-                        data_content_type="application/json",
-                    )
-
-                logger.info(
-                    "Submitted decompiled source ZIP to Nemesis",
-                    decompiled_object_id=decompiled_object_id,
-                    originating_object_id=file_enriched.object_id,
-                )
-
-            # Step 5 - handle any deserialization results
-            if "inspect_assembly" in service_results and service_results["inspect_assembly"]:
-                logger.debug(f"service_results['inspect_assembly']: {service_results['inspect_assembly']}")
-                inspect_assembly = get_non_null_sections(service_results["inspect_assembly"])
-                if inspect_assembly:
-                    # Store the raw enrichment result
-                    enrichment.results["inspect_assembly"] = inspect_assembly
-
-                    # Generate a markdown finding summary
-                    summary_markdown = dict_to_markdown(inspect_assembly)
-                    display_data = FileObject(
-                        type="finding_summary",
-                        metadata={"summary": summary_markdown},
-                    )
-
-                    finding = Finding(
-                        category=FindingCategory.VULNERABILITY,
-                        finding_name="dotnet_vulns",
-                        origin_type=FindingOrigin.ENRICHMENT_MODULE,
-                        origin_name=self.name,
-                        object_id=file_enriched.object_id,
-                        severity=9,
-                        raw_data=inspect_assembly,
-                        data=[display_data],
-                    )
-
-                    enrichment.findings = [finding]
+            # Get results from local parsing
+            if file_path:
+                enrichment.results = {"parsed": parse_dotnet_assembly(file_path)}
+            else:
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    enrichment.results = {"parsed": parse_dotnet_assembly(temp_file.name)}
 
             return enrichment
 

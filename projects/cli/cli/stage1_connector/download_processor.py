@@ -161,8 +161,12 @@ class OutflankDownloadProcessor:
 
         # Upload the file to Nemesis
         try:
+            # Use the implant hostname as the source identifier
+            source = f"host://{implant.hostname}" if implant.hostname else None
+
             metadata = FileMetadata(
                 agent_id="stage1",
+                source=source,
                 project=self.project,
                 timestamp=datetime.now(UTC),
                 expiration=datetime.now(UTC).replace(year=datetime.now().year + 1),

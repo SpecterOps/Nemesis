@@ -14,8 +14,18 @@ CLI_OPTIONS=""
 FOUND_DIRECTORY=false
 
 for arg in "$@"; do
+    # Check for help flags first
+    if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+        # Pass help flag to the underlying CLI tool
+        docker run \
+          --rm \
+          -ti \
+          --network "$NEMESIS_NETWORK" \
+          "$NEMESIS_CLI_IMAGE" \
+          monitor --help
+        exit 0
     # Check if argument is a directory path
-    if [[ -d "$arg" ]]; then
+    elif [[ -d "$arg" ]]; then
         # It's a directory - this is what we'll monitor
         if [ "$FOUND_DIRECTORY" = true ]; then
             echo "Error: monitor command only accepts one directory path"

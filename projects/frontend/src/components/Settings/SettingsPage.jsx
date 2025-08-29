@@ -1,6 +1,6 @@
 import { useUser } from '@/contexts/UserContext';
-import { AlertTriangle, Calendar, Database, Trash2, User } from 'lucide-react';
-import React, { useState } from 'react';
+import { AlertTriangle, Bell, Calendar, Database, Trash2, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import Dialog from '../ui/dialog';
 
 // SettingsSection component remains the same
@@ -43,6 +43,48 @@ const SettingsPage = () => {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [deleteStatus, setDeleteStatus] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Version information state
+  const [versionInfo, setVersionInfo] = useState(null);
+  
+  // Alert information state
+  const [alertInfo, setAlertInfo] = useState(null);
+  
+  // Fetch version information on component mount
+  useEffect(() => {
+    const fetchVersionInfo = async () => {
+      try {
+        const response = await fetch('/version.json');
+        if (response.ok) {
+          const data = await response.json();
+          setVersionInfo(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch version info:', error);
+      }
+    };
+    
+    fetchVersionInfo();
+  }, []);
+  
+  // Fetch alert information on component mount
+  useEffect(() => {
+    const fetchAlertInfo = async () => {
+      try {
+        const response = await fetch('/api/system/apprise-info');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.channels && data.channels.length > 0) {
+            setAlertInfo(data);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch alert info:', error);
+      }
+    };
+    
+    fetchAlertInfo();
+  }, []);
 
   // Event handlers remain the same
   const handleUserSubmit = (e) => {
@@ -240,25 +282,87 @@ const SettingsPage = () => {
           </div>
         </SettingsSection>
 
-        {/* System Information section remains the same */}
+        {/* Alert Information section - only shown if alert info is available */}
+        {alertInfo && alertInfo.channels && alertInfo.channels.length > 0 && (
+          <SettingsSection
+            icon={Bell}
+            title="Alert Information"
+          >
+            <div className="space-y-2 text-sm">
+              {alertInfo.channels.map((channel, index) => (
+                <div key={index} className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {channel.type === 'main' ? 'Main Alert Channel' : `${channel.tag.charAt(0).toUpperCase() + channel.tag.slice(1)} Channel`}
+                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">
+                    #{channel.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </SettingsSection>
+        )}
+
+        {/* System Information section with version details */}
         <SettingsSection
           icon={AlertTriangle}
           title="System Information"
-          description="Version and system details"
         >
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500 dark:text-gray-400">Version</span>
-              <span className="text-gray-900 dark:text-gray-100">0.1.0</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500 dark:text-gray-400">
-                Build Date
-              </span>
-              <span className="text-gray-900 dark:text-gray-100">
-                January 16, 2025
-              </span>
-            </div>
+            {versionInfo ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Git SHA</span>
+                  <span className="text-gray-900 dark:text-gray-100 font-mono">
+                    {versionInfo.git.shaShort}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Branch</span>
+                  <span className="text-gray-900 dark:text-gray-100">
+                    {versionInfo.git.branch}
+                  </span>
+                </div>
+                {versionInfo.git.tag && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Release</span>
+                    <span className="text-gray-900 dark:text-gray-100">
+                      {versionInfo.git.tag}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Build Date</span>
+                  <span className="text-gray-900 dark:text-gray-100">
+                    {new Date(versionInfo.build.timestamp).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Build Source</span>
+                  <span className="text-gray-900 dark:text-gray-100">
+                    {versionInfo.build.source}
+                  </span>
+                </div>
+                {versionInfo.git.dirty && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Status</span>
+                    <span className="text-yellow-600 dark:text-yellow-400">
+                      Uncommitted changes
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-start">
+                  <span className="text-gray-500 dark:text-gray-400">Last Commit</span>
+                  <span className="text-gray-900 dark:text-gray-100 text-right max-w-xs">
+                    {versionInfo.git.commitMessage}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="text-gray-500 dark:text-gray-400">
+                Loading version information...
+              </div>
+            )}
           </div>
         </SettingsSection>
       </div>

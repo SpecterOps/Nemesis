@@ -17,7 +17,7 @@ def yara_match_to_markdown(match):
         f"# Yara Rule: {match['rule_name']}",
     ]
     try:
-        if 'rule_description' in match and match['rule_description']:
+        if "rule_description" in match and match["rule_description"]:
             markdown.append(f"{match['rule_description']}\n")
 
         markdown.append('### Matches\nMatching strings in the form of "<offset>: <matched data>".')
@@ -34,7 +34,7 @@ def yara_match_to_markdown(match):
 
         markdown.append("```\n")
 
-        if 'rule_text' in match and match['rule_text']:
+        if "rule_text" in match and match["rule_text"]:
             markdown.extend(["# Rule Text", f"```yara\n{match['rule_text']}"])
         else:
             markdown.extend(["# Rule Text", "```text\n*Rule text not available*"])
@@ -60,116 +60,137 @@ class YaraScanner(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Always returns True as Yara scanning should run on all files."""
         return True
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process file using Yara scanning."""
-        try:
-            # Get the current file_enriched from the database backend
-            file_enriched = get_file_enriched(object_id)
+    def _analyze_yara(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze file using Yara rules and generate enrichment result.
 
-            with self.storage.download(file_enriched.object_id) as file:
-                # Get scan results
-                scan_results = self.rule_manager.match(file.name)
+        Args:
+            file_path: Path to the file to analyze with Yara
+            file_enriched: File enrichment data
 
-                enrichment_result = EnrichmentResult(module_name=self.name)
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
+        # Get scan results
+        scan_results = self.rule_manager.match(file_path)
 
-                yara_matches = []
-                for rule in scan_results:
-                    rule_text = self.rule_manager.get_rule_content(rule.identifier)
-                    yara_match = {"rule_name": rule.identifier, "rule_string_matches": [], "rule_text": rule_text}
+        enrichment_result = EnrichmentResult(module_name=self.name)
 
-                    # Add metadata if available
-                    metadata_dict = dict(rule.metadata)
-                    if "description" in metadata_dict:
-                        yara_match["rule_description"] = metadata_dict["description"]
+        yara_matches = []
+        for rule in scan_results:
+            rule_text = self.rule_manager.get_rule_content(rule.identifier)
+            yara_match = {"rule_name": rule.identifier, "rule_string_matches": [], "rule_text": rule_text}
 
-                    # Process patterns (strings in yara-x)
-                    for pattern in rule.patterns:
-                        if pattern.matches:  # Only process patterns that had matches
-                            string_match = {
-                                "identifier": pattern.identifier,
-                                "yara_string_match_instances": [],
-                            }
+            # Add metadata if available
+            metadata_dict = dict(rule.metadata)
+            if "description" in metadata_dict:
+                yara_match["rule_description"] = metadata_dict["description"]
 
-                            for match in pattern.matches:
-                                if match.length < 1000:
-                                    # Read the matched data from the file
-                                    with open(file.name, "rb") as f:
-                                        f.seek(match.offset)
-                                        matched_data = f.read(match.length)
+            # Process patterns (strings in yara-x)
+            for pattern in rule.patterns:
+                if pattern.matches:  # Only process patterns that had matches
+                    string_match = {
+                        "identifier": pattern.identifier,
+                        "yara_string_match_instances": [],
+                    }
 
-                                        string_match_instance = {
-                                            "offset": match.offset,
-                                            "length": match.length,
-                                        }
+                    for match in pattern.matches:
+                        if match.length < 1000:
+                            # Read the matched data from the file
+                            with open(file_path, "rb") as f:
+                                f.seek(match.offset)
+                                matched_data = f.read(match.length)
 
-                                        # Always include base64 representation for compatibility
-                                        string_match_instance["matched_data_b64"] = base64.b64encode(
-                                            matched_data
-                                        ).decode("utf-8")
+                                string_match_instance = {
+                                    "offset": match.offset,
+                                    "length": match.length,
+                                }
 
-                                        # Format differently based on file type
-                                        if hasattr(file_enriched, "is_plaintext") and file_enriched.is_plaintext:
-                                            try:
-                                                # Try to decode as UTF-8
-                                                string_match_instance["matched_data_text"] = matched_data.decode(
-                                                    "utf-8"
-                                                )
-                                            except UnicodeDecodeError:
-                                                try:
-                                                    # Fallback to a more lenient encoding
-                                                    string_match_instance["matched_data_text"] = matched_data.decode(
-                                                        "unicode_escape"
-                                                    )
-                                                except:
-                                                    # If both decodings fail, use hex format
-                                                    string_match_instance["matched_data_hex"] = format_hex_like_xxd(
-                                                        matched_data
-                                                    )
-                                        else:
-                                            # Binary file - format as hex
+                                # Always include base64 representation for compatibility
+                                string_match_instance["matched_data_b64"] = base64.b64encode(matched_data).decode(
+                                    "utf-8"
+                                )
+
+                                # Format differently based on file type
+                                if hasattr(file_enriched, "is_plaintext") and file_enriched.is_plaintext:
+                                    try:
+                                        # Try to decode as UTF-8
+                                        string_match_instance["matched_data_text"] = matched_data.decode("utf-8")
+                                    except UnicodeDecodeError:
+                                        try:
+                                            # Fallback to a more lenient encoding
+                                            string_match_instance["matched_data_text"] = matched_data.decode(
+                                                "unicode_escape"
+                                            )
+                                        except:
+                                            # If both decodings fail, use hex format
                                             string_match_instance["matched_data_hex"] = format_hex_like_xxd(
                                                 matched_data
                                             )
                                 else:
-                                    logger.warning(
-                                        f"Yara match for rule '{rule.identifier}' is length {match.length}, not including in base64 data"
-                                    )
-                                    string_match_instance = {
-                                        "offset": match.offset,
-                                        "length": match.length,
-                                    }
-                                string_match["yara_string_match_instances"].append(string_match_instance)
-
-                            yara_match["rule_string_matches"].append(string_match)
-
-                            summary_markdown = yara_match_to_markdown(yara_match)
-                            display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
-
-                            finding = Finding(
-                                category=FindingCategory.YARA_MATCH,
-                                finding_name="yara_match",
-                                origin_type=FindingOrigin.ENRICHMENT_MODULE,
-                                origin_name=self.name,
-                                object_id=file_enriched.object_id,
-                                severity=8,
-                                raw_data={"match": yara_match},
-                                data=[display_data],
+                                    # Binary file - format as hex
+                                    string_match_instance["matched_data_hex"] = format_hex_like_xxd(matched_data)
+                        else:
+                            logger.warning(
+                                f"Yara match for rule '{rule.identifier}' is length {match.length}, not including in base64 data"
                             )
+                            string_match_instance = {
+                                "offset": match.offset,
+                                "length": match.length,
+                            }
+                        string_match["yara_string_match_instances"].append(string_match_instance)
 
-                            if not enrichment_result.findings:
-                                enrichment_result.findings = []
+                    yara_match["rule_string_matches"].append(string_match)
 
-                            enrichment_result.findings.append(finding)
+                    summary_markdown = yara_match_to_markdown(yara_match)
+                    display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
 
-                    yara_matches.append(yara_match)
+                    finding = Finding(
+                        category=FindingCategory.YARA_MATCH,
+                        finding_name="yara_match",
+                        origin_type=FindingOrigin.ENRICHMENT_MODULE,
+                        origin_name=self.name,
+                        object_id=file_enriched.object_id,
+                        severity=8,
+                        raw_data={"match": yara_match},
+                        data=[display_data],
+                    )
 
-                if yara_matches:
-                    enrichment_result.results = {"yara_matches": yara_matches}
-                    return enrichment_result
+                    if not enrichment_result.findings:
+                        enrichment_result.findings = []
+
+                    enrichment_result.findings.append(finding)
+
+            yara_matches.append(yara_match)
+
+        if yara_matches:
+            enrichment_result.results = {"yara_matches": yara_matches}
+            return enrichment_result
+        return None
+
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process file using Yara scanning.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+        try:
+            # Get the current file_enriched from the database backend
+            file_enriched = get_file_enriched(object_id)
+
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_yara(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    return self._analyze_yara(temp_file.name, file_enriched)
 
         except Exception as e:
             logger.exception(e, message="Error in process()")

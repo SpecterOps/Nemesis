@@ -223,7 +223,7 @@ class YaraRuleManager:
         """
         scanner = self._get_scanner()
         if not scanner:
-            logger.warning("No Yara rules compiled")
+            logger.debug("No Yara rules compiled")
             return []
         try:
             # Check if target is a string that could be a file path

@@ -2,14 +2,15 @@ import tempfile
 import uuid
 from io import BytesIO
 
-import structlog
 from dapr.clients import DaprClient
 from fastapi import UploadFile
 from minio import Minio
 from minio.error import S3Error
 from urllib3 import PoolManager, Retry
 
-logger = structlog.get_logger(module=__name__)
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class StorageMinio:
@@ -58,7 +59,7 @@ class StorageMinio:
                 logger.exception(e, message="Failed to download file")
                 raise
             finally:
-                logger.info("Downloaded file", file_uuid=file_uuid)
+                logger.debug("Downloaded file", file_uuid=file_uuid)
 
             return temp_file
         except Exception as e:
@@ -75,7 +76,7 @@ class StorageMinio:
                 file_data = response.read()
                 response.close()
 
-                logger.info("Successfully downloaded file", file_uuid=file_uuid)
+                logger.debug("Successfully downloaded file", file_uuid=file_uuid)
                 return file_data
 
             except BaseException as e:
@@ -115,7 +116,7 @@ class StorageMinio:
                     yield chunk
 
                 response.close()
-                logger.info("Successfully streamed file", file_uuid=file_uuid)
+                logger.debug("Successfully streamed file", file_uuid=file_uuid)
 
             except BaseException as e:
                 logger.exception(e, message="Failed to stream file")
@@ -153,7 +154,7 @@ class StorageMinio:
         """Checks if the bucket exists and creates it w/ the LifecycleConfig if not."""
         try:
             if not self.check_bucket_exists():
-                logger.info("Creating Minio bucket", bucket=self.bucket_name)
+                logger.debug("Creating Minio bucket", bucket=self.bucket_name)
                 self.minio_client.make_bucket(f"{self.bucket_name}")
 
                 # # since this is the only place that creates the bucket, we can set
@@ -170,7 +171,7 @@ class StorageMinio:
                 #         ),
                 #     ],
                 # )
-                # logger.info(
+                # logger.debug(
                 #     f"Setting Minio bucket files to expire in {self.storage_expiration_days} days",
                 #     bucket=self.bucket_name,
                 # )
@@ -183,7 +184,7 @@ class StorageMinio:
         try:
             self.ensure_bucket_exists()
 
-            logger.info(f"Uploading UploadFile {file.filename} to storage")
+            logger.debug(f"Uploading UploadFile {file.filename} to storage")
 
             # Get file size using SpooledTemporaryFile instead of async read
             file_size = 0
@@ -281,7 +282,7 @@ class StorageMinio:
         upload creates everything correctly.
         """
 
-        logger.info("Deleting all files from bucket", bucket_name=self.bucket_name)
+        logger.debug("Deleting all files from bucket", bucket_name=self.bucket_name)
 
         try:
             files = self.minio_client.list_objects(self.bucket_name, recursive=True)

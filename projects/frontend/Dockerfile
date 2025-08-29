@@ -11,6 +11,8 @@ COPY package.json ./
 RUN npm install
 COPY . .
 
+# Note: version.json will be mounted as a volume in dev or copied during CI build
+
 ########################
 # Development
 ########################

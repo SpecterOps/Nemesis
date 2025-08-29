@@ -399,6 +399,10 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
                   <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.agent_id}</td>
                 </tr>
                 <tr>
+                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Source</td>
+                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.source || 'Unknown'}</td>
+                </tr>
+                <tr>
                   <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Project</td>
                   <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.project}</td>
                 </tr>
@@ -451,6 +455,19 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
                         className="text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         {fileData.originating_object_id}
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {fileData?.originating_container_id && (
+                  <tr>
+                    <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Originating Container</td>
+                    <td className="py-0.5 font-mono text-sm">
+                      <button
+                        onClick={() => navigate(`/containers?container_id=${fileData.originating_container_id}`)}
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        {fileData.originating_container_id}
                       </button>
                     </td>
                   </tr>

@@ -46,17 +46,25 @@ class FilenameScanner(EnrichmentModule):
             "phpinfo",
         ]
 
-    def should_process(self, object_id: str) -> bool:
-        """Always returns True as filename scanning should run on all files."""
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+        """Always returns True as filename scanning should run on all files.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file (not used by filename scanner)
+        """
         return True
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process file by checking its filename for sensitive terms."""
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process file by checking its filename for sensitive terms.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file (not used by filename scanner)
+        """
         try:
             # Get the current file_enriched from the database backend
             file_enriched = get_file_enriched(object_id)
-
-            logger.debug(f"scanning filename of object_id: {object_id}, filename: {file_enriched.file_name}")
 
             matches = []
             filename_lower = file_enriched.file_name.lower()

@@ -38,22 +38,39 @@ rule has_dpapi_blob
 }
         """)
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+        """Check if this file should be processed by scanning for DPAPI blobs.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+        """
         file_enriched = get_file_enriched(object_id)
         if file_enriched.size > self.size_limit:
             logger.warning(
                 f"[dpapi_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"
             )
 
-        num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
-        file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
+        if file_path:
+            # Use provided file path - read only the needed bytes
+            with open(file_path, "rb") as f:
+                num_bytes = min(file_enriched.size, self.size_limit)
+                file_bytes = f.read(num_bytes)
+        else:
+            # Fallback to downloading the file itself
+            num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
+            file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
 
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
-        logger.debug(f"[dpapi_analyzer] should_run: {should_run}")
         return should_run
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process file in either workflow or standalone mode."""
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process file in either workflow or standalone mode.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+        """
         try:
             file_enriched = get_file_enriched(object_id)
 
@@ -61,14 +78,20 @@ rule has_dpapi_blob
 
             # TODO: handle carving _large_ dpapi blobs + uploading to the datalake
 
-            with self.storage.download(file_enriched.object_id) as temp_file:
-                blobs = asyncio.run(
-                    carve_dpapi_blobs_from_file(temp_file.name, file_enriched.object_id, self.max_blobs)
-                )
-                masterkey_guids = sorted(set([blob["dpapi_master_key_guid"] for blob in blobs if blob["success"]]))
+            if file_path:
+                # Use provided file path (if file already downloaded)
+                blobs = asyncio.run(carve_dpapi_blobs_from_file(file_path, file_enriched.object_id, self.max_blobs))
+            else:
+                # Fallback to downloading the file itself
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    blobs = asyncio.run(
+                        carve_dpapi_blobs_from_file(temp_file.name, file_enriched.object_id, self.max_blobs)
+                    )
 
-                if blobs:
-                    summary_markdown = f"""
+            masterkey_guids = sorted({blob["dpapi_master_key_guid"] for blob in blobs if blob["success"]})
+
+            if blobs:
+                summary_markdown = f"""
 # DPAPI Blobs Found : {len(blobs)}
 # Masterkey GUIDs
 List of unique masterkey GUIDs associated with the found blobs:
@@ -76,24 +99,24 @@ List of unique masterkey GUIDs associated with the found blobs:
 {"\n".join(masterkey_guids)}
 ```
 """
-                    enrichment_result.results = {"blobs": blobs}
+                enrichment_result.results = {"blobs": blobs}
 
-                    display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
+                display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
 
-                    finding = Finding(
-                        category=FindingCategory.EXTRACTED_DATA,
-                        finding_name="dpapi_data",
-                        origin_type=FindingOrigin.ENRICHMENT_MODULE,
-                        origin_name=self.name,
-                        object_id=file_enriched.object_id,
-                        severity=5,
-                        raw_data=enrichment_result.results,
-                        data=[display_data],
-                    )
+                finding = Finding(
+                    category=FindingCategory.EXTRACTED_DATA,
+                    finding_name="dpapi_data",
+                    origin_type=FindingOrigin.ENRICHMENT_MODULE,
+                    origin_name=self.name,
+                    object_id=file_enriched.object_id,
+                    severity=5,
+                    raw_data=enrichment_result.results,
+                    data=[display_data],
+                )
 
-                    enrichment_result.findings = [finding]
+                enrichment_result.findings = [finding]
 
-                    return enrichment_result
+                return enrichment_result
 
         except Exception as e:
             logger.exception(e, message="Error in DPAPI process()")

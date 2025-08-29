@@ -418,7 +418,7 @@ def process_database(filename, keyfile=None):
                     warn(f"{filename}: error reading encrypted data!")
                     return None
 
-                result = f"{dbname}:$keepass$*2*{transform_rounds}*{algorithm}*"
+                result = f"dbname:$keepass$*2*{transform_rounds}*{algorithm}*"
                 result += bytes_to_hex(master_seed) + "*"
                 result += bytes_to_hex(transform_seed) + "*"
                 result += bytes_to_hex(initialization_vectors) + "*"

@@ -16,15 +16,17 @@ spec:
       value: "false"
     - name: autoAck
       value: "false"
+    - name: requeueInFailure
+      value: "true"
     - name: reconnectWait
-      value: "5"
+      value: "3"
     - name: concurrencyMode
       value: parallel
-    # - name: backOffMaxRetries # doesn't appear to be a used value
-    #   value: "5"
-    # - name: backOffMaxInterval # doesn't appear to be a used value
-    #   value: "5s"
-    - name: prefetchCount
-      value: "10"              # Set to 1 for processing one message at a time
+    - name: deliveryMode  # persistence setting
+      value: "2"
+    - name: prefetchCount # should be equal or less than the max concurrent workflows
+      value: "5"
+    - name: maxPriority   # set so we can prioritize some messages if wanted
+      value: "3"
 auth:
   secretStore: nemesis-secret-store

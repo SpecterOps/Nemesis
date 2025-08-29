@@ -1,0 +1,40 @@
+name: "chromium_local_state"
+description: "Link Chromium Local State files to Login Data + Cookies"
+category: "chromium"
+enabled: true
+
+triggers:
+  - file_patterns:
+      - "**/User Data/Local State"
+      - "**/Opera Software/Opera Stable/Local State"
+    mime_patterns:
+      - "application/json"
+
+linked_files:
+  - name: "login_data"
+    description: "Stored login credentials"
+    path_templates:
+      - "{parent_dir}/Default/Login Data"
+    priority: "high"
+    collection_reason: "Contains encrypted login credentials"
+
+  - name: "cookies"
+    description: "Stored cookie values"
+    path_templates:
+      - "{parent_dir}/Default/Network/Cookies"
+    priority: "high"
+    collection_reason: "Contains encrypted cookie values"
+
+  - name: "system_hive"
+    description: "SYSTEM registry hive"
+    path_templates:
+      - 'C:\Windows\System32\config\SYSTEM'
+    priority: "high"
+    collection_reason: "Needed to decrypt the DPAPI_SYSTEM secret"
+
+  - name: "security_hive"
+    description: "SECURITY registry hive"
+    path_templates:
+      - 'C:\Windows\System32\config\SECURITY'
+    priority: "high"
+    collection_reason: "Needed to decrypt the DPAPI_SYSTEM secret"

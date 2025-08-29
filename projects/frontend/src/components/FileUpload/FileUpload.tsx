@@ -1,27 +1,30 @@
 // src/components/FileUpload/FileUpload.tsx
 import { useUser } from '@/contexts/UserContext';
-import { AlertTriangle, Clock, FileText, Folder, HelpCircle, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Clock, FileText, Folder, HelpCircle, Loader2, X, MapPin, FolderArchive } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
+import { folderCompressor, CompressionProgress } from '@/utils/FolderCompressor';
 
 interface UploadResponse {
   object_id: string;
 }
 
-interface Metadata {
-  object_id: string;
-  agent_id: string;
-  project: string;
-  timestamp: string;
-  expiration: string;
-  path: string;
+interface ContainerUploadResponse {
+  container_id: string;
+  message: string;
+  estimated_files: number;
+  estimated_size: number;
 }
 
 interface FileUploadStatus {
   file: File;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: 'pending' | 'compressing' | 'uploading' | 'success' | 'error';
   progress: number;
   error?: string;
   objectId?: string;
+  containerId?: string;
+  isFolder?: boolean;
+  folderName?: string;
+  compressionProgress?: CompressionProgress;
 }
 
 // Custom hook for updating expiration time
@@ -105,9 +108,24 @@ const FileListItem: React.FC<{
   fileStatus: FileUploadStatus;
   onRemove: () => void;
 }> = ({ fileStatus, onRemove }) => {
-  const { file, status, progress, error } = fileStatus;
+  const { file, status, progress, error, isFolder, folderName, compressionProgress } = fileStatus;
 
   const getStatusIcon = () => {
+    if (isFolder) {
+      switch (status) {
+        case 'compressing':
+          return <Loader2 className="h-4 w-4 animate-spin text-orange-500" />;
+        case 'uploading':
+          return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+        case 'success':
+          return <FolderArchive className="h-4 w-4 text-green-500" />;
+        case 'error':
+          return <AlertTriangle className="h-4 w-4 text-red-500" />;
+        default:
+          return <FolderArchive className="h-4 w-4 text-gray-500" />;
+      }
+    }
+    
     switch (status) {
       case 'uploading':
         return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
@@ -126,6 +144,8 @@ const FileListItem: React.FC<{
 
   const getStatusColor = () => {
     switch (status) {
+      case 'compressing':
+        return 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800';
       case 'uploading':
         return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
       case 'success':
@@ -137,17 +157,46 @@ const FileListItem: React.FC<{
     }
   };
 
+  const getDisplayName = () => {
+    if (isFolder && folderName) {
+      return `${folderName} (folder)`;
+    }
+    return file.name;
+  };
+
+  const getStatusText = () => {
+    if (status === 'compressing' && compressionProgress) {
+      const { filesProcessed, totalFiles, uncompressedSize } = compressionProgress;
+      const sizeInMB = (uncompressedSize / 1024 / 1024).toFixed(1);
+      return `Compressing: ${filesProcessed}/${totalFiles} files (${sizeInMB} MB)`;
+    }
+    return null;
+  };
+
   return (
     <div className={`flex items-center justify-between p-3 rounded-md border ${getStatusColor()}`}>
       <div className="flex items-center space-x-3 flex-1 min-w-0">
         {getStatusIcon()}
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{file.name}</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300 truncate">{getDisplayName()}</span>
             <span className="text-xs text-gray-500 whitespace-nowrap">
               ({(file.size / 1024 / 1024).toFixed(2)} MB)
             </span>
           </div>
+          {status === 'compressing' && compressionProgress && (
+            <div className="mt-1">
+              <div className="text-xs text-orange-600 dark:text-orange-400 mb-1">
+                {getStatusText()}
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5">
+                <div
+                  className="bg-orange-500 h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${compressionProgress.percentage}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
           {status === 'uploading' && (
             <div className="mt-1">
               <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5">
@@ -163,12 +212,12 @@ const FileListItem: React.FC<{
           )}
         </div>
       </div>
-      {status !== 'uploading' && (
+      {status !== 'uploading' && status !== 'compressing' && (
         <button
           type="button"
           onClick={onRemove}
           className="text-gray-400 hover:text-red-500 p-1 ml-2"
-          title="Remove file"
+          title="Remove"
         >
           <X className="h-4 w-4" />
         </button>
@@ -181,6 +230,7 @@ const FileUpload: React.FC = () => {
   const { username, project: contextProject, dataExpirationDays, dataExpirationDate } = useUser();
   const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([]);
   const [filePath, setFilePath] = useState('');
+  const [source, setSource] = useState('');
   const [project, setProject] = useState(contextProject);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -249,18 +299,68 @@ const FileUpload: React.FC = () => {
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    if (droppedFiles.length > 0) {
-      addFiles(droppedFiles);
+    
+    // Clear previously uploaded files before adding new ones
+    setFileStatuses(prev => prev.filter(fs => fs.status !== 'success'));
+    
+    const items = Array.from(e.dataTransfer.items);
+    const regularFiles: File[] = [];
+    const folders: FileSystemDirectoryEntry[] = [];
+    
+    // Separate files and folders
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry) {
+          if (entry.isDirectory) {
+            folders.push(entry as FileSystemDirectoryEntry);
+          } else {
+            const file = item.getAsFile();
+            if (file) {
+              regularFiles.push(file);
+            }
+          }
+        }
+      }
+    }
+    
+    // Add regular files
+    if (regularFiles.length > 0) {
+      addFiles(regularFiles);
+    }
+    
+    // Process folders
+    for (const folder of folders) {
+      try {
+        // Create a placeholder file for the folder compression
+        const placeholderFile = new File([], `${folder.name}.zip`, { type: 'application/zip' });
+        
+        const folderStatus: FileUploadStatus = {
+          file: placeholderFile,
+          status: 'pending',
+          progress: 0,
+          isFolder: true,
+          folderName: folder.name
+        };
+        
+        setFileStatuses(prev => [...prev, folderStatus]);
+        
+        // Store the folder entry for later compression
+        (folderStatus as any).folderEntry = folder;
+      } catch (err) {
+        setError(`Failed to prepare folder ${folder.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
     }
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length > 0) {
+      // Clear previously uploaded files before adding new ones
+      setFileStatuses(prev => prev.filter(fs => fs.status !== 'success'));
       addFiles(selectedFiles);
     }
     // Reset the input so the same files can be selected again if needed
@@ -277,8 +377,122 @@ const FileUpload: React.FC = () => {
     setError(null);
   };
 
+  const uploadContainer = async (fileStatus: FileUploadStatus, index: number): Promise<void> => {
+    const { folderName } = fileStatus;
+    const folderEntry = (fileStatus as any).folderEntry as FileSystemDirectoryEntry;
+    
+    if (!folderEntry || !folderName) {
+      throw new Error('Invalid folder data');
+    }
+    
+    // Update status to compressing
+    setFileStatuses(prev => prev.map((fs, i) =>
+      i === index ? { ...fs, status: 'compressing', progress: 0 } : fs
+    ));
+    
+    try {
+      // Compress the folder
+      const compressionResult = await folderCompressor.compressFolder(folderEntry, {
+        maxUncompressedSize: 500 * 1024 * 1024, // 500MB uncompressed
+        maxCompressedSize: 100 * 1024 * 1024,   // 100MB compressed
+        onProgress: (progress) => {
+          setFileStatuses(prev => prev.map((fs, i) =>
+            i === index ? { ...fs, compressionProgress: progress, progress: progress.percentage } : fs
+          ));
+        }
+      });
+      
+      // Update the file status with the compressed blob
+      const compressedFile = new File([compressionResult.blob], `${folderName}.zip`, { 
+        type: 'application/zip' 
+      });
+      
+      setFileStatuses(prev => prev.map((fs, i) =>
+        i === index ? { ...fs, file: compressedFile, status: 'uploading', progress: 0 } : fs
+      ));
+      
+      // Prepare expiration
+      let expiration: Date;
+      if (dataExpirationDate) {
+        expiration = new Date(dataExpirationDate);
+      } else {
+        expiration = new Date();
+        expiration.setDate(expiration.getDate() + parseInt(dataExpirationDays));
+      }
+      
+      // Prepare form data for regular file upload
+      const formData = new FormData();
+      formData.append('file', compressedFile);
+      
+      const metadata = {
+        agent_id: username,
+        source: source || undefined,
+        project,
+        timestamp: new Date().toISOString(),
+        expiration: expiration.toISOString(),
+        path: getFormattedPath(filePath, `${folderName}.zip`)
+      };
+      
+      formData.append('metadata', JSON.stringify(metadata));
+      
+      // Simulate progress (since fetch doesn't provide upload progress by default)
+      const progressInterval = setInterval(() => {
+        setFileStatuses(prev => prev.map((fs, i) => {
+          if (i === index && fs.status === 'uploading' && fs.progress < 90) {
+            return { ...fs, progress: fs.progress + 10 };
+          }
+          return fs;
+        }));
+      }, 200);
+      
+      // Upload to regular files endpoint
+      const response = await fetch('/api/files', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      clearInterval(progressInterval);
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+      
+      const result = await response.json() as UploadResponse;
+      
+      // Update status to success
+      setFileStatuses(prev => prev.map((fs, i) =>
+        i === index ? {
+          ...fs,
+          status: 'success',
+          progress: 100,
+          objectId: result.object_id
+        } : fs
+      ));
+      
+      setSuccessCount(prev => prev + 1);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+      
+      // Update status to error
+      setFileStatuses(prev => prev.map((fs, i) =>
+        i === index ? {
+          ...fs,
+          status: 'error',
+          progress: 0,
+          error: errorMessage
+        } : fs
+      ));
+    }
+  };
+
   const uploadFile = async (fileStatus: FileUploadStatus, index: number): Promise<void> => {
-    const { file } = fileStatus;
+    const { file, isFolder } = fileStatus;
+    
+    // If it's a folder, use the container upload
+    if (isFolder) {
+      return uploadContainer(fileStatus, index);
+    }
 
     // Update status to uploading
     setFileStatuses(prev => prev.map((fs, i) =>
@@ -299,6 +513,7 @@ const FileUpload: React.FC = () => {
 
       const metadata = {
         agent_id: username,
+        source: source || undefined,
         project,
         timestamp: new Date().toISOString(),
         expiration: expiration.toISOString(),
@@ -410,11 +625,14 @@ const FileUpload: React.FC = () => {
                 : 'border-gray-300 dark:border-gray-600'
             }`}
           >
-            <FileText className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <div className="flex justify-center space-x-4 mb-4">
+              <FileText className="w-12 h-12 text-gray-400 dark:text-gray-500" />
+              <FolderArchive className="w-12 h-12 text-gray-400 dark:text-gray-500" />
+            </div>
             <div className="text-gray-600 dark:text-gray-400">
-              <p className="mb-2">Drag and drop multiple files here, or</p>
+              <p className="mb-2">Drag and drop files or folders here, or</p>
               <label className="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
-                <span>browse</span>
+                <span>browse for files</span>
                 <input
                   type="file"
                   multiple
@@ -422,6 +640,11 @@ const FileUpload: React.FC = () => {
                   className="hidden"
                 />
               </label>
+              <div className="mt-3 text-xs text-gray-500 dark:text-gray-500">
+                <p>• Files: Max 100MB each</p>
+                <p>• Folders: Max 500MB uncompressed, 100MB compressed</p>
+                <p>• Folders will be automatically compressed as ZIP containers</p>
+              </div>
             </div>
           </div>
 
@@ -460,6 +683,14 @@ const FileUpload: React.FC = () => {
               value={filePath}
               onChange={(e) => setFilePath(e.target.value)}
               placeholder="C:\Folder\ or /folder/"
+            />
+
+            <InputField
+              icon={MapPin}
+              label="Source"
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              placeholder="host://HOSTNAME or https://domain.com"
             />
 
             <InputField

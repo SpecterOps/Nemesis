@@ -197,6 +197,73 @@ async def delete_database_entries(object_ids: List[str]) -> bool:
             conn.close()
 
 
+async def delete_expired_containers(expiration_date: Optional[datetime] = None) -> bool:
+    """
+    Delete expired entries from the container_processing table.
+
+    Args:
+        expiration_date: Optional date to use for comparison instead of current datetime.
+                         If None, current datetime is used.
+                         If datetime.max, all containers will be considered expired.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    try:
+        conn = get_db_connection()
+
+        # Use provided expiration date or current datetime
+        comparison_date = expiration_date if expiration_date is not None else datetime.now()
+
+        # Define the WHERE clause based on the expiration_date
+        where_clause = "WHERE 1=1"  # Default to delete all records if datetime.max
+        params = tuple()
+
+        if expiration_date != datetime.max:
+            where_clause = "WHERE expiration < %s"
+            params = (comparison_date,)
+
+        with conn.cursor() as cur:
+            # First, get count of records that will be deleted for logging
+            cur.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM container_processing
+                {where_clause}
+                """,
+                params,
+            )
+            count_to_delete = cur.fetchone()[0]
+
+            if count_to_delete == 0:
+                logger.info("No expired containers found to delete")
+                return True
+
+            # Delete expired entries from container_processing table
+            cur.execute(
+                f"""
+                DELETE FROM container_processing
+                {where_clause}
+                """,
+                params,
+            )
+
+        conn.commit()
+        logger.info(
+            "Successfully deleted expired containers",
+            container_count=count_to_delete,
+            expiration_date=comparison_date if expiration_date != datetime.max else "all"
+        )
+        return True
+
+    except Exception as e:
+        logger.exception(e, message="Error deleting expired containers")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 async def run_cleanup_job(expiration_date: Optional[datetime] = None):
     """
     Main job function that runs the cleanup process.
@@ -216,31 +283,45 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
         return
 
     try:
-        # Step 1: Get expired object IDs from database using the provided expiration date
-        expired_object_ids = await get_expired_object_ids(expiration_date)
-        logger.info("Found expired objects", count=len(expired_object_ids))
+        # we do this three times over a minute to round up weird processing edge cases (hopefully)
+        for x in range(3):
+            # Step 1: Get expired object IDs from database using the provided expiration date
+            expired_object_ids = await get_expired_object_ids(expiration_date)
+            logger.info("Found expired objects", count=len(expired_object_ids), round=(x+1))
 
-        if not expired_object_ids:
-            logger.info("No expired objects found, cleanup job completed")
-            return
+            if not expired_object_ids:
+                logger.info("No expired objects found, cleanup job completed", round=(x+1))
+                return
 
-        # Step 2: Get related transform object IDs
-        transform_object_ids = await get_transform_object_ids(expired_object_ids)
-        logger.info("Found related transform objects", count=len(transform_object_ids))
+            # Step 2: Get related transform object IDs
+            transform_object_ids = await get_transform_object_ids(expired_object_ids)
+            logger.info("Found related transform objects", count=len(transform_object_ids), round=(x+1))
 
-        # Step 3: Combine all object IDs that need to be deleted from Minio
-        all_object_ids = list(set(expired_object_ids + transform_object_ids))
+            # Step 3: Combine all object IDs that need to be deleted from Minio
+            all_object_ids = list(set(expired_object_ids + transform_object_ids))
 
-        # Step 4: Delete objects from Minio using the StorageMinio instance
-        deleted_count = storage.delete_objects(all_object_ids)
-        logger.info("Deleted objects from Minio", count=deleted_count, total=len(all_object_ids))
+            # Step 4: Delete objects from Minio using the StorageMinio instance
+            deleted_count = storage.delete_objects(all_object_ids)
+            logger.info("Deleted objects from Minio", count=deleted_count, total=len(all_object_ids), round=(x+1))
 
-        # Step 5: Delete database entries
-        db_delete_success = await delete_database_entries(expired_object_ids)
-        if db_delete_success:
-            logger.info("Successfully completed cleanup job")
-        else:
-            logger.error("Failed to delete some database entries during cleanup job")
+            # Step 5: Delete database entries
+            db_delete_success = await delete_database_entries(expired_object_ids)
+            if db_delete_success:
+                logger.info("Successfully deleted database entries", round=(x+1))
+            else:
+                logger.error("Failed to delete some database entries during cleanup job", round=(x+1))
+
+            # Step 6: delete any expired containers
+            container_delete_success = await delete_expired_containers(expiration_date)
+            if container_delete_success:
+                logger.info("Successfully deleted container entries", round=(x+1))
+            else:
+                logger.error("Failed to delete some container entries during cleanup job", round=(x+1))
+
+            await asyncio.sleep(20)
+
+        logger.info("Cleanup job complete")
+
 
     except Exception as e:
         logger.exception(e, message="Error running cleanup job")

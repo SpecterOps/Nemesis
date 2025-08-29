@@ -20,16 +20,13 @@ async def parse_dpapi_blob(blob_bytes: bytes) -> ParsedDpapiBlob:
 
     parsed_blob = ParsedDpapiBlob()
 
-    try:
-        # it's a bit tricky to carve _just_ the DPAPI blob, but this is how:
-        blob = DPAPI_BLOB(blob_bytes)
-        if blob.rawData is not None:
-            blob.rawData = blob.rawData[: len(blob.getData())]
-            parsed_blob.dpapi_master_key_guid = bin_to_string(blob["GuidMasterKey"]).lower()
-            parsed_blob.dpapi_data_b64 = base64.b64encode(blob.rawData).decode("utf-8")
-            parsed_blob.success = True
-    except Exception as e:
-        await logger.awarning(f"Error in parse_dpapi_blob: {e}")
+    # it's a bit tricky to carve _just_ the DPAPI blob, but this is how:
+    blob = DPAPI_BLOB(blob_bytes)
+    if blob.rawData is not None:
+        blob.rawData = blob.rawData[: len(blob.getData())]
+        parsed_blob.dpapi_master_key_guid = bin_to_string(blob["GuidMasterKey"]).lower()
+        parsed_blob.dpapi_data_b64 = base64.b64encode(blob.rawData).decode("utf-8")
+        parsed_blob.success = True
 
     return parsed_blob
 

@@ -72,6 +72,7 @@ The `./tools/submit.sh` script wraps the docker syntax automatically.
   --username your-username \
   --password your-password \
   --project my-project \
+  --source host://HOST1 \
   --agent-id my-agent \
   --workers 5 \
   --recursive \
@@ -103,6 +104,7 @@ Options:
   -u, --username TEXT    Basic auth username  [default: n]
   -p, --password TEXT    Basic auth password  [default: n]
   --project TEXT         Project name for metadata  [default: assess-test]
+  --source TEXT          Source name for metadata (e.g., 'host://HOST1')
   --agent-id TEXT        Agent ID for metadata  [default:
                          submitunknown_user@docker-desktop]
   -f, --file FILE        Path to single file to submit (alternative to PATHS
@@ -110,16 +112,17 @@ Options:
   --help                 Show this message and exit.
 ```
 
-| Option        | Default               | Description               |
-| ------------- | --------------------- | ------------------------- |
-| `--host`      | `0.0.0.0:7443`        | Nemesis host and port     |
-| `--recursive` | `false`               | Process subdirectories    |
-| `--workers`   | `10`                  | Number of upload threads  |
-| `--username`  | `n`                   | Basic auth username       |
-| `--password`  | `n`                   | Basic auth password       |
-| `--project`   | `assess-test`         | Project name for metadata |
-| `--agent-id`  | `submit<user>@<host>` | Agent ID for metadata     |
-| `--debug`     | `false`               | Enable debug logging      |
+| Option        | Default               | Description                                                             |
+| ------------- | --------------------- | ----------------------------------------------------------------------- |
+| `--host`      | `0.0.0.0:7443`        | Nemesis host and port                                                   |
+| `--recursive` | `false`               | Process subdirectories                                                  |
+| `--workers`   | `10`                  | Number of upload threads                                                |
+| `--username`  | `n`                   | Basic auth username                                                     |
+| `--password`  | `n`                   | Basic auth password                                                     |
+| `--project`   | `assess-test`         | Project name for metadata                                               |
+| `--source`    |                       | Source name (e.g., 'host://HOST1' or 'https://domain.com') for metadata |
+| `--agent-id`  | `submit<user>@<host>` | Agent ID for metadata                                                   |
+| `--debug`     | `false`               | Enable debug logging                                                    |
 
 ## Folder Monitoring
 
@@ -173,6 +176,7 @@ docker run \
   --username your-username \
   --password your-password \
   --project my-project \
+  --source host://HOST1 \
   --agent-id my-agent \
   --workers 5  \
   --debug
@@ -188,16 +192,17 @@ poetry run python -m cli monitor /path/to/directory
 
 ### Options Reference
 
-| Option           | Default                | Description                                     |
-| ---------------- | ---------------------- | ----------------------------------------------- |
-| `--host`         | `0.0.0.0:7443`         | Nemesis host and port                           |
-| `--username`     | `n`                    | Basic auth username                             |
-| `--password`     | `n`                    | Basic auth password                             |
-| `--project`      | `assess-test`          | Project name for metadata                       |
-| `--agent-id`     | `monitor<user>@<host>` | Agent ID for metadata                           |
-| `--workers`      | `10`                   | Number of upload threads for initial submission |
-| `--only-monitor` | `false`                | Skip existing files, only monitor for new ones  |
-| `--debug`        | `false`                | Enable debug logging                            |
+| Option           | Default                | Description                                                             |
+| ---------------- | ---------------------- | ----------------------------------------------------------------------- |
+| `--host`         | `0.0.0.0:7443`         | Nemesis host and port                                                   |
+| `--username`     | `n`                    | Basic auth username                                                     |
+| `--password`     | `n`                    | Basic auth password                                                     |
+| `--project`      | `assess-test`          | Project name for metadata                                               |
+| `--source`       |                        | Source name (e.g., 'host://HOST1' or 'https://domain.com') for metadata |
+| `--agent-id`     | `monitor<user>@<host>` | Agent ID for metadata                                                   |
+| `--workers`      | `10`                   | Number of upload threads for initial submission                         |
+| `--only-monitor` | `false`                | Skip existing files, only monitor for new ones                          |
+| `--debug`        | `false`                | Enable debug logging                                                    |
 
 
 ## Mythic Connector

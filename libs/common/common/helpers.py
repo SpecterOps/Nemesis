@@ -1,10 +1,9 @@
 import hashlib
+import io
+import ntpath
 import re
 import subprocess
-
-import structlog
-
-logger = structlog.get_logger(module=__name__)
+from typing import BinaryIO
 
 
 def calculate_file_hash(file_path: str, hash_type: str) -> str:
@@ -250,6 +249,20 @@ def sanitize_file_path(file_path: str, num_chars=4):
     return f"{sanitized_base}.{extension[0]}" if extension else sanitized_base
 
 
+def get_file_extension(filepath):
+    # Get just the final filename component of the path
+    base_name = ntpath.basename(filepath)
+
+    # Split on the last dot, but only if the dot isn't the first character
+    if base_name.startswith(".") or "." not in base_name:
+        return ""
+
+    name_parts = base_name.split(".")
+    if len(name_parts) > 1:
+        return "." + name_parts[-1]
+    return ""
+
+
 def extract_all_strings(filename: str, min_len: int = 5):
     """
     Returns a combined list of all single-byte ASCII strings
@@ -272,6 +285,22 @@ def extract_all_strings(filename: str, min_len: int = 5):
     # all_strings = list(set(all_strings))
 
     return all_strings
+
+
+def create_text_reader(binary_file: BinaryIO) -> io.TextIOWrapper:
+    """Creates a text reader that handles BOMs and mixed content"""
+
+    bom_check = binary_file.read(4)
+    binary_file.seek(0)  # Reset to start
+
+    if bom_check.startswith(b"\xff\xfe"):
+        return io.TextIOWrapper(binary_file, encoding="utf-16le")
+    elif bom_check.startswith(b"\xfe\xff"):
+        return io.TextIOWrapper(binary_file, encoding="utf-16be")
+    elif bom_check.startswith(b"\xef\xbb\xbf"):
+        return io.TextIOWrapper(binary_file, encoding="utf-8-sig")
+    else:
+        return io.TextIOWrapper(binary_file, encoding="utf-8", errors="replace")
 
 
 def escape_markdown(text):

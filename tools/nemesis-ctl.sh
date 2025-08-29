@@ -25,6 +25,7 @@ Options:
   --build         Build images before starting (not for 'stop' or 'clean' actions).
   --monitoring    Enable the monitoring profile (Grafana, Prometheus).
   --jupyter       Enable the Jupyter profile.
+  --llm           Enable the LLM services profile.
 
 Examples:
   # Start production services with monitoring
@@ -76,6 +77,7 @@ fi
 BUILD=false
 MONITORING=false
 JUPYTER=false
+LLM=false
 
 # Parse optional flags
 while [[ "$#" -gt 0 ]]; do
@@ -83,6 +85,7 @@ while [[ "$#" -gt 0 ]]; do
     --build) BUILD=true; shift ;;
     --monitoring) MONITORING=true; shift ;;
     --jupyter) JUPYTER=true; shift ;;
+    --llm) LLM=true; shift ;;
     *) echo "Unknown option: $1" >&2; echo "" >&2; usage ;;
   esac
 done
@@ -123,6 +126,10 @@ if [ "$JUPYTER" = "true" ]; then
   DOCKER_CMD+=("--profile" "jupyter")
 fi
 
+if [ "$LLM" = "true" ]; then
+  DOCKER_CMD+=("--profile" "llm")
+fi
+
 # 2. Handle Environment-specific files
 if [ "$ENVIRONMENT" = "prod" ]; then
   DOCKER_CMD+=("-f" "compose.yaml")
@@ -139,6 +146,10 @@ fi
 # 3. Handle Action
 if [ "$ACTION" = "start" ]; then
   echo "--- Preparing to Start Services for '$ENVIRONMENT' environment ---"
+
+  # Generate version.json for local builds
+  echo "Generating version information..."
+  "${SCRIPT_DIR}/generate-version.sh" "${COMPOSE_DIR}/version.json" "local"
 
   if [ "$BUILD" = "true" ]; then
     # Base images must be built for both dev and prod before starting

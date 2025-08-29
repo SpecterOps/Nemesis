@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 import threading
-from datetime import UTC, datetime
+import time
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Event, Thread
@@ -14,6 +14,8 @@ import click
 import colorlog
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from tqdm import tqdm
 
 # Disable SSL warnings for the submit functionality
@@ -110,6 +112,83 @@ class UploadTracker:
                 logger.warning(f"• {path}: {error}")
 
 
+def parse_filters(
+    filters_file: Optional[str],
+    include_patterns: tuple[str, ...],
+    exclude_patterns: tuple[str, ...],
+    pattern_type: str,
+) -> Optional[dict]:
+    """Parse filter options into the format expected by the API"""
+
+    # If a filters file is provided, load it
+    if filters_file:
+        if include_patterns or exclude_patterns:
+            raise ValueError("Cannot specify both --filters file and --include-pattern/--exclude-pattern options")
+
+        try:
+            with open(filters_file) as f:
+                filters_data = json.load(f)
+
+            # Validate the structure
+            if not isinstance(filters_data, dict):
+                raise ValueError("Filters file must contain a JSON object")
+
+            # Ensure pattern_type is set if not specified in file
+            if "pattern_type" not in filters_data:
+                filters_data["pattern_type"] = pattern_type
+
+            return filters_data
+
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in filters file: {e}") from e
+        except Exception as e:
+            raise ValueError(f"Error reading filters file: {e}") from e
+
+    # If inline patterns are provided, build the filter object
+    elif include_patterns or exclude_patterns:
+        file_filters = {"pattern_type": pattern_type}
+
+        if include_patterns:
+            file_filters["include"] = list(include_patterns)
+        if exclude_patterns:
+            file_filters["exclude"] = list(exclude_patterns)
+
+        return file_filters
+
+    return None
+
+
+def validate_filters(file_filters: dict) -> None:
+    """Validate the structure of file filters"""
+    allowed_fields = {"include", "exclude", "pattern_type"}
+
+    if not isinstance(file_filters, dict):
+        raise ValueError("file_filters must be a dictionary")
+
+    # Check for unknown fields
+    unknown_fields = set(file_filters.keys()) - allowed_fields
+    if unknown_fields:
+        raise ValueError(f"Unknown filter fields: {', '.join(unknown_fields)}")
+
+    # Validate pattern_type
+    pattern_type = file_filters.get("pattern_type", "glob")
+    if pattern_type not in ["glob", "regex"]:
+        raise ValueError(f"pattern_type must be 'glob' or 'regex', got: {pattern_type}")
+
+    # Validate include/exclude are lists of strings
+    for field in ["include", "exclude"]:
+        if field in file_filters:
+            patterns = file_filters[field]
+            if not isinstance(patterns, list):
+                raise ValueError(f"{field} must be a list of strings")
+            if not all(isinstance(p, str) for p in patterns):
+                raise ValueError(f"All {field} patterns must be strings")
+
+    # At least one of include or exclude should be present
+    if not any(field in file_filters for field in ["include", "exclude"]):
+        raise ValueError("At least one of 'include' or 'exclude' patterns must be specified")
+
+
 def submit_main(
     debug: bool,
     paths: tuple[str, ...],
@@ -121,6 +200,13 @@ def submit_main(
     project: str,
     agent_id: str,
     file_path: str,
+    container: bool,
+    source: Optional[str] = None,
+    filters: Optional[str] = None,
+    include_pattern: tuple[str, ...] = (),
+    exclude_pattern: tuple[str, ...] = (),
+    pattern_type: str = "glob",
+    repeat: int = 0,
 ):
     """Submit files to Nemesis for processing.
 
@@ -143,6 +229,15 @@ def submit_main(
 
         # Upload with basic auth:
         main.py submit /etc/issue -u admin -p secret
+
+        # Upload container with filters from file:
+        main.py submit archive.zip --container --filters filters.json
+
+        # Upload container with inline patterns:
+        main.py submit archive.zip --container --include-pattern "*.exe" --exclude-pattern "*/temp/*"
+
+        # Submit file twice (original + 1 repeat):
+        main.py submit /etc/issue --repeat 1
     """
     try:
         if debug:
@@ -159,6 +254,16 @@ def submit_main(
             logger.error("No files or paths specified")
             sys.exit(1)
 
+        # Validate repeat parameter
+        if repeat < 0:
+            logger.error("Repeat count must be at least 0")
+            sys.exit(1)
+
+        # Validate filter options
+        file_filters = None
+        if container and (filters or include_pattern or exclude_pattern):
+            file_filters = parse_filters(filters, include_pattern, exclude_pattern, pattern_type)
+
         # Convert to Path objects
         path_objects = [Path(p) for p in paths]
 
@@ -173,6 +278,10 @@ def submit_main(
             password=password,
             project=project,
             agent_id=agent_id,
+            container=container,
+            source=source,
+            file_filters=file_filters,
+            repeat=repeat,
         )
 
         if not success:
@@ -188,47 +297,98 @@ def submit_files(
     host: str = "0.0.0.0:7443",
     recursive: bool = False,
     verbose: bool = False,
-    workers: int = 10,
+    workers: int = 5,
     username: str = "n",
     password: str = "n",
     project: str = "assess-test",
-    agent_id: str = "beacon123",
+    agent_id: str = "submit.sh",
+    container: bool = False,
+    source: Optional[str] = None,
+    file_filters: Optional[dict] = None,
+    repeat: int = 0,
 ):
     """Submit files to Nemesis"""
 
-    file_queue = Queue()
-    error_queue = Queue()
-    tracker = UploadTracker()
-    stop_event = Event()
-
-    # Start counting total files (this will also start filling the queue)
-    total_files = stream_files(paths, recursive, file_queue)
-
-    if total_files == 0:
-        logger.error("No files found to upload")
+    # Validate that filters are only used with container mode
+    if file_filters and not container:
+        logger.error("File filters can only be used with --container flag")
         return False
 
     # Validate authentication before starting uploads
-    # Disable SSL warnings
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     auth = (username, password) if username and password else None
     if not validate_auth(host, auth):
         return False
 
-    # Create progress bar
+    # Create session with retry logic and connection pooling
+    session = create_session_with_retries()
+
+    # Total submissions = 1 original + repeat additional submissions
+    total_submissions = 1 + repeat
+
+    # Get list of files once
+    temp_queue = Queue()
+    total_files = stream_files(paths, recursive, temp_queue)
+
+    if total_files == 0:
+        logger.error("No files found to upload")
+        return False
+
+    # Convert queue to list for reuse across submissions
+    files_to_submit = []
+    while not temp_queue.empty():
+        try:
+            files_to_submit.append(temp_queue.get_nowait())
+        except Empty:
+            break
+
+    # Calculate total operations for progress bar
+    total_operations = total_files * total_submissions
+
+    # Create shared structures for concurrent submission
+    overall_tracker = UploadTracker()
+    error_queue = Queue()
+    stop_event = Event()
+
+    if total_submissions > 1:
+        logger.info(f"Starting {total_submissions} concurrent submissions ({total_files} files × {total_submissions} submissions = {total_operations} total operations)")
+
+    # Create progress bar for all operations
     with tqdm(
-        total=total_files,
-        desc="Uploading files",
-        unit="file",
+        total=total_operations,
+        desc="Uploading files concurrently" if total_submissions > 1 else "Uploading files",
+        unit="upload",
         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
     ) as pbar:
-        # Create and start worker threads
+        # Create worker threads - each handles multiple submissions of the same file
         threads = []
-        # Auth credentials already validated above
-        for _ in range(min(workers, total_files)):
+        file_submission_queue = Queue()
+
+        # Populate queue with (file, submission_number) pairs
+        for submission_num in range(total_submissions):
+            for file_path in files_to_submit:
+                file_submission_queue.put((file_path, submission_num))
+
+        # Create worker threads
+        for _ in range(min(workers, total_operations)):
             thread = Thread(
-                target=worker,
-                args=(file_queue, host, tracker, pbar, error_queue, stop_event, verbose, auth, project, agent_id),
+                target=concurrent_worker,
+                args=(
+                    file_submission_queue,
+                    host,
+                    session,
+                    overall_tracker,
+                    pbar,
+                    error_queue,
+                    stop_event,
+                    verbose,
+                    auth,
+                    project,
+                    agent_id,
+                    container,
+                    source,
+                    file_filters,
+                ),
             )
             thread.start()
             threads.append(thread)
@@ -238,8 +398,8 @@ def submit_files(
             thread.join()
 
     # Display final metrics
-    tracker.display_summary()
-    return tracker.failed == 0  # Return True if no failures
+    overall_tracker.display_summary()
+    return overall_tracker.failed == 0
 
 
 def stream_files(paths: list[Path], recursive: bool, file_queue: Queue) -> int:
@@ -298,53 +458,134 @@ def validate_auth(host_port: str, auth: Optional[tuple[str, str]] = None) -> boo
         return False
 
 
-def create_metadata(path: str, project: str = "assess-test", agent_id: str = "beacon123") -> dict:
-    return {
+def create_metadata(
+    path: str,
+    project: str = "assess-test",
+    agent_id: str = "submit.sh",
+    source: Optional[str] = None,
+    file_filters: Optional[dict] = None,
+) -> dict:
+    """Create metadata dictionary for file submission"""
+    metadata = {
         "agent_id": agent_id,
         "project": project,
-        "timestamp": datetime.now(UTC).isoformat(),
-        "expiration": datetime.now(UTC).replace(year=datetime.now().year + 1).isoformat(),
+        # "timestamp": datetime.now(UTC).isoformat(), # these have defaults in the submission API now
+        # "expiration": datetime.now(UTC).replace(year=datetime.now().year + 1).isoformat(),
         "path": str(path),
     }
+    if source:
+        metadata["source"] = source
+    if file_filters:
+        # Validate filters before adding to metadata
+        validate_filters(file_filters)
+        metadata["file_filters"] = file_filters
+    return metadata
+
+
+def create_session_with_retries() -> requests.Session:
+    """
+    Create a requests session with retry logic and connection pooling.
+    """
+    session = requests.Session()
+
+    # Configure retry strategy with exponential backoff
+    retry_strategy = Retry(
+        total=3,  # Total number of retries
+        status_forcelist=[429, 500, 502, 503, 504],  # HTTP status codes to retry on
+        # method_whitelist=["HEAD", "GET", "POST"],  # HTTP methods to retry
+        backoff_factor=1,  # Exponential backoff factor (1, 2, 4 seconds)
+        raise_on_status=False,  # Don't raise on status codes in status_forcelist
+    )
+
+    # Configure HTTP adapter with retry strategy
+    adapter = HTTPAdapter(
+        max_retries=retry_strategy,
+        pool_connections=10,  # Number of connection pools
+        pool_maxsize=20,  # Maximum number of connections in pool
+        pool_block=False,  # Don't block when pool is full
+    )
+
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    return session
 
 
 def upload_file(
     file_path: Path,
     host_port: str,
+    session: requests.Session,
     auth: Optional[tuple[str, str]] = None,
     project: str = "assess-test",
-    agent_id: str = "beacon123",
+    agent_id: str = "submit.sh",
+    container: bool = False,
+    source: Optional[str] = None,
+    file_filters: Optional[dict] = None,
 ) -> tuple[bool, Optional[str], int]:
     """
-    Attempt to upload a file. Returns (success, error_message, bytes_uploaded).
+    Attempt to upload a file with retry logic. Returns (success, error_message, bytes_uploaded).
     If success is True, error_message will be None.
     """
-    try:
-        if not os.access(file_path, os.R_OK):
-            raise PermissionError(f"No read permission for {file_path}")
+    max_retries = 3
+    base_delay = 1.0
 
-        metadata = create_metadata(str(file_path), project, agent_id)
-        file_size = file_path.stat().st_size
+    for attempt in range(max_retries):
+        try:
+            if not os.access(file_path, os.R_OK):
+                raise PermissionError(f"No read permission for {file_path}")
 
-        with open(file_path, "rb") as f:
-            files = {"file": f, "metadata": (None, json.dumps(metadata))}
-            response = requests.post(f"https://{host_port}/api/files", files=files, auth=auth, verify=False)
-            response.raise_for_status()
-            return True, None, file_size
+            metadata = create_metadata(str(file_path), project, agent_id, source, file_filters)
+            file_size = file_path.stat().st_size
 
-    except PermissionError:
-        return False, f"Permission denied: {file_path}", 0
-    except FileNotFoundError:
-        return False, f"File not found: {file_path}", 0
-    except requests.exceptions.RequestException as e:
-        return False, f"Upload failed: {file_path} - {str(e)}", 0
-    except Exception as e:
-        return False, f"Unexpected error with {file_path}: {str(e)}", 0
+            endpoint = "/api/containers" if container else "/api/files"
+
+            with open(file_path, "rb") as f:
+                files = {"file": f, "metadata": (None, json.dumps(metadata))}
+                response = session.post(
+                    f"https://{host_port}{endpoint}",
+                    files=files,
+                    auth=auth,
+                    verify=False,
+                    timeout=(30, 300),
+                )
+                response.raise_for_status()
+                return True, None, file_size
+
+        except PermissionError:
+            return False, f"Permission denied: {file_path}", 0
+        except FileNotFoundError:
+            return False, f"File not found: {file_path}", 0
+        except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as e:
+            if attempt < max_retries - 1:
+                delay = base_delay * (2**attempt)
+                logger.debug(f"SSL/Connection error on attempt {attempt + 1}, retrying in {delay}s: {str(e)}")
+                time.sleep(delay)
+                continue
+            return False, f"Upload failed: {file_path} - {str(e)}", 0
+        except requests.exceptions.Timeout as e:
+            if attempt < max_retries - 1:
+                delay = base_delay * (2**attempt)
+                logger.debug(f"Timeout on attempt {attempt + 1}, retrying in {delay}s: {str(e)}")
+                time.sleep(delay)
+                continue
+            return False, f"Upload failed: {file_path} - {str(e)}", 0
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1 and "504" in str(e):
+                delay = base_delay * (2**attempt)
+                logger.debug(f"Server error on attempt {attempt + 1}, retrying in {delay}s: {str(e)}")
+                time.sleep(delay)
+                continue
+            return False, f"Upload failed: {file_path} - {str(e)}", 0
+        except Exception as e:
+            return False, f"Unexpected error with {file_path}: {str(e)}", 0
+
+    return False, f"Upload failed after {max_retries} attempts: {file_path}", 0
 
 
-def worker(
+def concurrent_worker(
     queue: Queue,
     host_port: str,
+    session: requests.Session,
     tracker: UploadTracker,
     progress_bar: tqdm,
     error_queue: Queue,
@@ -352,7 +593,53 @@ def worker(
     verbose: bool,
     auth: Optional[tuple[str, str]] = None,
     project: str = "assess-test",
-    agent_id: str = "beacon123",
+    agent_id: str = "submit.sh",
+    container: bool = False,
+    source: Optional[str] = None,
+    file_filters: Optional[dict] = None,
+):
+    """Worker thread to process (file, submission_number) pairs from the queue"""
+    while not stop_event.is_set():
+        try:
+            file_path, submission_num = queue.get_nowait()
+        except Empty:
+            break
+
+        success, error, bytes_uploaded = upload_file(
+            file_path, host_port, session, auth, project, agent_id, container, source, file_filters
+        )
+        if success:
+            tracker.add_success(file_path, bytes_uploaded)
+            if verbose:
+                logger.debug(f"✓ {file_path} submission #{submission_num} ({bytes_uploaded:,} bytes)")
+        else:
+            tracker.add_failure(file_path, error)
+            if error:
+                error_queue.put(error)
+                logger.warning(f"✗ {file_path} submission #{submission_num}: {error}")
+
+        progress_bar.update(1)
+        progress_bar.set_description(
+            f"Uploading (✓:{tracker.successful} ✗:{tracker.failed} | {tracker.format_bytes()})"
+        )
+        queue.task_done()
+
+
+def worker(
+    queue: Queue,
+    host_port: str,
+    session: requests.Session,
+    tracker: UploadTracker,
+    progress_bar: tqdm,
+    error_queue: Queue,
+    stop_event: Event,
+    verbose: bool,
+    auth: Optional[tuple[str, str]] = None,
+    project: str = "assess-test",
+    agent_id: str = "submit.sh",
+    container: bool = False,
+    source: Optional[str] = None,
+    file_filters: Optional[dict] = None,
 ):
     """Worker thread to process files from the queue"""
     while not stop_event.is_set():
@@ -361,7 +648,9 @@ def worker(
         except Empty:
             break
 
-        success, error, bytes_uploaded = upload_file(file_path, host_port, auth, project, agent_id)
+        success, error, bytes_uploaded = upload_file(
+            file_path, host_port, session, auth, project, agent_id, container, source, file_filters
+        )
         if success:
             tracker.add_success(file_path, bytes_uploaded)
             if verbose:

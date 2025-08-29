@@ -175,8 +175,12 @@ class FileHandler:
                 """Callback to upload the downloaded file to Nemesis."""
 
                 self._total_files_count += 1
+                # Use the host field as the source identifier
+                source = f"host://{file_meta.get('host', 'unknown')}"
+                
                 metadata = FileMetadata(
                     agent_id="mythic",
+                    source=source,
                     project=self.cfg.project,
                     timestamp=datetime.now(UTC),
                     expiration=datetime.now(UTC).replace(year=datetime.now().year + 1),

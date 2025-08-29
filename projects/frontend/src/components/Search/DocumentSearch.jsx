@@ -10,6 +10,7 @@ const DocumentSearch = () => {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [filters, setFilters] = useState({
     pathPattern: '',
+    sourcePattern: '',
     agentPattern: '',
     project: '',
     dateRange: 'any'
@@ -194,11 +195,12 @@ const DocumentSearch = () => {
 
         const query = {
           query: `
-            query SearchDocuments($searchQuery: String!, $pathPattern: String!, $agentPattern: String!, $project: String, $startDate: timestamptz, $endDate: timestamptz) {
+            query SearchDocuments($searchQuery: String!, $pathPattern: String!, $sourcePattern: String!, $agentPattern: String!, $project: String, $startDate: timestamptz, $endDate: timestamptz) {
               search_documents(
                 args: {
                   search_query: $searchQuery,
                   path_pattern: $pathPattern,
+                  source_pattern: $sourcePattern,
                   agent_pattern: $agentPattern,
                   project_name: $project,
                   start_date: $startDate,
@@ -214,6 +216,7 @@ const DocumentSearch = () => {
                 extension
                 project
                 agent_id
+                source
                 timestamp
               }
             }
@@ -221,6 +224,7 @@ const DocumentSearch = () => {
           variables: {
             searchQuery: formatSearchQuery(debouncedQuery),
             pathPattern: convertWildcardToLike(filters.pathPattern),
+            sourcePattern: convertWildcardToLike(filters.sourcePattern),
             agentPattern: convertWildcardToLike(filters.agentPattern),
             project: filters.project || null,
             startDate: startDate?.toISOString() || null,
@@ -258,6 +262,7 @@ const DocumentSearch = () => {
             file_type: result.extension.toUpperCase(),
             project: result.project,
             agent_id: result.agent_id,
+            source: result.source,
             matched_lines: matchedLineNumbers,
             total_matches: totalMatches,
             timestamp: result.timestamp
@@ -347,6 +352,18 @@ const DocumentSearch = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Source
+              </label>
+              <input
+                type="text"
+                value={filters.sourcePattern}
+                onChange={(e) => setFilters({ ...filters, sourcePattern: e.target.value })}
+                placeholder="e.g., host://* or https://*"
+                className="w-full p-2 border dark:border-gray-700 rounded bg-white dark:bg-dark-secondary dark:text-gray-300 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Agent ID
               </label>
               <input
@@ -429,6 +446,7 @@ const DocumentSearch = () => {
                   </pre>
                   <div className="mt-2 flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                     <span>Project: {result.project}</span>
+                    <span>Source: {result.source || 'Unknown'}</span>
                     <span>Agent ID: {result.agent_id}</span>
                     <span>
                       {new Date(result.timestamp).toLocaleDateString()}

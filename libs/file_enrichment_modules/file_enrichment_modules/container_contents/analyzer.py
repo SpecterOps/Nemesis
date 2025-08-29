@@ -23,7 +23,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
         # Configuration for container extraction
         self.extracted_archive_size_limit = 1_073_741_824  # 1GB default
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = get_file_enriched(object_id)
 
@@ -67,7 +67,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
 
         return "\n".join(summary_lines)
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process container file and extract its contents."""
         try:
             file_enriched = get_file_enriched(object_id)
@@ -77,12 +77,6 @@ class ContainerContentsAnalyzer(EnrichmentModule):
 
             # Initialize DaprClient and ContainerExtractor
             with DaprClient() as dapr_client:
-                container_extractor = ContainerExtractor(
-                    self.storage,
-                    dapr_client,
-                    self.extracted_archive_size_limit,
-                )
-
                 # Create a subclass to capture extracted files
                 class TrackingContainerExtractor(ContainerExtractor):
                     def publish_file_message(self, file_message: File):

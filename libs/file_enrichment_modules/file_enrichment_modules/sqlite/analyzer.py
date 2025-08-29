@@ -99,60 +99,91 @@ class SqliteParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = get_file_enriched(object_id)
         should_run = (
             "sqlite 3.x database" in file_enriched.magic_type.lower()
             or file_enriched.file_name.lower().endswith(".sqlite")
         )
-        logger.debug(f"SqliteParser should_run: {should_run}, magic_type: {file_enriched.magic_type.lower()}")
         return should_run
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process SQLite database file using the state store."""
+    def _analyze_sqlite_database(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze SQLite database file and generate enrichment result.
+
+        Args:
+            file_path: Path to the SQLite database file to analyze
+            file_enriched: File enrichment data
+
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
+        enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
+
         try:
-            file_enriched = get_file_enriched(object_id)
-            enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
+            # Connect to the SQLite database
+            conn = sqlite3.connect(file_path)
+            # Handle binary data properly to avoid UTF-8 decode errors
+            conn.text_factory = lambda x: x.decode("utf-8", errors="replace") if isinstance(x, bytes) else x
+            cursor = conn.cursor()
 
-            with self.storage.download(file_enriched.object_id) as temp_file:
-                # Connect to the SQLite database
-                conn = sqlite3.connect(temp_file.name)
-                cursor = conn.cursor()
+            # Get all tables
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [t[0] for t in cursor.fetchall()]
 
-                # Get all tables
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-                tables = [t[0] for t in cursor.fetchall()]
+            # Process each table
+            database_data = {}
+            for table in tables:
+                database_data[table] = get_table_data(cursor, table)
 
-                # Process each table
-                database_data = {}
-                for table in tables:
-                    database_data[table] = get_table_data(cursor, table)
+            conn.close()
+            # Store the raw parsed data
+            enrichment_result.results = database_data
 
-                conn.close()
-                # Store the raw parsed data
-                enrichment_result.results = database_data
+            # Create human-readable display
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
+                display = format_sqlite_data(database_data)
+                tmp_display_file.write(display)
+                tmp_display_file.flush()
 
-                # Create human-readable display
-                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
-                    display = format_sqlite_data(database_data)
-                    tmp_display_file.write(display)
-                    tmp_display_file.flush()
+                object_id = self.storage.upload_file(tmp_display_file.name)
 
-                    object_id = self.storage.upload_file(tmp_display_file.name)
-
-                    displayable_parsed = Transform(
-                        type="displayable_parsed",
-                        object_id=f"{object_id}",
-                        metadata={
-                            "file_name": f"{file_enriched.file_name}.txt",
-                            "display_type_in_dashboard": "monaco",
-                            "default_display": True,
-                        },
-                    )
-                enrichment_result.transforms = [displayable_parsed]
+                displayable_parsed = Transform(
+                    type="displayable_parsed",
+                    object_id=f"{object_id}",
+                    metadata={
+                        "file_name": f"{file_enriched.file_name}.txt",
+                        "display_type_in_dashboard": "monaco",
+                        "default_display": True,
+                    },
+                )
+            enrichment_result.transforms = [displayable_parsed]
 
             return enrichment_result
+
+        except Exception as e:
+            logger.exception(e, message=f"Error analyzing SQLite database for {file_enriched.file_name}")
+            return None
+
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process SQLite database file using the state store.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+        try:
+            file_enriched = get_file_enriched(object_id)
+
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_sqlite_database(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    return self._analyze_sqlite_database(temp_file.name, file_enriched)
 
         except Exception as e:
             logger.exception(e, message="Error processing SQLite database")

@@ -1,16 +1,19 @@
 import asyncio
 import base64
 import json
+import re
 import time
 import uuid
+from datetime import datetime
 from typing import Any
 
 import psycopg
-import structlog
 from common.helpers import sanitize_for_jsonb
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
 
-logger = structlog.get_logger(module=__name__)
+# logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
@@ -60,6 +63,39 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
         return True, payload
 
 
+def format_commit_date(commit_date_str):
+    """
+    Convert git commit date from Unix timestamp format to human-readable format.
+
+    Args:
+        commit_date_str (str): Commit date in format "timestamp timezone" (e.g., "1753487005 -0700")
+
+    Returns:
+        str: Human-readable date string, or original value if conversion fails
+    """
+    try:
+        # Parse the timestamp and timezone using regex
+        match = re.match(r"^(\d+)\s*([-+]\d{4})$", commit_date_str.strip())
+        if not match:
+            return commit_date_str
+
+        timestamp_str, tz_offset = match.groups()
+        timestamp = int(timestamp_str)
+
+        # Convert Unix timestamp to datetime object
+        dt = datetime.fromtimestamp(timestamp)
+
+        # Format as human-readable string
+        formatted_date = dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Add timezone offset to the formatted string
+        return f"{formatted_date} {tz_offset}"
+
+    except (ValueError, OSError, OverflowError):
+        # Return original value if any conversion fails
+        return commit_date_str
+
+
 def create_finding_summary(match_info):
     """
     Creates a markdown summary of a single NoseyParker finding.
@@ -76,7 +112,24 @@ def create_finding_summary(match_info):
     summary = f"# {match_info.rule_name}\n\n"
     summary += "### Metadata\n"
     summary += f"* **Finding ID**: {finding_id}\n"
-    summary += f"* **Rule Type**: {match_info.rule_type}\n\n"
+    summary += f"* **Rule Type**: {match_info.rule_type}\n"
+
+    # Add file path if available
+    if match_info.file_path:
+        summary += f"* **File Path**: `{match_info.file_path}`\n"
+
+    # Add git commit information if available
+    if match_info.git_commit:
+        summary += f"* **Git Commit**: `{match_info.git_commit.commit_id}`\n"
+        summary += f"* **Author**: {match_info.git_commit.author} ({match_info.git_commit.author_email})\n"
+
+        # Format the commit date with fallback
+        formatted_date = format_commit_date(match_info.git_commit.commit_date)
+        summary += f"* **Commit Date**: {formatted_date}\n"
+
+        summary += f"* **Commit Message**: {match_info.git_commit.message[:100]}{'...' if len(match_info.git_commit.message) > 100 else ''}\n"
+
+    summary += "\n"
 
     summary += "### Detected Match\n\n"
     summary += f"**Location**: Line {match_info.location.line}, Column {match_info.location.column}\n\n"
@@ -124,7 +177,7 @@ async def store_noseyparker_results(
                     cur.execute(
                         """
                         UPDATE workflows
-                        SET enrichments_success = array_append(enrichments_success, %s)
+                        SET enrichments_success = array_append(enrichments_failure, %s)
                         WHERE object_id = %s
                         """,
                         ("noseyparker", object_id),

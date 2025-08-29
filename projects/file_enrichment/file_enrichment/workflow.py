@@ -4,37 +4,28 @@ import json
 import ntpath
 import os
 import pathlib
-from datetime import datetime
-from typing import BinaryIO
 
 import common.helpers as helpers
 import dapr.ext.workflow as wf
 import magic
 import psycopg
-import structlog
-from common.helpers import is_container
-from common.models import Alert, EnrichmentResult, File, NoseyParkerInput
+from common.helpers import create_text_reader, get_file_extension, is_container
+from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, WORKFLOW_RUNTIME_LOG_LEVEL, get_logger
+from common.models import Alert, EnrichmentResult, NoseyParkerInput
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from dapr.ext.workflow.logger.options import LoggerOptions
-from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from file_enrichment_modules.module_loader import ModuleLoader
 
-from .file_feature_extractor import FileFeatureExtractor
-from .logger import configure_logging
+from .file_linking.helpers import initialize_file_linking
+from .file_linking.rules_engine import FileLinkingEngine
 
-logger = structlog.get_logger(module=__name__)
-
-log_handler, log_formatter = configure_logging()
-workflow_runtime_log_level = os.getenv("WORKFLOW_RUNTIME_LOG_LEVEL", "WARNING")
-workflow_client_log_level = os.getenv("WORKFLOW_CLIENT_LOG_LEVEL", "WARNING")
+logger = get_logger(__name__)
 
 workflow_runtime = wf.WorkflowRuntime(
     logger_options=LoggerOptions(
-        log_level=workflow_runtime_log_level,
-        log_handler=log_handler,
-        log_formatter=log_formatter,
+        log_level=WORKFLOW_RUNTIME_LOG_LEVEL,
     )
 )
 
@@ -43,15 +34,11 @@ workflow_client: wf.DaprWorkflowClient = None
 activity_functions = {}
 download_path = "/tmp/"
 storage = StorageMinio()
+file_linking_engine: FileLinkingEngine = None
 
 dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
 gotenberg_url = f"http://localhost:{dapr_port}/v1.0/invoke/gotenberg/method/forms/libreoffice/convert"
-max_parallel_enrichment_modules = int(
-    os.getenv("MAX_PARALLEL_ENRICHMENT_MODULES", 5)
-)  # maximum workflows that can run at a time
-container_nesting_limit = 2
 
-logger.info(f"max_parallel_enrichment_modules: {max_parallel_enrichment_modules}")
 nemesis_url = os.getenv("NEMESIS_URL", "http://localhost/")
 nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_url
 
@@ -66,133 +53,6 @@ with DaprClient() as client:
 # region Helper functions
 #
 ##########################################
-
-
-def create_enrichment_activity(module_name: str):
-    """Creates a unique activity function for each module"""
-    global activity_functions
-    activity_name = f"enrich_{module_name}"
-
-    @workflow_runtime.activity(name=activity_name)
-    def activity_function(ctx, input_data: dict):
-        logger.debug("Starting enrichment activity", module_name=module_name)
-        object_id = input_data["object_id"]
-        result = None
-
-        try:
-            if module_name not in workflow_runtime.modules:
-                raise KeyError(f"Module {module_name} not found in workflow_runtime.modules")
-
-            module = workflow_runtime.modules[module_name]
-
-            # check if we should process with this module
-            should_process = module.should_process(object_id)
-
-            if not should_process:
-                logger.debug("Module decided to skip processing", module_name=module_name)
-                return None
-
-            result: EnrichmentResult = module.process(object_id)
-            if result:
-                # Store enrichment result directly in database
-                with psycopg.connect(postgres_connection_string) as conn:
-                    with conn.cursor() as cur:
-                        # escape any \x0000 characters/etc. and then dump to a form we can index
-                        results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
-
-                        # Store enrichment
-                        cur.execute(
-                            """
-                            INSERT INTO enrichments (object_id, module_name, result_data)
-                            VALUES (%s, %s, %s)
-                        """,
-                            (object_id, module_name, results_escaped),
-                        )
-
-                        # Store any transforms
-                        if result.transforms:
-                            for transform in result.transforms:
-                                cur.execute(
-                                    """
-                                    INSERT INTO transforms (object_id, type, transform_object_id, metadata)
-                                    VALUES (%s, %s, %s, %s)
-                                """,
-                                    (
-                                        object_id,
-                                        transform.type,
-                                        transform.object_id,
-                                        json.dumps(transform.metadata) if transform.metadata else None,
-                                    ),
-                                )
-
-                        # Store any findings
-                        if result.findings:
-                            for finding in result.findings:
-                                cur.execute(
-                                    """
-                                    INSERT INTO findings (
-                                        finding_name, category, severity, object_id,
-                                        origin_type, origin_name, raw_data, data
-                                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                                """,
-                                    (
-                                        finding.finding_name,
-                                        finding.category,
-                                        finding.severity,
-                                        object_id,
-                                        finding.origin_type,
-                                        finding.origin_name,
-                                        json.dumps(finding.raw_data),
-                                        json.dumps([obj.model_dump_json() for obj in finding.data]),
-                                    ),
-                                )
-
-                        # Update workflow in database with successful module
-                        logger.debug(f"Enrichment success: {module_name}")
-                        cur.execute(
-                            """
-                            UPDATE workflows
-                            SET enrichments_success = array_append(enrichments_success, %s)
-                            WHERE object_id = %s
-                            """,
-                            (module_name, object_id),
-                        )
-
-                    conn.commit()
-
-                # Return minimal result to indicate success
-                return {"status": "success", "module": module_name}
-
-        except Exception as e:
-            logger.exception(
-                e,
-                message="Error in enrichment module",
-                module_name=module_name,
-                object_id=object_id,
-                result=result if result else None,
-                exc_info=True,
-            )
-
-            # Update workflow in database with failed module
-            try:
-                with psycopg.connect(postgres_connection_string) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            UPDATE workflows
-                            SET enrichments_failure = array_append(enrichments_failure, %s)
-                            WHERE object_id = %s
-                            """,
-                            (f"{module_name}:{str(e)[:100]}", object_id),
-                        )
-                        conn.commit()
-            except Exception as db_error:
-                logger.error(f"Failed to update workflow failure in database: {str(db_error)}")
-
-            raise
-
-    activity_functions[activity_name] = activity_function
-    return activity_name
 
 
 def build_dependency_graph(modules):
@@ -242,149 +102,9 @@ def topological_sort(graph):
 ##########################################
 
 
-@workflow_runtime.activity
-def index_file_message(ctx: WorkflowActivityContext, activity_input: dict):
-    """Store the file message in PostgreSQL for later replay. Only indexes non-nested files."""
-    try:
-        file = File.model_validate(activity_input)
-
-        # we don't want to index files that were extracted from existing files that we've already processed
-        if file.nesting_level and file.nesting_level > 0:
-            logger.debug(
-                "nesting_level > 0, not indexing `file` message",
-                nesting_level=file.nesting_level,
-                object_id=file.object_id,
-            )
-            return
-
-        with psycopg.connect(postgres_connection_string) as conn:
-            with conn.cursor() as cur:
-                query = """
-                INSERT INTO files (
-                    object_id, agent_id, project, timestamp, expiration,
-                    path, originating_object_id, nesting_level,
-                    file_creation_time, file_access_time, file_modification_time
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                ) ON CONFLICT (object_id) DO UPDATE SET
-                    agent_id = EXCLUDED.agent_id,
-                    project = EXCLUDED.project,
-                    timestamp = EXCLUDED.timestamp,
-                    expiration = EXCLUDED.expiration,
-                    path = EXCLUDED.path,
-                    originating_object_id = EXCLUDED.originating_object_id,
-                    nesting_level = EXCLUDED.nesting_level,
-                    file_creation_time = EXCLUDED.file_creation_time,
-                    file_access_time = EXCLUDED.file_access_time,
-                    file_modification_time = EXCLUDED.file_modification_time,
-                    updated_at = CURRENT_TIMESTAMP;
-                """
-
-                cur.execute(
-                    query,
-                    (
-                        file.object_id,
-                        file.agent_id,
-                        file.project,
-                        file.timestamp,
-                        file.expiration,
-                        file.path,
-                        file.originating_object_id,
-                        file.nesting_level,
-                        datetime.fromisoformat(file.creation_time) if file.creation_time else None,
-                        datetime.fromisoformat(file.access_time) if file.access_time else None,
-                        datetime.fromisoformat(file.modification_time) if file.modification_time else None,
-                    ),
-                )
-                conn.commit()
-
-        logger.info("Successfully stored file data in PostgreSQL", object_id=file.object_id)
-        return {}
-
-    except Exception as e:
-        logger.exception(e, message="Error indexing file message")
-        raise
-
-
-@workflow_runtime.activity
-def store_file_enriched(ctx, file_enriched):
-    """Store the file_enriched data in PostgreSQL."""
-    try:
-        with psycopg.connect(postgres_connection_string) as conn:
-            with conn.cursor() as cur:
-                # Convert field names to match database schema
-                insert_query = """
-                    INSERT INTO files_enriched (
-                        object_id, agent_id, project, timestamp, expiration, path,
-                        file_name, extension, size, magic_type, mime_type,
-                        is_plaintext, is_container, originating_object_id,
-                        nesting_level, file_creation_time, file_access_time,
-                        file_modification_time, security_info, hashes
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s
-                    )
-                    ON CONFLICT (object_id) DO UPDATE SET
-                        agent_id = EXCLUDED.agent_id,
-                        project = EXCLUDED.project,
-                        timestamp = EXCLUDED.timestamp,
-                        expiration = EXCLUDED.expiration,
-                        path = EXCLUDED.path,
-                        file_name = EXCLUDED.file_name,
-                        extension = EXCLUDED.extension,
-                        size = EXCLUDED.size,
-                        magic_type = EXCLUDED.magic_type,
-                        mime_type = EXCLUDED.mime_type,
-                        is_plaintext = EXCLUDED.is_plaintext,
-                        is_container = EXCLUDED.is_container,
-                        originating_object_id = EXCLUDED.originating_object_id,
-                        nesting_level = EXCLUDED.nesting_level,
-                        file_creation_time = EXCLUDED.file_creation_time,
-                        file_access_time = EXCLUDED.file_access_time,
-                        file_modification_time = EXCLUDED.file_modification_time,
-                        security_info = EXCLUDED.security_info,
-                        hashes = EXCLUDED.hashes,
-                        updated_at = CURRENT_TIMESTAMP
-                """
-
-                # Extract filename from path if it exists
-                file_name = os.path.basename(file_enriched.get("path", "")) if file_enriched.get("path") else None
-
-                cur.execute(
-                    insert_query,
-                    (
-                        file_enriched["object_id"],
-                        file_enriched.get("agent_id"),
-                        file_enriched.get("project"),
-                        file_enriched.get("timestamp"),
-                        file_enriched.get("expiration"),
-                        file_enriched.get("path"),
-                        file_name,
-                        file_enriched.get("extension"),
-                        file_enriched.get("size"),
-                        file_enriched.get("magic_type"),
-                        file_enriched.get("mime_type"),
-                        file_enriched.get("is_plaintext"),
-                        file_enriched.get("is_container"),
-                        file_enriched.get("originating_object_id"),
-                        file_enriched.get("nesting_level"),
-                        file_enriched.get("file_creation_time"),
-                        file_enriched.get("file_access_time"),
-                        file_enriched.get("file_modification_time"),
-                        json.dumps(file_enriched.get("security_info")) if file_enriched.get("security_info") else None,
-                        json.dumps(file_enriched.get("hashes")) if file_enriched.get("hashes") else None,
-                    ),
-                )
-                conn.commit()
-                logger.info("Stored file_enriched in PostgreSQL", object_id=file_enriched["object_id"])
-    except Exception as e:
-        logger.exception(e, message="Error storing file_enriched in PostgreSQL", file_enriched=file_enriched)
-        raise
-
-
 def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, max_chunk_bytes: int = 800000):
     """Used to index plaintext content with byte-based chunking to avoid tsvector limits"""
-    logger.info(f"indexing plaintext for {object_id}")
+    logger.debug(f"indexing plaintext for {object_id}")
 
     with psycopg.connect(postgres_connection_string) as conn:
         with conn.cursor() as cur:
@@ -433,20 +153,6 @@ def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, max_chun
 ##########################################
 
 
-def get_file_extension(filepath):
-    # Get just the final filename component of the path
-    base_name = ntpath.basename(filepath)
-
-    # Split on the last dot, but only if the dot isn't the first character
-    if base_name.startswith(".") or "." not in base_name:
-        return ""
-
-    name_parts = base_name.split(".")
-    if len(name_parts) > 1:
-        return "." + name_parts[-1]
-    return ""
-
-
 @workflow_runtime.activity
 def get_basic_analysis(ctx, activity_input):
     """Perform 'basic' analysis on a file. Run for every file."""
@@ -476,134 +182,248 @@ def get_basic_analysis(ctx, activity_input):
             "is_container": is_container(mime_type),
         }
 
-        return basic_analysis
+        file_enriched = {
+            **activity_input,
+            **basic_analysis,
+        }
 
-
-@workflow_runtime.activity
-def extract_and_store_features(ctx, activity_input):
-    """Extract features from a file and store them in PostgreSQL."""
-    try:
-        logger.info("Starting feature extraction")
-        object_id = activity_input["object_id"]
-        file_enriched = get_file_enriched(object_id)
-
-        # we only want to process things that were submitted and not things extracted/post-processed
-        #   so things that don't have an originating_object_id
-        if not file_enriched.originating_object_id:
-            # Initialize feature extractor
-            extractor = FileFeatureExtractor()
-
-            # Default timestamp for missing values (Unix epoch)
-            DEFAULT_TIMESTAMP = datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.now().astimezone().tzinfo)
-
-            # Use file timestamps from file_enriched, using epoch if not available
-            creation_time = file_enriched.creation_time if file_enriched.creation_time else DEFAULT_TIMESTAMP
-            modification_time = (
-                file_enriched.modification_time if file_enriched.modification_time else DEFAULT_TIMESTAMP
-            )
-            access_time = file_enriched.access_time if file_enriched.access_time else DEFAULT_TIMESTAMP
-
-            # Extract features
-            features = extractor.extract_indivdiual_features(
-                filepath=file_enriched.path,
-                size=file_enriched.size,
-                created_time=creation_time,
-                modified_time=modification_time,
-                accessed_time=access_time,
-            )
-
-            # Extract version and remove from features dict
-            features_version = features.pop("_features_version")
-
-            # Create labels dictionary
-            labels = {
-                "has_finding": False,
-                "has_credential": False,
-                "has_dotnet_vulns": False,
-                "has_pii": False,
-                "has_yara_match": False,
-                "viewed": False,
-            }
-
-            # Fetch findings from database and update labels
+        try:
             with psycopg.connect(postgres_connection_string) as conn:
                 with conn.cursor() as cur:
-                    # First get the findings
-                    cur.execute(
-                        """
-                        SELECT category, finding_name
-                        FROM findings
-                        WHERE object_id = %s
-                    """,
-                        (file_enriched.object_id,),
-                    )
-
-                    findings = cur.fetchall()
-
-                    if findings:
-                        labels["has_finding"] = True
-                        for category, finding_name in findings:
-                            if category == "credential":
-                                labels["has_credential"] = True
-                            elif category == "vulnerability" and finding_name == "dotnet_vulns":
-                                labels["has_dotnet_vulns"] = True
-                            elif category == "pii":
-                                labels["has_pii"] = True
-                            elif category == "yara_match":
-                                labels["has_yara_match"] = True
-
-                    # Parse timestamps to datetime objects if they're strings
-                    def parse_timestamp(ts):
-                        if isinstance(ts, str):
-                            return datetime.fromisoformat(ts)
-                        return ts
-
-                    # Now insert into files_enriched_dataset
-                    query = """
-                    INSERT INTO files_enriched_dataset (
-                        object_id, agent_id, project, timestamp, expiration,
-                        path, file_creation_time, file_access_time, file_modification_time,
-                        features_version, individual_features, labels
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    ) ON CONFLICT (object_id) DO UPDATE SET
-                        agent_id = EXCLUDED.agent_id,
-                        project = EXCLUDED.project,
-                        timestamp = EXCLUDED.timestamp,
-                        expiration = EXCLUDED.expiration,
-                        path = EXCLUDED.path,
-                        file_creation_time = EXCLUDED.file_creation_time,
-                        file_access_time = EXCLUDED.file_access_time,
-                        file_modification_time = EXCLUDED.file_modification_time,
-                        features_version = EXCLUDED.features_version,
-                        individual_features = EXCLUDED.individual_features,
-                        labels = EXCLUDED.labels;
+                    # Convert field names to match database schema
+                    insert_query = """
+                        INSERT INTO files_enriched (
+                            object_id, agent_id, source, project, timestamp, expiration, path,
+                            file_name, extension, size, magic_type, mime_type,
+                            is_plaintext, is_container, originating_object_id, originating_container_id,
+                            nesting_level, file_creation_time, file_access_time,
+                            file_modification_time, security_info, hashes
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s, %s
+                        )
+                        ON CONFLICT (object_id) DO UPDATE SET
+                            agent_id = EXCLUDED.agent_id,
+                            source = EXCLUDED.source,
+                            project = EXCLUDED.project,
+                            timestamp = EXCLUDED.timestamp,
+                            expiration = EXCLUDED.expiration,
+                            path = EXCLUDED.path,
+                            file_name = EXCLUDED.file_name,
+                            extension = EXCLUDED.extension,
+                            size = EXCLUDED.size,
+                            magic_type = EXCLUDED.magic_type,
+                            mime_type = EXCLUDED.mime_type,
+                            is_plaintext = EXCLUDED.is_plaintext,
+                            is_container = EXCLUDED.is_container,
+                            originating_object_id = EXCLUDED.originating_object_id,
+                            originating_container_id = EXCLUDED.originating_container_id,
+                            nesting_level = EXCLUDED.nesting_level,
+                            file_creation_time = EXCLUDED.file_creation_time,
+                            file_access_time = EXCLUDED.file_access_time,
+                            file_modification_time = EXCLUDED.file_modification_time,
+                            security_info = EXCLUDED.security_info,
+                            hashes = EXCLUDED.hashes,
+                            updated_at = CURRENT_TIMESTAMP
                     """
 
                     cur.execute(
-                        query,
-                        [
-                            file_enriched.object_id,
-                            file_enriched.agent_id,
-                            file_enriched.project,
-                            parse_timestamp(file_enriched.timestamp),
-                            parse_timestamp(file_enriched.expiration) if file_enriched.expiration else None,
-                            file_enriched.path,
-                            creation_time,
-                            access_time,
-                            modification_time,
-                            features_version,
-                            json.dumps(features),
-                            json.dumps(labels),
-                        ],
+                        insert_query,
+                        (
+                            file_enriched["object_id"],
+                            file_enriched.get("agent_id"),
+                            file_enriched.get("source"),
+                            file_enriched.get("project"),
+                            file_enriched.get("timestamp"),
+                            file_enriched.get("expiration"),
+                            file_enriched.get("path"),
+                            file_enriched.get("file_name"),
+                            file_enriched.get("extension"),
+                            file_enriched.get("size"),
+                            file_enriched.get("magic_type"),
+                            file_enriched.get("mime_type"),
+                            file_enriched.get("is_plaintext"),
+                            file_enriched.get("is_container"),
+                            file_enriched.get("originating_object_id"),
+                            file_enriched.get("originating_container_id"),
+                            file_enriched.get("nesting_level"),
+                            file_enriched.get("file_creation_time"),
+                            file_enriched.get("file_access_time"),
+                            file_enriched.get("file_modification_time"),
+                            json.dumps(file_enriched.get("security_info"))
+                            if file_enriched.get("security_info")
+                            else None,
+                            json.dumps(file_enriched.get("hashes")) if file_enriched.get("hashes") else None,
+                        ),
                     )
                     conn.commit()
+                    logger.debug("Stored file_enriched in PostgreSQL", object_id=file_enriched["object_id"])
+        except Exception as e:
+            logger.exception(e, message="Error storing file_enriched in PostgreSQL", file_enriched=file_enriched)
+            raise
 
-            logger.info("Successfully stored file features in dataset", object_id=file_enriched.object_id)
+        return file_enriched
+
+
+# @workflow_runtime.activity
+# def extract_and_store_features(ctx, activity_input):
+#     """Extract features from a file and store them in PostgreSQL."""
+#     try:
+#         logger.info("Starting feature extraction")
+#         object_id = activity_input["object_id"]
+#         file_enriched = get_file_enriched(object_id)
+
+#         # we only want to process things that were submitted and not things extracted/post-processed
+#         #   so things that don't have an originating_object_id
+#         if not file_enriched.originating_object_id:
+#             # Initialize feature extractor
+#             extractor = FileFeatureExtractor()
+
+#             # Default timestamp for missing values (Unix epoch)
+#             DEFAULT_TIMESTAMP = datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.now().astimezone().tzinfo)
+
+#             # Use file timestamps from file_enriched, using epoch if not available
+#             creation_time = file_enriched.creation_time if file_enriched.creation_time else DEFAULT_TIMESTAMP
+#             modification_time = (
+#                 file_enriched.modification_time if file_enriched.modification_time else DEFAULT_TIMESTAMP
+#             )
+#             access_time = file_enriched.access_time if file_enriched.access_time else DEFAULT_TIMESTAMP
+
+#             # Extract features
+#             features = extractor.extract_indivdiual_features(
+#                 filepath=file_enriched.path,
+#                 size=file_enriched.size,
+#                 created_time=creation_time,
+#                 modified_time=modification_time,
+#                 accessed_time=access_time,
+#             )
+
+#             # Extract version and remove from features dict
+#             features_version = features.pop("_features_version")
+
+#             # Create labels dictionary
+#             labels = {
+#                 "has_finding": False,
+#                 "has_credential": False,
+#                 "has_dotnet_vulns": False,
+#                 "has_pii": False,
+#                 "has_yara_match": False,
+#                 "viewed": False,
+#             }
+
+#             # Fetch findings from database and update labels
+#             with psycopg.connect(postgres_connection_string) as conn:
+#                 with conn.cursor() as cur:
+#                     # First get the findings
+#                     cur.execute(
+#                         """
+#                         SELECT category, finding_name
+#                         FROM findings
+#                         WHERE object_id = %s
+#                     """,
+#                         (file_enriched.object_id,),
+#                     )
+
+#                     findings = cur.fetchall()
+
+#                     if findings:
+#                         labels["has_finding"] = True
+#                         for category, finding_name in findings:
+#                             if category == "credential":
+#                                 labels["has_credential"] = True
+#                             elif category == "vulnerability" and finding_name == "dotnet_vulns":
+#                                 labels["has_dotnet_vulns"] = True
+#                             elif category == "pii":
+#                                 labels["has_pii"] = True
+#                             elif category == "yara_match":
+#                                 labels["has_yara_match"] = True
+
+#                     # Parse timestamps to datetime objects if they're strings
+#                     def parse_timestamp(ts):
+#                         if isinstance(ts, str):
+#                             return datetime.fromisoformat(ts)
+#                         return ts
+
+#                     # Now insert into files_enriched_dataset
+#                     query = """
+#                     INSERT INTO files_enriched_dataset (
+#                         object_id, agent_id, source, project, timestamp, expiration,
+#                         path, file_creation_time, file_access_time, file_modification_time,
+#                         features_version, individual_features, labels
+#                     ) VALUES (
+#                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+#                     ) ON CONFLICT (object_id) DO UPDATE SET
+#                         agent_id = EXCLUDED.agent_id,
+#                         source = EXCLUDED.source,
+#                         project = EXCLUDED.project,
+#                         timestamp = EXCLUDED.timestamp,
+#                         expiration = EXCLUDED.expiration,
+#                         path = EXCLUDED.path,
+#                         file_creation_time = EXCLUDED.file_creation_time,
+#                         file_access_time = EXCLUDED.file_access_time,
+#                         file_modification_time = EXCLUDED.file_modification_time,
+#                         features_version = EXCLUDED.features_version,
+#                         individual_features = EXCLUDED.individual_features,
+#                         labels = EXCLUDED.labels;
+#                     """
+
+#                     cur.execute(
+#                         query,
+#                         [
+#                             file_enriched.object_id,
+#                             file_enriched.agent_id,
+#                             file_enriched.source,
+#                             file_enriched.project,
+#                             parse_timestamp(file_enriched.timestamp),
+#                             parse_timestamp(file_enriched.expiration) if file_enriched.expiration else None,
+#                             file_enriched.path,
+#                             creation_time,
+#                             access_time,
+#                             modification_time,
+#                             features_version,
+#                             json.dumps(features),
+#                             json.dumps(labels),
+#                         ],
+#                     )
+#                     conn.commit()
+
+#             logger.info("Successfully stored file features in dataset", object_id=file_enriched.object_id)
+
+#     except Exception as e:
+#         logger.exception(e, message="Error extracting and storing features", activity_input=activity_input)
+#         raise
+
+
+@workflow_runtime.activity
+def check_file_linkings(ctx, activity_input):
+    """
+    Check for file linkings using the rules engine and update database tables.
+    """
+
+    object_id = activity_input["object_id"]
+    file_enriched = get_file_enriched(object_id)
+
+    try:
+        # Use the global file linking engine instance
+        global file_linking_engine
+        if file_linking_engine is None:
+            logger.warning("File linking engine not initialized, skipping file linking check")
+            return {"linkings_created": 0, "error": "engine_not_initialized"}
+
+        # Convert file_enriched model to dict for the rules engine
+        file_data = file_enriched.model_dump() if hasattr(file_enriched, "model_dump") else file_enriched.__dict__
+
+        # Process the file and create linkings
+        linkings_created = file_linking_engine.process_file(file_data)
+
+        logger.debug("File linking check complete", object_id=object_id, linkings_created=linkings_created)
+
+        return {"linkings_created": linkings_created}
 
     except Exception as e:
-        logger.exception(e, message="Error extracting and storing features", activity_input=activity_input)
-        raise
+        logger.exception("Error in file linking check", object_id=object_id, error=str(e))
+        # Don't raise to ensure workflow can complete
+        return {"linkings_created": 0, "error": str(e)}
 
 
 @workflow_runtime.activity
@@ -725,22 +545,6 @@ def publish_enriched_file(ctx, activity_input):
         return False
 
 
-def create_text_reader(binary_file: BinaryIO) -> io.TextIOWrapper:
-    """Creates a text reader that handles BOMs and mixed content"""
-
-    bom_check = binary_file.read(4)
-    binary_file.seek(0)  # Reset to start
-
-    if bom_check.startswith(b"\xff\xfe"):
-        return io.TextIOWrapper(binary_file, encoding="utf-16le")
-    elif bom_check.startswith(b"\xfe\xff"):
-        return io.TextIOWrapper(binary_file, encoding="utf-16be")
-    elif bom_check.startswith(b"\xef\xbb\xbf"):
-        return io.TextIOWrapper(binary_file, encoding="utf-8-sig")
-    else:
-        return io.TextIOWrapper(binary_file, encoding="utf-8", errors="replace")
-
-
 # endregion
 
 ##########################################
@@ -750,129 +554,199 @@ def create_text_reader(binary_file: BinaryIO) -> io.TextIOWrapper:
 ##########################################
 
 
-@workflow_runtime.workflow
-def enrichment_module_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
-    """Child workflow that runs enrichment modules with a rolling window of parallel tasks."""
+@workflow_runtime.activity
+def run_enrichment_modules(ctx, activity_input: dict):
+    """Activity that runs all enrichment modules for a file with single file download."""
 
-    object_id = workflow_input["file"]["object_id"]
-    execution_order = workflow_input["execution_order"]
+    object_id = activity_input["object_id"]
+    execution_order = activity_input["execution_order"]
+
+    logger.info("Starting enrichment modules processing", object_id=object_id, execution_order=execution_order)
+
+    results = []
 
     try:
-        logger.info("Module execution order", execution_order=execution_order, instance_id=ctx.instance_id)
+        # Download the file once at the beginning
+        with storage.download(object_id) as temp_file:
+            logger.debug("Downloaded file for processing", object_id=object_id, temp_file=temp_file.name)
 
-        # Track all results
-        results = []
-        # Track in-flight tasks with their module names
-        in_flight_tasks = {}  # task -> module_name mapping
+            # First pass: determine which modules should process this file
+            modules_to_process = []
+            for module_name in execution_order:
+                if module_name not in workflow_runtime.modules:
+                    logger.warning("Module not found", module_name=module_name)
+                    continue
 
-        # execution_order = ["yara"] # for testing a single specific module
-
-        # Process modules with rolling window
-        for module_name in execution_order:
-            activity_name = f"enrich_{module_name}"
-            if activity_name not in activity_functions:
-                raise KeyError(f"Activity {activity_name} not registered")
-
-            # If we've hit max parallelism, wait for any task to complete
-            if len(in_flight_tasks) >= max_parallel_enrichment_modules:
-                # Use when_any to get the first completed task
-                completed_task = yield wf.when_any(list(in_flight_tasks.keys()))
-                completed_module = in_flight_tasks[completed_task]
-
+                module = workflow_runtime.modules[module_name]
                 try:
-                    result = completed_task.get_result()
-                    logger.debug("Module completed", module_name=completed_module, result=result)
-                    results.append((completed_module, result))
-                    logger.debug(f"Module COMPLETED: {completed_module}")
+                    should_process = module.should_process(object_id, temp_file.name)
+
+                    if should_process:
+                        modules_to_process.append(module_name)
+                    #     logger.debug("Module will process file", module_name=module_name)
+                    # else:
+                    #     logger.debug("Module will skip file", module_name=module_name)
                 except Exception as e:
-                    logger.exception(e, message="Error in module execution", module_name=completed_module)
-                    # Continue with other modules even if one fails
-                    results.append((completed_module, None))
-                    logger.error(f"Module ERROR: {completed_module}")
+                    logger.exception("Error in should_process", module_name=module_name, error=str(e))
 
-                # Remove completed task from in_flight
-                del in_flight_tasks[completed_task]
+            logger.info("Modules selected for processing", object_id=object_id, modules_to_process=modules_to_process)
 
-            # Start new task
-            task = ctx.call_activity(activity_functions[activity_name], input={"object_id": object_id})
-            in_flight_tasks[task] = module_name
-            logger.debug("Started task for module", module_name=module_name)
+            # Second pass: process with modules that should run
+            for module_name in modules_to_process:
+                try:
+                    module = workflow_runtime.modules[module_name]
+                    logger.debug("Starting module processing", module_name=module_name)
 
-        # Wait for remaining tasks to complete
-        while in_flight_tasks:
-            completed_task = yield wf.when_any(list(in_flight_tasks.keys()))
-            completed_module = in_flight_tasks[completed_task]
+                    result: EnrichmentResult = module.process(object_id, temp_file.name)
 
-            try:
-                result = completed_task.get_result()
-                logger.debug("Module completed", module_name=completed_module, result=result)
-                results.append((completed_module, result))
-                logger.debug(f"Module COMPLETED: {completed_module}")
-            except Exception as e:
-                logger.exception(e, message="Error in module execution", module_name=completed_module)
-                results.append((completed_module, None))
-                logger.warning(f"Module ERROR: {completed_module}")
+                    if result:
+                        # Store enrichment result directly in database (same as before)
+                        with psycopg.connect(postgres_connection_string) as conn:
+                            with conn.cursor() as cur:
+                                # Store enrichment
+                                results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
+                                cur.execute(
+                                    """
+                                    INSERT INTO enrichments (object_id, module_name, result_data)
+                                    VALUES (%s, %s, %s)
+                                """,
+                                    (object_id, module_name, results_escaped),
+                                )
 
-            del in_flight_tasks[completed_task]
+                                # Store any transforms
+                                if result.transforms:
+                                    for transform in result.transforms:
+                                        cur.execute(
+                                            """
+                                            INSERT INTO transforms (object_id, type, transform_object_id, metadata)
+                                            VALUES (%s, %s, %s, %s)
+                                        """,
+                                            (
+                                                object_id,
+                                                transform.type,
+                                                transform.object_id,
+                                                json.dumps(transform.metadata) if transform.metadata else None,
+                                            ),
+                                        )
 
-        logger.info("All modules completed", total_modules=len(results), results=results)
+                                # Store any findings
+                                if result.findings:
+                                    for finding in result.findings:
+                                        cur.execute(
+                                            """
+                                            INSERT INTO findings (
+                                                finding_name, category, severity, object_id,
+                                                origin_type, origin_name, raw_data, data
+                                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                        """,
+                                            (
+                                                finding.finding_name,
+                                                finding.category,
+                                                finding.severity,
+                                                object_id,
+                                                finding.origin_type,
+                                                finding.origin_name,
+                                                json.dumps(finding.raw_data),
+                                                json.dumps([obj.model_dump_json() for obj in finding.data]),
+                                            ),
+                                        )
 
-        return results
+                                # Update workflow in database with successful module
+                                cur.execute(
+                                    """
+                                    UPDATE workflows
+                                    SET enrichments_success = array_append(enrichments_success, %s)
+                                    WHERE object_id = %s
+                                    """,
+                                    (module_name, object_id),
+                                )
+
+                            conn.commit()
+
+                        results.append((module_name, {"status": "success", "module": module_name}))
+                        logger.debug("Module completed successfully", module_name=module_name)
+                    else:
+                        results.append((module_name, None))
+                        logger.debug("Module returned no result", module_name=module_name)
+
+                except Exception as e:
+                    logger.exception(
+                        "Error in enrichment module", module_name=module_name, object_id=object_id, error=str(e)
+                    )
+
+                    # Update workflow in database with failed module
+                    try:
+                        with psycopg.connect(postgres_connection_string) as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    """
+                                    UPDATE workflows
+                                    SET enrichments_failure = array_append(enrichments_failure, %s)
+                                    WHERE object_id = %s
+                                    """,
+                                    (f"{module_name}:{str(e)[:100]}", object_id),
+                                )
+                                conn.commit()
+                    except Exception as db_error:
+                        logger.error(f"Failed to update workflow failure in database: {str(db_error)}")
+
+                    results.append((module_name, None))
+                    # Continue with other modules instead of raising
 
     except Exception as e:
-        logger.error(f"Error in workflow execution: {str(e)}")
+        logger.exception("Error in run_enrichment_modules", object_id=object_id, error=str(e))
         raise
+
+    logger.debug("Enrichment modules processing completed", object_id=object_id, total_modules=len(results))
+    return results
 
 
 @workflow_runtime.workflow
 def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
     """Main workflow that orchestrates all enrichment activities."""
 
-    logger.info("Starting main enrichment workflow")
+    if not ctx.is_replaying:
+        logger.debug("Starting main enrichment workflow")
+
+    start_time = ctx.current_utc_datetime
 
     try:
         input_file = workflow_input["file"]
         object_id = input_file["object_id"]  # the only guaranteed field to exist
 
-        logger.debug("Workflow input", object_id=object_id, workflow_input=workflow_input, instance_id=ctx.instance_id)
+        if not ctx.is_replaying:
+            logger.debug("Workflow input", object_id=object_id, workflow_input=workflow_input)
 
-        initial_tasks = [
-            ctx.call_activity(index_file_message, input=input_file),
-            ctx.call_activity(get_basic_analysis, input=input_file),
-        ]
-
+        # Get basic analysis for the file
         try:
-            initial_tasks_results = yield wf.when_all(initial_tasks)
-            basic_analysis = initial_tasks_results[1]
-            logger.debug("Initial tasks complete - index_file_message, get_basic_analysis")
+            # basic_analysis = yield ctx.call_activity(get_basic_analysis, input=input_file)
+            file_enriched = yield ctx.call_activity(get_basic_analysis, input=input_file)
+            if not ctx.is_replaying:
+                logger.debug(
+                    "get_basic_analysis complete",
+                    processing_time=f"{ctx.current_utc_datetime - start_time}",
+                )
         except Exception as e:
-            logger.exception("Error in index_file_message or get_basic_analysis", error=str(e))
-            raise
-
-        # create file_enriched object
-        file_enriched = {
-            **input_file,
-            **basic_analysis,
-        }
-
-        # store the basic file analysis into the file_enriched object in Postgres
-        try:
-            yield ctx.call_activity(store_file_enriched, input=file_enriched)
-            logger.debug("Stored file_enriched in PostgreSQL")
-        except Exception:
-            logger.exception(
-                "Error in initial tasks - calling store_file_enriched_postgres", store_file_enriched=store_file_enriched
-            )
+            logger.exception("Error in get_basic_analysis", error=str(e))
             raise
 
         enrichment_tasks = [
             ctx.call_activity(handle_file_if_plaintext, input=file_enriched),
-            ctx.call_child_workflow(workflow=enrichment_module_workflow, input=workflow_input),
+            ctx.call_activity(check_file_linkings, input={"object_id": object_id}),
+            ctx.call_activity(
+                run_enrichment_modules,
+                input={"object_id": object_id, "execution_order": workflow_input["execution_order"]},
+            ),
         ]
 
         try:
             yield wf.when_all(enrichment_tasks)
-            logger.debug("Enrichment tasks complete - handle_file_if_plaintext, enrichment_module_workflow")
+
+            if not ctx.is_replaying:
+                logger.debug(
+                    "Enrichment tasks complete - handle_file_if_plaintext, enrichment_module_workflow",
+                    processing_time=f"{ctx.current_utc_datetime - start_time}",
+                )
         except Exception as e:
             logger.exception(
                 "Error in enrichment tasks - handle_file_if_plaintext or enrichment_module_workflow", error=str(e)
@@ -881,27 +755,83 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
 
         final_tasks = [
             ctx.call_activity(publish_enriched_file, input={"object_id": object_id}),
-            ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
+            # ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
             ctx.call_activity(publish_findings_alerts, input={"object_id": object_id}),
         ]
 
         try:
             yield wf.when_all(final_tasks)
-            logger.debug(
-                "Final tasks complete - publish_enriched_file, extract_and_store_features, publish_findings_alerts"
-            )
+
+            if not ctx.is_replaying:
+                logger.debug(
+                    "Final tasks complete - publish_enriched_file, publish_findings_alerts",
+                    processing_time=f"{ctx.current_utc_datetime - start_time}",
+                )
         except Exception as e:
             logger.exception(
-                "Error in final tasks - publish_enriched_file, extract_and_store_features, publish_findings_alerts",
+                "Error in final tasks - publish_enriched_file, publish_findings_alerts",
                 error=str(e),
             )
             raise
 
-        logger.info("Workflow completed successfully", object_id=object_id)
+        if not ctx.is_replaying:
+            logger.debug(
+                "Workflow completed successfully",
+                processing_time=f"{ctx.current_utc_datetime - start_time}",
+            )
         return {}
 
     except Exception:
         logger.exception("Error in main workflow execution", workflow_input=workflow_input)
+        raise
+
+
+@workflow_runtime.workflow
+def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
+    """Lightweight workflow that runs a single enrichment module for bulk operations."""
+
+    workflow_logger = logger.bind(instance_id=ctx.instance_id, workflow_is_replaying=ctx.is_replaying)
+
+    try:
+        enrichment_name = workflow_input["enrichment_name"]
+        object_id = workflow_input["object_id"]
+        bulk_id = workflow_input.get("bulk_id")  # For tracking bulk operation progress
+
+        workflow_logger.debug(
+            "Starting single enrichment workflow",
+            enrichment_name=enrichment_name,
+            object_id=object_id,
+            bulk_id=bulk_id,
+            instance_id=ctx.instance_id,
+        )
+
+        # Get the activity name for this enrichment
+        activity_name = f"enrich_{enrichment_name}"
+        if activity_name not in activity_functions:
+            raise KeyError(f"Activity {activity_name} not registered")
+
+        # Run the single enrichment activity
+        result = yield ctx.call_activity(activity_functions[activity_name], input={"object_id": object_id})
+
+        workflow_logger.debug(
+            "Single enrichment workflow completed",
+            enrichment_name=enrichment_name,
+            object_id=object_id,
+            bulk_id=bulk_id,
+            result=result,
+            instance_id=ctx.instance_id,
+        )
+
+        return result
+
+    except Exception as e:
+        workflow_logger.exception(
+            "Error in single enrichment workflow",
+            enrichment_name=enrichment_name if "enrichment_name" in locals() else "unknown",
+            object_id=object_id if "object_id" in locals() else "unknown",
+            bulk_id=bulk_id if "bulk_id" in locals() else None,
+            error=str(e),
+        )
         raise
 
 
@@ -916,7 +846,11 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
 
 async def initialize_workflow_runtime():
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-    global workflow_runtime, workflow_client
+    global workflow_runtime, workflow_client, file_linking_engine
+
+    # Initialize file linking system with shared instance
+    file_linking_engine = FileLinkingEngine(postgres_connection_string)
+    initialize_file_linking(postgres_connection_string, file_linking_engine)
 
     # Load enrichment modules
     module_loader = ModuleLoader()
@@ -934,6 +868,9 @@ async def initialize_workflow_runtime():
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
     execution_order = topological_sort(graph)
+
+    # execution_order = ["yara"]  # for testing a single specific module
+
     logger.info(
         "Determined module execution order",
         execution_order=execution_order,
@@ -942,10 +879,9 @@ async def initialize_workflow_runtime():
         filtered_from=len(workflow_runtime.modules),
     )
 
-    # Register each module as an activity
-    for module_name in available_modules.keys():
-        activity_name = create_enrichment_activity(module_name)
-        logger.info("Registered activity", activity_name=activity_name)
+    # Modules are now processed within the run_enrichment_modules activity
+    #   No need to register individual activities for each module
+    logger.info("Modules loaded and ready for processing", total_modules=len(available_modules))
 
     # Start workflow runtime
     workflow_runtime.start()
@@ -953,9 +889,7 @@ async def initialize_workflow_runtime():
     # Initialize workflow client
     workflow_client = wf.DaprWorkflowClient(
         logger_options=LoggerOptions(
-            log_level=workflow_client_log_level,
-            log_handler=log_handler,
-            log_formatter=log_formatter,
+            log_level=WORKFLOW_CLIENT_LOG_LEVEL,
         )
     )
 

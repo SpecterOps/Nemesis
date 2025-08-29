@@ -34,13 +34,14 @@ class NemesisClient:
             cfg.credential.password,
         )
 
-    def create_file_metadata(self, path: str, agent_id: str, project: str) -> FileMetadata:
+    def create_file_metadata(self, path: str, agent_id: str, project: str, source: str | None = None) -> FileMetadata:
         """Create standardized file metadata.
 
         Args:
             path: File path
             agent_id: Identifier for the agent
             project: Project name
+            source: Optional source identifier (e.g., "host://192.168.1.1", "https://site.domain.com")
 
         Returns:
             FileMetadata object with standard fields
@@ -48,6 +49,7 @@ class NemesisClient:
         now = datetime.now(UTC)
         return FileMetadata(
             agent_id=agent_id,
+            source=source,
             project=project,
             timestamp=now,
             expiration=now.replace(year=now.year + 1),
