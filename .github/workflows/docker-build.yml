@@ -24,36 +24,36 @@ jobs:
       matrix:
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
         service:
-          - name: web-api
+          - name: agents
             context: .
-            dockerfile: ./projects/web_api/Dockerfile
-          - name: dotnet-api
+            dockerfile: ./projects/agents/Dockerfile
+          - name: alerting
             context: .
-            dockerfile: ./projects/dotnet_api/Dockerfile
+            dockerfile: ./projects/alerting/Dockerfile
+          - name: cli
+            context: .
+            dockerfile: ./projects/cli/Dockerfile
+          - name: document-conversion
+            context: .
+            dockerfile: ./projects/document_conversion/Dockerfile
+          - name: dotnet-service
+            context: .
+            dockerfile: ./projects/dotnet_service/Dockerfile
           - name: file-enrichment
             context: .
             dockerfile: ./projects/file_enrichment/Dockerfile
           - name: frontend
             context: ./projects/frontend
             dockerfile: ./projects/frontend/Dockerfile
-          - name: jupyter
-            context: ./projects/jupyter
-            dockerfile: ./projects/jupyter/Dockerfile
-          - name: alerting
-            context: .
-            dockerfile: ./projects/alerting/Dockerfile
-          - name: triage
-            context: .
-            dockerfile: ./projects/triage/Dockerfile
-          - name: cli
-            context: .
-            dockerfile: ./projects/cli/Dockerfile
           - name: housekeeping
             context: .
             dockerfile: ./projects/housekeeping/Dockerfile
-          - name: document-conversion
+          - name: jupyter
+            context: ./projects/jupyter
+            dockerfile: ./projects/jupyter/Dockerfile
+          - name: web-api
             context: .
-            dockerfile: ./projects/document_conversion/Dockerfile
+            dockerfile: ./projects/web_api/Dockerfile
 
     steps:
       - name: Checkout repository

@@ -5,7 +5,6 @@ on:
     branches: [ "main" ]
     paths:
       - 'infra/docker/python_base/**'
-      - 'projects/InspectAssembly/**'
   workflow_dispatch:
 
 env:
@@ -91,29 +90,6 @@ jobs:
           cache-from: type=gha,scope=python-base-prod-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=python-base-prod-${{ matrix.arch }}
 
-      # InspectAssembly Base Image
-      - name: Extract metadata for InspectAssembly image
-        id: meta-inspect-assembly
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly
-          tags: |
-            type=sha,format=short,suffix=-${{ matrix.arch }}
-            type=ref,event=branch,suffix=-${{ matrix.arch }}
-            type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
-
-      - name: Build and push InspectAssembly image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./projects/InspectAssembly
-          file: ./projects/InspectAssembly/Dockerfile
-          push: true
-          platforms: ${{ matrix.platform }}
-          tags: ${{ steps.meta-inspect-assembly.outputs.tags }}
-          labels: ${{ steps.meta-inspect-assembly.outputs.labels }}
-          cache-from: type=gha,scope=inspect-assembly-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=inspect-assembly-${{ matrix.arch }}
-
   # Create multi-arch manifests
   create-manifests:
     needs: build-base-images
@@ -167,29 +143,6 @@ jobs:
       - name: Create and push Python base prod multi-arch manifest
         run: |
           echo '${{ steps.meta-python-base-prod.outputs.tags }}' | while IFS= read -r tag; do
-            if [ -n "$tag" ]; then
-              echo "Creating manifest for: $tag"
-              docker buildx imagetools create \
-                --tag "$tag" \
-                "${tag}-amd64" \
-                "${tag}-arm64"
-            fi
-          done
-
-      # InspectAssembly Manifest
-      - name: Extract metadata for InspectAssembly manifest
-        id: meta-inspect-assembly
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/inspect-assembly
-          tags: |
-            type=sha,format=short
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Create and push InspectAssembly multi-arch manifest
-        run: |
-          echo '${{ steps.meta-inspect-assembly.outputs.tags }}' | while IFS= read -r tag; do
             if [ -n "$tag" ]; then
               echo "Creating manifest for: $tag"
               docker buildx imagetools create \
