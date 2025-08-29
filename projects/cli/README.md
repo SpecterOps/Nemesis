@@ -124,3 +124,32 @@ Alternatively, you can build the production image and run it with the following:
 ```bash
 docker compose -f compose.yaml -f compose.prod.build.yaml run --rm cli
 ```
+
+
+# Using submit.sh (in dev)
+## Building the dev image
+1. Navigate to the cli directory. Perform all the following steps from this directory.
+```bash
+cd Nemesis/projects/cli
+```
+
+2. Build the base images:
+```bash
+docker compose -f ../../compose.base.yaml build
+```
+
+3. Build the nemesis-cli image:
+```bash
+docker build -t nemesis-cli --target dev --no-cache -f Dockerfile ../..
+```
+
+4. Export NEMESIS_CLI_IMAGE
+```bash
+export NEMESIS_CLI_IMAGE=nemesis-cli:latest
+```
+
+5. Run ./submit.sh as normal:
+```bash
+cd ../..
+./tools/submit.sh --help
+```
