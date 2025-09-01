@@ -16,71 +16,6 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 logger = structlog.get_logger(module=__name__)
 
 
-# Keytab structure classes
-class KeyTab(Structure):
-    structure = (("file_format_version", "H=517"), ("keytab_entry", ":"))
-
-    def fromString(self, data):
-        self.entries = []
-        Structure.fromString(self, data)
-        data = self["keytab_entry"]
-        while len(data) != 0:
-            ktentry = KeyTabEntry(data)
-            data = data[len(ktentry.getData()) :]
-            self.entries.append(ktentry)
-
-    def getData(self):
-        self["keytab_entry"] = b"".join([entry.getData() for entry in self.entries])
-        data = Structure.getData(self)
-        return data
-
-
-class OctetString(Structure):
-    structure = (("len", ">H-value"), ("value", ":"))
-
-
-class KeyTabContentRest(Structure):
-    structure = (
-        ("name_type", ">I=1"),
-        ("timestamp", ">I=0"),
-        ("vno8", "B=2"),
-        ("keytype", ">H"),
-        ("keylen", ">H-key"),
-        ("key", ":"),
-    )
-
-
-class KeyTabContent(Structure):
-    structure = (
-        ("num_components", ">h"),
-        ("realmlen", ">h-realm"),
-        ("realm", ":"),
-        ("components", ":"),
-        ("restdata", ":"),
-    )
-
-    def fromString(self, data):
-        self.components = []
-        Structure.fromString(self, data)
-        data = self["components"]
-        for i in range(self["num_components"]):
-            ktentry = OctetString(data)
-            data = data[ktentry["len"] + 2 :]
-            self.components.append(ktentry)
-        self.restfields = KeyTabContentRest(data)
-
-    def getData(self):
-        self["num_components"] = len(self.components)
-        self["components"] = b"".join([component.getData() for component in self.components])
-        self["restdata"] = self.restfields.getData()
-        data = Structure.getData(self)
-        return data
-
-
-class KeyTabEntry(Structure):
-    structure = (("size", ">I-content"), ("content", ":", KeyTabContent))
-
-
 class KeytabAnalyzer(EnrichmentModule):
     def __init__(self):
         super().__init__("keytab_analyzer")
@@ -144,198 +79,145 @@ rule Keytab_File
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
         return should_run
 
-    def _parse_keytab(self, file_data):
-        """Parse a keytab file and extract key information with robust error handling."""
-        entries = []
-
-        # Check for minimum keytab file size
-        if len(file_data) < 4:
-            entries.append({"error": "File too small to be a valid keytab"})
-            return entries
-
-        # Verify keytab version at the beginning of the file
+    def _parse_keytab_entry(self, entry_data):
+        """Parse a single keytab entry."""
         try:
-            version = unpack("H", file_data[0:2])[0]
-            if version != 0x502:
-                entries.append({"error": f"Unexpected keytab version: 0x{version:x}"})
-                # Continue processing anyway as best effort
-        except Exception as e:
-            entries.append({"error": f"Failed to parse keytab version: {str(e)}"})
-
-        # Try the standard parsing approach first
-        try:
-            keytab = KeyTab()
-            keytab.fromString(file_data)
-
-            for entry in keytab.entries:
-                try:
-                    content = entry["content"]
-
-                    # Extract realm
-                    realm = content["realm"].decode("utf-8", errors="replace")
-
-                    # Extract principal components
-                    principal_components = []
-                    for component in content.components:
-                        principal_components.append(component["value"].decode("utf-8", errors="replace"))
-
-                    principal = "/".join(principal_components)
-
-                    # Extract key information
-                    key_type = content.restfields["keytype"]
-                    key_type_name = self.key_types.get(key_type, f"Unknown ({key_type})")
-                    key = content.restfields["key"]
-                    key_hex = binascii.hexlify(key).decode("ascii")
-
-                    # Extract timestamp if available
-                    timestamp = content.restfields["timestamp"]
-                    if timestamp > 0:
-                        timestamp_dt = datetime.fromtimestamp(timestamp, tz=UTC).isoformat()
-                    else:
-                        timestamp_dt = "N/A"
-
-                    # Create entry information
-                    entry_info = {
-                        "realm": realm,
-                        "principal": principal,
-                        "key_type": key_type,
-                        "key_type_name": key_type_name,
-                        "key_length": len(key) * 8,  # Length in bits
-                        "key": key_hex,
-                        "timestamp": timestamp_dt,
-                        "kvno": content.restfields["vno8"],
-                    }
-
-                    entries.append(entry_info)
-
-                except Exception as e:
-                    logger.error(f"Error parsing keytab entry: {str(e)}")
-                    entries.append({"error": f"Error in entry: {str(e)}"})
-
-            # If we got here and have entries, return them
-            if entries:
-                return entries
-
-        except Exception as e:
-            logger.error(f"Standard parsing approach failed: {str(e)}")
-            # Continue to fallback parsing methods
-
-        # Fallback: Manual parsing for common keytab format
-        try:
-            # Skip the 2-byte header
-            data = file_data[2:]
             offset = 0
-
-            while offset < len(data):
-                try:
-                    # Each entry starts with its size
-                    if offset + 4 > len(data):
-                        break
-
-                    entry_size = unpack(">I", data[offset : offset + 4])[0]
-
-                    # Sanity check on entry size
-                    if entry_size <= 0 or entry_size > len(data) - offset:
-                        offset += 4  # Skip this problematic entry
-                        continue
-
-                    # Get the raw entry data
-                    entry_data = data[offset + 4 : offset + 4 + entry_size]
-                    offset += 4 + entry_size
-
-                    # Try to extract key data from the entry
-                    # This is a simplified approach focusing on finding key material
-                    if len(entry_data) >= 20:  # Minimum size for a meaningful entry
-                        # Look for key type and key data markers
-                        for i in range(len(entry_data) - 8):
-                            # Check for patterns that might indicate key type and length fields
-                            if i + 8 <= len(entry_data):
-                                try:
-                                    possible_key_type = unpack(">H", entry_data[i : i + 2])[0]
-                                    possible_key_len = unpack(">H", entry_data[i + 2 : i + 4])[0]
-
-                                    # Validate key type and length
-                                    if possible_key_type in self.key_types and 8 <= possible_key_len <= 64:
-                                        if i + 4 + possible_key_len <= len(entry_data):
-                                            key_data = entry_data[i + 4 : i + 4 + possible_key_len]
-                                            key_hex = binascii.hexlify(key_data).decode("ascii")
-
-                                            entry_info = {
-                                                "realm": "Unknown (manual extraction)",
-                                                "principal": "Unknown (manual extraction)",
-                                                "key_type": possible_key_type,
-                                                "key_type_name": self.key_types.get(
-                                                    possible_key_type, f"Unknown ({possible_key_type})"
-                                                ),
-                                                "key_length": possible_key_len * 8,
-                                                "key": key_hex,
-                                                "timestamp": "Unknown (manual extraction)",
-                                                "kvno": 0,  # Unknown in this fallback method
-                                                "note": "Extracted using fallback method - limited metadata available",
-                                            }
-                                            entries.append(entry_info)
-                                except Exception:
-                                    # Continue searching through the entry data
-                                    continue
-                except Exception as e:
-                    logger.error(f"Error in fallback parsing of entry at offset {offset}: {str(e)}")
-                    # Continue to next potential entry
-
-            # If we found some entries using the fallback method
-            if entries:
-                return entries
-
+            
+            # Number of components (2 bytes)
+            if offset + 2 > len(entry_data):
+                return None
+            num_components = unpack(">h", entry_data[offset:offset+2])[0]
+            offset += 2
+            
+            # Realm length and value
+            if offset + 2 > len(entry_data):
+                return None
+            realm_len = unpack(">h", entry_data[offset:offset+2])[0]
+            offset += 2
+            
+            if offset + realm_len > len(entry_data):
+                return None
+            realm = entry_data[offset:offset+realm_len].decode('utf-8', errors='replace')
+            offset += realm_len
+            
+            # Components (principal parts)
+            components = []
+            for i in range(num_components):
+                if offset + 2 > len(entry_data):
+                    return None
+                comp_len = unpack(">h", entry_data[offset:offset+2])[0]
+                offset += 2
+                
+                if offset + comp_len > len(entry_data):
+                    return None
+                component = entry_data[offset:offset+comp_len].decode('utf-8', errors='replace')
+                components.append(component)
+                offset += comp_len
+            
+            principal = "/".join(components)
+            
+            # Name type (4 bytes)
+            if offset + 4 > len(entry_data):
+                return None
+            name_type = unpack(">I", entry_data[offset:offset+4])[0]
+            offset += 4
+            
+            # Timestamp (4 bytes)
+            if offset + 4 > len(entry_data):
+                return None
+            timestamp = unpack(">I", entry_data[offset:offset+4])[0]
+            offset += 4
+            
+            # KVNO (1 byte)
+            if offset + 1 > len(entry_data):
+                return None
+            kvno = entry_data[offset]
+            offset += 1
+            
+            # Key type (2 bytes)
+            if offset + 2 > len(entry_data):
+                return None
+            key_type = unpack(">H", entry_data[offset:offset+2])[0]
+            offset += 2
+            
+            # Key length (2 bytes)
+            if offset + 2 > len(entry_data):
+                return None
+            key_length = unpack(">H", entry_data[offset:offset+2])[0]
+            offset += 2
+            
+            # Key data
+            if offset + key_length > len(entry_data):
+                return None
+            key_data = entry_data[offset:offset+key_length]
+            
+            # Format timestamp
+            if timestamp > 0:
+                timestamp_dt = datetime.fromtimestamp(timestamp, tz=UTC).isoformat()
+            else:
+                timestamp_dt = "N/A"
+            
+            return {
+                "realm": realm,
+                "principal": principal,
+                "key_type": key_type,
+                "key_type_name": self.key_types.get(key_type, f"Unknown ({key_type})"),
+                "key_length": key_length * 8,  # Convert to bits
+                "key": binascii.hexlify(key_data).decode("ascii"),
+                "timestamp": timestamp_dt,
+                "kvno": kvno,
+                "name_type": name_type
+            }
+            
         except Exception as e:
-            logger.error(f"Fallback parsing method failed: {str(e)}")
+            logger.error(f"Error parsing keytab entry: {e}")
+            return None
 
-        # If we got here with no entries, check for hex patterns that might be keys
-        if not entries:
+    def _parse_keytab_manual(self, file_data):
+        """Manual keytab parsing implementation."""
+        entries = []
+        
+        # Check version
+        if len(file_data) < 2:
+            return [{"error": "File too small"}]
+        
+        version = unpack(">H", file_data[0:2])[0]
+        if version != 0x0502:
+            entries.append({"error": f"Unexpected keytab version: 0x{version:x}"})
+            return entries
+        
+        offset = 2
+        
+        while offset < len(file_data):
             try:
-                # Last-resort attempt: look for hex patterns that might be keys
-                # Common key sizes: RC4 (16 bytes), AES-128 (16 bytes), AES-256 (32 bytes)
-                key_candidates = []
-
-                # Convert to hex for pattern searching
-                hex_data = binascii.hexlify(file_data).decode("ascii")
-
-                # Look for 32-character (16 bytes) and 64-character (32 bytes) hex sequences
-                # that might be keys (excluding long sequences of zeros or repeated characters)
-                for length in [32, 64]:  # Hex characters, representing 16 or 32 bytes
-                    for i in range(0, len(hex_data) - length, 2):
-                        segment = hex_data[i : i + length]
-
-                        # Skip if it's all zeros or a single repeated character
-                        if segment == "0" * length or all(c == segment[0] for c in segment):
-                            continue
-
-                        # Check for sufficient entropy in the potential key
-                        unique_chars = len(set(segment))
-                        if unique_chars > 10:  # Require some entropy
-                            key_candidates.append(segment)
-
-                # Add found potential keys
-                for i, key in enumerate(key_candidates):
-                    entries.append(
-                        {
-                            "realm": "Unknown (hex pattern extraction)",
-                            "principal": f"Potential key {i + 1}",
-                            "key_type": 0,
-                            "key_type_name": "Unknown (hex pattern extraction)",
-                            "key_length": len(key) * 4,  # Hex characters × 4 bits
-                            "key": key,
-                            "timestamp": "Unknown (hex pattern extraction)",
-                            "kvno": 0,
-                            "note": "Potential key extracted by hex pattern matching - use with caution",
-                        }
-                    )
+                # Read entry size
+                if offset + 4 > len(file_data):
+                    break
+                    
+                entry_size = unpack(">I", file_data[offset:offset+4])[0]
+                offset += 4
+                
+                if entry_size == 0 or offset + entry_size > len(file_data):
+                    break
+                    
+                entry_data = file_data[offset:offset+entry_size]
+                offset += entry_size
+                
+                # Parse entry
+                entry = self._parse_keytab_entry(entry_data)
+                if entry:
+                    entries.append(entry)
+                    
             except Exception as e:
-                logger.error(f"Pattern-based extraction failed: {str(e)}")
-
-        # If we still found nothing, add an error entry
-        if not entries:
-            entries.append({"error": "Failed to parse keytab file using all available methods"})
-
+                logger.error(f"Error parsing keytab entry at offset {offset}: {e}")
+                break
+                
         return entries
+
+    def _parse_keytab(self, file_data):
+        """Parse a keytab file and extract key information."""
+        return self._parse_keytab_manual(file_data)
 
     def _analyze_keytab_file(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze keytab file and generate enrichment result.
@@ -398,7 +280,7 @@ rule Keytab_File
                     report_lines.append(f"\n**Note**: {entry['note']}")
 
                 # Basic entry details
-                report_lines.append(f"\n**Principal**: {entry['principal']}@{entry['realm']}")
+                report_lines.append(f"\n**Principal**: `{entry['principal']}@{entry['realm']}`")
                 report_lines.append(f"\n**Key Version Number (KVNO)**: {entry['kvno']}")
                 report_lines.append(f"\n**Timestamp**: {entry['timestamp']}")
                 report_lines.append(f"\n**Key Type**: {entry['key_type_name']} ({entry['key_type']})")
@@ -444,7 +326,7 @@ rule Keytab_File
 
                 for i, entry in enumerate(valid_keys, 1):
                     key_summary += f"**Entry {i}**\n"
-                    key_summary += f"- **Principal:** {entry['principal']}@{entry['realm']}\n"
+                    key_summary += f"- **Principal:** `{entry['principal']}@{entry['realm']}`\n"
                     key_summary += f"- **Key Type:** {entry['key_type_name']}\n"
                     key_summary += f"- **Key Length:** {entry['key_length']} bits\n"
                     key_summary += f"- **KVNO:** {entry['kvno']}\n"
