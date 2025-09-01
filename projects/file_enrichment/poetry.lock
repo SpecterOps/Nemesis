@@ -1290,6 +1290,7 @@ develop = true
 
 [package.dependencies]
 dapr = ">=1.0.0,<2.0.0"
+impacket = ">=0.12.0,<0.13.0"
 psycopg = {version = ">=3.0.0,<4.0.0", extras = ["binary"]}
 structlog = ">=20.0.0,<30.0.0"
 
@@ -5578,4 +5579,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "4036266b23dc4e8b4bcc3cce59acf3b94e4cafb7ff04a9d43abfe3e938a021a8"
+content-hash = "e39541f703abf195f73f47e34688c026447ad3df79a7268971372aee11420e6e"

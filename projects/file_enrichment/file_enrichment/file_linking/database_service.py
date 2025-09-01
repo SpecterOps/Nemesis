@@ -44,29 +44,36 @@ class FileLinkingDatabaseService:
         Returns:
             bool: True if successful, False otherwise
         """
-        try:
-            with psycopg.connect(self.connection_string) as conn:
-                with conn.cursor() as cur:
-                    query = """
-                        INSERT INTO file_listings (source, path, object_id, status)
-                        VALUES (%s, %s, %s, %s)
-                        ON CONFLICT (source, path_lower) DO UPDATE SET
-                            object_id = EXCLUDED.object_id,
-                            status = EXCLUDED.status,
-                            updated_at = CURRENT_TIMESTAMP
-                    """
+        if source and path:
+            try:
+                with psycopg.connect(self.connection_string) as conn:
+                    with conn.cursor() as cur:
+                        query = """
+                            INSERT INTO file_listings (source, path, object_id, status)
+                            VALUES (%s, %s, %s, %s)
+                            ON CONFLICT (source, path_lower) DO UPDATE SET
+                                object_id = EXCLUDED.object_id,
+                                status = EXCLUDED.status,
+                                updated_at = CURRENT_TIMESTAMP
+                        """
 
-                    cur.execute(query, (source, _normalize_file_path(path), object_id, status.value))
-                    conn.commit()
+                        cur.execute(query, (source, _normalize_file_path(path), object_id, status.value))
+                        conn.commit()
 
-                    logger.debug(
-                        "Added/updated file listing", source=source, path=path, status=status.value, object_id=object_id
-                    )
-                    return True
+                        logger.debug(
+                            "Added/updated file listing",
+                            source=source,
+                            path=path,
+                            status=status.value,
+                            object_id=object_id,
+                        )
+                        return True
 
-        except Exception as e:
-            logger.exception("Error adding file listing", source=source, path=path, status=status.value, error=str(e))
-            return False
+            except Exception as e:
+                logger.exception(
+                    "Error adding file listing", source=source, path=path, status=status.value, error=str(e)
+                )
+                return False
 
     def add_file_linking(self, source: str, file_path_1: str, file_path_2: str, link_type: str | None = None) -> bool:
         """
@@ -81,40 +88,42 @@ class FileLinkingDatabaseService:
         Returns:
             bool: True if successful, False otherwise
         """
-        try:
-            with psycopg.connect(self.connection_string) as conn:
-                with conn.cursor() as cur:
-                    query = """
-                        INSERT INTO file_linkings (source, file_path_1, file_path_2, link_type)
-                        VALUES (%s, %s, %s, %s)
-                        ON CONFLICT (source, file_path_1, file_path_2) DO UPDATE SET
-                            link_type = EXCLUDED.link_type,
-                            updated_at = CURRENT_TIMESTAMP
-                    """
+        if source and file_path_1 and file_path_2:
+            try:
+                with psycopg.connect(self.connection_string) as conn:
+                    with conn.cursor() as cur:
+                        query = """
+                            INSERT INTO file_linkings (source, file_path_1, file_path_2, link_type)
+                            VALUES (%s, %s, %s, %s)
+                            ON CONFLICT (source, file_path_1, file_path_2) DO UPDATE SET
+                                link_type = EXCLUDED.link_type,
+                                updated_at = CURRENT_TIMESTAMP
+                        """
 
-                    cur.execute(
-                        query, (source, _normalize_file_path(file_path_1), _normalize_file_path(file_path_2), link_type)
-                    )
-                    conn.commit()
+                        cur.execute(
+                            query,
+                            (source, _normalize_file_path(file_path_1), _normalize_file_path(file_path_2), link_type),
+                        )
+                        conn.commit()
 
-                    logger.debug(
-                        "Added file linking",
-                        source=source,
-                        file_path_1=file_path_1,
-                        file_path_2=file_path_2,
-                        link_type=link_type,
-                    )
-                    return True
+                        logger.debug(
+                            "Added file linking",
+                            source=source,
+                            file_path_1=file_path_1,
+                            file_path_2=file_path_2,
+                            link_type=link_type,
+                        )
+                        return True
 
-        except Exception as e:
-            logger.exception(
-                "Error adding file linking",
-                source=source,
-                file_path_1=file_path_1,
-                file_path_2=file_path_2,
-                error=str(e),
-            )
-            return False
+            except Exception as e:
+                logger.exception(
+                    "Error adding file linking",
+                    source=source,
+                    file_path_1=file_path_1,
+                    file_path_2=file_path_2,
+                    error=str(e),
+                )
+                return False
 
     def update_listing_status(
         self, source: str, path: str, new_status: FileListingStatus, object_id: str | None = None

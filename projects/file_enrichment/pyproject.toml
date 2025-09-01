@@ -39,7 +39,7 @@ pyarrow = "^19.0.1"
 msoffcrypto-tool = "^5.4.2"
 oletools = "^0.60.2"
 pypykatz = "^0.6.11"
-
+cryptography = "^42.0.8"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"
