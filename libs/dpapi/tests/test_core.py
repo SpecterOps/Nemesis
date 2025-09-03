@@ -1,0 +1,194 @@
+"""Tests for DPAPI core models."""
+
+import base64
+from pathlib import Path
+from uuid import UUID
+
+import pytest
+from dpapi.core import Blob, MasterKeyFile, MasterKeyPolicy
+
+
+class TestMasterKeyFile:
+    """Tests for MasterKeyFile class."""
+
+    def test_parse_valid_masterkey_file_domain(self):
+        """Test parsing a valid masterkey file from a domain user."""
+        test_file = Path("tests/fixtures/masterkey_domain.bin")
+
+        masterkey = MasterKeyFile.parse(test_file)
+
+        # Verify basic structure
+        assert isinstance(masterkey, MasterKeyFile)
+        assert isinstance(masterkey.version, int)
+        assert masterkey.version == 2
+        assert isinstance(masterkey.modified, bool)
+        assert isinstance(masterkey.masterkey_guid, UUID)
+        assert masterkey.masterkey_guid == UUID("ed93694f-5a6d-46e2-b821-219f2c0ecd4d")
+        assert isinstance(masterkey.policy, MasterKeyPolicy)
+        assert masterkey.policy == (MasterKeyPolicy.NONE)
+
+        # File path should be set to the parsed file path
+        assert masterkey.file_path is None
+        assert masterkey.master_key and len(masterkey.master_key) == 176
+        assert masterkey.local_key and len(masterkey.local_key) == 144
+        assert not masterkey.backup_key
+        assert masterkey.domain_backup_key and len(masterkey.domain_backup_key) == 428
+
+    def test_parse_valid_masterkey_file_local(self):
+        """Test parsing a valid masterkey file from a local account."""
+        test_file = Path("tests/fixtures/masterkey_local.bin")
+
+        masterkey = MasterKeyFile.parse(test_file)
+
+        # Verify basic structure
+        assert isinstance(masterkey, MasterKeyFile)
+        assert isinstance(masterkey.version, int)
+        assert masterkey.version == 2
+        assert isinstance(masterkey.modified, bool)
+        assert isinstance(masterkey.masterkey_guid, UUID)
+        assert masterkey.masterkey_guid == UUID("387a062d-f8b6-4661-b2c5-eecbb9f80afb")
+        assert isinstance(masterkey.policy, MasterKeyPolicy)
+        assert masterkey.policy == (MasterKeyPolicy.LOCAL_BACKUP | MasterKeyPolicy.DPAPI_OWF)
+
+        # File path should be set to the parsed file path
+        assert masterkey.file_path is None
+        assert masterkey.master_key and len(masterkey.master_key) == 176
+        assert masterkey.local_key and len(masterkey.local_key) == 144
+        assert masterkey.backup_key and len(masterkey.backup_key) == 20
+        assert not masterkey.domain_backup_key
+
+    def test_parse_nonexistent_file(self):
+        """Test parsing a non-existent file raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            MasterKeyFile.parse("nonexistent_file.bin")
+
+    def test_parse_empty_file(self, tmp_path):
+        """Test parsing an empty file raises ValueError."""
+        empty_file = tmp_path / "empty.bin"
+        empty_file.write_bytes(b"")
+
+        with pytest.raises(ValueError, match="File too small"):
+            MasterKeyFile.parse(empty_file)
+
+    def test_parse_truncated_header(self, tmp_path):
+        """Test parsing a file with truncated header raises ValueError."""
+        truncated_file = tmp_path / "truncated.bin"
+        truncated_file.write_bytes(b"truncated_data_too_short")
+
+        with pytest.raises(ValueError, match="File too small"):
+            MasterKeyFile.parse(truncated_file)
+
+    def test_parse_invalid_size(self, tmp_path):
+        """Test parsing a file with invalid key data size raises ValueError."""
+        invalid_file = tmp_path / "invalid.bin"
+
+        # Create a minimal header that claims more data than available
+        import struct
+
+        header = struct.pack(
+            "<III80sIIIIIIIII",
+            1,  # version
+            0,  # modified
+            0,  # szFilePath
+            "{12345678-1234-5678-9abc-123456789abc}".encode("utf-16le").ljust(80, b"\x00"),  # guid
+            0,  # policy
+            1000,  # cbMK - claims 1000 bytes
+            0,  # pbMK
+            0,  # cbLK
+            0,  # pbLK
+            0,  # cbBK
+            0,  # pbBK
+            0,  # cbBBK
+            0,  # pbBBK
+        )
+        invalid_file.write_bytes(header)
+
+        with pytest.raises(ValueError, match="File size doesn't match expected key data size"):
+            MasterKeyFile.parse(invalid_file)
+
+    def test_policy_flags(self):
+        """Test MasterKeyPolicy flag combinations."""
+        # Test individual flags
+        assert MasterKeyPolicy.LOCAL_BACKUP == 0x1
+        assert MasterKeyPolicy.NO_BACKUP == 0x2
+        assert MasterKeyPolicy.DPAPI_OWF == 0x4
+
+        # Test flag combinations
+        combined = MasterKeyPolicy.LOCAL_BACKUP | MasterKeyPolicy.DPAPI_OWF
+        assert combined == 0x5
+        assert MasterKeyPolicy.LOCAL_BACKUP in combined
+        assert MasterKeyPolicy.DPAPI_OWF in combined
+        assert MasterKeyPolicy.NO_BACKUP not in combined
+
+    def test_optional_keys(self, tmp_path):
+        """Test parsing file with some keys missing."""
+        test_file = tmp_path / "optional_keys.bin"
+
+        import struct
+
+        # Create header with only master key data
+        guid_bytes = "{12345678-1234-5678-9abc-123456789abc}".encode("utf-16le")
+        guid_padded = guid_bytes + b"\x00" * (80 - len(guid_bytes))
+
+        header = struct.pack(
+            "<III80sIIIIIIIII",
+            1,  # version
+            0,  # modified
+            0,  # szFilePath
+            guid_padded,  # guid
+            MasterKeyPolicy.LOCAL_BACKUP.value,  # policy
+            10,  # cbMK - has master key
+            0,  # pbMK
+            0,  # cbLK - no local key
+            0,  # pbLK
+            0,  # cbBK - no backup key
+            0,  # pbBK
+            0,  # cbBBK - no backup DC key
+            0,  # pbBBK
+        )
+
+        # Add only master key data
+        master_key_data = b"1234567890"
+        test_file.write_bytes(header + master_key_data)
+
+        masterkey = MasterKeyFile.parse(test_file)
+
+        # Should have master key but not others
+        assert masterkey.master_key is not None
+        assert len(masterkey.master_key) == 10
+        assert masterkey.local_key is None
+        assert masterkey.backup_key is None
+        assert masterkey.domain_backup_key is None
+
+
+class TestBlob:
+    """Tests for Blob class."""
+
+    def test_parse_blob_with_entropy(self):
+        """Test parsing a DPAPI blob with entropy data."""
+        blob_with_entropy_b64 = "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAT2mT7W1a4ka4ISGfLA7NTQAAAAACAAAAAAAQZgAAAAEAACAAAACaiwIebFUs33w09ku7t4/Du5UqIHgZYWB5wlb0ZVbAUQAAAAAOgAAAAAIAACAAAADlEO+UC16KILnjeGsNQeNKSA3rkgH143oMqetquuJKrhAAAAAgdVgTUj+tOxXBNhzgaet9QAAAAPgAbyIprGNvJeerbviVODBFa9R0rpBTZ/cV0Ca9geQ8xTIoizQnEFZo8vg5wfK111UtBt+FJOmZL18JIy+r1io="
+        blob_data = base64.b64decode(blob_with_entropy_b64)
+
+        blob = Blob.parse(blob_data)
+
+        # Verify basic structure
+        assert isinstance(blob, Blob)
+        assert isinstance(blob.version, int)
+        assert blob.version == 1
+        assert isinstance(blob.masterkey_guid, UUID)
+        assert blob.masterkey_guid == UUID("ed93694f-5a6d-46e2-b821-219f2c0ecd4d")
+        assert isinstance(blob.prompt_flags, int)
+        assert isinstance(blob.description, str)
+        assert isinstance(blob.encryption_algorithm_id, int)
+        assert isinstance(blob.encryption_algorithm_key_size, int)
+        assert isinstance(blob.encryption_key, bytes)
+        assert isinstance(blob.encryption_salt, bytes)
+        assert isinstance(blob.mac_algorithm_id, int)
+        assert isinstance(blob.mac_algorithm_key_size, int)
+        assert isinstance(blob.mac_key, bytes)
+        assert isinstance(blob.encrypted_data, bytes)
+        assert isinstance(blob.mac, bytes)
+
+        # Verify blob has encrypted data
+        assert len(blob.encrypted_data) > 0
+        assert len(blob.mac) > 0

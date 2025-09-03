@@ -1,0 +1,286 @@
+"""Core data models for DPAPI library."""
+
+import struct
+from dataclasses import dataclass
+from enum import IntFlag
+from pathlib import Path
+from uuid import UUID
+
+from .dpapi_blob import DPAPI_BLOB
+
+DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
+
+
+@dataclass
+class DomainBackupKey:
+    """Represents a domain backup key for decrypting masterkeys."""
+
+    guid: UUID
+    key_data: bytes
+    domain_controller: str | None = None
+
+
+class MasterKeyPolicy(IntFlag):
+    """Policy bits for DPAPI masterkey."""
+
+    NONE = 0x0  # No special policy
+    LOCAL_BACKUP = 0x1  # Policy bit for local only (no DC) backup
+    NO_BACKUP = 0x2  # Policy bit for NO backup (Win95)
+    DPAPI_OWF = 0x4  # Use the DPAPI One way function of the password (SHA_1(pw))
+
+
+@dataclass
+class MasterKey:
+    """Represents a DPAPI masterkey.
+
+    Attributes:
+        guid: Unique identifier for this masterkey.
+        encrypted_key_user: Masterkey encrypted with the user's password-derived key.
+        encrypted_key_backup: Masterkey encrypted with the domain backup key.
+        backup_key_guid: GUID of the domain backup key used to encrypt this masterkey.
+        plaintext_key: Decrypted masterkey data.
+        plaintext_key_sha1: SHA1 hash of the plaintext masterkey. AKA the Master Key (MK) Encryption Key.
+    """
+
+    guid: UUID
+    encrypted_key_usercred: bytes | None = None
+    encrypted_key_backup: bytes | None = None
+    plaintext_key: bytes | None = None
+    plaintext_key_sha1: bytes | None = None
+    backup_key_guid: UUID | None = None
+
+    @property
+    def is_decrypted(self) -> bool:
+        """Check if masterkey has been decrypted."""
+        return self.plaintext_key is not None
+
+
+@dataclass
+class Blob:
+    """Represents a DPAPI encrypted blob.
+
+    Structure representation comes from parsing in SPCryptProtect and SPCryptUnprotect in crypt32p.cpp.
+    """
+
+    outerVersion: int
+    provider_guid: UUID
+
+    version: int
+    masterkey_guid: UUID
+    prompt_flags: int
+    description: str
+    encryption_algorithm_id: int
+    encryption_algorithm_key_size: int
+    encryption_key: bytes
+    encryption_salt: bytes
+    mac_algorithm_id: int
+    mac_algorithm_key_size: int
+    mac_key: bytes
+    encrypted_data: bytes
+    mac: bytes  # MAC signature. Includes all data from the beginning of the structure through encrypted_data
+
+    # Raw bytes of the entire blob
+    raw_bytes: bytes
+
+    @classmethod
+    def parse(cls, data_or_path: bytes | str | Path) -> "Blob":
+        """Parse a DPAPI blob from bytes or file path.
+
+        Args:
+            data_or_path: Either raw bytes or path to blob file
+
+        Returns:
+            DpapiBlob instance with parsed data
+
+        Raises:
+            ValueError: If blob format is invalid
+            FileNotFoundError: If file doesn't exist
+        """
+
+        def _parse_guid(data: bytes) -> UUID:
+            # '<' = little-endian for first 3 fields, '>' = big-endian for last field
+            data1, data2, data3 = struct.unpack("<IHH", data[:8])
+            data4 = data[8:16]  # Keep as bytes (big-endian)
+
+            return UUID(f"{data1:08x}-{data2:04x}-{data3:04x}-{data4[0]:02x}{data4[1]:02x}-{data4[2:].hex()}")
+
+        if isinstance(data_or_path, (str, Path)):
+            file_path = Path(data_or_path)
+            if not file_path.exists():
+                raise FileNotFoundError(f"Blob file not found: {file_path}")
+            with open(file_path, "rb") as f:
+                data = f.read()
+        else:
+            data = data_or_path
+
+        try:
+            dpapi_blob = DPAPI_BLOB(data)
+        except Exception as e:
+            raise ValueError(f"Failed to parse DPAPI blob: {e}") from e
+
+        # Convert impacket DPAPI_BLOB fields to our Blob class fields
+        # Parse Windows GUIDs from bytes to UUID
+        masterkey_guid_bytes = dpapi_blob["GuidMasterKey"]
+        masterkey_guid = _parse_guid(masterkey_guid_bytes)
+
+        provider_guid_bytes = dpapi_blob["GuidCredential"]
+        provider_guid = _parse_guid(provider_guid_bytes)
+
+        # Validate versions are both 1
+        if dpapi_blob["Version"] != 1:
+            raise ValueError(f"Invalid outer version: {dpapi_blob['Version']}")
+        if dpapi_blob["MasterKeyVersion"] != 1:
+            raise ValueError(f"Invalid master key version: {dpapi_blob['MasterKeyVersion']}")
+
+        # Validate the provider GUID is DF9D8CD0-1501-11D1-8C7A-00C04FC297EB
+        if provider_guid != DEFAULT_BLOB_PROVIDER_GUID:
+            raise ValueError(f"Invalid provider GUID: {provider_guid}")
+
+        description = ""
+        if dpapi_blob["Description"]:
+            description = dpapi_blob["Description"].decode("utf-16le", errors="ignore").rstrip("\x00")
+
+        return cls(
+            outerVersion=dpapi_blob["Version"],
+            provider_guid=provider_guid,
+            version=dpapi_blob["MasterKeyVersion"],
+            masterkey_guid=masterkey_guid,
+            prompt_flags=dpapi_blob["Flags"],
+            description=description,
+            encryption_algorithm_id=dpapi_blob["CryptAlgo"],
+            encryption_algorithm_key_size=dpapi_blob["CryptAlgoLen"],
+            # Yes, this is intended. Impacket incorrectly parses the salt
+            # as the encryption key. The encryption key field comes first,
+            # then the salt
+            encryption_key=dpapi_blob["HMacKey"],
+            encryption_salt=dpapi_blob["Salt"],
+            mac_algorithm_id=dpapi_blob["HashAlgo"],
+            mac_algorithm_key_size=dpapi_blob["HashAlgoLen"],
+            mac_key=dpapi_blob["HMac"],
+            encrypted_data=dpapi_blob["Data"],
+            mac=dpapi_blob["Sign"],
+            raw_bytes=data,
+        )
+
+
+@dataclass
+class MasterKeyFile:
+    """Represents a DPAPI masterkey file structure.
+
+    Based on the Windows MASTERKEY_STORED structure, this class can parse
+    masterkey files from disk and extract the various key components.
+    """
+
+    version: int
+    modified: bool
+    file_path: None
+    masterkey_guid: UUID
+    policy: MasterKeyPolicy
+
+    # Masterkey data (pbMK)
+    master_key: bytes | None = None
+
+    # Local key data (pbLK), a randomized key protected by a key derived from the user and system components of the DPAPI_SYSTEM secret
+    local_key: bytes | None = None
+
+    # Backup key data (pbBK), a structure protected by the Local Key that specifies the ID of the credential in CREDHIST needed to decrypt the masterkey.
+    backup_key: bytes | None = None
+
+    # Domain backup key ("DC recovery key" in MS parlance) protected masterkey data (pbBBK - backup backup key?).
+    domain_backup_key: bytes | None = None
+
+    @classmethod
+    def parse(cls, file_path: str | Path) -> "MasterKeyFile":
+        """Parse a masterkey file from disk.
+
+        Args:
+            file_path: Path to the masterkey file
+
+        Returns:
+            MasterKeyFile instance with parsed data
+
+        Raises:
+            ValueError: If file format is invalid
+            FileNotFoundError: If file doesn't exist
+        """
+        file_path = Path(file_path)
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"Masterkey file not found: {file_path}")
+
+        with open(file_path, "rb") as f:
+            data = f.read()
+
+        if len(data) < 44:  # Minimum size for MASTERKEY_STORED_ON_DISK header
+            raise ValueError("File too small to contain valid masterkey data")
+
+        # Parse the on-disk structure
+        # struct format: DWORD dwVersion, BOOL fModified, DWORD szFilePath,
+        #                WCHAR wszguidMasterKey[40], DWORD dwPolicy,
+        #                DWORD cbMK, DWORD pbMK, DWORD cbLK, DWORD pbLK,
+        #                DWORD cbBK, DWORD pbBK, DWORD cbBBK, DWORD pbBBK
+
+        header_format = "<III80sIIIIIIIII"  # 80 bytes for WCHAR[40] (40 * 2)
+        header_size = struct.calcsize(header_format)
+
+        if len(data) < header_size:
+            raise ValueError("File too small to contain complete header")
+
+        header = struct.unpack(header_format, data[:header_size])
+
+        version = header[0]
+        modified = bool(header[1])
+        # Skip szFilePath (header[2]) - invalid on disk
+        guid_bytes = header[3]
+        policy = header[4]
+        cb_mk = header[5]
+        # Skip pbMK offset (header[6]) - invalid on disk
+        cb_lk = header[7]
+        # Skip pbLK offset (header[8]) - invalid on disk
+        cb_bk = header[9]
+        # Skip pbBK offset (header[10]) - invalid on disk
+        cb_bbk = header[11]
+        # Skip pbBBK offset (header[12]) - invalid on disk
+
+        # Extract GUID string (null-terminated wide string) and convert to UUID
+        guid_str = guid_bytes.decode("utf-16le").rstrip("\x00")
+        guid = UUID(guid_str)
+
+        # Validate total size
+        total_key_size = cb_mk + cb_lk + cb_bk + cb_bbk
+        if len(data) < header_size + total_key_size:
+            raise ValueError("File size doesn't match expected key data size")
+
+        # Extract key data sequentially after header
+        offset = header_size
+
+        master_key = None
+        if cb_mk > 0:
+            master_key = data[offset : offset + cb_mk]
+            offset += cb_mk
+
+        local_key = None
+        if cb_lk > 0:
+            local_key = data[offset : offset + cb_lk]
+            offset += cb_lk
+
+        backup_key = None
+        if cb_bk > 0:
+            backup_key = data[offset : offset + cb_bk]
+            offset += cb_bk
+
+        backup_dc_key = None
+        if cb_bbk > 0:
+            backup_dc_key = data[offset : offset + cb_bbk]
+
+        return cls(
+            version=version,
+            modified=modified,
+            file_path=None,  # Invalid on disk, set to None
+            masterkey_guid=guid,
+            policy=MasterKeyPolicy(policy),
+            master_key=master_key,
+            local_key=local_key,
+            backup_key=backup_key,
+            domain_backup_key=backup_dc_key,
+        )

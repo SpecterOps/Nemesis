@@ -1,2 +1,0 @@
-# dpapi
-A DPAPI library.

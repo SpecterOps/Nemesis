@@ -1,0 +1,347 @@
+"""DPAPI cryptographic operations."""
+
+from enum import Enum
+
+from Crypto.Hash import HMAC, MD4, SHA1, SHA256
+from Crypto.Protocol.KDF import PBKDF2
+from Cryptodome.Cipher import PKCS1_v1_5
+from Cryptodome.Hash import SHA1 as CryptodomeSHA1
+from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
+from pydantic import BaseModel, field_validator
+
+from .dpapi_blob import DPAPI_BLOB
+
+
+class DPAPICryptoError(Exception):
+    """Base exception for DPAPI cryptographic operations."""
+
+    pass
+
+
+class InvalidBlobDataError(DPAPICryptoError):
+    """Raised when DPAPI blob data is invalid or malformed."""
+
+    pass
+
+
+class BlobDecryptionError(DPAPICryptoError):
+    """Raised when DPAPI blob decryption fails."""
+
+    pass
+
+
+class MasterKeyDecryptionError(DPAPICryptoError):
+    """Raised when masterkey decryption fails."""
+
+    pass
+
+
+class InvalidBackupKeyError(DPAPICryptoError):
+    """Raised when domain backup key is invalid or malformed."""
+
+    pass
+
+
+class Password(BaseModel):
+    """Password credential."""
+
+    value: str
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, v: str) -> str:
+        if not v:
+            raise ValueError("Password value cannot be empty")
+        return v
+
+
+class NtlmHash(BaseModel):
+    """NTLM hash credential."""
+
+    value: bytes
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, v: bytes) -> bytes:
+        if not v:
+            raise ValueError("NTLM hash value cannot be empty")
+        if len(v) != 16:
+            raise ValueError("NTLM hash must be exactly 16 bytes")
+        return v
+
+    @classmethod
+    def from_hexstring(cls, hex_string: str) -> "NtlmHash":
+        """Create NtlmHash from hex string."""
+        try:
+            return cls(value=bytes.fromhex(hex_string))
+        except ValueError as e:
+            raise ValueError(f"Invalid hex string: {e}") from e
+
+
+class Sha1Hash(BaseModel):
+    """SHA1 hash credential."""
+
+    value: bytes
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, v: bytes) -> bytes:
+        if not v:
+            raise ValueError("SHA1 hash value cannot be empty")
+        if len(v) != 20:
+            raise ValueError("SHA1 hash must be exactly 20 bytes")
+        return v
+
+    @classmethod
+    def from_hex(cls, hex_string: str) -> "Sha1Hash":
+        """Create Sha1Hash from hex string."""
+        try:
+            return cls(value=bytes.fromhex(hex_string))
+        except ValueError as e:
+            raise ValueError(f"Invalid hex string: {e}") from e
+
+
+class Pbkdf2Hash(BaseModel):
+    """PBKDF2 hash credential."""
+
+    value: bytes
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, v: bytes) -> bytes:
+        if not v:
+            raise ValueError("PBKDF2 hash value cannot be empty")
+        if len(v) != 16:
+            raise ValueError("PBKDF2 hash must be exactly 16 bytes")
+        return v
+
+    @classmethod
+    def from_hex(cls, hex_string: str) -> "Pbkdf2Hash":
+        """Create Pbkdf2Hash from hex string."""
+        try:
+            return cls(value=bytes.fromhex(hex_string))
+        except ValueError as e:
+            raise ValueError(f"Invalid hex string: {e}") from e
+
+
+def _derive_secure_cred_key(ntlm_hash: bytes, user_sid_bytes: bytes) -> bytes:
+    """Compute PBKDF2 hash using two-step derivation process."""
+    derived_key = PBKDF2(ntlm_hash, user_sid_bytes, dkLen=32, count=10000, hmac_hash_module=SHA256)  # type: ignore
+    derived_key = PBKDF2(derived_key, user_sid_bytes, dkLen=16, count=1, hmac_hash_module=SHA256)  # type: ignore
+    return derived_key
+
+
+class CredKeyHashType(Enum):
+    """Type of one-way function (OWF) hashes used in credential key derivation."""
+
+    MD4 = "md4"
+    NTLM = "md4"  # Alias for MD4
+    SHA1 = "sha1"
+    PBKDF2 = "pbkdf2"
+    SECURE_CRED_KEY = "pbkdf2"  # Alias for PBKDF2
+
+
+class CredKey(BaseModel):
+    """Credential key derived from OWF hash."""
+
+    key: NtlmHash | Sha1Hash | Pbkdf2Hash
+
+    @property
+    def owf(self) -> CredKeyHashType:
+        """Get the OWF type inferred from the hash type."""
+        if isinstance(self.key, NtlmHash):
+            return CredKeyHashType.NTLM
+        elif isinstance(self.key, Sha1Hash):
+            return CredKeyHashType.SHA1
+        elif isinstance(self.key, Pbkdf2Hash):
+            return CredKeyHashType.PBKDF2
+        else:
+            raise ValueError(f"Cannot infer OWF type from key type: {type(self.key)}")
+
+    @classmethod
+    def from_password(cls, password: str, hash_type: CredKeyHashType, user_sid: str | None = None) -> "CredKey":
+        """Create CredKey from password by calculating the specified hash type.
+
+        Derived from SharpDPAPI's CalculateKeys function: https://github.com/GhostPack/SharpDPAPI/blob/master/SharpDPAPI/lib/Dpapi.cs#L1755
+        """
+
+        if hash_type in (CredKeyHashType.MD4, CredKeyHashType.NTLM):
+            ntlm_hash = MD4.new(password.encode("utf-16le")).digest()
+            return cls(key=NtlmHash(value=ntlm_hash))
+        elif hash_type == CredKeyHashType.SHA1:
+            sha1_hash = SHA1.new(password.encode("utf-16le")).digest()
+            return cls(key=Sha1Hash(value=sha1_hash))
+        elif hash_type == CredKeyHashType.PBKDF2:
+            if user_sid is None:
+                raise ValueError("user_sid parameter is required when using PBKDF2")
+
+            user_sid_bytes = user_sid.encode("utf-16le")
+            ntlm_hash = MD4.new(password.encode("utf-16le")).digest()
+
+            derived_key = _derive_secure_cred_key(ntlm_hash, user_sid_bytes)
+
+            return cls(key=Pbkdf2Hash(value=derived_key))
+        else:
+            raise ValueError(f"Unsupported hash type: {hash_type}")
+
+    @classmethod
+    def from_ntlm(cls, ntlm_hash: bytes, hash_type: CredKeyHashType, user_sid: str | None = None) -> "CredKey":
+        """Create CredKey from NTLM hash."""
+
+        if hash_type in (CredKeyHashType.MD4, CredKeyHashType.NTLM):
+            return cls(key=NtlmHash(value=ntlm_hash))
+        elif hash_type == CredKeyHashType.PBKDF2:
+            if user_sid is None:
+                raise ValueError("user_sid parameter is required when using PBKDF2")
+
+            user_sid_bytes = user_sid.encode("utf-16le")
+            derived_key = _derive_secure_cred_key(ntlm_hash, user_sid_bytes)
+
+            return cls(key=Pbkdf2Hash(value=derived_key))
+        else:
+            raise ValueError(f"Cannot derive {hash_type} from NTLM hash")
+
+    @classmethod
+    def from_sha1(cls, sha1_hash: bytes) -> "CredKey":
+        """Create CredKey from SHA1 hash."""
+        return cls(key=Sha1Hash(value=sha1_hash))
+
+
+class MasterKeyEncryptionKey(BaseModel):
+    """Symmetric encryption key derived from credential key."""
+
+    key: Sha1Hash
+
+    @staticmethod
+    def _derive_mk_key(pwdhash: bytes, user_sid: str, digest: str = "sha1") -> bytes:
+        """Internal use. Computes the DPAPI symmetric key from a hash derived from a user's password."""
+        # Map digest names to pycryptodome hash modules
+        digest_map = {
+            "sha1": SHA1,
+            "sha256": SHA256,
+            "md4": MD4,
+        }
+
+        if digest not in digest_map:
+            raise ValueError(f"Unsupported digest algorithm: {digest}")
+
+        user_sid_bytes = user_sid.encode("utf-16le") + b"\0\0"
+
+        return HMAC.new(pwdhash, user_sid_bytes, digestmod=digest_map[digest]).digest()
+
+    @classmethod
+    def from_cred_key(cls, cred_key: CredKey, user_sid: str) -> "MasterKeyEncryptionKey":
+        """Generate symmetric key from credential key using derivation algorithm.
+
+        Args:
+            cred_key: The credential key containing hash
+            user_sid: The user SID for derivation
+        """
+        if cred_key.owf in (CredKeyHashType.MD4, CredKeyHashType.NTLM):
+            if not isinstance(cred_key.key, NtlmHash):
+                raise ValueError("Expected NtlmHash for MD4/NTLM key type")
+            key = cls._derive_mk_key(cred_key.key.value, user_sid, digest="sha1")
+        elif cred_key.owf == CredKeyHashType.SHA1:
+            if not isinstance(cred_key.key, Sha1Hash):
+                raise ValueError("Expected Sha1Hash for SHA1 key type")
+            key = cls._derive_mk_key(cred_key.key.value, user_sid, digest="sha1")
+        elif cred_key.owf == CredKeyHashType.PBKDF2:
+            if not isinstance(cred_key.key, Pbkdf2Hash):
+                raise ValueError("Expected Pbkdf2Hash for PBKDF2 key type")
+
+            key = cls._derive_mk_key(cred_key.key.value, user_sid, digest="sha1")
+        else:
+            raise ValueError(f"Invalid hash_type: {cred_key.owf}")
+
+        return cls(key=Sha1Hash(value=key))
+
+
+class DpapiCrypto:
+    """DPAPI cryptographic operations handler."""
+
+    @staticmethod
+    def decrypt_masterkey_with_backup_key(encrypted_masterkey: bytes, backup_key: bytes) -> tuple[bytes, bytes]:
+        """Decrypt a masterkey using a domain backup key.
+
+        Args:
+            encrypted_masterkey: The encrypted masterkey bytes (domainkey_pb_secret)
+            backup_key: The domain backup key bytes
+
+        Returns:
+            Tuple of (sha1_key, full_key) on success
+
+        Raises:
+            InvalidBackupKeyError: If backup key is invalid or malformed
+            MasterKeyDecryptionError: If masterkey decryption fails
+        """
+        try:
+            # Extract the private key from the backup key data
+            # Skip the PVK_FILE_HDR and get the PRIVATE_KEY_BLOB
+            key = PRIVATE_KEY_BLOB(backup_key[len(PVK_FILE_HDR()) :])
+            private = privatekeyblob_to_pkcs1(key)
+            cipher = PKCS1_v1_5.new(private)
+        except Exception as e:
+            raise InvalidBackupKeyError(f"Invalid domain backup key: {e}") from e
+
+        try:
+            # Decrypt the masterkey (reverse byte order as per Impacket implementation)
+            decrypted_key = cipher.decrypt(encrypted_masterkey[::-1], None)
+
+            if not decrypted_key:
+                raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
+
+            # Parse the decrypted data as DPAPI_DOMAIN_RSA_MASTER_KEY
+            domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
+            full_key = domain_master_key["buffer"][: domain_master_key["cbMasterKey"]]
+            sha1_key = CryptodomeSHA1.new(full_key).digest()
+
+            return (sha1_key, full_key)
+        except MasterKeyDecryptionError:
+            raise
+        except Exception as e:
+            raise MasterKeyDecryptionError(f"Failed to decrypt masterkey: {e}") from e
+
+    @staticmethod
+    def decrypt_masterkey_with_mk_key(encrypted_masterkey: bytes, mk_key: MasterKeyEncryptionKey) -> bytes:
+        """Decrypt a masterkey using a masterkey encryption key.
+
+        Args:
+            encrypted_masterkey: The encrypted masterkey data
+            cred_key: The credential key containing hashes
+
+        Returns:
+            Decrypted masterkey bytes or None if decryption fails
+        """
+
+        raise NotImplementedError("MasterKeyEncryptionKey decryption not implemented yet")
+
+    @staticmethod
+    def decrypt_blob(blob_data: bytes, masterkey: bytes, entropy: bytes | None = None) -> bytes:
+        """Decrypt a DPAPI blob using the provided masterkey SHA1.
+
+        Args:
+            blob_data: The encrypted DPAPI blob's bytes
+            masterkey: Bytes of the plaintext masterkey
+            entropy: Optional entropy data used in blob encryption
+
+        Returns:
+            Decrypted blob data
+
+        Raises:
+            InvalidBlobDataError: If blob data is invalid or malformed
+            BlobDecryptionError: If decryption fails
+        """
+        try:
+            dpapi_blob = DPAPI_BLOB(blob_data)
+        except Exception as e:
+            raise InvalidBlobDataError(f"Invalid DPAPI blob data: {e}") from e
+
+        try:
+            decrypted_data = dpapi_blob.decrypt(masterkey)
+        except Exception as e:
+            raise BlobDecryptionError(f"Failed to decrypt DPAPI blob: {e}") from e
+
+        if not decrypted_data:
+            raise BlobDecryptionError("Failed to decrypt DPAPI blob despite having a plaintext masterkey")
+
+        return decrypted_data
