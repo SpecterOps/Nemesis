@@ -4,6 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from .core import MasterKeyFile, MasterKeyPolicy
 from .eventing import DpapiEvent, DpapiObserver, NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent
 
 if TYPE_CHECKING:
@@ -64,26 +65,24 @@ class AutoDecryptionObserver(DpapiObserver):
                     if masterkey.encrypted_key_backup is None:
                         continue
 
-                    # For domain masterkeys, we need to extract the RSA-encrypted portion
-                    # The domain backup key data has a structure with the encrypted data at offset 28
-                    encrypted_data = masterkey.encrypted_key_backup
-                    if len(encrypted_data) > 256:
-                        # This looks like a full domain backup key structure, extract the RSA portion
-                        encrypted_data = encrypted_data[28 : 28 + 256]
-
-                    # Attempt decryption using the backup key data
-                    result = self.dpapi_manager._crypto.decrypt_masterkey_with_backup_key(
-                        encrypted_data,
-                        new_backup_key.key_data,
+                    # Create a MasterKeyFile object for the domain backup key decrypt method
+                    masterkey_file = MasterKeyFile(
+                        version=0,
+                        modified=False,
+                        file_path=None,
+                        masterkey_guid=masterkey.guid,
+                        policy=MasterKeyPolicy.NONE,
+                        domain_backup_key=masterkey.encrypted_key_backup,
                     )
 
+                    # Attempt decryption using the backup key
+                    result = new_backup_key.decrypt_masterkey_file(masterkey_file)
+
                     if result:
-                        # Extract sha1_key and full_key from the result tuple
-                        sha1_key, full_key = result
-                        # Update the masterkey with decrypted data
-                        masterkey.plaintext_key = full_key
-                        masterkey.plaintext_key_sha1 = sha1_key
-                        masterkey.backup_key_guid = new_backup_key.guid
+                        # Update the masterkey with decrypted data from the result MasterKey
+                        masterkey.plaintext_key = result.plaintext_key
+                        masterkey.plaintext_key_sha1 = result.plaintext_key_sha1
+                        masterkey.backup_key_guid = result.backup_key_guid
                         await self.dpapi_manager._masterkey_repo.update_masterkey(masterkey)
 
                 except Exception:
@@ -116,25 +115,24 @@ class AutoDecryptionObserver(DpapiObserver):
             # Try to decrypt the masterkey with each backup key
             for backup_key in backup_keys:
                 try:
-                    # For domain masterkeys, we need to extract the RSA-encrypted portion
-                    # The domain backup key data has a structure with the encrypted data at offset 28
-                    encrypted_data = masterkey.encrypted_key_backup
-                    if len(encrypted_data) > 256:
-                        # This looks like a full domain backup key structure, extract the RSA portion
-                        encrypted_data = encrypted_data[28 : 28 + 256]
-
-                    # Attempt decryption using the backup key data
-                    result = self.dpapi_manager._crypto.decrypt_masterkey_with_backup_key(
-                        encrypted_data, backup_key.key_data
+                    # Create a MasterKeyFile object for the domain backup key decrypt method
+                    masterkey_file = MasterKeyFile(
+                        version=0,
+                        modified=False,
+                        file_path=None,
+                        masterkey_guid=masterkey.guid,
+                        policy=MasterKeyPolicy.NONE,
+                        domain_backup_key=masterkey.encrypted_key_backup,
                     )
 
+                    # Attempt decryption using the backup key
+                    result = backup_key.decrypt_masterkey_file(masterkey_file)
+
                     if result:
-                        # Extract sha1_key and full_key from the result tuple
-                        sha1_key, full_key = result
-                        # Update the masterkey with decrypted data
-                        masterkey.plaintext_key = full_key
-                        masterkey.plaintext_key_sha1 = sha1_key
-                        masterkey.backup_key_guid = backup_key.guid
+                        # Update the masterkey with decrypted data from the result MasterKey
+                        masterkey.plaintext_key = result.plaintext_key
+                        masterkey.plaintext_key_sha1 = result.plaintext_key_sha1
+                        masterkey.backup_key_guid = result.backup_key_guid
                         await self.dpapi_manager._masterkey_repo.update_masterkey(masterkey)
                         return  # Successfully decrypted, stop trying other keys
 

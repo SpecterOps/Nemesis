@@ -1,16 +1,13 @@
 """Tests for DPAPI cryptographic operations."""
 
-import base64
-import json
 from uuid import UUID
 
 import pytest
-from dpapi.core import Blob, DomainBackupKey, MasterKeyFile
+from dpapi.core import Blob
 from dpapi.crypto import (
     CredKey,
     CredKeyHashType,
     DpapiCrypto,
-    InvalidBackupKeyError,
     InvalidBlobDataError,
     MasterKeyEncryptionKey,
     NtlmHash,
@@ -29,6 +26,11 @@ user_sid_bytes = user_sid.encode("utf-16le")
 credkey_ntlm_hash = ntlm_hash
 credkey_sha1_hash = "15056cbc481efd37bba0e97e9c28493a40cf8745"
 credkey_pbkdf2_hash = "775ec403415b49002386ea8e477346cd"
+
+masterkey_bytes = bytes.fromhex(
+    "36BD60CB9E7E52433169DB00E93ED0A82D3C30C65D948BD8596FB32C267671020B02026B0AE03479DD18374ADBDD7658F45CCE6ED2A45319EFF7A96C411C85F5"
+)
+masterkey_sha1_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
 
 
 class TestPassword:
@@ -349,66 +351,8 @@ class TestMasterKeyEncryptionKey:
         assert mk_key.key.value.hex() == "d3205d40d3df002fba1936ce075c0b2805fab06d"
 
 
-class TestDomainBackupKey:
-    """Test DomainBackupKey dataclass."""
-
-    def test_create_domain_backup_key(self):
-        """Test creating DomainBackupKey."""
-        from uuid import uuid4
-
-        guid = uuid4()
-        key_data = b"backup_key_data_here"
-        domain_controller = "DC01.example.com"
-
-        backup_key = DomainBackupKey(guid=guid, key_data=key_data, domain_controller=domain_controller)
-
-        assert backup_key.guid == guid
-        assert backup_key.key_data == key_data
-        assert backup_key.domain_controller == domain_controller
-
-    def test_create_domain_backup_key_no_dc(self):
-        """Test creating DomainBackupKey without domain controller."""
-        from uuid import uuid4
-
-        guid = uuid4()
-        key_data = b"backup_key_data_here"
-
-        backup_key = DomainBackupKey(guid=guid, key_data=key_data)
-
-        assert backup_key.guid == guid
-        assert backup_key.key_data == key_data
-        assert backup_key.domain_controller is None
-
-
 class TestDPAPICrypto:
     """Test DPAPICrypto class."""
-
-    def test_decrypt_masterkey_with_backup_key_invalid_backup_key(self):
-        """Test backup key decryption with invalid backup key."""
-        encrypted_masterkey = b"mock_encrypted_masterkey_data"
-        invalid_backup_key = b"invalid_backup_key_data"
-
-        # Should raise InvalidBackupKeyError when backup key is invalid
-        with pytest.raises(InvalidBackupKeyError, match="Invalid domain backup key"):
-            DpapiCrypto.decrypt_masterkey_with_backup_key(encrypted_masterkey, invalid_backup_key)
-
-    def test_decrypt_masterkey_with_backup_key_empty_data(self):
-        """Test backup key decryption with empty data."""
-        # Test with empty backup key data
-        with pytest.raises(InvalidBackupKeyError, match="Invalid domain backup key"):
-            DpapiCrypto.decrypt_masterkey_with_backup_key(b"encrypted", b"")
-
-        # Test with too short backup key data
-        with pytest.raises(InvalidBackupKeyError, match="Invalid domain backup key"):
-            DpapiCrypto.decrypt_masterkey_with_backup_key(b"encrypted", b"short")
-
-    def test_decrypt_masterkey_with_mk_key_not_implemented(self):
-        """Test MK key decryption raises NotImplementedError."""
-        crypto = DpapiCrypto()
-        mk_key = MasterKeyEncryptionKey(key=Sha1Hash(value=b"a" * 20))
-
-        with pytest.raises(NotImplementedError, match="MasterKeyEncryptionKey decryption not implemented"):
-            crypto.decrypt_masterkey_with_mk_key(b"encrypted", mk_key)
 
     def test_decrypt_blob_with_invalid_data(self):
         """Test DPAPI blob decryption with invalid blob data."""
@@ -489,54 +433,3 @@ class TestBlobParse:
         # Data
         assert blob.encryption_salt == blob_impacket["Salt"] == blob_dpapick.salt
         assert blob.encrypted_data == blob_impacket["Data"] == blob_dpapick.cipherText
-
-
-class TestDomainMasterkeyDecryption:
-    """Test domain masterkey decryption with backup key."""
-
-    def test_decrypt_domain_masterkey_with_backup_key(self, read_file_text, get_file_path):
-        """Test decrypting domain masterkey using backup key from fixtures."""
-        backup_key_json = read_file_text("backupkey.json")
-        masterkey_path = get_file_path("masterkey_domain.bin")
-
-        backup_key_data = json.loads(backup_key_json)
-
-        # Create DomainBackupKey object
-        backup_key = DomainBackupKey(
-            guid=UUID(backup_key_data["backup_key_guid"]),
-            key_data=base64.b64decode(backup_key_data["key"]),
-            domain_controller=backup_key_data["dc"],
-        )
-
-        masterkey_file = MasterKeyFile.parse(masterkey_path)
-
-        assert masterkey_file.domain_backup_key is not None, "Domain masterkey should have domain_backup_key"
-        backup_dc_key = masterkey_file.domain_backup_key
-
-        # The domain backup key has a structure: GUID (16 bytes) is at offset 12,
-        # Encrypted data (256 bytes) starts at offset 28
-        encrypted_masterkey = backup_dc_key[28 : 28 + 256]
-
-        result = DpapiCrypto.decrypt_masterkey_with_backup_key(
-            encrypted_masterkey,
-            backup_key.key_data,
-        )
-
-        # Verify decryption succeeded
-        assert result is not None
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-
-        sha1_key, full_key = result
-
-        # Verify the decrypted keys are valid
-        assert isinstance(sha1_key, bytes)
-        assert isinstance(full_key, bytes)
-        assert len(sha1_key) == 20  # SHA1 digest length
-        assert len(full_key) > 0
-
-        assert (
-            full_key.hex()
-            == "106600000e80000036bd60cb9e7e52433169db00e93ed0a82d3c30c65d948bd8596fb32c267671020b02026b0ae03479dd18374adbdd7658f45cce6ed2a45319"
-        )
-        assert sha1_key.hex() == "f8f89573b06357b59396f2818e9ce6bb96fbeaf5"

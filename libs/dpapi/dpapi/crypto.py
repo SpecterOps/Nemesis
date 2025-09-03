@@ -4,9 +4,6 @@ from enum import Enum
 
 from Crypto.Hash import HMAC, MD4, SHA1, SHA256
 from Crypto.Protocol.KDF import PBKDF2
-from Cryptodome.Cipher import PKCS1_v1_5
-from Cryptodome.Hash import SHA1 as CryptodomeSHA1
-from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
 from pydantic import BaseModel, field_validator
 
 from .dpapi_blob import DPAPI_BLOB
@@ -258,48 +255,6 @@ class MasterKeyEncryptionKey(BaseModel):
 
 class DpapiCrypto:
     """DPAPI cryptographic operations handler."""
-
-    @staticmethod
-    def decrypt_masterkey_with_backup_key(encrypted_masterkey: bytes, backup_key: bytes) -> tuple[bytes, bytes]:
-        """Decrypt a masterkey using a domain backup key.
-
-        Args:
-            encrypted_masterkey: The encrypted masterkey bytes (domainkey_pb_secret)
-            backup_key: The domain backup key bytes
-
-        Returns:
-            Tuple of (sha1_key, full_key) on success
-
-        Raises:
-            InvalidBackupKeyError: If backup key is invalid or malformed
-            MasterKeyDecryptionError: If masterkey decryption fails
-        """
-        try:
-            # Extract the private key from the backup key data
-            # Skip the PVK_FILE_HDR and get the PRIVATE_KEY_BLOB
-            key = PRIVATE_KEY_BLOB(backup_key[len(PVK_FILE_HDR()) :])
-            private = privatekeyblob_to_pkcs1(key)
-            cipher = PKCS1_v1_5.new(private)
-        except Exception as e:
-            raise InvalidBackupKeyError(f"Invalid domain backup key: {e}") from e
-
-        try:
-            # Decrypt the masterkey (reverse byte order as per Impacket implementation)
-            decrypted_key = cipher.decrypt(encrypted_masterkey[::-1], None)
-
-            if not decrypted_key:
-                raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
-
-            # Parse the decrypted data as DPAPI_DOMAIN_RSA_MASTER_KEY
-            domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
-            full_key = domain_master_key["buffer"][: domain_master_key["cbMasterKey"]]
-            sha1_key = CryptodomeSHA1.new(full_key).digest()
-
-            return (sha1_key, full_key)
-        except MasterKeyDecryptionError:
-            raise
-        except Exception as e:
-            raise MasterKeyDecryptionError(f"Failed to decrypt masterkey: {e}") from e
 
     @staticmethod
     def decrypt_masterkey_with_mk_key(encrypted_masterkey: bytes, mk_key: MasterKeyEncryptionKey) -> bytes:

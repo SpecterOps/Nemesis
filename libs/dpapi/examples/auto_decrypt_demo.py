@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import UUID
 
 from dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
+from dpapi.repositories import MasterKeyFilter
 
 
 async def main():
@@ -51,7 +52,7 @@ async def main():
 
         # Check initial state
         all_keys = await dpapi.get_all_masterkeys()
-        decrypted_keys = await dpapi.get_decrypted_masterkeys()
+        decrypted_keys = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"Initial state: {len(all_keys)} total, {len(decrypted_keys)} decrypted")
 
         # Add the domain backup key - this should trigger automatic decryption
@@ -68,7 +69,7 @@ async def main():
 
         # Check final state - should show more decrypted keys if auto-decryption worked
         all_keys_final = await dpapi.get_all_masterkeys()
-        decrypted_keys_final = await dpapi.get_decrypted_masterkeys()
+        decrypted_keys_final = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"After backup key: {len(all_keys_final)} total, {len(decrypted_keys_final)} decrypted")
 
         if len(decrypted_keys_final) > len(decrypted_keys):
@@ -119,7 +120,7 @@ async def main():
 
         # Check final state
         all_keys_after = await dpapi2.get_all_masterkeys()
-        decrypted_keys_after = await dpapi2.get_decrypted_masterkeys()
+        decrypted_keys_after = await dpapi2.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"After adding masterkeys: {len(all_keys_after)} total, {len(decrypted_keys_after)} decrypted")
 
         if len(decrypted_keys_after) > 0:
@@ -144,7 +145,7 @@ async def main():
 
         # Check state before backup key
         all_keys_before = await dpapi_no_auto.get_all_masterkeys()
-        decrypted_keys_before = await dpapi_no_auto.get_decrypted_masterkeys()
+        decrypted_keys_before = await dpapi_no_auto.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"Before backup key: {len(all_keys_before)} total, {len(decrypted_keys_before)} decrypted")
 
         # Add backup key - should NOT trigger auto-decryption
@@ -158,7 +159,7 @@ async def main():
 
         # Check state after backup key
         all_keys_after = await dpapi_no_auto.get_all_masterkeys()
-        decrypted_keys_after = await dpapi_no_auto.get_decrypted_masterkeys()
+        decrypted_keys_after = await dpapi_no_auto.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"After backup key: {len(all_keys_after)} total, {len(decrypted_keys_after)} decrypted")
 
         if len(decrypted_keys_after) == len(decrypted_keys_before):

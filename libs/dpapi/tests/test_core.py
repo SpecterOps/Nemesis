@@ -1,11 +1,13 @@
 """Tests for DPAPI core models."""
 
 import base64
+import json
 from pathlib import Path
 from uuid import UUID
 
 import pytest
-from dpapi.core import Blob, MasterKeyFile, MasterKeyPolicy
+from dpapi.core import Blob, DomainBackupKey, MasterKeyFile, MasterKeyPolicy
+from dpapi.crypto import MasterKeyDecryptionError
 
 
 class TestMasterKeyFile:
@@ -192,3 +194,83 @@ class TestBlob:
         # Verify blob has encrypted data
         assert len(blob.encrypted_data) > 0
         assert len(blob.mac) > 0
+
+
+class TestDomainBackupKey:
+    """Test DomainBackupKey dataclass."""
+
+    def test_create_domain_backup_key(self):
+        """Test creating DomainBackupKey."""
+        from uuid import uuid4
+
+        guid = uuid4()
+        key_data = b"backup_key_data_here"
+        domain_controller = "DC01.example.com"
+
+        backup_key = DomainBackupKey(guid=guid, key_data=key_data, domain_controller=domain_controller)
+
+        assert backup_key.guid == guid
+        assert backup_key.key_data == key_data
+        assert backup_key.domain_controller == domain_controller
+
+    def test_create_domain_backup_key_no_dc(self):
+        """Test creating DomainBackupKey without domain controller."""
+        from uuid import uuid4
+
+        guid = uuid4()
+        key_data = b"backup_key_data_here"
+
+        backup_key = DomainBackupKey(guid=guid, key_data=key_data)
+
+        assert backup_key.guid == guid
+        assert backup_key.key_data == key_data
+        assert backup_key.domain_controller is None
+
+    def test_decrypt_masterkey_file_with_backup_key(self):
+        """Test decrypting a domain masterkey file using backup key."""
+        # Load the backup key from fixtures
+        backupkey_file = Path("tests/fixtures/backupkey.json")
+        with open(backupkey_file) as f:
+            backupkey_data = json.load(f)
+
+        # Create DomainBackupKey from the fixture data
+        backup_key = DomainBackupKey(
+            guid=UUID(backupkey_data["backup_key_guid"]),
+            key_data=base64.b64decode(backupkey_data["key"]),
+            domain_controller=backupkey_data["dc"],
+        )
+
+        # Load the domain masterkey file
+        masterkey_file = MasterKeyFile.parse("tests/fixtures/masterkey_domain.bin")
+
+        # Decrypt the masterkey
+        decrypted_masterkey = backup_key.decrypt_masterkey_file(masterkey_file)
+
+        # Verify decryption succeeded
+        assert decrypted_masterkey is not None
+        assert decrypted_masterkey.is_decrypted
+        assert decrypted_masterkey.guid == masterkey_file.masterkey_guid
+        assert decrypted_masterkey.plaintext_key is not None
+        assert decrypted_masterkey.plaintext_key_sha1 is not None
+        assert decrypted_masterkey.backup_key_guid == backup_key.guid
+        assert len(decrypted_masterkey.plaintext_key_sha1) == 20  # SHA1 is 20 bytes
+
+        masterkey_bytes = "36bd60cb9e7e52433169db00e93ed0a82d3c30c65d948bd8596fb32c267671020b02026b0ae03479dd18374adbdd7658f45cce6ed2a45319eff7a96c411c85f5"
+        masterkey_sha1_hash = "17fd87f91d25a18abd9bcd66b6d9f3c6bfc16778"
+
+        assert decrypted_masterkey.plaintext_key.hex() == masterkey_bytes
+        assert decrypted_masterkey.plaintext_key_sha1.hex() == masterkey_sha1_hash
+
+    def test_decrypt_masterkey_file_no_domain_key(self):
+        """Test decrypting a masterkey file without domain backup key raises exception."""
+        from uuid import uuid4
+
+        # Create a backup key
+        backup_key = DomainBackupKey(guid=uuid4(), key_data=b"fake_key_data")
+
+        # Load the local masterkey file (no domain backup key)
+        masterkey_file = MasterKeyFile.parse("tests/fixtures/masterkey_local.bin")
+
+        # Should raise MasterKeyDecryptionError since no domain backup key in file
+        with pytest.raises(MasterKeyDecryptionError, match="contains no domain backup key"):
+            backup_key.decrypt_masterkey_file(masterkey_file)

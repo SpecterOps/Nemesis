@@ -6,18 +6,15 @@ from enum import IntFlag
 from pathlib import Path
 from uuid import UUID
 
+from Cryptodome.Cipher import PKCS1_v1_5
+from Cryptodome.Hash import SHA1
+from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
+from impacket.dpapi import DomainKey as ImpacketDomainKey
+
+from .crypto import InvalidBackupKeyError, MasterKeyDecryptionError
 from .dpapi_blob import DPAPI_BLOB
 
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
-
-
-@dataclass
-class DomainBackupKey:
-    """Represents a domain backup key for decrypting masterkeys."""
-
-    guid: UUID
-    key_data: bytes
-    domain_controller: str | None = None
 
 
 class MasterKeyPolicy(IntFlag):
@@ -189,6 +186,9 @@ class MasterKeyFile:
     # Domain backup key ("DC recovery key" in MS parlance) protected masterkey data (pbBBK - backup backup key?).
     domain_backup_key: bytes | None = None
 
+    # Raw bytes of the entire master key file
+    raw_bytes: bytes | None = None
+
     @classmethod
     def parse(cls, file_path: str | Path) -> "MasterKeyFile":
         """Parse a masterkey file from disk.
@@ -283,4 +283,73 @@ class MasterKeyFile:
             local_key=local_key,
             backup_key=backup_key,
             domain_backup_key=backup_dc_key,
+            raw_bytes=data,
         )
+
+
+@dataclass
+class DomainBackupKey:
+    """Represents a domain backup key for decrypting masterkeys."""
+
+    guid: UUID
+    key_data: bytes
+    domain_controller: str | None = None
+
+    def decrypt_masterkey_file(self, masterkey_file: MasterKeyFile) -> MasterKey:
+        """Decrypt a masterkey file using this domain backup key.
+
+        Args:
+            masterkey_file: The masterkey file to decrypt
+
+        Returns:
+            MasterKey instance with decrypted key data
+
+        Raises:
+            MasterKeyDecryptionError: If masterkey file has no domain backup key or decryption fails
+            InvalidBackupKeyError: If domain backup key is invalid or malformed
+        """
+        if not masterkey_file.domain_backup_key:
+            raise MasterKeyDecryptionError("Masterkey file contains no domain backup key data")
+
+        try:
+            domain_key = ImpacketDomainKey(masterkey_file.domain_backup_key)
+        except Exception as e:
+            raise MasterKeyDecryptionError(f"Failed to parse domain backup key data: {e}") from e
+
+        try:
+            # Extract the private key from the backup key data
+            key = PRIVATE_KEY_BLOB(self.key_data[len(PVK_FILE_HDR()) :])
+            private = privatekeyblob_to_pkcs1(key)
+            cipher = PKCS1_v1_5.new(private)
+        except Exception as e:
+            raise InvalidBackupKeyError(f"Invalid domain backup key: {e}") from e
+
+        try:
+            # Decrypt the masterkey (reverse byte order as per Impacket implementation)
+            decrypted_key = cipher.decrypt(domain_key["SecretData"][::-1], None)
+
+            if not decrypted_key:
+                raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
+
+            domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
+            # From the impacket DPAPI_DOMAIN_RSA_MASTER_KEY structure:
+            # The cbMasterKey field indicates the length of the actual masterkey
+            # The buffer field contains the DPAPI_DOMAIN_RSA_MASTER_KEY header followed by the actual masterkey data
+            # The actual masterkey data starts at offset 8 after the structure header
+            buffer = domain_master_key["buffer"]
+            key_offset = 8  # Offset to skip the DPAPI_DOMAIN_RSA_MASTER_KEY structure header within the buffer
+            plaintext_key = buffer[key_offset : key_offset + domain_master_key["cbMasterKey"]]
+            plaintext_key_sha1 = SHA1.new(plaintext_key).digest()
+
+            return MasterKey(
+                guid=masterkey_file.masterkey_guid,
+                encrypted_key_backup=masterkey_file.domain_backup_key,
+                plaintext_key=plaintext_key,
+                plaintext_key_sha1=plaintext_key_sha1,
+                backup_key_guid=self.guid,
+            )
+
+        except (InvalidBackupKeyError, MasterKeyDecryptionError):
+            raise
+        except Exception as e:
+            raise MasterKeyDecryptionError(f"Failed to decrypt masterkey: {e}") from e

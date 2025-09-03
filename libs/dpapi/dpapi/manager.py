@@ -16,6 +16,8 @@ from .storage_postgres import PostgresDomainBackupKeyRepository, PostgresMasterK
 if TYPE_CHECKING:
     from .repositories import DomainBackupKeyRepository, MasterKeyRepository
 
+from .repositories import MasterKeyFilter
+
 
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
@@ -139,7 +141,7 @@ class DpapiManager(Publisher):
         try:
             if masterkey.plaintext_key is None:
                 raise MasterKeyNotDecryptedError(blob.masterkey_guid)
-            return self._crypto.decrypt_blob(blob.encrypted_data, masterkey.plaintext_key)
+            return self._crypto.decrypt_blob(blob.raw_bytes, masterkey.plaintext_key)
         except Exception as e:
             raise DpapiBlobDecryptionError(str(e)) from e
 
@@ -149,18 +151,18 @@ class DpapiManager(Publisher):
             await self._initialize_storage()
         return await self._masterkey_repo.get_masterkey(guid)
 
-    async def get_all_masterkeys(self) -> list[MasterKey]:
-        """Retrieve all masterkeys."""
-        if not self._initialized:
-            await self._initialize_storage()
-        return await self._masterkey_repo.get_all_masterkeys()
+    async def get_all_masterkeys(
+        self, filter_by: MasterKeyFilter = MasterKeyFilter.ALL, backup_key_guid: UUID | None = None
+    ) -> list[MasterKey]:
+        """Retrieve masterkeys with optional filtering.
 
-    async def get_decrypted_masterkeys(self) -> list[MasterKey]:
-        """Retrieve all decrypted masterkeys."""
+        Args:
+            filter_by: Filter by decryption status (default: ALL)
+            backup_key_guid: Filter by backup key GUID (default: None for all)
+        """
         if not self._initialized:
             await self._initialize_storage()
-        all_keys = await self.get_all_masterkeys()
-        return [key for key in all_keys if key.is_decrypted]
+        return await self._masterkey_repo.get_all_masterkeys(filter_by, backup_key_guid)
 
     async def close(self) -> None:
         """Close the manager and cleanup resources."""

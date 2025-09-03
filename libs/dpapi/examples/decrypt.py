@@ -7,13 +7,14 @@ from pathlib import Path
 from uuid import UUID
 
 from dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
+from dpapi.repositories import MasterKeyFilter
 
 
 async def main():
     """Test auto-decryption with fixtures."""
     print("=== Testing Auto-Decryption ===")
 
-    # Load fixtures
+    # Load test data that's in the project
     fixtures_path = Path(__file__).parent.parent / "tests" / "fixtures"
     backup_key_path = fixtures_path / "backupkey.json"
     masterkey_path = fixtures_path / "masterkey_domain.bin"
@@ -41,7 +42,7 @@ async def main():
 
         # Check initial state
         all_keys = await dpapi.get_all_masterkeys()
-        decrypted_keys = await dpapi.get_decrypted_masterkeys()
+        decrypted_keys = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"Initial state: {len(all_keys)} total, {len(decrypted_keys)} decrypted")
 
         print("2. Adding domain backup key...")
@@ -61,7 +62,7 @@ async def main():
 
         # Check final state
         all_keys_final = await dpapi.get_all_masterkeys()
-        decrypted_keys_final = await dpapi.get_decrypted_masterkeys()
+        decrypted_keys_final = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"After backup key: {len(all_keys_final)} total, {len(decrypted_keys_final)} decrypted")
 
         if len(decrypted_keys_final) > 0:

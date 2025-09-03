@@ -7,7 +7,14 @@ from pathlib import Path
 from uuid import UUID
 
 from dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
-from dpapi.eventing import DpapiEvent, DpapiObserver, NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent
+from dpapi.repositories import MasterKeyFilter
+from dpapi.eventing import (
+    DpapiEvent,
+    DpapiObserver,
+    NewDomainBackupKeyEvent,
+    NewEncryptedMasterKeyEvent,
+    NewPlaintextMasterKeyEvent,
+)
 
 
 class MyDpapiEventMonitor(DpapiObserver):
@@ -20,6 +27,8 @@ class MyDpapiEventMonitor(DpapiObserver):
             print(f"New encrypted masterkey added: {event.masterkey_guid}")
         elif isinstance(event, NewDomainBackupKeyEvent):
             print(f"New domain backup key added: {event.backup_key_guid}")
+        elif isinstance(event, NewPlaintextMasterKeyEvent):
+            print(f"New plaintext masterkey added: {event.masterkey_guid}")
         else:
             print(f"Event received: {type(event).__name__}")
 
@@ -66,53 +75,74 @@ async def main() -> None:
 
         # Check results after fake backup key
         all_keys = await dpapi.get_all_masterkeys()
-        decrypted_keys = await dpapi.get_decrypted_masterkeys()
+        decrypted_keys = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"\nAfter fake backup key - Total masterkeys: {len(all_keys)}, Decrypted: {len(decrypted_keys)}")
 
         # Try with real DPAPI data if available
         fixtures_path = Path(__file__).parent.parent / "tests" / "fixtures"
-        backup_key_path = fixtures_path / "test_backupkey.json"
-        masterkey_path = fixtures_path / "test_masterkey_domain.bin"
+        backup_key_path = fixtures_path / "backupkey.json"
+        masterkey_path = fixtures_path / "masterkey_domain.bin"
+        blob_path = fixtures_path / "blob_without_entropy.bin"
 
-        if backup_key_path.exists() and masterkey_path.exists():
-            print("\n=== Adding Real DPAPI Data ===")
+        print("\n=== Adding Real DPAPI Data ===")
 
-            # Load and add real masterkey
-            with open(backup_key_path) as f:
-                backup_key_data = json.load(f)
+        # Load and add real masterkey
+        with open(backup_key_path) as f:
+            backup_key_data = json.load(f)
 
-            masterkey_file = MasterKeyFile.parse(masterkey_path)
+        masterkey_file = MasterKeyFile.parse(masterkey_path)
 
-            if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
-                raise ValueError("Invalid masterkey file")
+        if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
+            raise ValueError("Invalid masterkey file")
 
-            await dpapi.add_encrypted_masterkey(
-                guid=masterkey_file.masterkey_guid,
-                encrypted_key_usercred=masterkey_file.master_key,
-                encrypted_key_backup=masterkey_file.domain_backup_key,
-            )
+        await dpapi.add_encrypted_masterkey(
+            guid=masterkey_file.masterkey_guid,
+            encrypted_key_usercred=masterkey_file.master_key,
+            encrypted_key_backup=masterkey_file.domain_backup_key,
+        )
 
-            # Add real backup key
-            real_backup_key = DomainBackupKey(
-                guid=UUID(backup_key_data["backup_key_guid"]),
-                key_data=base64.b64decode(backup_key_data["key"]),
-                domain_controller=backup_key_data["dc"],
-            )
-            await dpapi.add_domain_backup_key(real_backup_key)
+        # Add real backup key
+        real_backup_key = DomainBackupKey(
+            guid=UUID(backup_key_data["backup_key_guid"]),
+            key_data=base64.b64decode(backup_key_data["key"]),
+            domain_controller=backup_key_data["dc"],
+        )
+        await dpapi.add_domain_backup_key(real_backup_key)
 
-            # Give auto-decryption time to work
-            await asyncio.sleep(0.1)
+        # Give auto-decryption time to work
+        await asyncio.sleep(0.1)
 
-            # Check final results
-            all_keys_final = await dpapi.get_all_masterkeys()
-            decrypted_keys_final = await dpapi.get_decrypted_masterkeys()
-            print(
-                f"After real backup key - Total masterkeys: {len(all_keys_final)}, Decrypted: {len(decrypted_keys_final)}"
-            )
+        # Check final results
+        all_keys_final = await dpapi.get_all_masterkeys()
+        decrypted_keys_final = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        print(
+            f"After real backup key - Total masterkeys: {len(all_keys_final)}, Decrypted: {len(decrypted_keys_final)}"
+        )
 
-            # Update domain_mk_guid to use the real one for blob decryption test
-            if decrypted_keys_final:
-                domain_mk_guid = masterkey_file.masterkey_guid
+        # Print the decrypted masterkeys  in the form of {GUID}:SHA1
+        for key in decrypted_keys_final:
+            print(f"{key.guid}:{key.plaintext_key_sha1.hex()}")
+
+        # Demonstrate blob decryption with the blob_without_entropy.bin fixture
+        print("\n=== Decrypting DPAPI Blob ===")
+
+        # Load and parse the blob
+        with open(blob_path, "rb") as f:
+            blob_data = f.read()
+
+        # Parse blob to get its structure and masterkey GUID
+        from dpapi import Blob
+
+        blob = Blob.parse(blob_data)
+        print(f"Blob masterkey GUID: {blob.masterkey_guid}")
+
+        # Decrypt the blob using the DPAPI manager
+        decrypted_blob_data = await dpapi.decrypt_blob(blob)
+        print(f"Decrypted blob data: {decrypted_blob_data.decode('utf-8')}")
+
+        # Update domain_mk_guid to use the real one for blob decryption test
+        if decrypted_keys_final:
+            domain_mk_guid = masterkey_file.masterkey_guid
 
 
 if __name__ == "__main__":
