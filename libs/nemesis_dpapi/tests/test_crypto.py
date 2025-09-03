@@ -3,8 +3,8 @@
 from uuid import UUID
 
 import pytest
-from dpapi.core import Blob
-from dpapi.crypto import (
+from nemesis_dpapi.core import Blob
+from nemesis_dpapi.crypto import (
     CredKey,
     CredKeyHashType,
     DpapiCrypto,
@@ -15,7 +15,7 @@ from dpapi.crypto import (
     Pbkdf2Hash,
     Sha1Hash,
 )
-from dpapi.dpapi_blob import DPAPI_BLOB
+from nemesis_dpapi.dpapi_blob import DPAPI_BLOB
 
 password = "Qwerty12345"
 ntlm_hash = "abd9ffb762c86b26ef4ce5c81b0dd37f"

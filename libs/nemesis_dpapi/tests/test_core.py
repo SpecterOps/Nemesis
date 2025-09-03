@@ -6,8 +6,8 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from dpapi.core import Blob, DomainBackupKey, MasterKeyFile, MasterKeyPolicy
-from dpapi.crypto import MasterKeyDecryptionError
+from nemesis_dpapi.core import Blob, DomainBackupKey, MasterKeyFile, MasterKeyPolicy
+from nemesis_dpapi.crypto import MasterKeyDecryptionError
 
 
 class TestMasterKeyFile:
