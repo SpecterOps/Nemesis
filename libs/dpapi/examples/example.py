@@ -7,7 +7,6 @@ from pathlib import Path
 from uuid import UUID
 
 from dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
-from dpapi.repositories import MasterKeyFilter
 from dpapi.eventing import (
     DpapiEvent,
     DpapiObserver,
@@ -15,6 +14,7 @@ from dpapi.eventing import (
     NewEncryptedMasterKeyEvent,
     NewPlaintextMasterKeyEvent,
 )
+from dpapi.repositories import MasterKeyFilter
 
 
 class MyDpapiEventMonitor(DpapiObserver):
