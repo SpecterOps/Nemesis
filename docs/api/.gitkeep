@@ -1,8 +1,0 @@
-# API Documentation
-
-This directory contains automatically generated API documentation from the Nemesis web-api service.
-
-- `README.md` - Main API documentation (auto-generated)
-- `openapi.json` - Raw OpenAPI specification (auto-generated)
-
-Documentation is updated automatically when changes are made to `projects/web_api/`.
