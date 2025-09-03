@@ -337,7 +337,16 @@ class DomainBackupKey:
             # The buffer field contains the DPAPI_DOMAIN_RSA_MASTER_KEY header followed by the actual masterkey data
             # The actual masterkey data starts at offset 8 after the structure header
             buffer = domain_master_key["buffer"]
-            key_offset = 8  # Offset to skip the DPAPI_DOMAIN_RSA_MASTER_KEY structure header within the buffer
+
+            if len(decrypted_key) == 128:
+                key_offset = 8  # Offset to skip the DPAPI_DOMAIN_RSA_MASTER_KEY structure header within the buffer
+            elif len(decrypted_key) == 104:
+                key_offset = 0
+            else:
+                raise MasterKeyDecryptionError(
+                    f"Unexpected decrypted key length: {len(decrypted_key)}. Decrypted key: {decrypted_key.hex()}"
+                )
+
             plaintext_key = buffer[key_offset : key_offset + domain_master_key["cbMasterKey"]]
             plaintext_key_sha1 = SHA1.new(plaintext_key).digest()
 

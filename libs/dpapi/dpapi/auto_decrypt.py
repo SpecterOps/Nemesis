@@ -28,15 +28,18 @@ class AutoDecryptionObserver(DpapiObserver):
     def update(self, event: DpapiEvent) -> None:
         """Handle DPAPI events, specifically new domain backup keys and encrypted masterkeys."""
         if isinstance(event, NewDomainBackupKeyEvent):
-            # Schedule decryption attempt using the new backup key
-            task = asyncio.create_task(self._attempt_masterkey_decryption_with_backup_key(event.backup_key_guid))
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
+            self._create_task(self._attempt_masterkey_decryption_with_backup_key(event.backup_key_guid))
         elif isinstance(event, NewEncryptedMasterKeyEvent):
-            # Schedule decryption attempt for the new masterkey using existing backup keys
-            task = asyncio.create_task(self._attempt_new_masterkey_decryption(event.masterkey_guid))
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
+            self._create_task(self._attempt_masterkey_decryption(event.masterkey_guid))
+
+    def _create_task(self, coroutine) -> None:
+        """Creates a background task and maintains a reference until its completion
+
+        The purpose of this is to maintain reference to the task so that the garbage collector
+        does not prematurely collect and destroy it."""
+        task = asyncio.create_task(coroutine)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     async def _attempt_masterkey_decryption_with_backup_key(self, backup_key_guid: UUID) -> None:
         """Attempt to decrypt all masterkeys using the new backup key."""
@@ -95,51 +98,44 @@ class AutoDecryptionObserver(DpapiObserver):
             # Silently handle any errors during auto-decryption
             pass
 
-    async def _attempt_new_masterkey_decryption(self, masterkey_guid: UUID) -> None:
+    async def _attempt_masterkey_decryption(self, masterkey_guid: UUID) -> None:
         """Attempt to decrypt a new masterkey using existing domain backup keys."""
-        try:
-            # Get the specific masterkey
-            masterkey = await self.dpapi_manager.get_masterkey(masterkey_guid)
-            if not masterkey or masterkey.is_decrypted:
-                return  # Masterkey not found or already decrypted
 
-            # Check if encrypted_key_backup exists
-            if masterkey.encrypted_key_backup is None:
-                return  # Cannot decrypt without backup key data
+        masterkey = await self.dpapi_manager.get_masterkey(masterkey_guid)
+        if not masterkey or masterkey.is_decrypted:
+            return  # Masterkey not found or already decrypted
 
-            # Get all existing backup keys
-            backup_keys = await self.dpapi_manager._backup_key_repo.get_all_backup_keys()
-            if not backup_keys:
-                return  # No backup keys available
+        if masterkey.encrypted_key_backup is None:
+            return  # Cannot decrypt without backup key data
 
-            # Try to decrypt the masterkey with each backup key
-            for backup_key in backup_keys:
-                try:
-                    # Create a MasterKeyFile object for the domain backup key decrypt method
-                    masterkey_file = MasterKeyFile(
-                        version=0,
-                        modified=False,
-                        file_path=None,
-                        masterkey_guid=masterkey.guid,
-                        policy=MasterKeyPolicy.NONE,
-                        domain_backup_key=masterkey.encrypted_key_backup,
-                    )
+        backup_keys = await self.dpapi_manager._backup_key_repo.get_all_backup_keys()
+        if not backup_keys:
+            return  # No backup keys available
 
-                    # Attempt decryption using the backup key
-                    result = backup_key.decrypt_masterkey_file(masterkey_file)
+        # Try to decrypt the masterkey with each backup key
+        for backup_key in backup_keys:
+            try:
+                # Create a MasterKeyFile object for the domain backup key decrypt method
+                masterkey_file = MasterKeyFile(
+                    version=0,
+                    modified=False,
+                    file_path=None,
+                    masterkey_guid=masterkey.guid,
+                    policy=MasterKeyPolicy.NONE,
+                    domain_backup_key=masterkey.encrypted_key_backup,
+                )
 
-                    if result:
-                        # Update the masterkey with decrypted data from the result MasterKey
-                        masterkey.plaintext_key = result.plaintext_key
-                        masterkey.plaintext_key_sha1 = result.plaintext_key_sha1
-                        masterkey.backup_key_guid = result.backup_key_guid
-                        await self.dpapi_manager._masterkey_repo.update_masterkey(masterkey)
-                        return  # Successfully decrypted, stop trying other keys
+                # Attempt decryption using the backup key
+                result = backup_key.decrypt_masterkey_file(masterkey_file)
 
-                except Exception:
-                    # Continue with other backup keys if one fails
-                    continue
+                if result:
+                    # Update the masterkey with decrypted data from the result MasterKey
+                    masterkey.plaintext_key = result.plaintext_key
+                    masterkey.plaintext_key_sha1 = result.plaintext_key_sha1
+                    masterkey.backup_key_guid = result.backup_key_guid
+                    await self.dpapi_manager._masterkey_repo.update_masterkey(masterkey)
+                    return  # Successfully decrypted, stop trying other keys
 
-        except Exception:
-            # Silently handle any errors during auto-decryption
-            pass
+            except Exception:
+                # Continue with other backup keys if one fails
+                continue

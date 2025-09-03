@@ -141,6 +141,7 @@ class DpapiManager(Publisher):
         try:
             if masterkey.plaintext_key is None:
                 raise MasterKeyNotDecryptedError(blob.masterkey_guid)
+
             return self._crypto.decrypt_blob(blob.raw_bytes, masterkey.plaintext_key)
         except Exception as e:
             raise DpapiBlobDecryptionError(str(e)) from e

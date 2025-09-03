@@ -1,5 +1,6 @@
 """Tests for DPAPI core models."""
 
+import asyncio
 import base64
 import json
 from pathlib import Path
@@ -8,6 +9,7 @@ from uuid import UUID
 import pytest
 from dpapi.core import Blob, DomainBackupKey, MasterKeyFile, MasterKeyPolicy
 from dpapi.crypto import MasterKeyDecryptionError
+from dpapi.manager import DpapiManager
 
 
 class TestMasterKeyFile:
@@ -226,10 +228,10 @@ class TestDomainBackupKey:
         assert backup_key.key_data == key_data
         assert backup_key.domain_controller is None
 
-    def test_decrypt_masterkey_file_with_backup_key(self):
+    def test_decrypt_masterkey_file_with_backup_key(self, get_file_path):
         """Test decrypting a domain masterkey file using backup key."""
         # Load the backup key from fixtures
-        backupkey_file = Path("tests/fixtures/backupkey.json")
+        backupkey_file = get_file_path("backupkey.json")
         with open(backupkey_file) as f:
             backupkey_data = json.load(f)
 
@@ -241,7 +243,7 @@ class TestDomainBackupKey:
         )
 
         # Load the domain masterkey file
-        masterkey_file = MasterKeyFile.parse("tests/fixtures/masterkey_domain.bin")
+        masterkey_file = MasterKeyFile.parse(get_file_path("masterkey_domain.bin"))
 
         # Decrypt the masterkey
         decrypted_masterkey = backup_key.decrypt_masterkey_file(masterkey_file)
@@ -260,6 +262,58 @@ class TestDomainBackupKey:
 
         assert decrypted_masterkey.plaintext_key.hex() == masterkey_bytes
         assert decrypted_masterkey.plaintext_key_sha1.hex() == masterkey_sha1_hash
+
+    @pytest.mark.asyncio
+    async def test_decrypt_masterkey_file_with_backup_key_oldformat(self, get_file_path):
+        """Test decrypting a domain masterkey file using backup key."""
+        # Load the backup key from fixtures
+        backupkey_file = get_file_path("old/dpapi_domain_backupkey.json")
+        with open(backupkey_file) as f:
+            backupkey_data = json.load(f)
+
+        # Create DomainBackupKey from the fixture data
+        backup_key = DomainBackupKey(
+            guid=UUID(backupkey_data["domain_backupkey_guid"]),
+            key_data=base64.b64decode(backupkey_data["domain_backupkey_b64"]),
+            domain_controller=backupkey_data["domain_controller"],
+        )
+
+        # Load the domain masterkey file
+        masterkey_file = MasterKeyFile.parse(get_file_path("old/ab998260-e99d-4871-8f4b-d922b2848ce6"))
+
+        # Decrypt the masterkey
+        decrypted_masterkey = backup_key.decrypt_masterkey_file(masterkey_file)
+
+        # Verify decryption succeeded
+        assert decrypted_masterkey is not None
+        assert decrypted_masterkey.is_decrypted
+        assert decrypted_masterkey.guid == masterkey_file.masterkey_guid
+        assert decrypted_masterkey.plaintext_key is not None
+        assert decrypted_masterkey.plaintext_key_sha1 is not None
+        assert decrypted_masterkey.backup_key_guid == backup_key.guid
+        assert len(decrypted_masterkey.plaintext_key_sha1) == 20  # SHA1 is 20 bytes
+
+        assert (
+            masterkey_file is not None
+            and masterkey_file.master_key is not None
+            and masterkey_file.domain_backup_key is not None
+        )
+
+        manager = DpapiManager(storage_backend="memory", auto_decrypt=True)
+        await manager.add_domain_backup_key(backup_key)
+        await manager.add_encrypted_masterkey(
+            guid=masterkey_file.masterkey_guid,
+            encrypted_key_usercred=masterkey_file.master_key,
+            encrypted_key_backup=masterkey_file.domain_backup_key,
+        )
+        blob = Blob.parse(get_file_path("old/dpapi_blob.bin"))
+
+        assert blob.masterkey_guid == masterkey_file.masterkey_guid
+
+        await asyncio.sleep(0.5)  # Give auto-decryption a moment to complete
+
+        decrypted = await manager.decrypt_blob(blob)
+        assert decrypted == b"This is a test."  # Adjusted expected value
 
     def test_decrypt_masterkey_file_no_domain_key(self):
         """Test decrypting a masterkey file without domain backup key raises exception."""
