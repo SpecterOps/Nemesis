@@ -7,9 +7,10 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from dpapi.core import Blob, DomainBackupKey, MasterKeyFile, MasterKeyPolicy
-from dpapi.crypto import MasterKeyDecryptionError
-from dpapi.manager import DpapiManager
+
+from nemesis_dpapi import Blob, DomainBackupKey, DpapiManager, MasterKeyFile
+from nemesis_dpapi.core import MasterKeyPolicy
+from nemesis_dpapi.crypto import MasterKeyDecryptionError
 
 
 class TestMasterKeyFile:
@@ -267,7 +268,10 @@ class TestDomainBackupKey:
     async def test_decrypt_masterkey_file_with_backup_key_oldformat(self, get_file_path):
         """Test decrypting a domain masterkey file using backup key."""
         # Load the backup key from fixtures
-        backupkey_file = get_file_path("old/dpapi_domain_backupkey.json")
+        backupkey_file = get_file_path("old_format/dpapi_domain_backupkey.json")
+        masterkey_file = MasterKeyFile.parse(get_file_path("old_format/ab998260-e99d-4871-8f4b-d922b2848ce6"))
+        blob = Blob.parse(get_file_path("old_format/dpapi_blob.bin"))
+
         with open(backupkey_file) as f:
             backupkey_data = json.load(f)
 
@@ -279,7 +283,6 @@ class TestDomainBackupKey:
         )
 
         # Load the domain masterkey file
-        masterkey_file = MasterKeyFile.parse(get_file_path("old/ab998260-e99d-4871-8f4b-d922b2848ce6"))
 
         # Decrypt the masterkey
         decrypted_masterkey = backup_key.decrypt_masterkey_file(masterkey_file)
@@ -306,7 +309,6 @@ class TestDomainBackupKey:
             encrypted_key_usercred=masterkey_file.master_key,
             encrypted_key_backup=masterkey_file.domain_backup_key,
         )
-        blob = Blob.parse(get_file_path("old/dpapi_blob.bin"))
 
         assert blob.masterkey_guid == masterkey_file.masterkey_guid
 

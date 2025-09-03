@@ -1250,6 +1250,27 @@ files = [
 ]
 
 [[package]]
+name = "nemesis-dpapi"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = ">=3.12"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+asyncpg = ">=0.29.0,<=0.30.0"
+cryptography = ">=42.0.0,<43.0.0"
+impacket = ">=0.12.0,<0.13.0"
+pycryptodome = ">=3.23.0,<4.0.0"
+pydantic = ">=2.0.0,<3.0.0"
+
+[package.source]
+type = "directory"
+url = "../nemesis_dpapi"
+
+[[package]]
 name = "pefile"
 version = "2024.8.26"
 description = "Python PE parsing module"
@@ -2139,4 +2160,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "6552d98358cb657ece08997fab507a11e8f34f896497043040915d5278251739"
+content-hash = "2a30af6a8c24325d3184f0d7b55edf17fc626dac82787a31ae2564cf47c5dc3a"

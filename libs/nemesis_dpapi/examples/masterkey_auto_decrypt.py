@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
-from dpapi.repositories import MasterKeyFilter
+from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
+from nemesis_dpapi.repositories import MasterKeyFilter
 
 
 async def main():

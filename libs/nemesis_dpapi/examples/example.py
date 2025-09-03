@@ -6,15 +6,15 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
-from dpapi.eventing import (
+from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
+from nemesis_dpapi.eventing import (
     DpapiEvent,
     DpapiObserver,
     NewDomainBackupKeyEvent,
     NewEncryptedMasterKeyEvent,
     NewPlaintextMasterKeyEvent,
 )
-from dpapi.repositories import MasterKeyFilter
+from nemesis_dpapi.repositories import MasterKeyFilter
 
 
 class MyDpapiEventMonitor(DpapiObserver):
@@ -131,7 +131,7 @@ async def main() -> None:
             blob_data = f.read()
 
         # Parse blob to get its structure and masterkey GUID
-        from dpapi import Blob
+        from nemesis_dpapi import Blob
 
         blob = Blob.parse(blob_data)
         print(f"Blob masterkey GUID: {blob.masterkey_guid}")
