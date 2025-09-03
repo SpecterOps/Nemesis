@@ -17,7 +17,6 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import FileDetailsSection from './FileDetailsSection';
 import EnrichmentStatusSection from './EnrichmentStatusSection';
 import { getMonacoLanguage } from './languageMap';
-import JsonViewer from './JsonViewer';
 import CsvViewer from './CsvViewer';
 import MonacoContentViewer from './MonacoViewer';
 import SQLiteViewer from './SQLiteViewer';
@@ -539,6 +538,21 @@ const FileViewer = () => {
       });
     }
 
+    // Add enrichment tabs
+    if (fileData?.enrichments) {
+      fileData.enrichments.forEach(enrichment => {
+        if (enrichment.result_data) {
+          tabs.push({
+            id: `enrichment-${enrichment.module_name}`,
+            type: 'enrichment',
+            label: `Enrichment - ${enrichment.module_name}`,
+            enrichmentData: enrichment,
+            icon: FileText
+          });
+        }
+      });
+    }
+
     // Always add hex view
     tabs.push({ id: 'hex', type: 'hex', label: 'Hex', icon: File });
 
@@ -709,6 +723,7 @@ useEffect(() => {
                 updated_at
                 enrichments {
                   module_name
+                  result_data
                   created_at
                   updated_at
                 }
@@ -860,9 +875,12 @@ useEffect(() => {
     if (transform.type === 'json') {
       const content = new TextDecoder().decode(transform.content);
       return (
-        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg">
-          <JsonViewer content={content} />
-        </div>
+        <MonacoContentViewer
+          content={JSON.stringify(JSON.parse(content), null, 2)}
+          language="json"
+          onLanguageChange={() => {}}
+          showLanguageSelect={false}
+        />
       );
     }
 
@@ -876,6 +894,23 @@ useEffect(() => {
     }
 
     return null;
+  };
+
+  // Render enrichment content as JSON
+  const renderEnrichmentContent = (tabId) => {
+    const enrichmentKey = tabId.replace('enrichment-', '');
+    const enrichment = fileData?.enrichments?.find(e => e.module_name === enrichmentKey);
+    if (!enrichment || !enrichment.result_data) return null;
+
+    const jsonContent = JSON.stringify(enrichment.result_data, null, 2);
+    return (
+      <MonacoContentViewer
+        content={jsonContent}
+        language="json"
+        onLanguageChange={() => {}}
+        showLanguageSelect={false}
+      />
+    );
   };
 
   // "p"" to swap preview tabs, <- to go back, tab to scroll to file data area
@@ -1336,10 +1371,14 @@ useEffect(() => {
                     />
                   ) : tab.id === 'text' ? (
                     fileData?.mime_type === 'application/json' ? (
-                      <JsonViewer
-                        content={textContent || (fileData?.is_plaintext && fileContent ?
-                          new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
-                          'No text content available')}
+                      <MonacoContentViewer
+                        content={JSON.stringify(
+                          JSON.parse(textContent || (fileData?.is_plaintext && fileContent ?
+                            new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
+                            '{}')), null, 2)}
+                        language="json"
+                        onLanguageChange={() => {}}
+                        showLanguageSelect={false}
                       />
                     ) : fileData?.mime_type === 'text/csv' || fileData?.file_name.endsWith('.csv') ? (
                       <CsvViewer
@@ -1363,6 +1402,8 @@ useEffect(() => {
                       onLanguageChange={() => { }}
                       showLanguageSelect={false}
                     />
+                  ) : tab.type === 'enrichment' ? (
+                    renderEnrichmentContent(tab.id)
                   ) : (
                     renderTransformContent(tab.id)
                   )}
