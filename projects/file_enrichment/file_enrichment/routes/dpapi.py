@@ -1,7 +1,6 @@
 """DPAPI credential submission routes."""
 
 import asyncio
-import binascii
 import urllib.parse
 from functools import lru_cache
 from typing import Annotated
@@ -133,20 +132,39 @@ async def _handle_decrypted_master_key_credential(
     from Crypto.Hash import SHA1
     from nemesis_dpapi.core import MasterKey
 
-    # Extract strongly typed master key data
-    masterkey_guid = request.value.guid
-    masterkey_data = binascii.unhexlify(request.value.key_hex)
+    processed_guids = []
+    existing_guids = []
 
-    # Create a MasterKey with the decrypted data and add it
-    masterkey = MasterKey(
-        guid=masterkey_guid,
-        plaintext_key=masterkey_data,
-        plaintext_key_sha1=SHA1.new(masterkey_data).digest(),
-    )
+    # Process each master key data entry
+    for master_key_data in request.value:
+        # Extract strongly typed master key data
+        masterkey_guid = master_key_data.guid
+        masterkey_data = bytes.fromhex(master_key_data.key_hex)
 
-    # Add directly to the repository
-    await dpapi_manager._masterkey_repo.add_masterkey(masterkey)
-    return {"status": "success", "type": "dec_master_key", "guid": str(masterkey_guid)}
+        # Check if masterkey already exists
+        existing_masterkey = await dpapi_manager._masterkey_repo.get_masterkey(masterkey_guid)
+        if existing_masterkey is not None:
+            logger.info(f"Master key {masterkey_guid} already exists, skipping")
+            existing_guids.append(str(masterkey_guid))
+            continue
+
+        # Create a MasterKey with the decrypted data and add it
+        masterkey = MasterKey(
+            guid=masterkey_guid,
+            plaintext_key=masterkey_data,
+            plaintext_key_sha1=SHA1.new(masterkey_data).digest(),
+        )
+
+        # Add directly to the repository
+        await dpapi_manager._masterkey_repo.add_masterkey(masterkey)
+        processed_guids.append(str(masterkey_guid))
+
+    return {
+        "status": "success",
+        "type": "dec_master_key",
+        "added": processed_guids,
+        "already_exists": existing_guids,
+    }
 
 
 async def _handle_string_based_credential(

@@ -7,10 +7,10 @@ const DpapiSubmitCredential = () => {
   const [userSid, setUserSid] = useState('');
   const [guid, setGuid] = useState('');
   const [domainController, setDomainController] = useState('');
-  const [masterKeyGuid, setMasterKeyGuid] = useState('');
-  const [keyHex, setKeyHex] = useState('');
+  const [masterKeyData, setMasterKeyData] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const [message, setMessage] = useState({ type: '', text: '', details: null });
+  const [showDetails, setShowDetails] = useState(false);
 
   const credentialTypes = [
     {
@@ -27,8 +27,8 @@ const DpapiSubmitCredential = () => {
     },
     {
       value: 'cred_key',
-      label: 'Cred Key (16 or 20 bytes)',
-      placeholder: '9c457aaadf804b08db137f1bc40dcc46',
+      label: 'Cred Key (SHA1)',
+      placeholder: 'ABCDEF1234567890ABCDEF1234567890ABCDEF12 (20 bytes)',
       apiType: 'cred_key'
     },
     {
@@ -42,7 +42,7 @@ const DpapiSubmitCredential = () => {
     {
       value: 'dec_master_key',
       label: 'Decrypted Master Key',
-      placeholder: 'Enter master key hex data',
+      placeholder: 'Enter master key data (one per line)\n{guid}:{sha1}\n{guid}:{sha1}',
       apiType: 'dec_master_key',
       structuredValue: true
     }
@@ -58,13 +58,45 @@ const DpapiSubmitCredential = () => {
     e.preventDefault();
 
     if (isStructuredValue) {
-      if (!masterKeyGuid.trim()) {
-        setMessage({ type: 'error', text: 'Please enter a Master Key GUID' });
+      if (!masterKeyData.trim()) {
+        setMessage({ type: 'error', text: 'Please enter master key data' });
         return;
       }
-      if (!keyHex.trim()) {
-        setMessage({ type: 'error', text: 'Please enter Key Hex' });
-        return;
+
+      // Validate master key data format
+      const lines = masterKeyData.split('\n').filter(line => line.trim());
+      const uuidRegex = /^\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}$/;
+      const hexRegex = /^[0-9a-fA-F]+$/;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const parts = line.split(':');
+
+        if (parts.length !== 2) {
+          setMessage({
+            type: 'error',
+            text: `Line ${i + 1}: Invalid format. Expected "guid:sha1hex"`
+          });
+          return;
+        }
+
+        const [guid, keyHex] = parts;
+
+        if (!uuidRegex.test(guid)) {
+          setMessage({
+            type: 'error',
+            text: `Line ${i + 1}: Invalid GUID format "${guid}"`
+          });
+          return;
+        }
+
+        if (!hexRegex.test(keyHex)) {
+          setMessage({
+            type: 'error',
+            text: `Line ${i + 1}: Invalid hex format in key "${keyHex}"`
+          });
+          return;
+        }
       }
     } else {
       if (!credentialValue.trim()) {
@@ -79,7 +111,7 @@ const DpapiSubmitCredential = () => {
     }
 
     setIsSubmitting(true);
-    setMessage({ type: '', text: '' });
+    setMessage({ type: '', text: '', details: null });
 
     try {
       const response = await fetch('/api/dpapi/credentials', {
@@ -90,10 +122,12 @@ const DpapiSubmitCredential = () => {
         body: JSON.stringify({
           type: selectedType.apiType,
           ...(isStructuredValue ? {
-            value: {
-              guid: masterKeyGuid,
-              key_hex: keyHex
-            }
+            value: masterKeyData.split('\n')
+              .filter(line => line.trim())
+              .map(line => {
+                const [guid, key_hex] = line.trim().split(':');
+                return { guid, key_hex };
+              })
           } : {
             value: credentialValue
           }),
@@ -104,13 +138,27 @@ const DpapiSubmitCredential = () => {
       });
 
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Credential submitted successfully!' });
+        const responseData = await response.json();
+        let successMessage = 'Credential submitted successfully!';
+        let details = null;
+
+        if (responseData && Object.keys(responseData).length > 0) {
+          const filteredData = Object.entries(responseData)
+            .filter(([, value]) => value !== null && value !== undefined && value !== '')
+            .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+          
+          if (Object.keys(filteredData).length > 0) {
+            details = filteredData;
+          }
+        }
+
+        setMessage({ type: 'success', text: successMessage, details });
+        setShowDetails(false);
         setCredentialValue('');
         setUserSid('');
         setGuid('');
         setDomainController('');
-        setMasterKeyGuid('');
-        setKeyHex('');
+        setMasterKeyData('');
       } else {
         let errorMessage = `HTTP ${response.status}`;
         try {
@@ -173,9 +221,9 @@ const DpapiSubmitCredential = () => {
                   setUserSid('');
                   setGuid('');
                   setDomainController('');
-                  setMasterKeyGuid('');
-                  setKeyHex('');
-                  setMessage({ type: '', text: '' });
+                  setMasterKeyData('');
+                  setMessage({ type: '', text: '', details: null });
+                  setShowDetails(false);
                 }}
                 className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 appearance-none pr-10"
               >
@@ -242,39 +290,25 @@ const DpapiSubmitCredential = () => {
             </div>
           )}
 
-          {/* Master Key GUID - For dec_master_key */}
+          {/* Master Key Data - For dec_master_key */}
           {isStructuredValue && (
             <div>
-              <label htmlFor="master-key-guid" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Master Key GUID
-              </label>
-              <input
-                type="text"
-                id="master-key-guid"
-                value={masterKeyGuid}
-                onChange={(e) => setMasterKeyGuid(e.target.value)}
-                placeholder="6d2bd107-a942-4c0d-bf2a-8b3d1264cf73"
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-                required
-              />
-            </div>
-          )}
-
-          {/* Key Hex - For dec_master_key */}
-          {isStructuredValue && (
-            <div>
-              <label htmlFor="key-hex" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Key Hex
+              <label htmlFor="master-key-data" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Master Key Data
               </label>
               <textarea
-                id="key-hex"
-                value={keyHex}
-                onChange={(e) => setKeyHex(e.target.value)}
-                placeholder="0826EC6BC801252E401902AB09FE1068052D07001"
-                rows={3}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-vertical font-mono"
+                id="master-key-data"
+                value={masterKeyData}
+                onChange={(e) => setMasterKeyData(e.target.value)}
+                placeholder={`6d2bd107-a942-4c0d-bf2a-8b3d1264cf73:0826EC6BC801252E401902AB09FE1068052D07001
+12345678-1234-1234-1234-123456789012:ABCDEF1234567890ABCDEF1234567890ABCDEF12`}
+                rows={6}
+                className="block w-full px-1 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-vertical font-mono"
                 required
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Format: One entry per line in the format "{"{guid}"}:{"{sha1}"}"
+              </p>
             </div>
           )}
 
@@ -300,8 +334,8 @@ const DpapiSubmitCredential = () => {
             <button
               type="submit"
               disabled={
-                isSubmitting || 
-                (isStructuredValue ? (!masterKeyGuid.trim() || !keyHex.trim()) : !credentialValue.trim()) ||
+                isSubmitting ||
+                (isStructuredValue ? !masterKeyData.trim() : !credentialValue.trim()) ||
                 (requiresUserSid && !userSid.trim()) ||
                 (requiresGuid && !guid.trim())
               }
@@ -324,23 +358,54 @@ const DpapiSubmitCredential = () => {
 
         {/* Success/Error Messages */}
         {message.text && (
-          <div className={`mt-4 p-4 rounded-md flex items-center ${
+          <div className={`mt-4 rounded-md ${
             message.type === 'success'
               ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700'
               : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700'
           }`}>
-            {message.type === 'success' ? (
-              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mr-2 flex-shrink-0" />
-            ) : (
-              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 mr-2 flex-shrink-0" />
+            <div className="p-4 flex items-center">
+              {message.type === 'success' ? (
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mr-2 flex-shrink-0" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 mr-2 flex-shrink-0" />
+              )}
+              <div className="flex-1">
+                <p className={`text-sm ${
+                  message.type === 'success'
+                    ? 'text-green-800 dark:text-green-200'
+                    : 'text-red-800 dark:text-red-200'
+                }`}>
+                  {message.text}
+                </p>
+                {message.details && (
+                  <button
+                    onClick={() => setShowDetails(!showDetails)}
+                    className={`mt-2 text-xs underline hover:no-underline ${
+                      message.type === 'success'
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}
+                  >
+                    {showDetails ? 'Hide' : 'Show'} response details
+                  </button>
+                )}
+              </div>
+            </div>
+            {message.details && showDetails && (
+              <div className={`px-4 pb-4 border-t ${
+                message.type === 'success'
+                  ? 'border-green-200 dark:border-green-700'
+                  : 'border-red-200 dark:border-red-700'
+              }`}>
+                <pre className={`text-xs mt-2 whitespace-pre-wrap font-mono ${
+                  message.type === 'success'
+                    ? 'text-green-700 dark:text-green-300'
+                    : 'text-red-700 dark:text-red-300'
+                }`}>
+                  {JSON.stringify(message.details, null, 2)}
+                </pre>
+              </div>
             )}
-            <p className={`text-sm ${
-              message.type === 'success'
-                ? 'text-green-800 dark:text-green-200'
-                : 'text-red-800 dark:text-red-200'
-            }`}>
-              {message.text}
-            </p>
           </div>
         )}
       </div>
