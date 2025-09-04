@@ -2,13 +2,16 @@
 
 import base64
 import json
+import ntpath
 
 import psycopg
 import structlog
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+from file_linking import add_file_linking
 from impacket.dpapi import DPAPI_BLOB
 from impacket.uuid import bin_to_string
+from nemesis_dpapi import Blob, DpapiManager
 
 from .helpers import (
     detect_encryption_type,
@@ -19,7 +22,9 @@ from .helpers import (
 logger = structlog.get_logger(module=__name__)
 
 
-def process_chromium_local_state(object_id: str, file_path: str | None = None) -> None:
+def process_chromium_local_state(
+    object_id: str, file_path: str | None = None, dpapi_manager: DpapiManager | None = None
+) -> None:
     """Process Chromium Local State file and insert state keys into database.
 
     Args:
@@ -46,7 +51,7 @@ def process_chromium_local_state(object_id: str, file_path: str | None = None) -
 
     conn_str = get_postgres_connection_str()
     with psycopg.connect(conn_str) as pg_conn:
-        _insert_state_keys(file_enriched, username, browser, content, pg_conn)
+        _insert_state_keys(file_enriched, username, browser, content, pg_conn, dpapi_manager)
 
     logger.debug("Completed processing Chromium Local State", object_id=object_id)
 
@@ -86,7 +91,9 @@ def _parse_app_bound_key(app_bound_key_b64: str) -> tuple[bytes, str | None]:
         return base64.b64decode(app_bound_key_b64), None
 
 
-def _insert_state_keys(file_enriched, username: str | None, browser: str, content: str, pg_conn) -> None:
+def _insert_state_keys(
+    file_enriched, username: str | None, browser: str, content: str, pg_conn, dpapi_manager: DpapiManager | None = None
+) -> None:
     """Parse Local State JSON and insert state keys into chromium.state_keys table."""
     try:
         # Parse JSON content
@@ -94,6 +101,10 @@ def _insert_state_keys(file_enriched, username: str | None, browser: str, conten
 
         # Extract os_crypt section
         os_crypt = data.get("os_crypt", {})
+
+        key_bytes_dec = b""
+        app_bound_key_dec_inter = b""
+        app_bound_key_dec = b""
 
         # Get encrypted_key (pre v127)
         encrypted_key_b64 = os_crypt.get("encrypted_key")
@@ -112,6 +123,10 @@ def _insert_state_keys(file_enriched, username: str | None, browser: str, conten
             encryption_type, masterkey_guid = detect_encryption_type(dpapi_bytes)
             if encryption_type == "dpapi":
                 key_masterkey_guid = masterkey_guid
+                try:
+                    key_bytes_dec = dpapi_manager.decrypt_blob(Blob(dpapi_bytes))
+                except Exception:
+                    logger.warning(f"Unable to decrypt DPAPI blob: {key_masterkey_guid}")
 
         # Get app_bound_encrypted_key (post v127)
         app_bound_key_b64 = os_crypt.get("app_bound_encrypted_key")
@@ -120,6 +135,25 @@ def _insert_state_keys(file_enriched, username: str | None, browser: str, conten
 
         if app_bound_key_b64:
             app_bound_key_enc, app_bound_key_system_masterkey_guid = _parse_app_bound_key(app_bound_key_b64)
+
+            drive, parts = ntpath.splitdrive(file_enriched.path)
+            masterkey_path = (
+                f"{drive}/Windows/System32/Microsoft/Protect/S-1-5-18/User/{app_bound_key_system_masterkey_guid}"
+            )
+
+            # add the masterkey file path (now that we know the key GUID) as a link/listing
+            add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "link_type:system_masterkey")
+
+            try:
+                app_bound_key_dec_inter = dpapi_manager.decrypt_blob(Blob(app_bound_key_enc))
+                if app_bound_key_dec_inter:
+                    try:
+                        # TODO: parse app_bound_key_user_masterkey_guid
+                        app_bound_key_dec = dpapi_manager.decrypt_blob(Blob(app_bound_key_dec_inter))
+                    except Exception:
+                        logger.warning(f"Unable to decrypt final app bound key blob: {key_masterkey_guid}")
+            except Exception:
+                logger.warning(f"Unable to decrypt intermediate/outer app bound key blob: {key_masterkey_guid}")
 
         # Skip if no keys are present
         if not key_bytes_enc and not app_bound_key_enc:
@@ -136,12 +170,13 @@ def _insert_state_keys(file_enriched, username: str | None, browser: str, conten
             "browser": browser,
             "key_masterkey_guid": key_masterkey_guid,
             "key_bytes_enc": key_bytes_enc,
-            "key_bytes_dec": b"",  # Will be populated by decryption modules
+            "key_bytes_dec": key_bytes_dec,
             "key_is_decrypted": False,
             "app_bound_key_enc": app_bound_key_enc,
             "app_bound_key_system_masterkey_guid": app_bound_key_system_masterkey_guid,
             "app_bound_key_user_masterkey_guid": None,  # Will be populated later
-            "app_bound_key_dec": b"",  # Will be populated by decryption modules
+            "app_bound_key_dec_inter": app_bound_key_dec_inter,
+            "app_bound_key_dec": app_bound_key_dec,
             "app_bound_key_is_decrypted": False,
         }
 
@@ -152,12 +187,12 @@ def _insert_state_keys(file_enriched, username: str | None, browser: str, conten
                 (originating_object_id, agent_id, source, project, username, browser,
                  key_masterkey_guid, key_bytes_enc, key_bytes_dec, key_is_decrypted,
                  app_bound_key_enc, app_bound_key_system_masterkey_guid,
-                 app_bound_key_user_masterkey_guid, app_bound_key_dec, app_bound_key_is_decrypted)
+                 app_bound_key_user_masterkey_guid, app_bound_key_dec_inter, app_bound_key_dec, app_bound_key_is_decrypted)
                 VALUES (%(originating_object_id)s, %(agent_id)s, %(source)s, %(project)s,
                         %(username)s, %(browser)s, %(key_masterkey_guid)s, %(key_bytes_enc)s,
                         %(key_bytes_dec)s, %(key_is_decrypted)s, %(app_bound_key_enc)s,
                         %(app_bound_key_system_masterkey_guid)s, %(app_bound_key_user_masterkey_guid)s,
-                        %(app_bound_key_dec)s, %(app_bound_key_is_decrypted)s)
+                        %(app_bound_key_dec_inter)s, %(app_bound_key_dec)s, %(app_bound_key_is_decrypted)s)
                 ON CONFLICT (source, username, browser)
                 DO UPDATE SET
                     key_masterkey_guid = EXCLUDED.key_masterkey_guid,
@@ -167,6 +202,7 @@ def _insert_state_keys(file_enriched, username: str | None, browser: str, conten
                     app_bound_key_enc = EXCLUDED.app_bound_key_enc,
                     app_bound_key_system_masterkey_guid = EXCLUDED.app_bound_key_system_masterkey_guid,
                     app_bound_key_user_masterkey_guid = EXCLUDED.app_bound_key_user_masterkey_guid,
+                    app_bound_key_dec_inter = EXCLUDED.app_bound_key_dec_inter,
                     app_bound_key_dec = EXCLUDED.app_bound_key_dec,
                     app_bound_key_is_decrypted = EXCLUDED.app_bound_key_is_decrypted
             """
@@ -182,7 +218,6 @@ def _insert_state_keys(file_enriched, username: str | None, browser: str, conten
             if result:
                 state_key_id = result[0]
 
-                # Update chromium.logins entries with null state_key_id
                 cur.execute(
                     """
                     UPDATE chromium.logins
@@ -195,7 +230,6 @@ def _insert_state_keys(file_enriched, username: str | None, browser: str, conten
                 )
                 logins_updated = cur.rowcount
 
-                # Update chromium.cookies entries with null state_key_id
                 cur.execute(
                     """
                     UPDATE chromium.cookies

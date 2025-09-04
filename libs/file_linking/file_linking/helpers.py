@@ -6,30 +6,18 @@ file relationships they discover during analysis.
 """
 
 import structlog
+from dapr.clients import DaprClient
 
+from .database_service import FileLinkingDatabaseService, FileListingStatus, _normalize_file_path
 from .rules_engine import FileLinkingEngine
 
 logger = structlog.get_logger(module=__name__)
 
-# Global variables for file linking system
-_postgres_connection_string: str | None = None
-_file_linking_engine: FileLinkingEngine | None = None
 
-
-def initialize_file_linking(postgres_connection_string: str, engine_instance: FileLinkingEngine = None) -> None:
-    """
-    Initialize the file linking system with database connection.
-
-    Args:
-        postgres_connection_string: PostgreSQL connection string
-        engine_instance: Optional existing engine instance to reuse
-    """
-    global _postgres_connection_string, _file_linking_engine
-    _postgres_connection_string = postgres_connection_string
-    if engine_instance is not None:
-        _file_linking_engine = engine_instance
-    else:
-        _file_linking_engine = FileLinkingEngine(postgres_connection_string)
+def _get_postgres_conn_str():
+    with DaprClient() as client:
+        secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
+        return secret.secret["POSTGRES_CONNECTION_STRING"]
 
 
 def add_file_linkings(
@@ -57,7 +45,7 @@ def add_file_linkings(
 
     Example:
         # In a PE analysis module
-        from file_enrichment.file_linking.helpers import add_file_linkings
+        from file_linking.helpers import add_file_linkings
 
         # After discovering imported DLL paths
         linked_paths = [
@@ -73,15 +61,21 @@ def add_file_linkings(
             collection_reason="Required DLL dependencies for analysis"
         )
     """
-    if not _file_linking_engine:
-        logger.error("File linking not initialized - call initialize_file_linking() first")
+
+    try:
+        file_linking_engine = FileLinkingEngine(_get_postgres_conn_str())
+    except Exception as e:
+        logger.exception(e, "[add_file_linkings]")
+
+    if not file_linking_engine:
+        logger.error("[add_file_linkings] File linking engine not initialized")
         return 0
 
     if not linked_file_paths:
         return 0
 
     try:
-        return _file_linking_engine.add_programmatic_linking(
+        return file_linking_engine.add_programmatic_linking(
             source=source,
             source_file_path=source_file_path,
             linked_file_paths=linked_file_paths,
@@ -91,7 +85,7 @@ def add_file_linkings(
 
     except Exception as e:
         logger.exception(
-            "Error adding programmatic file linkings",
+            "[add_file_linkings] Error adding programmatic file linkings",
             source=source,
             source_file_path=source_file_path,
             linked_file_paths=linked_file_paths,
@@ -101,7 +95,7 @@ def add_file_linkings(
         return 0
 
 
-def add_single_file_linking(
+def add_file_linking(
     source: str, source_file_path: str, linked_file_path: str, link_type: str, collection_reason: str | None = None
 ) -> bool:
     """
@@ -127,3 +121,24 @@ def add_single_file_linking(
         )
         > 0
     )
+
+
+def add_file_listing(source: str, path: str, status: FileListingStatus, object_id: str | None = None) -> bool:
+    """
+    Add a single file listing (convenience function).
+
+    Args:
+        source: Source identifier (e.g., agnt_id/source)
+        path: File path
+        status: Current collection status
+        object_id: UUID if file is already collected
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        database_service = FileLinkingDatabaseService(_get_postgres_conn_str())
+        return database_service.add_file_listing(source, _normalize_file_path(path), status, object_id)
+    except Exception as e:
+        logger.exception(e, "[add_file_listing]")
+        return False

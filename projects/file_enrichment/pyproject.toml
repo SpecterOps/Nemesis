@@ -25,6 +25,7 @@ plyara = "^2.2.7"
 common = { path = "../../libs/common", develop = true }
 chromium = { path = "../../libs/chromium", develop = true }
 nemesis_dpapi = { path = "../../libs/nemesis_dpapi", develop = true }
+file_linking = { path = "../../libs/file_linking", develop = true }
 file_enrichment_modules = { path = "../../libs/file_enrichment_modules", develop = true }
 structlog = "^25.1.0"
 colorlog = "^6.9.0"
