@@ -248,9 +248,7 @@ class WorkflowQueueMonitor:
             "timestamp": result["timestamp"],
         }
 
-    async def purge_all_workflow_queues(
-        self, topics: list[str] | None = None, confirm: bool = False
-    ) -> dict[str, Any]:
+    async def purge_all_workflow_queues(self, topics: list[str] | None = None, confirm: bool = False) -> dict[str, Any]:
         """
         Purge all messages from workflow queues.
 

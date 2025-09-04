@@ -22,6 +22,7 @@ from common.models2.api import (
     HealthResponse,
     YaraReloadResponse,
 )
+from common.models2.dpapi import DpapiCredentialRequest
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
@@ -31,7 +32,7 @@ from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
 from web_api.large_containers import LargeContainerProcessor
-from web_api.models.requests import CleanupRequest, DpapiCredentialRequest, EnrichmentRequest
+from web_api.models.requests import CleanupRequest, EnrichmentRequest
 from web_api.models.responses import (
     ContainerStatusResponse,
     ContainerSubmissionResponse,

@@ -1,12 +1,4 @@
 from pydantic import BaseModel
-from common.models2.dpapi import (
-    CredKeyCredential,
-    DecryptedMasterKeyCredential,
-    DomainBackupKeyCredential,
-    DpapiCredentialRequest,
-    NtlmHashCredential,
-    PasswordCredential,
-)
 
 
 class EnrichmentRequest(BaseModel):
