@@ -23,7 +23,7 @@ const DpapiSubmitCredential = () => {
     },
     {
       value: 'cred_key',
-      label: 'Cred Key',
+      label: 'Cred Key (16 or 20 bytes)',
       placeholder: '9c457aaadf804b08db137f1bc40dcc46',
       apiType: 'cred_key'
     },
@@ -46,7 +46,7 @@ const DpapiSubmitCredential = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!credentialValue.trim()) {
       setMessage({ type: 'error', text: 'Please enter a credential value' });
       return;
@@ -94,15 +94,15 @@ const DpapiSubmitCredential = () => {
           // If JSON parsing fails, include status text
           errorMessage = `${errorMessage} - ${response.statusText}`;
         }
-        setMessage({ 
-          type: 'error', 
-          text: `Failed to submit credential: ${errorMessage}` 
+        setMessage({
+          type: 'error',
+          text: `Failed to submit credential: ${errorMessage}`
         });
       }
     } catch (error) {
-      setMessage({ 
-        type: 'error', 
-        text: `Network error: ${error.message}` 
+      setMessage({
+        type: 'error',
+        text: `Network error: ${error.message}`
       });
     } finally {
       setIsSubmitting(false);
