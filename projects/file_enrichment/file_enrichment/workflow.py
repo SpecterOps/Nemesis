@@ -17,6 +17,7 @@ from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from dapr.ext.workflow.logger.options import LoggerOptions
 from file_enrichment_modules.module_loader import ModuleLoader
+from nemesis_dpapi import DpapiManager
 
 from .file_linking.helpers import initialize_file_linking
 from .file_linking.rules_engine import FileLinkingEngine
@@ -30,6 +31,7 @@ workflow_runtime = wf.WorkflowRuntime(
 )
 
 
+dpapi_manager = DpapiManager(storage_backend="memory")
 workflow_client: wf.DaprWorkflowClient = None
 activity_functions = {}
 download_path = "/tmp/"
@@ -846,7 +848,7 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 
 async def initialize_workflow_runtime():
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-    global workflow_runtime, workflow_client, file_linking_engine
+    global workflow_runtime, workflow_client, file_linking_engine, dpapi_manager
 
     # Initialize file linking system with shared instance
     file_linking_engine = FileLinkingEngine(postgres_connection_string)
@@ -864,6 +866,14 @@ async def initialize_workflow_runtime():
         for name, module in workflow_runtime.modules.items()
         if hasattr(module, "workflows") and workflow_name in module.workflows
     }
+
+    # janky pass-through for any modules that have a 'dpapi_manager' property
+    for module in workflow_runtime.modules.values():
+        if hasattr(module, "dpapi_manager") and module.dpapi_manager is None:
+            logger.debug(f"Setting 'dpapi_manager' for '{module}'")
+            module.dpapi_manager = dpapi_manager
+        elif hasattr(workflow_runtime, "dpapi_manager"):
+            logger.debug(f"'dpapi_manager' already set for for '{module}'")
 
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
