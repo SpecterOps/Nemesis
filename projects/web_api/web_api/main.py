@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
         if lock_file:
             try:
                 lock_file.close()
-            except:
+            except Exception:
                 pass
 
 
@@ -128,7 +128,7 @@ async def timeout_middleware(request: Request, call_next):
             timeout = 60
         return await asyncio.wait_for(call_next(request), timeout=timeout)
     except TimeoutError:
-        raise HTTPException(status_code=504, detail="Request timeout")
+        raise HTTPException(status_code=504, detail="Request timeout") from None
 
 
 storage = StorageMinio()
@@ -1087,17 +1087,17 @@ async def get_apprise_info():
 
         return response.json()
 
-    except requests.Timeout:
+    except requests.Timeout as e:
         logger.error("Timeout connecting to alerting service")
-        raise HTTPException(status_code=504, detail="Request to alerting service timed out")
+        raise HTTPException(status_code=504, detail="Request to alerting service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to alerting service")
-        raise HTTPException(status_code=503, detail="Alerting service unavailable")
+        raise HTTPException(status_code=503, detail="Alerting service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(e, message="Error getting apprise info")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 def _scan_agent_metadata():
@@ -1219,12 +1219,12 @@ async def run_text_summarizer(request: dict = Body(..., description="Request con
             logger.warning(f"Failed to run text summarizer: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
-    except requests.Timeout:
+    except requests.Timeout as e:
         logger.error("Timeout running text summarizer")
-        raise HTTPException(status_code=504, detail="Request to agents service timed out")
+        raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
-        raise HTTPException(status_code=503, detail="Agents service unavailable")
+        raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
@@ -1251,12 +1251,12 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
             logger.warning(f"Failed to run credential analysis: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
-    except requests.Timeout:
+    except requests.Timeout as e:
         logger.error("Timeout running credential analysis")
-        raise HTTPException(status_code=504, detail="Request to agents service timed out")
+        raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
-        raise HTTPException(status_code=503, detail="Agents service unavailable")
+        raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
@@ -1281,12 +1281,12 @@ async def run_dotnet_analysis(request: dict = Body(..., description="Request con
         else:
             logger.warning(f"Failed to run .NET analysis: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
-    except requests.Timeout:
+    except requests.Timeout as e:
         logger.error("Timeout running .NET analysis")
-        raise HTTPException(status_code=504, detail="Request to agents service timed out")
+        raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
-        raise HTTPException(status_code=503, detail="Agents service unavailable")
+        raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:

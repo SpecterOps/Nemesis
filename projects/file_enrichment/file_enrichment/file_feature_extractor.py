@@ -700,7 +700,7 @@ class FileFeatureExtractor:
         """
         features = {}
 
-        file_name = ntpath.basename(filepath)
+        # file_name = ntpath.basename(filepath)
         dir_path = ntpath.dirname(filepath)
         dir_path_lower = dir_path.lower()
 
