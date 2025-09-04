@@ -9,6 +9,7 @@ import {
   FileText,
   FolderTree,
   HelpCircle,
+  Key,
   LayoutDashboard,
   Search,
   Settings,
@@ -41,6 +42,7 @@ import Containers from './components/Containers/Containers';
 import AgentsPage from './components/Agents/AgentsPage';
 import FileBrowser from './components/FileBrowser/FileBrowser';
 import Chromium from './components/Chromium/Chromium';
+import Dpapi from './components/Dpapi/Dpapi';
 
 // Assets
 import logoDark from './img/nemesis_logo_dark.png';
@@ -181,9 +183,10 @@ const Sidebar = ({ onCollapse }) => {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { id: 'upload', label: 'File Upload', icon: Upload, path: '/upload' },
     { id: 'files', label: 'Files', icon: FileText, path: '/files' },
+    { id: 'findings', label: `Findings - ${findingsCount} Untriaged`, icon: Siren, path: '/findings', count: findingsCount },
     { id: 'file-browser', label: 'File Browser', icon: FolderTree, path: '/file-browser' },
     { id: 'chromium', label: 'Chromium', icon: Globe, path: '/chromium' },
-    { id: 'findings', label: `Findings - ${findingsCount} Untriaged`, icon: Siren, path: '/findings', count: findingsCount },
+    { id: 'dpapi', label: 'Dpapi', icon: Key, path: '/dpapi' },
     { id: 'search', label: 'Document Search', icon: Search, path: '/search' },
     { id: 'yara', label: 'Yara Rules', icon: FileSearch, path: '/yara-rules' },
     { id: 'containers', label: 'Containers', icon: FileArchive, path: '/containers' }
@@ -358,6 +361,7 @@ const App = () => {
                       <Route path="/search" element={<DocumentSearch />} />
                       <Route path="/findings" element={<FindingsListContainer />} />
                       <Route path="/chromium" element={<Chromium />} />
+                      <Route path="/dpapi" element={<Dpapi />} />
                       <Route path="/yara-rules" element={<YaraRulesManager />} />
                       <Route path="/containers" element={<Containers />} />
                       <Route path="/agents" element={<AgentsPage />} />
