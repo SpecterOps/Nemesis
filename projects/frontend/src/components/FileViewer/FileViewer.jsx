@@ -15,6 +15,7 @@ import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileTex
 import { default as React, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import FileDetailsSection from './FileDetailsSection';
+import LinkedFilesSection from './LinkedFilesSection';
 import EnrichmentStatusSection from './EnrichmentStatusSection';
 import { getMonacoLanguage } from './languageMap';
 import CsvViewer from './CsvViewer';
@@ -1413,6 +1414,11 @@ useEffect(() => {
           </CardContent>
         </Card>
       </div>
+
+      <LinkedFilesSection 
+        filePath={fileData?.path}
+        source={fileData?.source}
+      />
 
       <EnrichmentStatusSection objectId={objectId} />
 
