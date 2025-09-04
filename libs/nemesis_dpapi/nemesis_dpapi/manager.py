@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 from .repositories import MasterKeyFilter
 
 
+# TODO: Make thread safe
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
@@ -153,7 +154,9 @@ class DpapiManager(Publisher):
         return await self._masterkey_repo.get_masterkey(guid)
 
     async def get_all_masterkeys(
-        self, filter_by: MasterKeyFilter = MasterKeyFilter.ALL, backup_key_guid: UUID | None = None
+        self,
+        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        backup_key_guid: UUID | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering.
 

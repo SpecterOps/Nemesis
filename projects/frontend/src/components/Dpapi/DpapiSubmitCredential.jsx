@@ -5,6 +5,10 @@ const DpapiSubmitCredential = () => {
   const [credentialType, setCredentialType] = useState('password');
   const [credentialValue, setCredentialValue] = useState('');
   const [userSid, setUserSid] = useState('');
+  const [guid, setGuid] = useState('');
+  const [domainController, setDomainController] = useState('');
+  const [masterKeyGuid, setMasterKeyGuid] = useState('');
+  const [keyHex, setKeyHex] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
@@ -23,7 +27,7 @@ const DpapiSubmitCredential = () => {
     },
     {
       value: 'cred_key',
-      label: 'Cred Key',
+      label: 'Cred Key (16 or 20 bytes)',
       placeholder: '9c457aaadf804b08db137f1bc40dcc46',
       apiType: 'cred_key'
     },
@@ -31,25 +35,42 @@ const DpapiSubmitCredential = () => {
       value: 'domain_backup_key',
       label: 'Domain Backup Key',
       placeholder: 'AgAAAAAAAAAAAAAANgBjADIAYg... (base64(pvk))',
-      apiType: 'domain_backup_key'
+      apiType: 'domain_backup_key',
+      requiresGuid: true,
+      supportsDomainController: true
     },
     {
       value: 'dec_master_key',
       label: 'Decrypted Master Key',
-      placeholder: '{6d2bd107-a942-4c0d-bf2a-8b3d1264cf73}:0826EC6BC801252E401902AB09FE1068052D07001',
-      apiType: 'dec_master_key'
+      placeholder: 'Enter master key hex data',
+      apiType: 'dec_master_key',
+      structuredValue: true
     }
   ];
 
   const selectedType = credentialTypes.find(type => type.value === credentialType);
   const requiresUserSid = ['password', 'ntlm_hash', 'cred_key'].includes(credentialType);
+  const requiresGuid = selectedType?.requiresGuid || false;
+  const supportsDomainController = selectedType?.supportsDomainController || false;
+  const isStructuredValue = selectedType?.structuredValue || false;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!credentialValue.trim()) {
-      setMessage({ type: 'error', text: 'Please enter a credential value' });
-      return;
+
+    if (isStructuredValue) {
+      if (!masterKeyGuid.trim()) {
+        setMessage({ type: 'error', text: 'Please enter a Master Key GUID' });
+        return;
+      }
+      if (!keyHex.trim()) {
+        setMessage({ type: 'error', text: 'Please enter Key Hex' });
+        return;
+      }
+    } else {
+      if (!credentialValue.trim()) {
+        setMessage({ type: 'error', text: 'Please enter a credential value' });
+        return;
+      }
     }
 
     if (requiresUserSid && !userSid.trim()) {
@@ -68,8 +89,17 @@ const DpapiSubmitCredential = () => {
         },
         body: JSON.stringify({
           type: selectedType.apiType,
-          value: encodeURIComponent(credentialValue),
-          ...(requiresUserSid && { user_sid: userSid })
+          ...(isStructuredValue ? {
+            value: {
+              guid: masterKeyGuid,
+              key_hex: keyHex
+            }
+          } : {
+            value: credentialValue
+          }),
+          ...(requiresUserSid && { user_sid: userSid }),
+          ...(requiresGuid && guid.trim() && { guid }),
+          ...(supportsDomainController && domainController.trim() && { domain_controller: domainController })
         }),
       });
 
@@ -77,6 +107,10 @@ const DpapiSubmitCredential = () => {
         setMessage({ type: 'success', text: 'Credential submitted successfully!' });
         setCredentialValue('');
         setUserSid('');
+        setGuid('');
+        setDomainController('');
+        setMasterKeyGuid('');
+        setKeyHex('');
       } else {
         let errorMessage = `HTTP ${response.status}`;
         try {
@@ -94,15 +128,15 @@ const DpapiSubmitCredential = () => {
           // If JSON parsing fails, include status text
           errorMessage = `${errorMessage} - ${response.statusText}`;
         }
-        setMessage({ 
-          type: 'error', 
-          text: `Failed to submit credential: ${errorMessage}` 
+        setMessage({
+          type: 'error',
+          text: `Failed to submit credential: ${errorMessage}`
         });
       }
     } catch (error) {
-      setMessage({ 
-        type: 'error', 
-        text: `Network error: ${error.message}` 
+      setMessage({
+        type: 'error',
+        text: `Network error: ${error.message}`
       });
     } finally {
       setIsSubmitting(false);
@@ -137,6 +171,10 @@ const DpapiSubmitCredential = () => {
                   setCredentialType(e.target.value);
                   setCredentialValue('');
                   setUserSid('');
+                  setGuid('');
+                  setDomainController('');
+                  setMasterKeyGuid('');
+                  setKeyHex('');
                   setMessage({ type: '', text: '' });
                 }}
                 className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 appearance-none pr-10"
@@ -169,26 +207,104 @@ const DpapiSubmitCredential = () => {
             </div>
           )}
 
-          {/* Credential Value Input */}
-          <div>
-            <label htmlFor="credential-value" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Credential Value
-            </label>
-            <textarea
-              id="credential-value"
-              value={credentialValue}
-              onChange={(e) => setCredentialValue(e.target.value)}
-              placeholder={selectedType?.placeholder}
-              rows={4}
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-vertical"
-            />
-          </div>
+          {/* GUID Input - For domain_backup_key */}
+          {requiresGuid && (
+            <div>
+              <label htmlFor="guid" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Backup Key GUID
+              </label>
+              <input
+                type="text"
+                id="guid"
+                value={guid}
+                onChange={(e) => setGuid(e.target.value)}
+                placeholder="6d2bd107-a942-4c0d-bf2a-8b3d1264cf73"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                required
+              />
+            </div>
+          )}
+
+          {/* Domain Controller Input - Optional for domain_backup_key */}
+          {supportsDomainController && (
+            <div>
+              <label htmlFor="domain-controller" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Domain Controller (Optional)
+              </label>
+              <input
+                type="text"
+                id="domain-controller"
+                value={domainController}
+                onChange={(e) => setDomainController(e.target.value)}
+                placeholder="dc.domain.com"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              />
+            </div>
+          )}
+
+          {/* Master Key GUID - For dec_master_key */}
+          {isStructuredValue && (
+            <div>
+              <label htmlFor="master-key-guid" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Master Key GUID
+              </label>
+              <input
+                type="text"
+                id="master-key-guid"
+                value={masterKeyGuid}
+                onChange={(e) => setMasterKeyGuid(e.target.value)}
+                placeholder="6d2bd107-a942-4c0d-bf2a-8b3d1264cf73"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                required
+              />
+            </div>
+          )}
+
+          {/* Key Hex - For dec_master_key */}
+          {isStructuredValue && (
+            <div>
+              <label htmlFor="key-hex" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Key Hex
+              </label>
+              <textarea
+                id="key-hex"
+                value={keyHex}
+                onChange={(e) => setKeyHex(e.target.value)}
+                placeholder="0826EC6BC801252E401902AB09FE1068052D07001"
+                rows={3}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-vertical font-mono"
+                required
+              />
+            </div>
+          )}
+
+          {/* Credential Value Input - For other types */}
+          {!isStructuredValue && (
+            <div>
+              <label htmlFor="credential-value" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Credential Value
+              </label>
+              <textarea
+                id="credential-value"
+                value={credentialValue}
+                onChange={(e) => setCredentialValue(e.target.value)}
+                placeholder={selectedType?.placeholder}
+                rows={4}
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-vertical"
+              />
+            </div>
+          )}
 
           {/* Submit Button */}
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={isSubmitting || !credentialValue.trim() || (requiresUserSid && !userSid.trim())}
+              disabled={
+                isSubmitting || 
+                (isStructuredValue ? (!masterKeyGuid.trim() || !keyHex.trim()) : !credentialValue.trim()) ||
+                (requiresUserSid && !userSid.trim()) ||
+                (requiresGuid && !guid.trim())
+              }
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? (

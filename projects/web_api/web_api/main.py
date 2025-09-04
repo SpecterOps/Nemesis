@@ -22,6 +22,7 @@ from common.models2.api import (
     HealthResponse,
     YaraReloadResponse,
 )
+from common.models2.dpapi import DpapiCredentialRequest
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
@@ -29,7 +30,6 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Path, Query, Reque
 from fastapi.responses import StreamingResponse
 from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
-
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
 from web_api.large_containers import LargeContainerProcessor
 from web_api.models.requests import CleanupRequest, EnrichmentRequest
@@ -49,8 +49,8 @@ logger = structlog.get_logger(module=__name__)
 
 # TODO: is this needed really?
 VERSION = "0.1.0"
-
 MOUNTED_CONTAINER_PATH = "/mounted-containers"
+DAPR_PORT = os.getenv("DAPR_HTTP_PORT", 3500)
 
 
 @asynccontextmanager
@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
         if lock_file:
             try:
                 lock_file.close()
-            except:
+            except Exception:
                 pass
 
 
@@ -112,6 +112,7 @@ app = FastAPI(
         {"name": "files", "description": "File management operations"},
         {"name": "workflows", "description": "Workflow management operations"},
         {"name": "enrichments", "description": "Enrichment management operations"},
+        {"name": "dpapi", "description": "DPAPI credential and masterkey operations"},
         {"name": "queues", "description": "Internal pub/sub queue operations"},
         {"name": "system", "description": "System and health check endpoints"},
     ],
@@ -129,7 +130,7 @@ async def timeout_middleware(request: Request, call_next):
             timeout = 60
         return await asyncio.wait_for(call_next(request), timeout=timeout)
     except TimeoutError:
-        raise HTTPException(status_code=504, detail="Request timeout")
+        raise HTTPException(status_code=504, detail="Request timeout") from None
 
 
 storage = StorageMinio()
@@ -703,8 +704,7 @@ async def get_failed():
 async def list_enrichments():
     """List all available enrichment modules by forwarding to file-enrichment service."""
     try:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        url = f"http://localhost:{dapr_port}/v1.0/invoke/file-enrichment/method/enrichments"
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/file-enrichment/method/enrichments"
 
         response = requests.get(url)
         if response.status_code != 200:
@@ -718,7 +718,6 @@ async def list_enrichments():
     except Exception as e:
         logger.exception(e, message="Error listing enrichment modules")
         raise HTTPException(status_code=500, detail=str(e)) from e
-
 
 
 @app.post(
@@ -740,8 +739,7 @@ async def run_enrichment(
             raise HTTPException(status_code=404, detail=f"File {request.object_id} not found")
 
         # Forward the request to the enrichment service
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        url = f"http://localhost:{dapr_port}/v1.0/invoke/file-enrichment/method/enrichments/{enrichment_name}"
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/file-enrichment/method/enrichments/{enrichment_name}"
 
         logger.info("Forwarding enrichment request", enrichment_name=enrichment_name, object_id=request.object_id)
 
@@ -791,8 +789,7 @@ async def run_bulk_enrichment(
     """Start bulk enrichment for a specific module by publishing individual tasks to pub/sub."""
     try:
         # First verify enrichment module exists
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        enrichments_url = f"http://localhost:{dapr_port}/v1.0/invoke/file-enrichment/method/enrichments"
+        enrichments_url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/file-enrichment/method/enrichments"
 
         enrichments_response = requests.get(enrichments_url, timeout=10)
         if enrichments_response.status_code != 200:
@@ -885,6 +882,62 @@ async def stop_bulk_enrichment(
 
 #######################################
 #
+# dpapi routes
+#
+#######################################
+
+
+@app.post(
+    "/dpapi/credentials",
+    tags=["dpapi"],
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+    summary="Submit DPAPI credential for masterkey decryption",
+    description="Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, and decrypted master keys.",
+)
+async def submit_dpapi_credential(
+    request: DpapiCredentialRequest = Body(..., description="The DPAPI credential data"),
+):
+    """Submit DPAPI credential for masterkey decryption by forwarding to file-enrichment service."""
+    try:
+        # Forward the request to the enrichment service
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/file-enrichment/method/dpapi/credentials"
+
+        has_user_sid = hasattr(request, "user_sid")
+        logger.info("Forwarding DPAPI credential request", credential_type=request.type, has_user_sid=has_user_sid)
+
+        response = requests.post(
+            url,
+            json=request.model_dump(),
+            timeout=30,
+        )
+
+        # Handle various response status codes
+        if response.status_code == 400:
+            raise HTTPException(status_code=400, detail=response.text)
+        elif response.status_code == 503:
+            raise HTTPException(status_code=503, detail="File enrichment service is unavailable")
+        elif response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code, detail=f"Error from file enrichment service: {response.text}"
+            )
+
+        return response.json()
+
+    except requests.Timeout as e:
+        logger.error("Timeout connecting to file enrichment service for DPAPI credential")
+        raise HTTPException(status_code=504, detail="Request to file enrichment service timed out") from e
+    except requests.RequestException as e:
+        logger.exception(e, message="Error connecting to file enrichment service")
+        raise HTTPException(status_code=503, detail="File enrichment service unavailable") from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(e, message="Error submitting DPAPI credential", credential_type=request.type)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+#######################################
+#
 # queue routes
 #
 #######################################
@@ -970,7 +1023,6 @@ async def trigger_cleanup(request: CleanupRequest = Body(default=None, descripti
     try:
         # Create request payload (default to empty dict if no request body provided)
         payload = {} if request is None else request.model_dump(exclude_unset=True)
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
         results = {}
 
         # 1. Purge everything in the RabbitMQ queues
@@ -993,7 +1045,7 @@ async def trigger_cleanup(request: CleanupRequest = Body(default=None, descripti
             }
 
         # 3. Call housekeeping service
-        housekeeping_url = f"http://localhost:{dapr_port}/v1.0/invoke/housekeeping/method/trigger-cleanup"
+        housekeeping_url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/housekeeping/method/trigger-cleanup"
         logger.info("Forwarding cleanup request to housekeeping service", expiration=payload.get("expiration"))
 
         housekeeping_response = requests.post(
@@ -1077,8 +1129,7 @@ async def root():
 async def get_apprise_info():
     """Forward request to alerting service to get Apprise configuration info."""
     try:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        url = f"http://localhost:{dapr_port}/v1.0/invoke/alerting/method/apprise-info"
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/alerting/method/apprise-info"
 
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
@@ -1089,17 +1140,17 @@ async def get_apprise_info():
 
         return response.json()
 
-    except requests.Timeout:
+    except requests.Timeout as e:
         logger.error("Timeout connecting to alerting service")
-        raise HTTPException(status_code=504, detail="Request to alerting service timed out")
+        raise HTTPException(status_code=504, detail="Request to alerting service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to alerting service")
-        raise HTTPException(status_code=503, detail="Alerting service unavailable")
+        raise HTTPException(status_code=503, detail="Alerting service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(e, message="Error getting apprise info")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 def _scan_agent_metadata():
@@ -1108,8 +1159,7 @@ def _scan_agent_metadata():
     This function queries the agents service to get the agent information.
     """
     try:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        url = f"http://localhost:{dapr_port}/v1.0/invoke/agents/method/agents/metadata"
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/metadata"
 
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -1166,8 +1216,7 @@ async def get_agents_spend_data():
     Returns total spend, token counts, and request statistics.
     """
     try:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        url = f"http://localhost:{dapr_port}/v1.0/invoke/agents/method/agents/spend-data"
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/spend-data"
 
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -1211,25 +1260,21 @@ async def get_agents_spend_data():
 async def run_text_summarizer(request: dict = Body(..., description="Request containing object_id")):
     """Forward text summarization request to agents service."""
     try:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        url = f"http://localhost:{dapr_port}/v1.0/invoke/agents/method/agents/text_summarizer"
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/text_summarizer"
 
         response = requests.post(url, json=request, timeout=120)  # 2 minute timeout for LLM operations
         if response.status_code == 200:
             return response.json()
         else:
             logger.warning(f"Failed to run text summarizer: {response.status_code}")
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Error from agents service: {response.text}"
-            )
+            raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
-    except requests.Timeout:
+    except requests.Timeout as e:
         logger.error("Timeout running text summarizer")
-        raise HTTPException(status_code=504, detail="Request to agents service timed out")
+        raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
-        raise HTTPException(status_code=503, detail="Agents service unavailable")
+        raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
@@ -1246,25 +1291,21 @@ async def run_text_summarizer(request: dict = Body(..., description="Request con
 async def run_llm_credential_analysis(request: dict = Body(..., description="Request containing object_id")):
     """Forward credential analysis request to agents service."""
     try:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        url = f"http://localhost:{dapr_port}/v1.0/invoke/agents/method/agents/llm_credential_analysis"
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/llm_credential_analysis"
 
         response = requests.post(url, json=request, timeout=120)  # 2 minute timeout for LLM operations
         if response.status_code == 200:
             return response.json()
         else:
             logger.warning(f"Failed to run credential analysis: {response.status_code}")
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Error from agents service: {response.text}"
-            )
+            raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
-    except requests.Timeout:
+    except requests.Timeout as e:
         logger.error("Timeout running credential analysis")
-        raise HTTPException(status_code=504, detail="Request to agents service timed out")
+        raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
-        raise HTTPException(status_code=503, detail="Agents service unavailable")
+        raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
@@ -1273,7 +1314,7 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
 
 
 @app.post(
-    "/agents/dotnet_analysis", 
+    "/agents/dotnet_analysis",
     tags=["system"],
     summary="Run .NET assembly analysis",
     description="Forward .NET assembly analysis request to agents service",
@@ -1281,23 +1322,19 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
 async def run_dotnet_analysis(request: dict = Body(..., description="Request containing object_id")):
     """Forward .NET assembly analysis request to agents service."""
     try:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-        url = f"http://localhost:{dapr_port}/v1.0/invoke/agents/method/agents/dotnet_analysis"
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/dotnet_analysis"
         response = requests.post(url, json=request, timeout=120)  # 2 minute timeout for LLM operations
         if response.status_code == 200:
             return response.json()
         else:
             logger.warning(f"Failed to run .NET analysis: {response.status_code}")
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Error from agents service: {response.text}"
-            )
-    except requests.Timeout:
+            raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
+    except requests.Timeout as e:
         logger.error("Timeout running .NET analysis")
-        raise HTTPException(status_code=504, detail="Request to agents service timed out")
+        raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
-        raise HTTPException(status_code=503, detail="Agents service unavailable")
+        raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:

@@ -3,24 +3,22 @@ import asyncio
 import json
 import os
 import random
-import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-import common.helpers as helpers
 import psycopg
 from common.logger import get_logger
 from common.models import CloudEvent, DotNetOutput, File, NoseyParkerOutput
 from common.state_helpers import get_file_enriched
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
-from fastapi import Body, FastAPI, HTTPException, Path
-from psycopg_pool import ConnectionPool
-from pydantic import BaseModel
-
+from fastapi import FastAPI
 from file_enrichment.dotnet import store_dotnet_results
 from file_enrichment.noseyparker import store_noseyparker_results
+from psycopg_pool import ConnectionPool
 
+from .routes.dpapi import dpapi_background_monitor, dpapi_router
+from .routes.enrichments import router as enrichments_router
 from .workflow import (
     get_workflow_client,
     initialize_workflow_runtime,
@@ -47,11 +45,6 @@ with DaprClient() as client:
 pool = ConnectionPool(
     postgres_connection_string, min_size=max_parallel_workflows, max_size=(3 * max_parallel_workflows)
 )
-
-
-class EnrichmentRequest(BaseModel):
-    object_id: str
-
 
 module_execution_order = []
 workflow_manager: WorkflowManager = None
@@ -265,7 +258,7 @@ async def postgres_notify_listener():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager for workflow runtime setup/teardown"""
-    global module_execution_order, workflow_manager, notify_listener_task
+    global module_execution_order, workflow_manager, notify_listener_task, background_dpapi_task
 
     logger.info("Initializing workflow runtime...", pid=os.getpid())
 
@@ -288,6 +281,10 @@ async def lifespan(app: FastAPI):
         notify_listener_task = asyncio.create_task(postgres_notify_listener())
         logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
 
+        # Start masterkey watcher in background
+        background_dpapi_task = asyncio.create_task(dpapi_background_monitor())
+        logger.info("Started masterkey watcher task", pid=os.getpid())
+
         # Recover any interrupted workflows before starting normal processing
         await recover_interrupted_workflows()
 
@@ -306,6 +303,15 @@ async def lifespan(app: FastAPI):
 
     try:
         logger.info("Shutting down workflow runtime...", pid=os.getpid())
+
+        # Cancel masterkey watcher task
+        if background_dpapi_task and not background_dpapi_task.done():
+            logger.info("Cancelling masterkey watcher task...", pid=os.getpid())
+            background_dpapi_task.cancel()
+            try:
+                await background_dpapi_task
+            except asyncio.CancelledError:
+                logger.info("Masterkey watcher task cancelled", pid=os.getpid())
 
         # Cancel PostgreSQL NOTIFY listener
         if notify_listener_task and not notify_listener_task.done():
@@ -328,6 +334,12 @@ async def lifespan(app: FastAPI):
 # Initialize FastAPI app with lifespan manager
 app = FastAPI(lifespan=lifespan)
 dapr_app = DaprApp(app)
+
+# Include routers
+app.include_router(dpapi_router)
+app.include_router(enrichments_router)
+
+background_dpapi_task = None
 
 
 async def save_file_message(file: File):
@@ -577,188 +589,6 @@ async def process_bulk_enrichment_task(event: CloudEvent):
 
     except Exception as e:
         logger.exception("Error processing bulk enrichment task", cloud_event=event, error=str(e))
-
-
-@app.get("/llm_enrichments")
-async def list_enabled_llm_enrichments():
-    """List the enabled LLM enrichments based on environment variables."""
-    try:
-        if not workflow_runtime or not workflow_runtime.modules:
-            raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
-
-        llm_enrichments = []
-        if os.getenv("RIGGING_GENERATOR_CREDENTIALS"):
-            llm_enrichments.append("llm_credential_analysis")
-        if os.getenv("RIGGING_GENERATOR_SUMMARY"):
-            llm_enrichments.append("text_summarizer")
-        if os.getenv("RIGGING_GENERATOR_TRIAGE"):
-            llm_enrichments.append("finding_triage")
-
-        return {"modules": llm_enrichments}
-
-    except Exception as e:
-        logger.exception(e, message="Error listing enabled LLM enrichment modules", pid=os.getpid())
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
-
-
-@app.get("/enrichments")
-async def list_enrichments():
-    """List all available enrichment modules."""
-    try:
-        if not workflow_runtime or not workflow_runtime.modules:
-            raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
-
-        modules = list(workflow_runtime.modules.keys())
-        return {"modules": modules}
-
-    except Exception as e:
-        logger.exception(e, message="Error listing enrichment modules", pid=os.getpid())
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
-
-
-@app.post("/enrichments/{enrichment_name}")
-async def run_enrichment(
-    enrichment_name: str = Path(..., description="Name of the enrichment module to run"),
-    request: EnrichmentRequest = Body(..., description="The enrichment request containing the object ID"),
-):
-    """Run a specific enrichment module directly."""
-
-    try:
-        # Check if module exists
-        if not workflow_runtime or not workflow_runtime.modules:
-            raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
-
-        if enrichment_name not in workflow_runtime.modules:
-            raise HTTPException(status_code=404, detail=f"Enrichment module '{enrichment_name}' not found")
-
-        # Get the module
-        module = workflow_runtime.modules[enrichment_name]
-
-        # Check if we should process this file - run in thread since it might use sync operations
-        should_process = await asyncio.to_thread(module.should_process, request.object_id)
-        if not should_process:
-            return {
-                "status": "skipped",
-                "message": f"Module {enrichment_name} decided to skip processing",
-                "object_id": request.object_id,
-                "instance_id": "",
-            }
-
-        # Process the file in a separate thread to avoid event loop conflicts
-        result = await asyncio.to_thread(module.process, request.object_id)
-
-        if result:
-            # Store enrichment result in database
-            def store_results():
-                with pool.connection() as conn:
-                    with conn.cursor() as cur:
-                        # Store main enrichment result
-                        results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
-                        cur.execute(
-                            """
-                            INSERT INTO enrichments (object_id, module_name, result_data)
-                            VALUES (%s, %s, %s)
-                            """,
-                            (request.object_id, enrichment_name, results_escaped),
-                        )
-
-                        # Store any transforms
-                        if result.transforms:
-                            for transform in result.transforms:
-                                cur.execute(
-                                    """
-                                    INSERT INTO transforms (object_id, type, transform_object_id, metadata)
-                                    VALUES (%s, %s, %s, %s)
-                                    """,
-                                    (
-                                        request.object_id,
-                                        transform.type,
-                                        transform.object_id,
-                                        json.dumps(transform.metadata) if transform.metadata else None,
-                                    ),
-                                )
-
-                        # Store any findings
-                        if result.findings:
-                            for finding in result.findings:
-                                cur.execute(
-                                    """
-                                    INSERT INTO findings (
-                                        finding_name, category, severity, object_id,
-                                        origin_type, origin_name, raw_data, data
-                                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                                    """,
-                                    (
-                                        finding.finding_name,
-                                        finding.category,
-                                        finding.severity,
-                                        request.object_id,
-                                        finding.origin_type,
-                                        finding.origin_name,
-                                        json.dumps(finding.raw_data),
-                                        json.dumps([obj.model_dump_json() for obj in finding.data]),
-                                    ),
-                                )
-
-                    conn.commit()
-
-            # Run database operations in thread
-            await asyncio.to_thread(store_results)
-
-        return {
-            "status": "success",
-            "message": f"Completed enrichment with module '{enrichment_name}'",
-            "object_id": request.object_id,
-            "instance_id": str(uuid.uuid4()),  # Generate a unique instance ID
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            e,
-            message="Error running enrichment module",
-            enrichment_name=enrichment_name,
-            object_id=request.object_id,
-            pid=os.getpid(),
-        )
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
-
-
-@app.post("/enrichments/{enrichment_name}/bulk")
-async def run_bulk_enrichment(
-    enrichment_name: str = Path(..., description="Name of the enrichment module to run"),
-):
-    """Bulk enrichment is now handled by the web API using distributed processing."""
-    raise HTTPException(
-        status_code=501,
-        detail="Bulk enrichment has been moved to the web API for distributed processing. Please use the main API endpoint.",
-    )
-
-
-@app.get("/enrichments/{enrichment_name}/bulk/status")
-async def get_bulk_enrichment_status(
-    enrichment_name: str = Path(..., description="Name of the enrichment module to check status for"),
-):
-    """Bulk enrichment status is now handled by the web API."""
-    raise HTTPException(
-        status_code=501,
-        detail="Bulk enrichment status is now handled by the web API. Please use the main API endpoint.",
-    )
-
-
-@app.post("/enrichments/{enrichment_name}/bulk/stop")
-async def stop_bulk_enrichment(
-    enrichment_name: str = Path(..., description="Name of the enrichment module to stop"),
-):
-    """Bulk enrichment stopping is now handled by the web API."""
-    raise HTTPException(
-        status_code=501,
-        detail="Bulk enrichment stopping is now handled by the web API. Please use the main API endpoint.",
-    )
-
-
-# Removed /reset route - replaced by PostgreSQL NOTIFY listener
 
 
 @app.api_route("/healthz", methods=["GET", "HEAD"])
