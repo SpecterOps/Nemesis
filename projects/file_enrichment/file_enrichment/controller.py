@@ -15,11 +15,10 @@ from common.state_helpers import get_file_enriched
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import Body, FastAPI, HTTPException, Path
-from psycopg_pool import ConnectionPool
-from pydantic import BaseModel
-
 from file_enrichment.dotnet import store_dotnet_results
 from file_enrichment.noseyparker import store_noseyparker_results
+from psycopg_pool import ConnectionPool
+from pydantic import BaseModel
 
 from .workflow import (
     get_workflow_client,

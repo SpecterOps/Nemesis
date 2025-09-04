@@ -7,7 +7,6 @@ import re
 import statistics
 from collections import Counter
 from datetime import datetime
-from typing import Optional
 
 from common.logger import get_logger
 
@@ -593,9 +592,9 @@ class FileFeatureExtractor:
         filepath: str,
         size: int,
         sibling_data: dict,
-        created_time: Optional[str] = None,
-        modified_time: Optional[str] = None,
-        accessed_time: Optional[str] = None,
+        created_time: str | None = None,
+        modified_time: str | None = None,
+        accessed_time: str | None = None,
     ) -> dict[str, float]:
         features = {}
 
@@ -692,9 +691,9 @@ class FileFeatureExtractor:
         filepath: str,
         size: int,
         population_stats: dict,
-        created_time: Optional[str] = None,
-        modified_time: Optional[str] = None,
-        accessed_time: Optional[str] = None,
+        created_time: str | None = None,
+        modified_time: str | None = None,
+        accessed_time: str | None = None,
     ) -> dict[str, float]:
         """
         Extract population-based features including time patterns
@@ -854,9 +853,9 @@ class FileFeatureExtractor:
         self,
         filepath: str,
         size: int,
-        created_time: Optional[str] = None,
-        modified_time: Optional[str] = None,
-        accessed_time: Optional[str] = None,
+        created_time: str | None = None,
+        modified_time: str | None = None,
+        accessed_time: str | None = None,
     ) -> dict[str, float]:
         """
         Extract features for an individual file from file metadata.
@@ -1225,7 +1224,7 @@ class FileFeatureExtractor:
 
     @staticmethod
     def compute_sibling_data(
-        target_file: dict, sibling_files: list[dict], known_sensitive: Optional[set[str]] = None
+        target_file: dict, sibling_files: list[dict], known_sensitive: set[str] | None = None
     ) -> dict:
         """
         Compute statistics about sibling files in the same directory.
