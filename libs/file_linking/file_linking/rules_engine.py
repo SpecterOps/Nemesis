@@ -322,7 +322,7 @@ class FileLinkingEngine:
                 )
 
                 # Add file linking
-                full_link_type = f"programmatic:{link_type}"
+                full_link_type = link_type  # f"programmatic:{link_type}"
                 if collection_reason:
                     full_link_type += f":{collection_reason}"
 
@@ -335,7 +335,7 @@ class FileLinkingEngine:
 
                 linkings_created += 1
 
-                logger.debug(
+                logger.warning(
                     "Created programmatic file linking",
                     source_path=source_file_path,
                     linked_path=linked_path,

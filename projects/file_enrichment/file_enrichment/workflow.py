@@ -17,10 +17,8 @@ from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from dapr.ext.workflow.logger.options import LoggerOptions
 from file_enrichment_modules.module_loader import ModuleLoader
+from file_linking import FileLinkingEngine
 from nemesis_dpapi import DpapiManager
-
-from .file_linking.helpers import initialize_file_linking
-from .file_linking.rules_engine import FileLinkingEngine
 
 logger = get_logger(__name__)
 
@@ -852,7 +850,6 @@ async def initialize_workflow_runtime():
 
     # Initialize file linking system with shared instance
     file_linking_engine = FileLinkingEngine(postgres_connection_string)
-    initialize_file_linking(postgres_connection_string, file_linking_engine)
 
     # Load enrichment modules
     module_loader = ModuleLoader()

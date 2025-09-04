@@ -1,0 +1,23 @@
+name: "hive_system"
+description: "Link SYSTEM hive to SECURITY hive"
+category: "windows"
+enabled: true
+
+triggers:
+  - file_patterns:
+      - "**/Windows/System32/Microsoft/Protect/S-1-5-18/User/*"
+
+linked_files:
+  - name: "system_hive"
+    description: "SYSTEM registry hive"
+    path_templates:
+      - 'C:\Windows\System32\config\SYSTEM'
+    priority: "high"
+    collection_reason: "Needed to decrypt the DPAPI_SYSTEM secret"
+
+  - name: "security_hive"
+    description: "SECURITY registry hive"
+    path_templates:
+      - 'C:\Windows\System32\config\SECURITY'
+    priority: "high"
+    collection_reason: "Needed to decrypt the DPAPI_SYSTEM secret"

@@ -668,7 +668,8 @@ CREATE TABLE chromium.state_keys (
     app_bound_key_enc BYTEA NOT NULL,                   -- os_crypt.app_bound_encrypted_key in Chromium `Local State` file (post v127)
     app_bound_key_system_masterkey_guid UUID,           -- associated _system_ masterkey GUID for key_bytes_enc
     app_bound_key_user_masterkey_guid UUID,             -- associated _user_ masterkey GUID for key_bytes_enc
-    app_bound_key_dec BYTEA NOT NULL,
+    app_bound_key_dec_inter BYTEA NOT NULL,             -- intermediate dec value after the SYSTEM key has been used
+    app_bound_key_dec BYTEA NOT NULL,                   -- completely dec value
     app_bound_key_is_decrypted BOOLEAN,
 
     UNIQUE (source, username, browser)

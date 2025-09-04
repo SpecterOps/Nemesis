@@ -24,17 +24,3 @@ linked_files:
       - "{parent_dir}/Default/Network/Cookies"
     priority: "high"
     collection_reason: "Contains encrypted cookie values"
-
-  - name: "system_hive"
-    description: "SYSTEM registry hive"
-    path_templates:
-      - 'C:\Windows\System32\config\SYSTEM'
-    priority: "high"
-    collection_reason: "Needed to decrypt the DPAPI_SYSTEM secret"
-
-  - name: "security_hive"
-    description: "SECURITY registry hive"
-    path_templates:
-      - 'C:\Windows\System32\config\SECURITY'
-    priority: "high"
-    collection_reason: "Needed to decrypt the DPAPI_SYSTEM secret"

@@ -7,6 +7,7 @@ from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
+from nemesis_dpapi import DpapiManager
 
 logger = structlog.get_logger(module=__name__)
 
@@ -18,6 +19,8 @@ class ChromeLocalStateParser(EnrichmentModule):
 
         # the workflows this module should automatically run in
         self.workflows = ["default"]
+
+        self.dpapi_manager: DpapiManager | None = None
 
         # Yara rule to check for Chrome Login Data tables
         self.yara_rule = yara_x.compile("""
@@ -72,7 +75,7 @@ rule Chrome_Local_State
         """
         try:
             # Use the chromium library to process and insert into database
-            process_chromium_local_state(object_id, file_path)
+            process_chromium_local_state(object_id, file_path, self.dpapi_manager)
 
         except Exception as e:
             logger.exception(e, message="Error processing Chrome Login Data database")
