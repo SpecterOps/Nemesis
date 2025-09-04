@@ -142,7 +142,7 @@ def _insert_state_keys(
             )
 
             # add the masterkey file path (now that we know the key GUID) as a link/listing
-            add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "link_type:system_masterkey")
+            add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:system_masterkey")
 
             try:
                 app_bound_key_dec_inter = dpapi_manager.decrypt_blob(Blob(app_bound_key_enc))
