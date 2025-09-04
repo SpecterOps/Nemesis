@@ -922,7 +922,7 @@ class FileFeatureExtractor:
                 "numbers_in_file_name": len(re.findall(r"\d", file_name)),
                 "numbers_in_dir_path": len(re.findall(r"\d", dir_path)),
                 "file_name_naming_convention": self._get_naming_convention(file_name),
-                "file_name_naming_convention": self._get_naming_convention(dir_path),
+                "dir_name_naming_convention": self._get_naming_convention(dir_path),
                 "file_name_has_date_pattern": int(self._has_date_pattern(file_name)),
                 "dir_path_has_date_pattern": int(self._has_date_pattern(dir_path)),
             }
