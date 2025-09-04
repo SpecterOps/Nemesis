@@ -29,7 +29,6 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Path, Query, Reque
 from fastapi.responses import StreamingResponse
 from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
-
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
 from web_api.large_containers import LargeContainerProcessor
 from web_api.models.requests import CleanupRequest, EnrichmentRequest
@@ -720,7 +719,6 @@ async def list_enrichments():
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-
 @app.post(
     "/enrichments/{enrichment_name}",
     response_model=EnrichmentResponse,
@@ -1219,10 +1217,7 @@ async def run_text_summarizer(request: dict = Body(..., description="Request con
             return response.json()
         else:
             logger.warning(f"Failed to run text summarizer: {response.status_code}")
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Error from agents service: {response.text}"
-            )
+            raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
     except requests.Timeout:
         logger.error("Timeout running text summarizer")
@@ -1254,10 +1249,7 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
             return response.json()
         else:
             logger.warning(f"Failed to run credential analysis: {response.status_code}")
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Error from agents service: {response.text}"
-            )
+            raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
     except requests.Timeout:
         logger.error("Timeout running credential analysis")
@@ -1273,7 +1265,7 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
 
 
 @app.post(
-    "/agents/dotnet_analysis", 
+    "/agents/dotnet_analysis",
     tags=["system"],
     summary="Run .NET assembly analysis",
     description="Forward .NET assembly analysis request to agents service",
@@ -1288,10 +1280,7 @@ async def run_dotnet_analysis(request: dict = Body(..., description="Request con
             return response.json()
         else:
             logger.warning(f"Failed to run .NET analysis: {response.status_code}")
-            raise HTTPException(
-                status_code=response.status_code, 
-                detail=f"Error from agents service: {response.text}"
-            )
+            raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
     except requests.Timeout:
         logger.error("Timeout running .NET analysis")
         raise HTTPException(status_code=504, detail="Request to agents service timed out")
