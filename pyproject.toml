@@ -22,6 +22,7 @@ exclude = [
     "dist",
     "node_modules",
     "venv",
+    "dpapi_blob.py"
 ]
 
 line-length = 120

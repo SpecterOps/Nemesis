@@ -3,7 +3,6 @@
 from uuid import UUID
 
 import pytest
-
 from nemesis_dpapi.core import Blob
 from nemesis_dpapi.crypto import (
     CredKey,
@@ -411,24 +410,24 @@ class TestBlobParse:
 
         # GUIDs
         assert blob.provider_guid.bytes_le == blob_impacket["GuidCredential"]
-        assert str(blob.provider_guid).lower() == blob_dpapick.provider.lower()
+        assert str(blob.provider_guid).lower() == blob_dpapick.provider.lower()  # type: ignore
         assert blob.masterkey_guid.bytes_le == blob_impacket["GuidMasterKey"]
-        assert str(blob.masterkey_guid).lower() == blob_dpapick.mkguid.lower()
+        assert str(blob.masterkey_guid).lower() == blob_dpapick.mkguid.lower()  # type: ignore
 
         # Description (handle null-terminated UTF-16LE strings)
         impacket_desc = blob_impacket["Description"].decode("utf-16le").rstrip("\x00")
         assert blob.description == impacket_desc
 
         if blob_dpapick.description != b"\x00":
-            dpapick_desc = blob_dpapick.description.decode("utf-16le").rstrip("\x00")
+            dpapick_desc = blob_dpapick.description.decode("utf-16le").rstrip("\x00")  # type: ignore
             assert blob.description == dpapick_desc
 
         # Encryption algorithm
-        assert blob.encryption_algorithm_id == blob_impacket["CryptAlgo"] == blob_dpapick.cipherAlgo.algnum
+        assert blob.encryption_algorithm_id == blob_impacket["CryptAlgo"] == blob_dpapick.cipherAlgo.algnum  # type: ignore
         assert blob.encryption_algorithm_key_size == blob_impacket["CryptAlgoLen"]
 
         # MAC algorithm
-        assert blob.mac_algorithm_id == blob_impacket["HashAlgo"] == blob_dpapick.hashAlgo.algnum
+        assert blob.mac_algorithm_id == blob_impacket["HashAlgo"] == blob_dpapick.hashAlgo.algnum  # type: ignore
         assert blob.mac_algorithm_key_size == blob_impacket["HashAlgoLen"]
 
         # Data

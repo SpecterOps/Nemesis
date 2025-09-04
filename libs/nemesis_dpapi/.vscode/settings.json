@@ -7,11 +7,14 @@
     },
     "[python]": {
         "editor.formatOnSave": true,
+        "editor.formatOnSaveMode": "file",
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
         "editor.codeActionsOnSave": {
             "source.fixAll": "explicit",
             "source.organizeImports": "explicit"
-        },
-        "editor.defaultFormatter": "charliermarsh.ruff"
+        }
     },
     "autoDocstring.docstringFormat": "google",
     "editor.formatOnSave": true,
