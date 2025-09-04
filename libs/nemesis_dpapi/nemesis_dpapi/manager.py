@@ -9,9 +9,20 @@ from .auto_decrypt import AutoDecryptionObserver
 from .core import Blob, DomainBackupKey, MasterKey
 from .crypto import DpapiCrypto
 from .eventing import NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent, Publisher
-from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
-from .storage_in_memory import InMemoryDomainBackupKeyRepository, InMemoryMasterKeyRepository
-from .storage_postgres import PostgresDomainBackupKeyRepository, PostgresMasterKeyRepository, create_tables
+from .exceptions import (
+    DpapiBlobDecryptionError,
+    MasterKeyNotDecryptedError,
+    MasterKeyNotFoundError,
+)
+from .storage_in_memory import (
+    InMemoryDomainBackupKeyRepository,
+    InMemoryMasterKeyRepository,
+)
+from .storage_postgres import (
+    PostgresDomainBackupKeyRepository,
+    PostgresMasterKeyRepository,
+    create_tables,
+)
 
 if TYPE_CHECKING:
     from .repositories import DomainBackupKeyRepository, MasterKeyRepository
@@ -22,7 +33,9 @@ from .repositories import MasterKeyFilter
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
-    def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:
+    def __init__(
+        self, storage_backend: str = "memory", auto_decrypt: bool = True
+    ) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:
@@ -153,7 +166,9 @@ class DpapiManager(Publisher):
         return await self._masterkey_repo.get_masterkey(guid)
 
     async def get_all_masterkeys(
-        self, filter_by: MasterKeyFilter = MasterKeyFilter.ALL, backup_key_guid: UUID | None = None
+        self,
+        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        backup_key_guid: UUID | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering.
 

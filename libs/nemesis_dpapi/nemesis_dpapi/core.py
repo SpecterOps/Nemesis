@@ -8,13 +8,35 @@ from uuid import UUID
 
 from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
-from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
+from impacket.dpapi import (
+    DPAPI_DOMAIN_RSA_MASTER_KEY,
+    PRIVATE_KEY_BLOB,
+    PVK_FILE_HDR,
+    privatekeyblob_to_pkcs1,
+)
 from impacket.dpapi import DomainKey as ImpacketDomainKey
 
-from .crypto import InvalidBackupKeyError, MasterKeyDecryptionError
 from .dpapi_blob import DPAPI_BLOB
 
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
+
+
+class DPAPICryptoError(Exception):
+    """Base exception for DPAPI cryptographic operations."""
+
+    pass
+
+
+class InvalidBackupKeyError(DPAPICryptoError):
+    """Raised when domain backup key is invalid or malformed."""
+
+    pass
+
+
+class MasterKeyDecryptionError(DPAPICryptoError):
+    """Raised when masterkey decryption fails."""
+
+    pass
 
 
 class MasterKeyPolicy(IntFlag):
@@ -99,7 +121,9 @@ class Blob:
             data1, data2, data3 = struct.unpack("<IHH", data[:8])
             data4 = data[8:16]  # Keep as bytes (big-endian)
 
-            return UUID(f"{data1:08x}-{data2:04x}-{data3:04x}-{data4[0]:02x}{data4[1]:02x}-{data4[2:].hex()}")
+            return UUID(
+                f"{data1:08x}-{data2:04x}-{data3:04x}-{data4[0]:02x}{data4[1]:02x}-{data4[2:].hex()}"
+            )
 
         if isinstance(data_or_path, (str, Path)):
             file_path = Path(data_or_path)
@@ -127,7 +151,9 @@ class Blob:
         if dpapi_blob["Version"] != 1:
             raise ValueError(f"Invalid outer version: {dpapi_blob['Version']}")
         if dpapi_blob["MasterKeyVersion"] != 1:
-            raise ValueError(f"Invalid master key version: {dpapi_blob['MasterKeyVersion']}")
+            raise ValueError(
+                f"Invalid master key version: {dpapi_blob['MasterKeyVersion']}"
+            )
 
         # Validate the provider GUID is DF9D8CD0-1501-11D1-8C7A-00C04FC297EB
         if provider_guid != DEFAULT_BLOB_PROVIDER_GUID:
@@ -135,7 +161,11 @@ class Blob:
 
         description = ""
         if dpapi_blob["Description"]:
-            description = dpapi_blob["Description"].decode("utf-16le", errors="ignore").rstrip("\x00")
+            description = (
+                dpapi_blob["Description"]
+                .decode("utf-16le", errors="ignore")
+                .rstrip("\x00")
+            )
 
         return cls(
             outerVersion=dpapi_blob["Version"],
@@ -309,12 +339,16 @@ class DomainBackupKey:
             InvalidBackupKeyError: If domain backup key is invalid or malformed
         """
         if not masterkey_file.domain_backup_key:
-            raise MasterKeyDecryptionError("Masterkey file contains no domain backup key data")
+            raise MasterKeyDecryptionError(
+                "Masterkey file contains no domain backup key data"
+            )
 
         try:
             domain_key = ImpacketDomainKey(masterkey_file.domain_backup_key)
         except Exception as e:
-            raise MasterKeyDecryptionError(f"Failed to parse domain backup key data: {e}") from e
+            raise MasterKeyDecryptionError(
+                f"Failed to parse domain backup key data: {e}"
+            ) from e
 
         try:
             # Extract the private key from the backup key data
@@ -329,7 +363,9 @@ class DomainBackupKey:
             decrypted_key = cipher.decrypt(domain_key["SecretData"][::-1], None)
 
             if not decrypted_key:
-                raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
+                raise MasterKeyDecryptionError(
+                    "Failed to decrypt masterkey with backup key"
+                )
 
             domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
             # From the impacket DPAPI_DOMAIN_RSA_MASTER_KEY structure:
@@ -347,7 +383,9 @@ class DomainBackupKey:
                     f"Unexpected decrypted key length: {len(decrypted_key)}. Decrypted key: {decrypted_key.hex()}"
                 )
 
-            plaintext_key = buffer[key_offset : key_offset + domain_master_key["cbMasterKey"]]
+            plaintext_key = buffer[
+                key_offset : key_offset + domain_master_key["cbMasterKey"]
+            ]
             plaintext_key_sha1 = SHA1.new(plaintext_key).digest()
 
             return MasterKey(

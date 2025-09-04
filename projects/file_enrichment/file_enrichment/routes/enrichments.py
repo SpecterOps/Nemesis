@@ -13,7 +13,6 @@ from pydantic import BaseModel
 
 logger = get_logger(__name__)
 
-# Create the router directly - no prefix to maintain original URLs
 router = APIRouter(tags=["enrichments"])
 
 
