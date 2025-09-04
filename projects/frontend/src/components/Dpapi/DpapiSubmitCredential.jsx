@@ -57,9 +57,20 @@ const DpapiSubmitCredential = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!credentialValue.trim()) {
-      setMessage({ type: 'error', text: 'Please enter a credential value' });
-      return;
+    if (isStructuredValue) {
+      if (!masterKeyGuid.trim()) {
+        setMessage({ type: 'error', text: 'Please enter a Master Key GUID' });
+        return;
+      }
+      if (!keyHex.trim()) {
+        setMessage({ type: 'error', text: 'Please enter Key Hex' });
+        return;
+      }
+    } else {
+      if (!credentialValue.trim()) {
+        setMessage({ type: 'error', text: 'Please enter a credential value' });
+        return;
+      }
     }
 
     if (requiresUserSid && !userSid.trim()) {
@@ -78,8 +89,17 @@ const DpapiSubmitCredential = () => {
         },
         body: JSON.stringify({
           type: selectedType.apiType,
-          value: credentialValue,
-          ...(requiresUserSid && { user_sid: userSid })
+          ...(isStructuredValue ? {
+            value: {
+              guid: masterKeyGuid,
+              key_hex: keyHex
+            }
+          } : {
+            value: credentialValue
+          }),
+          ...(requiresUserSid && { user_sid: userSid }),
+          ...(requiresGuid && guid.trim() && { guid }),
+          ...(supportsDomainController && domainController.trim() && { domain_controller: domainController })
         }),
       });
 
@@ -87,6 +107,10 @@ const DpapiSubmitCredential = () => {
         setMessage({ type: 'success', text: 'Credential submitted successfully!' });
         setCredentialValue('');
         setUserSid('');
+        setGuid('');
+        setDomainController('');
+        setMasterKeyGuid('');
+        setKeyHex('');
       } else {
         let errorMessage = `HTTP ${response.status}`;
         try {
@@ -275,7 +299,12 @@ const DpapiSubmitCredential = () => {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={isSubmitting || !credentialValue.trim() || (requiresUserSid && !userSid.trim())}
+              disabled={
+                isSubmitting || 
+                (isStructuredValue ? (!masterKeyGuid.trim() || !keyHex.trim()) : !credentialValue.trim()) ||
+                (requiresUserSid && !userSid.trim()) ||
+                (requiresGuid && !guid.trim())
+              }
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? (

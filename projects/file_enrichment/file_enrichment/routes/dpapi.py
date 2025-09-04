@@ -1,7 +1,10 @@
 """DPAPI credential submission routes."""
 
+import asyncio
 import binascii
 import urllib.parse
+from functools import lru_cache
+from typing import Annotated
 from uuid import UUID
 
 from common.logger import get_logger
@@ -14,7 +17,7 @@ from common.models2.dpapi import (
     PasswordCredential,
 )
 from dapr.clients import DaprClient
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from nemesis_dpapi import (
     CredKey,
     CredKeyHashType,
@@ -27,17 +30,47 @@ from nemesis_dpapi import (
 
 logger = get_logger(__name__)
 
+
+# Using lru_cache to create a singleton instance of DpapiManager
+@lru_cache
+def get_dpapi_manager() -> DpapiManager:
+    return DpapiManager(storage_backend="memory")
+
+
+DpapiManagerDep = Annotated[DpapiManager, Depends(get_dpapi_manager)]
+
+
+async def dpapi_background_monitor() -> None:
+    dpapi_manager = get_dpapi_manager()
+    while True:
+        try:
+            num_masterkeys = await dpapi_manager.get_all_masterkeys()
+            num_dec_masterkeys = len([mk for mk in num_masterkeys if mk.is_decrypted])
+            backupkeys = await dpapi_manager._backup_key_repo.get_all_backup_keys()
+            logger.info(
+                "Background DPAPI manager loop tick",
+                num_masterkeys=len(num_masterkeys),
+                num_dec_masterkeys=num_dec_masterkeys,
+                num_backup_keys=len(backupkeys),
+            )
+        except Exception as e:
+            logger.exception("Error in DPAPI background monitor", error=str(e))
+
+        await asyncio.sleep(5)
+
+
 # Get database connection string
 with DaprClient() as client:
     secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
     postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
 
 # Create the router directly - no prefix to maintain original URLs
-router = APIRouter(tags=["dpapi"])
+dpapi_router = APIRouter(tags=["dpapi"])
 
 
-@router.post("/dpapi/credentials")
+@dpapi_router.post("/dpapi/credentials")
 async def submit_dpapi_credential(
+    dpapi_manager: DpapiManagerDep,
     request: DpapiCredentialRequest = Body(..., description="The DPAPI credential data"),
 ):
     """Submit DPAPI credential for masterkey decryption."""
@@ -45,33 +78,31 @@ async def submit_dpapi_credential(
         has_user_sid = hasattr(request, "user_sid")
         logger.info("Received DPAPI credential submission", credential_type=request.type, has_user_sid=has_user_sid)
 
-        # async with DpapiManager(postgres_connection_string) as dpapi_manager:
-        async with DpapiManager(storage_backend="memory") as dpapi_manager:
-            try:
-                if isinstance(request, DomainBackupKeyCredential):
-                    result = await _handle_domain_backup_key_credential(dpapi_manager, request)
-                elif isinstance(request, DecryptedMasterKeyCredential):
-                    result = await _handle_decrypted_master_key_credential(dpapi_manager, request)
-                elif isinstance(request, (PasswordCredential, NtlmHashCredential, CredKeyCredential)):
-                    result = await _handle_string_based_credential(dpapi_manager, request)
-                else:
-                    raise HTTPException(status_code=400, detail=f"Unsupported credential type: {request.type}")
+        try:
+            if isinstance(request, DomainBackupKeyCredential):
+                result = await _handle_domain_backup_key_credential(dpapi_manager, request)
+            elif isinstance(request, DecryptedMasterKeyCredential):
+                result = await _handle_decrypted_master_key_credential(dpapi_manager, request)
+            elif isinstance(request, (PasswordCredential, NtlmHashCredential, CredKeyCredential)):
+                result = await _handle_string_based_credential(dpapi_manager, request)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported credential type: {request.type}")
 
-                logger.info("Successfully processed DPAPI credential", credential_type=request.type, result=result)
-                return {
-                    "status": "success" if result.get("status") == "success" else "partial",
-                    "message": f"Processed {request.type} credential"
-                    + (f": {result.get('message', '')}" if result.get("message") else ""),
-                    "result": result,
-                }
+            logger.info("Successfully processed DPAPI credential", credential_type=request.type, result=result)
+            return {
+                "status": "success" if result.get("status") == "success" else "partial",
+                "message": f"Processed {request.type} credential"
+                + (f": {result.get('message', '')}" if result.get("message") else ""),
+                "result": result,
+            }
 
-            except ValueError as e:
-                logger.error("Invalid credential format", credential_type=request.type, error=str(e))
-                raise HTTPException(status_code=400, detail=f"Invalid credential format: {str(e)}") from e
+        except ValueError as e:
+            logger.error("Invalid credential format", credential_type=request.type, error=str(e))
+            raise HTTPException(status_code=400, detail=f"Invalid credential format: {str(e)}") from e
 
-            except Exception as e:
-                logger.exception("Error processing DPAPI credential", credential_type=request.type, error=str(e))
-                raise HTTPException(status_code=500, detail=f"Error processing credential: {str(e)}") from e
+        except Exception as e:
+            logger.exception("Error processing DPAPI credential", credential_type=request.type, error=str(e))
+            raise HTTPException(status_code=500, detail=f"Error processing credential: {str(e)}") from e
 
     except HTTPException:
         raise

@@ -27,6 +27,7 @@ credkey_ntlm_hash = ntlm_hash
 credkey_sha1_hash = "15056cbc481efd37bba0e97e9c28493a40cf8745"
 credkey_pbkdf2_hash = "775ec403415b49002386ea8e477346cd"
 
+masterkey_uuid = UUID("ed93694f-5a6d-46e2-b821-219f2c0ecd4d")
 masterkey_bytes = bytes.fromhex(
     "36BD60CB9E7E52433169DB00E93ED0A82D3C30C65D948BD8596FB32C267671020B02026B0AE03479DD18374ADBDD7658F45CCE6ED2A45319EFF7A96C411C85F5"
 )
@@ -364,7 +365,7 @@ class TestDPAPICrypto:
 
     def test_decrypt_blob_with_entropy(self, blob_with_entropy: bytes):
         blob = Blob.parse(blob_with_entropy)
-        assert blob.masterkey_guid == UUID("ed93694f-5a6d-46e2-b821-219f2c0ecd4d")
+        assert blob.masterkey_guid == masterkey_uuid
 
         masterkey_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
 
@@ -380,7 +381,7 @@ class TestDPAPICrypto:
     def test_decrypt_blob_without_entropy(self, blob_without_entropy: bytes):
         blob = Blob.parse(blob_without_entropy)
 
-        assert blob.masterkey_guid == UUID("ed93694f-5a6d-46e2-b821-219f2c0ecd4d")
+        assert blob.masterkey_guid == masterkey_uuid
 
         masterkey_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
         decrypted_data = DpapiCrypto.decrypt_blob(

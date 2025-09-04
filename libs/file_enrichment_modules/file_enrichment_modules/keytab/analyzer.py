@@ -9,8 +9,6 @@ import yara_x
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from impacket.structure import Structure
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)
@@ -83,81 +81,81 @@ rule Keytab_File
         """Parse a single keytab entry."""
         try:
             offset = 0
-            
+
             # Number of components (2 bytes)
             if offset + 2 > len(entry_data):
                 return None
-            num_components = unpack(">h", entry_data[offset:offset+2])[0]
+            num_components = unpack(">h", entry_data[offset : offset + 2])[0]
             offset += 2
-            
+
             # Realm length and value
             if offset + 2 > len(entry_data):
                 return None
-            realm_len = unpack(">h", entry_data[offset:offset+2])[0]
+            realm_len = unpack(">h", entry_data[offset : offset + 2])[0]
             offset += 2
-            
+
             if offset + realm_len > len(entry_data):
                 return None
-            realm = entry_data[offset:offset+realm_len].decode('utf-8', errors='replace')
+            realm = entry_data[offset : offset + realm_len].decode("utf-8", errors="replace")
             offset += realm_len
-            
+
             # Components (principal parts)
             components = []
             for i in range(num_components):
                 if offset + 2 > len(entry_data):
                     return None
-                comp_len = unpack(">h", entry_data[offset:offset+2])[0]
+                comp_len = unpack(">h", entry_data[offset : offset + 2])[0]
                 offset += 2
-                
+
                 if offset + comp_len > len(entry_data):
                     return None
-                component = entry_data[offset:offset+comp_len].decode('utf-8', errors='replace')
+                component = entry_data[offset : offset + comp_len].decode("utf-8", errors="replace")
                 components.append(component)
                 offset += comp_len
-            
+
             principal = "/".join(components)
-            
+
             # Name type (4 bytes)
             if offset + 4 > len(entry_data):
                 return None
-            name_type = unpack(">I", entry_data[offset:offset+4])[0]
+            name_type = unpack(">I", entry_data[offset : offset + 4])[0]
             offset += 4
-            
+
             # Timestamp (4 bytes)
             if offset + 4 > len(entry_data):
                 return None
-            timestamp = unpack(">I", entry_data[offset:offset+4])[0]
+            timestamp = unpack(">I", entry_data[offset : offset + 4])[0]
             offset += 4
-            
+
             # KVNO (1 byte)
             if offset + 1 > len(entry_data):
                 return None
             kvno = entry_data[offset]
             offset += 1
-            
+
             # Key type (2 bytes)
             if offset + 2 > len(entry_data):
                 return None
-            key_type = unpack(">H", entry_data[offset:offset+2])[0]
+            key_type = unpack(">H", entry_data[offset : offset + 2])[0]
             offset += 2
-            
+
             # Key length (2 bytes)
             if offset + 2 > len(entry_data):
                 return None
-            key_length = unpack(">H", entry_data[offset:offset+2])[0]
+            key_length = unpack(">H", entry_data[offset : offset + 2])[0]
             offset += 2
-            
+
             # Key data
             if offset + key_length > len(entry_data):
                 return None
-            key_data = entry_data[offset:offset+key_length]
-            
+            key_data = entry_data[offset : offset + key_length]
+
             # Format timestamp
             if timestamp > 0:
                 timestamp_dt = datetime.fromtimestamp(timestamp, tz=UTC).isoformat()
             else:
                 timestamp_dt = "N/A"
-            
+
             return {
                 "realm": realm,
                 "principal": principal,
@@ -167,9 +165,9 @@ rule Keytab_File
                 "key": binascii.hexlify(key_data).decode("ascii"),
                 "timestamp": timestamp_dt,
                 "kvno": kvno,
-                "name_type": name_type
+                "name_type": name_type,
             }
-            
+
         except Exception as e:
             logger.error(f"Error parsing keytab entry: {e}")
             return None
@@ -177,42 +175,42 @@ rule Keytab_File
     def _parse_keytab_manual(self, file_data):
         """Manual keytab parsing implementation."""
         entries = []
-        
+
         # Check version
         if len(file_data) < 2:
             return [{"error": "File too small"}]
-        
+
         version = unpack(">H", file_data[0:2])[0]
         if version != 0x0502:
             entries.append({"error": f"Unexpected keytab version: 0x{version:x}"})
             return entries
-        
+
         offset = 2
-        
+
         while offset < len(file_data):
             try:
                 # Read entry size
                 if offset + 4 > len(file_data):
                     break
-                    
-                entry_size = unpack(">I", file_data[offset:offset+4])[0]
+
+                entry_size = unpack(">I", file_data[offset : offset + 4])[0]
                 offset += 4
-                
+
                 if entry_size == 0 or offset + entry_size > len(file_data):
                     break
-                    
-                entry_data = file_data[offset:offset+entry_size]
+
+                entry_data = file_data[offset : offset + entry_size]
                 offset += entry_size
-                
+
                 # Parse entry
                 entry = self._parse_keytab_entry(entry_data)
                 if entry:
                     entries.append(entry)
-                    
+
             except Exception as e:
                 logger.error(f"Error parsing keytab entry at offset {offset}: {e}")
                 break
-                
+
         return entries
 
     def _parse_keytab(self, file_data):

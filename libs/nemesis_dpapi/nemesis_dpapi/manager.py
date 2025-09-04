@@ -9,20 +9,9 @@ from .auto_decrypt import AutoDecryptionObserver
 from .core import Blob, DomainBackupKey, MasterKey
 from .crypto import DpapiCrypto
 from .eventing import NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent, Publisher
-from .exceptions import (
-    DpapiBlobDecryptionError,
-    MasterKeyNotDecryptedError,
-    MasterKeyNotFoundError,
-)
-from .storage_in_memory import (
-    InMemoryDomainBackupKeyRepository,
-    InMemoryMasterKeyRepository,
-)
-from .storage_postgres import (
-    PostgresDomainBackupKeyRepository,
-    PostgresMasterKeyRepository,
-    create_tables,
-)
+from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
+from .storage_in_memory import InMemoryDomainBackupKeyRepository, InMemoryMasterKeyRepository
+from .storage_postgres import PostgresDomainBackupKeyRepository, PostgresMasterKeyRepository, create_tables
 
 if TYPE_CHECKING:
     from .repositories import DomainBackupKeyRepository, MasterKeyRepository
@@ -30,12 +19,11 @@ if TYPE_CHECKING:
 from .repositories import MasterKeyFilter
 
 
+# TODO: Make thread safe
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
-    def __init__(
-        self, storage_backend: str = "memory", auto_decrypt: bool = True
-    ) -> None:
+    def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:

@@ -17,7 +17,7 @@ from file_enrichment.dotnet import store_dotnet_results
 from file_enrichment.noseyparker import store_noseyparker_results
 from psycopg_pool import ConnectionPool
 
-from .routes.dpapi import router as dpapi_router
+from .routes.dpapi import dpapi_background_monitor, dpapi_router
 from .routes.enrichments import router as enrichments_router
 from .workflow import (
     get_workflow_client,
@@ -258,7 +258,7 @@ async def postgres_notify_listener():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager for workflow runtime setup/teardown"""
-    global module_execution_order, workflow_manager, notify_listener_task
+    global module_execution_order, workflow_manager, notify_listener_task, background_dpapi_task
 
     logger.info("Initializing workflow runtime...", pid=os.getpid())
 
@@ -281,6 +281,10 @@ async def lifespan(app: FastAPI):
         notify_listener_task = asyncio.create_task(postgres_notify_listener())
         logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
 
+        # Start masterkey watcher in background
+        background_dpapi_task = asyncio.create_task(dpapi_background_monitor())
+        logger.info("Started masterkey watcher task", pid=os.getpid())
+
         # Recover any interrupted workflows before starting normal processing
         await recover_interrupted_workflows()
 
@@ -299,6 +303,15 @@ async def lifespan(app: FastAPI):
 
     try:
         logger.info("Shutting down workflow runtime...", pid=os.getpid())
+
+        # Cancel masterkey watcher task
+        if background_dpapi_task and not background_dpapi_task.done():
+            logger.info("Cancelling masterkey watcher task...", pid=os.getpid())
+            background_dpapi_task.cancel()
+            try:
+                await background_dpapi_task
+            except asyncio.CancelledError:
+                logger.info("Masterkey watcher task cancelled", pid=os.getpid())
 
         # Cancel PostgreSQL NOTIFY listener
         if notify_listener_task and not notify_listener_task.done():
@@ -325,6 +338,8 @@ dapr_app = DaprApp(app)
 # Include routers
 app.include_router(dpapi_router)
 app.include_router(enrichments_router)
+
+background_dpapi_task = None
 
 
 async def save_file_message(file: File):
