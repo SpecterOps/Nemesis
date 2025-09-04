@@ -52,8 +52,14 @@ class FileLinkingDatabaseService:
                             INSERT INTO file_listings (source, path, object_id, status)
                             VALUES (%s, %s, %s, %s)
                             ON CONFLICT (source, path_lower) DO UPDATE SET
-                                object_id = EXCLUDED.object_id,
-                                status = EXCLUDED.status,
+                                object_id = CASE 
+                                    WHEN file_listings.status = 'collected' THEN file_listings.object_id
+                                    ELSE EXCLUDED.object_id
+                                END,
+                                status = CASE 
+                                    WHEN file_listings.status = 'collected' THEN file_listings.status
+                                    ELSE EXCLUDED.status
+                                END,
                                 updated_at = CURRENT_TIMESTAMP
                         """
 
