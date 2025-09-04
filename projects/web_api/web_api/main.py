@@ -898,17 +898,11 @@ async def submit_dpapi_credential(
 ):
     """Submit DPAPI credential for masterkey decryption by forwarding to file-enrichment service."""
     try:
-        # Validate required fields based on credential type
-        requires_user_sid = request.type in ["password", "ntlm_hash", "cred_key"]
-        if requires_user_sid and not request.user_sid:
-            raise HTTPException(status_code=400, detail=f"user_sid is required for credential type '{request.type}'")
-
         # Forward the request to the enrichment service
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/file-enrichment/method/dpapi/credentials"
 
-        logger.info(
-            "Forwarding DPAPI credential request", credential_type=request.type, has_user_sid=bool(request.user_sid)
-        )
+        has_user_sid = hasattr(request, "user_sid")
+        logger.info("Forwarding DPAPI credential request", credential_type=request.type, has_user_sid=has_user_sid)
 
         response = requests.post(
             url,
