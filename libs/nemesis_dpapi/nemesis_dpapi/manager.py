@@ -4,11 +4,12 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import asyncpg
+from Crypto.Hash import SHA1
 
 from .auto_decrypt import AutoDecryptionObserver
 from .core import Blob, DomainBackupKey, MasterKey
 from .crypto import DpapiCrypto
-from .eventing import NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent, Publisher
+from .eventing import NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent, NewPlaintextMasterKeyEvent, Publisher
 from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 from .storage_in_memory import InMemoryDomainBackupKeyRepository, InMemoryMasterKeyRepository
 from .storage_postgres import PostgresDomainBackupKeyRepository, PostgresMasterKeyRepository, create_tables
@@ -99,6 +100,31 @@ class DpapiManager(Publisher):
         await self._masterkey_repo.add_masterkey(masterkey)
 
         self.publish(NewEncryptedMasterKeyEvent(masterkey_guid=guid))
+
+    async def add_decrypted_masterkey(
+        self, guid: UUID, plaintext_key: bytes | None, plaintext_key_sha1: bytes | None
+    ) -> None:
+        """Add an decrypted masterkey
+
+        Args:
+            guid: Unique identifier for the masterkey (the masterkey GUID)
+            plaintext_key: Decrypted masterkey data
+        """
+        if plaintext_key:
+            masterkey = MasterKey(
+                guid=guid,
+                plaintext_key=plaintext_key,
+                plaintext_key_sha1=SHA1.new(plaintext_key).digest(),
+            )
+            await self._masterkey_repo.add_masterkey(masterkey)
+            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=guid))
+        elif plaintext_key_sha1:
+            masterkey = MasterKey(
+                guid=guid,
+                plaintext_key_sha1=SHA1.new(plaintext_key).digest(),
+            )
+            await self._masterkey_repo.add_masterkey(masterkey)
+            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=guid))
 
     async def add_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
         """Add a domain backup key and decrypt all compatible masterkeys.
