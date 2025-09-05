@@ -76,10 +76,14 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         """Extract bootkey from SYSTEM hive using pypykatz."""
         try:
             # pypykatz OfflineRegistry already extracts the bootkey when parsing SYSTEM
-            if hasattr(registry, 'system') and registry.system:
+            if hasattr(registry, "system") and registry.system:
                 # The bootkey is available in the system object
-                if hasattr(registry.system, 'bootkey'):
-                    return registry.system.bootkey.hex() if hasattr(registry.system.bootkey, 'hex') else str(registry.system.bootkey)
+                if hasattr(registry.system, "bootkey"):
+                    return (
+                        registry.system.bootkey.hex()
+                        if hasattr(registry.system.bootkey, "hex")
+                        else str(registry.system.bootkey)
+                    )
             return None
         except Exception as e:
             logger.error(f"Failed to extract bootkey: {e}")
@@ -159,7 +163,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         except Exception as e:
             logger.error(f"Failed to create proactive file linkings: {e}")
 
-    def _process_sam_hive(self, sam_file: str, system_file: str | None, file_enriched) -> dict:
+    def _process_sam_hive(self, sam_file: str, system_file: str | None) -> dict:
         """Process SAM hive to extract local accounts using pypykatz."""
         results = {"accounts": [], "bootkey_available": system_file is not None}
 
@@ -175,26 +179,34 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 return results
 
             # Extract user information from parsed SAM
-            if hasattr(registry, 'sam') and registry.sam:
+            if hasattr(registry, "sam") and registry.sam:
                 sam_obj = registry.sam
-                if hasattr(sam_obj, 'users'):
+                if hasattr(sam_obj, "users"):
                     for user in sam_obj.users:
                         user_info = {
-                            "rid": getattr(user, 'rid', None),
-                            "username": getattr(user, 'username', None),
-                            "full_name": getattr(user, 'fullname', None),
-                            "comment": getattr(user, 'comment', None),
-                            "nt_hash": getattr(user, 'nt_hash', None),
-                            "lm_hash": getattr(user, 'lm_hash', None),
-                            "bootkey_available": system_file is not None
+                            "rid": getattr(user, "rid", None),
+                            "username": getattr(user, "username", None),
+                            "full_name": getattr(user, "fullname", None),
+                            "comment": getattr(user, "comment", None),
+                            "nt_hash": getattr(user, "nt_hash", None),
+                            "lm_hash": getattr(user, "lm_hash", None),
+                            "bootkey_available": system_file is not None,
                         }
-                        
+
                         # Convert hashes to hex strings if they exist
                         if user_info["nt_hash"]:
-                            user_info["nt_hash"] = user_info["nt_hash"].hex() if hasattr(user_info["nt_hash"], 'hex') else str(user_info["nt_hash"])
+                            user_info["nt_hash"] = (
+                                user_info["nt_hash"].hex()
+                                if hasattr(user_info["nt_hash"], "hex")
+                                else str(user_info["nt_hash"])
+                            )
                         if user_info["lm_hash"]:
-                            user_info["lm_hash"] = user_info["lm_hash"].hex() if hasattr(user_info["lm_hash"], 'hex') else str(user_info["lm_hash"])
-                        
+                            user_info["lm_hash"] = (
+                                user_info["lm_hash"].hex()
+                                if hasattr(user_info["lm_hash"], "hex")
+                                else str(user_info["lm_hash"])
+                            )
+
                         results["accounts"].append(user_info)
 
         except Exception as e:
@@ -205,7 +217,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         return results
 
-    def _process_security_hive(self, security_file: str, system_file: str | None, file_enriched) -> dict:
+    def _process_security_hive(self, security_file: str, system_file: str | None) -> dict:
         """Process SECURITY hive to extract LSA secrets using pypykatz."""
         results = {"lsa_secrets": [], "cached_credentials": [], "bootkey_available": system_file is not None}
 
@@ -217,40 +229,40 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         # Create persistent copies of both files that pypykatz can access
         security_copy_path = None
         system_copy_path = None
-        
+
         try:
             # Debug what we're actually receiving
             logger.warning(f"security_file path: {security_file}")
             logger.warning(f"system_file path: {system_file}")
             logger.warning(f"security_file exists: {os.path.exists(security_file) if security_file else 'N/A'}")
             logger.warning(f"system_file exists: {os.path.exists(system_file) if system_file else 'N/A'}")
-            
+
             # Create temporary copies that persist during processing
-            security_fd, security_copy_path = tempfile.mkstemp(suffix='.security')
-            system_fd, system_copy_path = tempfile.mkstemp(suffix='.system')
-            
+            security_fd, security_copy_path = tempfile.mkstemp(suffix=".security")
+            system_fd, system_copy_path = tempfile.mkstemp(suffix=".system")
+
             # Close the file descriptors but keep the paths
             os.close(security_fd)
             os.close(system_fd)
-            
+
             # Copy the files
             logger.warning(f"Copying {security_file} to {security_copy_path}")
             shutil.copy2(security_file, security_copy_path)
             logger.warning(f"Copying {system_file} to {system_copy_path}")
             shutil.copy2(system_file, system_copy_path)
-            
+
             # Verify the copies exist and have content
             security_size = os.path.getsize(security_copy_path)
             system_size = os.path.getsize(system_copy_path)
             logger.warning(f"Security copy size: {security_size} bytes")
             logger.warning(f"System copy size: {system_size} bytes")
-            
+
             logger.warning(f"Created persistent copies: SECURITY={security_copy_path}, SYSTEM={system_copy_path}")
-            
+
             # Now parse with pypykatz using the persistent copies
             logger.warning("Creating OfflineRegistry with persistent file copies")
             registry = OfflineRegistry.from_files(system_path=system_copy_path, security_path=security_copy_path)
-            
+
             # Extract bootkey from SYSTEM
             bootkey = self._extract_bootkey(registry)
             if bootkey:
@@ -269,144 +281,158 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 # Continue anyway to see if we can get any data
 
             # Extract LSA secrets from parsed SECURITY hive
-            if hasattr(registry, 'security') and registry.security:
+            if hasattr(registry, "security") and registry.security:
                 security_obj = registry.security
                 logger.warning(f"Security object type: {type(security_obj)}")
-                
+
                 # Try to get secrets as dictionary
                 try:
                     security_dict = security_obj.to_dict()
                     logger.warning(f"Security dict keys: {list(security_dict.keys()) if security_dict else 'None'}")
-                    
+
                     # Extract LSA secrets - they're in 'cached_secrets', not 'lsa_secrets'!
-                    if security_dict and 'cached_secrets' in security_dict:
-                        cached_secrets = security_dict['cached_secrets']
-                        logger.warning(f"Found cached_secrets in dict with {len(cached_secrets)} items, type: {type(cached_secrets)}")
-                        
+                    if security_dict and "cached_secrets" in security_dict:
+                        cached_secrets = security_dict["cached_secrets"]
+                        logger.warning(
+                            f"Found cached_secrets in dict with {len(cached_secrets)} items, type: {type(cached_secrets)}"
+                        )
+
                         if isinstance(cached_secrets, list):
                             # cached_secrets is a list of secret objects
                             for i, secret_data in enumerate(cached_secrets):
                                 logger.warning(f"Processing cached secret {i}: {type(secret_data)}")
-                                
+
                                 # If it's a dict, inspect its keys to find the actual secret data
                                 if isinstance(secret_data, dict):
                                     logger.warning(f"Cached secret {i} keys: {list(secret_data.keys())}")
-                                    
+
                                     # Look for common secret data keys
                                     secret_value = None
                                     secret_name = f"cached_secret_{i}"
-                                    
+
                                     # First try common secret keys
-                                    for key in ['secret', 'data', 'value', 'cleartext', 'plaintext', 'decrypted']:
+                                    for key in ["secret", "data", "value", "cleartext", "plaintext", "decrypted"]:
                                         if key in secret_data:
                                             secret_value = secret_data[key]
                                             logger.warning(f"Found secret data in key '{key}': {type(secret_value)}")
                                             break
-                                    
+
                                     # For DPAPI secrets, extract machine_key and user_key
-                                    if not secret_value and 'machine_key' in secret_data and 'user_key' in secret_data:
-                                        machine_key = secret_data['machine_key']
-                                        user_key = secret_data['user_key']
+                                    if not secret_value and "machine_key" in secret_data and "user_key" in secret_data:
+                                        machine_key = secret_data["machine_key"]
+                                        user_key = secret_data["user_key"]
                                         if isinstance(machine_key, bytes) and isinstance(user_key, bytes):
                                             secret_value = {
-                                                'machine_key': machine_key.hex(),
-                                                'user_key': user_key.hex()
+                                                "machine_key": machine_key.hex(),
+                                                "user_key": user_key.hex(),
                                             }
-                                            secret_name = secret_data.get('key_name', f"cached_secret_{i}")
-                                            logger.warning(f"Found DPAPI keys - machine_key: {len(machine_key)} bytes, user_key: {len(user_key)} bytes")
-                                    
+                                            secret_name = secret_data.get("key_name", f"cached_secret_{i}")
+                                            logger.warning(
+                                                f"Found DPAPI keys - machine_key: {len(machine_key)} bytes, user_key: {len(user_key)} bytes"
+                                            )
+
                                     # For NL$KM secrets, extract raw_secret
-                                    elif not secret_value and 'raw_secret' in secret_data:
-                                        raw_secret = secret_data['raw_secret']
+                                    elif not secret_value and "raw_secret" in secret_data:
+                                        raw_secret = secret_data["raw_secret"]
                                         if isinstance(raw_secret, bytes):
                                             secret_value = raw_secret.hex()
-                                            secret_name = secret_data.get('key_name', f"cached_secret_{i}")
+                                            secret_name = secret_data.get("key_name", f"cached_secret_{i}")
                                             logger.warning(f"Found raw_secret: {len(raw_secret)} bytes")
-                                    
+
                                     # If still no specific key found, try to get the first non-metadata value
                                     elif not secret_value:
                                         for key, value in secret_data.items():
-                                            if key not in ['type', 'name', 'id', 'index', 'key_name', 'history'] and value:
+                                            if (
+                                                key not in ["type", "name", "id", "index", "key_name", "history"]
+                                                and value
+                                            ):
                                                 secret_value = value
-                                                logger.warning(f"Using key '{key}' as secret data: {type(secret_value)}")
+                                                logger.warning(
+                                                    f"Using key '{key}' as secret data: {type(secret_value)}"
+                                                )
                                                 break
-                                    
+
                                     secret_info = {
                                         "name": secret_name,
                                         "decrypted": True,
                                         "value": str(secret_value) if secret_value else str(secret_data),
-                                        "bootkey_available": True
+                                        "bootkey_available": True,
                                     }
                                 else:
                                     secret_info = {
                                         "name": f"cached_secret_{i}",
                                         "decrypted": True,
                                         "value": str(secret_data) if secret_data else None,
-                                        "bootkey_available": True
+                                        "bootkey_available": True,
                                     }
                                 results["lsa_secrets"].append(secret_info)
                         elif isinstance(cached_secrets, dict):
                             # cached_secrets is a dictionary
                             for secret_name, secret_data in cached_secrets.items():
-                                logger.warning(f"Processing cached secret: {secret_name}, data type: {type(secret_data)}")
+                                logger.warning(
+                                    f"Processing cached secret: {secret_name}, data type: {type(secret_data)}"
+                                )
                                 secret_info = {
                                     "name": secret_name,
                                     "decrypted": True,
                                     "value": str(secret_data) if secret_data else None,
-                                    "bootkey_available": True
+                                    "bootkey_available": True,
                                 }
                                 results["lsa_secrets"].append(secret_info)
-                    
+
                     # Also check for other secret types
-                    secret_keys = ['lsa_key', 'NK$LM', 'dcc']
+                    secret_keys = ["lsa_key", "NK$LM", "dcc"]
                     for key in secret_keys:
                         if security_dict and key in security_dict:
                             secret_data = security_dict[key]
                             logger.warning(f"Found {key}: {type(secret_data)}")
-                            
+
                             # Format bytes as hex strings for better readability
                             if isinstance(secret_data, bytes):
                                 formatted_value = secret_data.hex()
                             else:
                                 formatted_value = str(secret_data) if secret_data else None
-                            
+
                             secret_info = {
                                 "name": key,
                                 "decrypted": True,
                                 "value": formatted_value,
-                                "bootkey_available": True
+                                "bootkey_available": True,
                             }
                             results["lsa_secrets"].append(secret_info)
-                    
+
                     if not results["lsa_secrets"]:
-                        logger.warning("No secrets extracted from security_dict - available keys: " + str(list(security_dict.keys())))
-                    
+                        logger.warning(
+                            "No secrets extracted from security_dict - available keys: "
+                            + str(list(security_dict.keys()))
+                        )
+
                     # Also try direct attribute access for LSA secrets
-                    if hasattr(security_obj, 'lsa_secrets'):
-                        lsa_secrets_attr = getattr(security_obj, 'lsa_secrets', {})
+                    if hasattr(security_obj, "lsa_secrets"):
+                        lsa_secrets_attr = getattr(security_obj, "lsa_secrets", {})
                         logger.warning(f"Found lsa_secrets attribute with {len(lsa_secrets_attr)} items")
                         for secret_name, secret_data in lsa_secrets_attr.items():
                             # Avoid duplicates if we already processed from dict
-                            if not any(s['name'] == secret_name for s in results["lsa_secrets"]):
+                            if not any(s["name"] == secret_name for s in results["lsa_secrets"]):
                                 secret_info = {
                                     "name": secret_name,
                                     "decrypted": True,
                                     "value": str(secret_data) if secret_data else None,
-                                    "bootkey_available": True
+                                    "bootkey_available": True,
                                 }
                                 results["lsa_secrets"].append(secret_info)
-                    
+
                     # Check for cached domain credentials
-                    if security_dict and 'cached_creds' in security_dict and security_dict['cached_creds']:
+                    if security_dict and "cached_creds" in security_dict and security_dict["cached_creds"]:
                         results["cached_credentials_key_present"] = True
-                        for cached_cred in security_dict['cached_creds']:
+                        for cached_cred in security_dict["cached_creds"]:
                             cred_info = {
-                                "domain": cached_cred.get('domain'),
-                                "username": cached_cred.get('username'),
-                                "decrypted": True
+                                "domain": cached_cred.get("domain"),
+                                "username": cached_cred.get("username"),
+                                "decrypted": True,
                             }
                             results["cached_credentials"].append(cred_info)
-                
+
                 except Exception as e:
                     logger.error(f"Failed to extract security dictionary: {e}")
                     # Try string representation as fallback
@@ -419,23 +445,23 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                                 "name": "parsed_from_string_representation",
                                 "decrypted": True,
                                 "value": "LSA secrets present - check raw data",
-                                "bootkey_available": True
+                                "bootkey_available": True,
                             }
                             results["lsa_secrets"].append(secret_info)
                     except Exception as e2:
                         logger.error(f"Failed to get security string representation: {e2}")
-                
+
                 # Also check for cached credentials via attribute access
-                if hasattr(security_obj, 'cached_creds'):
-                    cached_creds_attr = getattr(security_obj, 'cached_creds', [])
+                if hasattr(security_obj, "cached_creds"):
+                    cached_creds_attr = getattr(security_obj, "cached_creds", [])
                     if cached_creds_attr:
                         results["cached_credentials_key_present"] = True
                         try:
                             for cached_cred in cached_creds_attr:
                                 cred_info = {
-                                    "domain": getattr(cached_cred, 'domain', None),
-                                    "username": getattr(cached_cred, 'username', None),
-                                    "decrypted": True
+                                    "domain": getattr(cached_cred, "domain", None),
+                                    "username": getattr(cached_cred, "username", None),
+                                    "decrypted": True,
                                 }
                                 results["cached_credentials"].append(cred_info)
                         except Exception as e:
@@ -461,7 +487,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         return results
 
-    def _process_system_hive(self, system_file: str, file_enriched) -> dict:
+    def _process_system_hive(self, system_file: str) -> dict:
         """Process SYSTEM hive to extract bootkey and system information using pypykatz."""
         results = {"bootkey": None, "computer_name": None, "current_control_set": None, "services": []}
 
@@ -475,26 +501,25 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 results["bootkey"] = bootkey
 
             # Extract system information from parsed SYSTEM hive
-            if hasattr(registry, 'system') and registry.system:
+            if hasattr(registry, "system") and registry.system:
                 system_obj = registry.system
-                
+
                 # Get computer name if available
-                if hasattr(system_obj, 'computer_name'):
+                if hasattr(system_obj, "computer_name"):
                     results["computer_name"] = system_obj.computer_name
-                
+
                 # Get current control set info if available
-                if hasattr(system_obj, 'current_control_set'):
+                if hasattr(system_obj, "current_control_set"):
                     results["current_control_set"] = system_obj.current_control_set
 
                 # Extract some basic service info if available
-                # Note: pypykatz may not expose all service details, so we'll get what we can
                 interesting_services = ["NTDS", "DNS", "W32Time", "LanmanServer", "Spooler"]
                 for service_name in interesting_services:
                     service_info = {
                         "name": service_name,
                         "display_name": None,
                         "start_type": None,
-                        "status": "present_in_system_hive"
+                        "status": "present_in_system_hive",
                     }
                     results["services"].append(service_info)
 
@@ -502,11 +527,11 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             logger.error(f"Failed to process SYSTEM hive with pypykatz: {e}")
             # Return empty results on error
             results = {
-                "bootkey": None, 
+                "bootkey": None,
                 "error": "Could not parse SYSTEM hive",
-                "computer_name": None, 
-                "current_control_set": None, 
-                "services": []
+                "computer_name": None,
+                "current_control_set": None,
+                "services": [],
             }
 
         return results
@@ -555,7 +580,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 if secrets:
                     summary += "**LSA Secrets**:\n\n"
                     for secret in secrets[:10]:  # Limit to first 10
-                        if isinstance(secret, dict) and 'name' in secret:
+                        if isinstance(secret, dict) and "name" in secret:
                             if secret.get("decrypted", False) and secret.get("value"):
                                 # Show decrypted value, but truncate if too long
                                 value = str(secret["value"])
@@ -598,7 +623,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             if secrets:
                 summary += "## LSA Secrets\n\n"
                 for secret in secrets[:10]:  # Limit to first 10
-                    if isinstance(secret, dict) and 'name' in secret:
+                    if isinstance(secret, dict) and "name" in secret:
                         if secret.get("decrypted", False) and secret.get("value"):
                             # Show decrypted value, but truncate if too long
                             value = str(secret["value"])
@@ -653,7 +678,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         # Process based on hive type
         if hive_type == "SYSTEM":
             # Process SYSTEM hive first
-            analysis_results = self._process_system_hive(hive_file_path, file_enriched)
+            analysis_results = self._process_system_hive(hive_file_path)
 
             # Also check for and process existing SAM/SECURITY hives
             drive, _ = ntpath.splitdrive(file_enriched.path)
@@ -667,52 +692,20 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 # Process SAM if found
                 if sam_object_id:
                     try:
-                        sam_temp_file = self.storage.download(sam_object_id)
-                        if sam_temp_file is not None:
-                            with sam_temp_file as sam_temp:
-                                # Copy to avoid file closure issues
-                                sam_copy = tempfile.NamedTemporaryFile(delete=False)
-                                shutil.copy2(sam_temp.name, sam_copy.name)
-                                sam_copy.close()
-                                
-                                try:
-                                    sam_results = self._process_sam_hive(sam_copy.name, hive_file_path, file_enriched)
-                                    analysis_results["sam_analysis"] = sam_results
-                                    logger.info(f"Processed paired SAM hive for SYSTEM: {sam_path}")
-                                finally:
-                                    try:
-                                        os.unlink(sam_copy.name)
-                                    except:
-                                        pass
-                        else:
-                            logger.error(f"Failed to download paired SAM hive: {sam_object_id}")
+                        with self.storage.download(sam_object_id) as sam_temp_file:
+                            sam_results = self._process_sam_hive(sam_temp_file.name, hive_file_path)
+                            analysis_results["sam_analysis"] = sam_results
+                            logger.info(f"Processed paired SAM hive for SYSTEM: {sam_path}")
                     except Exception as e:
                         logger.error(f"Failed to process paired SAM hive: {e}")
 
                 # Process SECURITY if found
                 if security_object_id:
                     try:
-                        security_temp_file = self.storage.download(security_object_id)
-                        if security_temp_file is not None:
-                            with security_temp_file as security_temp:
-                                # Copy to avoid file closure issues
-                                security_copy = tempfile.NamedTemporaryFile(delete=False)
-                                shutil.copy2(security_temp.name, security_copy.name)
-                                security_copy.close()
-                                
-                                try:
-                                    security_results = self._process_security_hive(
-                                        security_copy.name, hive_file_path, file_enriched
-                                    )
-                                    analysis_results["security_analysis"] = security_results
-                                    logger.info(f"Processed paired SECURITY hive for SYSTEM: {security_path}")
-                                finally:
-                                    try:
-                                        os.unlink(security_copy.name)
-                                    except:
-                                        pass
-                        else:
-                            logger.error(f"Failed to download paired SECURITY hive: {security_object_id}")
+                        with self.storage.download(security_object_id) as security_temp_file:
+                            sam_results = self._process_security_hive(security_temp_file.name, hive_file_path)
+                            analysis_results["security_analysis"] = sam_results
+                            logger.debug(f"Processed paired SECURITY hive for SYSTEM: {security_path}")
                     except Exception as e:
                         logger.error(f"Failed to process paired SECURITY hive: {e}")
 
@@ -720,7 +713,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             # Look for SYSTEM hive
             drive, _ = ntpath.splitdrive(file_enriched.path)
             system_object_id = None
-            system_file_path = None
 
             if drive:
                 system_path = f"{drive}\\Windows\\System32\\Config\\SYSTEM"
@@ -729,51 +721,29 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             if system_object_id:
                 # Download the SYSTEM hive
                 try:
-                    system_temp_file = self.storage.download(system_object_id)
-                    if system_temp_file is None:
-                        logger.error(f"Failed to download SYSTEM hive {system_object_id}")
-                        # Process without SYSTEM hive
+                    with self.storage.download(system_object_id) as system_temp_file:
                         if hive_type == "SAM":
-                            analysis_results = self._process_sam_hive(hive_file_path, None, file_enriched)
+                            analysis_results = self._process_sam_hive(hive_file_path, system_temp_file.name)
                         else:  # SECURITY
-                            analysis_results = self._process_security_hive(hive_file_path, None, file_enriched)
-                        logger.warning(f"Processed {hive_type} hive without SYSTEM bootkey (download failed)")
-                    else:
-                        with system_temp_file as system_temp:
-                            # Copy to a temporary file that won't be auto-closed by context manager
-                            system_copy = tempfile.NamedTemporaryFile(delete=False)
-                            shutil.copy2(system_temp.name, system_copy.name)
-                            system_copy.close()
-                            
-                            try:
-                                if hive_type == "SAM":
-                                    analysis_results = self._process_sam_hive(hive_file_path, system_copy.name, file_enriched)
-                                else:  # SECURITY
-                                    analysis_results = self._process_security_hive(hive_file_path, system_copy.name, file_enriched)
+                            analysis_results = self._process_security_hive(hive_file_path, system_temp_file.name)
+                        logger.info(f"Processed {hive_type} hive with SYSTEM bootkey")
 
-                                logger.info(f"Processed {hive_type} hive with SYSTEM bootkey")
-                            finally:
-                                # Clean up the temporary copy
-                                try:
-                                    os.unlink(system_copy.name)
-                                except:
-                                    pass
                 except Exception as e:
                     logger.error(f"Error downloading SYSTEM hive: {e}")
                     # Process without SYSTEM hive
                     if hive_type == "SAM":
-                        analysis_results = self._process_sam_hive(hive_file_path, None, file_enriched)
+                        analysis_results = self._process_sam_hive(hive_file_path, None)
                     else:  # SECURITY
-                        analysis_results = self._process_security_hive(hive_file_path, None, file_enriched)
-                    logger.warning(f"Processed {hive_type} hive without SYSTEM bootkey (download error)")
+                        analysis_results = self._process_security_hive(hive_file_path, None)
+                    logger.debug(f"Processed {hive_type} hive without SYSTEM bootkey (download error)")
+
             else:
                 # Process without SYSTEM hive
                 if hive_type == "SAM":
-                    analysis_results = self._process_sam_hive(hive_file_path, None, file_enriched)
+                    analysis_results = self._process_sam_hive(hive_file_path, None)
                 else:  # SECURITY
-                    analysis_results = self._process_security_hive(hive_file_path, None, file_enriched)
-
-                logger.warning(f"Processed {hive_type} hive without SYSTEM bootkey")
+                    analysis_results = self._process_security_hive(hive_file_path, None)
+                logger.debug(f"Processed {hive_type} hive without SYSTEM bootkey")
 
             # Store reference to system hive if found
             if system_object_id:
@@ -794,15 +764,15 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 finding_name = "system_hive_bootkey_extracted"
             elif hive_type == "SAM" and analysis_results.get("accounts"):
                 category = FindingCategory.CREDENTIAL
-                severity = 7 if analysis_results.get("bootkey_available") else 5
+                severity = 7 if analysis_results.get("bootkey_available") else 3
                 finding_name = "sam_hive_accounts_detected"
             elif hive_type == "SECURITY" and analysis_results.get("lsa_secrets"):
                 category = FindingCategory.CREDENTIAL
-                severity = 7 if analysis_results.get("bootkey_available") else 5
+                severity = 7 if analysis_results.get("bootkey_available") else 3
                 finding_name = "security_hive_secrets_detected"
             else:
                 category = FindingCategory.INFORMATIONAL
-                severity = 3
+                severity = 1
                 finding_name = f"registry_hive_{hive_type.lower()}_processed"
 
             # Create display data
@@ -867,7 +837,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                         if secrets:
                             yaml_output.append("  LSA Secrets:")
                             for secret in secrets[:10]:
-                                if isinstance(secret, dict) and 'name' in secret:
+                                if isinstance(secret, dict) and "name" in secret:
                                     if secret.get("decrypted", False) and secret.get("value"):
                                         # Show decrypted value, but truncate if too long
                                         value = str(secret["value"])
@@ -893,7 +863,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     if secrets:
                         yaml_output.append("\nLSA Secrets:")
                         for secret in secrets[:10]:
-                            if isinstance(secret, dict) and 'name' in secret:
+                            if isinstance(secret, dict) and "name" in secret:
                                 if secret.get("decrypted", False) and secret.get("value"):
                                     # Show decrypted value, but truncate if too long
                                     value = str(secret["value"])
