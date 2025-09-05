@@ -92,6 +92,9 @@ class DpapiManager(Publisher):
             encrypted_key_backup: Masterkey data encrypted with the domain backup key
         """
 
+        if not self._initialized:
+            await self._initialize_storage()
+
         masterkey = MasterKey(
             guid=guid,
             encrypted_key_usercred=encrypted_key_usercred,
@@ -110,6 +113,9 @@ class DpapiManager(Publisher):
             guid: Unique identifier for the masterkey (the masterkey GUID)
             plaintext_key: Decrypted masterkey data
         """
+        if not self._initialized:
+            await self._initialize_storage()
+
         if plaintext_key:
             masterkey = MasterKey(
                 guid=guid,
