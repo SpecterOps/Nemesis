@@ -8,13 +8,10 @@ from uuid import UUID
 
 from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
-from impacket.dpapi import (
-    DPAPI_DOMAIN_RSA_MASTER_KEY,
-    PRIVATE_KEY_BLOB,
-    PVK_FILE_HDR,
-    privatekeyblob_to_pkcs1,
-)
+from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR
 from impacket.dpapi import DomainKey as ImpacketDomainKey
+from impacket.dpapi import privatekeyblob_to_pkcs1
+from pydantic import BaseModel, ConfigDict
 
 from .dpapi_blob import DPAPI_BLOB
 
@@ -121,9 +118,7 @@ class Blob:
             data1, data2, data3 = struct.unpack("<IHH", data[:8])
             data4 = data[8:16]  # Keep as bytes (big-endian)
 
-            return UUID(
-                f"{data1:08x}-{data2:04x}-{data3:04x}-{data4[0]:02x}{data4[1]:02x}-{data4[2:].hex()}"
-            )
+            return UUID(f"{data1:08x}-{data2:04x}-{data3:04x}-{data4[0]:02x}{data4[1]:02x}-{data4[2:].hex()}")
 
         if isinstance(data_or_path, (str, Path)):
             file_path = Path(data_or_path)
@@ -151,9 +146,7 @@ class Blob:
         if dpapi_blob["Version"] != 1:
             raise ValueError(f"Invalid outer version: {dpapi_blob['Version']}")
         if dpapi_blob["MasterKeyVersion"] != 1:
-            raise ValueError(
-                f"Invalid master key version: {dpapi_blob['MasterKeyVersion']}"
-            )
+            raise ValueError(f"Invalid master key version: {dpapi_blob['MasterKeyVersion']}")
 
         # Validate the provider GUID is DF9D8CD0-1501-11D1-8C7A-00C04FC297EB
         if provider_guid != DEFAULT_BLOB_PROVIDER_GUID:
@@ -161,11 +154,7 @@ class Blob:
 
         description = ""
         if dpapi_blob["Description"]:
-            description = (
-                dpapi_blob["Description"]
-                .decode("utf-16le", errors="ignore")
-                .rstrip("\x00")
-            )
+            description = dpapi_blob["Description"].decode("utf-16le", errors="ignore").rstrip("\x00")
 
         return cls(
             outerVersion=dpapi_blob["Version"],
@@ -339,16 +328,12 @@ class DomainBackupKey:
             InvalidBackupKeyError: If domain backup key is invalid or malformed
         """
         if not masterkey_file.domain_backup_key:
-            raise MasterKeyDecryptionError(
-                "Masterkey file contains no domain backup key data"
-            )
+            raise MasterKeyDecryptionError("Masterkey file contains no domain backup key data")
 
         try:
             domain_key = ImpacketDomainKey(masterkey_file.domain_backup_key)
         except Exception as e:
-            raise MasterKeyDecryptionError(
-                f"Failed to parse domain backup key data: {e}"
-            ) from e
+            raise MasterKeyDecryptionError(f"Failed to parse domain backup key data: {e}") from e
 
         try:
             # Extract the private key from the backup key data
@@ -363,9 +348,7 @@ class DomainBackupKey:
             decrypted_key = cipher.decrypt(domain_key["SecretData"][::-1], None)
 
             if not decrypted_key:
-                raise MasterKeyDecryptionError(
-                    "Failed to decrypt masterkey with backup key"
-                )
+                raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
 
             domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
             # From the impacket DPAPI_DOMAIN_RSA_MASTER_KEY structure:
@@ -383,9 +366,7 @@ class DomainBackupKey:
                     f"Unexpected decrypted key length: {len(decrypted_key)}. Decrypted key: {decrypted_key.hex()}"
                 )
 
-            plaintext_key = buffer[
-                key_offset : key_offset + domain_master_key["cbMasterKey"]
-            ]
+            plaintext_key = buffer[key_offset : key_offset + domain_master_key["cbMasterKey"]]
             plaintext_key_sha1 = SHA1.new(plaintext_key).digest()
 
             return MasterKey(
@@ -400,3 +381,79 @@ class DomainBackupKey:
             raise
         except Exception as e:
             raise MasterKeyDecryptionError(f"Failed to decrypt masterkey: {e}") from e
+
+
+class DpapiSystemSecret(BaseModel):
+    """Represents the DPAPI_SYSTEM LSA secret key for decrypting machine-protected masterkeys."""
+
+    model_config = ConfigDict(frozen=True)
+
+    user_key: bytes
+    machine_key: bytes
+
+    @classmethod
+    def from_bytes(cls, dpapi_system_data: bytes | str) -> "DpapiSystemSecret":
+        """Create DpapiSystemKey from DPAPI_SYSTEM LSA secret.
+
+        Args:
+            dpapi_system_data: 40-byte DPAPI_SYSTEM LSA secret (as bytes) or hex string
+
+        Returns:
+            DpapiSystemKey instance
+
+        Raises:
+            ValueError: If dpapi_system_data is not exactly 40 bytes or 80 hex characters
+        """
+        # Convert hex string to bytes if needed
+        if isinstance(dpapi_system_data, str):
+            try:
+                dpapi_system_bytes = bytes.fromhex(dpapi_system_data)
+            except ValueError as e:
+                raise ValueError(f"Invalid hex string: {e}") from e
+        else:
+            dpapi_system_bytes = dpapi_system_data
+
+        if len(dpapi_system_bytes) != 40:
+            raise ValueError(f"DPAPI_SYSTEM must be exactly 40 bytes, got {len(dpapi_system_bytes)}")
+
+        # Split into user (first 20 bytes) and machine (last 20 bytes) components
+        user_key_bytes = dpapi_system_bytes[:20]
+        machine_key_bytes = dpapi_system_bytes[20:]
+
+        return cls(user_key=user_key_bytes, machine_key=machine_key_bytes)
+
+    @classmethod
+    def from_lsa_secret(cls, lsa_secret_bytes: bytes | str) -> "DpapiSystemSecret":
+        """Create DpapiSystemSecret from the DPAPI_SYSTEM LSA secret structure.
+
+        Args:
+            lsa_secret_bytes: LSA secret structure containing version and keys (as bytes or hex string)
+
+        Returns:
+            DpapiSystemSecret instance
+
+        Raises:
+            ValueError: If structure is invalid or missing required data
+        """
+        # Convert hex string to bytes if needed
+        if isinstance(lsa_secret_bytes, str):
+            try:
+                lsa_secret_data = bytes.fromhex(lsa_secret_bytes)
+            except ValueError as e:
+                raise ValueError(f"Invalid hex string: {e}") from e
+        else:
+            lsa_secret_data = lsa_secret_bytes
+
+        if len(lsa_secret_data) != 44:  # 4 + 20 + 20 = minimum structure size
+            raise ValueError(f"Incorrect LSA secret size, expected at least 44 bytes, got {len(lsa_secret_data)}")
+
+        try:
+            # Parse structure: Version (4 bytes), MachineKey (20 bytes), UserKey (20 bytes)
+            version, machine_key, user_key = struct.unpack("<L20s20s", lsa_secret_data[:44])
+        except struct.error as e:
+            raise ValueError(f"Failed to parse LSA secret structure: {e}") from e
+
+        if version != 1:
+            raise ValueError(f"Unexpected LSA secret version: {version}, expected 1")
+
+        return cls(user_key=user_key, machine_key=machine_key)

@@ -45,6 +45,12 @@ const DpapiSubmitCredential = () => {
       placeholder: 'Enter master key data (one per line)\n{guid}:{sha1}\n{guid}:{sha1}',
       apiType: 'dec_master_key',
       structuredValue: true
+    },
+    {
+      value: 'dpapi_system',
+      label: 'DPAPI_SYSTEM LSA Secret',
+      placeholder: 'ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890',
+      apiType: 'dpapi_system'
     }
   ];
 
@@ -146,7 +152,7 @@ const DpapiSubmitCredential = () => {
           const filteredData = Object.entries(responseData)
             .filter(([, value]) => value !== null && value !== undefined && value !== '')
             .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
-          
+
           if (Object.keys(filteredData).length > 0) {
             details = filteredData;
           }

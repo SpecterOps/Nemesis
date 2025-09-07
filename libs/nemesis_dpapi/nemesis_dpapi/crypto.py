@@ -11,6 +11,7 @@ from pydantic import BaseModel, field_validator
 
 from .core import DPAPICryptoError
 from .dpapi_blob import DPAPI_BLOB
+from .types import Sid
 
 if TYPE_CHECKING:
     from .core import MasterKey
@@ -56,7 +57,7 @@ class NtlmHash(BaseModel):
         return v
 
     @classmethod
-    def from_hexstring(cls, hex_string: str) -> "NtlmHash":
+    def from_hexstring(cls, hex_string: str) -> NtlmHash:
         """Create NtlmHash from hex string."""
         try:
             return cls(value=bytes.fromhex(hex_string))
@@ -79,7 +80,7 @@ class Sha1Hash(BaseModel):
         return v
 
     @classmethod
-    def from_hex(cls, hex_string: str) -> "Sha1Hash":
+    def from_hex(cls, hex_string: str) -> Sha1Hash:
         """Create Sha1Hash from hex string."""
         try:
             return cls(value=bytes.fromhex(hex_string))
@@ -102,7 +103,7 @@ class Pbkdf2Hash(BaseModel):
         return v
 
     @classmethod
-    def from_hex(cls, hex_string: str) -> "Pbkdf2Hash":
+    def from_hex(cls, hex_string: str) -> Pbkdf2Hash:
         """Create Pbkdf2Hash from hex string."""
         try:
             return cls(value=bytes.fromhex(hex_string))
@@ -112,12 +113,8 @@ class Pbkdf2Hash(BaseModel):
 
 def _derive_secure_cred_key(ntlm_hash: bytes, user_sid_bytes: bytes) -> bytes:
     """Compute PBKDF2 hash using two-step derivation process."""
-    derived_key = PBKDF2(
-        ntlm_hash, user_sid_bytes, dkLen=32, count=10000, hmac_hash_module=SHA256
-    )  # type: ignore
-    derived_key = PBKDF2(
-        derived_key, user_sid_bytes, dkLen=16, count=1, hmac_hash_module=SHA256
-    )  # type: ignore
+    derived_key = PBKDF2(ntlm_hash, user_sid_bytes, dkLen=32, count=10000, hmac_hash_module=SHA256)  # type: ignore
+    derived_key = PBKDF2(derived_key, user_sid_bytes, dkLen=16, count=1, hmac_hash_module=SHA256)  # type: ignore
     return derived_key
 
 
@@ -149,9 +146,7 @@ class CredKey(BaseModel):
             raise ValueError(f"Cannot infer OWF type from key type: {type(self.key)}")
 
     @classmethod
-    def from_password(
-        cls, password: str, hash_type: CredKeyHashType, user_sid: str | None = None
-    ) -> "CredKey":
+    def from_password(cls, password: str, hash_type: CredKeyHashType, user_sid: Sid | None = None) -> CredKey:
         """Create CredKey from password by calculating the specified hash type.
 
         Derived from SharpDPAPI's CalculateKeys function: https://github.com/GhostPack/SharpDPAPI/blob/master/SharpDPAPI/lib/Dpapi.cs#L1755
@@ -177,9 +172,7 @@ class CredKey(BaseModel):
             raise ValueError(f"Unsupported hash type: {hash_type}")
 
     @classmethod
-    def from_ntlm(
-        cls, ntlm_hash: bytes, hash_type: CredKeyHashType, user_sid: str | None = None
-    ) -> "CredKey":
+    def from_ntlm(cls, ntlm_hash: bytes, hash_type: CredKeyHashType, user_sid: Sid | None = None) -> CredKey:
         """Create CredKey from NTLM hash."""
 
         if hash_type in (CredKeyHashType.MD4, CredKeyHashType.NTLM):
@@ -196,7 +189,7 @@ class CredKey(BaseModel):
             raise ValueError(f"Cannot derive {hash_type} from NTLM hash")
 
     @classmethod
-    def from_sha1(cls, sha1_hash: bytes) -> "CredKey":
+    def from_sha1(cls, sha1_hash: bytes) -> CredKey:
         """Create CredKey from SHA1 hash."""
         return cls(key=Sha1Hash(value=sha1_hash))
 
@@ -207,7 +200,7 @@ class MasterKeyEncryptionKey(BaseModel):
     key: Sha1Hash
 
     @staticmethod
-    def _derive_mk_key(pwdhash: bytes, user_sid: str, digest: str = "sha1") -> bytes:
+    def _derive_mk_key(pwdhash: bytes, user_sid: Sid, digest: str = "sha1") -> bytes:
         """Internal use. Computes the DPAPI symmetric key from a hash derived from a user's password."""
         # Map digest names to pycryptodome hash modules
         digest_map = {
@@ -224,14 +217,12 @@ class MasterKeyEncryptionKey(BaseModel):
         return HMAC.new(pwdhash, user_sid_bytes, digestmod=digest_map[digest]).digest()
 
     @classmethod
-    def from_cred_key(
-        cls, cred_key: CredKey, user_sid: str
-    ) -> "MasterKeyEncryptionKey":
+    def from_cred_key(cls, cred_key: CredKey, user_sid: Sid) -> MasterKeyEncryptionKey:
         """Generate symmetric key from credential key using derivation algorithm.
 
         Args:
             cred_key: The credential key containing hash
-            user_sid: The user SID for derivation
+            user_sid: The user SID (used in the key derivation)
         """
         if cred_key.owf in (CredKeyHashType.MD4, CredKeyHashType.NTLM):
             if not isinstance(cred_key.key, NtlmHash):
@@ -256,9 +247,7 @@ class DpapiCrypto:
     """DPAPI cryptographic operations handler."""
 
     @staticmethod
-    def decrypt_masterkey_with_mk_key(
-        encrypted_masterkey: bytes, mk_key: MasterKeyEncryptionKey
-    ) -> "MasterKey":
+    def decrypt_masterkey_with_mk_key(encrypted_masterkey: bytes, mk_key: MasterKeyEncryptionKey) -> MasterKey:
         """Decrypt a masterkey using a masterkey encryption key.
 
         Args:
@@ -269,14 +258,10 @@ class DpapiCrypto:
             The decrypted MasterKey object
         """
 
-        raise NotImplementedError(
-            "MasterKeyEncryptionKey decryption not implemented yet"
-        )
+        raise NotImplementedError("MasterKeyEncryptionKey decryption not implemented yet")
 
     @staticmethod
-    def decrypt_blob(
-        blob_data: bytes, masterkey: bytes, entropy: bytes | None = None
-    ) -> bytes:
+    def decrypt_blob(blob_data: bytes, masterkey: bytes, entropy: bytes | None = None) -> bytes:
         """Decrypt a DPAPI blob using the provided masterkey SHA1.
 
         Args:
@@ -302,8 +287,6 @@ class DpapiCrypto:
             raise BlobDecryptionError(f"Failed to decrypt DPAPI blob: {e}") from e
 
         if not decrypted_data:
-            raise BlobDecryptionError(
-                "Failed to decrypt DPAPI blob despite having a plaintext masterkey"
-            )
+            raise BlobDecryptionError("Failed to decrypt DPAPI blob despite having a plaintext masterkey")
 
         return decrypted_data

@@ -12,20 +12,21 @@ from common.models2.dpapi import (
     DecryptedMasterKeyCredential,
     DomainBackupKeyCredential,
     DpapiCredentialRequest,
+    DpapiSystemCredential,
     NtlmHashCredential,
     PasswordCredential,
 )
 from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException
 from nemesis_dpapi import (
-    CredKey,
-    CredKeyHashType,
     DomainBackupKey,
     DpapiCrypto,
     DpapiManager,
     MasterKeyEncryptionKey,
     MasterKeyFilter,
 )
+
+from .masterkey_decryptor import MasterKeyDecryptor
 
 logger = get_logger(__name__)
 
@@ -82,8 +83,11 @@ async def submit_dpapi_credential(
                 result = await _handle_domain_backup_key_credential(dpapi_manager, request)
             elif isinstance(request, DecryptedMasterKeyCredential):
                 result = await _handle_decrypted_master_key_credential(dpapi_manager, request)
+            elif isinstance(request, DpapiSystemCredential):
+                result = await _handle_dpapi_system_credential(dpapi_manager, request)
             elif isinstance(request, (PasswordCredential, NtlmHashCredential, CredKeyCredential)):
-                result = await _handle_string_based_credential(dpapi_manager, request)
+                decryptor = MasterKeyDecryptor(dpapi_manager)
+                result = await decryptor.handle_password_based_credential(request)
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported credential type: {request.type}")
 
@@ -167,43 +171,34 @@ async def _handle_decrypted_master_key_credential(
     }
 
 
-async def _handle_string_based_credential(
-    dpapi_manager: DpapiManager, request: PasswordCredential | NtlmHashCredential | CredKeyCredential
-) -> dict:
-    """Handle password, NTLM hash, and cred key credential submissions."""
+async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: DpapiSystemCredential) -> dict:
+    """Handle DPAPI_SYSTEM LSA secret credential submission."""
+    from nemesis_dpapi import DpapiSystemKey
 
-    if isinstance(request, PasswordCredential):
-        creds_to_try = [
-            CredKey.from_password(request.value, CredKeyHashType.PBKDF2, request.user_sid),
-            CredKey.from_password(request.value, CredKeyHashType.SHA1),
-            CredKey.from_password(request.value, CredKeyHashType.NTLM),
-        ]
-    elif isinstance(request, NtlmHashCredential):
-        hash_bytes = bytes.fromhex(request.value)
-        creds_to_try = [
-            CredKey.from_ntlm(hash_bytes, CredKeyHashType.PBKDF2, request.user_sid),
-            CredKey.from_ntlm(hash_bytes, CredKeyHashType.NTLM),
-        ]
-    elif isinstance(request, CredKeyCredential):
-        hash_bytes = bytes.fromhex(request.value)
-        creds_to_try = [
-            CredKey.from_sha1(hash_bytes),
-        ]
-    else:
-        raise ValueError(f"Unsupported credential type: {request.type}")
+    # Convert hex string to bytes
+    dpapi_system_bytes = bytes.fromhex(request.value)
 
+    # Create DpapiSystemKey from the DPAPI_SYSTEM LSA secret
+    dpapi_system_key = DpapiSystemKey.from_bytes(dpapi_system_bytes)
+
+    # Get all encrypted masterkeys that can be decrypted with machine credentials
     encrypted_masterkeys = await dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
 
+    decrypted_count = 0
     for masterkey in encrypted_masterkeys:
         if not masterkey.encrypted_key_usercred:
             continue
 
-        masterkey_bytes = masterkey.encrypted_key_usercred
-
-        for cred in creds_to_try:
-            mk_key = MasterKeyEncryptionKey.from_cred_key(cred, request.user_sid)
-
-            mk = DpapiCrypto.decrypt_masterkey_with_mk_key(masterkey_bytes, mk_key)
+        try:
+            # Try to decrypt the masterkey using the DPAPI_SYSTEM key
+            mk_key = MasterKeyEncryptionKey.from_dpapi_system_key(dpapi_system_key)
+            mk = DpapiCrypto.decrypt_masterkey_with_mk_key(masterkey.encrypted_key_machine, mk_key)
             await dpapi_manager._masterkey_repo.add_masterkey(mk)
+            decrypted_count += 1
+        except Exception as e:
+            logger.debug(f"Failed to decrypt masterkey {masterkey.guid} with DPAPI_SYSTEM key: {e}")
+            continue
 
-    return {"status": "success", "type": request.type}
+    return {"status": "success", "type": "dpapi_system", "decrypted_masterkeys": decrypted_count}
+
+

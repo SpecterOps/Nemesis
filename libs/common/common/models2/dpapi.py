@@ -1,73 +1,11 @@
 """DPAPI credential models for API requests."""
 
 import re
-from typing import Annotated, Literal
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, BeforeValidator, Field, field_serializer, field_validator
-
-
-def validate_windows_sid(value: str) -> str:
-    """Validate that a string is a valid Windows SID format.
-
-    Windows SIDs have the format: S-R-I-S-S-...-S
-    Where:
-    - S = literal 'S'
-    - R = revision (usually 1)
-    - I = identifier authority (48-bit number)
-    - S = subauthority values (32-bit numbers)
-
-    Examples:
-    - S-1-5-21-1234567890-1234567890-1234567890-1001 (domain user)
-    - S-1-5-18 (local system)
-    - S-1-5-32-544 (builtin administrators)
-    """
-    if not isinstance(value, str):
-        raise ValueError("SID must be a string")
-
-    # Basic format check: starts with S-, all parts are numeric except first
-    sid_pattern = r"^S-\d+(-\d+)*$"
-
-    if not re.match(sid_pattern, value):
-        raise ValueError(f"Invalid Windows SID format: {value}")
-
-    # Split and validate components
-    parts = value.split("-")
-
-    # Must have at least S-R-I-S (4 parts after splitting - need at least one subauthority)
-    if len(parts) < 4:
-        raise ValueError(f"SID must have at least one subauthority: {value}")
-
-    # First part must be 'S'
-    if parts[0] != "S":
-        raise ValueError(f"SID must start with 'S': {value}")
-
-    # Second part is revision (should be 1)
-    try:
-        revision = int(parts[1])
-        if revision != 1:
-            raise ValueError(f"SID revision must be 1, got {revision}: {value}")
-    except ValueError as e:
-        # Re-raise specific revision errors, but catch non-numeric revision errors
-        if "SID revision must be 1" in str(e):
-            raise e
-        raise ValueError(f"Invalid SID revision: {value}") from e
-
-    # Validate all numeric parts are valid integers
-    for i, part in enumerate(parts[2:], start=2):
-        try:
-            num_val = int(part)
-            # Authority and subauthority values should be non-negative
-            if num_val < 0:
-                raise ValueError(f"SID component at position {i} must be non-negative: {value}")
-        except ValueError as e:
-            raise ValueError(f"Invalid numeric component in SID at position {i}: {value}") from e
-
-    return value
-
-
-# Annotated type for Windows SID validation
-Sid = Annotated[str, BeforeValidator(validate_windows_sid)]
+from nemesis_dpapi.types import Sid
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 
 class PasswordCredential(BaseModel):
@@ -131,10 +69,30 @@ class DecryptedMasterKeyCredential(BaseModel):
     value: list[MasterKeyData]
 
 
+class DpapiSystemCredential(BaseModel):
+    """DPAPI_SYSTEM LSA Secret credential."""
+
+    type: Literal["dpapi_system"]
+    value: str = Field(description="Hex-encoded DPAPI_SYSTEM LSA secret (40 bytes)", pattern=r"^[0-9a-fA-F]{80}$")
+
+    @field_validator("value")
+    @classmethod
+    def validate_hex_length(cls, v):
+        """Validate that value is exactly 80 hex characters (40 bytes)."""
+        if len(v) != 80:
+            raise ValueError(
+                f"DPAPI_SYSTEM value must be exactly 80 hex characters (40 bytes), got {len(v)} characters"
+            )
+        if not re.match(r"^[0-9a-fA-F]+$", v):
+            raise ValueError("DPAPI_SYSTEM value must contain only hex characters (0-9, a-f, A-F)")
+        return v
+
+
 type DpapiCredentialRequest = (
     PasswordCredential
     | NtlmHashCredential
     | CredKeyCredential
     | DomainBackupKeyCredential
     | DecryptedMasterKeyCredential
+    | DpapiSystemCredential
 )

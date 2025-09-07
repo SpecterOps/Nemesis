@@ -7,9 +7,13 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+
 from nemesis_dpapi import Blob, DomainBackupKey, DpapiManager, MasterKeyFile
-from nemesis_dpapi.core import MasterKeyPolicy
-from nemesis_dpapi.crypto import MasterKeyDecryptionError
+from nemesis_dpapi.core import DpapiSystemSecret, MasterKeyDecryptionError, MasterKeyPolicy
+
+DPAPI_SYSTEM_SECRET_HEX = "01000000dcfd03644f501805c189e15e9367b01415dea75a4e25d96d26879ded571f5d48a6887455d28f66f5"
+MACHINE_KEY_HEX = "dcfd03644f501805c189e15e9367b01415dea75a"
+USER_KEY_HEX = "4e25d96d26879ded571f5d48a6887455d28f66f5"
 
 
 class TestMasterKeyFile:
@@ -329,3 +333,176 @@ class TestDomainBackupKey:
         # Should raise MasterKeyDecryptionError since no domain backup key in file
         with pytest.raises(MasterKeyDecryptionError, match="contains no domain backup key"):
             backup_key.decrypt_masterkey_file(masterkey_file)
+
+
+class TestDpapiSystemSecret:
+    """Tests for DpapiSystemSecret class."""
+
+    def test_from_bytes_valid_40_bytes(self):
+        """Test creating DpapiSystemSecret from valid 40-byte data."""
+        # Create test data: 20 bytes user key + 20 bytes machine key
+        user_key_data = b"user_key_12345678901"  # 20 bytes
+        machine_key_data = b"mach_key_12345678901"  # 20 bytes
+        dpapi_system_data = user_key_data + machine_key_data
+
+        secret = DpapiSystemSecret.from_bytes(dpapi_system_data)
+
+        assert secret.user_key == user_key_data
+        assert secret.machine_key == machine_key_data
+
+    def test_direct_creation_with_bytes(self):
+        """Test creating DpapiSystemSecret directly with bytes."""
+        # Create test data: 20 bytes user key + 20 bytes machine key
+        user_key_data = b"user_key_12345678901"  # 20 bytes
+        machine_key_data = b"mach_key_12345678901"  # 20 bytes
+
+        # Test by creating instance directly with bytes
+        secret = DpapiSystemSecret(
+            user_key=user_key_data,
+            machine_key=machine_key_data,
+        )
+
+        assert secret.user_key == user_key_data
+        assert secret.machine_key == machine_key_data
+
+    def test_from_bytes_invalid_length_short(self):
+        """Test from_bytes with data too short raises ValueError."""
+        short_data = b"too_short"  # Only 9 bytes
+
+        with pytest.raises(ValueError, match="DPAPI_SYSTEM must be exactly 40 bytes, got 9"):
+            DpapiSystemSecret.from_bytes(short_data)
+
+    def test_from_bytes_invalid_length_long(self):
+        """Test from_bytes with data too long raises ValueError."""
+        long_data = b"a" * 50  # 50 bytes
+
+        with pytest.raises(ValueError, match="DPAPI_SYSTEM must be exactly 40 bytes, got 50"):
+            DpapiSystemSecret.from_bytes(long_data)
+
+    def test_from_lsa_secret_valid_structure(self):
+        """Test creating DpapiSystemSecret from valid LSA secret structure."""
+
+        secret = DpapiSystemSecret.from_lsa_secret(DPAPI_SYSTEM_SECRET_HEX)
+
+        assert secret.user_key == bytes.fromhex(USER_KEY_HEX)
+        assert secret.machine_key == bytes.fromhex(MACHINE_KEY_HEX)
+
+    def test_from_lsa_secret_and_direct_creation(self):
+        """Test creating DpapiSystemSecret from LSA secret and direct instantiation."""
+        import struct
+
+        # Create valid LSA secret structure
+        version = 1
+        machine_key = b"mach_key_12345678901"  # 20 bytes
+        user_key = b"user_key_12345678901"  # 20 bytes
+
+        lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
+
+        # First parse with bytes to get the expected values
+        secret_from_bytes = DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+
+        # Test by creating instance directly with bytes
+        secret_from_hex = DpapiSystemSecret(
+            user_key=user_key,
+            machine_key=machine_key,
+        )
+
+        assert secret_from_hex.user_key == user_key
+        assert secret_from_hex.machine_key == machine_key
+        assert secret_from_hex.user_key == secret_from_bytes.user_key
+        assert secret_from_hex.machine_key == secret_from_bytes.machine_key
+
+    def test_from_lsa_secret_too_small(self):
+        """Test from_lsa_secret with data too small raises ValueError."""
+        small_data = b"too_small"  # Only 9 bytes
+
+        with pytest.raises(ValueError, match="Incorrect LSA secret size, expected at least 44 bytes, got 9"):
+            DpapiSystemSecret.from_lsa_secret(small_data)
+
+    def test_from_lsa_secret_invalid_version(self):
+        """Test from_lsa_secret with invalid version raises ValueError."""
+        import struct
+
+        # Create LSA secret with invalid version
+        version = 0  # Should be 1
+        machine_key = b"mach_key_12345678901"  # 20 bytes
+        user_key = b"user_key_12345678901"  # 20 bytes
+
+        lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
+
+        with pytest.raises(ValueError, match="Unexpected LSA secret version: 0, expected 1"):
+            DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+
+    def test_from_lsa_secret_zero_machine_key_accepted(self):
+        """Test from_lsa_secret with zero-filled machine key is accepted."""
+        import struct
+
+        # Create LSA secret with zero-filled machine key
+        version = 1
+        machine_key = b"\x00" * 20  # All zeros - still valid bytes
+        user_key = b"user_key_12345678901"  # 20 bytes
+
+        lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
+
+        # Zero-filled keys are valid - they're still 20 bytes
+        secret = DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+
+        assert secret.user_key == user_key
+        assert secret.machine_key == machine_key
+
+    def test_from_lsa_secret_zero_user_key_accepted(self):
+        """Test from_lsa_secret with zero-filled user key is accepted."""
+        import struct
+
+        # Create LSA secret with zero-filled user key
+        version = 1
+        machine_key = b"mach_key_12345678901"  # 20 bytes
+        user_key = b"\x00" * 20  # All zeros - still valid bytes
+
+        lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
+
+        # Zero-filled keys are valid - they're still 20 bytes
+        secret = DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+
+        assert secret.user_key == user_key
+        assert secret.machine_key == machine_key
+
+    def test_from_lsa_secret_malformed_struct(self):
+        """Test from_lsa_secret with malformed structure raises ValueError."""
+        malformed_data = b"malformed_struct_data_not_enough_bytes"
+
+        with pytest.raises(ValueError, match="Incorrect LSA secret size"):
+            DpapiSystemSecret.from_lsa_secret(malformed_data)
+
+    def test_from_lsa_secret_exact_size(self):
+        """Test from_lsa_secret with exactly 44 bytes works correctly."""
+        import struct
+
+        # Create exactly 44 byte LSA secret structure
+        version = 1
+        machine_key = b"1234567890abcdefghij"  # 20 bytes
+        user_key = b"ABCDEFGHIJ0987654321"  # 20 bytes
+
+        lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
+        assert len(lsa_secret_data) == 44
+
+        secret = DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+
+        assert secret.user_key == user_key
+        assert secret.machine_key == machine_key
+
+    def test_from_lsa_secret_extra_data_rejected(self):
+        """Test from_lsa_secret rejects data with extra bytes beyond the structure."""
+        import struct
+
+        # Create LSA secret structure with extra data
+        version = 0
+        machine_key = b"mach_key_12345678901"  # 20 bytes
+        user_key = b"user_key_12345678901"  # 20 bytes
+
+        lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
+        lsa_secret_data += b"extra_data_that_should_be_ignored"
+
+        # Should raise ValueError because length is not exactly 44 bytes
+        with pytest.raises(ValueError, match="Incorrect LSA secret size, expected at least 44 bytes, got 77"):
+            DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
