@@ -7,9 +7,8 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-
 from nemesis_dpapi import Blob, DomainBackupKey, DpapiManager, MasterKeyFile
-from nemesis_dpapi.core import DpapiSystemSecret, MasterKeyDecryptionError, MasterKeyPolicy
+from nemesis_dpapi.core import DpapiSystemCredential, MasterKeyDecryptionError, MasterKeyPolicy
 
 DPAPI_SYSTEM_SECRET_HEX = "01000000dcfd03644f501805c189e15e9367b01415dea75a4e25d96d26879ded571f5d48a6887455d28f66f5"
 MACHINE_KEY_HEX = "dcfd03644f501805c189e15e9367b01415dea75a"
@@ -345,7 +344,7 @@ class TestDpapiSystemSecret:
         machine_key_data = b"mach_key_12345678901"  # 20 bytes
         dpapi_system_data = user_key_data + machine_key_data
 
-        secret = DpapiSystemSecret.from_bytes(dpapi_system_data)
+        secret = DpapiSystemCredential.from_bytes(dpapi_system_data)
 
         assert secret.user_key == user_key_data
         assert secret.machine_key == machine_key_data
@@ -357,7 +356,7 @@ class TestDpapiSystemSecret:
         machine_key_data = b"mach_key_12345678901"  # 20 bytes
 
         # Test by creating instance directly with bytes
-        secret = DpapiSystemSecret(
+        secret = DpapiSystemCredential(
             user_key=user_key_data,
             machine_key=machine_key_data,
         )
@@ -370,19 +369,19 @@ class TestDpapiSystemSecret:
         short_data = b"too_short"  # Only 9 bytes
 
         with pytest.raises(ValueError, match="DPAPI_SYSTEM must be exactly 40 bytes, got 9"):
-            DpapiSystemSecret.from_bytes(short_data)
+            DpapiSystemCredential.from_bytes(short_data)
 
     def test_from_bytes_invalid_length_long(self):
         """Test from_bytes with data too long raises ValueError."""
         long_data = b"a" * 50  # 50 bytes
 
         with pytest.raises(ValueError, match="DPAPI_SYSTEM must be exactly 40 bytes, got 50"):
-            DpapiSystemSecret.from_bytes(long_data)
+            DpapiSystemCredential.from_bytes(long_data)
 
     def test_from_lsa_secret_valid_structure(self):
         """Test creating DpapiSystemSecret from valid LSA secret structure."""
 
-        secret = DpapiSystemSecret.from_lsa_secret(DPAPI_SYSTEM_SECRET_HEX)
+        secret = DpapiSystemCredential.from_lsa_secret(DPAPI_SYSTEM_SECRET_HEX)
 
         assert secret.user_key == bytes.fromhex(USER_KEY_HEX)
         assert secret.machine_key == bytes.fromhex(MACHINE_KEY_HEX)
@@ -399,10 +398,10 @@ class TestDpapiSystemSecret:
         lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
 
         # First parse with bytes to get the expected values
-        secret_from_bytes = DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+        secret_from_bytes = DpapiSystemCredential.from_lsa_secret(lsa_secret_data)
 
         # Test by creating instance directly with bytes
-        secret_from_hex = DpapiSystemSecret(
+        secret_from_hex = DpapiSystemCredential(
             user_key=user_key,
             machine_key=machine_key,
         )
@@ -417,7 +416,7 @@ class TestDpapiSystemSecret:
         small_data = b"too_small"  # Only 9 bytes
 
         with pytest.raises(ValueError, match="Incorrect LSA secret size, expected at least 44 bytes, got 9"):
-            DpapiSystemSecret.from_lsa_secret(small_data)
+            DpapiSystemCredential.from_lsa_secret(small_data)
 
     def test_from_lsa_secret_invalid_version(self):
         """Test from_lsa_secret with invalid version raises ValueError."""
@@ -431,7 +430,7 @@ class TestDpapiSystemSecret:
         lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
 
         with pytest.raises(ValueError, match="Unexpected LSA secret version: 0, expected 1"):
-            DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+            DpapiSystemCredential.from_lsa_secret(lsa_secret_data)
 
     def test_from_lsa_secret_zero_machine_key_accepted(self):
         """Test from_lsa_secret with zero-filled machine key is accepted."""
@@ -445,7 +444,7 @@ class TestDpapiSystemSecret:
         lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
 
         # Zero-filled keys are valid - they're still 20 bytes
-        secret = DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+        secret = DpapiSystemCredential.from_lsa_secret(lsa_secret_data)
 
         assert secret.user_key == user_key
         assert secret.machine_key == machine_key
@@ -462,7 +461,7 @@ class TestDpapiSystemSecret:
         lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
 
         # Zero-filled keys are valid - they're still 20 bytes
-        secret = DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+        secret = DpapiSystemCredential.from_lsa_secret(lsa_secret_data)
 
         assert secret.user_key == user_key
         assert secret.machine_key == machine_key
@@ -472,7 +471,7 @@ class TestDpapiSystemSecret:
         malformed_data = b"malformed_struct_data_not_enough_bytes"
 
         with pytest.raises(ValueError, match="Incorrect LSA secret size"):
-            DpapiSystemSecret.from_lsa_secret(malformed_data)
+            DpapiSystemCredential.from_lsa_secret(malformed_data)
 
     def test_from_lsa_secret_exact_size(self):
         """Test from_lsa_secret with exactly 44 bytes works correctly."""
@@ -486,7 +485,7 @@ class TestDpapiSystemSecret:
         lsa_secret_data = struct.pack("<L20s20s", version, machine_key, user_key)
         assert len(lsa_secret_data) == 44
 
-        secret = DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+        secret = DpapiSystemCredential.from_lsa_secret(lsa_secret_data)
 
         assert secret.user_key == user_key
         assert secret.machine_key == machine_key
@@ -505,4 +504,4 @@ class TestDpapiSystemSecret:
 
         # Should raise ValueError because length is not exactly 44 bytes
         with pytest.raises(ValueError, match="Incorrect LSA secret size, expected at least 44 bytes, got 77"):
-            DpapiSystemSecret.from_lsa_secret(lsa_secret_data)
+            DpapiSystemCredential.from_lsa_secret(lsa_secret_data)

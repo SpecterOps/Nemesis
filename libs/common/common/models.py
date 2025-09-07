@@ -1,7 +1,7 @@
 # src/common/models.py
 from datetime import datetime
 from enum import Enum
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +29,7 @@ class FindingCategory(str, Enum):
     YARA_MATCH = "yara_match"
     PII = "pii"
     MISC = "misc"
+    INFORMATIONAL = "informational"
 
 
 class FindingOrigin(str, Enum):
@@ -141,8 +142,8 @@ class MatchInfo(BaseModel):
     matched_content: str
     location: MatchLocation
     snippet: str
-    file_path: Optional[str] = None
-    git_commit: Optional[GitCommitInfo] = None
+    file_path: str | None = None
+    git_commit: GitCommitInfo | None = None
 
 
 class ScanStats(BaseModel):

@@ -18,13 +18,7 @@ from common.models2.dpapi import (
 )
 from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException
-from nemesis_dpapi import (
-    DomainBackupKey,
-    DpapiCrypto,
-    DpapiManager,
-    MasterKeyEncryptionKey,
-    MasterKeyFilter,
-)
+from nemesis_dpapi import DomainBackupKey, DpapiCrypto, DpapiManager, MasterKeyEncryptionKey, MasterKeyFilter
 
 from .masterkey_decryptor import MasterKeyDecryptor
 
@@ -173,13 +167,13 @@ async def _handle_decrypted_master_key_credential(
 
 async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: DpapiSystemCredential) -> dict:
     """Handle DPAPI_SYSTEM LSA secret credential submission."""
-    from nemesis_dpapi import DpapiSystemKey
+    from nemesis_dpapi import DpapiSystemCredential
 
     # Convert hex string to bytes
     dpapi_system_bytes = bytes.fromhex(request.value)
 
-    # Create DpapiSystemKey from the DPAPI_SYSTEM LSA secret
-    dpapi_system_key = DpapiSystemKey.from_bytes(dpapi_system_bytes)
+    # Create DpapiSystemSecret from the DPAPI_SYSTEM LSA secret
+    dpapi_system_key = DpapiSystemCredential.from_bytes(dpapi_system_bytes)
 
     # Get all encrypted masterkeys that can be decrypted with machine credentials
     encrypted_masterkeys = await dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
@@ -200,5 +194,3 @@ async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: 
             continue
 
     return {"status": "success", "type": "dpapi_system", "decrypted_masterkeys": decrypted_count}
-
-

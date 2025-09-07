@@ -1,4 +1,5 @@
 # enrichment_modules/lsass_dump/analyzer.py
+import asyncio
 import tempfile
 import textwrap
 from datetime import datetime
@@ -7,9 +8,9 @@ import structlog
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from pypykatz.pypykatz import pypykatz
-
 from file_enrichment_modules.module_loader import EnrichmentModule
+from nemesis_dpapi import DpapiManager
+from pypykatz.pypykatz import pypykatz
 
 logger = structlog.get_logger(module=__name__)
 
@@ -49,6 +50,7 @@ class LsassDumpParser(EnrichmentModule):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
+        self.dpapi_manager: DpapiManager | None = None
 
     def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
@@ -220,6 +222,20 @@ class LsassDumpParser(EnrichmentModule):
                     elif ssp == "dpapi_creds":
                         if hasattr(cred, "key_guid"):
                             cred_data["key_guid"] = str(cred.key_guid)
+                            masterkey_bytes = None
+                            sha1_masterkey_bytes = None
+                            if hasattr(cred, "masterkey") and cred.masterkey:
+                                masterkey_bytes = bytes.fromhex(cred.masterkey)
+                            if hasattr(cred, "sha1_masterkey") and cred.sha1_masterkey:
+                                sha1_masterkey_bytes = bytes.fromhex(cred.sha1_masterkey)
+
+                            # add this masterkey to the DPAPI cache
+                            asyncio.run(
+                                self.dpapi_manager.add_decrypted_masterkey(
+                                    cred.key_guid, masterkey_bytes, sha1_masterkey_bytes
+                                )
+                            )
+
                         if hasattr(cred, "masterkey") and cred.masterkey:
                             cred_data["masterkey"] = (
                                 cred.masterkey.hex() if hasattr(cred.masterkey, "hex") else str(cred.masterkey)

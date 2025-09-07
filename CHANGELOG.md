@@ -9,20 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Documentation for LLM functionality
 - "Chromium" page in the web frontend to display history, downloads, cookies, logins, and state keys
   - Includes filtering + CSV downloads for displayed data
-- Start of a "File Browser" in the web frontend
+- "File Browser" in the web frontend
+- "DPAPI" viewer/submission pages in the web frontend
+- Linked file tracking (via the ./libs/file_linking/ library)
+  - Linked files exposed in the "File Browser" frontend and file viewer pages
 - Adaptation of @Dreadnode's .NET reversing agent to `agents`
 - "chromium" standard library in ./libs/ for parsing Chromium based files
+- "nemesis_dpapi" library in ./libs/ for handling DPAPI related data/decryption
+- `registry_hive` parsing module that extracts bootkeys + local accounts + lsa secrets from linked hives
+- API route to submit DPAPI credential material
+- Auto-building API documents for ./docs/api.md from the FastAPI routes in `web_api` container
+- Documentation for "Containers" and LLM functionality
 
 ### Changed
 
 - Standardize logging + fix suppressed logs
+- DPAPI keys carved from LSASS dumps now saved via the nemesis_dpapi library
 
 ### Fixed
 
 - Frontend live file reload
+- `certificate` and `keytab` file enrichment modules
 
 
 ## [2.1.2] - 2025-08-22

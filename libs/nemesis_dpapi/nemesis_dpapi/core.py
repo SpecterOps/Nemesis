@@ -8,9 +8,8 @@ from uuid import UUID
 
 from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
-from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR
+from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
 from impacket.dpapi import DomainKey as ImpacketDomainKey
-from impacket.dpapi import privatekeyblob_to_pkcs1
 from pydantic import BaseModel, ConfigDict
 
 from .dpapi_blob import DPAPI_BLOB
@@ -18,19 +17,19 @@ from .dpapi_blob import DPAPI_BLOB
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
 
 
-class DPAPICryptoError(Exception):
+class DpapiCryptoError(Exception):
     """Base exception for DPAPI cryptographic operations."""
 
     pass
 
 
-class InvalidBackupKeyError(DPAPICryptoError):
+class InvalidBackupKeyError(DpapiCryptoError):
     """Raised when domain backup key is invalid or malformed."""
 
     pass
 
 
-class MasterKeyDecryptionError(DPAPICryptoError):
+class MasterKeyDecryptionError(DpapiCryptoError):
     """Raised when masterkey decryption fails."""
 
     pass
@@ -383,7 +382,7 @@ class DomainBackupKey:
             raise MasterKeyDecryptionError(f"Failed to decrypt masterkey: {e}") from e
 
 
-class DpapiSystemSecret(BaseModel):
+class DpapiSystemCredential(BaseModel):
     """Represents the DPAPI_SYSTEM LSA secret key for decrypting machine-protected masterkeys."""
 
     model_config = ConfigDict(frozen=True)
@@ -392,7 +391,7 @@ class DpapiSystemSecret(BaseModel):
     machine_key: bytes
 
     @classmethod
-    def from_bytes(cls, dpapi_system_data: bytes | str) -> "DpapiSystemSecret":
+    def from_bytes(cls, dpapi_system_data: bytes | str) -> "DpapiSystemCredential":
         """Create DpapiSystemKey from DPAPI_SYSTEM LSA secret.
 
         Args:
@@ -423,7 +422,7 @@ class DpapiSystemSecret(BaseModel):
         return cls(user_key=user_key_bytes, machine_key=machine_key_bytes)
 
     @classmethod
-    def from_lsa_secret(cls, lsa_secret_bytes: bytes | str) -> "DpapiSystemSecret":
+    def from_lsa_secret(cls, lsa_secret_bytes: bytes | str) -> "DpapiSystemCredential":
         """Create DpapiSystemSecret from the DPAPI_SYSTEM LSA secret structure.
 
         Args:

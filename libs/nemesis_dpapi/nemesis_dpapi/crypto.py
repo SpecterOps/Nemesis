@@ -9,7 +9,7 @@ from Crypto.Hash import HMAC, MD4, SHA1, SHA256
 from Crypto.Protocol.KDF import PBKDF2
 from pydantic import BaseModel, field_validator
 
-from .core import DPAPICryptoError
+from .core import DpapiCryptoError
 from .dpapi_blob import DPAPI_BLOB
 from .types import Sid
 
@@ -17,13 +17,13 @@ if TYPE_CHECKING:
     from .core import MasterKey
 
 
-class InvalidBlobDataError(DPAPICryptoError):
+class InvalidBlobDataError(DpapiCryptoError):
     """Raised when DPAPI blob data is invalid or malformed."""
 
     pass
 
 
-class BlobDecryptionError(DPAPICryptoError):
+class BlobDecryptionError(DpapiCryptoError):
     """Raised when DPAPI blob decryption fails."""
 
     pass
