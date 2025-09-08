@@ -7,7 +7,7 @@ import asyncpg
 from Crypto.Hash import SHA1
 
 from .auto_decrypt import AutoDecryptionObserver
-from .core import Blob, DomainBackupKey, MasterKey
+from .core import Blob, DomainBackupKey, DpapiSystemCredential, MasterKey
 from .crypto import DpapiCrypto
 from .eventing import NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent, NewPlaintextMasterKeyEvent, Publisher
 from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
@@ -78,59 +78,34 @@ class DpapiManager(Publisher):
         if self._pg_pool:
             await self._pg_pool.close()
 
-    async def add_encrypted_masterkey(
+    async def add_masterkey(
         self,
-        guid: UUID,
-        encrypted_key_usercred: bytes,
-        encrypted_key_backup: bytes,
+        masterkey: MasterKey,
     ) -> None:
-        """Add an encrypted masterkey and attempt decryption if possible.
+        """Add a masterkey (encrypted or plaintext).
 
         Args:
-            guid: Unique identifier for the masterkey (the masterkey GUID)
-            encrypted_key_usercred: Masterkey data encrypted with the user's cred
-            encrypted_key_backup: Masterkey data encrypted with the domain backup key
-        """
-
-        if not self._initialized:
-            await self._initialize_storage()
-
-        masterkey = MasterKey(
-            guid=guid,
-            encrypted_key_usercred=encrypted_key_usercred,
-            encrypted_key_backup=encrypted_key_backup,
-        )
-        await self._masterkey_repo.add_masterkey(masterkey)
-
-        self.publish(NewEncryptedMasterKeyEvent(masterkey_guid=guid))
-
-    async def add_decrypted_masterkey(
-        self, guid: UUID, plaintext_key: bytes | None, plaintext_key_sha1: bytes | None
-    ) -> None:
-        """Add an decrypted masterkey
-
-        Args:
-            guid: Unique identifier for the masterkey (the masterkey GUID)
-            plaintext_key: Decrypted masterkey data
+            masterkey: MasterKey object to add
         """
         if not self._initialized:
             await self._initialize_storage()
 
-        if plaintext_key:
-            masterkey = MasterKey(
-                guid=guid,
-                plaintext_key=plaintext_key,
-                plaintext_key_sha1=SHA1.new(plaintext_key).digest(),
+        calculated_sha1 = None
+        if masterkey.plaintext_key and not masterkey.plaintext_key_sha1:
+            calculated_sha1 = SHA1.new(masterkey.plaintext_key).digest()
+            new_masterkey = masterkey.model_copy(
+                update={"plaintext_key_sha1": calculated_sha1},
             )
-            await self._masterkey_repo.add_masterkey(masterkey)
-            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=guid))
-        elif plaintext_key_sha1:
-            masterkey = MasterKey(
-                guid=guid,
-                plaintext_key_sha1=SHA1.new(plaintext_key).digest(),
-            )
-            await self._masterkey_repo.add_masterkey(masterkey)
-            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=guid))
+        else:
+            new_masterkey = masterkey
+
+        await self._masterkey_repo.add_masterkey(new_masterkey)
+
+        # Publish appropriate event based on what was added
+        if new_masterkey.plaintext_key or new_masterkey.plaintext_key_sha1:
+            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=new_masterkey.guid))
+        elif new_masterkey.encrypted_key_usercred or new_masterkey.encrypted_key_backup:
+            self.publish(NewEncryptedMasterKeyEvent(masterkey_guid=new_masterkey.guid))
 
     async def add_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
         """Add a domain backup key and decrypt all compatible masterkeys.
@@ -144,6 +119,14 @@ class DpapiManager(Publisher):
         await self._backup_key_repo.add_backup_key(backup_key)
 
         self.publish(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
+
+    async def add_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add a domain backup key and decrypt all compatible masterkeys.
+
+        Args:
+            backup_key: Domain backup key to add
+        """
+        raise NotImplementedError("Adding DPAPI system credentials is not implemented yet.")
 
     async def decrypt_blob(self, blob: Blob) -> bytes:
         """Decrypt a DPAPI blob using available masterkeys.

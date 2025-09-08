@@ -71,8 +71,10 @@ class DecryptedMasterKeyCredential(BaseModel):
     value: list[MasterKeyData]
 
 
-class DpapiSystemCredential(BaseModel):
-    """DPAPI_SYSTEM LSA Secret credential."""
+class DpapiSystemCredentialRequest(BaseModel):
+    """DPAPI_SYSTEM LSA Secret credential sent in an API request."""
+
+    # TODO: Make this use DpapiSystemCredential from nemesis_dpapi core
 
     type: Literal["dpapi_system"]
     value: str = Field(
@@ -101,5 +103,5 @@ type DpapiCredentialRequest = (
     | CredKeyCredential
     | DomainBackupKeyCredential
     | DecryptedMasterKeyCredential
-    | DpapiSystemCredential
+    | DpapiSystemCredentialRequest
 )

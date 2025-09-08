@@ -5,6 +5,7 @@ from uuid import UUID
 import pytest
 from nemesis_dpapi.core import Blob
 from nemesis_dpapi.crypto import (
+    BlobDecryptionError,
     CredKey,
     CredKeyHashType,
     DpapiCrypto,
@@ -14,6 +15,7 @@ from nemesis_dpapi.crypto import (
     Password,
     Pbkdf2Hash,
     Sha1Hash,
+    _derive_secure_cred_key,
 )
 from nemesis_dpapi.dpapi_blob import DPAPI_BLOB
 
@@ -261,6 +263,30 @@ class TestCredKey:
         expected_hash = "775ec403415b49002386ea8e477346cd"
         assert cred_key.key.value.hex() == expected_hash
 
+    def test_from_password_md4_explicit(self):
+        """Test creating CredKey from password with explicit MD4 hash type."""
+        password = "Qwerty12345"
+
+        cred_key = CredKey.from_password(password, CredKeyHashType.MD4)
+
+        assert isinstance(cred_key.key, NtlmHash)
+        assert cred_key.owf == CredKeyHashType.MD4
+
+        expected_hash = "abd9ffb762c86b26ef4ce5c81b0dd37f"
+        assert cred_key.key.value.hex() == expected_hash
+
+    def test_from_password_secure_cred_key(self):
+        """Test creating CredKey from password with SECURE_CRED_KEY alias."""
+        password = "Qwerty12345"
+
+        cred_key = CredKey.from_password(password, CredKeyHashType.SECURE_CRED_KEY, user_sid)
+
+        assert isinstance(cred_key.key, Pbkdf2Hash)
+        assert cred_key.owf == CredKeyHashType.PBKDF2
+
+        expected_hash = "775ec403415b49002386ea8e477346cd"
+        assert cred_key.key.value.hex() == expected_hash
+
     def test_from_password_unsupported_type(self):
         """Test creating CredKey from password with unsupported type."""
         password = "TestPassword123"
@@ -277,6 +303,15 @@ class TestCredKey:
         assert isinstance(cred_key.key, NtlmHash)
         assert cred_key.key.value == ntlm_bytes
         assert cred_key.owf == CredKeyHashType.NTLM
+
+    def test_from_ntlm_md4(self):
+        """Test creating CredKey from NTLM hash with explicit MD4 type."""
+        ntlm_bytes = b"a" * 16
+        cred_key = CredKey.from_ntlm(ntlm_bytes, CredKeyHashType.MD4)
+
+        assert isinstance(cred_key.key, NtlmHash)
+        assert cred_key.key.value == ntlm_bytes
+        assert cred_key.owf == CredKeyHashType.MD4
 
     def test_from_ntlm_pbkdf2(self):
         """Test creating CredKey from NTLM hash with PBKDF2 derivation."""
@@ -356,6 +391,40 @@ class TestMasterKeyEncryptionKey:
         assert len(mk_key.key.value) == 20  # SHA1 digest length
         assert mk_key.key.value.hex() == "d3205d40d3df002fba1936ce075c0b2805fab06d"
 
+    def test_from_dpapi_system_cred(self):
+        """Test creating MasterKeyEncryptionKey from DPAPI_SYSTEM credential."""
+        dpapi_system_key = b"a" * 20  # 20 bytes for SHA1
+
+        mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(dpapi_system_key)
+
+        assert isinstance(mk_key.key, Sha1Hash)
+        assert mk_key.key.value == dpapi_system_key
+
+    def test_derive_mk_key_with_different_digests(self):
+        """Test _derive_mk_key with different digest algorithms."""
+        pwdhash = b"a" * 16
+        user_sid = "S-1-5-21-1234567890-1234567890-1234567890-1001"
+
+        # Test with sha256
+        sha256_key = MasterKeyEncryptionKey._derive_mk_key(pwdhash, user_sid, digest="sha256")
+        assert len(sha256_key) == 32  # SHA256 digest length
+
+        # Test with md4
+        md4_key = MasterKeyEncryptionKey._derive_mk_key(pwdhash, user_sid, digest="md4")
+        assert len(md4_key) == 16  # MD4 digest length
+
+        # Test with sha1 (default)
+        sha1_key = MasterKeyEncryptionKey._derive_mk_key(pwdhash, user_sid, digest="sha1")
+        assert len(sha1_key) == 20  # SHA1 digest length
+
+    def test_derive_mk_key_with_unsupported_digest(self):
+        """Test _derive_mk_key with unsupported digest algorithm."""
+        pwdhash = b"a" * 16
+        user_sid = "S-1-5-21-1234567890-1234567890-1234567890-1001"
+
+        with pytest.raises(ValueError, match="Unsupported digest algorithm"):
+            MasterKeyEncryptionKey._derive_mk_key(pwdhash, user_sid, digest="unsupported")
+
 
 class TestDPAPICrypto:
     """Test DPAPICrypto class."""
@@ -367,6 +436,16 @@ class TestDPAPICrypto:
         # Test with invalid blob data - should raise InvalidBlobDataError
         with pytest.raises(InvalidBlobDataError, match="Invalid DPAPI blob data"):
             crypto.decrypt_blob(b"invalid_blob_data", b"a" * 20)
+
+    def test_decrypt_blob_with_wrong_masterkey(self, blob_without_entropy: bytes):
+        """Test DPAPI blob decryption with wrong masterkey."""
+        crypto = DpapiCrypto()
+
+        # Use wrong masterkey - should raise BlobDecryptionError
+        wrong_masterkey = b"wrong_key" * 3  # 27 bytes
+
+        with pytest.raises(BlobDecryptionError, match="Failed to decrypt DPAPI blob"):
+            crypto.decrypt_blob(blob_without_entropy, wrong_masterkey)
 
     def test_decrypt_blob_with_entropy(self, blob_with_entropy: bytes):
         blob = Blob.parse(blob_with_entropy)
@@ -439,3 +518,47 @@ class TestBlobParse:
         # Data
         assert blob.encryption_salt == blob_impacket["Salt"] == blob_dpapick.salt
         assert blob.encrypted_data == blob_impacket["Data"] == blob_dpapick.cipherText
+
+
+class TestCryptoHelperFunctions:
+    """Test crypto helper functions."""
+
+    def test_derive_secure_cred_key(self):
+        """Test _derive_secure_cred_key function directly."""
+        ntlm_hash = bytes.fromhex("abd9ffb762c86b26ef4ce5c81b0dd37f")  # Qwerty12345
+        user_sid_bytes = "S-1-5-21-3821320868-1508310791-3575676346-1103".encode("utf-16le")
+
+        derived_key = _derive_secure_cred_key(ntlm_hash, user_sid_bytes)
+
+        assert len(derived_key) == 16  # PBKDF2 returns 16 bytes
+        assert derived_key == bytes.fromhex("775ec403415b49002386ea8e477346cd")
+
+
+class TestExceptions:
+    """Test custom exceptions."""
+
+    def test_blob_decryption_error_inheritance(self):
+        """Test BlobDecryptionError inherits from DpapiCryptoError."""
+        from nemesis_dpapi.exceptions import DpapiCryptoError
+
+        error = BlobDecryptionError("test message")
+        assert isinstance(error, DpapiCryptoError)
+        assert str(error) == "test message"
+
+    def test_invalid_blob_data_error_inheritance(self):
+        """Test InvalidBlobDataError inherits from DpapiCryptoError."""
+        from nemesis_dpapi.exceptions import DpapiCryptoError
+
+        error = InvalidBlobDataError("test message")
+        assert isinstance(error, DpapiCryptoError)
+        assert str(error) == "test message"
+
+
+class TestPasswordValidation:
+    """Additional tests for Password validation."""
+
+    def test_password_with_none_value_direct(self):
+        """Test Password with None value raises validation error."""
+        with pytest.raises(ValueError):
+            # This should trigger pydantic's validation before our custom validator
+            Password(value=None)  # type: ignore

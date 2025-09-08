@@ -275,12 +275,9 @@ class DpapiCrypto:
         except Exception as e:
             raise InvalidBlobDataError(f"Invalid DPAPI blob data: {e}") from e
 
-        try:
-            decrypted_data = dpapi_blob.decrypt(masterkey)
-        except Exception as e:
-            raise BlobDecryptionError(f"Failed to decrypt DPAPI blob: {e}") from e
+        decrypted_data = dpapi_blob.decrypt(masterkey)
 
         if not decrypted_data:
-            raise BlobDecryptionError("Failed to decrypt DPAPI blob despite having a plaintext masterkey")
+            raise BlobDecryptionError("Failed to decrypt DPAPI blob")
 
         return decrypted_data

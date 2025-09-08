@@ -317,8 +317,10 @@ class TestDomainBackupKey:
 
         manager = DpapiManager(storage_backend="memory", auto_decrypt=True)
         await manager.add_domain_backup_key(backup_key)
-        await manager.add_decrypted_masterkey(
-            decrypted_masterkey.guid, decrypted_masterkey.plaintext_key, decrypted_masterkey.plaintext_key_sha1
+        await manager.add_masterkey(
+            decrypted_masterkey.guid,
+            plaintext_key=decrypted_masterkey.plaintext_key,
+            plaintext_key_sha1=decrypted_masterkey.plaintext_key_sha1
         )
 
         assert blob.masterkey_guid == masterkey_file.masterkey_guid

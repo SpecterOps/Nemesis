@@ -12,13 +12,14 @@ from common.models2.dpapi import (
     DecryptedMasterKeyCredential,
     DomainBackupKeyCredential,
     DpapiCredentialRequest,
-    DpapiSystemCredential,
+    DpapiSystemCredentialRequest,
     NtlmHashCredential,
     PasswordCredential,
 )
 from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException
-from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKeyEncryptionKey, MasterKeyFilter
+from nemesis_dpapi import DomainBackupKey, DpapiManager, DpapiSystemCredential, MasterKeyEncryptionKey, MasterKeyFilter
+from nemesis_dpapi.exceptions import MasterKeyDecryptionError
 
 from .masterkey_decryptor import MasterKeyDecryptor
 
@@ -165,32 +166,38 @@ async def _handle_decrypted_master_key_credential(
     }
 
 
-async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: DpapiSystemCredential) -> dict:
+async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: DpapiSystemCredentialRequest) -> dict:
     """Handle DPAPI_SYSTEM LSA secret credential submission."""
-    from nemesis_dpapi import DpapiSystemCredential
 
-    # Convert hex string to bytes
     dpapi_system_bytes = bytes.fromhex(request.value)
-
-    # Create DpapiSystemSecret from the DPAPI_SYSTEM LSA secret
     dpapi_system_key = DpapiSystemCredential.from_bytes(dpapi_system_bytes)
+    await dpapi_manager.add_dpapi_system_credential(dpapi_system_key)
 
-    # Get all encrypted masterkeys that can be decrypted with machine credentials
+    # Now decrypt masterkeys that may have been encrypted with the DPAPI_SYSTEM key
+    # TODO: Move this into the auto-decrypt logic of DpapiManager
     encrypted_masterkeys = await dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
 
     decrypted_count = 0
     for encrypted_mk in encrypted_masterkeys:
-        if not encrypted_mk.encrypted_key_usercred:
-            continue
-
         try:
-            # Try to decrypt the masterkey using the DPAPI_SYSTEM key
+            if not encrypted_mk.encrypted_key_usercred:
+                continue
+
             mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(dpapi_system_key.machine_key)
-            plaintext_mk = encrypted_mk.decrypt(mk_key)
-            await dpapi_manager._masterkey_repo.add_masterkey(plaintext_mk)
-            decrypted_count += 1
+
+            try:
+                # Try to decrypt the masterkey using the DPAPI_SYSTEM key
+                plaintext_mk = encrypted_mk.decrypt(mk_key)
+                decrypted_count += 1
+            except MasterKeyDecryptionError as e:
+                logger.debug(f"Failed to decrypt masterkey {encrypted_mk.guid} with DPAPI_SYSTEM key: {e}")
+                continue
+
+            await dpapi_manager.add_masterkey(plaintext_mk)
         except Exception as e:
-            logger.debug(f"Failed to decrypt masterkey {encrypted_mk.guid} with DPAPI_SYSTEM key: {e}")
+            logger.error(
+                f"Error decrypting masterkey with DPAPI_SYSTEM credential. MasterKey UUID: {encrypted_mk.guid}: {e}"
+            )
             continue
 
     return {"status": "success", "type": "dpapi_system", "decrypted_masterkeys": decrypted_count}

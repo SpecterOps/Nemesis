@@ -868,7 +868,7 @@ async def initialize_workflow_runtime():
     for module in workflow_runtime.modules.values():
         if hasattr(module, "dpapi_manager") and module.dpapi_manager is None:
             logger.debug(f"Setting 'dpapi_manager' for '{module}'")
-            module.dpapi_manager = dpapi_manager
+            module.dpapi_manager = dpapi_manager  # type: ignore
         elif hasattr(workflow_runtime, "dpapi_manager"):
             logger.debug(f"'dpapi_manager' already set for for '{module}'")
 

@@ -24,7 +24,7 @@ class ChromeCookiesParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-        self.dpapi_manager: DpapiManager | None = None
+        self.dpapi_manager: DpapiManager
 
         # Yara rule to check for Chrome Cookies tables
         self.yara_rule = yara_x.compile("""

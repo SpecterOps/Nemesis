@@ -3,6 +3,7 @@ import asyncio
 import tempfile
 import textwrap
 from datetime import datetime
+from uuid import UUID
 
 import structlog
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
@@ -10,6 +11,7 @@ from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager
+from nemesis_dpapi.core import MasterKey
 from pypykatz.pypykatz import pypykatz
 
 logger = structlog.get_logger(module=__name__)
@@ -50,7 +52,7 @@ class LsassDumpParser(EnrichmentModule):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
-        self.dpapi_manager: DpapiManager | None = None
+        self.dpapi_manager: DpapiManager
 
     def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
@@ -88,7 +90,7 @@ class LsassDumpParser(EnrichmentModule):
             pypy_parse = pypykatz.parse_minidump_file(dump_file_path)
         except Exception as e:
             logger.error(f"An error occurred while parsing lsass dump: {e}", exc_info=True)
-            return None, None, None, None
+            return [], [], [], []
 
         ssps = [
             "msv_creds",
@@ -229,12 +231,13 @@ class LsassDumpParser(EnrichmentModule):
                             if hasattr(cred, "sha1_masterkey") and cred.sha1_masterkey:
                                 sha1_masterkey_bytes = bytes.fromhex(cred.sha1_masterkey)
 
-                            # add this masterkey to the DPAPI cache
-                            asyncio.run(
-                                self.dpapi_manager.add_decrypted_masterkey(
-                                    cred.key_guid, masterkey_bytes, sha1_masterkey_bytes
-                                )
+                            mk = MasterKey(
+                                guid=UUID(str(cred.key_guid)),
+                                plaintext_key=masterkey_bytes,
+                                plaintext_key_sha1=sha1_masterkey_bytes,
                             )
+                            # add this masterkey to the DPAPI cache
+                            asyncio.run(self.dpapi_manager.add_masterkey(mk))
 
                         if hasattr(cred, "masterkey") and cred.masterkey:
                             cred_data["masterkey"] = (
@@ -249,7 +252,7 @@ class LsassDumpParser(EnrichmentModule):
                             cred_data["sha1_masterkey"] = sha1_hex
 
                             # Add to masterkeys list
-                            m = "{%s}:%s" % (cred.key_guid, sha1_hex)
+                            m = f"{{{cred.key_guid}}}:{sha1_hex}"
                             if m not in masterkeys:
                                 masterkeys.append(m)
                                 credentials.append(
@@ -396,7 +399,7 @@ class LsassDumpParser(EnrichmentModule):
         # Parse the LSASS dump
         logon_sessions, credentials, tickets, masterkeys = self._parse_lsass_dump(file_path, file_enriched.file_name)
 
-        if logon_sessions is None:
+        if not len(logon_sessions):
             logger.error("Failed to parse LSASS dump file")
             return None
 
