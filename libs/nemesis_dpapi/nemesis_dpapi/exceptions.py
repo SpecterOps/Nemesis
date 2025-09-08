@@ -37,3 +37,21 @@ class StorageError(DpapiError):
     """Raised when storage backend operations fail."""
 
     pass
+
+
+class DpapiCryptoError(Exception):
+    """Base exception for DPAPI cryptographic operations."""
+
+    pass
+
+
+class InvalidBackupKeyError(DpapiCryptoError):
+    """Raised when domain backup key is invalid or malformed."""
+
+    pass
+
+
+class MasterKeyDecryptionError(DpapiCryptoError):
+    """Raised when masterkey decryption fails."""
+
+    pass

@@ -1,14 +1,20 @@
 """Auto-decryption observer for DPAPI manager."""
 
 import asyncio
+from logging import getLogger
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from .core import MasterKeyFile, MasterKeyPolicy
+from nemesis_dpapi.exceptions import MasterKeyDecryptionError
+
+from .core import MasterKey, MasterKeyFile, MasterKeyPolicy
 from .eventing import DpapiEvent, DpapiObserver, NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent
 
 if TYPE_CHECKING:
     from .manager import DpapiManager
+
+
+logger = getLogger(__name__)
 
 
 class AutoDecryptionObserver(DpapiObserver):
@@ -44,59 +50,56 @@ class AutoDecryptionObserver(DpapiObserver):
     async def _attempt_masterkey_decryption_with_backup_key(self, backup_key_guid: UUID) -> None:
         """Attempt to decrypt all masterkeys using the new backup key."""
         try:
-            # Get all masterkeys
             masterkeys = await self.dpapi_manager.get_all_masterkeys()
             encrypted_count = len([mk for mk in masterkeys if not mk.is_decrypted])
 
             if encrypted_count == 0:
-                return  # All masterkeys already decrypted
+                return
 
             # Get all backup keys (including the new one)
             backup_keys = await self.dpapi_manager._backup_key_repo.get_all_backup_keys()
             new_backup_key = next((bk for bk in backup_keys if bk.guid == backup_key_guid), None)
 
             if not new_backup_key:
-                return  # Could not find backup key
+                return
 
             # Try to decrypt each encrypted masterkey with the new backup key
             for masterkey in masterkeys:
                 if masterkey.is_decrypted:
                     continue
 
-                try:
-                    # Check if encrypted_key_backup exists before attempting decryption
-                    if masterkey.encrypted_key_backup is None:
-                        continue
-
-                    # Create a MasterKeyFile object for the domain backup key decrypt method
-                    masterkey_file = MasterKeyFile(
-                        version=0,
-                        modified=False,
-                        file_path=None,
-                        masterkey_guid=masterkey.guid,
-                        policy=MasterKeyPolicy.NONE,
-                        domain_backup_key=masterkey.encrypted_key_backup,
-                    )
-
-                    # Attempt decryption using the backup key
-                    result = new_backup_key.decrypt_masterkey_file(masterkey_file)
-
-                    if result:
-                        # Update the masterkey with decrypted data from the result MasterKey
-                        masterkey.plaintext_key = result.plaintext_key
-                        masterkey.plaintext_key_sha1 = result.plaintext_key_sha1
-                        masterkey.backup_key_guid = result.backup_key_guid
-                        await self.dpapi_manager._masterkey_repo.update_masterkey(masterkey)
-
-                except Exception:
-                    # Continue with other masterkeys if one fails
-                    # For debugging - you can uncomment this line to see errors
-                    # print(f"Auto-decrypt error: {e}")
+                if masterkey.encrypted_key_backup is None:
+                    # No backup key data to use
                     continue
 
-        except Exception:
-            # Silently handle any errors during auto-decryption
-            pass
+                masterkey_file = MasterKeyFile(
+                    version=0,
+                    modified=False,
+                    file_path=None,
+                    masterkey_guid=masterkey.guid,
+                    policy=MasterKeyPolicy.NONE,
+                    domain_backup_key=masterkey.encrypted_key_backup,
+                )
+
+                try:
+                    result = new_backup_key.decrypt_masterkey_file(masterkey_file)
+                except MasterKeyDecryptionError:
+                    continue
+
+                if result:
+                    new_mk = MasterKey(
+                        guid=masterkey.guid,
+                        encrypted_key_usercred=masterkey.encrypted_key_usercred,
+                        encrypted_key_backup=masterkey.encrypted_key_backup,
+                        plaintext_key=result.plaintext_key,
+                        plaintext_key_sha1=result.plaintext_key_sha1,
+                        backup_key_guid=result.backup_key_guid,
+                    )
+
+                    await self.dpapi_manager._masterkey_repo.update_masterkey(new_mk)
+
+        except Exception as e:
+            logger.error(f"Auto-decrypt error: {e}")
 
     async def _attempt_masterkey_decryption(self, masterkey_guid: UUID) -> None:
         """Attempt to decrypt a new masterkey using existing domain backup keys."""
@@ -110,12 +113,11 @@ class AutoDecryptionObserver(DpapiObserver):
 
         backup_keys = await self.dpapi_manager._backup_key_repo.get_all_backup_keys()
         if not backup_keys:
-            return  # No backup keys available
+            return
 
         # Try to decrypt the masterkey with each backup key
         for backup_key in backup_keys:
             try:
-                # Create a MasterKeyFile object for the domain backup key decrypt method
                 masterkey_file = MasterKeyFile(
                     version=0,
                     modified=False,
@@ -125,17 +127,19 @@ class AutoDecryptionObserver(DpapiObserver):
                     domain_backup_key=masterkey.encrypted_key_backup,
                 )
 
-                # Attempt decryption using the backup key
                 result = backup_key.decrypt_masterkey_file(masterkey_file)
-
-                if result:
-                    # Update the masterkey with decrypted data from the result MasterKey
-                    masterkey.plaintext_key = result.plaintext_key
-                    masterkey.plaintext_key_sha1 = result.plaintext_key_sha1
-                    masterkey.backup_key_guid = result.backup_key_guid
-                    await self.dpapi_manager._masterkey_repo.update_masterkey(masterkey)
-                    return  # Successfully decrypted, stop trying other keys
-
             except Exception:
-                # Continue with other backup keys if one fails
+                logger.debug(f"Failed to decrypt masterkey {masterkey.guid} with backup key {backup_key.guid}")
                 continue
+
+            if result:
+                new_mk = MasterKey(
+                    guid=masterkey.guid,
+                    encrypted_key_usercred=masterkey.encrypted_key_usercred,
+                    encrypted_key_backup=masterkey.encrypted_key_backup,
+                    plaintext_key=result.plaintext_key,
+                    plaintext_key_sha1=result.plaintext_key_sha1,
+                    backup_key_guid=result.backup_key_guid,
+                )
+                await self.dpapi_manager._masterkey_repo.update_masterkey(new_mk)
+                return

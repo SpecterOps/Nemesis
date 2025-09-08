@@ -1,7 +1,7 @@
-"""Core data models for DPAPI library."""
+"""Core data types used in the DPAPI library"""
 
+import json
 import struct
-from dataclasses import dataclass
 from enum import IntFlag
 from pathlib import Path
 from uuid import UUID
@@ -10,29 +10,33 @@ from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
 from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
 from impacket.dpapi import DomainKey as ImpacketDomainKey
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ConfigDict
 
 from .dpapi_blob import DPAPI_BLOB
+from .exceptions import InvalidBackupKeyError, MasterKeyDecryptionError
 
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
 
 
-class DpapiCryptoError(Exception):
-    """Base exception for DPAPI cryptographic operations."""
+class BaseModel(PydanticBaseModel):
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
 
-    pass
+    def to_json(self, **kwargs) -> str:
+        """Serialize model to JSON string."""
+        return self.model_dump_json(**kwargs)
 
-
-class InvalidBackupKeyError(DpapiCryptoError):
-    """Raised when domain backup key is invalid or malformed."""
-
-    pass
-
-
-class MasterKeyDecryptionError(DpapiCryptoError):
-    """Raised when masterkey decryption fails."""
-
-    pass
+    @classmethod
+    def from_json(cls, data: str, **kwargs):
+        """
+        Deserialize a JSON string into a model instance.
+        kwargs are passed to `json.loads`.
+        """
+        parsed = json.loads(data, **kwargs)
+        return cls.model_validate(parsed)
 
 
 class MasterKeyPolicy(IntFlag):
@@ -44,8 +48,7 @@ class MasterKeyPolicy(IntFlag):
     DPAPI_OWF = 0x4  # Use the DPAPI One way function of the password (SHA_1(pw))
 
 
-@dataclass
-class MasterKey:
+class MasterKey(BaseModel):
     """Represents a DPAPI masterkey.
 
     Attributes:
@@ -56,6 +59,8 @@ class MasterKey:
         plaintext_key: Decrypted masterkey data.
         plaintext_key_sha1: SHA1 hash of the plaintext masterkey. AKA the Master Key (MK) Encryption Key.
     """
+
+    model_config = {"frozen": True}
 
     guid: UUID
     encrypted_key_usercred: bytes | None = None
@@ -70,12 +75,13 @@ class MasterKey:
         return self.plaintext_key is not None
 
 
-@dataclass
-class Blob:
+class Blob(BaseModel):
     """Represents a DPAPI encrypted blob.
 
     Structure representation comes from parsing in SPCryptProtect and SPCryptUnprotect in crypt32p.cpp.
     """
+
+    model_config = {"frozen": True}
 
     outerVersion: int
     provider_guid: UUID
@@ -178,13 +184,14 @@ class Blob:
         )
 
 
-@dataclass
-class MasterKeyFile:
+class MasterKeyFile(BaseModel):
     """Represents a DPAPI masterkey file structure.
 
     Based on the Windows MASTERKEY_STORED structure, this class can parse
     masterkey files from disk and extract the various key components.
     """
+
+    model_config = {"frozen": True}
 
     version: int
     modified: bool
@@ -305,9 +312,10 @@ class MasterKeyFile:
         )
 
 
-@dataclass
-class DomainBackupKey:
+class DomainBackupKey(BaseModel):
     """Represents a domain backup key for decrypting masterkeys."""
+
+    model_config = {"frozen": True}
 
     guid: UUID
     key_data: bytes
@@ -327,12 +335,12 @@ class DomainBackupKey:
             InvalidBackupKeyError: If domain backup key is invalid or malformed
         """
         if not masterkey_file.domain_backup_key:
-            raise MasterKeyDecryptionError("Masterkey file contains no domain backup key data")
+            raise ValueError("Masterkey file contains no domain backup key data")
 
         try:
             domain_key = ImpacketDomainKey(masterkey_file.domain_backup_key)
         except Exception as e:
-            raise MasterKeyDecryptionError(f"Failed to parse domain backup key data: {e}") from e
+            raise ValueError(f"Failed to parse domain backup key data from master key file: {e}") from e
 
         try:
             # Extract the private key from the backup key data
@@ -342,44 +350,35 @@ class DomainBackupKey:
         except Exception as e:
             raise InvalidBackupKeyError(f"Invalid domain backup key: {e}") from e
 
-        try:
-            # Decrypt the masterkey (reverse byte order as per Impacket implementation)
-            decrypted_key = cipher.decrypt(domain_key["SecretData"][::-1], None)
+        # Decrypt the masterkey (reverse byte order as per Impacket implementation)
+        decrypted_key = cipher.decrypt(domain_key["SecretData"][::-1], None)
 
-            if not decrypted_key:
-                raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
+        if not decrypted_key:
+            raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
 
-            domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
-            # From the impacket DPAPI_DOMAIN_RSA_MASTER_KEY structure:
-            # The cbMasterKey field indicates the length of the actual masterkey
-            # The buffer field contains the DPAPI_DOMAIN_RSA_MASTER_KEY header followed by the actual masterkey data
-            # The actual masterkey data starts at offset 8 after the structure header
-            buffer = domain_master_key["buffer"]
+        domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
+        buffer = domain_master_key["buffer"]
 
-            if len(decrypted_key) == 128:
-                key_offset = 8  # Offset to skip the DPAPI_DOMAIN_RSA_MASTER_KEY structure header within the buffer
-            elif len(decrypted_key) == 104:
-                key_offset = 0
-            else:
-                raise MasterKeyDecryptionError(
-                    f"Unexpected decrypted key length: {len(decrypted_key)}. Decrypted key: {decrypted_key.hex()}"
-                )
-
-            plaintext_key = buffer[key_offset : key_offset + domain_master_key["cbMasterKey"]]
-            plaintext_key_sha1 = SHA1.new(plaintext_key).digest()
-
-            return MasterKey(
-                guid=masterkey_file.masterkey_guid,
-                encrypted_key_backup=masterkey_file.domain_backup_key,
-                plaintext_key=plaintext_key,
-                plaintext_key_sha1=plaintext_key_sha1,
-                backup_key_guid=self.guid,
+        # If it's a version 3 masterkey, skip the first 8 bytes (structure is different)
+        if len(decrypted_key) == 128:
+            key_offset = 8
+        elif len(decrypted_key) == 104:
+            key_offset = 0
+        else:
+            raise MasterKeyDecryptionError(
+                f"Unexpected decrypted key length: {len(decrypted_key)}. Decrypted key: {decrypted_key.hex()}"
             )
 
-        except (InvalidBackupKeyError, MasterKeyDecryptionError):
-            raise
-        except Exception as e:
-            raise MasterKeyDecryptionError(f"Failed to decrypt masterkey: {e}") from e
+        plaintext_key = buffer[key_offset : key_offset + domain_master_key["cbMasterKey"]]
+        plaintext_key_sha1 = SHA1.new(plaintext_key).digest()
+
+        return MasterKey(
+            guid=masterkey_file.masterkey_guid,
+            encrypted_key_backup=masterkey_file.domain_backup_key,
+            plaintext_key=plaintext_key,
+            plaintext_key_sha1=plaintext_key_sha1,
+            backup_key_guid=self.guid,
+        )
 
 
 class DpapiSystemCredential(BaseModel):

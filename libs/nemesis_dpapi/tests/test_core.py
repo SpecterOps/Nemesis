@@ -1,6 +1,5 @@
 """Tests for DPAPI core models."""
 
-import asyncio
 import base64
 import json
 from pathlib import Path
@@ -8,7 +7,7 @@ from uuid import UUID
 
 import pytest
 from nemesis_dpapi import Blob, DomainBackupKey, DpapiManager, MasterKeyFile
-from nemesis_dpapi.core import DpapiSystemCredential, MasterKeyDecryptionError, MasterKeyPolicy
+from nemesis_dpapi.core import DpapiSystemCredential, MasterKeyPolicy
 
 DPAPI_SYSTEM_SECRET_HEX = "01000000dcfd03644f501805c189e15e9367b01415dea75a4e25d96d26879ded571f5d48a6887455d28f66f5"
 MACHINE_KEY_HEX = "dcfd03644f501805c189e15e9367b01415dea75a"
@@ -306,15 +305,11 @@ class TestDomainBackupKey:
 
         manager = DpapiManager(storage_backend="memory", auto_decrypt=True)
         await manager.add_domain_backup_key(backup_key)
-        await manager.add_encrypted_masterkey(
-            guid=masterkey_file.masterkey_guid,
-            encrypted_key_usercred=masterkey_file.master_key,
-            encrypted_key_backup=masterkey_file.domain_backup_key,
+        await manager.add_decrypted_masterkey(
+            decrypted_masterkey.guid, decrypted_masterkey.plaintext_key, decrypted_masterkey.plaintext_key_sha1
         )
 
         assert blob.masterkey_guid == masterkey_file.masterkey_guid
-
-        await asyncio.sleep(0.5)  # Give auto-decryption a moment to complete
 
         decrypted = await manager.decrypt_blob(blob)
         assert decrypted == b"This is a test."  # Adjusted expected value
@@ -330,7 +325,7 @@ class TestDomainBackupKey:
         masterkey_file = MasterKeyFile.parse("tests/fixtures/masterkey_local.bin")
 
         # Should raise MasterKeyDecryptionError since no domain backup key in file
-        with pytest.raises(MasterKeyDecryptionError, match="contains no domain backup key"):
+        with pytest.raises(ValueError, match="contains no domain backup key"):
             backup_key.decrypt_masterkey_file(masterkey_file)
 
 

@@ -9,12 +9,12 @@ from Crypto.Hash import HMAC, MD4, SHA1, SHA256
 from Crypto.Protocol.KDF import PBKDF2
 from pydantic import BaseModel, field_validator
 
-from .core import DpapiCryptoError
 from .dpapi_blob import DPAPI_BLOB
+from .exceptions import DpapiCryptoError
 from .types import Sid
 
 if TYPE_CHECKING:
-    from .core import MasterKey
+    pass
 
 
 class InvalidBlobDataError(DpapiCryptoError):
@@ -245,20 +245,6 @@ class MasterKeyEncryptionKey(BaseModel):
 
 class DpapiCrypto:
     """DPAPI cryptographic operations handler."""
-
-    @staticmethod
-    def decrypt_masterkey_with_mk_key(encrypted_masterkey: bytes, mk_key: MasterKeyEncryptionKey) -> MasterKey:
-        """Decrypt a masterkey using a masterkey encryption key.
-
-        Args:
-            encrypted_masterkey: The encrypted masterkey data
-            mk_key: The masterkey encryption key used to encrypt/decrypt the masterkey
-
-        Returns:
-            The decrypted MasterKey object
-        """
-
-        raise NotImplementedError("MasterKeyEncryptionKey decryption not implemented yet")
 
     @staticmethod
     def decrypt_blob(blob_data: bytes, masterkey: bytes, entropy: bytes | None = None) -> bytes:

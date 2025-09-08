@@ -42,14 +42,6 @@ async def main():
                 encrypted_key_backup=mk_domain.domain_backup_key,
             )
 
-        # Local masterkey (387a062d-f8b6-4661-b2c5-eecbb9f80afb)
-        if mk_local.master_key and mk_local.backup_key:
-            await dpapi.add_encrypted_masterkey(
-                guid=mk_local.masterkey_guid,
-                encrypted_key_usercred=mk_local.master_key,
-                encrypted_key_backup=mk_local.backup_key,
-            )
-
         # Check initial state
         all_keys = await dpapi.get_all_masterkeys()
         decrypted_keys = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)

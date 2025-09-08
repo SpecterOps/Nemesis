@@ -20,7 +20,7 @@ class MasterKeyDecryptor:
     ) -> dict:
         """Handle password, NTLM hash, and cred key credential submissions."""
 
-        mk_keys_to_try = self._generate_masterkey_encryption_keys(request)
+        mk_keys_to_try = self._generate_mk_encryption_keys(request)
 
         task = asyncio.create_task(self._decrypt_masterkeys_background(mk_keys_to_try, request.type))
         self._background_tasks.add(task)
@@ -60,7 +60,7 @@ class MasterKeyDecryptor:
         except Exception as e:
             logger.error(f"Error in background decryption task: {e}")
 
-    def _generate_masterkey_encryption_keys(
+    def _generate_mk_encryption_keys(
         self, request: Union[PasswordCredential, NtlmHashCredential, CredKeyCredential]
     ) -> list[MasterKeyEncryptionKey]:
         """Generate MasterKeyEncryptionKey objects based on the credential type."""
