@@ -10,9 +10,11 @@ from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
 from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
 from impacket.dpapi import DomainKey as ImpacketDomainKey
+from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 
+from .crypto import MasterKeyEncryptionKey
 from .dpapi_blob import DPAPI_BLOB
 from .exceptions import InvalidBackupKeyError, MasterKeyDecryptionError
 
@@ -73,6 +75,38 @@ class MasterKey(BaseModel):
     def is_decrypted(self) -> bool:
         """Check if masterkey has been decrypted."""
         return self.plaintext_key is not None
+
+    def decrypt(self, master_key_encryption_key: MasterKeyEncryptionKey) -> "MasterKey":
+        """Decrypt the master key using the provided master key encryption key.
+
+        Args:
+            master_key_encryption_key: The 20-byte SHA1 hash used to decrypt the master key
+
+        Returns:
+            A new MasterKey instance with decrypted plaintext_key and plaintext_key_sha1
+
+        Raises:
+            ValueError: If encrypted_key_usercred is None or decryption fails
+            MasterKeyDecryptionError: If master key decryption fails
+        """
+        if self.encrypted_key_usercred is None:
+            raise ValueError("No encrypted user credential key available for decryption")
+
+        mk = ImpacketMasterKey(self.encrypted_key_usercred)
+        plaintext_mk = mk.decrypt(master_key_encryption_key.key.value)
+
+        if not plaintext_mk:
+            raise MasterKeyDecryptionError("Decryption failed")
+
+        plaintext_key_sha1 = SHA1.new(plaintext_mk).digest()
+
+        # Return a new MasterKey instance with decrypted data
+        return self.model_copy(
+            update={
+                "plaintext_key": plaintext_mk,
+                "plaintext_key_sha1": plaintext_key_sha1,
+            }
+        )
 
 
 class Blob(BaseModel):

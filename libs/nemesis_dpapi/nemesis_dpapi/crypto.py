@@ -11,10 +11,9 @@ from pydantic import BaseModel, field_validator
 
 from .dpapi_blob import DPAPI_BLOB
 from .exceptions import DpapiCryptoError
-from .types import Sid
 
 if TYPE_CHECKING:
-    pass
+    from .types import Sid
 
 
 class InvalidBlobDataError(DpapiCryptoError):
@@ -241,6 +240,15 @@ class MasterKeyEncryptionKey(BaseModel):
             raise ValueError(f"Invalid hash_type: {cred_key.owf}")
 
         return cls(key=Sha1Hash(value=key))
+
+    @classmethod
+    def from_dpapi_system_cred(cls, dpapi_system_key: bytes) -> MasterKeyEncryptionKey:
+        """Generate symmetric key from DPAPI_SYSTEM credential.
+
+        Args:
+            dpapi_system_key: The DPAPI_SYSTEM key bytes
+        """
+        return cls(key=Sha1Hash(value=dpapi_system_key))
 
 
 class DpapiCrypto:
