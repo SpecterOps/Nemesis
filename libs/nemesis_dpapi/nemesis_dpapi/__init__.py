@@ -5,6 +5,7 @@ from .crypto import CredKey, CredKeyHashType, DpapiCrypto, MasterKeyEncryptionKe
 from .exceptions import (
     DpapiBlobDecryptionError,
     DpapiError,
+    MasterKeyDecryptionError,
     MasterKeyNotDecryptedError,
     MasterKeyNotFoundError,
     StorageError,
@@ -22,6 +23,7 @@ __all__ = [
     "DpapiManager",
     "DpapiSystemCredential",
     "MasterKey",
+    "MasterKeyDecryptionError",
     "MasterKeyEncryptionKey",
     "MasterKeyFile",
     "MasterKeyFilter",

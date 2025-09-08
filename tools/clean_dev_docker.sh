@@ -1,3 +1,9 @@
+# For Nemesis-related docker components (i.e. it won't do this for any non-Nemesis stuff):)
+# - Stops/removes the containers
+# - Deletes/prunes the images
+# - Deletes networks, and volumes
+# - Cleans the builder cache
+
 docker ps -a --filter "name=nemesis-*" --format '{{.Names}}' | xargs -r docker rm -v -f
 docker images ghcr.io/specterops/nemesis/* --format '{{.Repository}}' 2>&1 | grep -Ev "base" | xargs -r docker rmi -f
 docker images 'nemesis-*' --format '{{.Repository}}' 2>&1 | grep -Ev "base" | xargs -r docker rmi -f

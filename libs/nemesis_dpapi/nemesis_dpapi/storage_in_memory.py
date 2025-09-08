@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from .core import DomainBackupKey, MasterKey
+from .core import DomainBackupKey, DpapiSystemCredential, MasterKey
 from .exceptions import StorageError
 from .repositories import MasterKeyFilter
 
@@ -79,3 +79,22 @@ class InMemoryDomainBackupKeyRepository:
         if guid not in self._backup_keys:
             raise StorageError(f"Domain backup key {guid} not found")
         del self._backup_keys[guid]
+
+
+class InMemoryDpapiSystemCredentialRepository:
+    """In-memory storage for DPAPI system credentials."""
+
+    def __init__(self) -> None:
+        self._credentials: list[DpapiSystemCredential] = []
+
+    async def add_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add a DPAPI system credential to storage."""
+        self._credentials.append(cred)
+
+    async def get_all_credentials(self) -> list[DpapiSystemCredential]:
+        """Retrieve all DPAPI system credentials."""
+        return list(self._credentials)
+
+    async def delete_all_credentials(self) -> None:
+        """Delete all DPAPI system credentials."""
+        self._credentials.clear()

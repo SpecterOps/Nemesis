@@ -2,8 +2,16 @@ import asyncio
 from typing import Union
 
 from common.logger import get_logger
-from common.models2.dpapi import CredKeyCredential, NtlmHashCredential, PasswordCredential
-from nemesis_dpapi import CredKey, CredKeyHashType, DpapiManager, MasterKeyEncryptionKey, MasterKeyFilter
+from common.models2.dpapi import CredKeyCredential, DpapiSystemCredentialRequest, NtlmHashCredential, PasswordCredential
+from nemesis_dpapi import (
+    CredKey,
+    CredKeyHashType,
+    DpapiManager,
+    MasterKeyDecryptionError,
+    MasterKeyEncryptionKey,
+    MasterKeyFilter,
+)
+from nemesis_dpapi.core import DpapiSystemCredential
 
 logger = get_logger(__name__)
 
@@ -14,6 +22,14 @@ class MasterKeyDecryptor:
     def __init__(self, dpapi_manager: DpapiManager):
         self.dpapi_manager = dpapi_manager
         self._background_tasks = set()
+
+    async def process_dpapi_system_credential(self, request: DpapiSystemCredentialRequest) -> dict:
+        """Handle DPAPI_SYSTEM credential submissions."""
+
+        cred = DpapiSystemCredential.from_bytes(bytes.fromhex(request))
+        MasterKeyEncryptionKey.from_dpapi_system_cred(request.value)
+
+        return {"status": "success", "type": "dpapi_system", "message": "DPAPI_SYSTEM credential processing started"}
 
     async def process_password_based_credential(
         self, request: Union[PasswordCredential, NtlmHashCredential, CredKeyCredential]
@@ -35,6 +51,7 @@ class MasterKeyDecryptor:
         try:
             logger.info(f"Starting background decryption for credential type: {credential_type}")
 
+            # Get encrypted master keys
             encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
 
             decrypted_count = 0
@@ -45,10 +62,10 @@ class MasterKeyDecryptor:
                 for mk_key in mk_keys_to_try:
                     try:
                         plaintext_mk = masterkey.decrypt(mk_key)
-                        await self.dpapi_manager._masterkey_repo.add_masterkey(plaintext_mk)
+                        await self.dpapi_manager.add_masterkey(plaintext_mk)
                         decrypted_count += 1
                         logger.info(f"Successfully decrypted master key with {credential_type}")
-                    except Exception as e:
+                    except MasterKeyDecryptionError as e:
                         # Continue trying other credentials on failure
                         logger.debug(f"Failed to decrypt master key: {e}")
                         continue
@@ -57,7 +74,7 @@ class MasterKeyDecryptor:
             logger.info(f"Background decryption completed. Decrypted {decrypted_count} master keys")
 
         except Exception as e:
-            logger.error(f"Error in background decryption task: {e}")
+            logger.error(f"Error in background masterkey decryption task. Cred type: {credential_type}. Error: {e}")
 
     def _generate_mk_encryption_keys(
         self, request: Union[PasswordCredential, NtlmHashCredential, CredKeyCredential]

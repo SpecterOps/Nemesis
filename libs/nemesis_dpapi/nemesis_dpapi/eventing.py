@@ -30,7 +30,16 @@ class NewDomainBackupKeyEvent:
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
-type DpapiEvent = NewEncryptedMasterKeyEvent | NewPlaintextMasterKeyEvent | NewDomainBackupKeyEvent
+@dataclass
+class NewDpapiSystemCredentialEvent:
+    """Event emitted when a new DPAPI system credential is added"""
+
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+type DpapiEvent = (
+    NewEncryptedMasterKeyEvent | NewPlaintextMasterKeyEvent | NewDomainBackupKeyEvent | NewDpapiSystemCredentialEvent
+)
 
 
 class DpapiObserver:

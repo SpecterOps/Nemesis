@@ -8,12 +8,7 @@ from uuid import UUID
 
 from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
-from impacket.dpapi import (
-    DPAPI_DOMAIN_RSA_MASTER_KEY,
-    PRIVATE_KEY_BLOB,
-    PVK_FILE_HDR,
-    privatekeyblob_to_pkcs1,
-)
+from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
 from impacket.dpapi import DomainKey as ImpacketDomainKey
 from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
@@ -89,8 +84,8 @@ class MasterKey(BaseModel):
             A new MasterKey instance with decrypted plaintext_key and plaintext_key_sha1
 
         Raises:
-            ValueError: If encrypted_key_usercred is None or decryption fails
-            MasterKeyDecryptionError: If master key decryption fails
+            ValueError: If encrypted_key_usercred is None
+            MasterKeyDecryptionError: If decryption fails
         """
         if self.encrypted_key_usercred is None:
             raise ValueError("No encrypted user credential key available for decryption")
@@ -103,7 +98,6 @@ class MasterKey(BaseModel):
 
         plaintext_key_sha1 = SHA1.new(plaintext_mk).digest()
 
-        # Return a new MasterKey instance with decrypted data
         return self.model_copy(
             update={
                 "plaintext_key": plaintext_mk,
@@ -409,6 +403,7 @@ class DomainBackupKey(BaseModel):
 
         return MasterKey(
             guid=masterkey_file.masterkey_guid,
+            encrypted_key_usercred=masterkey_file.master_key,
             encrypted_key_backup=masterkey_file.domain_backup_key,
             plaintext_key=plaintext_key,
             plaintext_key_sha1=plaintext_key_sha1,

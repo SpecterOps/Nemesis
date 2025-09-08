@@ -9,13 +9,36 @@ from Crypto.Hash import SHA1
 from .auto_decrypt import AutoDecryptionObserver
 from .core import Blob, DomainBackupKey, DpapiSystemCredential, MasterKey
 from .crypto import DpapiCrypto
-from .eventing import NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent, NewPlaintextMasterKeyEvent, Publisher
-from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
-from .storage_in_memory import InMemoryDomainBackupKeyRepository, InMemoryMasterKeyRepository
-from .storage_postgres import PostgresDomainBackupKeyRepository, PostgresMasterKeyRepository, create_tables
+from .eventing import (
+    NewDomainBackupKeyEvent,
+    NewDpapiSystemCredentialEvent,
+    NewEncryptedMasterKeyEvent,
+    NewPlaintextMasterKeyEvent,
+    Publisher,
+)
+from .exceptions import (
+    DpapiBlobDecryptionError,
+    MasterKeyNotDecryptedError,
+    MasterKeyNotFoundError,
+)
+from .storage_in_memory import (
+    InMemoryDomainBackupKeyRepository,
+    InMemoryDpapiSystemCredentialRepository,
+    InMemoryMasterKeyRepository,
+)
+from .storage_postgres import (
+    PostgresDomainBackupKeyRepository,
+    PostgresDpapiSystemCredentialRepository,
+    PostgresMasterKeyRepository,
+    create_tables,
+)
 
 if TYPE_CHECKING:
-    from .repositories import DomainBackupKeyRepository, MasterKeyRepository
+    from .repositories import (
+        DomainBackupKeyRepository,
+        DpapiSystemCredentialRepository,
+        MasterKeyRepository,
+    )
 
 from .repositories import MasterKeyFilter
 
@@ -24,7 +47,9 @@ from .repositories import MasterKeyFilter
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
-    def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:
+    def __init__(
+        self, storage_backend: str = "memory", auto_decrypt: bool = True
+    ) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:
@@ -41,6 +66,7 @@ class DpapiManager(Publisher):
         # Storage-related fields
         self._masterkey_repo: MasterKeyRepository
         self._backup_key_repo: DomainBackupKeyRepository
+        self._dpapi_system_cred_repo: DpapiSystemCredentialRepository
         self._pg_pool: asyncpg.Pool | None = None
 
         # Set up auto-decryption if enabled
@@ -53,6 +79,7 @@ class DpapiManager(Publisher):
         if self._storage_backend == "memory":
             self._masterkey_repo = InMemoryMasterKeyRepository()
             self._backup_key_repo = InMemoryDomainBackupKeyRepository()
+            self._dpapi_system_cred_repo = InMemoryDpapiSystemCredentialRepository()
         elif self._storage_backend.startswith("postgres://"):
             # Initialize PostgreSQL connection pool
             pool = await asyncpg.create_pool(self._storage_backend)
@@ -63,6 +90,9 @@ class DpapiManager(Publisher):
 
             self._masterkey_repo = PostgresMasterKeyRepository(self._pg_pool)
             self._backup_key_repo = PostgresDomainBackupKeyRepository(self._pg_pool)
+            self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(
+                self._pg_pool
+            )
         else:
             raise ValueError(f"Unsupported storage backend: {self._storage_backend}")
 
@@ -121,12 +151,17 @@ class DpapiManager(Publisher):
         self.publish(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
 
     async def add_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
-        """Add a domain backup key and decrypt all compatible masterkeys.
+        """Add a DPAPI system credential.
 
         Args:
-            backup_key: Domain backup key to add
+            cred: DPAPI system credential to add
         """
-        raise NotImplementedError("Adding DPAPI system credentials is not implemented yet.")
+        if not self._initialized:
+            await self._initialize_storage()
+
+        await self._dpapi_system_cred_repo.add_credential(cred)
+
+        self.publish(NewDpapiSystemCredentialEvent())
 
     async def decrypt_blob(self, blob: Blob) -> bytes:
         """Decrypt a DPAPI blob using available masterkeys.

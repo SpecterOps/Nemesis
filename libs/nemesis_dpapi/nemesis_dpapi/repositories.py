@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Protocol
 from uuid import UUID
 
-from .core import DomainBackupKey, MasterKey
+from .core import DomainBackupKey, DpapiSystemCredential, MasterKey
 
 
 class MasterKeyFilter(Enum):
@@ -63,4 +63,20 @@ class DomainBackupKeyRepository(Protocol):
 
     async def delete_backup_key(self, guid: UUID) -> None:
         """Delete a backup key by GUID."""
+        ...
+
+
+class DpapiSystemCredentialRepository(Protocol):
+    """Protocol for DPAPI system credential storage operations."""
+
+    async def add_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add a DPAPI system credential to storage."""
+        ...
+
+    async def get_all_credentials(self) -> list[DpapiSystemCredential]:
+        """Retrieve all DPAPI system credentials."""
+        ...
+
+    async def delete_all_credentials(self) -> None:
+        """Delete all DPAPI system credentials."""
         ...

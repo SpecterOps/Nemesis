@@ -4,7 +4,7 @@ from uuid import UUID
 
 import asyncpg
 
-from .core import DomainBackupKey, MasterKey
+from .core import DomainBackupKey, DpapiSystemCredential, MasterKey
 from .exceptions import StorageError
 from .repositories import MasterKeyFilter
 
@@ -150,6 +150,33 @@ class PostgresDomainBackupKeyRepository:
                 raise StorageError(f"Domain backup key {guid} not found")
 
 
+class PostgresDpapiSystemCredentialRepository:
+    """PostgreSQL storage for DPAPI system credentials."""
+
+    def __init__(self, connection_pool: asyncpg.Pool) -> None:
+        self.pool = connection_pool
+
+    async def add_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add a DPAPI system credential to storage."""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO dpapi_system_credentials (user_key, machine_key) VALUES ($1, $2)",
+                cred.user_key,
+                cred.machine_key,
+            )
+
+    async def get_all_credentials(self) -> list[DpapiSystemCredential]:
+        """Retrieve all DPAPI system credentials."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT * FROM dpapi_system_credentials")
+            return [DpapiSystemCredential(user_key=row["user_key"], machine_key=row["machine_key"]) for row in rows]
+
+    async def delete_all_credentials(self) -> None:
+        """Delete all DPAPI system credentials."""
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM dpapi_system_credentials")
+
+
 async def create_tables(connection_pool: asyncpg.Pool) -> None:
     """Create database tables for DPAPI storage."""
     async with connection_pool.acquire() as conn:
@@ -169,5 +196,13 @@ async def create_tables(connection_pool: asyncpg.Pool) -> None:
                 guid TEXT PRIMARY KEY,
                 key_data BYTEA NOT NULL,
                 domain_controller TEXT
+            )
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS dpapi_system_credentials (
+                id SERIAL PRIMARY KEY,
+                user_key BYTEA NOT NULL,
+                machine_key BYTEA NOT NULL
             )
         """)
