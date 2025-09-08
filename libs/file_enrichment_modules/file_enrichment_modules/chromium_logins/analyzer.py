@@ -2,6 +2,7 @@
 import csv
 import sqlite3
 import tempfile
+from typing import TYPE_CHECKING
 
 import structlog
 import yara_x
@@ -10,7 +11,9 @@ from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi import DpapiManager
+
+if TYPE_CHECKING:
+    from nemesis_dpapi import DpapiManager
 
 logger = structlog.get_logger(module=__name__)
 
@@ -23,7 +26,7 @@ class ChromeLoginsParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-        self.dpapi_manager: DpapiManager | None = None
+        self.dpapi_manager: DpapiManager
 
         # Yara rule to check for Chrome Login Data tables
         self.yara_rule = yara_x.compile("""

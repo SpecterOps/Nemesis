@@ -8,7 +8,6 @@ import structlog
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)

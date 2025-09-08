@@ -7,7 +7,6 @@ from common.models import EnrichmentResult, FileObject, Finding, FindingCategory
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
-
 from file_enrichment_modules.dpapi.dpapi_helpers import carve_dpapi_blobs_from_file
 from file_enrichment_modules.module_loader import EnrichmentModule
 

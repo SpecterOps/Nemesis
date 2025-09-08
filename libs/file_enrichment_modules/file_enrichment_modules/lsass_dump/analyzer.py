@@ -3,6 +3,7 @@ import asyncio
 import tempfile
 import textwrap
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
@@ -10,9 +11,11 @@ from common.models import EnrichmentResult, FileObject, Finding, FindingCategory
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi import DpapiManager
 from nemesis_dpapi.core import MasterKey
 from pypykatz.pypykatz import pypykatz
+
+if TYPE_CHECKING:
+    from nemesis_dpapi import DpapiManager
 
 logger = structlog.get_logger(module=__name__)
 

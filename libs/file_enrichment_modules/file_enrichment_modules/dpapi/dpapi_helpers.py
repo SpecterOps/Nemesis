@@ -1,5 +1,4 @@
 import base64
-from typing import Optional
 
 import structlog
 from impacket.dpapi import DPAPI_BLOB
@@ -10,8 +9,8 @@ logger = structlog.get_logger(module=__name__)
 
 
 class ParsedDpapiBlob(BaseModel):
-    dpapi_master_key_guid: Optional[str] = str
-    dpapi_data_b64: Optional[str] = None
+    dpapi_master_key_guid: str | None = str
+    dpapi_data_b64: str | None = None
     success: bool = False  # true/false if parsing was successful or not
 
 

@@ -13,7 +13,6 @@ from common.models import (
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = structlog.get_logger(module=__name__)

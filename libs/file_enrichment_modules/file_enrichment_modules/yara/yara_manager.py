@@ -2,7 +2,6 @@ import glob
 import os
 import threading
 from datetime import UTC, datetime
-from typing import Optional
 
 import plyara
 import psycopg
@@ -25,7 +24,7 @@ class YaraRuleManager:
     def __init__(self):
         self.parser = plyara.Plyara()
         self._compiler = yara_x.Compiler()
-        self._compiled_rules: Optional[yara_x.Rules] = None
+        self._compiled_rules: yara_x.Rules | None = None
 
         with DaprClient() as client:
             secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
@@ -39,7 +38,7 @@ class YaraRuleManager:
         # Then load enabled rules from database
         self.load_rules()
 
-    def _get_scanner(self) -> Optional[yara_x.Scanner]:
+    def _get_scanner(self) -> yara_x.Scanner | None:
         """Get or create thread-local scanner instance."""
         if not hasattr(self._thread_local, "scanner"):
             if self._compiled_rules:
@@ -132,7 +131,7 @@ class YaraRuleManager:
             logger.exception(e, message="Error processing disk rules")
             raise
 
-    def get_rule_content(self, rule_name: str) -> Optional[str]:
+    def get_rule_content(self, rule_name: str) -> str | None:
         """
         Retrieve the content of a Yara rule by name.
 

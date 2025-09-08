@@ -6,10 +6,9 @@ import structlog
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from pypdf import PdfReader
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.pdf.pdf2john import PdfParser
+from pypdf import PdfReader
 
 logger = structlog.get_logger(module=__name__)
 

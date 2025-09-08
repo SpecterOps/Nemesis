@@ -1,5 +1,7 @@
 # enrichment_modules/chromium_logins/analyzer.py
 
+from typing import TYPE_CHECKING
+
 import structlog
 import yara_x
 from chromium import process_chromium_local_state
@@ -7,7 +9,9 @@ from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi import DpapiManager
+
+if TYPE_CHECKING:
+    from nemesis_dpapi import DpapiManager
 
 logger = structlog.get_logger(module=__name__)
 
