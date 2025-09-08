@@ -18,7 +18,7 @@ from common.models2.dpapi import (
 )
 from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException
-from nemesis_dpapi import DomainBackupKey, DpapiCrypto, DpapiManager, MasterKeyEncryptionKey, MasterKeyFilter
+from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKeyEncryptionKey, MasterKeyFilter
 
 from .masterkey_decryptor import MasterKeyDecryptor
 
@@ -179,18 +179,18 @@ async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: 
     encrypted_masterkeys = await dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
 
     decrypted_count = 0
-    for masterkey in encrypted_masterkeys:
-        if not masterkey.encrypted_key_usercred:
+    for encrypted_mk in encrypted_masterkeys:
+        if not encrypted_mk.encrypted_key_usercred:
             continue
 
         try:
             # Try to decrypt the masterkey using the DPAPI_SYSTEM key
-            mk_key = MasterKeyEncryptionKey.from_dpapi_system_key(dpapi_system_key)
-            mk = DpapiCrypto.decrypt_masterkey_with_mk_key(masterkey.encrypted_key_machine, mk_key)
-            await dpapi_manager._masterkey_repo.add_masterkey(mk)
+            mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(dpapi_system_key.machine_key)
+            plaintext_mk = encrypted_mk.decrypt(mk_key)
+            await dpapi_manager._masterkey_repo.add_masterkey(plaintext_mk)
             decrypted_count += 1
         except Exception as e:
-            logger.debug(f"Failed to decrypt masterkey {masterkey.guid} with DPAPI_SYSTEM key: {e}")
+            logger.debug(f"Failed to decrypt masterkey {encrypted_mk.guid} with DPAPI_SYSTEM key: {e}")
             continue
 
     return {"status": "success", "type": "dpapi_system", "decrypted_masterkeys": decrypted_count}
