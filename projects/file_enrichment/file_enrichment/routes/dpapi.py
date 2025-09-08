@@ -81,7 +81,7 @@ async def submit_dpapi_credential(
                 result = await _handle_dpapi_system_credential(dpapi_manager, request)
             elif isinstance(request, (PasswordCredential, NtlmHashCredential, CredKeyCredential)):
                 decryptor = MasterKeyDecryptor(dpapi_manager)
-                result = await decryptor.handle_password_based_credential(request)
+                result = await decryptor.process_password_based_credential(request)
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported credential type: {request.type}")
 

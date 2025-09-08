@@ -2,7 +2,7 @@ import asyncio
 from typing import Union
 
 from common.logger import get_logger
-from common.models2.dpapi import CredKeyCredential, NtlmHashCredential, PasswordCredential
+from common.models2.dpapi import CredKeyCredential, DpapiSystemCredential, NtlmHashCredential, PasswordCredential
 from nemesis_dpapi import CredKey, CredKeyHashType, DpapiCrypto, DpapiManager, MasterKeyEncryptionKey, MasterKeyFilter
 
 logger = get_logger(__name__)
@@ -15,7 +15,17 @@ class MasterKeyDecryptor:
         self.dpapi_manager = dpapi_manager
         self._background_tasks = set()
 
-    async def handle_password_based_credential(
+    async def process_dpapi_system_credential(self, request: DpapiSystemCredential) -> dict:
+        """Handle DPAPI_SYSTEM credential submissions."""
+
+        from nemesis_dpapi.core import DpapiSystemCredential as NemesisDpapiSystemCredential
+
+        NemesisDpapiSystemCredential.from_bytes(bytes.fromhex(request.value))
+        MasterKeyEncryptionKey.from_dpapi_system_cred(request.value)
+
+        return {"status": "success", "type": "dpapi_system", "message": "DPAPI_SYSTEM credential processing started"}
+
+    async def process_password_based_credential(
         self, request: Union[PasswordCredential, NtlmHashCredential, CredKeyCredential]
     ) -> dict:
         """Handle password, NTLM hash, and cred key credential submissions."""

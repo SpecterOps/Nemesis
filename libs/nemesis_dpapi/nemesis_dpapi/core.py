@@ -8,7 +8,12 @@ from uuid import UUID
 
 from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
-from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
+from impacket.dpapi import (
+    DPAPI_DOMAIN_RSA_MASTER_KEY,
+    PRIVATE_KEY_BLOB,
+    PVK_FILE_HDR,
+    privatekeyblob_to_pkcs1,
+)
 from impacket.dpapi import DomainKey as ImpacketDomainKey
 from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
@@ -61,8 +66,6 @@ class MasterKey(BaseModel):
         plaintext_key: Decrypted masterkey data.
         plaintext_key_sha1: SHA1 hash of the plaintext masterkey. AKA the Master Key (MK) Encryption Key.
     """
-
-    model_config = {"frozen": True}
 
     guid: UUID
     encrypted_key_usercred: bytes | None = None
@@ -224,8 +227,6 @@ class MasterKeyFile(BaseModel):
     Based on the Windows MASTERKEY_STORED structure, this class can parse
     masterkey files from disk and extract the various key components.
     """
-
-    model_config = {"frozen": True}
 
     version: int
     modified: bool
@@ -425,18 +426,24 @@ class DpapiSystemCredential(BaseModel):
 
     @classmethod
     def from_bytes(cls, dpapi_system_data: bytes | str) -> "DpapiSystemCredential":
-        """Create DpapiSystemKey from DPAPI_SYSTEM LSA secret.
+        """Create a DpapiSystemCredential from bytes.
 
         Args:
-            dpapi_system_data: 40-byte DPAPI_SYSTEM LSA secret (as bytes) or hex string
+            dpapi_system_data (bytes | str): 40-byte DPAPI_SYSTEM LSA secret
+                (as raw bytes or hex string).
 
         Returns:
-            DpapiSystemKey instance
+            DpapiSystemKey: A new instance created from the given secret.
 
         Raises:
-            ValueError: If dpapi_system_data is not exactly 40 bytes or 80 hex characters
+            ValueError: If dpapi_system_data is not exactly 40 bytes or
+                80 hex characters.
+
+        Note:
+            For creating a DpapiSystemCredential from the bytes of the
+            DPAPI_SYSTEM LSA secret, use the from_lsa_secret method instead.
         """
-        # Convert hex string to bytes if needed
+
         if isinstance(dpapi_system_data, str):
             try:
                 dpapi_system_bytes = bytes.fromhex(dpapi_system_data)
@@ -456,7 +463,7 @@ class DpapiSystemCredential(BaseModel):
 
     @classmethod
     def from_lsa_secret(cls, lsa_secret_bytes: bytes | str) -> "DpapiSystemCredential":
-        """Create DpapiSystemSecret from the DPAPI_SYSTEM LSA secret structure.
+        """Create DpapiSystemSecret from the DPAPI_SYSTEM LSA secret.
 
         Args:
             lsa_secret_bytes: LSA secret structure containing version and keys (as bytes or hex string)

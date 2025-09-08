@@ -55,7 +55,9 @@ class MasterKeyData(BaseModel):
     """Strongly typed master key data."""
 
     guid: UUID = Field(description="Master key GUID")
-    key_hex: str = Field(description="Hex-encoded master key bytes", pattern=r"^[0-9a-fA-F]+$")
+    key_hex: str = Field(
+        description="Hex-encoded master key bytes", pattern=r"^[0-9a-fA-F]+$"
+    )
 
     @field_serializer("guid")
     def serialize_guid(self, value: UUID) -> str:
@@ -73,7 +75,10 @@ class DpapiSystemCredential(BaseModel):
     """DPAPI_SYSTEM LSA Secret credential."""
 
     type: Literal["dpapi_system"]
-    value: str = Field(description="Hex-encoded DPAPI_SYSTEM LSA secret (40 bytes)", pattern=r"^[0-9a-fA-F]{80}$")
+    value: str = Field(
+        description="Hex-encoded DPAPI_SYSTEM LSA secret (40 bytes)",
+        pattern=r"^[0-9a-fA-F]{80}$",
+    )
 
     @field_validator("value")
     @classmethod
@@ -84,7 +89,9 @@ class DpapiSystemCredential(BaseModel):
                 f"DPAPI_SYSTEM value must be exactly 80 hex characters (40 bytes), got {len(v)} characters"
             )
         if not re.match(r"^[0-9a-fA-F]+$", v):
-            raise ValueError("DPAPI_SYSTEM value must contain only hex characters (0-9, a-f, A-F)")
+            raise ValueError(
+                "DPAPI_SYSTEM value must contain only hex characters (0-9, a-f, A-F)"
+            )
         return v
 
 
