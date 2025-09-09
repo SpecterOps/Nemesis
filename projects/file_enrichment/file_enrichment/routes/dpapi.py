@@ -65,7 +65,7 @@ async def dpapi_background_monitor() -> None:
             backupkeys = await dpapi_manager._backup_key_repo.get_all_backup_keys()
             num_system_creds = await dpapi_manager._dpapi_system_cred_repo.get_all_credentials()
             logger.info(
-                "Background DPAPI manager loop tick",
+                "Background DPAPI loop tick",
                 total_mks=len(num_masterkeys),
                 num_enc_mks=num_enc_masterkeys,
                 num_dec_mks=num_dec_masterkeys,

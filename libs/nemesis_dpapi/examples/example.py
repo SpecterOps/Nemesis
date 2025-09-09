@@ -92,7 +92,7 @@ async def main() -> None:
             guid=UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
             key_data=fake_backup_key_bytes,
         )
-        await dpapi.add_domain_backup_key(backup_key)
+        await dpapi.upsert_domain_backup_key(backup_key)
 
         # Check results after fake backup key
         all_keys = await dpapi.get_all_masterkeys()
@@ -116,7 +116,7 @@ async def main() -> None:
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi.add_domain_backup_key(real_backup_key)
+        await dpapi.upsert_domain_backup_key(real_backup_key)
 
         # Give auto-decryption time to work
         await asyncio.sleep(1)

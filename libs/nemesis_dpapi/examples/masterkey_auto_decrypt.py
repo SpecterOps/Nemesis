@@ -37,7 +37,7 @@ async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi.add_domain_backup_key(backup_key)
+        await dpapi.upsert_domain_backup_key(backup_key)
 
         # Give the background auto-decryption task a moment to complete
         await asyncio.sleep(0.1)
@@ -65,7 +65,7 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi2.add_domain_backup_key(backup_key)
+        await dpapi2.upsert_domain_backup_key(backup_key)
 
         # Check initial state (should have backup key but no masterkeys)
         backup_keys = await dpapi2._backup_key_repo.get_all_backup_keys()
@@ -138,7 +138,7 @@ async def auto_decryption_disabled(mk_domain, backup_key_data):
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi_no_auto.add_domain_backup_key(backup_key_disabled)
+        await dpapi_no_auto.upsert_domain_backup_key(backup_key_disabled)
         await asyncio.sleep(0.1)
 
         # Check state after backup key
