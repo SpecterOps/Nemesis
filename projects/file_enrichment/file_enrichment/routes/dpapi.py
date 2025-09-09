@@ -1,6 +1,7 @@
 """DPAPI credential submission routes."""
 
 import asyncio
+import base64
 import urllib.parse
 from functools import lru_cache
 from typing import Annotated
@@ -8,20 +9,19 @@ from uuid import UUID
 
 from common.logger import get_logger
 from common.models2.dpapi import (
-    CredKeyCredential,
     DecryptedMasterKeyCredential,
     DomainBackupKeyCredential,
     DpapiCredentialRequest,
     DpapiSystemCredentialRequest,
-    NtlmHashCredential,
-    PasswordCredential,
+    NtlmHashCredentialKey,
+    PasswordCredentialKey,
+    Pbkdf2StrongCredentialKey,
+    Sha1CredentialKey,
 )
 from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException
-from nemesis_dpapi import DomainBackupKey, DpapiManager, DpapiSystemCredential, MasterKeyEncryptionKey, MasterKeyFilter
-from nemesis_dpapi.exceptions import MasterKeyDecryptionError
-
-from .masterkey_decryptor import MasterKeyDecryptor
+from nemesis_dpapi import DomainBackupKey, DpapiManager, DpapiSystemCredential
+from nemesis_dpapi.masterkey_decryptor import MasterKeyDecryptorService
 
 logger = get_logger(__name__)
 
@@ -78,11 +78,12 @@ async def submit_dpapi_credential(
                 result = await _handle_domain_backup_key_credential(dpapi_manager, request)
             elif isinstance(request, DecryptedMasterKeyCredential):
                 result = await _handle_decrypted_master_key_credential(dpapi_manager, request)
-            elif isinstance(request, DpapiSystemCredential):
+            elif isinstance(request, DpapiSystemCredentialRequest):
                 result = await _handle_dpapi_system_credential(dpapi_manager, request)
-            elif isinstance(request, (PasswordCredential, NtlmHashCredential, CredKeyCredential)):
-                decryptor = MasterKeyDecryptor(dpapi_manager)
-                result = await decryptor.process_password_based_credential(request)
+            elif isinstance(
+                request, (PasswordCredentialKey, NtlmHashCredentialKey, Sha1CredentialKey, Pbkdf2StrongCredentialKey)
+            ):
+                result = await _handle_password_based_credential(dpapi_manager, request)
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported credential type: {request.type}")
 
@@ -111,7 +112,6 @@ async def submit_dpapi_credential(
 
 async def _handle_domain_backup_key_credential(dpapi_manager: DpapiManager, request: DomainBackupKeyCredential) -> dict:
     """Handle domain backup key credential submission."""
-    import base64
 
     # Decode URL encoded value for string-based credentials
     credential_value = urllib.parse.unquote(request.value)
@@ -173,31 +173,27 @@ async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: 
     dpapi_system_key = DpapiSystemCredential.from_bytes(dpapi_system_bytes)
     await dpapi_manager.add_dpapi_system_credential(dpapi_system_key)
 
-    # Now decrypt masterkeys that may have been encrypted with the DPAPI_SYSTEM key
-    # TODO: Move this into the auto-decrypt logic of DpapiManager
-    encrypted_masterkeys = await dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
+    return {"status": "success", "type": "decrypted_masterkeys"}
 
-    decrypted_count = 0
-    for encrypted_mk in encrypted_masterkeys:
-        try:
-            if not encrypted_mk.encrypted_key_usercred:
-                continue
 
-            mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(dpapi_system_key.machine_key)
+async def _handle_password_based_credential(
+    dpapi_manager: DpapiManager,
+    request: PasswordCredentialKey | NtlmHashCredentialKey | Sha1CredentialKey | Pbkdf2StrongCredentialKey,
+):
+    from nemesis_dpapi.crypto import NtlmHash, Password, Pbkdf2Hash, Sha1Hash
 
-            try:
-                # Try to decrypt the masterkey using the DPAPI_SYSTEM key
-                plaintext_mk = encrypted_mk.decrypt(mk_key)
-                decrypted_count += 1
-            except MasterKeyDecryptionError as e:
-                logger.debug(f"Failed to decrypt masterkey {encrypted_mk.guid} with DPAPI_SYSTEM key: {e}")
-                continue
+    decryptor = MasterKeyDecryptorService(dpapi_manager)
 
-            await dpapi_manager.add_masterkey(plaintext_mk)
-        except Exception as e:
-            logger.error(
-                f"Error decrypting masterkey with DPAPI_SYSTEM credential. MasterKey UUID: {encrypted_mk.guid}: {e}"
-            )
-            continue
+    if isinstance(request, PasswordCredentialKey):
+        c = Password(value=request.value)
+    elif isinstance(request, NtlmHashCredentialKey):
+        c = NtlmHash(value=bytes.fromhex(request.value))
+    elif isinstance(request, Sha1CredentialKey):
+        c = Sha1Hash(value=bytes.fromhex(request.value))
+    elif isinstance(request, Pbkdf2StrongCredentialKey):
+        c = Pbkdf2Hash(value=bytes.fromhex(request.value))
+    else:
+        raise ValueError(f"Unsupported password-based credential type: {type(request)}")
 
-    return {"status": "success", "type": "dpapi_system", "decrypted_masterkeys": decrypted_count}
+    result = await decryptor.process_password_based_credential(c, request.user_sid)
+    return result

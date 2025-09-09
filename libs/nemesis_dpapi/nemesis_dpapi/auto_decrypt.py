@@ -5,10 +5,18 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from nemesis_dpapi.crypto import MasterKeyEncryptionKey
 from nemesis_dpapi.exceptions import MasterKeyDecryptionError
+from nemesis_dpapi.repositories import MasterKeyFilter
 
-from .core import MasterKey, MasterKeyFile, MasterKeyPolicy
-from .eventing import DpapiEvent, DpapiObserver, NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent
+from .core import DpapiSystemCredential, MasterKey, MasterKeyFile, MasterKeyPolicy
+from .eventing import (
+    DpapiEvent,
+    DpapiObserver,
+    NewDomainBackupKeyEvent,
+    NewDpapiSystemCredentialEvent,
+    NewEncryptedMasterKeyEvent,
+)
 
 if TYPE_CHECKING:
     from .manager import DpapiManager
@@ -37,15 +45,46 @@ class AutoDecryptionObserver(DpapiObserver):
             self._create_task(self._attempt_masterkey_decryption_with_backup_key(event.backup_key_guid))
         elif isinstance(event, NewEncryptedMasterKeyEvent):
             self._create_task(self._attempt_masterkey_decryption(event.masterkey_guid))
+        elif isinstance(event, NewDpapiSystemCredentialEvent):
+            self._create_task(self._attempt_masterkey_decryption_with_system_credential(event.credential))
 
     def _create_task(self, coroutine) -> None:
         """Creates a background task and maintains a reference until its completion
 
         The purpose of this is to maintain reference to the task so that the garbage collector
-        does not prematurely collect and destroy it."""
+        does not prematurely collect and destroy it.
+        """
         task = asyncio.create_task(coroutine)
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
+
+    async def _attempt_masterkey_decryption_with_system_credential(self, credential: DpapiSystemCredential) -> None:
+        """Attempt to decrypt all encrypted masterkeys using the new DPAPI system credentials."""
+
+        encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
+
+        decrypted_count = 0
+        for encrypted_mk in encrypted_masterkeys:
+            try:
+                if not encrypted_mk.encrypted_key_usercred:
+                    continue
+
+                mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(credential.machine_key)
+
+                try:
+                    # Try to decrypt the masterkey using the DPAPI_SYSTEM key
+                    plaintext_mk = encrypted_mk.decrypt(mk_key)
+                    decrypted_count += 1
+                except MasterKeyDecryptionError as e:
+                    logger.debug(f"Failed to decrypt masterkey {encrypted_mk.guid} with DPAPI_SYSTEM key: {e}")
+                    continue
+
+                await self.dpapi_manager.add_masterkey(plaintext_mk)
+            except Exception as e:
+                logger.error(
+                    f"Error decrypting masterkey with DPAPI_SYSTEM credential. MasterKey UUID: {encrypted_mk.guid}: {e}"
+                )
+                continue
 
     async def _attempt_masterkey_decryption_with_backup_key(self, backup_key_guid: UUID) -> None:
         """Attempt to decrypt all masterkeys using the new backup key."""
@@ -69,7 +108,6 @@ class AutoDecryptionObserver(DpapiObserver):
                     continue
 
                 if masterkey.encrypted_key_backup is None:
-                    # No backup key data to use
                     continue
 
                 masterkey_file = MasterKeyFile(

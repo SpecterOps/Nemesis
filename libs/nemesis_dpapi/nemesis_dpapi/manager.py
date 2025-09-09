@@ -16,11 +16,7 @@ from .eventing import (
     NewPlaintextMasterKeyEvent,
     Publisher,
 )
-from .exceptions import (
-    DpapiBlobDecryptionError,
-    MasterKeyNotDecryptedError,
-    MasterKeyNotFoundError,
-)
+from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 from .storage_in_memory import (
     InMemoryDomainBackupKeyRepository,
     InMemoryDpapiSystemCredentialRepository,
@@ -47,9 +43,7 @@ from .repositories import MasterKeyFilter
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
-    def __init__(
-        self, storage_backend: str = "memory", auto_decrypt: bool = True
-    ) -> None:
+    def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:
@@ -90,9 +84,7 @@ class DpapiManager(Publisher):
 
             self._masterkey_repo = PostgresMasterKeyRepository(self._pg_pool)
             self._backup_key_repo = PostgresDomainBackupKeyRepository(self._pg_pool)
-            self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(
-                self._pg_pool
-            )
+            self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(self._pg_pool)
         else:
             raise ValueError(f"Unsupported storage backend: {self._storage_backend}")
 
@@ -160,8 +152,7 @@ class DpapiManager(Publisher):
             await self._initialize_storage()
 
         await self._dpapi_system_cred_repo.add_credential(cred)
-
-        self.publish(NewDpapiSystemCredentialEvent())
+        self.publish(NewDpapiSystemCredentialEvent(credential=cred))
 
     async def decrypt_blob(self, blob: Blob) -> bytes:
         """Decrypt a DPAPI blob using available masterkeys.

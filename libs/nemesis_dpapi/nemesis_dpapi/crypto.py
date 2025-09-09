@@ -112,18 +112,22 @@ class Pbkdf2Hash(BaseModel):
 
 def _derive_secure_cred_key(ntlm_hash: bytes, user_sid_bytes: bytes) -> bytes:
     """Compute PBKDF2 hash using two-step derivation process."""
-    derived_key = PBKDF2(ntlm_hash, user_sid_bytes, dkLen=32, count=10000, hmac_hash_module=SHA256)  # type: ignore
-    derived_key = PBKDF2(derived_key, user_sid_bytes, dkLen=16, count=1, hmac_hash_module=SHA256)  # type: ignore
+    derived_key = PBKDF2(
+        ntlm_hash, user_sid_bytes, dkLen=32, count=10000, hmac_hash_module=SHA256
+    )  # type: ignore
+    derived_key = PBKDF2(
+        derived_key, user_sid_bytes, dkLen=16, count=1, hmac_hash_module=SHA256
+    )  # type: ignore
     return derived_key
 
 
 class CredKeyHashType(Enum):
     """Type of one-way function (OWF) hashes used in credential key derivation."""
 
-    MD4 = "md4"
+    MD4 = "md4"  # MD4 hash (16 bytes)
     NTLM = "md4"  # Alias for MD4
-    SHA1 = "sha1"
-    PBKDF2 = "pbkdf2"
+    SHA1 = "sha1"  # SHA1 hash (20 bytes)
+    PBKDF2 = "pbkdf2"  # "Secure" Cred Key, 16 bytes derived from PBKDF2
     SECURE_CRED_KEY = "pbkdf2"  # Alias for PBKDF2
 
 
@@ -145,10 +149,24 @@ class CredKey(BaseModel):
             raise ValueError(f"Cannot infer OWF type from key type: {type(self.key)}")
 
     @classmethod
-    def from_password(cls, password: str, hash_type: CredKeyHashType, user_sid: Sid | None = None) -> CredKey:
+    def from_password(
+        cls, password: str, hash_type: CredKeyHashType, user_sid: Sid | None = None
+    ) -> CredKey:
         """Create CredKey from password by calculating the specified hash type.
 
-        Derived from SharpDPAPI's CalculateKeys function: https://github.com/GhostPack/SharpDPAPI/blob/master/SharpDPAPI/lib/Dpapi.cs#L1755
+        Args:
+            password: The user's password
+            hash_type: The type of hash to compute (NTLM, SHA1, PBKDF2)
+            user_sid: (Optional) The user's SID. Only required for PBKDF2 derivation.
+
+        Returns:
+            CredKey object with the computed hash
+
+        Raises:
+            ValueError: If parameters are invalid or unsupported hash type
+
+        Note:
+            Derived from SharpDPAPI's CalculateKeys function: https://github.com/GhostPack/SharpDPAPI/blob/master/SharpDPAPI/lib/Dpapi.cs#L1755
         """
 
         if hash_type in (CredKeyHashType.MD4, CredKeyHashType.NTLM):
@@ -171,7 +189,9 @@ class CredKey(BaseModel):
             raise ValueError(f"Unsupported hash type: {hash_type}")
 
     @classmethod
-    def from_ntlm(cls, ntlm_hash: bytes, hash_type: CredKeyHashType, user_sid: Sid | None = None) -> CredKey:
+    def from_ntlm(
+        cls, ntlm_hash: bytes, hash_type: CredKeyHashType, user_sid: Sid | None = None
+    ) -> CredKey:
         """Create CredKey from NTLM hash."""
 
         if hash_type in (CredKeyHashType.MD4, CredKeyHashType.NTLM):
@@ -191,6 +211,11 @@ class CredKey(BaseModel):
     def from_sha1(cls, sha1_hash: bytes) -> CredKey:
         """Create CredKey from SHA1 hash."""
         return cls(key=Sha1Hash(value=sha1_hash))
+
+    @classmethod
+    def from_pbkdf2(cls, pbkdf2_hash: bytes) -> CredKey:
+        """Create CredKey from PBKDF2 hash."""
+        return cls(key=Pbkdf2Hash(value=pbkdf2_hash))
 
 
 class MasterKeyEncryptionKey(BaseModel):
@@ -255,7 +280,9 @@ class DpapiCrypto:
     """DPAPI cryptographic operations handler."""
 
     @staticmethod
-    def decrypt_blob(blob_data: bytes, masterkey: bytes, entropy: bytes | None = None) -> bytes:
+    def decrypt_blob(
+        blob_data: bytes, masterkey: bytes, entropy: bytes | None = None
+    ) -> bytes:
         """Decrypt a DPAPI blob using the provided masterkey SHA1.
 
         Args:

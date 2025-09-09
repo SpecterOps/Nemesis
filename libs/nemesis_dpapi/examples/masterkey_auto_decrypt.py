@@ -6,29 +6,10 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
-from nemesis_dpapi.repositories import MasterKeyFilter
+from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKey, MasterKeyFile, MasterKeyFilter
 
 
-async def main():
-    """Demonstrate built-in auto-decryption feature with test data."""
-    print("=== Built-in Auto-Decryption Demo (Real Test Data) ===")
-
-    # Load test data fixtures
-    fixtures_path = Path(__file__).parent.parent / "tests" / "fixtures"
-
-    # Load backup key from fixtures
-    with open(fixtures_path / "backupkey.json") as f:
-        backup_key_data = json.load(f)
-
-    # Load masterkey files
-    mk_domain_file = fixtures_path / "masterkey_domain.bin"
-    mk_local_file = fixtures_path / "masterkey_local.bin"
-
-    mk_domain = MasterKeyFile.parse(mk_domain_file)
-    mk_local = MasterKeyFile.parse(mk_local_file)
-
-    # Scenario 1: Add masterkeys first, then backup key
+async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
     print("\n📋 Scenario 1: masterkeys added first, then backup key")
     async with DpapiManager(storage_backend="memory") as dpapi:
         # Add encrypted masterkeys first
@@ -36,10 +17,12 @@ async def main():
 
         # Domain masterkey (ed93694f-5a6d-46e2-b821-219f2c0ecd4d)
         if mk_domain.master_key and mk_domain.domain_backup_key:
-            await dpapi.add_encrypted_masterkey(
-                guid=mk_domain.masterkey_guid,
-                encrypted_key_usercred=mk_domain.master_key,
-                encrypted_key_backup=mk_domain.domain_backup_key,
+            await dpapi.add_masterkey(
+                MasterKey(
+                    guid=mk_domain.masterkey_guid,
+                    encrypted_key_usercred=mk_domain.master_key,
+                    encrypted_key_backup=mk_domain.domain_backup_key,
+                )
             )
 
         # Check initial state
@@ -71,7 +54,8 @@ async def main():
         else:
             print("✗ No masterkeys were auto-decrypted")
 
-    # Scenario 2: Add backup key first, then masterkeys
+
+async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data):
     print("\n📋 Scenario 2: backup key added first, then masterkeys")
     async with DpapiManager(storage_backend="memory") as dpapi2:
         # Add domain backup key first
@@ -93,18 +77,22 @@ async def main():
 
         # Domain masterkey
         if mk_domain.master_key and mk_domain.domain_backup_key:
-            await dpapi2.add_encrypted_masterkey(
-                guid=mk_domain.masterkey_guid,
-                encrypted_key_usercred=mk_domain.master_key,
-                encrypted_key_backup=mk_domain.domain_backup_key,
+            await dpapi2.add_masterkey(
+                MasterKey(
+                    guid=mk_domain.masterkey_guid,
+                    encrypted_key_usercred=mk_domain.master_key,
+                    encrypted_key_backup=mk_domain.domain_backup_key,
+                )
             )
 
         # Local masterkey (won't be decrypted by domain backup key)
         if mk_local.master_key and mk_local.backup_key:
-            await dpapi2.add_encrypted_masterkey(
-                guid=mk_local.masterkey_guid,
-                encrypted_key_usercred=mk_local.master_key,
-                encrypted_key_backup=mk_local.backup_key,
+            await dpapi2.add_masterkey(
+                MasterKey(
+                    guid=mk_local.masterkey_guid,
+                    encrypted_key_usercred=mk_local.master_key,
+                    encrypted_key_backup=mk_local.backup_key,
+                )
             )
 
         # Give the background auto-decryption task a moment to complete
@@ -122,17 +110,21 @@ async def main():
         else:
             print("✗ No masterkeys were auto-decrypted")
 
-    print("\n=== Comparison: Auto-decryption Disabled ===")
+
+async def auto_decryption_disabled(mk_domain, backup_key_data):
+    print("\n=== Scenario 3: Auto-decryption Disabled ===")
 
     # Now demonstrate with auto-decryption disabled using data
     async with DpapiManager(storage_backend="memory", auto_decrypt=False) as dpapi_no_auto:
         print("\n5. Adding masterkeys with auto-decryption disabled...")
 
         if mk_domain.master_key and mk_domain.domain_backup_key:
-            await dpapi_no_auto.add_encrypted_masterkey(
-                guid=mk_domain.masterkey_guid,
-                encrypted_key_usercred=mk_domain.master_key,
-                encrypted_key_backup=mk_domain.domain_backup_key,
+            await dpapi_no_auto.add_masterkey(
+                MasterKey(
+                    guid=mk_domain.masterkey_guid,
+                    encrypted_key_usercred=mk_domain.master_key,
+                    encrypted_key_backup=mk_domain.domain_backup_key,
+                )
             )
 
         # Check state before backup key
@@ -156,6 +148,30 @@ async def main():
 
         if len(decrypted_keys_after) == len(decrypted_keys_before):
             print("✓ Auto-decryption correctly disabled - no automatic decryption occurred")
+
+
+async def main():
+    """Demonstrate built-in auto-decryption feature with test data."""
+    print("=== Built-in Auto-Decryption Demo (Real Test Data) ===")
+
+    # Load test data fixtures
+    fixtures_path = Path(__file__).parent.parent / "tests" / "fixtures"
+
+    # Load backup key from fixtures
+    with open(fixtures_path / "backupkey.json") as f:
+        backup_key_data = json.load(f)
+
+    # Load masterkey files
+    mk_domain_file = fixtures_path / "masterkey_domain.bin"
+    mk_local_file = fixtures_path / "masterkey_local.bin"
+
+    mk_domain = MasterKeyFile.parse(mk_domain_file)
+    mk_local = MasterKeyFile.parse(mk_local_file)
+
+    # Run all scenarios
+    await masterkeys_first_then_backup_key(mk_domain, backup_key_data)
+    await backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
+    await auto_decryption_disabled(mk_domain, backup_key_data)
 
     print("DONE!")
 

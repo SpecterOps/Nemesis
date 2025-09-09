@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
 
+from nemesis_dpapi.core import DpapiSystemCredential
+
 
 @dataclass
 class NewEncryptedMasterKeyEvent:
@@ -34,6 +36,7 @@ class NewDomainBackupKeyEvent:
 class NewDpapiSystemCredentialEvent:
     """Event emitted when a new DPAPI system credential is added"""
 
+    credential: DpapiSystemCredential
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 

@@ -17,19 +17,29 @@ const DpapiSubmitCredential = () => {
       value: 'password',
       label: 'Password',
       placeholder: 'Password123!',
-      apiType: 'password'
+      apiType: 'password',
+      description: 'Specify a SID and password to decrypt master keys associated with a user account. Collect it potentially from users (ask them), LSASS memory dumps (if the user is logged in and the OS supports stores it), keylogging, password managers, files (e.g. on disk, in shares, source code repositories), etc.'
     },
     {
-      value: 'ntlm_hash',
-      label: 'NTLM hash',
-      placeholder: '2B576ACBE6BCFDA7294D6BD18041B8FE',
-      apiType: 'ntlm_hash'
+      value: 'cred_key_ntlm',
+      label: 'NTLM Hash',
+      placeholder: 'ABD9FFB762C86B26EF4CE5C81B0DD37F (16 bytes)',
+      apiType: 'cred_key_ntlm',
+      description: 'Specify a SID and NTLM hash to decrypt master keys associated with a user account. Generate it by taking the MD4 hash of the password. Collect it from LSASS memory dumps (if the user is logged in and the OS supports stores it), by obtaining and/or cracking an NTLMv1 hash (e.g., using Internal-Monologue or coercing authentication on a machine with NTLMv1 enabled), by extracting it from the SAM & SYSTEM registry hives (for local accounts only), and from NTDS databases(ntds.dit+SYSTEM hive, dcsync, DSInternals, etc).'
     },
     {
-      value: 'cred_key',
-      label: 'Cred Key (SHA1)',
+      value: 'cred_key_sha1',
+      label: 'SHA1',
       placeholder: 'ABCDEF1234567890ABCDEF1234567890ABCDEF12 (20 bytes)',
-      apiType: 'cred_key'
+      apiType: 'cred_key_sha1',
+      description: 'Specify a SID and SHA1 credential key (a 20-byte key) to decrypt master keys associated with a user account. Generate it by taking the SHA1 hash of an NTLM hash. If the user is logged in, collect it from LSASS memory dumps or from the msv1_0 authentication package using LSA Whisperer\'s msv1_0!GetCredentialKey or msv1_0!GetStrongCredentialKey commands.'
+    },
+    {
+      value: 'cred_key_pbkdf2',
+      label: 'Secure Credential Key (PBKDF2)',
+      placeholder: 'ABCDEF1234567890ABCDEF1234567890ABCDEF12 (16 bytes)',
+      apiType: 'cred_key_pbkdf2',
+      description: 'Specify a SID and secure credential key (a 16-byte key derived using PBKDF2) to decrypt master keys associated with a user account.  If the user is logged in, collect it from LSASS memory dumps or from the msv1_0 authentication package using LSA Whisperer\'s msv1_0!GetCredentialKey or msv1_0!GetStrongCredentialKey commands.'
     },
     {
       value: 'domain_backup_key',
@@ -37,25 +47,28 @@ const DpapiSubmitCredential = () => {
       placeholder: 'AgAAAAAAAAAAAAAANgBjADIAYg... (base64(pvk))',
       apiType: 'domain_backup_key',
       requiresGuid: true,
-      supportsDomainController: true
+      supportsDomainController: true,
+      description: 'Domain controller DPAPI backup key in base64 PVK format. Extract from domain controllers using tools like mimikatz\'s lsadump::backupkeys, SharpDPAPI\s backupkey command, or by accessing the DPAPI_SYSTEM LSA secret on a host.'
     },
     {
       value: 'dec_master_key',
-      label: 'Decrypted Master Key',
+      label: 'Master Keys GUID:SHA1 Pairs',
       placeholder: 'Enter master key data (one per line)\n{guid}:{sha1}\n{guid}:{sha1}',
       apiType: 'dec_master_key',
-      structuredValue: true
+      structuredValue: true,
+      description: 'Plaintext DPAPI master keys as GUID:SHA1 pairs.'
     },
     {
       value: 'dpapi_system',
-      label: 'DPAPI_SYSTEM LSA Secret',
+      label: 'DPAPI_SYSTEM Secret',
       placeholder: 'ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890',
-      apiType: 'dpapi_system'
+      apiType: 'dpapi_system',
+      description: 'System DPAPI credential used for machine-wide encryption. Collect from the DPAPI_SYSTEM LSA secret (e.g., via the SYSTEM and SECURITY registry hives) or using the LSA APIs (e.g. using mimikatz\s lsadump::secrets command).'
     }
   ];
 
   const selectedType = credentialTypes.find(type => type.value === credentialType);
-  const requiresUserSid = ['password', 'ntlm_hash', 'cred_key'].includes(credentialType);
+  const requiresUserSid = ['password', 'cred_key_ntlm', 'cred_key_sha1', 'cred_key_pbkdf2'].includes(credentialType);
   const requiresGuid = selectedType?.requiresGuid || false;
   const supportsDomainController = selectedType?.supportsDomainController || false;
   const isStructuredValue = selectedType?.structuredValue || false;
@@ -242,6 +255,13 @@ const DpapiSubmitCredential = () => {
               <ChevronDown className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
             </div>
           </div>
+
+          {/* Credential Type Description */}
+          {selectedType?.description && (
+            <p className="text-sm text-gray-600 dark:text-gray-400 -mt-1 mb-4">
+              {selectedType.description}
+            </p>
+          )}
 
           {/* User SID Input - Only for password, ntlm_hash, cred_key */}
           {requiresUserSid && (
