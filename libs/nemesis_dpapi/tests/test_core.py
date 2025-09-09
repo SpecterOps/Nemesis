@@ -316,9 +316,9 @@ class TestDomainBackupKey:
         )
 
         manager = DpapiManager(storage_backend="memory", auto_decrypt=True)
-        await manager.add_domain_backup_key(backup_key)
+        await manager.upsert_domain_backup_key(backup_key)
 
-        await manager.add_masterkey(
+        await manager.upsert_masterkey(
             MasterKey(
                 guid=decrypted_masterkey.guid,
                 plaintext_key=decrypted_masterkey.plaintext_key,
@@ -354,7 +354,7 @@ class TestDpapiSystemSecret:
         # Create test data: 20 bytes user key + 20 bytes machine key
         user_key_data = b"user_key_12345678901"  # 20 bytes
         machine_key_data = b"mach_key_12345678901"  # 20 bytes
-        dpapi_system_data = user_key_data + machine_key_data
+        dpapi_system_data = machine_key_data + user_key_data  # 40 bytes total, machine key first
 
         secret = DpapiSystemCredential.from_bytes(dpapi_system_data)
 

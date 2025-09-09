@@ -450,9 +450,9 @@ class DpapiSystemCredential(BaseModel):
         if len(dpapi_system_bytes) != 40:
             raise ValueError(f"DPAPI_SYSTEM must be exactly 40 bytes, got {len(dpapi_system_bytes)}")
 
-        # Split into user (first 20 bytes) and machine (last 20 bytes) components
-        user_key_bytes = dpapi_system_bytes[:20]
-        machine_key_bytes = dpapi_system_bytes[20:]
+        # Split into machine (first 20 bytes) and user (last 20 bytes) components
+        machine_key_bytes = dpapi_system_bytes[:20]
+        user_key_bytes = dpapi_system_bytes[20:]
 
         return cls(user_key=user_key_bytes, machine_key=machine_key_bytes)
 

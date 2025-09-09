@@ -61,6 +61,7 @@ class AutoDecryptionObserver(DpapiObserver):
     async def _attempt_masterkey_decryption_with_system_credential(self, credential: DpapiSystemCredential) -> None:
         """Attempt to decrypt all encrypted masterkeys using the new DPAPI system credentials."""
 
+        print("Attempting to decrypt masterkeys with new DPAPI_SYSTEM credential")
         encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
 
         decrypted_count = 0
@@ -69,17 +70,19 @@ class AutoDecryptionObserver(DpapiObserver):
                 if not encrypted_mk.encrypted_key_usercred:
                     continue
 
-                mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(credential.machine_key)
+                for i in range(2):
+                    if i == 0:
+                        mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(credential.machine_key)
+                    else:
+                        mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(credential.user_key)
 
-                try:
-                    # Try to decrypt the masterkey using the DPAPI_SYSTEM key
-                    plaintext_mk = encrypted_mk.decrypt(mk_key)
-                    decrypted_count += 1
-                except MasterKeyDecryptionError as e:
-                    logger.debug(f"Failed to decrypt masterkey {encrypted_mk.guid} with DPAPI_SYSTEM key: {e}")
-                    continue
+                    try:
+                        plaintext_mk = encrypted_mk.decrypt(mk_key)
+                        decrypted_count += 1
+                    except MasterKeyDecryptionError:
+                        continue
 
-                await self.dpapi_manager.add_masterkey(plaintext_mk)
+                    await self.dpapi_manager.upsert_masterkey(plaintext_mk)
             except Exception as e:
                 logger.error(
                     f"Error decrypting masterkey with DPAPI_SYSTEM credential. MasterKey UUID: {encrypted_mk.guid}: {e}"

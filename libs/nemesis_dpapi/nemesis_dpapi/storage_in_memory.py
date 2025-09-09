@@ -13,10 +13,8 @@ class InMemoryMasterKeyRepository:
     def __init__(self) -> None:
         self._masterkeys: dict[UUID, MasterKey] = {}
 
-    async def add_masterkey(self, masterkey: MasterKey) -> None:
-        """Add a masterkey to storage."""
-        if masterkey.guid in self._masterkeys:
-            raise StorageError(f"Masterkey {masterkey.guid} already exists")
+    async def upsert_masterkey(self, masterkey: MasterKey) -> None:
+        """Add or update a masterkey in storage."""
         self._masterkeys[masterkey.guid] = masterkey
 
     async def get_masterkey(self, guid: UUID) -> MasterKey | None:
@@ -60,10 +58,8 @@ class InMemoryDomainBackupKeyRepository:
     def __init__(self) -> None:
         self._backup_keys: dict[UUID, DomainBackupKey] = {}
 
-    async def add_backup_key(self, key: DomainBackupKey) -> None:
-        """Add a domain backup key to storage."""
-        if key.guid in self._backup_keys:
-            raise StorageError(f"Domain backup key {key.guid} already exists")
+    async def upsert_backup_key(self, key: DomainBackupKey) -> None:
+        """Add or update a domain backup key in storage."""
         self._backup_keys[key.guid] = key
 
     async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:
@@ -87,8 +83,12 @@ class InMemoryDpapiSystemCredentialRepository:
     def __init__(self) -> None:
         self._credentials: list[DpapiSystemCredential] = []
 
-    async def add_credential(self, cred: DpapiSystemCredential) -> None:
-        """Add a DPAPI system credential to storage."""
+    async def upsert_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add or update a DPAPI system credential in storage."""
+        for i, existing_cred in enumerate(self._credentials):
+            if existing_cred.user_key == cred.user_key and existing_cred.machine_key == cred.machine_key:
+                self._credentials[i] = cred
+                return
         self._credentials.append(cred)
 
     async def get_all_credentials(self) -> list[DpapiSystemCredential]:

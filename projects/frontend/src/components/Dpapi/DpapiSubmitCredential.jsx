@@ -180,12 +180,19 @@ const DpapiSubmitCredential = () => {
         setMasterKeyData('');
       } else {
         let errorMessage = `HTTP ${response.status}`;
+        let errorDetails = null;
         try {
           const errorData = await response.json();
           if (errorData.message) {
             errorMessage = errorData.message;
           } else if (errorData.detail) {
-            errorMessage = errorData.detail;
+            // Handle validation errors (array of error objects)
+            if (Array.isArray(errorData.detail)) {
+              errorMessage = 'Validation error';
+              errorDetails = errorData.detail;
+            } else {
+              errorMessage = errorData.detail;
+            }
           } else if (errorData.error) {
             errorMessage = errorData.error;
           } else {
@@ -197,7 +204,8 @@ const DpapiSubmitCredential = () => {
         }
         setMessage({
           type: 'error',
-          text: `Failed to submit credential: ${errorMessage}`
+          text: `Failed to submit credential: ${errorMessage}`,
+          details: errorDetails
         });
       }
     } catch (error) {

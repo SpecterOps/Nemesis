@@ -15,14 +15,20 @@ class PostgresMasterKeyRepository:
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def add_masterkey(self, masterkey: MasterKey) -> None:
-        """Add a masterkey to storage."""
+    async def upsert_masterkey(self, masterkey: MasterKey) -> None:
+        """Add or update a masterkey in storage."""
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO masterkeys (guid, encrypted_key_usercred, encrypted_key_backup,
                                       plaintext_key, plaintext_key_sha1, backup_key_guid)
                 VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (guid) DO UPDATE SET
+                    encrypted_key_usercred = EXCLUDED.encrypted_key_usercred,
+                    encrypted_key_backup = EXCLUDED.encrypted_key_backup,
+                    plaintext_key = EXCLUDED.plaintext_key,
+                    plaintext_key_sha1 = EXCLUDED.plaintext_key_sha1,
+                    backup_key_guid = EXCLUDED.backup_key_guid
                 """,
                 str(masterkey.guid),
                 masterkey.encrypted_key_usercred,
@@ -120,11 +126,18 @@ class PostgresDomainBackupKeyRepository:
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def add_backup_key(self, key: DomainBackupKey) -> None:
-        """Add a domain backup key to storage."""
+    async def upsert_backup_key(self, key: DomainBackupKey) -> None:
+        """Add or update a domain backup key in storage."""
         async with self.pool.acquire() as conn:
             await conn.execute(
-                "INSERT INTO domain_backup_keys (guid, key_data) VALUES ($1, $2)", str(key.guid), key.key_data
+                """
+                INSERT INTO domain_backup_keys (guid, key_data)
+                VALUES ($1, $2)
+                ON CONFLICT (guid) DO UPDATE SET
+                    key_data = EXCLUDED.key_data
+                """,
+                str(key.guid),
+                key.key_data
             )
 
     async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:
@@ -156,11 +169,15 @@ class PostgresDpapiSystemCredentialRepository:
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def add_credential(self, cred: DpapiSystemCredential) -> None:
-        """Add a DPAPI system credential to storage."""
+    async def upsert_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add or update a DPAPI system credential in storage."""
         async with self.pool.acquire() as conn:
             await conn.execute(
-                "INSERT INTO dpapi_system_credentials (user_key, machine_key) VALUES ($1, $2)",
+                """
+                INSERT INTO dpapi_system_credentials (user_key, machine_key)
+                VALUES ($1, $2)
+                ON CONFLICT (user_key, machine_key) DO NOTHING
+                """,
                 cred.user_key,
                 cred.machine_key,
             )

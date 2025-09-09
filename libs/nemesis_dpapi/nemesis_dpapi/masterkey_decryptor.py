@@ -56,9 +56,11 @@ class MasterKeyDecryptorService:
                 for mk_key in mk_keys_to_try:
                     try:
                         plaintext_mk = masterkey.decrypt(mk_key)
-                        await self.dpapi_manager.add_masterkey(plaintext_mk)
+                        await self.dpapi_manager.upsert_masterkey(plaintext_mk)
                         decrypted_count += 1
-                        logger.info(f"Successfully decrypted master key with {credential_type.__name__}")
+                        logger.info(
+                            f"Successfully decrypted master key {masterkey.guid} with {credential_type.__name__}"
+                        )
                     except MasterKeyDecryptionError as e:
                         logger.debug(f"Failed to decrypt master key: {e}")
                         continue

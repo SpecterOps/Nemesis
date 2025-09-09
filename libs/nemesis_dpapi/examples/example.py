@@ -59,7 +59,7 @@ async def main() -> None:
 
         # Add masterkeys
         domain_mk_guid = UUID("12345678-1234-5678-9abc-123456789abc")
-        await dpapi.add_masterkey(
+        await dpapi.upsert_masterkey(
             MasterKey(
                 guid=domain_mk_guid,
                 encrypted_key_usercred=masterkey_file.master_key[:-1] + b"\x00",
@@ -68,7 +68,7 @@ async def main() -> None:
         )
 
         cred_mk_guid1 = UUID("87654321-4321-8765-cba9-987654321cba")
-        await dpapi.add_masterkey(
+        await dpapi.upsert_masterkey(
             MasterKey(
                 guid=cred_mk_guid1,
                 encrypted_key_usercred=masterkey_file.master_key[:-1] + b"\x00",
@@ -77,7 +77,7 @@ async def main() -> None:
         )
 
         cred_mk_guid2 = UUID("11111111-2222-3333-4444-555555555555")
-        await dpapi.add_masterkey(
+        await dpapi.upsert_masterkey(
             MasterKey(
                 guid=cred_mk_guid2,
                 encrypted_key_usercred=b"fake_encrypted_cred_masterkey_data_2",
@@ -102,7 +102,7 @@ async def main() -> None:
         if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
             raise ValueError("Invalid masterkey file")
 
-        await dpapi.add_masterkey(
+        await dpapi.upsert_masterkey(
             MasterKey(
                 guid=masterkey_file.masterkey_guid,
                 encrypted_key_usercred=masterkey_file.master_key,

@@ -16,7 +16,11 @@ from .eventing import (
     NewPlaintextMasterKeyEvent,
     Publisher,
 )
-from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
+from .exceptions import (
+    DpapiBlobDecryptionError,
+    MasterKeyNotDecryptedError,
+    MasterKeyNotFoundError,
+)
 from .storage_in_memory import (
     InMemoryDomainBackupKeyRepository,
     InMemoryDpapiSystemCredentialRepository,
@@ -43,7 +47,9 @@ from .repositories import MasterKeyFilter
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
-    def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:
+    def __init__(
+        self, storage_backend: str = "memory", auto_decrypt: bool = True
+    ) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:
@@ -84,7 +90,9 @@ class DpapiManager(Publisher):
 
             self._masterkey_repo = PostgresMasterKeyRepository(self._pg_pool)
             self._backup_key_repo = PostgresDomainBackupKeyRepository(self._pg_pool)
-            self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(self._pg_pool)
+            self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(
+                self._pg_pool
+            )
         else:
             raise ValueError(f"Unsupported storage backend: {self._storage_backend}")
 
@@ -100,14 +108,14 @@ class DpapiManager(Publisher):
         if self._pg_pool:
             await self._pg_pool.close()
 
-    async def add_masterkey(
+    async def upsert_masterkey(
         self,
         masterkey: MasterKey,
     ) -> None:
-        """Add a masterkey (encrypted or plaintext).
+        """Add or update a masterkey (encrypted or plaintext).
 
         Args:
-            masterkey: MasterKey object to add
+            masterkey: MasterKey object to add or update
         """
         if not self._initialized:
             await self._initialize_storage()
@@ -121,7 +129,7 @@ class DpapiManager(Publisher):
         else:
             new_masterkey = masterkey
 
-        await self._masterkey_repo.add_masterkey(new_masterkey)
+        await self._masterkey_repo.upsert_masterkey(new_masterkey)
 
         # Publish appropriate event based on what was added
         if new_masterkey.plaintext_key or new_masterkey.plaintext_key_sha1:
@@ -129,29 +137,30 @@ class DpapiManager(Publisher):
         elif new_masterkey.encrypted_key_usercred or new_masterkey.encrypted_key_backup:
             self.publish(NewEncryptedMasterKeyEvent(masterkey_guid=new_masterkey.guid))
 
-    async def add_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
-        """Add a domain backup key and decrypt all compatible masterkeys.
+    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
+        """Add or update a domain backup key and decrypt all compatible masterkeys.
 
         Args:
-            backup_key: Domain backup key to add
+            backup_key: Domain backup key to add or update
         """
+
         if not self._initialized:
             await self._initialize_storage()
 
-        await self._backup_key_repo.add_backup_key(backup_key)
+        await self._backup_key_repo.upsert_backup_key(backup_key)
 
         self.publish(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
 
-    async def add_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
-        """Add a DPAPI system credential.
+    async def upsert_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add or update a DPAPI system credential.
 
         Args:
-            cred: DPAPI system credential to add
+            cred: DPAPI system credential to add or update
         """
         if not self._initialized:
             await self._initialize_storage()
 
-        await self._dpapi_system_cred_repo.add_credential(cred)
+        await self._dpapi_system_cred_repo.upsert_credential(cred)
         self.publish(NewDpapiSystemCredentialEvent(credential=cred))
 
     async def decrypt_blob(self, blob: Blob) -> bytes:

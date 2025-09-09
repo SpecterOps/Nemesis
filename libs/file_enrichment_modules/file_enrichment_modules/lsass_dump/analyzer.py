@@ -240,7 +240,7 @@ class LsassDumpParser(EnrichmentModule):
                                 plaintext_key_sha1=sha1_masterkey_bytes,
                             )
                             # add this masterkey to the DPAPI cache
-                            asyncio.run(self.dpapi_manager.add_masterkey(mk))
+                            asyncio.run(self.dpapi_manager.upsert_masterkey(mk))
 
                         if hasattr(cred, "masterkey") and cred.masterkey:
                             cred_data["masterkey"] = (

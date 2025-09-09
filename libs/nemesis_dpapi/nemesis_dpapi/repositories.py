@@ -18,8 +18,8 @@ class MasterKeyFilter(Enum):
 class MasterKeyRepository(Protocol):
     """Protocol for masterkey storage operations."""
 
-    async def add_masterkey(self, masterkey: MasterKey) -> None:
-        """Add a masterkey to storage."""
+    async def upsert_masterkey(self, masterkey: MasterKey) -> None:
+        """Add or update a masterkey in storage."""
         ...
 
     async def get_masterkey(self, guid: UUID) -> MasterKey | None:
@@ -27,7 +27,9 @@ class MasterKeyRepository(Protocol):
         ...
 
     async def get_all_masterkeys(
-        self, filter_by: MasterKeyFilter = MasterKeyFilter.ALL, backup_key_guid: UUID | None = None
+        self,
+        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        backup_key_guid: UUID | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering.
 
@@ -49,8 +51,8 @@ class MasterKeyRepository(Protocol):
 class DomainBackupKeyRepository(Protocol):
     """Protocol for domain backup key storage operations."""
 
-    async def add_backup_key(self, key: DomainBackupKey) -> None:
-        """Add a domain backup key to storage."""
+    async def upsert_backup_key(self, key: DomainBackupKey) -> None:
+        """Add or update a domain backup key in storage."""
         ...
 
     async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:
@@ -69,8 +71,8 @@ class DomainBackupKeyRepository(Protocol):
 class DpapiSystemCredentialRepository(Protocol):
     """Protocol for DPAPI system credential storage operations."""
 
-    async def add_credential(self, cred: DpapiSystemCredential) -> None:
-        """Add a DPAPI system credential to storage."""
+    async def upsert_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add or update a DPAPI system credential in storage."""
         ...
 
     async def get_all_credentials(self) -> list[DpapiSystemCredential]:

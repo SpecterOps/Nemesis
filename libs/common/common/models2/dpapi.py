@@ -1,12 +1,12 @@
 """DPAPI credential models for API requests."""
 
 import re
-from typing import Literal
+from typing import Annotated, Literal, Union
 from uuid import UUID
 
 from common.logger import get_logger
 from nemesis_dpapi.types import Sid
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, Discriminator, Field, Tag, field_serializer, field_validator
 
 logger = get_logger(__name__)
 
@@ -35,13 +35,9 @@ class NtlmHashCredentialKey(BaseModel):
     def validate_ntlm_hash_length(cls, v):
         """Validate that value is exactly 32 hex characters (16 bytes)."""
         if len(v) != 32:
-            raise ValueError(
-                f"NTLM hash value must be exactly 32 hex characters (16 bytes), got {len(v)} characters"
-            )
+            raise ValueError(f"NTLM hash value must be exactly 32 hex characters (16 bytes), got {len(v)} characters")
         if not re.match(r"^[0-9a-fA-F]+$", v):
-            raise ValueError(
-                "NTLM hash value must contain only hex characters (0-9, a-f, A-F)"
-            )
+            raise ValueError("NTLM hash value must contain only hex characters (0-9, a-f, A-F)")
         return v
 
 
@@ -58,14 +54,10 @@ class Sha1CredentialKey(BaseModel):
     @classmethod
     def validate_cred_key_length(cls, v):
         """Validate that value is either 40 hex characters (20 bytes)."""
-        if len(v) == 40:
-            raise ValueError(
-                f"SHA1 credential key value must be 40 hex characters (20 bytes), got {len(v)} characters"
-            )
+        if len(v) != 40:
+            raise ValueError(f"SHA1 credential key value must be 40 hex characters (20 bytes), got {len(v)} characters")
         if not re.match(r"^[0-9a-fA-F]+$", v):
-            raise ValueError(
-                "SHA1 Credential key value must contain only hex characters (0-9, a-f, A-F)"
-            )
+            raise ValueError("SHA1 Credential key value must contain only hex characters (0-9, a-f, A-F)")
         return v
 
 
@@ -87,9 +79,7 @@ class Pbkdf2StrongCredentialKey(BaseModel):
                 f"Secure credential key (PBKDF2) value must be exactly 32 hex characters (16 bytes), got {len(v)} characters"
             )
         if not re.match(r"^[0-9a-fA-F]+$", v):
-            raise ValueError(
-                "Secure credential key (PBKDF2) value must contain only hex characters (0-9, a-f, A-F)"
-            )
+            raise ValueError("Secure credential key (PBKDF2) value must contain only hex characters (0-9, a-f, A-F)")
         return v
 
 
@@ -120,9 +110,7 @@ class MasterKeyData(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     guid: UUID = Field(description="Master key GUID")
-    key_hex: str = Field(
-        description="Hex-encoded master key bytes", pattern=r"^[0-9a-fA-F]+$"
-    )
+    key_hex: str = Field(description="Hex-encoded master key bytes", pattern=r"^[0-9a-fA-F]+$")
 
     @field_serializer("guid")
     def serialize_guid(self, value: UUID) -> str:
@@ -158,18 +146,26 @@ class DpapiSystemCredentialRequest(BaseModel):
                 f"DPAPI_SYSTEM value must be exactly 80 hex characters (40 bytes), got {len(v)} characters"
             )
         if not re.match(r"^[0-9a-fA-F]+$", v):
-            raise ValueError(
-                "DPAPI_SYSTEM value must contain only hex characters (0-9, a-f, A-F)"
-            )
+            raise ValueError("DPAPI_SYSTEM value must contain only hex characters (0-9, a-f, A-F)")
         return v
 
 
-type DpapiCredentialRequest = (
-    PasswordCredentialKey
-    | NtlmHashCredentialKey
-    | Sha1CredentialKey
-    | Pbkdf2StrongCredentialKey
-    | DomainBackupKeyCredential
-    | DecryptedMasterKeyCredential
-    | DpapiSystemCredentialRequest
-)
+def get_credential_type(v):
+    """Discriminator function to determine credential type from 'type' field."""
+    if isinstance(v, dict):
+        return v.get("type")
+    return getattr(v, "type", None)
+
+
+type DpapiCredentialRequest = Annotated[
+    Union[
+        Annotated[PasswordCredentialKey, Tag("password")],
+        Annotated[NtlmHashCredentialKey, Tag("cred_key_ntlm")],
+        Annotated[Sha1CredentialKey, Tag("cred_key_sha1")],
+        Annotated[Pbkdf2StrongCredentialKey, Tag("cred_key_pbkdf2")],
+        Annotated[DomainBackupKeyCredential, Tag("domain_backup_key")],
+        Annotated[DecryptedMasterKeyCredential, Tag("dec_master_key")],
+        Annotated[DpapiSystemCredentialRequest, Tag("dpapi_system")],
+    ],
+    Field(discriminator=Discriminator(get_credential_type)),
+]

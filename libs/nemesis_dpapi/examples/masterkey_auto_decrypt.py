@@ -17,7 +17,7 @@ async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
 
         # Domain masterkey (ed93694f-5a6d-46e2-b821-219f2c0ecd4d)
         if mk_domain.master_key and mk_domain.domain_backup_key:
-            await dpapi.add_masterkey(
+            await dpapi.upsert_masterkey(
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
                     encrypted_key_usercred=mk_domain.master_key,
@@ -77,7 +77,7 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
 
         # Domain masterkey
         if mk_domain.master_key and mk_domain.domain_backup_key:
-            await dpapi2.add_masterkey(
+            await dpapi2.upsert_masterkey(
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
                     encrypted_key_usercred=mk_domain.master_key,
@@ -87,7 +87,7 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
 
         # Local masterkey (won't be decrypted by domain backup key)
         if mk_local.master_key and mk_local.backup_key:
-            await dpapi2.add_masterkey(
+            await dpapi2.upsert_masterkey(
                 MasterKey(
                     guid=mk_local.masterkey_guid,
                     encrypted_key_usercred=mk_local.master_key,
@@ -119,7 +119,7 @@ async def auto_decryption_disabled(mk_domain, backup_key_data):
         print("\n5. Adding masterkeys with auto-decryption disabled...")
 
         if mk_domain.master_key and mk_domain.domain_backup_key:
-            await dpapi_no_auto.add_masterkey(
+            await dpapi_no_auto.upsert_masterkey(
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
                     encrypted_key_usercred=mk_domain.master_key,
