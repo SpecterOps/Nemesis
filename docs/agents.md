@@ -10,6 +10,7 @@ Nemesis currently has the following agents:
 | --------------------- | ---------- | ------------------ | -------------------------------------------------------------------------------------------------- |
 | `validate`            | LLM-based  | true               | Validates security findings by triaging them as true positives, false positives, or needing review |
 | `credential_analyzer` | LLM-based  | false              | Extracts credentials and passwords from text content using LLM analysis                            |
+| `dotnet_analyzer`     | LLM-based  | false              | Adapted .NET vulnerability analyzer from @Dreadnode.                                               |
 | `summarizer`          | LLM-based  | false              | Creates concise summaries of text content using LLM analysis                                       |
 | `jwt`                 | Rule-based | true               | Rule-based JWT analysis that checks expiry status and identifies sample data                       |
 
@@ -35,7 +36,7 @@ This agent will run/triage all findings that come in except for the following ca
 
 ### Credential Analyzer
 
-The `credential_analyzer` agent is an LLM-powered agent that will examine a text file for any credentials that might be present. It does **not** run automatically, but is triggered manually from a file details interace:
+The `credential_analyzer` agent is an LLM-powered agent that will examine a text file for any credentials that might be present. It does **not** run automatically, but is triggered manually from a file details interface:
 
 ![Agent Credential Extraction](images/agent_credential_extraction.png)
 
@@ -43,9 +44,21 @@ Once processing is complete, a markdown file will appear with any results in the
 
 ![Agent Credential Extraction Results](images/agent_credential_extraction_results.png)
 
+### .NET Analyzer
+
+The `dotnet_analyzer` agent is an LLM-powered agent directly adapted from [@Dreadnode](https://x.com/dreadnode)'s [example-agents](https://github.com/dreadnode/example-agents) repo. It will analyze a .NET binary using a number of callable tools, searching for security issues.
+
+It does **not** run automatically, but is triggered manually from a file details interface. A confirmation dialog will confirm running the agent, as it may take a bit of time and tokens.
+
+![.NET Analysis](images/agent_dotnet_analysis.png)
+
+Once processing is complete, a markdown file will appear with any results in the transforms tab under ".NET Assembly Analysis":
+
+![.NET Analysis Results](images/agent_dotnet_analysis_results.png)
+
 ### Text Summarizer
 
-The text `summarizer` agent is an LLM-powered agent that will summarize. Like the credential analizer, it does **not** run automatically, but is triggered manually from a file details interace. After processing, it will display the markdown-formatted text summary:
+The text `summarizer` agent is an LLM-powered agent that will summarize. Like the credential analizer, it does **not** run automatically, but is triggered manually from a file details interface. After processing, it will display the markdown-formatted text summary:
 
 ![Agent Text Summarizer](images/agent_text_summarizer.png)
 
