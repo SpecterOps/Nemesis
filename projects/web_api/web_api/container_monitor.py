@@ -6,7 +6,7 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
-from queue import Queue
+from queue import Empty, Queue
 from typing import Any
 
 import structlog
@@ -325,8 +325,8 @@ class ContainerMonitor:
                 # Get next container from queue (blocking with timeout)
                 try:
                     container_info = self.container_queue.get(timeout=1.0)
-                except:
-                    continue  # Timeout, check if still running
+                except Empty:  # Raised when the timeout hits
+                    continue
 
                 file_path = container_info["file_path"]
                 metadata = container_info["metadata"]

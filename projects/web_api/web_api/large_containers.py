@@ -444,9 +444,12 @@ class DDImageContainerExtractor(BaseContainerExtractor):
                 file_count = 0
                 total_size = 0
 
-                def walk_directory(directory, path="", stack=[]):
+                def walk_directory(directory, path="", stack=None):
                     """Recursively walk directory to count files with filtering"""
                     nonlocal file_count, total_size
+
+                    if stack is None:
+                        stack = []
 
                     for entry in directory:
                         # Skip . and .. entries

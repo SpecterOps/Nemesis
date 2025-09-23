@@ -4,7 +4,7 @@ from uuid import UUID
 
 import asyncpg
 
-from .core import DomainBackupKey, MasterKey
+from .core import DomainBackupKey, DpapiSystemCredential, MasterKey
 from .exceptions import StorageError
 from .repositories import MasterKeyFilter
 
@@ -15,14 +15,20 @@ class PostgresMasterKeyRepository:
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def add_masterkey(self, masterkey: MasterKey) -> None:
-        """Add a masterkey to storage."""
+    async def upsert_masterkey(self, masterkey: MasterKey) -> None:
+        """Add or update a masterkey in storage."""
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO masterkeys (guid, encrypted_key_usercred, encrypted_key_backup,
                                       plaintext_key, plaintext_key_sha1, backup_key_guid)
                 VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (guid) DO UPDATE SET
+                    encrypted_key_usercred = EXCLUDED.encrypted_key_usercred,
+                    encrypted_key_backup = EXCLUDED.encrypted_key_backup,
+                    plaintext_key = EXCLUDED.plaintext_key,
+                    plaintext_key_sha1 = EXCLUDED.plaintext_key_sha1,
+                    backup_key_guid = EXCLUDED.backup_key_guid
                 """,
                 str(masterkey.guid),
                 masterkey.encrypted_key_usercred,
@@ -120,11 +126,18 @@ class PostgresDomainBackupKeyRepository:
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def add_backup_key(self, key: DomainBackupKey) -> None:
-        """Add a domain backup key to storage."""
+    async def upsert_backup_key(self, key: DomainBackupKey) -> None:
+        """Add or update a domain backup key in storage."""
         async with self.pool.acquire() as conn:
             await conn.execute(
-                "INSERT INTO domain_backup_keys (guid, key_data) VALUES ($1, $2)", str(key.guid), key.key_data
+                """
+                INSERT INTO domain_backup_keys (guid, key_data)
+                VALUES ($1, $2)
+                ON CONFLICT (guid) DO UPDATE SET
+                    key_data = EXCLUDED.key_data
+                """,
+                str(key.guid),
+                key.key_data
             )
 
     async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:
@@ -150,6 +163,37 @@ class PostgresDomainBackupKeyRepository:
                 raise StorageError(f"Domain backup key {guid} not found")
 
 
+class PostgresDpapiSystemCredentialRepository:
+    """PostgreSQL storage for DPAPI system credentials."""
+
+    def __init__(self, connection_pool: asyncpg.Pool) -> None:
+        self.pool = connection_pool
+
+    async def upsert_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add or update a DPAPI system credential in storage."""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO dpapi_system_credentials (user_key, machine_key)
+                VALUES ($1, $2)
+                ON CONFLICT (user_key, machine_key) DO NOTHING
+                """,
+                cred.user_key,
+                cred.machine_key,
+            )
+
+    async def get_all_credentials(self) -> list[DpapiSystemCredential]:
+        """Retrieve all DPAPI system credentials."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT * FROM dpapi_system_credentials")
+            return [DpapiSystemCredential(user_key=row["user_key"], machine_key=row["machine_key"]) for row in rows]
+
+    async def delete_all_credentials(self) -> None:
+        """Delete all DPAPI system credentials."""
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM dpapi_system_credentials")
+
+
 async def create_tables(connection_pool: asyncpg.Pool) -> None:
     """Create database tables for DPAPI storage."""
     async with connection_pool.acquire() as conn:
@@ -169,5 +213,13 @@ async def create_tables(connection_pool: asyncpg.Pool) -> None:
                 guid TEXT PRIMARY KEY,
                 key_data BYTEA NOT NULL,
                 domain_controller TEXT
+            )
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS dpapi_system_credentials (
+                id SERIAL PRIMARY KEY,
+                user_key BYTEA NOT NULL,
+                machine_key BYTEA NOT NULL
             )
         """)

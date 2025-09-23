@@ -15,6 +15,7 @@ uvicorn = "^0.34.0"
 python-multipart = "^0.0.20"
 minio = "^7.2.14"
 common = { path = "../../libs/common", develop = true }
+nemesis_dpapi = { path = "../../libs/nemesis_dpapi", develop = true }
 tomli = "^2.2.1"
 asyncpg = "^0.30.0"
 requests = "^2.32.3"

@@ -1,9 +1,9 @@
 import logging
-from datetime import UTC, datetime
-from typing import Annotated, Union
-from uuid import UUID
 import re
-from typing import List, Optional, Literal
+from datetime import UTC, datetime
+from typing import Annotated, Literal, Union
+from uuid import UUID
+
 from pydantic import BaseModel, BeforeValidator, Field, field_validator
 
 logger = logging.getLogger(__name__)
@@ -70,38 +70,36 @@ UTCDatetime = Annotated[datetime, BeforeValidator(ensure_utc_datetime)]
 
 class FileFilters(BaseModel):
     """File filtering configuration for container extraction"""
-    
-    include: Optional[List[str]] = Field(
-        default=None, 
-        description="Patterns for files to include. If empty/None, all files are included by default."
+
+    include: list[str] | None = Field(
+        default=None, description="Patterns for files to include. If empty/None, all files are included by default."
     )
-    exclude: Optional[List[str]] = Field(
-        default=None,
-        description="Patterns for files to exclude. Takes precedence over include patterns."
+    exclude: list[str] | None = Field(
+        default=None, description="Patterns for files to exclude. Takes precedence over include patterns."
     )
     pattern_type: Literal["glob", "regex"] = Field(
         default="glob",
-        description="Type of patterns to use: 'glob' for shell-style wildcards, 'regex' for regular expressions"
+        description="Type of patterns to use: 'glob' for shell-style wildcards, 'regex' for regular expressions",
     )
-    
-    @field_validator('include', 'exclude')
+
+    @field_validator("include", "exclude")
     @classmethod
     def validate_patterns(cls, v, info):
         """Validate that patterns can be compiled if regex type"""
         if v is None:
             return v
-        
+
         # Access other field values through info.data
-        pattern_type = info.data.get('pattern_type', 'glob')
-        
-        if pattern_type == 'regex':
+        pattern_type = info.data.get("pattern_type", "glob")
+
+        if pattern_type == "regex":
             # Validate that all regex patterns compile
             for pattern in v:
                 try:
                     re.compile(pattern, re.IGNORECASE)
                 except re.error as e:
                     raise ValueError(f"Invalid regex pattern '{pattern}': {e}")
-        
+
         return v
 
 
@@ -114,9 +112,8 @@ class FileMetadata(BaseModel):
     timestamp: datetime | None = Field(default=None, description="ISO 8601 formatted timestamp")
     expiration: datetime | None = Field(default=None, description="ISO 8601 formatted expiration date")
     path: str
-    file_filters: Optional[FileFilters] = Field(
-        default=None,
-        description="Optional file filtering configuration for container extraction"
+    file_filters: FileFilters | None = Field(
+        default=None, description="Optional file filtering configuration for container extraction"
     )
 
     model_config = {
@@ -131,29 +128,28 @@ class FileMetadata(BaseModel):
                 "file_filters": {
                     "include": ["*.exe", "*/Users/**/*"],
                     "exclude": ["*/Windows/**/*", "*.tmp"],
-                    "pattern_type": "glob"
-                }
+                    "pattern_type": "glob",
+                },
             }
         }
     }
-
 
     model_config = {"json_encoders": {datetime: lambda dt: dt.isoformat()}}
 
 
 class ContainerFromMountRequest(BaseModel):
     """Request model for processing container files from mounted folder"""
-    
+
     filename: str = Field(description="Name of the container file in the mounted folder")
     metadata: FileMetadata = Field(description="File metadata for processing")
-    
+
     model_config = {
         "json_schema_extra": {
             "example": {
                 "filename": "large_archive.zip",
                 "metadata": {
                     "agent_id": "beacon123",
-                    "source": "host://192.168.1.1", 
+                    "source": "host://192.168.1.1",
                     "project": "assess-test",
                     "timestamp": "2025-01-06T23:48:46.925656Z",
                     "expiration": "2026-01-06T23:48:46.925656Z",
@@ -161,12 +157,13 @@ class ContainerFromMountRequest(BaseModel):
                     "file_filters": {
                         "include": ["*.exe", "*/Users/**/*"],
                         "exclude": ["*/Windows/**/*", "*.tmp"],
-                        "pattern_type": "glob"
-                    }
-                }
+                        "pattern_type": "glob",
+                    },
+                },
             }
         }
     }
+
 
 ####################
 # # OpenAPI Documentation Models

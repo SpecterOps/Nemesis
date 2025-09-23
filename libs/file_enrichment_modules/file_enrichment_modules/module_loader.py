@@ -2,7 +2,6 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Optional
 
 import structlog
 from common.models import EnrichmentResult
@@ -25,7 +24,7 @@ class EnrichmentModule:
 
 
 class ModuleLoader:
-    def __init__(self, modules_dir: Optional[str] = None):
+    def __init__(self, modules_dir: str | None = None):
         if modules_dir is None:
             self.modules_dir = Path(__file__).parent
         else:

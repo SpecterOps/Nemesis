@@ -1,12 +1,15 @@
 """Pytest tests for Windows SID validation."""
 
 import pytest
-from common.models2.dpapi import PasswordCredential, validate_windows_sid
-from pydantic import ValidationError
+from nemesis_dpapi.types import Sid, validate_windows_sid
+from pydantic import BaseModel, ValidationError
 
 
 class TestSidValidation:
     """Test cases for Windows SID validation."""
+
+    class SidTestType(BaseModel):
+        sid: Sid
 
     def test_valid_sids(self):
         """Test valid Windows SID formats."""
@@ -24,9 +27,9 @@ class TestSidValidation:
             validated = validate_windows_sid(sid)
             assert validated == sid
 
-            # Test in model
-            cred = PasswordCredential(type="password", value="test", user_sid=sid)
-            assert cred.user_sid == sid
+            # Test Pydantic type annotation
+            t = self.SidTestType(sid=sid)
+            assert t.sid == sid
 
     def test_invalid_sids(self):
         """Test invalid Windows SID formats."""
@@ -45,24 +48,23 @@ class TestSidValidation:
         ]
 
         for sid in invalid_sids:
-            # Test direct validation function
             with pytest.raises(ValueError, match="Invalid|SID"):
                 validate_windows_sid(sid)
 
-            # Test in model
             with pytest.raises(ValidationError):
-                PasswordCredential(type="password", value="test", user_sid=sid)
+                self.SidTestType(sid=sid)
 
     def test_sid_type_annotation(self):
         """Test that Sid type annotation works correctly."""
+
         # Valid SID should work
         valid_sid = "S-1-5-21-1234567890-1234567890-1234567890-1001"
-        cred = PasswordCredential(type="password", value="test", user_sid=valid_sid)
-        assert cred.user_sid == valid_sid
+        t = self.SidTestType(sid=valid_sid)
+        assert t.sid == valid_sid
 
         # Invalid SID should raise ValidationError
         with pytest.raises(ValidationError) as exc_info:
-            PasswordCredential(type="password", value="test", user_sid="invalid-sid")
+            self.SidTestType(sid="invalid-sid")
 
         assert "Invalid Windows SID format" in str(exc_info.value)
 

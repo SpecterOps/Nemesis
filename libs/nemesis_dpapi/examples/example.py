@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKeyFile
+from nemesis_dpapi import Blob, DomainBackupKey, DpapiManager, MasterKey, MasterKeyFile, MasterKeyFilter
 from nemesis_dpapi.eventing import (
     DpapiEvent,
     DpapiObserver,
@@ -14,7 +14,6 @@ from nemesis_dpapi.eventing import (
     NewEncryptedMasterKeyEvent,
     NewPlaintextMasterKeyEvent,
 )
-from nemesis_dpapi.repositories import MasterKeyFilter
 
 
 class MyDpapiEventMonitor(DpapiObserver):
@@ -36,6 +35,22 @@ class MyDpapiEventMonitor(DpapiObserver):
 async def main() -> None:
     """Demonstrate DPAPI library usage with eventing system."""
 
+    # Real/valid DPAPI test data
+    fixtures_path = Path(__file__).parent.parent / "tests" / "fixtures"
+    backup_key_path = fixtures_path / "backupkey.json"
+    masterkey_file_path = fixtures_path / "masterkey_domain.bin"
+    blob_path = fixtures_path / "blob_without_entropy.bin"
+
+    # Load and add real masterkey
+    with open(backup_key_path) as f:
+        backup_key_data = json.load(f)
+
+    masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+    backup_key_bytes = base64.b64decode(backup_key_data["key"])
+    fake_backup_key_bytes = backup_key_bytes[0:499] + b"\x00" + backup_key_bytes[500:]
+
+    print("\n=== Adding Real DPAPI Data ===")
+
     print("=== DPAPI Library Usage with Events ===")
     async with DpapiManager(storage_backend="memory") as dpapi:
         # Register custom observer
@@ -44,24 +59,30 @@ async def main() -> None:
 
         # Add masterkeys
         domain_mk_guid = UUID("12345678-1234-5678-9abc-123456789abc")
-        await dpapi.add_encrypted_masterkey(
-            guid=domain_mk_guid,
-            encrypted_key_usercred=b"fake_encrypted_usercred_data",
-            encrypted_key_backup=b"fake_encrypted_backup_data",
+        await dpapi.upsert_masterkey(
+            MasterKey(
+                guid=domain_mk_guid,
+                encrypted_key_usercred=masterkey_file.master_key[:-1] + b"\x00",
+                encrypted_key_backup=masterkey_file.domain_backup_key[:-1] + b"\x00",
+            )
         )
 
         cred_mk_guid1 = UUID("87654321-4321-8765-cba9-987654321cba")
-        await dpapi.add_encrypted_masterkey(
-            guid=cred_mk_guid1,
-            encrypted_key_usercred=b"fake_encrypted_cred_masterkey_data_1",
-            encrypted_key_backup=b"fake_encrypted_backup_data_1",
+        await dpapi.upsert_masterkey(
+            MasterKey(
+                guid=cred_mk_guid1,
+                encrypted_key_usercred=masterkey_file.master_key[:-1] + b"\x00",
+                encrypted_key_backup=masterkey_file.domain_backup_key[:-1] + b"\x00",
+            )
         )
 
         cred_mk_guid2 = UUID("11111111-2222-3333-4444-555555555555")
-        await dpapi.add_encrypted_masterkey(
-            guid=cred_mk_guid2,
-            encrypted_key_usercred=b"fake_encrypted_cred_masterkey_data_2",
-            encrypted_key_backup=b"fake_encrypted_backup_data_2",
+        await dpapi.upsert_masterkey(
+            MasterKey(
+                guid=cred_mk_guid2,
+                encrypted_key_usercred=b"fake_encrypted_cred_masterkey_data_2",
+                encrypted_key_backup=b"fake_encrypted_backup_data_2",
+            )
         )
 
         print("Added 3 masterkeys")
@@ -69,36 +90,24 @@ async def main() -> None:
         # Add domain backup key (fake one first)
         backup_key = DomainBackupKey(
             guid=UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
-            key_data=b"fake_backup_key_data_32_bytes_long",
+            key_data=fake_backup_key_bytes,
         )
-        await dpapi.add_domain_backup_key(backup_key)
+        await dpapi.upsert_domain_backup_key(backup_key)
 
         # Check results after fake backup key
         all_keys = await dpapi.get_all_masterkeys()
         decrypted_keys = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"\nAfter fake backup key - Total masterkeys: {len(all_keys)}, Decrypted: {len(decrypted_keys)}")
 
-        # Try with real DPAPI data if available
-        fixtures_path = Path(__file__).parent.parent / "tests" / "fixtures"
-        backup_key_path = fixtures_path / "backupkey.json"
-        masterkey_path = fixtures_path / "masterkey_domain.bin"
-        blob_path = fixtures_path / "blob_without_entropy.bin"
-
-        print("\n=== Adding Real DPAPI Data ===")
-
-        # Load and add real masterkey
-        with open(backup_key_path) as f:
-            backup_key_data = json.load(f)
-
-        masterkey_file = MasterKeyFile.parse(masterkey_path)
-
         if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
             raise ValueError("Invalid masterkey file")
 
-        await dpapi.add_encrypted_masterkey(
-            guid=masterkey_file.masterkey_guid,
-            encrypted_key_usercred=masterkey_file.master_key,
-            encrypted_key_backup=masterkey_file.domain_backup_key,
+        await dpapi.upsert_masterkey(
+            MasterKey(
+                guid=masterkey_file.masterkey_guid,
+                encrypted_key_usercred=masterkey_file.master_key,
+                encrypted_key_backup=masterkey_file.domain_backup_key,
+            )
         )
 
         # Add real backup key
@@ -107,10 +116,10 @@ async def main() -> None:
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi.add_domain_backup_key(real_backup_key)
+        await dpapi.upsert_domain_backup_key(real_backup_key)
 
         # Give auto-decryption time to work
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(1)
 
         # Check final results
         all_keys_final = await dpapi.get_all_masterkeys()
@@ -121,7 +130,7 @@ async def main() -> None:
 
         # Print the decrypted masterkeys  in the form of {GUID}:SHA1
         for key in decrypted_keys_final:
-            print(f"{key.guid}:{key.plaintext_key_sha1.hex()}")
+            print(f"{key.guid}:{key.plaintext_key_sha1.hex()}")  # type: ignore
 
         # Demonstrate blob decryption with the blob_without_entropy.bin fixture
         print("\n=== Decrypting DPAPI Blob ===")
@@ -131,7 +140,6 @@ async def main() -> None:
             blob_data = f.read()
 
         # Parse blob to get its structure and masterkey GUID
-        from nemesis_dpapi import Blob
 
         blob = Blob.parse(blob_data)
         print(f"Blob masterkey GUID: {blob.masterkey_guid}")

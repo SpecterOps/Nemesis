@@ -1,6 +1,7 @@
 """DPAPI credential submission routes."""
 
 import asyncio
+import base64
 import urllib.parse
 from functools import lru_cache
 from typing import Annotated
@@ -8,24 +9,19 @@ from uuid import UUID
 
 from common.logger import get_logger
 from common.models2.dpapi import (
-    CredKeyCredential,
     DecryptedMasterKeyCredential,
     DomainBackupKeyCredential,
     DpapiCredentialRequest,
-    NtlmHashCredential,
-    PasswordCredential,
+    DpapiSystemCredentialRequest,
+    NtlmHashCredentialKey,
+    PasswordCredentialKey,
+    Pbkdf2StrongCredentialKey,
+    Sha1CredentialKey,
 )
 from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException
-from nemesis_dpapi import (
-    CredKey,
-    CredKeyHashType,
-    DomainBackupKey,
-    DpapiCrypto,
-    DpapiManager,
-    MasterKeyEncryptionKey,
-    MasterKeyFilter,
-)
+from nemesis_dpapi import DomainBackupKey, DpapiManager, DpapiSystemCredential
+from nemesis_dpapi.masterkey_decryptor import MasterKeyDecryptorService
 
 logger = get_logger(__name__)
 
@@ -41,16 +37,21 @@ DpapiManagerDep = Annotated[DpapiManager, Depends(get_dpapi_manager)]
 
 async def dpapi_background_monitor() -> None:
     dpapi_manager = get_dpapi_manager()
+
     while True:
         try:
             num_masterkeys = await dpapi_manager.get_all_masterkeys()
             num_dec_masterkeys = len([mk for mk in num_masterkeys if mk.is_decrypted])
+            num_enc_masterkeys = len([mk for mk in num_masterkeys if not mk.is_decrypted])
             backupkeys = await dpapi_manager._backup_key_repo.get_all_backup_keys()
+            num_system_creds = await dpapi_manager._dpapi_system_cred_repo.get_all_credentials()
             logger.info(
-                "Background DPAPI manager loop tick",
-                num_masterkeys=len(num_masterkeys),
-                num_dec_masterkeys=num_dec_masterkeys,
+                "Background DPAPI loop tick",
+                total_mks=len(num_masterkeys),
+                num_enc_mks=num_enc_masterkeys,
+                num_dec_mks=num_dec_masterkeys,
                 num_backup_keys=len(backupkeys),
+                num_system_creds=len(num_system_creds),
             )
         except Exception as e:
             logger.exception("Error in DPAPI background monitor", error=str(e))
@@ -82,8 +83,12 @@ async def submit_dpapi_credential(
                 result = await _handle_domain_backup_key_credential(dpapi_manager, request)
             elif isinstance(request, DecryptedMasterKeyCredential):
                 result = await _handle_decrypted_master_key_credential(dpapi_manager, request)
-            elif isinstance(request, (PasswordCredential, NtlmHashCredential, CredKeyCredential)):
-                result = await _handle_string_based_credential(dpapi_manager, request)
+            elif isinstance(request, DpapiSystemCredentialRequest):
+                result = await _handle_dpapi_system_credential(dpapi_manager, request)
+            elif isinstance(
+                request, (PasswordCredentialKey, NtlmHashCredentialKey, Sha1CredentialKey, Pbkdf2StrongCredentialKey)
+            ):
+                result = await _handle_password_based_credential(dpapi_manager, request)
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported credential type: {request.type}")
 
@@ -112,7 +117,6 @@ async def submit_dpapi_credential(
 
 async def _handle_domain_backup_key_credential(dpapi_manager: DpapiManager, request: DomainBackupKeyCredential) -> dict:
     """Handle domain backup key credential submission."""
-    import base64
 
     # Decode URL encoded value for string-based credentials
     credential_value = urllib.parse.unquote(request.value)
@@ -121,7 +125,7 @@ async def _handle_domain_backup_key_credential(dpapi_manager: DpapiManager, requ
         guid=UUID(request.guid),  # Use the provided GUID
         key_data=pvk_data,
     )
-    await dpapi_manager.add_domain_backup_key(backup_key)
+    await dpapi_manager.upsert_domain_backup_key(backup_key)
     return {"status": "success", "type": "domain_backup_key"}
 
 
@@ -143,7 +147,7 @@ async def _handle_decrypted_master_key_credential(
 
         # Check if masterkey already exists
         existing_masterkey = await dpapi_manager._masterkey_repo.get_masterkey(masterkey_guid)
-        if existing_masterkey is not None:
+        if existing_masterkey is not None and existing_masterkey.is_decrypted:
             logger.info(f"Master key {masterkey_guid} already exists, skipping")
             existing_guids.append(str(masterkey_guid))
             continue
@@ -156,7 +160,7 @@ async def _handle_decrypted_master_key_credential(
         )
 
         # Add directly to the repository
-        await dpapi_manager._masterkey_repo.add_masterkey(masterkey)
+        await dpapi_manager._masterkey_repo.upsert_masterkey(masterkey)
         processed_guids.append(str(masterkey_guid))
 
     return {
@@ -167,43 +171,34 @@ async def _handle_decrypted_master_key_credential(
     }
 
 
-async def _handle_string_based_credential(
-    dpapi_manager: DpapiManager, request: PasswordCredential | NtlmHashCredential | CredKeyCredential
-) -> dict:
-    """Handle password, NTLM hash, and cred key credential submissions."""
+async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: DpapiSystemCredentialRequest) -> dict:
+    """Handle DPAPI_SYSTEM LSA secret credential submission."""
 
-    if isinstance(request, PasswordCredential):
-        creds_to_try = [
-            CredKey.from_password(request.value, CredKeyHashType.PBKDF2, request.user_sid),
-            CredKey.from_password(request.value, CredKeyHashType.SHA1),
-            CredKey.from_password(request.value, CredKeyHashType.NTLM),
-        ]
-    elif isinstance(request, NtlmHashCredential):
-        hash_bytes = bytes.fromhex(request.value)
-        creds_to_try = [
-            CredKey.from_ntlm(hash_bytes, CredKeyHashType.PBKDF2, request.user_sid),
-            CredKey.from_ntlm(hash_bytes, CredKeyHashType.NTLM),
-        ]
-    elif isinstance(request, CredKeyCredential):
-        hash_bytes = bytes.fromhex(request.value)
-        creds_to_try = [
-            CredKey.from_sha1(hash_bytes),
-        ]
+    dpapi_system_bytes = bytes.fromhex(request.value)
+    dpapi_system_key = DpapiSystemCredential.from_bytes(dpapi_system_bytes)
+    await dpapi_manager.upsert_dpapi_system_credential(dpapi_system_key)
+
+    return {"status": "success", "type": "dpapi_system"}
+
+
+async def _handle_password_based_credential(
+    dpapi_manager: DpapiManager,
+    request: PasswordCredentialKey | NtlmHashCredentialKey | Sha1CredentialKey | Pbkdf2StrongCredentialKey,
+):
+    from nemesis_dpapi.crypto import NtlmHash, Password, Pbkdf2Hash, Sha1Hash
+
+    decryptor = MasterKeyDecryptorService(dpapi_manager)
+
+    if isinstance(request, PasswordCredentialKey):
+        c = Password(value=request.value)
+    elif isinstance(request, NtlmHashCredentialKey):
+        c = NtlmHash(value=bytes.fromhex(request.value))
+    elif isinstance(request, Sha1CredentialKey):
+        c = Sha1Hash(value=bytes.fromhex(request.value))
+    elif isinstance(request, Pbkdf2StrongCredentialKey):
+        c = Pbkdf2Hash(value=bytes.fromhex(request.value))
     else:
-        raise ValueError(f"Unsupported credential type: {request.type}")
+        raise ValueError(f"Unsupported password-based credential type: {type(request)}")
 
-    encrypted_masterkeys = await dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
-
-    for masterkey in encrypted_masterkeys:
-        if not masterkey.encrypted_key_usercred:
-            continue
-
-        masterkey_bytes = masterkey.encrypted_key_usercred
-
-        for cred in creds_to_try:
-            mk_key = MasterKeyEncryptionKey.from_cred_key(cred, request.user_sid)
-
-            mk = DpapiCrypto.decrypt_masterkey_with_mk_key(masterkey_bytes, mk_key)
-            await dpapi_manager._masterkey_repo.add_masterkey(mk)
-
-    return {"status": "success", "type": request.type}
+    result = await decryptor.process_password_based_credential(c, request.user_sid)
+    return result

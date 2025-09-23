@@ -7,15 +7,38 @@ import asyncpg
 from Crypto.Hash import SHA1
 
 from .auto_decrypt import AutoDecryptionObserver
-from .core import Blob, DomainBackupKey, MasterKey
+from .core import Blob, DomainBackupKey, DpapiSystemCredential, MasterKey
 from .crypto import DpapiCrypto
-from .eventing import NewDomainBackupKeyEvent, NewEncryptedMasterKeyEvent, NewPlaintextMasterKeyEvent, Publisher
-from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
-from .storage_in_memory import InMemoryDomainBackupKeyRepository, InMemoryMasterKeyRepository
-from .storage_postgres import PostgresDomainBackupKeyRepository, PostgresMasterKeyRepository, create_tables
+from .eventing import (
+    NewDomainBackupKeyEvent,
+    NewDpapiSystemCredentialEvent,
+    NewEncryptedMasterKeyEvent,
+    NewPlaintextMasterKeyEvent,
+    Publisher,
+)
+from .exceptions import (
+    DpapiBlobDecryptionError,
+    MasterKeyNotDecryptedError,
+    MasterKeyNotFoundError,
+)
+from .storage_in_memory import (
+    InMemoryDomainBackupKeyRepository,
+    InMemoryDpapiSystemCredentialRepository,
+    InMemoryMasterKeyRepository,
+)
+from .storage_postgres import (
+    PostgresDomainBackupKeyRepository,
+    PostgresDpapiSystemCredentialRepository,
+    PostgresMasterKeyRepository,
+    create_tables,
+)
 
 if TYPE_CHECKING:
-    from .repositories import DomainBackupKeyRepository, MasterKeyRepository
+    from .repositories import (
+        DomainBackupKeyRepository,
+        DpapiSystemCredentialRepository,
+        MasterKeyRepository,
+    )
 
 from .repositories import MasterKeyFilter
 
@@ -24,7 +47,9 @@ from .repositories import MasterKeyFilter
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
-    def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:
+    def __init__(
+        self, storage_backend: str = "memory", auto_decrypt: bool = True
+    ) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:
@@ -41,6 +66,7 @@ class DpapiManager(Publisher):
         # Storage-related fields
         self._masterkey_repo: MasterKeyRepository
         self._backup_key_repo: DomainBackupKeyRepository
+        self._dpapi_system_cred_repo: DpapiSystemCredentialRepository
         self._pg_pool: asyncpg.Pool | None = None
 
         # Set up auto-decryption if enabled
@@ -53,6 +79,7 @@ class DpapiManager(Publisher):
         if self._storage_backend == "memory":
             self._masterkey_repo = InMemoryMasterKeyRepository()
             self._backup_key_repo = InMemoryDomainBackupKeyRepository()
+            self._dpapi_system_cred_repo = InMemoryDpapiSystemCredentialRepository()
         elif self._storage_backend.startswith("postgres://"):
             # Initialize PostgreSQL connection pool
             pool = await asyncpg.create_pool(self._storage_backend)
@@ -63,6 +90,9 @@ class DpapiManager(Publisher):
 
             self._masterkey_repo = PostgresMasterKeyRepository(self._pg_pool)
             self._backup_key_repo = PostgresDomainBackupKeyRepository(self._pg_pool)
+            self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(
+                self._pg_pool
+            )
         else:
             raise ValueError(f"Unsupported storage backend: {self._storage_backend}")
 
@@ -78,72 +108,60 @@ class DpapiManager(Publisher):
         if self._pg_pool:
             await self._pg_pool.close()
 
-    async def add_encrypted_masterkey(
+    async def upsert_masterkey(
         self,
-        guid: UUID,
-        encrypted_key_usercred: bytes,
-        encrypted_key_backup: bytes,
+        masterkey: MasterKey,
     ) -> None:
-        """Add an encrypted masterkey and attempt decryption if possible.
+        """Add or update a masterkey (encrypted or plaintext).
 
         Args:
-            guid: Unique identifier for the masterkey (the masterkey GUID)
-            encrypted_key_usercred: Masterkey data encrypted with the user's cred
-            encrypted_key_backup: Masterkey data encrypted with the domain backup key
-        """
-
-        if not self._initialized:
-            await self._initialize_storage()
-
-        masterkey = MasterKey(
-            guid=guid,
-            encrypted_key_usercred=encrypted_key_usercred,
-            encrypted_key_backup=encrypted_key_backup,
-        )
-        await self._masterkey_repo.add_masterkey(masterkey)
-
-        self.publish(NewEncryptedMasterKeyEvent(masterkey_guid=guid))
-
-    async def add_decrypted_masterkey(
-        self, guid: UUID, plaintext_key: bytes | None, plaintext_key_sha1: bytes | None
-    ) -> None:
-        """Add an decrypted masterkey
-
-        Args:
-            guid: Unique identifier for the masterkey (the masterkey GUID)
-            plaintext_key: Decrypted masterkey data
+            masterkey: MasterKey object to add or update
         """
         if not self._initialized:
             await self._initialize_storage()
 
-        if plaintext_key:
-            masterkey = MasterKey(
-                guid=guid,
-                plaintext_key=plaintext_key,
-                plaintext_key_sha1=SHA1.new(plaintext_key).digest(),
+        calculated_sha1 = None
+        if masterkey.plaintext_key and not masterkey.plaintext_key_sha1:
+            calculated_sha1 = SHA1.new(masterkey.plaintext_key).digest()
+            new_masterkey = masterkey.model_copy(
+                update={"plaintext_key_sha1": calculated_sha1},
             )
-            await self._masterkey_repo.add_masterkey(masterkey)
-            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=guid))
-        elif plaintext_key_sha1:
-            masterkey = MasterKey(
-                guid=guid,
-                plaintext_key_sha1=SHA1.new(plaintext_key).digest(),
-            )
-            await self._masterkey_repo.add_masterkey(masterkey)
-            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=guid))
+        else:
+            new_masterkey = masterkey
 
-    async def add_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
-        """Add a domain backup key and decrypt all compatible masterkeys.
+        await self._masterkey_repo.upsert_masterkey(new_masterkey)
+
+        # Publish appropriate event based on what was added
+        if new_masterkey.plaintext_key or new_masterkey.plaintext_key_sha1:
+            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=new_masterkey.guid))
+        elif new_masterkey.encrypted_key_usercred or new_masterkey.encrypted_key_backup:
+            self.publish(NewEncryptedMasterKeyEvent(masterkey_guid=new_masterkey.guid))
+
+    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
+        """Add or update a domain backup key and decrypt all compatible masterkeys.
 
         Args:
-            backup_key: Domain backup key to add
+            backup_key: Domain backup key to add or update
         """
+
         if not self._initialized:
             await self._initialize_storage()
 
-        await self._backup_key_repo.add_backup_key(backup_key)
+        await self._backup_key_repo.upsert_backup_key(backup_key)
 
         self.publish(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
+
+    async def upsert_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
+        """Add or update a DPAPI system credential.
+
+        Args:
+            cred: DPAPI system credential to add or update
+        """
+        if not self._initialized:
+            await self._initialize_storage()
+
+        await self._dpapi_system_cred_repo.upsert_credential(cred)
+        self.publish(NewDpapiSystemCredentialEvent(credential=cred))
 
     async def decrypt_blob(self, blob: Blob) -> bytes:
         """Decrypt a DPAPI blob using available masterkeys.
