@@ -739,3 +739,27 @@ CREATE TABLE IF NOT EXISTS chromium.cookies (
     FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL,
     UNIQUE (source, username, browser, host_key, name, path)
 );
+
+-- DPAPI tables
+CREATE SCHEMA dpapi;
+
+CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
+    guid TEXT PRIMARY KEY,
+    encrypted_key_usercred BYTEA,
+    encrypted_key_backup BYTEA,
+    plaintext_key BYTEA,
+    plaintext_key_sha1 BYTEA,
+    backup_key_guid TEXT
+);
+
+CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (
+    guid TEXT PRIMARY KEY,
+    key_data BYTEA NOT NULL,
+    domain_controller TEXT
+);
+
+CREATE TABLE IF NOT EXISTS dpapi.system_credentials (
+    id SERIAL PRIMARY KEY,
+    user_key BYTEA NOT NULL,
+    machine_key BYTEA NOT NULL
+);

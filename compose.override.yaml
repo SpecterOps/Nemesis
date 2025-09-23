@@ -130,3 +130,8 @@ services:
       - /src/projects/document_conversion/.venv
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+
+  postgres:
+    # expose the port locally
+    ports:
+      - "5432:5432"

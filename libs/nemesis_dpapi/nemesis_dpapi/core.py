@@ -12,7 +12,7 @@ from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FI
 from impacket.dpapi import DomainKey as ImpacketDomainKey
 from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 
 from .crypto import MasterKeyEncryptionKey
 from .dpapi_blob import DPAPI_BLOB
@@ -349,6 +349,50 @@ class DomainBackupKey(BaseModel):
     guid: UUID
     key_data: bytes
     domain_controller: str | None = None
+
+    @field_validator("key_data")
+    @classmethod
+    def validate_key_data(cls, v: bytes) -> bytes:
+        """Validate that key_data contains a correctly formatted domain backup key.
+
+        A valid domain backup key should:
+        1. Be at least large enough to contain a PVK file header
+        2. Have a valid PVK file header structure
+        3. Have a valid PRIVATE_KEY_BLOB structure following the header
+
+        Args:
+            v: The key_data bytes to validate
+
+        Returns:
+            The validated key_data bytes
+
+        Raises:
+            ValueError: If the key_data is not a valid domain backup key
+        """
+        if not isinstance(v, bytes):
+            raise ValueError("key_data must be bytes")
+
+        # Check minimum size - PVK header is at least 20 bytes
+        pvk_header_size = len(PVK_FILE_HDR())
+        if len(v) < pvk_header_size:
+            raise ValueError(f"key_data too short: {len(v)} bytes, minimum {pvk_header_size} bytes required for PVK header")
+
+        try:
+            # Validate PVK header can be parsed
+            PVK_FILE_HDR(v[:pvk_header_size])
+        except Exception as e:
+            raise ValueError(f"Invalid PVK file header: {e}") from e
+
+        try:
+            # Validate PRIVATE_KEY_BLOB can be parsed from the remaining data
+            private_key_data = v[pvk_header_size:]
+            if len(private_key_data) == 0:
+                raise ValueError("No private key data found after PVK header")
+            PRIVATE_KEY_BLOB(private_key_data)
+        except Exception as e:
+            raise ValueError(f"Invalid private key blob: {e}") from e
+
+        return v
 
     def decrypt_masterkey_file(self, masterkey_file: MasterKeyFile) -> MasterKey:
         """Decrypt a masterkey file using this domain backup key.

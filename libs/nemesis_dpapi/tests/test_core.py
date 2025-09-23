@@ -215,13 +215,16 @@ class TestBlob:
 class TestDomainBackupKey:
     """Test DomainBackupKey dataclass."""
 
-    def test_create_domain_backup_key(self):
+    def test_create_domain_backup_key(self, get_file_path):
         """Test creating DomainBackupKey."""
-        from uuid import uuid4
+        # Load valid backup key data from fixtures
+        backupkey_file = get_file_path("backupkey.json")
+        with open(backupkey_file) as f:
+            backupkey_data = json.load(f)
 
-        guid = uuid4()
-        key_data = b"backup_key_data_here"
-        domain_controller = "DC01.example.com"
+        guid = UUID(backupkey_data["backup_key_guid"])
+        key_data = base64.b64decode(backupkey_data["key"])
+        domain_controller = backupkey_data["dc"]
 
         backup_key = DomainBackupKey(guid=guid, key_data=key_data, domain_controller=domain_controller)
 
@@ -229,12 +232,15 @@ class TestDomainBackupKey:
         assert backup_key.key_data == key_data
         assert backup_key.domain_controller == domain_controller
 
-    def test_create_domain_backup_key_no_dc(self):
+    def test_create_domain_backup_key_no_dc(self, get_file_path):
         """Test creating DomainBackupKey without domain controller."""
-        from uuid import uuid4
+        # Load valid backup key data from fixtures
+        backupkey_file = get_file_path("backupkey.json")
+        with open(backupkey_file) as f:
+            backupkey_data = json.load(f)
 
-        guid = uuid4()
-        key_data = b"backup_key_data_here"
+        guid = UUID(backupkey_data["backup_key_guid"])
+        key_data = base64.b64decode(backupkey_data["key"])
 
         backup_key = DomainBackupKey(guid=guid, key_data=key_data)
 
@@ -335,8 +341,8 @@ class TestDomainBackupKey:
         """Test decrypting a masterkey file without domain backup key raises exception."""
         from uuid import uuid4
 
-        # Create a backup key
-        backup_key = DomainBackupKey(guid=uuid4(), key_data=b"fake_key_data")
+        # Create a backup key with fake data (bypassing validation using model_construct)
+        backup_key = DomainBackupKey.model_construct(guid=uuid4(), key_data=b"fake_key_data")
 
         # Load the local masterkey file (no domain backup key)
         masterkey_file = MasterKeyFile.parse("tests/fixtures/masterkey_local.bin")
@@ -344,6 +350,24 @@ class TestDomainBackupKey:
         # Should raise MasterKeyDecryptionError since no domain backup key in file
         with pytest.raises(ValueError, match="contains no domain backup key"):
             backup_key.decrypt_masterkey_file(masterkey_file)
+
+    def test_domain_backup_key_validation(self):
+        """Test that DomainBackupKey validates key_data format."""
+        from uuid import uuid4
+
+        guid = uuid4()
+
+        # Test with invalid key data (too short)
+        with pytest.raises(ValueError, match="key_data too short"):
+            DomainBackupKey(guid=guid, key_data=b"too_short")
+
+        # Test with empty key data
+        with pytest.raises(ValueError, match="key_data too short"):
+            DomainBackupKey(guid=guid, key_data=b"")
+
+        # Test with non-bytes key data should be caught by Pydantic
+        with pytest.raises(ValueError):
+            DomainBackupKey(guid=guid, key_data="not_bytes")
 
 
 class TestDpapiSystemSecret:

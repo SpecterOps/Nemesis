@@ -1,4 +1,5 @@
 import asyncio
+from time import perf_counter
 
 from common.logger import get_logger
 
@@ -43,6 +44,7 @@ class MasterKeyDecryptorService:
         self, mk_keys_to_try: list[MasterKeyEncryptionKey], credential_type: type
     ) -> None:
         """Perform master key decryption attempts in background."""
+        start_time = perf_counter()
         try:
             logger.info(f"Starting background decryption for credential type: {credential_type.__name__}")
 
@@ -66,11 +68,15 @@ class MasterKeyDecryptorService:
                         continue
 
             # TODO: Notify the user that new master keys have been decrypted
-            logger.info(f"Background decryption completed. Decrypted {decrypted_count} master keys")
+            elapsed_time = perf_counter() - start_time
+            logger.info(
+                f"Background decryption completed. Decrypted {decrypted_count}/({len(encrypted_masterkeys)}) master keys in {elapsed_time:.2f} seconds"
+            )
 
         except Exception as e:
+            elapsed_time = perf_counter() - start_time
             logger.error(
-                f"Error in background masterkey decryption task. Cred type: {credential_type.__name__}. Error: {e}"
+                f"Error in background masterkey decryption task. Cred type: {credential_type.__name__}. Error: {e}. Elapsed time: {elapsed_time:.2f} seconds"
             )
 
     def _generate_mk_encryption_keys(

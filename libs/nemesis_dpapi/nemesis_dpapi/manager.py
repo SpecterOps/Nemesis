@@ -16,11 +16,7 @@ from .eventing import (
     NewPlaintextMasterKeyEvent,
     Publisher,
 )
-from .exceptions import (
-    DpapiBlobDecryptionError,
-    MasterKeyNotDecryptedError,
-    MasterKeyNotFoundError,
-)
+from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 from .storage_in_memory import (
     InMemoryDomainBackupKeyRepository,
     InMemoryDpapiSystemCredentialRepository,
@@ -30,7 +26,6 @@ from .storage_postgres import (
     PostgresDomainBackupKeyRepository,
     PostgresDpapiSystemCredentialRepository,
     PostgresMasterKeyRepository,
-    create_tables,
 )
 
 if TYPE_CHECKING:
@@ -47,9 +42,7 @@ from .repositories import MasterKeyFilter
 class DpapiManager(Publisher):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
-    def __init__(
-        self, storage_backend: str = "memory", auto_decrypt: bool = True
-    ) -> None:
+    def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:
@@ -86,13 +79,10 @@ class DpapiManager(Publisher):
             if pool is None:
                 raise ValueError("Failed to create PostgreSQL connection pool")
             self._pg_pool = pool
-            await create_tables(self._pg_pool)
 
             self._masterkey_repo = PostgresMasterKeyRepository(self._pg_pool)
             self._backup_key_repo = PostgresDomainBackupKeyRepository(self._pg_pool)
-            self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(
-                self._pg_pool
-            )
+            self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(self._pg_pool)
         else:
             raise ValueError(f"Unsupported storage backend: {self._storage_backend}")
 

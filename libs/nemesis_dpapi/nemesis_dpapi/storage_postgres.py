@@ -8,6 +8,10 @@ from .core import DomainBackupKey, DpapiSystemCredential, MasterKey
 from .exceptions import StorageError
 from .repositories import MasterKeyFilter
 
+MASTKEYS_TABLE = "dpapi.masterkeys"
+BACKUPKEYS_TABLE = "dpapi.domain_backup_keys"
+SYSTEMCREDS_TABLE = "dpapi.system_credentials"
+
 
 class PostgresMasterKeyRepository:
     """PostgreSQL storage for masterkeys."""
@@ -19,8 +23,8 @@ class PostgresMasterKeyRepository:
         """Add or update a masterkey in storage."""
         async with self.pool.acquire() as conn:
             await conn.execute(
-                """
-                INSERT INTO masterkeys (guid, encrypted_key_usercred, encrypted_key_backup,
+                f"""
+                INSERT INTO {MASTKEYS_TABLE} (guid, encrypted_key_usercred, encrypted_key_backup,
                                       plaintext_key, plaintext_key_sha1, backup_key_guid)
                 VALUES ($1, $2, $3, $4, $5, $6)
                 ON CONFLICT (guid) DO UPDATE SET
@@ -41,7 +45,7 @@ class PostgresMasterKeyRepository:
     async def get_masterkey(self, guid: UUID) -> MasterKey | None:
         """Retrieve a masterkey by GUID."""
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("SELECT * FROM masterkeys WHERE guid = $1", str(guid))
+            row = await conn.fetchrow(f"SELECT * FROM {MASTKEYS_TABLE} WHERE guid = $1", str(guid))
             if not row:
                 return None
 
@@ -60,7 +64,7 @@ class PostgresMasterKeyRepository:
         """Retrieve masterkeys with optional filtering."""
         async with self.pool.acquire() as conn:
             # Build query based on filters
-            query = "SELECT * FROM masterkeys"
+            query = f"SELECT * FROM {MASTKEYS_TABLE}"
             params = []
             conditions = []
 
@@ -96,8 +100,8 @@ class PostgresMasterKeyRepository:
         """Update an existing masterkey."""
         async with self.pool.acquire() as conn:
             result = await conn.execute(
-                """
-                UPDATE masterkeys
+                f"""
+                UPDATE {MASTKEYS_TABLE}
                 SET encrypted_key_usercred = $2, encrypted_key_backup = $3,
                     plaintext_key = $4, plaintext_key_sha1 = $5, backup_key_guid = $6
                 WHERE guid = $1
@@ -115,7 +119,7 @@ class PostgresMasterKeyRepository:
     async def delete_masterkey(self, guid: UUID) -> None:
         """Delete a masterkey by GUID."""
         async with self.pool.acquire() as conn:
-            result = await conn.execute("DELETE FROM masterkeys WHERE guid = $1", str(guid))
+            result = await conn.execute(f"DELETE FROM {MASTKEYS_TABLE} WHERE guid = $1", str(guid))
             if result == "DELETE 0":
                 raise StorageError(f"Masterkey {guid} not found")
 
@@ -130,20 +134,20 @@ class PostgresDomainBackupKeyRepository:
         """Add or update a domain backup key in storage."""
         async with self.pool.acquire() as conn:
             await conn.execute(
-                """
-                INSERT INTO domain_backup_keys (guid, key_data)
+                f"""
+                INSERT INTO {BACKUPKEYS_TABLE} (guid, key_data)
                 VALUES ($1, $2)
                 ON CONFLICT (guid) DO UPDATE SET
                     key_data = EXCLUDED.key_data
                 """,
                 str(key.guid),
-                key.key_data
+                key.key_data,
             )
 
     async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:
         """Retrieve a backup key by GUID."""
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("SELECT * FROM domain_backup_keys WHERE guid = $1", str(guid))
+            row = await conn.fetchrow(f"SELECT * FROM {BACKUPKEYS_TABLE} WHERE guid = $1", str(guid))
             if not row:
                 return None
 
@@ -152,13 +156,13 @@ class PostgresDomainBackupKeyRepository:
     async def get_all_backup_keys(self) -> list[DomainBackupKey]:
         """Retrieve all backup keys."""
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("SELECT * FROM domain_backup_keys")
+            rows = await conn.fetch(f"SELECT * FROM {BACKUPKEYS_TABLE}")
             return [DomainBackupKey(guid=UUID(row["guid"]), key_data=row["key_data"]) for row in rows]
 
     async def delete_backup_key(self, guid: UUID) -> None:
         """Delete a backup key by GUID."""
         async with self.pool.acquire() as conn:
-            result = await conn.execute("DELETE FROM domain_backup_keys WHERE guid = $1", str(guid))
+            result = await conn.execute(f"DELETE FROM {BACKUPKEYS_TABLE} WHERE guid = $1", str(guid))
             if result == "DELETE 0":
                 raise StorageError(f"Domain backup key {guid} not found")
 
@@ -173,8 +177,8 @@ class PostgresDpapiSystemCredentialRepository:
         """Add or update a DPAPI system credential in storage."""
         async with self.pool.acquire() as conn:
             await conn.execute(
-                """
-                INSERT INTO dpapi_system_credentials (user_key, machine_key)
+                f"""
+                INSERT INTO {SYSTEMCREDS_TABLE} (user_key, machine_key)
                 VALUES ($1, $2)
                 ON CONFLICT (user_key, machine_key) DO NOTHING
                 """,
@@ -185,41 +189,10 @@ class PostgresDpapiSystemCredentialRepository:
     async def get_all_credentials(self) -> list[DpapiSystemCredential]:
         """Retrieve all DPAPI system credentials."""
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("SELECT * FROM dpapi_system_credentials")
+            rows = await conn.fetch(f"SELECT * FROM {SYSTEMCREDS_TABLE}")
             return [DpapiSystemCredential(user_key=row["user_key"], machine_key=row["machine_key"]) for row in rows]
 
     async def delete_all_credentials(self) -> None:
         """Delete all DPAPI system credentials."""
         async with self.pool.acquire() as conn:
-            await conn.execute("DELETE FROM dpapi_system_credentials")
-
-
-async def create_tables(connection_pool: asyncpg.Pool) -> None:
-    """Create database tables for DPAPI storage."""
-    async with connection_pool.acquire() as conn:
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS masterkeys (
-                guid TEXT PRIMARY KEY,
-                encrypted_key_usercred BYTEA,
-                encrypted_key_backup BYTEA,
-                plaintext_key BYTEA,
-                plaintext_key_sha1 BYTEA,
-                backup_key_guid TEXT
-            )
-        """)
-
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS domain_backup_keys (
-                guid TEXT PRIMARY KEY,
-                key_data BYTEA NOT NULL,
-                domain_controller TEXT
-            )
-        """)
-
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS dpapi_system_credentials (
-                id SERIAL PRIMARY KEY,
-                user_key BYTEA NOT NULL,
-                machine_key BYTEA NOT NULL
-            )
-        """)
+            await conn.execute(f"DELETE FROM {SYSTEMCREDS_TABLE}")

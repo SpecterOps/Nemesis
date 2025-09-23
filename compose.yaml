@@ -81,7 +81,7 @@ services:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+      - POSTGRES_CONNECTION_STRING=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?}
       - RABBITMQ_USER=${RABBITMQ_USER:?}
     depends_on:
@@ -265,7 +265,7 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+      - POSTGRES_CONNECTION_STRING=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
@@ -438,7 +438,7 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+      - POSTGRES_CONNECTION_STRING=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
       - POSTGRES_CONNECTION_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -494,7 +494,7 @@ services:
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+      - POSTGRES_CONNECTION_STRING=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
     depends_on:
       housekeeping: { condition: service_started }
       placement: { condition: service_started }
@@ -555,7 +555,7 @@ services:
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+      - POSTGRES_CONNECTION_STRING=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     depends_on:
       document-conversion: { condition: service_started }
