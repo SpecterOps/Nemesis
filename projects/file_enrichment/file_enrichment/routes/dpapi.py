@@ -18,9 +18,12 @@ from common.models2.dpapi import (
     Pbkdf2StrongCredentialKey,
     Sha1CredentialKey,
 )
+from Crypto.Hash import SHA1
 from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException
 from nemesis_dpapi import DomainBackupKey, DpapiManager, DpapiSystemCredential
+from nemesis_dpapi.core import MasterKey
+from nemesis_dpapi.crypto import NtlmHash, Password, Pbkdf2Hash, Sha1Hash
 from nemesis_dpapi.masterkey_decryptor import MasterKeyDecryptorService
 
 logger = get_logger(__name__)
@@ -133,8 +136,6 @@ async def _handle_decrypted_master_key_credential(
     dpapi_manager: DpapiManager, request: DecryptedMasterKeyCredential
 ) -> dict:
     """Handle decrypted master key credential submission."""
-    from Crypto.Hash import SHA1
-    from nemesis_dpapi.core import MasterKey
 
     processed_guids = []
     existing_guids = []
@@ -185,8 +186,6 @@ async def _handle_password_based_credential(
     dpapi_manager: DpapiManager,
     request: PasswordCredentialKey | NtlmHashCredentialKey | Sha1CredentialKey | Pbkdf2StrongCredentialKey,
 ):
-    from nemesis_dpapi.crypto import NtlmHash, Password, Pbkdf2Hash, Sha1Hash
-
     decryptor = MasterKeyDecryptorService(dpapi_manager)
 
     if isinstance(request, PasswordCredentialKey):

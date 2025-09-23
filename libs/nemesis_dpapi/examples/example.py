@@ -49,6 +49,9 @@ async def main() -> None:
     backup_key_bytes = base64.b64decode(backup_key_data["key"])
     fake_backup_key_bytes = backup_key_bytes[0:499] + b"\x00" + backup_key_bytes[500:]
 
+    if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
+        raise ValueError("Invalid masterkey file")
+
     print("\n=== Adding Real DPAPI Data ===")
 
     print("=== DPAPI Library Usage with Events ===")
@@ -98,9 +101,6 @@ async def main() -> None:
         all_keys = await dpapi.get_all_masterkeys()
         decrypted_keys = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"\nAfter fake backup key - Total masterkeys: {len(all_keys)}, Decrypted: {len(decrypted_keys)}")
-
-        if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
-            raise ValueError("Invalid masterkey file")
 
         await dpapi.upsert_masterkey(
             MasterKey(
