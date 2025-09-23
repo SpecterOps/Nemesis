@@ -1,4 +1,29 @@
-"""Updated example showing DPAPI manager usage with eventing."""
+"""Example showing DPAPI usage with eventing.
+
+This example demonstrates the complete DPAPI workflow including:
+
+1. Event monitoring setup
+   - Creates a custom DpapiObserver to monitor library events
+   - Subscribes to events for encrypted masterkeys, domain backup keys, and plaintext masterkeys
+   - Shows how to track DPAPI operations in real-time
+
+2. Masterkey management
+   - Loads masterkey files and domain backup key
+   - Adds multiple encrypted masterkeys to the DpapiManager
+   - Demonstrates both fake and real backup key scenarios
+
+3. Domain backup key operations
+   - First adds a fake/invalid backup key (shows failed decryption)
+   - Then adds the domain backup key
+   - Shows automatic decryption of masterkeys when valid backup key is added
+
+4. DPAPI blob decryption
+   - Loads an encrypted DPAPI blob
+   - Parses the blob to extract its masterkey GUID
+   - Decrypts the blob using the previously loaded masterkeys
+   - Displays the decrypted plaintext content
+
+"""
 
 import asyncio
 import base64

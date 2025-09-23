@@ -1,4 +1,24 @@
-"""Demo showing built-in auto-decryption functionality using test data."""
+"""Demo showing built-in auto-decryption functionality using test data.
+
+This example demonstrates the automatic decryption of DPAPI masterkeys when
+domain backup keys are added to the DpapiManager. It runs three scenarios:
+
+1. Add encrypted masterkeys first, then add domain backup key
+   - Loads encrypted masterkeys into the manager
+   - Adds domain backup key which triggers automatic decryption of existing keys
+   - Shows how auto-decryption works on previously stored encrypted keys
+
+2. Add domain backup key first, then add masterkeys
+   - Adds domain backup key to the manager first
+   - Loads encrypted masterkeys which are automatically decrypted upon insertion
+   - Demonstrates auto-decryption of newly added keys
+
+3. Auto-decryption disabled
+   - Shows the same operations with auto_decrypt=False
+   - Proves that no automatic decryption occurs when the feature is disabled
+   - Validates that the auto-decryption is controllable
+
+"""
 
 import asyncio
 import base64
