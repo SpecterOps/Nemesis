@@ -8,8 +8,8 @@ FROM ${PYTHON_BASE_DEV_IMAGE} AS base
 # that this project uses
 
 RUN apt-get update && \
-    apt-get install -y libmagic1 libpq5 \
-    gcc libc6-dev curl && \
+    apt-get install -y libmagic1 libpq5 binutils \
+    gcc g++ libc6-dev curl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

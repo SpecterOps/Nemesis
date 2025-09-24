@@ -539,6 +539,35 @@ trio = ["trio (>=0.23)"]
 wmi = ["wmi (>=1.5.1)"]
 
 [[package]]
+name = "dpapick3"
+version = "0.7.1"
+description = "A native implementation of DPAPI"
+optional = false
+python-versions = ">=3.2"
+groups = ["main"]
+files = [
+    {file = "dpapick3-0.7.1-py3-none-any.whl", hash = "sha256:61999f6d4d08231799d3d62e3a48502476fcc0c4d29f12bb8ed064e3352f5da9"},
+    {file = "dpapick3-0.7.1.tar.gz", hash = "sha256:3449366800d5bb313dd6d8d9d259d1b94498881ac74ced163749617a431921cb"},
+]
+
+[package.dependencies]
+pyasn1 = "*"
+pycryptodome = "*"
+python-registry = "*"
+
+[[package]]
+name = "enum-compat"
+version = "0.0.3"
+description = "enum/enum34 compatibility package"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "enum-compat-0.0.3.tar.gz", hash = "sha256:3677daabed56a6f724451d585662253d8fb4e5569845aafa8bb0da36b1a8751e"},
+    {file = "enum_compat-0.0.3-py3-none-any.whl", hash = "sha256:88091b617c7fc3bbbceae50db5958023c48dc40b50520005aa3bf27f8f7ea157"},
+]
+
+[[package]]
 name = "file-linking"
 version = "0.1.0"
 description = "Modules Nemesis uses to handle file links and listings"
@@ -549,7 +578,7 @@ files = []
 develop = true
 
 [package.dependencies]
-dapr = ">=1.0.0,<2.0.0"
+dapr = "1.15.0"
 psycopg = {version = ">=3.0.0,<4.0.0", extras = ["binary"]}
 structlog = ">=20.0.0,<30.0.0"
 
@@ -1098,6 +1127,7 @@ develop = true
 [package.dependencies]
 asyncpg = ">=0.29.0,<=0.30.0"
 cryptography = ">=42.0.0,<43.0.0"
+dpapick3 = ">=0.7.1,<0.8.0"
 impacket = ">=0.12.0,<0.13.0"
 pycryptodome = ">=3.23.0,<4.0.0"
 pydantic = ">=2.0.0,<3.0.0"
@@ -1661,6 +1691,23 @@ files = [
 six = ">=1.5"
 
 [[package]]
+name = "python-registry"
+version = "1.3.1"
+description = "Read access to Windows Registry files."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "python-registry-1.3.1.tar.gz", hash = "sha256:99185f67d5601be3e7843e55902d5769aea1740869b0882f34ff1bd4b43b1eb2"},
+    {file = "python_registry-1.3.1-py2-none-any.whl", hash = "sha256:59d3b00c04bca0c4e1a12be0404da6ccf76b87537ee3a3ad2d8fc1bccf6f63ca"},
+    {file = "python_registry-1.3.1-py3-none-any.whl", hash = "sha256:b5b8ae07c271dce12dacd24e16af8aa8d56167ebdb360112a4f152b6d04a4ca9"},
+]
+
+[package.dependencies]
+enum-compat = "*"
+unicodecsv = "*"
+
+[[package]]
 name = "ruff"
 version = "0.9.10"
 description = "An extremely fast Python linter and code formatter, written in Rust."
@@ -1771,6 +1818,17 @@ markers = "sys_platform == \"win32\""
 files = [
     {file = "tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8"},
     {file = "tzdata-2025.2.tar.gz", hash = "sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9"},
+]
+
+[[package]]
+name = "unicodecsv"
+version = "0.14.1"
+description = "Python2's stdlib csv module is nice, but it doesn't support unicode. This module is a drop-in replacement which *does*."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "unicodecsv-0.14.1.tar.gz", hash = "sha256:018c08037d48649a0412063ff4eda26eaa81eff1546dbffa51fa5293276ff7fc"},
 ]
 
 [[package]]
@@ -1913,4 +1971,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "842ede59e8053d59f8c2daba6d8b4b3b5a7c482bb514167e8ee54b9e4eff6b1f"
+content-hash = "c51722acaea2d9e006b44eed9603b650bcba2ca28b0d80aa90695298e88ed828"

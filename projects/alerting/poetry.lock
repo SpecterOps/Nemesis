@@ -513,7 +513,7 @@ files = []
 develop = true
 
 [package.dependencies]
-dapr = "^1.14.0"
+dapr = "1.15.0"
 fastapi = "^0.115.6"
 minio = "^7.2.14"
 pydantic = "^2.10.5"
@@ -1758,4 +1758,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "068fb76877123e63914d534cc0851e4e406bdfecc590098463b6c953f34b37e3"
+content-hash = "18b566b231fd7a41553fef874bd297a022565ac6662e1e53d2d343829a34e074"

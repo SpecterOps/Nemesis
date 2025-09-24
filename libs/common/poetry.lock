@@ -355,14 +355,14 @@ files = [
 
 [[package]]
 name = "dapr"
-version = "1.14.0"
+version = "1.15.0"
 description = "The official release of Dapr Python SDK."
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "dapr-1.14.0-py3-none-any.whl", hash = "sha256:31bfa9587b58d410a575dd46e568cd731e790e235d7b61b18cb17420977e9c84"},
-    {file = "dapr-1.14.0.tar.gz", hash = "sha256:d901b787a5154f4b4e448e439825693f3352dda374889ef541281dd2727b8d61"},
+    {file = "dapr-1.15.0-py3-none-any.whl", hash = "sha256:0093bf6df5eb9a14fbab60191a619438e0b6b336f60a7994e184276bcc35d5fb"},
+    {file = "dapr-1.15.0.tar.gz", hash = "sha256:6b2373084143f164cb00702758b17a14fc4442314a1f3e2be36ee008d486c47a"},
 ]
 
 [package.dependencies]
@@ -1363,4 +1363,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "a943b018720efd72039b4e2c420d653def7a5ef307194ccbfab8a010fcd99430"
+content-hash = "55d7bc7e9b7aba72dd9eab17cb273f2605d11ed63f6ca595b05ba50a4e07874d"

@@ -9,7 +9,7 @@ readme = "README.md"
 python = ">=3.12,<4.0"
 pydantic = "^2.10.5"
 structlog = "^25.1.0"
-dapr = "^1.14.0"
+dapr = "1.15.0"
 minio = "^7.2.14"
 fastapi = "^0.115.6"
 

@@ -734,7 +734,7 @@ files = []
 develop = true
 
 [package.dependencies]
-dapr = "^1.14.0"
+dapr = "1.15.0"
 fastapi = "^0.115.6"
 minio = "^7.2.14"
 pydantic = "^2.10.5"
@@ -3880,4 +3880,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "c559277a995c6cb610d9514651a8ad8bd1dd9e58f3d1baf8e5b77afda023c2fa"
+content-hash = "482e6b0e530d87d97a9ba97ee481914762059ad5441f5bf1969093ee137fc984"
