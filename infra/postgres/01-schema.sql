@@ -761,5 +761,6 @@ CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (
 CREATE TABLE IF NOT EXISTS dpapi.system_credentials (
     id SERIAL PRIMARY KEY,
     user_key BYTEA NOT NULL,
-    machine_key BYTEA NOT NULL
+    machine_key BYTEA NOT NULL,
+    UNIQUE (user_key, machine_key)
 );

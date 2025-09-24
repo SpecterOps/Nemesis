@@ -1,6 +1,7 @@
 """Auto-decryption observer for DPAPI manager."""
 
 import asyncio
+import time
 from logging import getLogger
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -60,6 +61,7 @@ class AutoDecryptionObserver(DpapiObserver):
 
     async def _attempt_masterkey_decryption_with_system_credential(self, credential: DpapiSystemCredential) -> None:
         """Attempt to decrypt all encrypted masterkeys using the new DPAPI system credentials."""
+        start_time = time.perf_counter()
 
         print("Attempting to decrypt masterkeys with new DPAPI_SYSTEM credential")
         encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
@@ -89,8 +91,12 @@ class AutoDecryptionObserver(DpapiObserver):
                 )
                 continue
 
+        end_time = time.perf_counter()
+        print(f"_attempt_masterkey_decryption_with_system_credential took {end_time - start_time:.4f} seconds")
+
     async def _attempt_masterkey_decryption_with_backup_key(self, backup_key_guid: UUID) -> None:
         """Attempt to decrypt all masterkeys using the new backup key."""
+        start_time = time.perf_counter()
         try:
             masterkeys = await self.dpapi_manager.get_all_masterkeys()
             encrypted_count = len([mk for mk in masterkeys if not mk.is_decrypted])
@@ -141,9 +147,13 @@ class AutoDecryptionObserver(DpapiObserver):
 
         except Exception as e:
             logger.error(f"Auto-decrypt error: {e}")
+        finally:
+            end_time = time.perf_counter()
+            print(f"_attempt_masterkey_decryption_with_backup_key took {end_time - start_time:.4f} seconds")
 
     async def _attempt_masterkey_decryption(self, masterkey_guid: UUID) -> None:
         """Attempt to decrypt a new masterkey using existing domain backup keys."""
+        start_time = time.perf_counter()
 
         masterkey = await self.dpapi_manager.get_masterkey(masterkey_guid)
         if not masterkey or masterkey.is_decrypted:
@@ -183,4 +193,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     backup_key_guid=result.backup_key_guid,
                 )
                 await self.dpapi_manager._masterkey_repo.update_masterkey(new_mk)
-                return
+                break
+
+        end_time = time.perf_counter()
+        print(f"_attempt_masterkey_decryption took {end_time - start_time:.4f} seconds")
