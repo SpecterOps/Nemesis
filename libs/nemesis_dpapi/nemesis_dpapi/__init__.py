@@ -1,7 +1,7 @@
 """DPAPI utility library for Windows Data Protection API operations."""
 
 from .core import Blob, DomainBackupKey, DpapiSystemCredential, MasterKey, MasterKeyFile
-from .crypto import CredKey, CredKeyHashType, DpapiCrypto, MasterKeyEncryptionKey
+from .crypto import CredKey, CredKeyHashType, MasterKeyEncryptionKey
 from .exceptions import (
     DpapiBlobDecryptionError,
     DpapiError,
@@ -19,7 +19,6 @@ __all__ = [
     "CredKey",
     "CredKeyHashType",
     "DomainBackupKey",
-    "DpapiCrypto",
     "DpapiManager",
     "DpapiSystemCredential",
     "MasterKey",

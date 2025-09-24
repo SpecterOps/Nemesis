@@ -8,7 +8,6 @@ from Crypto.Hash import SHA1
 
 from .auto_decrypt import AutoDecryptionObserver
 from .core import Blob, DomainBackupKey, DpapiSystemCredential, MasterKey
-from .crypto import DpapiCrypto
 from .eventing import (
     NewDomainBackupKeyEvent,
     NewDpapiSystemCredentialEvent,
@@ -52,7 +51,6 @@ class DpapiManager(Publisher):
         """
         super().__init__()
         self._storage_backend = storage_backend
-        self._crypto = DpapiCrypto()
         self._initialized = False
         self._auto_decrypt = auto_decrypt
 
@@ -180,10 +178,7 @@ class DpapiManager(Publisher):
 
         # Decrypt the blob
         try:
-            if masterkey.plaintext_key is None:
-                raise MasterKeyNotDecryptedError(blob.masterkey_guid)
-
-            return self._crypto.decrypt_blob(blob.raw_bytes, masterkey.plaintext_key)
+            return blob.decrypt(masterkey)
         except Exception as e:
             raise DpapiBlobDecryptionError(str(e)) from e
 

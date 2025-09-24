@@ -9,10 +9,10 @@ from uuid import UUID
 
 from common.logger import get_logger
 from common.models2.dpapi import (
-    DecryptedMasterKeyCredential,
     DomainBackupKeyCredential,
     DpapiCredentialRequest,
     DpapiSystemCredentialRequest,
+    MasterKeyGuidPairList,
     NtlmHashCredentialKey,
     PasswordCredentialKey,
     Pbkdf2StrongCredentialKey,
@@ -115,8 +115,8 @@ async def submit_dpapi_credential(
         try:
             if isinstance(request, DomainBackupKeyCredential):
                 result = await _handle_domain_backup_key_credential(dpapi_manager, request)
-            elif isinstance(request, DecryptedMasterKeyCredential):
-                result = await _handle_decrypted_master_key_credential(dpapi_manager, request)
+            elif isinstance(request, MasterKeyGuidPairList):
+                result = await _handle_master_key_guid_pairs(dpapi_manager, request)
             elif isinstance(request, DpapiSystemCredentialRequest):
                 result = await _handle_dpapi_system_credential(dpapi_manager, request)
             elif isinstance(
@@ -163,9 +163,7 @@ async def _handle_domain_backup_key_credential(dpapi_manager: DpapiManager, requ
     return {"status": "success", "type": "domain_backup_key"}
 
 
-async def _handle_decrypted_master_key_credential(
-    dpapi_manager: DpapiManager, request: DecryptedMasterKeyCredential
-) -> dict:
+async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: MasterKeyGuidPairList) -> dict:
     """Handle decrypted master key credential submission."""
 
     processed_guids = []
@@ -178,21 +176,19 @@ async def _handle_decrypted_master_key_credential(
         masterkey_data = bytes.fromhex(master_key_data.key_hex)
 
         # Check if masterkey already exists
-        existing_masterkey = await dpapi_manager._masterkey_repo.get_masterkey(masterkey_guid)
+        existing_masterkey = await dpapi_manager.get_masterkey(masterkey_guid)
         if existing_masterkey is not None and existing_masterkey.is_decrypted:
             logger.info(f"Master key {masterkey_guid} already exists, skipping")
             existing_guids.append(str(masterkey_guid))
             continue
 
-        # Create a MasterKey with the decrypted data and add it
         masterkey = MasterKey(
             guid=masterkey_guid,
             plaintext_key=masterkey_data,
             plaintext_key_sha1=SHA1.new(masterkey_data).digest(),
         )
 
-        # Add directly to the repository
-        await dpapi_manager._masterkey_repo.upsert_masterkey(masterkey)
+        await dpapi_manager.upsert_masterkey(masterkey)
         processed_guids.append(str(masterkey_guid))
 
     return {

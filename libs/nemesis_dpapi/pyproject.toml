@@ -10,6 +10,7 @@ dependencies = [
     "cryptography (>=42.0.0,<43.0.0)",
     "pydantic (>=2.0.0,<3.0.0)",
     "pycryptodome (>=3.23.0,<4.0.0)",
+    "dpapick3 (>=0.7.1,<0.8.0)",
 ]
 
 
@@ -21,7 +22,6 @@ build-backend = "poetry.core.masonry.api"
 ruff = "^0.12.10"
 pytest = "^8.4.1"
 pytest-asyncio = "^0.25.0"
-dpapick3 = "^0.7.1"
 pytest-cov = "^6.3.0"
 pytest-benchmark = "^5.1.0"
 

@@ -8,14 +8,20 @@ from uuid import UUID
 
 from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
-from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
+from dpapick3 import blob as dpapick3_blob
+from impacket.dpapi import (
+    DPAPI_BLOB,
+    DPAPI_DOMAIN_RSA_MASTER_KEY,
+    PRIVATE_KEY_BLOB,
+    PVK_FILE_HDR,
+    privatekeyblob_to_pkcs1,
+)
 from impacket.dpapi import DomainKey as ImpacketDomainKey
 from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, field_validator
 
 from .crypto import MasterKeyEncryptionKey
-from .dpapi_blob import DPAPI_BLOB
 from .exceptions import InvalidBackupKeyError, MasterKeyDecryptionError
 
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
@@ -214,6 +220,35 @@ class Blob(BaseModel):
             raw_bytes=data,
         )
 
+    def decrypt(self, masterkey: "MasterKey", entropy: bytes | None = None) -> bytes:
+        """Decrypt the blob using the provided master key.
+
+        Args:
+            masterkey: The decrypted MasterKey instance to use for decryption
+            entropy: Optional entropy data used during encryption/decryption
+
+        Returns:
+            Decrypted blob data as bytes
+
+        Raises:
+            ValueError: If masterkey is not decrypted or decryption fails
+        """
+        if not masterkey.is_decrypted:
+            raise ValueError("Master key must be decrypted before use")
+
+        if masterkey.plaintext_key_sha1 is None:
+            raise ValueError("Master key SHA1 hash is required for decryption")
+
+        blob_dpapick = dpapick3_blob.DPAPIBlob(self.raw_bytes)
+
+        if not blob_dpapick.decrypt(masterkey.plaintext_key_sha1, entropy):
+            raise ValueError("Failed to decrypt blob with provided master key")
+
+        if not blob_dpapick.cleartext:
+            raise Exception("Decryption succeeded but no cleartext available")
+
+        return blob_dpapick.cleartext
+
 
 class MasterKeyFile(BaseModel):
     """Represents a DPAPI masterkey file structure.
@@ -375,7 +410,9 @@ class DomainBackupKey(BaseModel):
         # Check minimum size - PVK header is at least 20 bytes
         pvk_header_size = len(PVK_FILE_HDR())
         if len(v) < pvk_header_size:
-            raise ValueError(f"key_data too short: {len(v)} bytes, minimum {pvk_header_size} bytes required for PVK header")
+            raise ValueError(
+                f"key_data too short: {len(v)} bytes, minimum {pvk_header_size} bytes required for PVK header"
+            )
 
         try:
             # Validate PVK header can be parsed

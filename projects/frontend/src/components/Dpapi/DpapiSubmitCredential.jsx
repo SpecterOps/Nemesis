@@ -51,10 +51,10 @@ const DpapiSubmitCredential = () => {
       description: 'Domain controller DPAPI backup key in base64 PVK format. Extract from domain controllers using tools like mimikatz\'s lsadump::backupkeys, SharpDPAPI\s backupkey command, or by accessing the DPAPI_SYSTEM LSA secret on a host.'
     },
     {
-      value: 'dec_master_key',
+      value: 'master_key_guid_pair',
       label: 'Master Keys GUID:SHA1 Pairs',
       placeholder: 'Enter master key data (one per line)\n{guid}:{sha1}\n{guid}:{sha1}',
-      apiType: 'dec_master_key',
+      apiType: 'master_key_guid_pair',
       structuredValue: true,
       description: 'Plaintext DPAPI master keys as GUID:SHA1 pairs.'
     },

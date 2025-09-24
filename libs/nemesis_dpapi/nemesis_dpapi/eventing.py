@@ -1,47 +1,71 @@
 """Main DPAPI manager class."""
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
 
-from nemesis_dpapi.core import DpapiSystemCredential
+from pydantic import Field, field_validator
+
+from nemesis_dpapi.core import BaseModel, DpapiSystemCredential
+from nemesis_dpapi.crypto import NtlmHash, Password, Pbkdf2Hash, Sha1Hash
+from nemesis_dpapi.types import Sid
 
 
-@dataclass
-class NewEncryptedMasterKeyEvent:
+class NewEncryptedMasterKeyEvent(BaseModel):
     """Event emitted when a new encrypted master key is added"""
 
     masterkey_guid: UUID
-    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-@dataclass
-class NewPlaintextMasterKeyEvent:
+class NewPlaintextMasterKeyEvent(BaseModel):
     """Event emitted when a new plaintext master key is added"""
 
     masterkey_guid: UUID
-    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-@dataclass
-class NewDomainBackupKeyEvent:
+class NewDomainBackupKeyEvent(BaseModel):
     """Event emitted when a new domain backup key is added"""
 
     backup_key_guid: UUID
-    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-@dataclass
-class NewDpapiSystemCredentialEvent:
+class NewDpapiSystemCredentialEvent(BaseModel):
     """Event emitted when a new DPAPI system credential is added"""
 
     credential: DpapiSystemCredential
-    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class NewPasswordDerivedCredentialEvent(BaseModel):
+    """Event emitted when a new password-derived credential is added. This includes
+    Password, NTLM hash, SHA1 hash, and PBKDF2 hash credentials."""
+
+    type: str
+    credential: Password | NtlmHash | Sha1Hash | Pbkdf2Hash
+    user_sid: Sid | None = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("type")
+    @classmethod
+    def validate_type_matches_credential(cls, v, info):
+        """Validate that the type field matches the credential class name."""
+        if "credential" in info.data:
+            credential = info.data["credential"]
+            expected_type = credential.__class__.__name__
+            if v != expected_type:
+                raise ValueError(f"Type '{v}' does not match credential class name '{expected_type}'")
+        return v
 
 
 type DpapiEvent = (
-    NewEncryptedMasterKeyEvent | NewPlaintextMasterKeyEvent | NewDomainBackupKeyEvent | NewDpapiSystemCredentialEvent
+    NewEncryptedMasterKeyEvent
+    | NewPlaintextMasterKeyEvent
+    | NewDomainBackupKeyEvent
+    | NewDpapiSystemCredentialEvent
+    | NewPasswordDerivedCredentialEvent
 )
 
 

@@ -96,26 +96,6 @@ class PostgresMasterKeyRepository:
 
             return masterkeys
 
-    async def update_masterkey(self, masterkey: MasterKey) -> None:
-        """Update an existing masterkey."""
-        async with self.pool.acquire() as conn:
-            result = await conn.execute(
-                f"""
-                UPDATE {MASTKEYS_TABLE}
-                SET encrypted_key_usercred = $2, encrypted_key_backup = $3,
-                    plaintext_key = $4, plaintext_key_sha1 = $5, backup_key_guid = $6
-                WHERE guid = $1
-                """,
-                str(masterkey.guid),
-                masterkey.encrypted_key_usercred,
-                masterkey.encrypted_key_backup,
-                masterkey.plaintext_key,
-                masterkey.plaintext_key_sha1,
-                str(masterkey.backup_key_guid) if masterkey.backup_key_guid else None,
-            )
-            if result == "UPDATE 0":
-                raise StorageError(f"Masterkey {masterkey.guid} not found")
-
     async def delete_masterkey(self, guid: UUID) -> None:
         """Delete a masterkey by GUID."""
         async with self.pool.acquire() as conn:

@@ -67,8 +67,8 @@ class Pbkdf2StrongCredentialKey(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["cred_key_pbkdf2"]
-    value: str  # Hex string representation of credential key (either 16)
-    user_sid: Sid  # Required for to derive MK encryption keys
+    value: str  # Hex string representation of credential key (16 bytes)
+    user_sid: Sid  # Required to derive MK encryption keys
 
     @field_validator("value")
     @classmethod
@@ -104,7 +104,7 @@ class DomainBackupKeyCredential(BaseModel):
             raise ValueError(f"guid must be a valid UUID format, got: {v}") from e
 
 
-class MasterKeyData(BaseModel):
+class MasterKeyGuidPair(BaseModel):
     """Strongly typed master key data."""
 
     model_config = {"frozen": True, "extra": "forbid"}
@@ -117,13 +117,13 @@ class MasterKeyData(BaseModel):
         return str(value)
 
 
-class DecryptedMasterKeyCredential(BaseModel):
-    """Pre-decrypted master key with strongly typed data."""
+class MasterKeyGuidPairList(BaseModel):
+    """Decrypted master key/GUID pairs."""
 
     model_config = {"frozen": True, "extra": "forbid"}
 
-    type: Literal["dec_master_key"]
-    value: list[MasterKeyData]
+    type: Literal["master_key_guid_pair"]
+    value: list[MasterKeyGuidPair]
 
 
 class DpapiSystemCredentialRequest(BaseModel):
@@ -164,7 +164,7 @@ type DpapiCredentialRequest = Annotated[
         Annotated[Sha1CredentialKey, Tag("cred_key_sha1")],
         Annotated[Pbkdf2StrongCredentialKey, Tag("cred_key_pbkdf2")],
         Annotated[DomainBackupKeyCredential, Tag("domain_backup_key")],
-        Annotated[DecryptedMasterKeyCredential, Tag("dec_master_key")],
+        Annotated[MasterKeyGuidPairList, Tag("master_key_guid_pair")],
         Annotated[DpapiSystemCredentialRequest, Tag("dpapi_system")],
     ],
     Field(discriminator=Discriminator(get_credential_type)),

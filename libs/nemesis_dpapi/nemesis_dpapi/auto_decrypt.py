@@ -41,11 +41,11 @@ class AutoDecryptionObserver(DpapiObserver):
         self._background_tasks: set[asyncio.Task] = set()
 
     def update(self, event: DpapiEvent) -> None:
-        """Handle DPAPI events, specifically new domain backup keys and encrypted masterkeys."""
+        """Handle DPAPI events, specifically new domain backup keys, encrypted masterkeys, and new credentials."""
         if isinstance(event, NewDomainBackupKeyEvent):
             self._create_task(self._attempt_masterkey_decryption_with_backup_key(event.backup_key_guid))
         elif isinstance(event, NewEncryptedMasterKeyEvent):
-            self._create_task(self._attempt_masterkey_decryption(event.masterkey_guid))
+            self._create_task(self._attempt_new_masterkey_decryption(event.masterkey_guid))
         elif isinstance(event, NewDpapiSystemCredentialEvent):
             self._create_task(self._attempt_masterkey_decryption_with_system_credential(event.credential))
 
@@ -72,6 +72,7 @@ class AutoDecryptionObserver(DpapiObserver):
                 if not encrypted_mk.encrypted_key_usercred:
                     continue
 
+                # Try the machine key first, then the user key
                 for i in range(2):
                     if i == 0:
                         mk_key = MasterKeyEncryptionKey.from_dpapi_system_cred(credential.machine_key)
@@ -85,6 +86,7 @@ class AutoDecryptionObserver(DpapiObserver):
                         continue
 
                     await self.dpapi_manager.upsert_masterkey(plaintext_mk)
+                    break  # Decrypted successfully, no need to try other key
             except Exception as e:
                 logger.error(
                     f"Error decrypting masterkey with DPAPI_SYSTEM credential. MasterKey UUID: {encrypted_mk.guid}: {e}"
@@ -143,7 +145,7 @@ class AutoDecryptionObserver(DpapiObserver):
                         backup_key_guid=result.backup_key_guid,
                     )
 
-                    await self.dpapi_manager._masterkey_repo.update_masterkey(new_mk)
+                    await self.dpapi_manager._masterkey_repo.upsert_masterkey(new_mk)
 
         except Exception as e:
             logger.error(f"Auto-decrypt error: {e}")
@@ -151,16 +153,20 @@ class AutoDecryptionObserver(DpapiObserver):
             end_time = time.perf_counter()
             print(f"_attempt_masterkey_decryption_with_backup_key took {end_time - start_time:.4f} seconds")
 
-    async def _attempt_masterkey_decryption(self, masterkey_guid: UUID) -> None:
+    async def _attempt_new_masterkey_decryption(self, masterkey_guid: UUID) -> None:
         """Attempt to decrypt a new masterkey using existing domain backup keys."""
         start_time = time.perf_counter()
 
         masterkey = await self.dpapi_manager.get_masterkey(masterkey_guid)
-        if not masterkey or masterkey.is_decrypted:
-            return  # Masterkey not found or already decrypted
+
+        if not masterkey:
+            raise ValueError(f"New masterkey {masterkey_guid} not found in the DB!")
+
+        if masterkey.is_decrypted:
+            return  # Already decrypted
 
         if masterkey.encrypted_key_backup is None:
-            return  # Cannot decrypt without backup key data
+            return  # Cannot decrypt if there's backup key data
 
         backup_keys = await self.dpapi_manager._backup_key_repo.get_all_backup_keys()
         if not backup_keys:
@@ -192,7 +198,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     plaintext_key_sha1=result.plaintext_key_sha1,
                     backup_key_guid=result.backup_key_guid,
                 )
-                await self.dpapi_manager._masterkey_repo.update_masterkey(new_mk)
+                await self.dpapi_manager._masterkey_repo.upsert_masterkey(new_mk)
                 break
 
         end_time = time.perf_counter()

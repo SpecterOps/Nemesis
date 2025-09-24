@@ -9,7 +9,6 @@ from Crypto.Hash import HMAC, MD4, SHA1, SHA256
 from Crypto.Protocol.KDF import PBKDF2
 from pydantic import BaseModel, field_validator
 
-from .dpapi_blob import DPAPI_BLOB
 from .exceptions import DpapiCryptoError
 
 if TYPE_CHECKING:
@@ -276,35 +275,3 @@ class MasterKeyEncryptionKey(BaseModel):
         return cls(key=Sha1Hash(value=dpapi_system_key))
 
 
-class DpapiCrypto:
-    """DPAPI cryptographic operations handler."""
-
-    @staticmethod
-    def decrypt_blob(
-        blob_data: bytes, masterkey: bytes, entropy: bytes | None = None
-    ) -> bytes:
-        """Decrypt a DPAPI blob using the provided masterkey SHA1.
-
-        Args:
-            blob_data: The encrypted DPAPI blob's bytes
-            masterkey: Bytes of the plaintext masterkey
-            entropy: Optional entropy data used in blob encryption
-
-        Returns:
-            Decrypted blob data
-
-        Raises:
-            InvalidBlobDataError: If blob data is invalid or malformed
-            BlobDecryptionError: If decryption fails
-        """
-        try:
-            dpapi_blob = DPAPI_BLOB(blob_data)
-        except Exception as e:
-            raise InvalidBlobDataError(f"Invalid DPAPI blob data: {e}") from e
-
-        decrypted_data = dpapi_blob.decrypt(masterkey)
-
-        if not decrypted_data:
-            raise BlobDecryptionError("Failed to decrypt DPAPI blob")
-
-        return decrypted_data

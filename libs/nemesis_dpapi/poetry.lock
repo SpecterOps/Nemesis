@@ -469,7 +469,7 @@ version = "0.7.1"
 description = "A native implementation of DPAPI"
 optional = false
 python-versions = ">=3.2"
-groups = ["dev"]
+groups = ["main"]
 files = [
     {file = "dpapick3-0.7.1-py3-none-any.whl", hash = "sha256:61999f6d4d08231799d3d62e3a48502476fcc0c4d29f12bb8ed064e3352f5da9"},
     {file = "dpapick3-0.7.1.tar.gz", hash = "sha256:3449366800d5bb313dd6d8d9d259d1b94498881ac74ced163749617a431921cb"},
@@ -486,7 +486,7 @@ version = "0.0.3"
 description = "enum/enum34 compatibility package"
 optional = false
 python-versions = "*"
-groups = ["dev"]
+groups = ["main"]
 files = [
     {file = "enum-compat-0.0.3.tar.gz", hash = "sha256:3677daabed56a6f724451d585662253d8fb4e5569845aafa8bb0da36b1a8751e"},
     {file = "enum_compat-0.0.3-py3-none-any.whl", hash = "sha256:88091b617c7fc3bbbceae50db5958023c48dc40b50520005aa3bf27f8f7ea157"},
@@ -730,7 +730,7 @@ version = "0.6.1"
 description = "Pure-Python implementation of ASN.1 types and DER/BER/CER codecs (X.208)"
 optional = false
 python-versions = ">=3.8"
-groups = ["main", "dev"]
+groups = ["main"]
 files = [
     {file = "pyasn1-0.6.1-py3-none-any.whl", hash = "sha256:0d632f46f2ba09143da3a8afe9e33fb6f92fa2320ab7e886e2d0f7672af84629"},
     {file = "pyasn1-0.6.1.tar.gz", hash = "sha256:6f580d2bdd84365380830acf45550f2511469f673cb4a5ae3857a3170128b034"},
@@ -770,7 +770,7 @@ version = "3.23.0"
 description = "Cryptographic library for Python"
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
-groups = ["main", "dev"]
+groups = ["main"]
 files = [
     {file = "pycryptodome-3.23.0-cp27-cp27m-macosx_10_9_x86_64.whl", hash = "sha256:a176b79c49af27d7f6c12e4b178b0824626f40a7b9fed08f712291b6d54bf566"},
     {file = "pycryptodome-3.23.0-cp27-cp27m-manylinux2010_i686.whl", hash = "sha256:573a0b3017e06f2cffd27d92ef22e46aa3be87a2d317a5abf7cc0e84e321bd75"},
@@ -1138,7 +1138,7 @@ version = "1.3.1"
 description = "Read access to Windows Registry files."
 optional = false
 python-versions = "*"
-groups = ["dev"]
+groups = ["main"]
 files = [
     {file = "python-registry-1.3.1.tar.gz", hash = "sha256:99185f67d5601be3e7843e55902d5769aea1740869b0882f34ff1bd4b43b1eb2"},
     {file = "python_registry-1.3.1-py2-none-any.whl", hash = "sha256:59d3b00c04bca0c4e1a12be0404da6ccf76b87537ee3a3ad2d8fc1bccf6f63ca"},
@@ -1244,7 +1244,7 @@ version = "0.14.1"
 description = "Python2's stdlib csv module is nice, but it doesn't support unicode. This module is a drop-in replacement which *does*."
 optional = false
 python-versions = "*"
-groups = ["dev"]
+groups = ["main"]
 files = [
     {file = "unicodecsv-0.14.1.tar.gz", hash = "sha256:018c08037d48649a0412063ff4eda26eaa81eff1546dbffa51fa5293276ff7fc"},
 ]
@@ -1270,4 +1270,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "804a08e8e1ce420b3d060b4731baf50c90b02be834394344264896897c4f60d3"
+content-hash = "dc6cde9fe10f703424e9c366286a8983e6045f644f6d2ed06455271dd5d168a2"

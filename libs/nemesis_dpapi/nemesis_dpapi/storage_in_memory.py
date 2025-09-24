@@ -39,12 +39,6 @@ class InMemoryMasterKeyRepository:
 
         return masterkeys
 
-    async def update_masterkey(self, masterkey: MasterKey) -> None:
-        """Update an existing masterkey."""
-        if masterkey.guid not in self._masterkeys:
-            raise StorageError(f"Masterkey {masterkey.guid} not found")
-        self._masterkeys[masterkey.guid] = masterkey
-
     async def delete_masterkey(self, guid: UUID) -> None:
         """Delete a masterkey by GUID."""
         if guid not in self._masterkeys:
