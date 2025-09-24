@@ -3,7 +3,7 @@
 
 # DPAPI Blobs
 Test blobs were created with PowerShell:
-```
+```powershell
 Add-Type -AssemblyName System.Security
 $data    = [Text.Encoding]::ASCII.GetBytes("test")
 $encrypted_no_entropy = [Security.Cryptography.ProtectedData]::Protect($data, $null, 'CurrentUser')

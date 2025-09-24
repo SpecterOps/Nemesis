@@ -23,3 +23,15 @@ pytest = "^8.4.1"
 pytest-asyncio = "^0.25.0"
 dpapick3 = "^0.7.1"
 pytest-cov = "^6.3.0"
+pytest-benchmark = "^5.1.0"
+
+[tool.pytest.ini_options]
+markers = [
+    "benchmark: performance benchmark tests"
+]
+# Skip benchmarks by default (use --benchmark-only to run them)
+addopts = "--benchmark-skip"
+# Test discovery patterns
+testpaths = ["tests"]
+python_files = ["test_*.py", "bench_*.py"]
+
