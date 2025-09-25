@@ -1,5 +1,6 @@
-import { AlertTriangle, Bot, Filter, Search, ThumbsUp } from 'lucide-react';
-import React, { useEffect, useMemo } from 'react';
+import { AlertTriangle, Bot, Filter, Search, ThumbsUp, ChevronDown } from 'lucide-react';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 
 const FindingsFilters = ({
@@ -30,9 +31,19 @@ const FindingsFilters = ({
         getFilterFromUrl('category', 'all')
     );
 
-    const [severityFilter, setSeverityFilter] = React.useState(() =>
-        convertSeverityFromUrl(getFilterFromUrl('severity', 'all'))
-    );
+    const [severityFilter, setSeverityFilter] = React.useState(() => {
+        const urlSeverity = convertSeverityFromUrl(getFilterFromUrl('severity', 'all'));
+        if (urlSeverity === 'all') {
+            return ['high', 'medium', 'low'];
+        } else {
+            const severityMap = { '7': 'high', '4': 'medium', '0': 'low' };
+            return [severityMap[urlSeverity]];
+        }
+    });
+    const [severityDropdownOpen, setSeverityDropdownOpen] = React.useState(false);
+    const severityDropdownRef = useRef(null);
+    const severityButtonRef = useRef(null);
+    const [dropdownPosition, setDropdownPosition] = React.useState({ top: 0, left: 0 });
 
     const [originFilter, setOriginFilter] = React.useState(() =>
         getFilterFromUrl('origin', '')
@@ -51,21 +62,11 @@ const FindingsFilters = ({
         getFilterFromUrl('object_id', '')
     );
 
-    // Helper function for severity conversion
-    const convertSeverityToUrl = (severityValue) => {
-        const severityMap = {
-            '7': 'high',
-            '4': 'medium',
-            '0': 'low',
-            'all': null
-        };
-        return severityMap[severityValue];
-    };
 
     // Check if any filters are active
     const hasActiveFilters = useMemo(() => {
         return categoryFilter !== 'all' ||
-            severityFilter !== 'all' ||
+            severityFilter.length !== 3 ||
             originFilter !== '' ||
             triageFilter !== 'untriaged_and_actionable' ||
             triageSourceFilter !== 'all' ||
@@ -75,7 +76,7 @@ const FindingsFilters = ({
     // Handle clearing all filters
     const handleClearFilters = () => {
         setCategoryFilter('all');
-        setSeverityFilter('all');
+        setSeverityFilter(['high', 'medium', 'low']);
         setOriginFilter('');
         setTriageFilter('untriaged_and_actionable');
         setTriageSourceFilter('all');
@@ -91,9 +92,12 @@ const FindingsFilters = ({
             newParams.set('category', categoryFilter);
         }
 
-        const severityParam = convertSeverityToUrl(severityFilter);
-        if (severityParam) {
-            newParams.set('severity', severityParam);
+        if (severityFilter.length === 1) {
+            const severityMap = { 'high': 'high', 'medium': 'medium', 'low': 'low' };
+            newParams.set('severity', severityMap[severityFilter[0]]);
+        } else if (severityFilter.length !== 3) {
+            // If not all severities are selected, we need to handle this differently
+            // For now, we'll only handle single selection in URL
         }
 
         if (originFilter) {
@@ -130,11 +134,23 @@ const FindingsFilters = ({
             if (categoryFilter !== 'all' && finding.category !== categoryFilter) return false;
 
             // Severity filter
-            if (severityFilter !== 'all') {
-                const severity = parseInt(severityFilter);
-                if (severity === 7 && finding.severity < 7) return false;
-                if (severity === 4 && (finding.severity >= 7 || finding.severity < 4)) return false;
-                if (severity === 0 && finding.severity >= 4) return false;
+            if (severityFilter.length < 3) {
+                let severityMatch = false;
+                for (const selected of severityFilter) {
+                    if (selected === 'high' && finding.severity >= 7) {
+                        severityMatch = true;
+                        break;
+                    }
+                    if (selected === 'medium' && finding.severity >= 4 && finding.severity < 7) {
+                        severityMatch = true;
+                        break;
+                    }
+                    if (selected === 'low' && finding.severity < 4) {
+                        severityMatch = true;
+                        break;
+                    }
+                }
+                if (!severityMatch) return false;
             }
 
             // Origin filter
@@ -188,7 +204,7 @@ const FindingsFilters = ({
         // Apply sorting
         return filtered.sort((a, b) => {
             let comparison = 0;
-            
+
             switch (sortColumn) {
                 case 'severity':
                     comparison = a.severity - b.severity;
@@ -218,7 +234,7 @@ const FindingsFilters = ({
                 default:
                     comparison = new Date(a.created_at) - new Date(b.created_at);
             }
-            
+
             return sortDirection === 'asc' ? comparison : -comparison;
         });
     }, [findings, categoryFilter, severityFilter, originFilter, triageFilter, triageSourceFilter, objectIdFilter, sortColumn, sortDirection]);
@@ -233,8 +249,53 @@ const FindingsFilters = ({
         setCategoryFilter(e.target.value);
     };
 
-    const handleSeverityChange = (e) => {
-        setSeverityFilter(e.target.value);
+    const handleSeverityToggle = (severity) => {
+        setSeverityFilter(prev => {
+            if (prev.includes(severity)) {
+                const newSelection = prev.filter(s => s !== severity);
+                return newSelection.length === 0 ? ['high', 'medium', 'low'] : newSelection;
+            } else {
+                return [...prev, severity];
+            }
+        });
+    };
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (severityDropdownRef.current && !severityDropdownRef.current.contains(event.target)) {
+                setSeverityDropdownOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
+
+    const getSeverityButtonText = () => {
+        if (severityFilter.length === 3) return 'All Severities';
+        if (severityFilter.length === 0) return 'No Severities';
+        const labels = { high: 'High', medium: 'Medium', low: 'Low' };
+        return severityFilter.map(s => labels[s]).join(', ');
+    };
+
+    const updateDropdownPosition = () => {
+        if (severityButtonRef.current) {
+            const rect = severityButtonRef.current.getBoundingClientRect();
+            setDropdownPosition({
+                top: rect.bottom + window.scrollY,
+                left: rect.left + window.scrollX
+            });
+        }
+    };
+
+    const handleSeverityDropdownToggle = () => {
+        if (!severityDropdownOpen) {
+            updateDropdownPosition();
+        }
+        setSeverityDropdownOpen(!severityDropdownOpen);
     };
 
     const handleOriginChange = (e) => {
@@ -288,17 +349,44 @@ const FindingsFilters = ({
 
                 <div className="flex items-center space-x-2">
                     <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                    <select
-                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-                        value={severityFilter}
-                        onChange={handleSeverityChange}
+                    <button
+                        ref={severityButtonRef}
+                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                        onClick={handleSeverityDropdownToggle}
                     >
-                        <option value="all">All Severities</option>
-                        <option value="7">High (7-10)</option>
-                        <option value="4">Medium (4-6)</option>
-                        <option value="0">Low (0-3)</option>
-                    </select>
+                        <span>{getSeverityButtonText()}</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${severityDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
                 </div>
+                {severityDropdownOpen && createPortal(
+                    <div
+                        ref={severityDropdownRef}
+                        className="fixed bg-white dark:bg-dark-secondary border dark:border-gray-700 rounded shadow-lg z-50 min-w-48"
+                        style={{
+                            top: `${dropdownPosition.top}px`,
+                            left: `${dropdownPosition.left}px`
+                        }}
+                    >
+                        <div className="p-2">
+                            {[
+                                { key: 'high', label: 'High (7-10)', color: 'text-red-600 dark:text-red-400' },
+                                { key: 'medium', label: 'Medium (4-6)', color: 'text-orange-600 dark:text-orange-400' },
+                                { key: 'low', label: 'Low (0-3)', color: 'text-yellow-600 dark:text-yellow-400' }
+                            ].map(({ key, label, color }) => (
+                                <label key={key} className="flex items-center space-x-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={severityFilter.includes(key)}
+                                        onChange={() => handleSeverityToggle(key)}
+                                        className="rounded"
+                                    />
+                                    <span className={`${color} font-medium`}>{label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>,
+                    document.body
+                )}
 
                 <div className="flex items-center space-x-2">
                     <Search className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
