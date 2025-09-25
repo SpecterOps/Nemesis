@@ -324,7 +324,7 @@ const DpapiSubmitCredential = () => {
             </div>
           )}
 
-          {/* Master Key Data - For dec_master_key */}
+          {/* Master Key Data - For master_key_guid_pair */}
           {isStructuredValue && (
             <div>
               <label htmlFor="master-key-data" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

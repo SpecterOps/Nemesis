@@ -193,7 +193,7 @@ async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: Ma
 
     return {
         "status": "success",
-        "type": "dec_master_key",
+        "type": "master_key_guid_pair",
         "added": processed_guids,
         "already_exists": existing_guids,
     }
