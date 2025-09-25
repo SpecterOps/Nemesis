@@ -433,7 +433,7 @@ const FileList = () => {
     }
 
     if (selectedTag) {
-      conditions.push({ file_tags: { _contains: selectedTag } });
+      conditions.push({ file_tags: { _contains: [selectedTag] } });
     }
 
     if (viewFilter !== 'all') {
