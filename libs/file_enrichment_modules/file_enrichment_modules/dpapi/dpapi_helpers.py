@@ -11,6 +11,7 @@ logger = structlog.get_logger(module=__name__)
 class ParsedDpapiBlob(BaseModel):
     dpapi_master_key_guid: str | None = str
     dpapi_data_b64: str | None = None
+    dpapi_blob_raw: bytes | None = None
     success: bool = False  # true/false if parsing was successful or not
 
 
@@ -25,6 +26,7 @@ async def parse_dpapi_blob(blob_bytes: bytes) -> ParsedDpapiBlob:
         blob.rawData = blob.rawData[: len(blob.getData())]
         parsed_blob.dpapi_master_key_guid = bin_to_string(blob["GuidMasterKey"]).lower()
         parsed_blob.dpapi_data_b64 = base64.b64encode(blob.rawData).decode("utf-8")
+        parsed_blob.dpapi_blob_raw = blob.rawData
         parsed_blob.success = True
 
     return parsed_blob
@@ -54,10 +56,14 @@ async def carve_dpapi_blobs_from_bytes(
             if not blob.success:
                 if file_name != "" and object_id != "":
                     await logger.awarning(
-                        "carve_dpapi_blobs_from_bytes: blob.rawData is None", file_name=file_name, object_id=object_id
+                        "carve_dpapi_blobs_from_bytes: blob.rawData is None",
+                        file_name=file_name,
+                        object_id=object_id,
                     )
                 else:
-                    await logger.awarning("carve_dpapi_blobs_from_bytes: blob.rawData is None")
+                    await logger.awarning(
+                        "carve_dpapi_blobs_from_bytes: blob.rawData is None"
+                    )
                 current_pos += 1
             elif blob.dpapi_data_b64:
                 current_pos += len(base64.b64decode(blob.dpapi_data_b64))
@@ -77,7 +83,10 @@ async def carve_dpapi_blobs_from_bytes(
             end_loc = loc
             # try to check for the end of the base64 string
             for i in range(loc, len(raw_bytes)):
-                if raw_bytes[i] not in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=":
+                if (
+                    raw_bytes[i]
+                    not in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+                ):
                     end_loc = i
                     break
             if end_loc != loc:
@@ -87,7 +96,9 @@ async def carve_dpapi_blobs_from_bytes(
                     current_pos += end_loc - loc
                     if not blob.success:
                         await logger.awarning(
-                            "carve_dpapi_blobs: blob.rawData is None", file_name=file_name, object_id=object_id
+                            "carve_dpapi_blobs: blob.rawData is None",
+                            file_name=file_name,
+                            object_id=object_id,
                         )
                     elif blob.dpapi_data_b64:
                         dpapi_blobs.append(blob)
@@ -102,7 +113,9 @@ async def carve_dpapi_blobs_from_bytes(
     return dpapi_blobs
 
 
-async def carve_dpapi_blobs_from_file(file_name: str, object_id: str = "", max_blobs: int = 1000) -> list[dict]:
+async def carve_dpapi_blobs_from_file(
+    file_name: str, object_id: str = "", max_blobs: int = 1000
+) -> list[dict]:
     """
     Helper that _just_ carves raw DPAPI blobs from a file,
     returning a list of dicts {dpapi_master_key_guid, dpapi_data_b64}

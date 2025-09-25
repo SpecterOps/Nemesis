@@ -1,16 +1,20 @@
 """Chromium Cookies file parsing and database operations."""
 
 import sqlite3
+import asyncio
 
 import psycopg
 import structlog
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+from nemesis_dpapi import Blob, DpapiManager
 
 from .helpers import (
     convert_chromium_timestamp,
+    decrypt_chrome_string,
     detect_encryption_type,
     get_postgres_connection_str,
+    get_state_key_bytes,
     get_state_key_id,
     parse_chromium_file_path,
 )
@@ -18,7 +22,9 @@ from .helpers import (
 logger = structlog.get_logger(module=__name__)
 
 
-def process_chromium_cookies(object_id: str, file_path: str | None = None) -> None:
+def process_chromium_cookies(
+    object_id: str, file_path: str | None = None, dpapi_manager: DpapiManager | None = None
+) -> None:
     """Process Chromium Cookies file and insert cookies into database.
 
     Args:
@@ -43,7 +49,7 @@ def process_chromium_cookies(object_id: str, file_path: str | None = None) -> No
 
     conn_str = get_postgres_connection_str()
     with psycopg.connect(conn_str) as pg_conn:
-        _insert_cookies(file_enriched, username, browser, db_path, pg_conn)
+        _insert_cookies(file_enriched, username, browser, db_path, pg_conn, dpapi_manager)
 
     logger.debug("Completed processing Chromium Cookies", object_id=object_id)
 
@@ -61,7 +67,9 @@ def _translate_samesite(samesite_int: int) -> str:
     return samesite_map.get(samesite_int, "Unknown")
 
 
-def _insert_cookies(file_enriched, username: str | None, browser: str, db_path: str, pg_conn) -> None:
+def _insert_cookies(
+    file_enriched, username: str | None, browser: str, db_path: str, pg_conn, dpapi_manager: DpapiManager | None = None
+) -> None:
     """Extract cookies from Cookies database and insert into chromium.cookies table."""
     try:
         # Read from SQLite
@@ -106,16 +114,52 @@ def _insert_cookies(file_enriched, username: str | None, browser: str, db_path: 
             path = path.decode("utf-8", errors="replace") if path else None
 
             # encrypted_value is already binary (what we want)
+
             if encrypted_value is None:
                 encrypted_value = b""
 
-            # Detect encryption type and get masterkey GUID
+            # Detect encryption type and get masterkey GUID (if applicable)
             encryption_type, masterkey_guid = detect_encryption_type(encrypted_value)
+            is_decrypted = False
+            value_dec = None
+            if masterkey_guid and dpapi_manager:
+                try:
+                    value_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.parse(encrypted_value)))
+                    if value_dec_bytes:
+                        value_dec = value_dec_bytes.decode('utf-8', errors='replace')
+                        is_decrypted = True
+                except:
+                    pass
 
             # Get state key ID for key/abe encryption
             state_key_id = None
             if encryption_type in ["key", "abe"]:
                 state_key_id = get_state_key_id(file_enriched.source, username, browser, pg_conn)
+                if state_key_id:
+                    # Retrieve the pre-processed state key for decryption
+                    state_key_bytes = get_state_key_bytes(state_key_id, encryption_type, pg_conn)
+                    if state_key_bytes:
+                        try:
+                            value_dec_bytes = decrypt_chrome_string(encrypted_value, state_key_bytes, encryption_type)
+                            if value_dec_bytes:
+                                # For cookies, may need to strip offset bytes depending on version
+                                if encryption_type == "abe" and len(value_dec_bytes) > 32:
+                                    # v20 cookies typically have 32-byte offset
+                                    value_dec_bytes = value_dec_bytes[32:]
+                                elif encryption_type == "key" and len(value_dec_bytes) > 48:
+                                    # v10/v11 cookies may have 32-byte prefix + 16-byte suffix
+                                    value_dec_bytes = value_dec_bytes[32:-16]
+                                elif encryption_type == "key" and len(value_dec_bytes) > 16:
+                                    # Or just 16-byte suffix
+                                    value_dec_bytes = value_dec_bytes[:-16]
+
+                                value_dec = value_dec_bytes.decode('utf-8', errors='replace')
+                                is_decrypted = True
+                        except Exception as e:
+                            logger.warning("Failed to decrypt cookie with state key",
+                                       state_key_id=state_key_id,
+                                       encryption_type=encryption_type,
+                                       error=str(e))
 
             cookie_data = {
                 "originating_object_id": file_enriched.object_id,
@@ -139,9 +183,9 @@ def _insert_cookies(file_enriched, username: str | None, browser: str, db_path: 
                 "encryption_type": encryption_type,
                 "masterkey_guid": masterkey_guid,
                 "state_key_id": state_key_id,
-                "is_decrypted": False,
+                "is_decrypted": is_decrypted,
                 "value_enc": encrypted_value,
-                "value_dec": None,
+                "value_dec": value_dec,
             }
             cookies_data.append(cookie_data)
 

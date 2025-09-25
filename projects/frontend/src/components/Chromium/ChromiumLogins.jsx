@@ -37,6 +37,19 @@ const Row = React.memo(({ index, style, data }) => {
           </Link>
         </Tooltip>
       </div>
+      <div
+        className={`px-2 flex-shrink-0 w-24 text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center cursor-pointer select-text transition-colors ${copiedCell === 'is_decrypted' ? 'bg-green-200 dark:bg-green-800' : ''}`}
+        onDoubleClick={() => handleCellDoubleClick(record.is_decrypted ? 'Yes' : 'No', 'is_decrypted')}
+        title="Double-click to copy"
+      >
+        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+          record.is_decrypted
+            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+            : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+        }`}>
+          {record.is_decrypted ? 'Yes' : 'No'}
+        </span>
+      </div>
       <div 
         className={`px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'source' ? 'bg-green-200 dark:bg-green-800' : ''}`}
         onDoubleClick={() => handleCellDoubleClick(record.source, 'source')}
@@ -46,13 +59,22 @@ const Row = React.memo(({ index, style, data }) => {
           <span className="block truncate">{record.source || 'Unknown'}</span>
         </Tooltip>
       </div>
-      <div 
+      <div
         className={`px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'username' ? 'bg-green-200 dark:bg-green-800' : ''}`}
         onDoubleClick={() => handleCellDoubleClick(record.username, 'username')}
         title="Double-click to copy"
       >
         <Tooltip content={record.username || 'Unknown'} side="top" align="start">
           <span className="block truncate">{record.username || 'Unknown'}</span>
+        </Tooltip>
+      </div>
+      <div
+        className={`px-2 flex-shrink-0 w-40 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'password_value_dec' ? 'bg-green-200 dark:bg-green-800' : ''}`}
+        onDoubleClick={() => handleCellDoubleClick(record.password_value_dec, 'password_value_dec')}
+        title="Double-click to copy"
+      >
+        <Tooltip content={record.password_value_dec || 'Not decrypted'} side="top" align="start">
+          <span className="block truncate font-mono text-xs">{record.password_value_dec || 'N/A'}</span>
         </Tooltip>
       </div>
       <div 
@@ -332,6 +354,12 @@ const ChromiumLogins = ({ renderActions }) => {
       case 'times_used':
         orderBy.times_used = sortDirection;
         break;
+      case 'is_decrypted':
+        orderBy.is_decrypted = sortDirection;
+        break;
+      case 'password_value_dec':
+        orderBy.password_value_dec = sortDirection;
+        break;
       default:
         orderBy.times_used = sortDirection;
     }
@@ -358,6 +386,8 @@ const ChromiumLogins = ({ renderActions }) => {
               signon_realm
               username_value
               times_used
+              is_decrypted
+              password_value_dec
             }
           }
         `,
@@ -395,8 +425,10 @@ const ChromiumLogins = ({ renderActions }) => {
 
       const headers = [
         'Object ID',
-        'Source', 
+        'Decrypted',
+        'Source',
         'Username',
+        'Password',
         'Browser',
         'Origin URL',
         'Signon Realm',
@@ -408,8 +440,10 @@ const ChromiumLogins = ({ renderActions }) => {
         headers.join(','),
         ...data.map(record => [
           `"${(record.originating_object_id || '').replace(/"/g, '""')}"`,
+          record.is_decrypted ? 'true' : 'false',
           `"${(record.source || '').replace(/"/g, '""')}"`,
           `"${(record.username || '').replace(/"/g, '""')}"`,
+          `"${(record.password_value_dec || '').replace(/"/g, '""')}"`,
           `"${(record.browser || '').replace(/"/g, '""')}"`,
           `"${(record.origin_url || '').replace(/"/g, '""')}"`,
           `"${(record.signon_realm || '').replace(/"/g, '""')}"`,
@@ -537,6 +571,8 @@ const ChromiumLogins = ({ renderActions }) => {
                   signon_realm
                   username_value
                   times_used
+                  is_decrypted
+                  password_value_dec
                 }
               }
             `,
@@ -564,6 +600,8 @@ const ChromiumLogins = ({ renderActions }) => {
                   signon_realm
                   username_value
                   times_used
+                  is_decrypted
+                  password_value_dec
                 }
               }
             `,
@@ -756,6 +794,15 @@ const ChromiumLogins = ({ renderActions }) => {
           Object ID
         </SortableHeader>
         <SortableHeader
+          column="is_decrypted"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
+          onSort={handleSort}
+          className="flex-shrink-0 w-24"
+        >
+          Decrypted
+        </SortableHeader>
+        <SortableHeader
           column="source"
           currentSort={sortColumn}
           currentDirection={sortDirection}
@@ -772,6 +819,15 @@ const ChromiumLogins = ({ renderActions }) => {
           className="flex-shrink-0 w-32"
         >
           Username
+        </SortableHeader>
+        <SortableHeader
+          column="password_value_dec"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
+          onSort={handleSort}
+          className="flex-shrink-0 w-40"
+        >
+          Password
         </SortableHeader>
         <SortableHeader
           column="browser"

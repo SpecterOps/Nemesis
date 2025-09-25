@@ -79,10 +79,16 @@ rule Chrome_Local_State
         """
         try:
             # Use the chromium library to process and insert into database
-            process_chromium_local_state(object_id, file_path, self.dpapi_manager)
+            state_key_data = process_chromium_local_state(object_id, file_path, self.dpapi_manager)
+
+            # Create enrichment result with parsed data
+            enrichment = EnrichmentResult(module_name=self.name)
+            enrichment.results = {"parsed": state_key_data}
+
+            return enrichment
 
         except Exception as e:
-            logger.exception(e, message="Error processing Chrome Login Data database")
+            logger.exception(e, message="Error processing Chrome Local State file")
 
 
 def create_enrichment_module() -> EnrichmentModule:
