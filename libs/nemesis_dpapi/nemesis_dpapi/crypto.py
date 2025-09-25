@@ -111,12 +111,8 @@ class Pbkdf2Hash(BaseModel):
 
 def _derive_secure_cred_key(ntlm_hash: bytes, user_sid_bytes: bytes) -> bytes:
     """Compute PBKDF2 hash using two-step derivation process."""
-    derived_key = PBKDF2(
-        ntlm_hash, user_sid_bytes, dkLen=32, count=10000, hmac_hash_module=SHA256
-    )  # type: ignore
-    derived_key = PBKDF2(
-        derived_key, user_sid_bytes, dkLen=16, count=1, hmac_hash_module=SHA256
-    )  # type: ignore
+    derived_key = PBKDF2(ntlm_hash, user_sid_bytes, dkLen=32, count=10000, hmac_hash_module=SHA256)  # type: ignore
+    derived_key = PBKDF2(derived_key, user_sid_bytes, dkLen=16, count=1, hmac_hash_module=SHA256)  # type: ignore
     return derived_key
 
 
@@ -148,9 +144,7 @@ class CredKey(BaseModel):
             raise ValueError(f"Cannot infer OWF type from key type: {type(self.key)}")
 
     @classmethod
-    def from_password(
-        cls, password: str, hash_type: CredKeyHashType, user_sid: Sid | None = None
-    ) -> CredKey:
+    def from_password(cls, password: str, hash_type: CredKeyHashType, user_sid: Sid | None = None) -> CredKey:
         """Create CredKey from password by calculating the specified hash type.
 
         Args:
@@ -188,9 +182,7 @@ class CredKey(BaseModel):
             raise ValueError(f"Unsupported hash type: {hash_type}")
 
     @classmethod
-    def from_ntlm(
-        cls, ntlm_hash: bytes, hash_type: CredKeyHashType, user_sid: Sid | None = None
-    ) -> CredKey:
+    def from_ntlm(cls, ntlm_hash: bytes, hash_type: CredKeyHashType, user_sid: Sid | None = None) -> CredKey:
         """Create CredKey from NTLM hash."""
 
         if hash_type in (CredKeyHashType.MD4, CredKeyHashType.NTLM):
@@ -273,5 +265,3 @@ class MasterKeyEncryptionKey(BaseModel):
             dpapi_system_key: The DPAPI_SYSTEM key bytes
         """
         return cls(key=Sha1Hash(value=dpapi_system_key))
-
-

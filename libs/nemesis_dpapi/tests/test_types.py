@@ -76,7 +76,7 @@ class TestSidValidation:
     def test_sid_non_string_input(self):
         """Test that non-string inputs are rejected."""
         with pytest.raises(ValueError, match="SID must be a string"):
-            validate_windows_sid(123)
+            validate_windows_sid(123)  # type: ignore
 
         with pytest.raises(ValueError, match="SID must be a string"):
-            validate_windows_sid(None)
+            validate_windows_sid(None)  # type: ignore

@@ -1,10 +1,6 @@
 """Tests for DPAPI cryptographic operations."""
 
-import base64
-from uuid import UUID
-
 import pytest
-from nemesis_dpapi.core import Blob, MasterKey
 from nemesis_dpapi.crypto import (
     BlobDecryptionError,
     CredKey,
@@ -17,7 +13,6 @@ from nemesis_dpapi.crypto import (
     Sha1Hash,
     _derive_secure_cred_key,
 )
-from nemesis_dpapi.dpapi_blob import DPAPI_BLOB
 
 password = "Qwerty12345"
 ntlm_hash = "abd9ffb762c86b26ef4ce5c81b0dd37f"
@@ -28,17 +23,6 @@ user_sid_bytes = user_sid.encode("utf-16le")
 credkey_ntlm_hash = ntlm_hash
 credkey_sha1_hash = "15056cbc481efd37bba0e97e9c28493a40cf8745"
 credkey_pbkdf2_hash = "775ec403415b49002386ea8e477346cd"
-
-masterkey_uuid = UUID("ed93694f-5a6d-46e2-b821-219f2c0ecd4d")
-masterkey_bytes = bytes.fromhex(
-    "36BD60CB9E7E52433169DB00E93ED0A82D3C30C65D948BD8596FB32C267671020B02026B0AE03479DD18374ADBDD7658F45CCE6ED2A45319EFF7A96C411C85F5"
-)
-masterkey_sha1_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
-masterkey_entry = "{ed93694f-5a6d-46e2-b821-219f2c0ecd4d}:17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778"
-masterkey_entries = """
-{ed93694f-5a6d-46e2-b821-219f2c0ecd4d}:17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778
-{12345678-1234-1234-1234-123456789012}:ABCDEF1234567890ABCDEF1234567890ABCDEF12
-""".strip()
 
 
 class TestPassword:
@@ -424,136 +408,6 @@ class TestMasterKeyEncryptionKey:
 
         with pytest.raises(ValueError, match="Unsupported digest algorithm"):
             MasterKeyEncryptionKey._derive_mk_key(pwdhash, user_sid, digest="unsupported")
-
-
-class TestBlobDecrypt:
-    """Test Blob.decrypt() method."""
-
-    def test_decrypt_blob_with_unencrypted_masterkey(self, blob_without_entropy: bytes):
-        """Test DPAPI blob decryption with unencrypted master key."""
-        blob = Blob.parse(blob_without_entropy)
-        # Create an unencrypted master key
-        masterkey = MasterKey(guid=blob.masterkey_guid)
-
-        with pytest.raises(ValueError, match="Master key must be decrypted before use"):
-            blob.decrypt(masterkey)
-
-    def test_decrypt_blob_with_wrong_masterkey(self, blob_without_entropy: bytes):
-        """Test DPAPI blob decryption with wrong masterkey."""
-        blob = Blob.parse(blob_without_entropy)
-        # Create a master key with wrong SHA1 hash
-        wrong_masterkey_sha1 = b"wrong_key" + b"\x00" * 8  # 20 bytes
-        masterkey = MasterKey(
-            guid=blob.masterkey_guid, plaintext_key=b"dummy_key" * 8, plaintext_key_sha1=wrong_masterkey_sha1
-        )
-
-        with pytest.raises(ValueError, match="Failed to decrypt blob with provided master key"):
-            blob.decrypt(masterkey)
-
-    def test_decrypt_blob_with_entropy(self, blob_with_entropy: bytes):
-        blob = Blob.parse(blob_with_entropy)
-        assert blob.masterkey_guid == masterkey_uuid
-
-        masterkey_sha1_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
-        masterkey = MasterKey(
-            guid=blob.masterkey_guid, plaintext_key=masterkey_bytes, plaintext_key_sha1=masterkey_sha1_bytes
-        )
-
-        entropy = bytes([1, 2, 3, 4, 5])
-        decrypted_data = blob.decrypt(masterkey, entropy=entropy)
-
-        assert isinstance(decrypted_data, bytes)
-        assert len(decrypted_data) > 0
-        assert decrypted_data.decode("utf-8") == "test"
-
-    def test_decrypt_blob_without_entropy(self, blob_without_entropy: bytes):
-        blob = Blob.parse(blob_without_entropy)
-
-        assert blob.masterkey_guid == masterkey_uuid
-
-        masterkey_sha1_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
-        masterkey = MasterKey(
-            guid=blob.masterkey_guid, plaintext_key=masterkey_bytes, plaintext_key_sha1=masterkey_sha1_bytes
-        )
-
-        decrypted_data = blob.decrypt(masterkey)
-
-        assert isinstance(decrypted_data, bytes)
-        assert len(decrypted_data) > 0
-        assert decrypted_data.decode("utf-8") == "test"
-
-    def test_decrypt_blob_app_bound_enc_key(self, read_file_text):
-        """Test DPAPI blob decryption with app-bound encrypted key from fixture."""
-        blob_b64 = read_file_text("blob_app_bound_enc_key.txt").strip()
-        blob_data = base64.b64decode(blob_b64)[4:]
-        blob = Blob.parse(blob_data)
-
-        assert blob.description == "Google Chrome"
-        assert str(blob.masterkey_guid).lower() == "f752e2e1-1726-454b-a632-0718d94ca677"
-        masterkey_sha1_bytes = bytes.fromhex("9DED7C56C3FE577B84780908ADAC346F38F1D114")
-
-        # Create a proper master key object
-        masterkey = MasterKey(
-            guid=blob.masterkey_guid,
-            plaintext_key=b"dummy_key" * 8,  # We only need the SHA1 hash for decryption
-            plaintext_key_sha1=masterkey_sha1_bytes,
-        )
-
-        # Test our new Blob.decrypt method
-        try:
-            decrypted_data = blob.decrypt(masterkey)
-            assert isinstance(decrypted_data, bytes)
-            assert len(decrypted_data) > 0
-        except ValueError:
-            pytest.skip("Unable to decrypt app-bound encrypted key blob with provided masterkey")
-
-        # Also verify against dpapick3 reference implementation
-        from dpapick3 import blob as dpapick3_blob
-
-        blob_dpapick = dpapick3_blob.DPAPIBlob(blob.raw_bytes)
-        assert blob_dpapick.decrypt(masterkey_sha1_bytes)
-
-
-class TestBlobParse:
-    """Test Blob.parse() method."""
-
-    def test_parse_blob(self, blob_without_entropy):
-        """Test parsing DPAPI blob data against reference implementations."""
-        from dpapick3 import blob as dpapick3_blob
-
-        blob = Blob.parse(blob_without_entropy)
-        blob_impacket = DPAPI_BLOB(blob_without_entropy)
-        blob_dpapick = dpapick3_blob.DPAPIBlob(blob_without_entropy)
-
-        # Basic metadata
-        assert blob.version == blob_impacket["Version"] == blob_dpapick.version
-        assert blob.prompt_flags == blob_impacket["Flags"] == blob_dpapick.flags
-
-        # GUIDs
-        assert blob.provider_guid.bytes_le == blob_impacket["GuidCredential"]
-        assert str(blob.provider_guid).lower() == blob_dpapick.provider.lower()  # type: ignore
-        assert blob.masterkey_guid.bytes_le == blob_impacket["GuidMasterKey"]
-        assert str(blob.masterkey_guid).lower() == blob_dpapick.mkguid.lower()  # type: ignore
-
-        # Description (handle null-terminated UTF-16LE strings)
-        impacket_desc = blob_impacket["Description"].decode("utf-16le").rstrip("\x00")
-        assert blob.description == impacket_desc
-
-        if blob_dpapick.description != b"\x00":
-            dpapick_desc = blob_dpapick.description.decode("utf-16le").rstrip("\x00")  # type: ignore
-            assert blob.description == dpapick_desc
-
-        # Encryption algorithm
-        assert blob.encryption_algorithm_id == blob_impacket["CryptAlgo"] == blob_dpapick.cipherAlgo.algnum  # type: ignore
-        assert blob.encryption_algorithm_key_size == blob_impacket["CryptAlgoLen"]
-
-        # MAC algorithm
-        assert blob.mac_algorithm_id == blob_impacket["HashAlgo"] == blob_dpapick.hashAlgo.algnum  # type: ignore
-        assert blob.mac_algorithm_key_size == blob_impacket["HashAlgoLen"]
-
-        # Data
-        assert blob.encryption_salt == blob_impacket["Salt"] == blob_dpapick.salt
-        assert blob.encrypted_data == blob_impacket["Data"] == blob_dpapick.cipherText
 
 
 class TestCryptoHelperFunctions:
