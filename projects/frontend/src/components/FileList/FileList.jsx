@@ -166,7 +166,7 @@ const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange 
   const maxVisiblePages = 7;
   const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
   const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-  
+
   const pageNumbers = [];
   for (let i = startPage; i <= endPage; i++) {
     pageNumbers.push(i);
@@ -209,7 +209,7 @@ const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange 
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
-            
+
             {startPage > 1 && (
               <>
                 <button
@@ -225,7 +225,7 @@ const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange 
                 )}
               </>
             )}
-            
+
             {pageNumbers.map((page) => (
               <button
                 key={page}
@@ -239,7 +239,7 @@ const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange 
                 {page}
               </button>
             ))}
-            
+
             {endPage < totalPages && (
               <>
                 {endPage < totalPages - 1 && (
@@ -255,7 +255,7 @@ const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange 
                 </button>
               </>
             )}
-            
+
             <button
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage === totalPages}
@@ -282,7 +282,7 @@ const FileList = () => {
   const selectedRowRef = useRef(null);
   const lastDirection = useRef('down');
   const { username } = useUser();
-  
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -324,13 +324,13 @@ const FileList = () => {
   const handleRowClick = (e, file, index) => {
     if (isTriageMode) {
       const actualIndex = isPaginated ? (currentPage - 1) * PAGE_SIZE + index : index;
-      
+
       if (e.shiftKey && selectedIndex !== -1) {
         // For paginated mode, only allow shift selection within current page
         if (isPaginated) {
           const pageStartIndex = (currentPage - 1) * PAGE_SIZE;
           const pageEndIndex = Math.min(pageStartIndex + PAGE_SIZE, totalCount);
-          
+
           if (selectedIndex >= pageStartIndex && selectedIndex < pageEndIndex) {
             const start = Math.min(selectedIndex - pageStartIndex, index);
             const end = Math.max(selectedIndex - pageStartIndex, index);
@@ -382,7 +382,7 @@ const FileList = () => {
   // Build where clause for queries
   const buildWhereClause = () => {
     const conditions = [];
-    
+
     // Base condition for files
     conditions.push({
       _or: [
@@ -460,7 +460,7 @@ const FileList = () => {
   // Build order by clause
   const buildOrderByClause = () => {
     const orderBy = {};
-    
+
     switch (sortColumn) {
       case 'agent_id':
         orderBy.agent_id = sortDirection;
@@ -486,7 +486,7 @@ const FileList = () => {
       default:
         orderBy.timestamp = sortDirection;
     }
-    
+
     return orderBy;
   };
 
@@ -787,7 +787,7 @@ const FileList = () => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
-      
+
       try {
         // First, get the count
         const countQuery = {
@@ -1074,11 +1074,11 @@ const FileList = () => {
             <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             <input
               type="text"
-              placeholder="Filter by path (e.g. *.txt)"
+              placeholder="Filter by source"
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-              value={pathFilter}
+              value={sourceFilter}
               onChange={(e) => {
-                setPathFilter(e.target.value);
+                setSourceFilter(e.target.value);
                 setCurrentPage(1);
               }}
             />
@@ -1088,11 +1088,11 @@ const FileList = () => {
             <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             <input
               type="text"
-              placeholder="Filter by source"
+              placeholder="Filter by path (e.g. *.txt)"
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-              value={sourceFilter}
+              value={pathFilter}
               onChange={(e) => {
-                setSourceFilter(e.target.value);
+                setPathFilter(e.target.value);
                 setCurrentPage(1);
               }}
             />
@@ -1359,7 +1359,7 @@ const FileList = () => {
               </AutoSizer>
             </div>
           )}
-          
+
           {/* Pagination controls */}
           {isPaginated && (
             <PaginationControls
