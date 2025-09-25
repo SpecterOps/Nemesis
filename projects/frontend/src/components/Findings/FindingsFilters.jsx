@@ -28,11 +28,11 @@ const FindingsFilters = ({
     // Initialize state from URL parameters
     const [categoryFilter, setCategoryFilter] = React.useState(() => {
         const urlCategory = getFilterFromUrl('category', '');
-        if (!urlCategory) return ['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii'];
+        if (!urlCategory) return ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'];
 
         // Handle comma-separated multiple categories
-        const categories = urlCategory.split(',').filter(c => ['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii'].includes(c.trim()));
-        return categories.length > 0 ? categories : ['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii'];
+        const categories = urlCategory.split(',').filter(c => ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'].includes(c.trim()));
+        return categories.length > 0 ? categories : ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'];
     });
 
     const [severityFilter, setSeverityFilter] = React.useState(() =>
@@ -68,7 +68,7 @@ const FindingsFilters = ({
 
     // Check if any filters are active
     const hasActiveFilters = useMemo(() => {
-        return categoryFilter.length !== 6 ||
+        return categoryFilter.length !== 8 ||
             severityFilter.length !== 3 ||
             originFilter !== '' ||
             triageFilter !== 'untriaged_and_actionable' ||
@@ -78,7 +78,7 @@ const FindingsFilters = ({
 
     // Handle clearing all filters
     const handleClearFilters = () => {
-        setCategoryFilter(['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii']);
+        setCategoryFilter(['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational']);
         setSeverityFilter(['high', 'medium', 'low']);
         setOriginFilter('');
         setTriageFilter('untriaged_and_actionable');
@@ -91,7 +91,7 @@ const FindingsFilters = ({
         const newParams = new URLSearchParams();
 
         // Only set parameters that aren't default values
-        if (categoryFilter.length < 6) {
+        if (categoryFilter.length < 8) {
             // Only set URL parameter if not all categories are selected
             newParams.set('category', categoryFilter.join(','));
         }
@@ -132,7 +132,7 @@ const FindingsFilters = ({
     const filteredFindings = useMemo(() => {
         const filtered = findings.filter(finding => {
             // Category filter
-            if (categoryFilter.length < 6 && !categoryFilter.includes(finding.category)) return false;
+            if (categoryFilter.length < 8 && !categoryFilter.includes(finding.category)) return false;
 
             // Severity filter
             if (severityFilter.length < 3) {
@@ -317,15 +317,17 @@ const FindingsFilters = ({
     };
 
     const getCategoryButtonText = () => {
-        if (categoryFilter.length === 6) return 'All Categories';
+        if (categoryFilter.length === 8) return 'All Categories';
         if (categoryFilter.length === 0) return 'No Categories';
         const labels = {
             credential: 'Credentials',
-            vulnerability: 'Vulnerabilities',
-            yara_match: 'Yara',
             extracted_hash: 'Extracted Hashes',
             extracted_data: 'Extracted Data',
-            pii: 'PII'
+            vulnerability: 'Vulnerabilities',
+            yara_match: 'Yara',
+            pii: 'PII',
+            misc: 'Misc',
+            informational: 'Informational'
         };
         return categoryFilter.map(c => labels[c]).join(', ');
     };
@@ -334,7 +336,7 @@ const FindingsFilters = ({
         setCategoryFilter(prev => {
             if (prev.includes(category)) {
                 const newSelection = prev.filter(c => c !== category);
-                return newSelection.length === 0 ? ['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii'] : newSelection;
+                return newSelection.length === 0 ? ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'] : newSelection;
             } else {
                 return [...prev, category];
             }
@@ -396,11 +398,13 @@ const FindingsFilters = ({
                         <div className="p-2">
                             {[
                                 { key: 'credential', label: 'Credentials' },
-                                { key: 'vulnerability', label: 'Vulnerabilities' },
-                                { key: 'yara_match', label: 'Yara' },
                                 { key: 'extracted_hash', label: 'Extracted Hashes' },
                                 { key: 'extracted_data', label: 'Extracted Data' },
-                                { key: 'pii', label: 'PII' }
+                                { key: 'vulnerability', label: 'Vulnerabilities' },
+                                { key: 'yara_match', label: 'Yara' },
+                                { key: 'pii', label: 'PII' },
+                                { key: 'misc', label: 'Misc' },
+                                { key: 'informational', label: 'Informational' }
                             ].map(({ key, label }) => (
                                 <label key={key} className="flex items-center space-x-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded cursor-pointer">
                                     <input
