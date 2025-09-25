@@ -18,32 +18,35 @@ const FindingsFilters = ({
     };
 
     const convertSeverityFromUrl = (urlSeverity) => {
-        const severityMap = {
-            'high': '7',
-            'medium': '4',
-            'low': '0'
-        };
-        return urlSeverity ? (severityMap[urlSeverity] || 'all') : 'all';
+        if (!urlSeverity) return ['high', 'medium', 'low'];
+
+        // Handle comma-separated multiple severities
+        const severities = urlSeverity.split(',').filter(s => ['high', 'medium', 'low'].includes(s.trim()));
+        return severities.length > 0 ? severities : ['high', 'medium', 'low'];
     };
 
     // Initialize state from URL parameters
-    const [categoryFilter, setCategoryFilter] = React.useState(() =>
-        getFilterFromUrl('category', 'all')
-    );
+    const [categoryFilter, setCategoryFilter] = React.useState(() => {
+        const urlCategory = getFilterFromUrl('category', '');
+        if (!urlCategory) return ['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii'];
 
-    const [severityFilter, setSeverityFilter] = React.useState(() => {
-        const urlSeverity = convertSeverityFromUrl(getFilterFromUrl('severity', 'all'));
-        if (urlSeverity === 'all') {
-            return ['high', 'medium', 'low'];
-        } else {
-            const severityMap = { '7': 'high', '4': 'medium', '0': 'low' };
-            return [severityMap[urlSeverity]];
-        }
+        // Handle comma-separated multiple categories
+        const categories = urlCategory.split(',').filter(c => ['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii'].includes(c.trim()));
+        return categories.length > 0 ? categories : ['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii'];
     });
+
+    const [severityFilter, setSeverityFilter] = React.useState(() =>
+        convertSeverityFromUrl(getFilterFromUrl('severity', ''))
+    );
     const [severityDropdownOpen, setSeverityDropdownOpen] = React.useState(false);
     const severityDropdownRef = useRef(null);
     const severityButtonRef = useRef(null);
-    const [dropdownPosition, setDropdownPosition] = React.useState({ top: 0, left: 0 });
+    const [severityDropdownPosition, setSeverityDropdownPosition] = React.useState({ top: 0, left: 0 });
+
+    const [categoryDropdownOpen, setCategoryDropdownOpen] = React.useState(false);
+    const categoryDropdownRef = useRef(null);
+    const categoryButtonRef = useRef(null);
+    const [categoryDropdownPosition, setCategoryDropdownPosition] = React.useState({ top: 0, left: 0 });
 
     const [originFilter, setOriginFilter] = React.useState(() =>
         getFilterFromUrl('origin', '')
@@ -65,7 +68,7 @@ const FindingsFilters = ({
 
     // Check if any filters are active
     const hasActiveFilters = useMemo(() => {
-        return categoryFilter !== 'all' ||
+        return categoryFilter.length !== 6 ||
             severityFilter.length !== 3 ||
             originFilter !== '' ||
             triageFilter !== 'untriaged_and_actionable' ||
@@ -75,7 +78,7 @@ const FindingsFilters = ({
 
     // Handle clearing all filters
     const handleClearFilters = () => {
-        setCategoryFilter('all');
+        setCategoryFilter(['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii']);
         setSeverityFilter(['high', 'medium', 'low']);
         setOriginFilter('');
         setTriageFilter('untriaged_and_actionable');
@@ -88,16 +91,14 @@ const FindingsFilters = ({
         const newParams = new URLSearchParams();
 
         // Only set parameters that aren't default values
-        if (categoryFilter !== 'all') {
-            newParams.set('category', categoryFilter);
+        if (categoryFilter.length < 6) {
+            // Only set URL parameter if not all categories are selected
+            newParams.set('category', categoryFilter.join(','));
         }
 
-        if (severityFilter.length === 1) {
-            const severityMap = { 'high': 'high', 'medium': 'medium', 'low': 'low' };
-            newParams.set('severity', severityMap[severityFilter[0]]);
-        } else if (severityFilter.length !== 3) {
-            // If not all severities are selected, we need to handle this differently
-            // For now, we'll only handle single selection in URL
+        if (severityFilter.length < 3) {
+            // Only set URL parameter if not all severities are selected
+            newParams.set('severity', severityFilter.join(','));
         }
 
         if (originFilter) {
@@ -131,7 +132,7 @@ const FindingsFilters = ({
     const filteredFindings = useMemo(() => {
         const filtered = findings.filter(finding => {
             // Category filter
-            if (categoryFilter !== 'all' && finding.category !== categoryFilter) return false;
+            if (categoryFilter.length < 6 && !categoryFilter.includes(finding.category)) return false;
 
             // Severity filter
             if (severityFilter.length < 3) {
@@ -245,9 +246,6 @@ const FindingsFilters = ({
     }, [filteredFindings, onFilteredDataChange]);
 
     // Filter change handlers
-    const handleCategoryChange = (e) => {
-        setCategoryFilter(e.target.value);
-    };
 
     const handleSeverityToggle = (severity) => {
         setSeverityFilter(prev => {
@@ -260,11 +258,14 @@ const FindingsFilters = ({
         });
     };
 
-    // Close dropdown when clicking outside
+    // Close dropdowns when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
-            if (severityDropdownRef.current && !severityDropdownRef.current.contains(event.target)) {
+            if (severityDropdownRef.current && !severityDropdownRef.current.contains(event.target) && !severityButtonRef.current.contains(event.target)) {
                 setSeverityDropdownOpen(false);
+            }
+            if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target) && !categoryButtonRef.current.contains(event.target)) {
+                setCategoryDropdownOpen(false);
             }
         };
 
@@ -281,10 +282,10 @@ const FindingsFilters = ({
         return severityFilter.map(s => labels[s]).join(', ');
     };
 
-    const updateDropdownPosition = () => {
+    const updateSeverityDropdownPosition = () => {
         if (severityButtonRef.current) {
             const rect = severityButtonRef.current.getBoundingClientRect();
-            setDropdownPosition({
+            setSeverityDropdownPosition({
                 top: rect.bottom + window.scrollY,
                 left: rect.left + window.scrollX
             });
@@ -293,9 +294,51 @@ const FindingsFilters = ({
 
     const handleSeverityDropdownToggle = () => {
         if (!severityDropdownOpen) {
-            updateDropdownPosition();
+            updateSeverityDropdownPosition();
         }
         setSeverityDropdownOpen(!severityDropdownOpen);
+    };
+
+    const updateCategoryDropdownPosition = () => {
+        if (categoryButtonRef.current) {
+            const rect = categoryButtonRef.current.getBoundingClientRect();
+            setCategoryDropdownPosition({
+                top: rect.bottom + window.scrollY,
+                left: rect.left + window.scrollX
+            });
+        }
+    };
+
+    const handleCategoryDropdownToggle = () => {
+        if (!categoryDropdownOpen) {
+            updateCategoryDropdownPosition();
+        }
+        setCategoryDropdownOpen(!categoryDropdownOpen);
+    };
+
+    const getCategoryButtonText = () => {
+        if (categoryFilter.length === 6) return 'All Categories';
+        if (categoryFilter.length === 0) return 'No Categories';
+        const labels = {
+            credential: 'Credentials',
+            vulnerability: 'Vulnerabilities',
+            yara_match: 'Yara',
+            extracted_hash: 'Extracted Hashes',
+            extracted_data: 'Extracted Data',
+            pii: 'PII'
+        };
+        return categoryFilter.map(c => labels[c]).join(', ');
+    };
+
+    const handleCategoryToggle = (category) => {
+        setCategoryFilter(prev => {
+            if (prev.includes(category)) {
+                const newSelection = prev.filter(c => c !== category);
+                return newSelection.length === 0 ? ['credential', 'vulnerability', 'yara_match', 'extracted_hash', 'extracted_data', 'pii'] : newSelection;
+            } else {
+                return [...prev, category];
+            }
+        });
     };
 
     const handleOriginChange = (e) => {
@@ -332,30 +375,57 @@ const FindingsFilters = ({
 
                 <div className="flex items-center space-x-2">
                     <Filter className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                    <select
-                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-                        value={categoryFilter}
-                        onChange={handleCategoryChange}
+                    <button
+                        ref={categoryButtonRef}
+                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors w-52"
+                        onClick={handleCategoryDropdownToggle}
                     >
-                        <option value="all">All Categories</option>
-                        <option value="credential">Credentials</option>
-                        <option value="vulnerability">Vulnerabilities</option>
-                        <option value="yara_match">Yara</option>
-                        <option value="extracted_hash">Extracted Hashes</option>
-                        <option value="extracted_data">Extracted Data</option>
-                        <option value="pii">PII</option>
-                    </select>
+                        <span className="truncate flex-1 text-left">{getCategoryButtonText()}</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
                 </div>
+                {categoryDropdownOpen && createPortal(
+                    <div
+                        ref={categoryDropdownRef}
+                        className="fixed bg-white dark:bg-dark-secondary border dark:border-gray-700 rounded shadow-lg z-50 min-w-64"
+                        style={{
+                            top: `${categoryDropdownPosition.top}px`,
+                            left: `${categoryDropdownPosition.left}px`
+                        }}
+                    >
+                        <div className="p-2">
+                            {[
+                                { key: 'credential', label: 'Credentials' },
+                                { key: 'vulnerability', label: 'Vulnerabilities' },
+                                { key: 'yara_match', label: 'Yara' },
+                                { key: 'extracted_hash', label: 'Extracted Hashes' },
+                                { key: 'extracted_data', label: 'Extracted Data' },
+                                { key: 'pii', label: 'PII' }
+                            ].map(({ key, label }) => (
+                                <label key={key} className="flex items-center space-x-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={categoryFilter.includes(key)}
+                                        onChange={() => handleCategoryToggle(key)}
+                                        className="rounded"
+                                    />
+                                    <span className="font-medium dark:text-gray-300">{label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>,
+                    document.body
+                )}
 
                 <div className="flex items-center space-x-2">
                     <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                     <button
                         ref={severityButtonRef}
-                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors w-44"
                         onClick={handleSeverityDropdownToggle}
                     >
-                        <span>{getSeverityButtonText()}</span>
-                        <ChevronDown className={`w-4 h-4 transition-transform ${severityDropdownOpen ? 'rotate-180' : ''}`} />
+                        <span className="truncate flex-1 text-left">{getSeverityButtonText()}</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${severityDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
                 </div>
                 {severityDropdownOpen && createPortal(
@@ -363,8 +433,8 @@ const FindingsFilters = ({
                         ref={severityDropdownRef}
                         className="fixed bg-white dark:bg-dark-secondary border dark:border-gray-700 rounded shadow-lg z-50 min-w-48"
                         style={{
-                            top: `${dropdownPosition.top}px`,
-                            left: `${dropdownPosition.left}px`
+                            top: `${severityDropdownPosition.top}px`,
+                            left: `${severityDropdownPosition.left}px`
                         }}
                     >
                         <div className="p-2">
