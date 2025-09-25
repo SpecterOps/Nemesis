@@ -125,7 +125,7 @@ const FileListItem: React.FC<{
           return <FolderArchive className="h-4 w-4 text-gray-500" />;
       }
     }
-    
+
     switch (status) {
       case 'uploading':
         return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
@@ -231,6 +231,7 @@ const FileUpload: React.FC = () => {
   const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([]);
   const [filePath, setFilePath] = useState('');
   const [source, setSource] = useState('');
+  const [sourceType, setSourceType] = useState('Host');
   const [project, setProject] = useState(contextProject);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -302,14 +303,14 @@ const FileUpload: React.FC = () => {
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     // Clear previously uploaded files before adding new ones
     setFileStatuses(prev => prev.filter(fs => fs.status !== 'success'));
-    
+
     const items = Array.from(e.dataTransfer.items);
     const regularFiles: File[] = [];
     const folders: FileSystemDirectoryEntry[] = [];
-    
+
     // Separate files and folders
     for (const item of items) {
       if (item.kind === 'file') {
@@ -326,18 +327,18 @@ const FileUpload: React.FC = () => {
         }
       }
     }
-    
+
     // Add regular files
     if (regularFiles.length > 0) {
       addFiles(regularFiles);
     }
-    
+
     // Process folders
     for (const folder of folders) {
       try {
         // Create a placeholder file for the folder compression
         const placeholderFile = new File([], `${folder.name}.zip`, { type: 'application/zip' });
-        
+
         const folderStatus: FileUploadStatus = {
           file: placeholderFile,
           status: 'pending',
@@ -345,9 +346,9 @@ const FileUpload: React.FC = () => {
           isFolder: true,
           folderName: folder.name
         };
-        
+
         setFileStatuses(prev => [...prev, folderStatus]);
-        
+
         // Store the folder entry for later compression
         (folderStatus as any).folderEntry = folder;
       } catch (err) {
@@ -380,16 +381,16 @@ const FileUpload: React.FC = () => {
   const uploadContainer = async (fileStatus: FileUploadStatus, index: number): Promise<void> => {
     const { folderName } = fileStatus;
     const folderEntry = (fileStatus as any).folderEntry as FileSystemDirectoryEntry;
-    
+
     if (!folderEntry || !folderName) {
       throw new Error('Invalid folder data');
     }
-    
+
     // Update status to compressing
     setFileStatuses(prev => prev.map((fs, i) =>
       i === index ? { ...fs, status: 'compressing', progress: 0 } : fs
     ));
-    
+
     try {
       // Compress the folder
       const compressionResult = await folderCompressor.compressFolder(folderEntry, {
@@ -401,16 +402,16 @@ const FileUpload: React.FC = () => {
           ));
         }
       });
-      
+
       // Update the file status with the compressed blob
-      const compressedFile = new File([compressionResult.blob], `${folderName}.zip`, { 
-        type: 'application/zip' 
+      const compressedFile = new File([compressionResult.blob], `${folderName}.zip`, {
+        type: 'application/zip'
       });
-      
+
       setFileStatuses(prev => prev.map((fs, i) =>
         i === index ? { ...fs, file: compressedFile, status: 'uploading', progress: 0 } : fs
       ));
-      
+
       // Prepare expiration
       let expiration: Date;
       if (dataExpirationDate) {
@@ -419,22 +420,23 @@ const FileUpload: React.FC = () => {
         expiration = new Date();
         expiration.setDate(expiration.getDate() + parseInt(dataExpirationDays));
       }
-      
+
       // Prepare form data for regular file upload
       const formData = new FormData();
       formData.append('file', compressedFile);
-      
+
+      const finalSource = source ? (sourceType === 'Host' ? `host://${source}` : source) : undefined;
       const metadata = {
         agent_id: username,
-        source: source || undefined,
+        source: finalSource,
         project,
         timestamp: new Date().toISOString(),
         expiration: expiration.toISOString(),
         path: getFormattedPath(filePath, `${folderName}.zip`)
       };
-      
+
       formData.append('metadata', JSON.stringify(metadata));
-      
+
       // Simulate progress (since fetch doesn't provide upload progress by default)
       const progressInterval = setInterval(() => {
         setFileStatuses(prev => prev.map((fs, i) => {
@@ -444,21 +446,21 @@ const FileUpload: React.FC = () => {
           return fs;
         }));
       }, 200);
-      
+
       // Upload to regular files endpoint
       const response = await fetch('/api/files', {
         method: 'POST',
         body: formData,
       });
-      
+
       clearInterval(progressInterval);
-      
+
       if (!response.ok) {
         throw new Error(`Upload failed: ${response.statusText}`);
       }
-      
+
       const result = await response.json() as UploadResponse;
-      
+
       // Update status to success
       setFileStatuses(prev => prev.map((fs, i) =>
         i === index ? {
@@ -468,12 +470,12 @@ const FileUpload: React.FC = () => {
           objectId: result.object_id
         } : fs
       ));
-      
+
       setSuccessCount(prev => prev + 1);
-      
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Upload failed';
-      
+
       // Update status to error
       setFileStatuses(prev => prev.map((fs, i) =>
         i === index ? {
@@ -488,7 +490,7 @@ const FileUpload: React.FC = () => {
 
   const uploadFile = async (fileStatus: FileUploadStatus, index: number): Promise<void> => {
     const { file, isFolder } = fileStatus;
-    
+
     // If it's a folder, use the container upload
     if (isFolder) {
       return uploadContainer(fileStatus, index);
@@ -511,9 +513,10 @@ const FileUpload: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file);
 
+      const finalSource = source ? (sourceType === 'Host' ? `host://${source}` : source) : undefined;
       const metadata = {
         agent_id: username,
-        source: source || undefined,
+        source: finalSource,
         project,
         timestamp: new Date().toISOString(),
         expiration: expiration.toISOString(),
@@ -685,13 +688,43 @@ const FileUpload: React.FC = () => {
               placeholder="C:\Folder\ or /folder/"
             />
 
-            <InputField
-              icon={MapPin}
-              label="Source"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              placeholder="host://HOSTNAME or https://domain.com"
-            />
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Source
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <MapPin className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <select
+                    value={sourceType}
+                    onChange={(e) => setSourceType(e.target.value)}
+                    className="pl-10 pr-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white min-w-[120px]"
+                  >
+                    <option value="Host">Host</option>
+                    <option value="URL">URL</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+                    <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={sourceType === 'Host' ? 'Hostname/IP address' : sourceType === 'URL' ? 'https://example.com' : `${sourceType.toLowerCase()}://value`}
+                  />
+                </div>
+              </div>
+            </div>
 
             <InputField
               icon={Folder}
@@ -706,7 +739,7 @@ const FileUpload: React.FC = () => {
               icon={Clock}
               label="Expiration Time"
               value={expirationTime}
-              tooltip="Change in 'Settings' at the top right."
+              tooltip="Date when the data expires and Nemesis will delete it (configurable on the Settings page)."
               readOnly
             />
           </div>

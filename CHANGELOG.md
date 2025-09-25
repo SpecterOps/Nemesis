@@ -18,7 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adaptation of @Dreadnode's .NET reversing agent to `agents`
 - "chromium" standard library in ./libs/ for parsing Chromium based files
 - "nemesis_dpapi" library in ./libs/ for handling DPAPI related data/decryption
+  - Includes in-memory storage of keys as well as postgres
+  - Allows subscriptions to react to DPAPI-related events (e.g. new backup key, new plaintext masterkey, etc.)
 - `registry_hive` parsing module that extracts bootkeys + local accounts + lsa secrets from linked hives
+- Refactored file enrichment web API code to be more modular
 - API route to submit DPAPI credential material
 - Auto-building API documents for ./docs/api.md from the FastAPI routes in `web_api` container
 - Documentation for "Containers" and LLM functionality
