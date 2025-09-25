@@ -328,18 +328,6 @@ minikerberos = ">=0.4.7"
 unicrypto = ">=0.0.10"
 
 [[package]]
-name = "asyncio"
-version = "4.0.0"
-description = "Deprecated backport of asyncio; use the stdlib package instead"
-optional = false
-python-versions = ">=3.4"
-groups = ["main"]
-files = [
-    {file = "asyncio-4.0.0-py3-none-any.whl", hash = "sha256:c1eddb0659231837046809e68103969b2bef8b0400d59cfa6363f6b5ed8cc88b"},
-    {file = "asyncio-4.0.0.tar.gz", hash = "sha256:570cd9e50db83bc1629152d4d0b7558d6451bb1bfd5dfc2e935d96fc2f40329b"},
-]
-
-[[package]]
 name = "asyncpg"
 version = "0.30.0"
 description = "An asyncio PostgreSQL driver"
@@ -1641,20 +1629,18 @@ python-registry = "*"
 
 [[package]]
 name = "durabletask-dapr"
-version = "0.2.0a9"
+version = "0.2.0a7"
 description = "A Durable Task Client SDK for Python"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "durabletask_dapr-0.2.0a9-py3-none-any.whl", hash = "sha256:48c401c30c05a6122bdd1ee245e9b65c56dabb2dde3dfe6fe1d4ee47085e4a2e"},
-    {file = "durabletask_dapr-0.2.0a9.tar.gz", hash = "sha256:ec481840a043a9d15f67628386b0694e60a04de8015f8f56883f55e490ebbb56"},
+    {file = "durabletask_dapr-0.2.0a7-py3-none-any.whl", hash = "sha256:a13b410ee8404882984d8e442a27d06570face32ca2d3c60c73b7377013ea1e9"},
+    {file = "durabletask_dapr-0.2.0a7.tar.gz", hash = "sha256:72fdb1055dbf47be3c9f24812fb41902e14ed27f19ccbd7af1372c4bad74963f"},
 ]
 
 [package.dependencies]
-asyncio = "*"
 grpcio = "*"
-protobuf = "*"
 
 [[package]]
 name = "easygui"
@@ -6001,4 +5987,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "40a809c593435ffa55cd40f29988a7901b112268b3353c459cddd4305bc081e6"
+content-hash = "ebbc28e743dae98d67f21500258fdac9ef156cdbe2a06adf6f62c8e23d0fd82b"
