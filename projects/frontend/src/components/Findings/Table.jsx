@@ -7,9 +7,9 @@ import { useFileNavigation } from './navigation';
 const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
   const isActive = currentSort === column;
   const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
-  
+
   return (
-    <div 
+    <div
       className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
       onClick={() => onSort(column, nextDirection)}
     >
@@ -165,13 +165,52 @@ export const TableRow = React.memo(({ index, style, data }) => {
                 {new Date(finding.created_at).toLocaleString()}
             </div>
             <div className="flex-shrink-0 w-48 text-sm text-gray-500 dark:text-gray-400 text-left">
-                {finding.finding_name}
+                <Tooltip
+                    content={finding.finding_name}
+                    side="top"
+                    sideOffset={10}
+                    align="left"
+                    alignOffset={-35}
+                    avoidCollisions={true}
+                    maxWidth="full"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                        {finding.finding_name}
+                    </div>
+                </Tooltip>
             </div>
             <div className="flex-shrink-0 w-40 text-sm text-gray-500 dark:text-gray-400 text-left">
-                {finding.category}
+                <Tooltip
+                    content={finding.category}
+                    side="top"
+                    sideOffset={10}
+                    align="left"
+                    alignOffset={-35}
+                    avoidCollisions={true}
+                    maxWidth="full"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                        {finding.category}
+                    </div>
+                </Tooltip>
             </div>
             <div className="flex-shrink-0 w-40 text-sm text-gray-500 dark:text-gray-400 text-left">
-                {finding.origin_name}
+                <Tooltip
+                    content={finding.origin_name}
+                    side="top"
+                    sideOffset={10}
+                    align="left"
+                    alignOffset={-35}
+                    avoidCollisions={true}
+                    maxWidth="full"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                        {finding.origin_name}
+                    </div>
+                </Tooltip>
             </div>
             <div className="flex-grow min-w-[300px] text-sm text-gray-500 dark:text-gray-400 text-left relative truncate">
                 <Tooltip
@@ -256,7 +295,7 @@ const TriageActions = ({ finding, handleTriage, triageStates }) => (
             <div className="flex items-center justify-center">
                 {finding.finding_triage_histories.length > 0 &&
                     finding.finding_triage_histories[0].automated ? (
-                    <Tooltip 
+                    <Tooltip
                         content={
                             <>
                                 {finding.finding_triage_histories[0].explanation || "No explanation provided"}
@@ -264,7 +303,7 @@ const TriageActions = ({ finding, handleTriage, triageStates }) => (
                                     <span> (confidence: <strong>{finding.finding_triage_histories[0].confidence}</strong>)</span>
                                 )}
                             </>
-                        } 
+                        }
                         side="top"
                     >
                         <span>
