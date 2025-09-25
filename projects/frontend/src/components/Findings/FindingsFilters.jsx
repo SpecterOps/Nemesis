@@ -48,8 +48,8 @@ const FindingsFilters = ({
     const categoryButtonRef = useRef(null);
     const [categoryDropdownPosition, setCategoryDropdownPosition] = React.useState({ top: 0, left: 0 });
 
-    const [originFilter, setOriginFilter] = React.useState(() =>
-        getFilterFromUrl('origin', '')
+    const [searchFilter, setSearchFilter] = React.useState(() =>
+        getFilterFromUrl('search', '')
     );
 
     const [triageFilter, setTriageFilter] = React.useState(() =>
@@ -70,17 +70,17 @@ const FindingsFilters = ({
     const hasActiveFilters = useMemo(() => {
         return categoryFilter.length !== 8 ||
             severityFilter.length !== 3 ||
-            originFilter !== '' ||
+            searchFilter !== '' ||
             triageFilter !== 'untriaged_and_actionable' ||
             triageSourceFilter !== 'all' ||
             objectIdFilter !== '';
-    }, [categoryFilter, severityFilter, originFilter, triageFilter, triageSourceFilter, objectIdFilter]);
+    }, [categoryFilter, severityFilter, searchFilter, triageFilter, triageSourceFilter, objectIdFilter]);
 
     // Handle clearing all filters
     const handleClearFilters = () => {
         setCategoryFilter(['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational']);
         setSeverityFilter(['high', 'medium', 'low']);
-        setOriginFilter('');
+        setSearchFilter('');
         setTriageFilter('untriaged_and_actionable');
         setTriageSourceFilter('all');
         setObjectIdFilter('');
@@ -101,8 +101,8 @@ const FindingsFilters = ({
             newParams.set('severity', severityFilter.join(','));
         }
 
-        if (originFilter) {
-            newParams.set('origin', originFilter);
+        if (searchFilter) {
+            newParams.set('search', searchFilter);
         }
 
         newParams.set('triage_state', triageFilter);
@@ -117,7 +117,7 @@ const FindingsFilters = ({
 
         // Preserve other existing parameters that we don't manage
         for (const [key, value] of searchParams.entries()) {
-            if (!['category', 'severity', 'origin', 'triage_state', 'triage_source', 'object_id'].includes(key)) {
+            if (!['category', 'severity', 'search', 'triage_state', 'triage_source', 'object_id'].includes(key)) {
                 newParams.set(key, value);
             }
         }
@@ -126,7 +126,7 @@ const FindingsFilters = ({
         if (newParams.toString() !== searchParams.toString()) {
             setSearchParams(newParams, { replace: false });
         }
-    }, [categoryFilter, severityFilter, originFilter, triageFilter, triageSourceFilter, objectIdFilter, setSearchParams, searchParams]);
+    }, [categoryFilter, severityFilter, searchFilter, triageFilter, triageSourceFilter, objectIdFilter, setSearchParams, searchParams]);
 
     // Memoized filtered and sorted findings calculation
     const filteredFindings = useMemo(() => {
@@ -154,8 +154,16 @@ const FindingsFilters = ({
                 if (!severityMatch) return false;
             }
 
-            // Origin filter
-            if (originFilter && !finding.origin_name.toLowerCase().includes(originFilter.toLowerCase())) return false;
+            // Multi-field search filter
+            if (searchFilter) {
+                const searchLower = searchFilter.toLowerCase();
+                const matchesName = finding.finding_name.toLowerCase().includes(searchLower);
+                const matchesCategory = finding.category.toLowerCase().includes(searchLower);
+                const matchesOrigin = finding.origin_name.toLowerCase().includes(searchLower);
+                const matchesFilePath = finding.files_enriched?.path?.toLowerCase().includes(searchLower) || false;
+
+                if (!matchesName && !matchesCategory && !matchesOrigin && !matchesFilePath) return false;
+            }
 
             // Object ID filter
             if (objectIdFilter && finding.object_id.toString() !== objectIdFilter) return false;
@@ -238,7 +246,7 @@ const FindingsFilters = ({
 
             return sortDirection === 'asc' ? comparison : -comparison;
         });
-    }, [findings, categoryFilter, severityFilter, originFilter, triageFilter, triageSourceFilter, objectIdFilter, sortColumn, sortDirection]);
+    }, [findings, categoryFilter, severityFilter, searchFilter, triageFilter, triageSourceFilter, objectIdFilter, sortColumn, sortDirection]);
 
     // Notify parent component of filtered data changes
     useEffect(() => {
@@ -343,8 +351,8 @@ const FindingsFilters = ({
         });
     };
 
-    const handleOriginChange = (e) => {
-        setOriginFilter(e.target.value);
+    const handleSearchChange = (e) => {
+        setSearchFilter(e.target.value);
     };
 
     const handleTriageStateChange = (e) => {
@@ -466,10 +474,10 @@ const FindingsFilters = ({
                     <Search className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                     <input
                         type="text"
-                        placeholder="Filter by origin"
-                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 w-40"
-                        value={originFilter}
-                        onChange={handleOriginChange}
+                        placeholder="Search name/category/origin/path"
+                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 w-64"
+                        value={searchFilter}
+                        onChange={handleSearchChange}
                     />
                 </div>
 
