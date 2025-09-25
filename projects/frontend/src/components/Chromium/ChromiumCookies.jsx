@@ -37,6 +37,19 @@ const Row = React.memo(({ index, style, data }) => {
           </Link>
         </Tooltip>
       </div>
+      <div
+        className={`px-2 flex-shrink-0 w-24 text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center cursor-pointer select-text transition-colors ${copiedCell === 'is_decrypted' ? 'bg-green-200 dark:bg-green-800' : ''}`}
+        onDoubleClick={() => handleCellDoubleClick(record.is_decrypted ? 'Yes' : 'No', 'is_decrypted')}
+        title="Double-click to copy"
+      >
+        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+          record.is_decrypted
+            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+            : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+        }`}>
+          {record.is_decrypted ? 'Yes' : 'No'}
+        </span>
+      </div>
       <div 
         className={`px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'source' ? 'bg-green-200 dark:bg-green-800' : ''}`}
         onDoubleClick={() => handleCellDoubleClick(record.source, 'source')}
@@ -325,6 +338,9 @@ const ChromiumCookies = ({ renderActions }) => {
       case 'last_access_utc':
         orderBy.last_access_utc = sortDirection;
         break;
+      case 'is_decrypted':
+        orderBy.is_decrypted = sortDirection;
+        break;
       default:
         orderBy.last_access_utc = sortDirection;
     }
@@ -351,6 +367,8 @@ const ChromiumCookies = ({ renderActions }) => {
               name
               expires_utc
               last_access_utc
+              is_decrypted
+              value_dec
             }
           }
         `,
@@ -388,26 +406,30 @@ const ChromiumCookies = ({ renderActions }) => {
 
       const headers = [
         'Object ID',
-        'Source', 
+        'Decrypted',
+        'Source',
         'Username',
         'Browser',
         'Host Key',
         'Name',
         'Expires UTC',
-        'Last Access UTC'
+        'Last Access UTC',
+        'Value Decrypted'
       ];
 
       const csvContent = [
         headers.join(','),
         ...data.map(record => [
           `"${(record.originating_object_id || '').replace(/"/g, '""')}"`,
+          record.is_decrypted ? 'true' : 'false',
           `"${(record.source || '').replace(/"/g, '""')}"`,
           `"${(record.username || '').replace(/"/g, '""')}"`,
           `"${(record.browser || '').replace(/"/g, '""')}"`,
           `"${(record.host_key || '').replace(/"/g, '""')}"`,
           `"${(record.name || '').replace(/"/g, '""')}"`,
           record.expires_utc ? `"${new Date(record.expires_utc).toISOString()}"` : '""',
-          record.last_access_utc ? `"${new Date(record.last_access_utc).toISOString()}"` : '""'
+          record.last_access_utc ? `"${new Date(record.last_access_utc).toISOString()}"` : '""',
+          `"${(record.value_dec || '').replace(/"/g, '""')}"`
         ].join(','))
       ].join('\n');
 
@@ -526,6 +548,8 @@ const ChromiumCookies = ({ renderActions }) => {
                   name
                   expires_utc
                   last_access_utc
+                  is_decrypted
+                  value_dec
                 }
               }
             `,
@@ -553,6 +577,8 @@ const ChromiumCookies = ({ renderActions }) => {
                   name
                   expires_utc
                   last_access_utc
+                  is_decrypted
+                  value_dec
                 }
               }
             `,
@@ -729,6 +755,15 @@ const ChromiumCookies = ({ renderActions }) => {
           className="flex-shrink-0 w-32"
         >
           Object ID
+        </SortableHeader>
+        <SortableHeader
+          column="is_decrypted"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
+          onSort={handleSort}
+          className="flex-shrink-0 w-24"
+        >
+          Decrypted
         </SortableHeader>
         <SortableHeader
           column="source"
