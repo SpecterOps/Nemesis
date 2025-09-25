@@ -568,7 +568,7 @@ def run_enrichment_modules(ctx, activity_input: dict):
     try:
         # Download the file once at the beginning
         with storage.download(object_id) as temp_file:
-            logger.debug("Downloaded file for processing", object_id=object_id, temp_file=temp_file.name)
+            logger.debug("Downloaded file for processing", object_id=object_id, temp_file=temp_file.name, size=os.path.getsize(temp_file.name))
 
             # First pass: determine which modules should process this file
             modules_to_process = []

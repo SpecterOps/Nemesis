@@ -1,20 +1,34 @@
 # enrichment_modules/registry_hive/analyzer.py
+import asyncio
 import ntpath
 import os
 import shutil
 import tempfile
 import textwrap
+from typing import TYPE_CHECKING
 
 import psycopg
 import structlog
-from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
+from common.models import (
+    EnrichmentResult,
+    FileObject,
+    Finding,
+    FindingCategory,
+    FindingOrigin,
+    Transform,
+)
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
+from nemesis_dpapi.core import DpapiSystemCredential
 from psycopg.rows import dict_row
 from pypykatz.registry.offline_parser import OffineRegistry as OfflineRegistry
+from regipy.registry import RegistryHive
+
+if TYPE_CHECKING:
+    from nemesis_dpapi import DpapiManager
 
 logger = structlog.get_logger(module=__name__)
 
@@ -24,6 +38,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         super().__init__("registry_hive")
         self.storage = StorageMinio()
         self.workflows = ["default"]
+        self.dpapi_manager: DpapiManager | None = None
 
         # Get PostgreSQL connection string
         with DaprClient() as client:
@@ -34,6 +49,12 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         """Determine if this module should run based on file type."""
         file_enriched = get_file_enriched(object_id)
         magic_type = file_enriched.magic_type.lower()
+        mime_type = file_enriched.mime_type.lower()
+
+        # This is because the "strings.txt" of a registry hive
+        #   has a matching magic type of the registry hive itself
+        if mime_type != 'application/octet-stream':
+            return False
 
         # Check if it's a Windows registry hive
         return any(
@@ -46,29 +67,13 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             ]
         )
 
-    def _identify_hive_type(self, file_path: str, file_name: str) -> str | None:
-        """Identify the type of registry hive based on filename."""
-        file_name_upper = file_name.upper()
+    def _identify_hive_type(self, file_path: str) -> str | None:
+        """Identify the type of registry hive based regipy"""
 
-        # Check common hive names - be more specific to avoid false positives
-        if any(name in file_name_upper for name in ["SYSTEM"]):
-            return "SYSTEM"
-        elif any(name in file_name_upper for name in ["SAM"]) and "SAMP" not in file_name_upper:
-            return "SAM"
-        elif any(name in file_name_upper for name in ["SECURITY"]):
-            return "SECURITY"
-        elif any(name in file_name_upper for name in ["SOFTWARE"]):
-            return "SOFTWARE"
-        elif any(name in file_name_upper for name in ["NTUSER"]) or file_name_upper.endswith("NTUSER.DAT"):
-            return "NTUSER"
-
-        # Try some common backup/copy patterns
-        if "SYSTEM." in file_name_upper or file_name_upper.endswith("SYSTEM"):
-            return "SYSTEM"
-        elif "SAM." in file_name_upper or file_name_upper.endswith("SAM"):
-            return "SAM"
-        elif "SECURITY." in file_name_upper or file_name_upper.endswith("SECURITY"):
-            return "SECURITY"
+        try:
+            return RegistryHive(file_path).hive_type.upper()
+        except Exception as e:
+            logger.exception(e, "Error parsing using regipy")
 
         return None
 
@@ -109,6 +114,30 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
                     result = cur.fetchone()
                     if result:
+                        return str(result["object_id"])  # Convert UUID to string
+
+                    # Fallback query: look for registry files by magic_type and enrichment results
+                    # Extract the hive type from the target path (e.g., SECURITY from ...\\Windows\\System32\\Config\\SECURITY)
+                    target_hive_type = ntpath.basename(target_hive_path).upper()
+
+                    cur.execute(
+                        """
+                        SELECT fe.object_id
+                        FROM files_enriched fe
+                        JOIN enrichments e ON fe.object_id = e.object_id
+                        WHERE fe.source = %s
+                        AND fe.magic_type = 'MS Windows registry file, NT/2000 or above'
+                        AND e.module_name = 'registry_hive'
+                        AND e.result_data->'results'->'hive_type' = %s
+                        ORDER BY fe.timestamp DESC
+                        LIMIT 1
+                    """,
+                        (file_enriched.source, f'"{target_hive_type}"'),
+                    )
+
+                    result = cur.fetchone()
+                    if result:
+                        print(f"XXX result: {result}")
                         return str(result["object_id"])  # Convert UUID to string
 
         except Exception as e:
@@ -219,7 +248,11 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
     def _process_security_hive(self, security_file: str, system_file: str | None) -> dict:
         """Process SECURITY hive to extract LSA secrets using pypykatz."""
-        results = {"lsa_secrets": [], "cached_credentials": [], "bootkey_available": system_file is not None}
+        results = {
+            "lsa_secrets": [],
+            "cached_credentials": [],
+            "bootkey_available": system_file is not None,
+        }
 
         if not system_file:
             # Cannot parse SECURITY without SYSTEM - pypykatz requires SYSTEM hive
@@ -231,12 +264,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         system_copy_path = None
 
         try:
-            # Debug what we're actually receiving
-            logger.warning(f"security_file path: {security_file}")
-            logger.warning(f"system_file path: {system_file}")
-            logger.warning(f"security_file exists: {os.path.exists(security_file) if security_file else 'N/A'}")
-            logger.warning(f"system_file exists: {os.path.exists(system_file) if system_file else 'N/A'}")
-
             # Create temporary copies that persist during processing
             security_fd, security_copy_path = tempfile.mkstemp(suffix=".security")
             system_fd, system_copy_path = tempfile.mkstemp(suffix=".system")
@@ -246,36 +273,24 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             os.close(system_fd)
 
             # Copy the files
-            logger.warning(f"Copying {security_file} to {security_copy_path}")
             shutil.copy2(security_file, security_copy_path)
-            logger.warning(f"Copying {system_file} to {system_copy_path}")
             shutil.copy2(system_file, system_copy_path)
 
-            # Verify the copies exist and have content
-            security_size = os.path.getsize(security_copy_path)
-            system_size = os.path.getsize(system_copy_path)
-            logger.warning(f"Security copy size: {security_size} bytes")
-            logger.warning(f"System copy size: {system_size} bytes")
-
-            logger.warning(f"Created persistent copies: SECURITY={security_copy_path}, SYSTEM={system_copy_path}")
-
             # Now parse with pypykatz using the persistent copies
-            logger.warning("Creating OfflineRegistry with persistent file copies")
             registry = OfflineRegistry.from_files(system_path=system_copy_path, security_path=security_copy_path)
 
             # Extract bootkey from SYSTEM
             bootkey = self._extract_bootkey(registry)
             if bootkey:
                 results["bootkey"] = bootkey
-                logger.warning("Extracted bootkey from SYSTEM hive")
+                logger.debug("Extracted bootkey from SYSTEM hive")
             else:
                 logger.warning("Failed to extract bootkey from SYSTEM hive")
 
             # Call get_secrets to extract and decrypt secrets
             try:
-                logger.warning("Calling get_secrets() to extract LSA secrets")
                 registry.get_secrets()
-                logger.warning("get_secrets() completed successfully")
+                logger.debug("get_secrets() completed successfully")
             except Exception as e:
                 logger.warning(f"Failed to extract secrets: {e}")
                 # Continue anyway to see if we can get any data
@@ -283,7 +298,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             # Extract LSA secrets from parsed SECURITY hive
             if hasattr(registry, "security") and registry.security:
                 security_obj = registry.security
-                logger.warning(f"Security object type: {type(security_obj)}")
 
                 # Try to get secrets as dictionary
                 try:
@@ -293,28 +307,27 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     # Extract LSA secrets - they're in 'cached_secrets', not 'lsa_secrets'!
                     if security_dict and "cached_secrets" in security_dict:
                         cached_secrets = security_dict["cached_secrets"]
-                        logger.warning(
-                            f"Found cached_secrets in dict with {len(cached_secrets)} items, type: {type(cached_secrets)}"
-                        )
 
                         if isinstance(cached_secrets, list):
                             # cached_secrets is a list of secret objects
                             for i, secret_data in enumerate(cached_secrets):
-                                logger.warning(f"Processing cached secret {i}: {type(secret_data)}")
-
                                 # If it's a dict, inspect its keys to find the actual secret data
                                 if isinstance(secret_data, dict):
-                                    logger.warning(f"Cached secret {i} keys: {list(secret_data.keys())}")
-
                                     # Look for common secret data keys
                                     secret_value = None
                                     secret_name = f"cached_secret_{i}"
 
                                     # First try common secret keys
-                                    for key in ["secret", "data", "value", "cleartext", "plaintext", "decrypted"]:
+                                    for key in [
+                                        "secret",
+                                        "data",
+                                        "value",
+                                        "cleartext",
+                                        "plaintext",
+                                        "decrypted",
+                                    ]:
                                         if key in secret_data:
                                             secret_value = secret_data[key]
-                                            logger.warning(f"Found secret data in key '{key}': {type(secret_value)}")
                                             break
 
                                     # For DPAPI secrets, extract machine_key and user_key
@@ -327,9 +340,13 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                                                 "user_key": user_key.hex(),
                                             }
                                             secret_name = secret_data.get("key_name", f"cached_secret_{i}")
+
                                             logger.warning(
                                                 f"Found DPAPI keys - machine_key: {len(machine_key)} bytes, user_key: {len(user_key)} bytes"
                                             )
+
+                                            # Register the DPAPI_SYSTEM credential with the DPAPI manager
+                                            asyncio.run(self._register_dpapi_system_credential(machine_key, user_key))
 
                                     # For NL$KM secrets, extract raw_secret
                                     elif not secret_value and "raw_secret" in secret_data:
@@ -337,19 +354,23 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                                         if isinstance(raw_secret, bytes):
                                             secret_value = raw_secret.hex()
                                             secret_name = secret_data.get("key_name", f"cached_secret_{i}")
-                                            logger.warning(f"Found raw_secret: {len(raw_secret)} bytes")
 
                                     # If still no specific key found, try to get the first non-metadata value
                                     elif not secret_value:
                                         for key, value in secret_data.items():
                                             if (
-                                                key not in ["type", "name", "id", "index", "key_name", "history"]
+                                                key
+                                                not in [
+                                                    "type",
+                                                    "name",
+                                                    "id",
+                                                    "index",
+                                                    "key_name",
+                                                    "history",
+                                                ]
                                                 and value
                                             ):
                                                 secret_value = value
-                                                logger.warning(
-                                                    f"Using key '{key}' as secret data: {type(secret_value)}"
-                                                )
                                                 break
 
                                     secret_info = {
@@ -369,9 +390,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                         elif isinstance(cached_secrets, dict):
                             # cached_secrets is a dictionary
                             for secret_name, secret_data in cached_secrets.items():
-                                logger.warning(
-                                    f"Processing cached secret: {secret_name}, data type: {type(secret_data)}"
-                                )
                                 secret_info = {
                                     "name": secret_name,
                                     "decrypted": True,
@@ -385,7 +403,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     for key in secret_keys:
                         if security_dict and key in security_dict:
                             secret_data = security_dict[key]
-                            logger.warning(f"Found {key}: {type(secret_data)}")
 
                             # Format bytes as hex strings for better readability
                             if isinstance(secret_data, bytes):
@@ -410,7 +427,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     # Also try direct attribute access for LSA secrets
                     if hasattr(security_obj, "lsa_secrets"):
                         lsa_secrets_attr = getattr(security_obj, "lsa_secrets", {})
-                        logger.warning(f"Found lsa_secrets attribute with {len(lsa_secrets_attr)} items")
+                        logger.debug(f"Found lsa_secrets attribute with {len(lsa_secrets_attr)} items")
                         for secret_name, secret_data in lsa_secrets_attr.items():
                             # Avoid duplicates if we already processed from dict
                             if not any(s["name"] == secret_name for s in results["lsa_secrets"]):
@@ -481,7 +498,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 if temp_path and os.path.exists(temp_path):
                     try:
                         os.unlink(temp_path)
-                        logger.warning(f"Cleaned up temporary file: {temp_path}")
                     except Exception as e:
                         logger.warning(f"Failed to clean up temporary file {temp_path}: {e}")
 
@@ -489,7 +505,12 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
     def _process_system_hive(self, system_file: str) -> dict:
         """Process SYSTEM hive to extract bootkey and system information using pypykatz."""
-        results = {"bootkey": None, "computer_name": None, "current_control_set": None, "services": []}
+        results = {
+            "bootkey": None,
+            "computer_name": None,
+            "current_control_set": None,
+            "services": [],
+        }
 
         try:
             # Use pypykatz to parse the SYSTEM hive
@@ -513,7 +534,13 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     results["current_control_set"] = system_obj.current_control_set
 
                 # Extract some basic service info if available
-                interesting_services = ["NTDS", "DNS", "W32Time", "LanmanServer", "Spooler"]
+                interesting_services = [
+                    "NTDS",
+                    "DNS",
+                    "W32Time",
+                    "LanmanServer",
+                    "Spooler",
+                ]
                 for service_name in interesting_services:
                     service_info = {
                         "name": service_name,
@@ -524,7 +551,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     results["services"].append(service_info)
 
         except Exception as e:
-            logger.error(f"Failed to process SYSTEM hive with pypykatz: {e}")
+            logger.exception(e, message="Failed to process SYSTEM hive with pypykatz")
             # Return empty results on error
             results = {
                 "bootkey": None,
@@ -645,7 +672,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         """Process registry hive file and extract relevant information."""
         try:
             file_enriched = get_file_enriched(object_id)
-            enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -664,7 +690,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
         # Identify hive type
-        hive_type = self._identify_hive_type(hive_file_path, file_enriched.file_name)
+        hive_type = self._identify_hive_type(hive_file_path)
         if not hive_type:
             logger.warning(f"Could not identify registry hive type for {file_enriched.file_name}")
             return None
@@ -695,7 +721,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                         with self.storage.download(sam_object_id) as sam_temp_file:
                             sam_results = self._process_sam_hive(sam_temp_file.name, hive_file_path)
                             analysis_results["sam_analysis"] = sam_results
-                            logger.info(f"Processed paired SAM hive for SYSTEM: {sam_path}")
+                            logger.debug(f"Processed paired SAM hive for SYSTEM: {sam_path}")
                     except Exception as e:
                         logger.error(f"Failed to process paired SAM hive: {e}")
 
@@ -726,7 +752,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                             analysis_results = self._process_sam_hive(hive_file_path, system_temp_file.name)
                         else:  # SECURITY
                             analysis_results = self._process_security_hive(hive_file_path, system_temp_file.name)
-                        logger.info(f"Processed {hive_type} hive with SYSTEM bootkey")
+                        logger.debug(f"Processed {hive_type} hive with SYSTEM bootkey")
 
                 except Exception as e:
                     logger.error(f"Error downloading SYSTEM hive: {e}")
@@ -795,7 +821,10 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             )
 
             enrichment_result.findings = [finding]
-            enrichment_result.results = {"hive_type": hive_type, "analysis_results": analysis_results}
+            enrichment_result.results = {
+                "hive_type": hive_type,
+                "analysis_results": analysis_results,
+            }
 
             # Create displayable transform
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_file:
@@ -891,6 +920,29 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 enrichment_result.transforms = [displayable_parsed]
 
         return enrichment_result
+
+    async def _register_dpapi_system_credential(self, machine_key: bytes, user_key: bytes):
+        """Register a DPAPI_SYSTEM credential with the DPAPI manager.
+
+        Args:
+            machine_key: The machine key component (20 bytes)
+            user_key: The user key component (20 bytes)
+        """
+        if not self.dpapi_manager:
+            logger.warning("DPAPI manager not initialized, skipping DPAPI_SYSTEM credential registration")
+            return
+
+        try:
+            # Create DPAPI system credential from the machine and user keys
+            dpapi_system_cred = DpapiSystemCredential(machine_key=machine_key, user_key=user_key)
+
+            # Register with the DPAPI manager - it will automatically decrypt compatible masterkeys
+            await self.dpapi_manager.upsert_dpapi_system_credential(dpapi_system_cred)
+
+            logger.warning("Successfully registered DPAPI_SYSTEM credential with DPAPI manager")
+
+        except Exception as e:
+            logger.warning(f"Failed to register DPAPI_SYSTEM credential: {e}")
 
 
 def create_enrichment_module() -> EnrichmentModule:

@@ -9,6 +9,7 @@ from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.dpapi.dpapi_helpers import carve_dpapi_blobs_from_file
 from file_enrichment_modules.module_loader import EnrichmentModule
+from nemesis_dpapi import Blob, DpapiManager
 
 logger = structlog.get_logger(module=__name__)
 
@@ -20,6 +21,7 @@ class DPAPIAnalyzer(EnrichmentModule):
         self.dapr_client = DaprClient()
         self.size_limit = 50000000  # only check the first 50 megs for DPAPI blobs, for performance
         self.max_blobs = 100
+        self.dpapi_manager: DpapiManager | None = None
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
@@ -79,26 +81,40 @@ rule has_dpapi_blob
 
             if file_path:
                 # Use provided file path (if file already downloaded)
-                blobs = asyncio.run(carve_dpapi_blobs_from_file(file_path, file_enriched.object_id, self.max_blobs))
+                carved_blobs = asyncio.run(carve_dpapi_blobs_from_file(file_path, file_enriched.object_id, self.max_blobs))
             else:
                 # Fallback to downloading the file itself
                 with self.storage.download(file_enriched.object_id) as temp_file:
-                    blobs = asyncio.run(
+                    carved_blobs = asyncio.run(
                         carve_dpapi_blobs_from_file(temp_file.name, file_enriched.object_id, self.max_blobs)
                     )
 
-            masterkey_guids = sorted({blob["dpapi_master_key_guid"] for blob in blobs if blob["success"]})
+            for carved_blob in carved_blobs:
+                try:
+                    dpapi_blob_raw = carved_blob["dpapi_blob_raw"]
+                    del carved_blob["dpapi_blob_raw"]  # because of result serialization
+                    carved_blob_dec = asyncio.run(self.dpapi_manager.decrypt_blob(Blob.parse(dpapi_blob_raw)))
 
-            if blobs:
+                    if carved_blob_dec:
+                        logger.warning(
+                            "Successfully decrypted blob", masterkey_guid=carved_blob["dpapi_master_key_guid"]
+                        )
+                        # TODO: handle this?
+                except Exception:
+                    logger.warning(f"Unable to decrypt DPAPI blob: {carved_blob['dpapi_master_key_guid']}")
+
+            masterkey_guids = sorted({blob["dpapi_master_key_guid"] for blob in carved_blobs if blob["success"]})
+
+            if carved_blobs:
                 summary_markdown = f"""
-# DPAPI Blobs Found : {len(blobs)}
+# DPAPI Blobs Found : {len(carved_blobs)}
 # Masterkey GUIDs
 List of unique masterkey GUIDs associated with the found blobs:
 ```text
 {"\n".join(masterkey_guids)}
 ```
 """
-                enrichment_result.results = {"blobs": blobs}
+                enrichment_result.results = {"blobs": carved_blobs}
 
                 display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
 
