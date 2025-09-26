@@ -726,22 +726,27 @@ const FileUpload: React.FC = () => {
               </div>
             </div>
 
-            <InputField
-              icon={Folder}
-              label="Project Name"
-              required
-              value={project}
-              onChange={(e) => setProject(e.target.value)}
-              placeholder="Enter project name (e.g. ASSESS-123)"
-            />
-
-            <InputField
-              icon={Clock}
-              label="Expiration Time"
-              value={expirationTime}
-              tooltip="Date when the data expires and Nemesis will delete it (configurable on the Settings page)."
-              readOnly
-            />
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <InputField
+                  icon={Folder}
+                  label="Project Name"
+                  required
+                  value={project}
+                  onChange={(e) => setProject(e.target.value)}
+                  placeholder="Enter project name (e.g. ASSESS-123)"
+                />
+              </div>
+              <div className="flex-1">
+                <InputField
+                  icon={Clock}
+                  label="Expiration Time"
+                  value={expirationTime}
+                  tooltip="Date when the data expires and Nemesis will delete it (configurable on the Settings page)."
+                  readOnly
+                />
+              </div>
+            </div>
           </div>
 
           {error && (
