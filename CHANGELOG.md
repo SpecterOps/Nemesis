@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API route to submit DPAPI credential material
 - Auto-building API documents for ./docs/api.md from the FastAPI routes in `web_api` container
 - Documentation for "Containers" and LLM functionality
+- Changed default FileList view to All Files, added unviewed indicator dot, and change search default to always include wildcards.
 
 ### Changed
 

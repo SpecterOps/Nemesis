@@ -432,7 +432,8 @@ const FileList = () => {
     }
 
     if (pathFilter) {
-      conditions.push({ path: { _ilike: pathFilter.replace(/\*/g, '%') } });
+      const searchValue = pathFilter.includes('*') ? pathFilter : `*${pathFilter}*`;
+      conditions.push({ path: { _ilike: searchValue.replace(/\*/g, '%') } });
     }
 
     if (selectedTag) {
