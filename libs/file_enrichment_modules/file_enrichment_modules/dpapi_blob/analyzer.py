@@ -81,7 +81,9 @@ rule has_dpapi_blob
 
             if file_path:
                 # Use provided file path (if file already downloaded)
-                carved_blobs = asyncio.run(carve_dpapi_blobs_from_file(file_path, file_enriched.object_id, self.max_blobs))
+                carved_blobs = asyncio.run(
+                    carve_dpapi_blobs_from_file(file_path, file_enriched.object_id, self.max_blobs)
+                )
             else:
                 # Fallback to downloading the file itself
                 with self.storage.download(file_enriched.object_id) as temp_file:
@@ -100,8 +102,10 @@ rule has_dpapi_blob
                             "Successfully decrypted blob", masterkey_guid=carved_blob["dpapi_master_key_guid"]
                         )
                         # TODO: handle this?
-                except Exception:
-                    logger.warning(f"Unable to decrypt DPAPI blob: {carved_blob['dpapi_master_key_guid']}")
+                except Exception as e:
+                    logger.warning(
+                        f"Unable to decrypt carved DPAPI blob: {carved_blob['dpapi_master_key_guid']}. Error: {e}"
+                    )
 
             masterkey_guids = sorted({blob["dpapi_master_key_guid"] for blob in carved_blobs if blob["success"]})
 

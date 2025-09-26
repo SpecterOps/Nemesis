@@ -7,14 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
-from common.models import (
-    EnrichmentResult,
-    FileObject,
-    Finding,
-    FindingCategory,
-    FindingOrigin,
-    Transform,
-)
+from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -63,6 +56,7 @@ class LsassDumpParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
         self.dpapi_manager: DpapiManager | None = None
+        self.size_limit = 1024 * 1024 * 100  # 100 MB size limit for LSASS dumps
 
     def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
@@ -84,9 +78,7 @@ class LsassDumpParser(EnrichmentModule):
         else:
             return value
 
-    def _parse_lsass_dump(
-        self, dump_file_path: str, target_hostname: str = "unknown"
-    ) -> tuple[list, list, list, list]:
+    def _parse_lsass_dump(self, dump_file_path: str, target_hostname: str = "unknown") -> tuple[list, list, list, list]:
         """
         Parse LSASS dump file using pypykatz
         :param dump_file_path: Path to the dump file
@@ -97,13 +89,19 @@ class LsassDumpParser(EnrichmentModule):
         credentials = []
         tickets = []
         masterkeys = []
+        # Track tasks that need to complete before returning
+        pending_tasks = []
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, create a new event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
         try:
             pypy_parse = pypykatz.parse_minidump_file(dump_file_path)
         except Exception as e:
-            logger.error(
-                f"An error occurred while parsing lsass dump: {e}", exc_info=True
-            )
+            logger.error(f"An error occurred while parsing lsass dump: {e}", exc_info=True)
             return [], [], [], []
 
         ssps = [
@@ -196,29 +194,15 @@ class LsassDumpParser(EnrichmentModule):
                     # MSV specific fields for session data
                     if ssp == "msv_creds":
                         if hasattr(cred, "LMHash") and cred.LMHash:
-                            cred_data["LMHash"] = (
-                                cred.LMHash.hex()
-                                if hasattr(cred.LMHash, "hex")
-                                else str(cred.LMHash)
-                            )
+                            cred_data["LMHash"] = cred.LMHash.hex() if hasattr(cred.LMHash, "hex") else str(cred.LMHash)
                         if hasattr(cred, "NThash") and cred.NThash:
-                            cred_data["NThash"] = (
-                                cred.NThash.hex()
-                                if hasattr(cred.NThash, "hex")
-                                else str(cred.NThash)
-                            )
+                            cred_data["NThash"] = cred.NThash.hex() if hasattr(cred.NThash, "hex") else str(cred.NThash)
                         if hasattr(cred, "SHAHash") and cred.SHAHash:
                             cred_data["SHAHash"] = (
-                                cred.SHAHash.hex()
-                                if hasattr(cred.SHAHash, "hex")
-                                else str(cred.SHAHash)
+                                cred.SHAHash.hex() if hasattr(cred.SHAHash, "hex") else str(cred.SHAHash)
                             )
                         if hasattr(cred, "DPAPI") and cred.DPAPI:
-                            cred_data["DPAPI"] = (
-                                cred.DPAPI.hex()
-                                if hasattr(cred.DPAPI, "hex")
-                                else str(cred.DPAPI)
-                            )
+                            cred_data["DPAPI"] = cred.DPAPI.hex() if hasattr(cred.DPAPI, "hex") else str(cred.DPAPI)
 
                     # Kerberos specific fields
                     elif ssp == "kerberos_creds":
@@ -228,17 +212,11 @@ class LsassDumpParser(EnrichmentModule):
                                 tickets.append(ticket)
                                 # Add ticket info to the session data
                                 ticket_info = {
-                                    "service_name": getattr(
-                                        ticket, "ServiceName", [None]
-                                    )[0]
-                                    if hasattr(ticket, "ServiceName")
-                                    and ticket.ServiceName
+                                    "service_name": getattr(ticket, "ServiceName", [None])[0]
+                                    if hasattr(ticket, "ServiceName") and ticket.ServiceName
                                     else None,
-                                    "client_name": getattr(
-                                        ticket, "EClientName", [None]
-                                    )[0]
-                                    if hasattr(ticket, "EClientName")
-                                    and ticket.EClientName
+                                    "client_name": getattr(ticket, "EClientName", [None])[0]
+                                    if hasattr(ticket, "EClientName") and ticket.EClientName
                                     else None,
                                     "domain_name": getattr(ticket, "DomainName", None),
                                     "end_time": str(getattr(ticket, "EndTime", None))
@@ -250,17 +228,9 @@ class LsassDumpParser(EnrichmentModule):
                         else:
                             cred_data["tickets"] = []
                         if hasattr(cred, "aes128") and cred.aes128:
-                            cred_data["aes128"] = (
-                                cred.aes128.hex()
-                                if hasattr(cred.aes128, "hex")
-                                else str(cred.aes128)
-                            )
+                            cred_data["aes128"] = cred.aes128.hex() if hasattr(cred.aes128, "hex") else str(cred.aes128)
                         if hasattr(cred, "aes256") and cred.aes256:
-                            cred_data["aes256"] = (
-                                cred.aes256.hex()
-                                if hasattr(cred.aes256, "hex")
-                                else str(cred.aes256)
-                            )
+                            cred_data["aes256"] = cred.aes256.hex() if hasattr(cred.aes256, "hex") else str(cred.aes256)
 
                     # DPAPI specific fields
                     elif ssp == "dpapi_creds":
@@ -271,9 +241,7 @@ class LsassDumpParser(EnrichmentModule):
                             if hasattr(cred, "masterkey") and cred.masterkey:
                                 masterkey_bytes = bytes.fromhex(cred.masterkey)
                             if hasattr(cred, "sha1_masterkey") and cred.sha1_masterkey:
-                                sha1_masterkey_bytes = bytes.fromhex(
-                                    cred.sha1_masterkey
-                                )
+                                sha1_masterkey_bytes = bytes.fromhex(cred.sha1_masterkey)
 
                             mk = MasterKey(
                                 guid=UUID(str(cred.key_guid)),
@@ -281,18 +249,29 @@ class LsassDumpParser(EnrichmentModule):
                                 plaintext_key_sha1=sha1_masterkey_bytes,
                             )
                             # add this masterkey to the DPAPI cache
-                            if self.dpapi_manager:
-                                asyncio.run(self.dpapi_manager.upsert_masterkey(mk))
-                            else:
+                            if self.dpapi_manager and loop:
+                                try:
+                                    task = loop.create_task(self.dpapi_manager.upsert_masterkey(mk))
+                                    pending_tasks.append(task)
+                                    logger.warning(
+                                        "[lsass_dump] Inserted masterkey from lsass dump into DPAPI manager",
+                                        masterkey_guid=cred.key_guid,
+                                    )
+                                except Exception as e:
+                                    # Database operation failed - skip to avoid event loop conflicts
+                                    logger.warning(
+                                        f"[lsass_dump] Inserting master key failed, skipping masterkey database update. Error: {e}"
+                                    )
+                            elif self.dpapi_manager and not loop:
                                 logger.warning(
-                                    "[lsass_dump] self.dpapi_manager not initialized!"
+                                    "[lsass_dump] No event loop available, skipping masterkey database update"
                                 )
+                            else:
+                                logger.warning("[lsass_dump] self.dpapi_manager not initialized!")
 
                         if hasattr(cred, "masterkey") and cred.masterkey:
                             cred_data["masterkey"] = (
-                                cred.masterkey.hex()
-                                if hasattr(cred.masterkey, "hex")
-                                else str(cred.masterkey)
+                                cred.masterkey.hex() if hasattr(cred.masterkey, "hex") else str(cred.masterkey)
                             )
                         if hasattr(cred, "sha1_masterkey") and cred.sha1_masterkey:
                             sha1_hex = (
@@ -321,14 +300,10 @@ class LsassDumpParser(EnrichmentModule):
                         if hasattr(cred, "password_raw"):
                             # Convert bytes to string for JSON serialization
                             if isinstance(cred.password_raw, bytes):
-                                cred_data["password_raw"] = cred.password_raw.decode(
-                                    "utf-8", errors="replace"
-                                )
+                                cred_data["password_raw"] = cred.password_raw.decode("utf-8", errors="replace")
                             else:
                                 cred_data["password_raw"] = (
-                                    str(cred.password_raw)
-                                    if cred.password_raw is not None
-                                    else ""
+                                    str(cred.password_raw) if cred.password_raw is not None else ""
                                 )
 
                     if cred_data:  # Only add if we have some data
@@ -353,10 +328,7 @@ class LsassDumpParser(EnrichmentModule):
         for ticket in tickets:
             if ticket.ServiceName is not None and ticket.ServiceName[0] == "krbtgt":
                 if ticket.EClientName is not None and ticket.DomainName is not None:
-                    if (
-                        ticket.TargetDomainName is not None
-                        and ticket.TargetDomainName != ticket.DomainName
-                    ):
+                    if ticket.TargetDomainName is not None and ticket.TargetDomainName != ticket.DomainName:
                         target_domain = ticket.TargetDomainName
                     else:
                         target_domain = ticket.DomainName
@@ -369,16 +341,12 @@ class LsassDumpParser(EnrichmentModule):
                                 domain=ticket.DomainName,
                                 username=ticket.EClientName[0],
                                 ticket={
-                                    "file": list(ticket.kirbi_data)[0].split(".kirbi")[
-                                        0
-                                    ]
+                                    "file": list(ticket.kirbi_data)[0].split(".kirbi")[0]
                                     + "_"
                                     + ticket.EndTime.strftime("%Y%m%d%H%M%S")
                                     + ".kirbi",
                                     "domain": target_domain,
-                                    "endtime": str(
-                                        ticket.EndTime
-                                    ),  # Convert datetime to string
+                                    "endtime": str(ticket.EndTime),  # Convert datetime to string
                                 },
                             )
                         )
@@ -388,11 +356,18 @@ class LsassDumpParser(EnrichmentModule):
         # import pprint
         # pprint.pprint(mks)
 
+        # Wait for all pending tasks to complete before returning
+        if pending_tasks and loop:
+            try:
+                # Wait for all tasks to complete
+                loop.run_until_complete(asyncio.gather(*pending_tasks, return_exceptions=True))
+                logger.info(f"[lsass_dump] Completed {len(pending_tasks)} DPAPI manager tasks")
+            except Exception as e:
+                logger.warning(f"[lsass_dump] Error waiting for DPAPI tasks to complete: {e}")
+
         return logon_sessions, credentials, tickets, masterkeys
 
-    def _create_finding_summary(
-        self, logon_sessions: list, credentials: list, tickets: list, masterkeys: list
-    ) -> str:
+    def _create_finding_summary(self, logon_sessions: list, credentials: list, tickets: list, masterkeys: list) -> str:
         """Creates a markdown summary for the LSASS dump findings."""
         summary = "# LSASS Dump Analysis Results\n\n"
 
@@ -439,14 +414,8 @@ class LsassDumpParser(EnrichmentModule):
                                         "sha1_masterkey",
                                     ]:
                                         summary += f"* **{key}**: `{value}`\n"
-                                    elif (
-                                        key == "tickets"
-                                        and isinstance(value, list)
-                                        and value
-                                    ):
-                                        summary += (
-                                            f"* **Tickets**: {len(value)} found\n"
-                                        )
+                                    elif key == "tickets" and isinstance(value, list) and value:
+                                        summary += f"* **Tickets**: {len(value)} found\n"
                                         for i, ticket in enumerate(value, 1):
                                             summary += f"  * **Ticket {i}**: Service=`{ticket.get('service_name', 'N/A')}`, Client=`{ticket.get('client_name', 'N/A')}`, Domain=`{ticket.get('domain_name', 'N/A')}`, EndTime=`{ticket.get('end_time', 'N/A')}`\n"
                                     else:
@@ -459,9 +428,7 @@ class LsassDumpParser(EnrichmentModule):
 
         return summary
 
-    def _analyze_lsass_dump_file(
-        self, file_path: str, file_enriched
-    ) -> EnrichmentResult | None:
+    def _analyze_lsass_dump_file(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze LSASS dump file and generate enrichment result.
 
         Args:
@@ -471,14 +438,10 @@ class LsassDumpParser(EnrichmentModule):
         Returns:
             EnrichmentResult or None if analysis fails
         """
-        enrichment_result = EnrichmentResult(
-            module_name=self.name, dependencies=self.dependencies
-        )
+        enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
         # Parse the LSASS dump
-        logon_sessions, credentials, tickets, masterkeys = self._parse_lsass_dump(
-            file_path, file_enriched.file_name
-        )
+        logon_sessions, credentials, tickets, masterkeys = self._parse_lsass_dump(file_path, file_enriched.file_name)
 
         if not len(logon_sessions):
             logger.error("Failed to parse LSASS dump file")
@@ -486,9 +449,7 @@ class LsassDumpParser(EnrichmentModule):
 
         if logon_sessions or credentials or tickets or masterkeys:
             # Create finding summary
-            summary_markdown = self._create_finding_summary(
-                logon_sessions, credentials, tickets, masterkeys
-            )
+            summary_markdown = self._create_finding_summary(logon_sessions, credentials, tickets, masterkeys)
 
             # Prepare credentials data for serialization (convert objects to dicts)
             credentials_data = []
@@ -508,9 +469,7 @@ class LsassDumpParser(EnrichmentModule):
                 credentials_data.append(cred_dict)
 
             # Create display data
-            display_data = FileObject(
-                type="finding_summary", metadata={"summary": summary_markdown}
-            )
+            display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
 
             # Create finding
             finding = Finding(
@@ -539,9 +498,7 @@ class LsassDumpParser(EnrichmentModule):
             }
 
             # Create a displayable version of the results
-            with tempfile.NamedTemporaryFile(
-                mode="w", encoding="utf-8"
-            ) as tmp_display_file:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
                 yaml_output = []
                 yaml_output.append("LSASS Dump Analysis Results")
                 yaml_output.append("===========================\n")
@@ -553,17 +510,11 @@ class LsassDumpParser(EnrichmentModule):
 
                 for i, session in enumerate(logon_sessions, 1):
                     yaml_output.append(f"Logon Session {i}:")
-                    yaml_output.append(
-                        f"   Authentication ID: {session.get('authentication_id', 'N/A')}"
-                    )
+                    yaml_output.append(f"   Authentication ID: {session.get('authentication_id', 'N/A')}")
                     yaml_output.append(f"   Username: {session.get('username', 'N/A')}")
                     yaml_output.append(f"   Domain: {session.get('domainname', 'N/A')}")
-                    yaml_output.append(
-                        f"   Logon Server: {session.get('logon_server', 'N/A')}"
-                    )
-                    yaml_output.append(
-                        f"   Logon Time: {session.get('logon_time', 'N/A')}"
-                    )
+                    yaml_output.append(f"   Logon Server: {session.get('logon_server', 'N/A')}")
+                    yaml_output.append(f"   Logon Time: {session.get('logon_time', 'N/A')}")
                     yaml_output.append(f"   SID: {session.get('sid', 'N/A')}")
                     yaml_output.append(f"   LUID: {session.get('luid', 'N/A')}")
 
@@ -575,22 +526,14 @@ class LsassDumpParser(EnrichmentModule):
                                 yaml_output.append(f"      Credential {j}:")
                                 for key, value in cred.items():
                                     if value is not None and value != "":
-                                        if (
-                                            key == "tickets"
-                                            and isinstance(value, list)
-                                            and value
-                                        ):
-                                            yaml_output.append(
-                                                f"         {key}: {len(value)} tickets found"
-                                            )
+                                        if key == "tickets" and isinstance(value, list) and value:
+                                            yaml_output.append(f"         {key}: {len(value)} tickets found")
                                             for k, ticket in enumerate(value, 1):
                                                 yaml_output.append(
                                                     f"            Ticket {k}: Service={ticket.get('service_name', 'N/A')}, Client={ticket.get('client_name', 'N/A')}, Domain={ticket.get('domain_name', 'N/A')}, EndTime={ticket.get('end_time', 'N/A')}"
                                                 )
                                         else:
-                                            yaml_output.append(
-                                                f"         {key}: {value}"
-                                            )
+                                            yaml_output.append(f"         {key}: {value}")
                     yaml_output.append("")  # Add empty line between sessions
 
                 display = textwrap.indent("\n".join(yaml_output), "   ")
@@ -612,9 +555,7 @@ class LsassDumpParser(EnrichmentModule):
 
         return enrichment_result
 
-    def process(
-        self, object_id: str, file_path: str | None = None
-    ) -> EnrichmentResult | None:
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process LSASS dump file and extract credentials.
 
         Args:

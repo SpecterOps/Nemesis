@@ -1,9 +1,9 @@
 """Chromium Local State file parsing and database operations."""
 
+import asyncio
 import base64
 import json
 import ntpath
-import asyncio
 
 import psycopg
 import structlog
@@ -145,7 +145,7 @@ def _insert_state_keys(
                             masterkey_guid=key_masterkey_guid,
                         )
                 except Exception:
-                    logger.warning(f"Unable to decrypt DPAPI blob: {key_masterkey_guid}")
+                    logger.warning(f"Unable to decrypt state key DPAPI blob: {key_masterkey_guid}")
 
         # Get app_bound_encrypted_key (post v127)
         app_bound_key_b64 = os_crypt.get("app_bound_encrypted_key")

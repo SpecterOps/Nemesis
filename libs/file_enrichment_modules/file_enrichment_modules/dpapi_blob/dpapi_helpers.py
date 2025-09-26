@@ -40,6 +40,7 @@ async def carve_dpapi_blobs_from_bytes(
     returning a list of dicts {dpapi_master_key_guid, dpapi_data_b64}
     """
     dpapi_blobs = list()
+    seen_blobs = set()  # Track unique blobs by their base64 data
     dpapi_signature = b"\x01\x00\x00\x00\xd0\x8c\x9d\xdf\x01\x15\xd1\x11\x8c\x7a\x00\xc0\x4f\xc2\x97\xeb"
 
     # The following are potential base64 representations of the DPAPI provider GUID
@@ -61,13 +62,13 @@ async def carve_dpapi_blobs_from_bytes(
                         object_id=object_id,
                     )
                 else:
-                    await logger.awarning(
-                        "carve_dpapi_blobs_from_bytes: blob.rawData is None"
-                    )
+                    await logger.awarning("carve_dpapi_blobs_from_bytes: blob.rawData is None")
                 current_pos += 1
             elif blob.dpapi_data_b64:
                 current_pos += len(base64.b64decode(blob.dpapi_data_b64))
-                dpapi_blobs.append(blob)
+                if blob.dpapi_data_b64 not in seen_blobs:
+                    seen_blobs.add(blob.dpapi_data_b64)
+                    dpapi_blobs.append(blob)
         except Exception as e:
             if file_name != "":
                 await logger.awarning(f"exception parsing file {file_name} for dpapi blobs: {e}")
@@ -83,10 +84,7 @@ async def carve_dpapi_blobs_from_bytes(
             end_loc = loc
             # try to check for the end of the base64 string
             for i in range(loc, len(raw_bytes)):
-                if (
-                    raw_bytes[i]
-                    not in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
-                ):
+                if raw_bytes[i] not in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=":
                     end_loc = i
                     break
             if end_loc != loc:
@@ -101,7 +99,9 @@ async def carve_dpapi_blobs_from_bytes(
                             object_id=object_id,
                         )
                     elif blob.dpapi_data_b64:
-                        dpapi_blobs.append(blob)
+                        if blob.dpapi_data_b64 not in seen_blobs:
+                            seen_blobs.add(blob.dpapi_data_b64)
+                            dpapi_blobs.append(blob)
                 except Exception as e:
                     if file_name != "":
                         await logger.awarning(f"exception parsing file {file_name} for b64dpapi blobs: {e}")
@@ -113,9 +113,7 @@ async def carve_dpapi_blobs_from_bytes(
     return dpapi_blobs
 
 
-async def carve_dpapi_blobs_from_file(
-    file_name: str, object_id: str = "", max_blobs: int = 1000
-) -> list[dict]:
+async def carve_dpapi_blobs_from_file(file_name: str, object_id: str = "", max_blobs: int = 1000) -> list[dict]:
     """
     Helper that _just_ carves raw DPAPI blobs from a file,
     returning a list of dicts {dpapi_master_key_guid, dpapi_data_b64}
