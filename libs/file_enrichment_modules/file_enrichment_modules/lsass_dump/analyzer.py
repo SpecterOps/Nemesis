@@ -6,18 +6,19 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi.core import MasterKey
+from nemesis_dpapi import DpapiManager, MasterKey
 from pypykatz.pypykatz import pypykatz
 
 if TYPE_CHECKING:
     from nemesis_dpapi import DpapiManager
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class Credential:
@@ -78,7 +79,9 @@ class LsassDumpParser(EnrichmentModule):
         else:
             return value
 
-    def _parse_lsass_dump(self, dump_file_path: str, target_hostname: str = "unknown") -> tuple[list, list, list, list]:
+    async def _parse_lsass_dump(
+        self, dump_file_path: str, target_hostname: str = "unknown"
+    ) -> tuple[list, list, list, list]:
         """
         Parse LSASS dump file using pypykatz
         :param dump_file_path: Path to the dump file
@@ -89,14 +92,6 @@ class LsassDumpParser(EnrichmentModule):
         credentials = []
         tickets = []
         masterkeys = []
-        # Track tasks that need to complete before returning
-        pending_tasks = []
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop, create a new event loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
 
         try:
             pypy_parse = pypykatz.parse_minidump_file(dump_file_path)
@@ -249,25 +244,20 @@ class LsassDumpParser(EnrichmentModule):
                                 plaintext_key_sha1=sha1_masterkey_bytes,
                             )
                             # add this masterkey to the DPAPI cache
-                            if self.dpapi_manager and loop:
+                            if self.dpapi_manager:
                                 try:
-                                    task = loop.create_task(self.dpapi_manager.upsert_masterkey(mk))
-                                    pending_tasks.append(task)
-                                    logger.warning(
-                                        "[lsass_dump] Inserted masterkey from lsass dump into DPAPI manager",
+                                    await self.dpapi_manager.upsert_masterkey(mk)
+                                    logger.info(
+                                        "Inserted masterkey from lsass dump into DPAPI manager",
                                         masterkey_guid=cred.key_guid,
                                     )
                                 except Exception as e:
                                     # Database operation failed - skip to avoid event loop conflicts
                                     logger.warning(
-                                        f"[lsass_dump] Inserting master key failed, skipping masterkey database update. Error: {e}"
+                                        f"Inserting master key failed, skipping masterkey database update. Error: {e}"
                                     )
-                            elif self.dpapi_manager and not loop:
-                                logger.warning(
-                                    "[lsass_dump] No event loop available, skipping masterkey database update"
-                                )
                             else:
-                                logger.warning("[lsass_dump] self.dpapi_manager not initialized!")
+                                logger.warning("self.dpapi_manager not initialized!")
 
                         if hasattr(cred, "masterkey") and cred.masterkey:
                             cred_data["masterkey"] = (
@@ -356,15 +346,6 @@ class LsassDumpParser(EnrichmentModule):
         # import pprint
         # pprint.pprint(mks)
 
-        # Wait for all pending tasks to complete before returning
-        if pending_tasks and loop:
-            try:
-                # Wait for all tasks to complete
-                loop.run_until_complete(asyncio.gather(*pending_tasks, return_exceptions=True))
-                logger.info(f"[lsass_dump] Completed {len(pending_tasks)} DPAPI manager tasks")
-            except Exception as e:
-                logger.warning(f"[lsass_dump] Error waiting for DPAPI tasks to complete: {e}")
-
         return logon_sessions, credentials, tickets, masterkeys
 
     def _create_finding_summary(self, logon_sessions: list, credentials: list, tickets: list, masterkeys: list) -> str:
@@ -428,7 +409,7 @@ class LsassDumpParser(EnrichmentModule):
 
         return summary
 
-    def _analyze_lsass_dump_file(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+    async def _analyze_lsass_dump_file(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze LSASS dump file and generate enrichment result.
 
         Args:
@@ -441,7 +422,9 @@ class LsassDumpParser(EnrichmentModule):
         enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
         # Parse the LSASS dump
-        logon_sessions, credentials, tickets, masterkeys = self._parse_lsass_dump(file_path, file_enriched.file_name)
+        logon_sessions, credentials, tickets, masterkeys = await self._parse_lsass_dump(
+            file_path, file_enriched.file_name
+        )
 
         if not len(logon_sessions):
             logger.error("Failed to parse LSASS dump file")
@@ -565,20 +548,51 @@ class LsassDumpParser(EnrichmentModule):
         Returns:
             EnrichmentResult or None if processing fails
         """
+
         try:
-            file_enriched = get_file_enriched(object_id)
-
-            # Use provided file_path if available, otherwise download
-            if file_path:
-                return self._analyze_lsass_dump_file(file_path, file_enriched)
-            else:
-                # Download the file to a temporary location
-                with self.storage.download(file_enriched.object_id) as temp_file:
-                    return self._analyze_lsass_dump_file(temp_file.name, file_enriched)
-
-        except Exception as e:
-            logger.exception(e, message="Error processing LSASS dump file")
+            # Check if there's already a running loop
+            loop = asyncio.get_running_loop()
+            # If we get here, there's already a running loop
+            # We cannot use run_until_complete in this case
+            logger.error("Cannot run synchronous process method from within an async context")
             return None
+        except RuntimeError:
+            # No running loop, create a new event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(self._process_async(object_id, file_path))
+            except Exception as e:
+                logger.exception(e, message="Error processing LSASS dump file")
+                return None
+            finally:
+                loop.close()
+
+    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Async helper for process method."""
+
+        logger.debug("Starting async processing of LSASS dump", object_id=object_id)
+
+        with DaprClient() as client:
+            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
+            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+
+        if not postgres_connection_string.startswith("postgres://"):
+            raise ValueError(
+                "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
+            )
+
+        self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
+
+        file_enriched = get_file_enriched(object_id)
+
+        # Use provided file_path if available, otherwise download
+        if file_path:
+            return await self._analyze_lsass_dump_file(file_path, file_enriched)
+        else:
+            # Download the file to a temporary location
+            with self.storage.download(file_enriched.object_id) as temp_file:
+                return await self._analyze_lsass_dump_file(temp_file.name, file_enriched)
 
 
 def create_enrichment_module() -> EnrichmentModule:

@@ -39,7 +39,7 @@ async def carve_dpapi_blobs_from_bytes(
     Helper that _just_ carves raw DPAPI blobs from bytes,
     returning a list of dicts {dpapi_master_key_guid, dpapi_data_b64}
     """
-    dpapi_blobs = list()
+    dpapi_blobs = []
     seen_blobs = set()  # Track unique blobs by their base64 data
     dpapi_signature = b"\x01\x00\x00\x00\xd0\x8c\x9d\xdf\x01\x15\xd1\x11\x8c\x7a\x00\xc0\x4f\xc2\x97\xeb"
 
@@ -119,7 +119,7 @@ async def carve_dpapi_blobs_from_file(file_name: str, object_id: str = "", max_b
     returning a list of dicts {dpapi_master_key_guid, dpapi_data_b64}
     """
 
-    dpapi_blobs = list()
+    dpapi_blobs = []
     chunk_size = 512000
 
     with open(file_name, "rb") as f:
