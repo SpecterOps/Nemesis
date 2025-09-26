@@ -756,6 +756,25 @@ const FileUpload: React.FC = () => {
             </div>
           )}
 
+          <button
+            type="submit"
+            disabled={isUploading || fileStatuses.length === 0 || !project}
+            className={`w-full py-2 px-4 rounded-md text-white font-medium transition-colors ${
+              isUploading || fileStatuses.length === 0 || !project
+                ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+            }`}
+          >
+            {isUploading ? (
+              <div className="flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                Uploading {pendingFiles.length} file{pendingFiles.length !== 1 ? 's' : ''}...
+              </div>
+            ) : (
+              `Upload ${fileStatuses.length} File${fileStatuses.length !== 1 ? 's' : ''}`
+            )}
+          </button>
+
           {successCount > 0 && (
             <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg flex items-center space-x-2">
               <svg
@@ -775,25 +794,6 @@ const FileUpload: React.FC = () => {
               </span>
             </div>
           )}
-
-          <button
-            type="submit"
-            disabled={isUploading || fileStatuses.length === 0 || !project}
-            className={`w-full py-2 px-4 rounded-md text-white font-medium transition-colors ${
-              isUploading || fileStatuses.length === 0 || !project
-                ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
-            }`}
-          >
-            {isUploading ? (
-              <div className="flex items-center justify-center">
-                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                Uploading {pendingFiles.length} file{pendingFiles.length !== 1 ? 's' : ''}...
-              </div>
-            ) : (
-              `Upload ${fileStatuses.length} File${fileStatuses.length !== 1 ? 's' : ''}`
-            )}
-          </button>
         </form>
       </div>
     </div>
