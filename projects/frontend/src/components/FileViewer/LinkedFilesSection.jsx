@@ -259,85 +259,109 @@ const LinkedFilesSection = ({ filePath, source }) => {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {linkedFiles.map((linking) => {
-            const linkedPath = getLinkedFilePath(linking, filePath);
-            const normalizedLinkedPath = linkedPath.replace(/\\/g, '/');
-            const direction = getRelationshipDirection(linking, filePath);
-            const fileName = linkedPath.split(/[\/\\]/).pop() || linkedPath;
-            
-            // Get file status info - try both normalized and original path
-            let fileInfo = fileStatusMap.get(normalizedLinkedPath) || fileStatusMap.get(linkedPath);
-            const isCollected = fileInfo?.status === 'collected' && fileInfo?.object_id;
+          {(() => {
+            // Group linked files by path to merge entries with different directions
+            const groupedFiles = new Map();
 
-            return (
-              <div
-                key={linking.linking_id}
-                className={`flex items-start justify-between p-3 rounded-lg transition-colors ${
-                  isCollected 
-                    ? 'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 border border-green-200 dark:border-green-800' 
-                    : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <div className="flex items-start space-x-3 flex-1 min-w-0">
-                  <div className="flex flex-col items-center flex-shrink-0">
-                    <FileText className={`w-4 h-4 mt-1 ${
-                      isCollected ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'
-                    }`} />
-                    {isCollected && (
-                      <button
-                        onClick={() => handleFileClick(linkedPath, fileInfo)}
-                        className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 cursor-pointer mt-2"
-                        title="Navigate to linked file"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className={`text-sm font-medium truncate ${
-                        isCollected ? 'text-green-900 dark:text-green-100' : 'text-gray-900 dark:text-gray-100'
-                      }`}>
-                        {fileName}
-                      </p>
-                      {linking.link_type && (
-                        <span className="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded">
-                          {linking.link_type}
-                        </span>
-                      )}
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        direction === 'outbound'
-                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                          : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                      }`}>
-                        {direction}
-                      </span>
-                      {fileInfo && !isCollected && (
-                        <span className={`text-xs px-2 py-1 rounded ${
-                          fileInfo.status === 'needs_to_be_collected'
-                            ? 'bg-yellow-200 dark:bg-yellow-800 text-yellow-900 dark:text-yellow-100'
-                            : 'bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100'
-                        }`}>
-                          {fileInfo.status.replace(/_/g, ' ')}
-                        </span>
+            linkedFiles.forEach((linking) => {
+              const linkedPath = getLinkedFilePath(linking, filePath);
+              const normalizedLinkedPath = linkedPath.replace(/\\/g, '/');
+              const direction = getRelationshipDirection(linking, filePath);
+
+              if (groupedFiles.has(normalizedLinkedPath)) {
+                const existing = groupedFiles.get(normalizedLinkedPath);
+                existing.directions.add(direction);
+                existing.linkTypes.add(linking.link_type);
+              } else {
+                groupedFiles.set(normalizedLinkedPath, {
+                  linkedPath,
+                  normalizedLinkedPath,
+                  directions: new Set([direction]),
+                  linkTypes: new Set([linking.link_type].filter(Boolean)),
+                  linkingId: linking.linking_id
+                });
+              }
+            });
+
+            return Array.from(groupedFiles.values()).map((group) => {
+              const fileName = group.linkedPath.split(/[\/\\]/).pop() || group.linkedPath;
+
+              // Get file status info - try both normalized and original path
+              let fileInfo = fileStatusMap.get(group.normalizedLinkedPath) || fileStatusMap.get(group.linkedPath);
+              const isCollected = fileInfo?.status === 'collected' && fileInfo?.object_id;
+
+              return (
+                <div
+                  key={group.linkingId}
+                  className={`flex items-start justify-between p-3 rounded-lg transition-colors ${
+                    isCollected
+                      ? 'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 border border-green-200 dark:border-green-800'
+                      : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <div className="flex items-start space-x-3 flex-1 min-w-0">
+                    <div className="flex flex-col items-center flex-shrink-0">
+                      <FileText className={`w-4 h-4 mt-1 ${
+                        isCollected ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'
+                      }`} />
+                      {isCollected && (
+                        <button
+                          onClick={() => handleFileClick(group.linkedPath, fileInfo)}
+                          className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 cursor-pointer mt-2"
+                          title="Navigate to linked file"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
-                    <p
-                      className={`text-xs truncate mt-1 ${
-                        isCollected
-                          ? 'text-green-600 dark:text-green-400 cursor-pointer hover:text-green-800 dark:hover:text-green-200 hover:underline'
-                          : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                      onClick={isCollected ? () => handleFileClick(linkedPath, fileInfo) : undefined}
-                      title={isCollected ? "Click to navigate to file" : undefined}
-                    >
-                      {linkedPath}
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`text-sm font-medium truncate ${
+                          isCollected ? 'text-green-900 dark:text-green-100' : 'text-gray-900 dark:text-gray-100'
+                        }`}>
+                          {fileName}
+                        </p>
+                        {Array.from(group.linkTypes).map((linkType) => (
+                          <span key={linkType} className="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded">
+                            {linkType}
+                          </span>
+                        ))}
+                        {Array.from(group.directions).map((direction) => (
+                          <span key={direction} className={`text-xs px-2 py-1 rounded ${
+                            direction === 'outbound'
+                              ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                              : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                          }`}>
+                            {direction}
+                          </span>
+                        ))}
+                        {fileInfo && !isCollected && (
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            fileInfo.status === 'needs_to_be_collected'
+                              ? 'bg-yellow-200 dark:bg-yellow-800 text-yellow-900 dark:text-yellow-100'
+                              : 'bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100'
+                          }`}>
+                            {fileInfo.status.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        className={`text-xs truncate mt-1 ${
+                          isCollected
+                            ? 'text-green-600 dark:text-green-400 cursor-pointer hover:text-green-800 dark:hover:text-green-200 hover:underline'
+                            : 'text-gray-500 dark:text-gray-400'
+                        }`}
+                        onClick={isCollected ? () => handleFileClick(group.linkedPath, fileInfo) : undefined}
+                        title={isCollected ? "Click to navigate to file" : undefined}
+                      >
+                        {group.linkedPath}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
       </CardContent>
     </Card>
