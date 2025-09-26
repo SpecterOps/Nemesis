@@ -279,9 +279,20 @@ const LinkedFilesSection = ({ filePath, source }) => {
                 }`}
               >
                 <div className="flex items-start space-x-3 flex-1 min-w-0">
-                  <FileText className={`w-4 h-4 mt-1 flex-shrink-0 ${
-                    isCollected ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'
-                  }`} />
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <FileText className={`w-4 h-4 mt-1 ${
+                      isCollected ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'
+                    }`} />
+                    {isCollected && (
+                      <button
+                        onClick={() => handleFileClick(linkedPath, fileInfo)}
+                        className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 cursor-pointer mt-2"
+                        title="Navigate to linked file"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className={`text-sm font-medium truncate ${
@@ -301,35 +312,29 @@ const LinkedFilesSection = ({ filePath, source }) => {
                       }`}>
                         {direction}
                       </span>
-                      {fileInfo && (
+                      {fileInfo && !isCollected && (
                         <span className={`text-xs px-2 py-1 rounded ${
-                          isCollected 
-                            ? 'bg-green-200 dark:bg-green-800 text-green-900 dark:text-green-100'
-                            : fileInfo.status === 'needs_to_be_collected'
-                              ? 'bg-yellow-200 dark:bg-yellow-800 text-yellow-900 dark:text-yellow-100'
-                              : 'bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100'
+                          fileInfo.status === 'needs_to_be_collected'
+                            ? 'bg-yellow-200 dark:bg-yellow-800 text-yellow-900 dark:text-yellow-100'
+                            : 'bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100'
                         }`}>
                           {fileInfo.status.replace(/_/g, ' ')}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
+                    <p
+                      className={`text-xs truncate mt-1 ${
+                        isCollected
+                          ? 'text-green-600 dark:text-green-400 cursor-pointer hover:text-green-800 dark:hover:text-green-200 hover:underline'
+                          : 'text-gray-500 dark:text-gray-400'
+                      }`}
+                      onClick={isCollected ? () => handleFileClick(linkedPath, fileInfo) : undefined}
+                      title={isCollected ? "Click to navigate to file" : undefined}
+                    >
                       {linkedPath}
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleFileClick(linkedPath, fileInfo)}
-                  className={`flex items-center justify-center p-1 transition-colors flex-shrink-0 ml-2 ${
-                    isCollected 
-                      ? 'text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 cursor-pointer'
-                      : 'text-gray-400 cursor-not-allowed'
-                  }`}
-                  title={isCollected ? "Navigate to linked file" : `File not available (${fileInfo?.status || 'unknown status'})`}
-                  disabled={!isCollected}
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </button>
               </div>
             );
           })}

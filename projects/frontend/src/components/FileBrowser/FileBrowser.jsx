@@ -491,7 +491,7 @@ const FileBrowser = () => {
                 }`}
               >
                 <List className="w-4 h-4" />
-                <span>Needs Collection ({collectionPaths.length})</span>
+                <span>Files That Need Collection</span>
               </button>
             </div>
 
