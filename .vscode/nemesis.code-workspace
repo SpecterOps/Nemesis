@@ -13,12 +13,24 @@
             "name": "infra"
         },
         {
+            "path": "../libs/chromium",
+            "name": "libs → chromium"
+        },
+        {
             "path": "../libs/common",
             "name": "libs → common"
         },
         {
             "path": "../libs/file_enrichment_modules",
             "name": "libs → file_enrichment_modules",
+        },
+        {
+            "path": "../libs/file_linking",
+            "name": "libs → file_linking"
+        },
+        {
+            "path": "../libs/nemesis_dpapi",
+            "name": "libs → nemesis_dpapi"
         },
         {
             "path": "../projects/alerting",
