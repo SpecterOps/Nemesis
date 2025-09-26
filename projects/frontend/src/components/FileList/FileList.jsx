@@ -117,7 +117,10 @@ const Row = React.memo(({ index, style, data }) => {
           {file.findingsByObjectId_aggregate.aggregate.count || 0}
         </span>
       </div>
-      <div className="px-6 flex-grow text-sm text-gray-500 dark:text-gray-400 truncate text-left">
+      <div className="px-6 flex-grow text-sm text-gray-500 dark:text-gray-400 truncate text-left relative">
+        {!file.files_view_histories?.some(h => h.username === username) && (
+          <div className="absolute left top-1/2 transform -translate-y-1/2 w-1.5 h-1.5 bg-blue-400 opacity-60 rounded-full" title="Unviewed by you"></div>
+        )}
         <Tooltip
           content={
             <div onClick={handleTooltipClick} className="select-text">
@@ -128,7 +131,7 @@ const Row = React.memo(({ index, style, data }) => {
           align="start"
           maxWidth="full"
         >
-          <span>{file.path}</span>
+          <span className="ml-3">{file.path}</span>
         </Tooltip>
       </div>
     </div>
@@ -295,7 +298,7 @@ const FileList = () => {
   const [objectIdFilter, setObjectIdFilter] = useState(() => searchParams.get('object_id') || '');
   const [sortColumn, setSortColumn] = useState(() => searchParams.get('sort_column') || 'timestamp');
   const [sortDirection, setSortDirection] = useState(() => searchParams.get('sort_direction') || 'desc');
-  const [viewFilter, setViewFilter] = useState(() => searchParams.get('view_state') || 'unviewed_by_me');
+  const [viewFilter, setViewFilter] = useState(() => searchParams.get('view_state') || 'all');
   const [showOnlyWithFindings, setShowOnlyWithFindings] = useState(false);
 
   const [availableTags, setAvailableTags] = useState([]);
