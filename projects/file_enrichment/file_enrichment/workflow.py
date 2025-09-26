@@ -29,7 +29,6 @@ workflow_runtime = wf.WorkflowRuntime(
 )
 
 
-dpapi_manager = DpapiManager(storage_backend="memory")
 workflow_client: wf.DaprWorkflowClient = None
 activity_functions = {}
 download_path = "/tmp/"
@@ -47,6 +46,10 @@ with DaprClient() as client:
     secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
     postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
 
+if not postgres_connection_string.startswith("postgres://"):
+    raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager")
+
+dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
 
 ##########################################
 #
@@ -568,7 +571,12 @@ def run_enrichment_modules(ctx, activity_input: dict):
     try:
         # Download the file once at the beginning
         with storage.download(object_id) as temp_file:
-            logger.debug("Downloaded file for processing", object_id=object_id, temp_file=temp_file.name, size=os.path.getsize(temp_file.name))
+            logger.debug(
+                "Downloaded file for processing",
+                object_id=object_id,
+                temp_file=temp_file.name,
+                size=os.path.getsize(temp_file.name),
+            )
 
             # First pass: determine which modules should process this file
             modules_to_process = []

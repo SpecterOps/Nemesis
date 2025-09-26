@@ -45,10 +45,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
 
         # Check if filename matches GUID pattern
         file_name_lower = file_enriched.file_name.lower() if file_enriched.file_name else ""
-        if self.guid_pattern.match(file_name_lower):
-            return True
-
-
+        return self.guid_pattern.match(file_name_lower) is not None
 
     def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
