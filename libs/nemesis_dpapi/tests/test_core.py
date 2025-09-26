@@ -24,7 +24,7 @@ masterkey_entries = """
 
 dpapi_system_secret_hex = "01000000dcfd03644f501805c189e15e9367b01415dea75a4e25d96d26879ded571f5d48a6887455d28f66f5"
 dpapi_system_secret_bytes = bytes.fromhex(dpapi_system_secret_hex)
-dpapi_system_machine_user_key_hex = dpapi_system_secret_hex[8:] # Skip version header
+dpapi_system_machine_user_key_hex = dpapi_system_secret_hex[8:]  # Skip version header
 dpapi_system_machine_key_hex = "dcfd03644f501805c189e15e9367b01415dea75a"
 dpapi_system_user_key_hex = "4e25d96d26879ded571f5d48a6887455d28f66f5"
 
@@ -118,7 +118,7 @@ class TestMasterKeyFile:
 
         header = struct.pack(
             "<III80sIIIIIIIII",
-            1,  # version
+            2,  # version
             0,  # modified
             0,  # szFilePath
             "{12345678-1234-5678-9abc-123456789abc}".encode("utf-16le").ljust(80, b"\x00"),  # guid
@@ -163,7 +163,7 @@ class TestMasterKeyFile:
 
         header = struct.pack(
             "<III80sIIIIIIIII",
-            1,  # version
+            2,  # version
             0,  # modified
             0,  # szFilePath
             guid_padded,  # guid

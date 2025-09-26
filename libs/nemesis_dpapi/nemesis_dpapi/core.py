@@ -318,7 +318,14 @@ class MasterKeyFile(BaseModel):
         header = struct.unpack(header_format, data[:header_size])
 
         version = header[0]
+        if version != 2:
+            raise ValueError(f"Unsupported masterkey file version: {version}")
+
+        if header[1] not in (0, 1):
+            raise ValueError(f"Invalid fModified value: {header[1]}")
+
         modified = bool(header[1])
+
         # Skip szFilePath (header[2]) - invalid on disk
         guid_bytes = header[3]
         policy = header[4]

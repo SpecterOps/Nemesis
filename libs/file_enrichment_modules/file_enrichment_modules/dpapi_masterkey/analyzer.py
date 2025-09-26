@@ -39,13 +39,16 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         """
         file_enriched = get_file_enriched(object_id)
 
-        # Check file size - masterkey files are typically small (few KB)
-        if file_enriched.size > 10000:  # 10KB limit
+        # Check file size - masterkey files are typically small (usually less than 2KB)
+        if file_enriched.size > 2048:
             return False
 
         # Check if filename matches GUID pattern
         file_name_lower = file_enriched.file_name.lower() if file_enriched.file_name else ""
-        return self.guid_pattern.match(file_name_lower) is not None
+        if self.guid_pattern.match(file_name_lower):
+            return True
+
+
 
     def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
