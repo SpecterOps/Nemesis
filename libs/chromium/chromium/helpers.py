@@ -8,8 +8,7 @@ import psycopg
 import structlog
 from Crypto.Cipher import AES, ChaCha20_Poly1305
 from dapr.clients import DaprClient
-from impacket.dpapi import DPAPI_BLOB
-from impacket.uuid import bin_to_string
+from nemesis_dpapi import Blob
 
 logger = structlog.get_logger(module=__name__)
 
@@ -101,15 +100,10 @@ def detect_encryption_type(encrypted_value: bytes) -> tuple[str, str | None]:
     # Check for DPAPI (first 4 bytes are \x01\x00\x00\x00)
     if encrypted_value[:4] == b"\x01\x00\x00\x00":
         try:
-            blob = DPAPI_BLOB(encrypted_value)
-            if blob.rawData is not None:
-                blob.rawData = blob.rawData[: len(blob.getData())]
-                masterkey_guid = bin_to_string(blob["GuidMasterKey"]).lower()
-                return "dpapi", masterkey_guid
+            blob = Blob.parse(encrypted_value)
+            return "dpapi", str(blob.masterkey_guid)
         except Exception as e:
-            logger.warning("Failed to parse DPAPI blob", error=str(e))
-            return "dpapi", None
-        return "dpapi", None
+            raise Exception(f"Found DPAPI app bound key, but couldn't parse blob: {str(e)}") from e
 
     # Check for key-based encryption (v10, v11)
     if len(encrypted_value) >= 3:

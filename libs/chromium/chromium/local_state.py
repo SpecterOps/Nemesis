@@ -57,7 +57,7 @@ async def process_chromium_local_state(
     with psycopg.connect(conn_str) as pg_conn:
         state_key_data = await _insert_state_keys(file_enriched, username, browser, content, pg_conn, dpapi_manager)
 
-    logger.warning("Completed processing Chromium Local State", object_id=object_id)
+    logger.debug("Completed processing Chromium Local State", object_id=object_id)
     return state_key_data
 
 
@@ -155,6 +155,7 @@ async def _insert_state_keys(
         app_bound_key_b64 = os_crypt.get("app_bound_encrypted_key")
         app_bound_key_enc = b""
         app_bound_key_system_masterkey_guid = None
+        app_bound_key_user_masterkey_guid = None
 
         if app_bound_key_b64:
             logger.debug("Found v2 app bound key encrypted_key in Local State")

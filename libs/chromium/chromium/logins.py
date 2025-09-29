@@ -1,7 +1,7 @@
 """Chromium Login Data file parsing and database operations."""
 
-import sqlite3
 import asyncio
+import sqlite3
 
 import psycopg
 import structlog
@@ -109,7 +109,7 @@ def _insert_logins(
                 try:
                     password_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.parse(password_value)))
                     if password_dec_bytes:
-                        password_value_dec = password_dec_bytes.decode('utf-8', errors='replace')
+                        password_value_dec = password_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
                 except:
                     pass
@@ -134,13 +134,15 @@ def _insert_logins(
                                     password_dec_bytes = password_dec_bytes[:-16]
                                 # v20 passwords typically don't have offset like cookies
 
-                                password_value_dec = password_dec_bytes.decode('utf-8', errors='replace')
+                                password_value_dec = password_dec_bytes.decode("utf-8", errors="replace")
                                 is_decrypted = True
                         except Exception as e:
-                            logger.debug("Failed to decrypt password with state key",
-                                       state_key_id=state_key_id,
-                                       encryption_type=encryption_type,
-                                       error=str(e))
+                            logger.debug(
+                                "Failed to decrypt password with state key",
+                                state_key_id=state_key_id,
+                                encryption_type=encryption_type,
+                                error=str(e),
+                            )
 
             login_data = {
                 "originating_object_id": file_enriched.object_id,
