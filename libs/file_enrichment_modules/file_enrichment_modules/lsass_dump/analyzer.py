@@ -348,7 +348,9 @@ class LsassDumpParser(EnrichmentModule):
 
         return logon_sessions, credentials, tickets, masterkeys
 
-    def _create_finding_summary(self, logon_sessions: list, credentials: list, tickets: list, masterkeys: list) -> str:
+    async def _create_finding_summary(
+        self, logon_sessions: list, credentials: list, tickets: list, masterkeys: list
+    ) -> str:
         """Creates a markdown summary for the LSASS dump findings."""
         summary = "# LSASS Dump Analysis Results\n\n"
 
@@ -432,7 +434,7 @@ class LsassDumpParser(EnrichmentModule):
 
         if logon_sessions or credentials or tickets or masterkeys:
             # Create finding summary
-            summary_markdown = self._create_finding_summary(logon_sessions, credentials, tickets, masterkeys)
+            summary_markdown = await self._create_finding_summary(logon_sessions, credentials, tickets, masterkeys)
 
             # Prepare credentials data for serialization (convert objects to dicts)
             credentials_data = []
@@ -552,26 +554,17 @@ class LsassDumpParser(EnrichmentModule):
         try:
             # Check if there's already a running loop
             loop = asyncio.get_running_loop()
-            # If we get here, there's already a running loop
-            # We cannot use run_until_complete in this case
-            logger.error("Cannot run synchronous process method from within an async context")
-            return None
+            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
         except RuntimeError:
             # No running loop, create a new event loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             try:
-                return loop.run_until_complete(self._process_async(object_id, file_path))
+                return asyncio.run(self._process_async(object_id, file_path))
             except Exception as e:
                 logger.exception(e, message="Error processing LSASS dump file")
                 return None
-            finally:
-                loop.close()
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
-
-        logger.debug("Starting async processing of LSASS dump", object_id=object_id)
 
         with DaprClient() as client:
             secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
@@ -583,6 +576,8 @@ class LsassDumpParser(EnrichmentModule):
             )
 
         self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
+
+        logger.debug("Starting async processing of LSASS dump", object_id=object_id)
 
         file_enriched = get_file_enriched(object_id)
 

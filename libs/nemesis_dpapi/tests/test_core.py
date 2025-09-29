@@ -9,7 +9,7 @@ import pytest
 from impacket.dpapi import DPAPI_BLOB
 from nemesis_dpapi import Blob, DomainBackupKey, DpapiManager, MasterKeyFile
 from nemesis_dpapi.core import DpapiSystemCredential, MasterKey, MasterKeyPolicy
-from nemesis_dpapi.crypto import CredKey, CredKeyHashType, MasterKeyEncryptionKey
+from nemesis_dpapi.crypto import BlobDecryptionError, CredKey, CredKeyHashType, MasterKeyEncryptionKey
 
 masterkey_uuid = UUID("ed93694f-5a6d-46e2-b821-219f2c0ecd4d")
 masterkey_bytes = bytes.fromhex(
@@ -666,7 +666,7 @@ class TestBlobDecrypt:
             guid=blob.masterkey_guid, plaintext_key=b"dummy_key" * 8, plaintext_key_sha1=wrong_masterkey_sha1
         )
 
-        with pytest.raises(ValueError, match="Failed to decrypt blob with provided master key"):
+        with pytest.raises(BlobDecryptionError):
             blob.decrypt(masterkey)
 
     def test_decrypt_blob_with_entropy(self, blob_with_entropy: bytes):

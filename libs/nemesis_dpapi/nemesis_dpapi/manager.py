@@ -34,11 +34,12 @@ if TYPE_CHECKING:
         MasterKeyRepository,
     )
 
+from .protocols import DpapiManagerProtocol
 from .repositories import MasterKeyFilter
 
 
 # TODO: Make thread safe
-class DpapiManager(Publisher):
+class DpapiManager(Publisher, DpapiManagerProtocol):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
     def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:

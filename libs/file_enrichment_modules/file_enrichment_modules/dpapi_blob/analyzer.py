@@ -1,17 +1,18 @@
 # enrichment_modules/dpapi/analyzer.py
 import asyncio
+import base64
 
-import structlog
 import yara_x
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.dpapi_blob.dpapi_helpers import carve_dpapi_blobs_from_file
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi import Blob, DpapiManager
+from nemesis_dpapi import Blob, DpapiBlobDecryptionError, DpapiManager
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class DpapiBlobAnalyzer(EnrichmentModule):
@@ -66,12 +67,47 @@ rule has_dpapi_blob
         return should_run
 
     def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process LSASS dump file and extract credentials.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+
+        try:
+            # Check if there's already a running loop
+            loop = asyncio.get_running_loop()
+            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
+        except RuntimeError:
+            # No running loop, create a new event loop
+            try:
+                return asyncio.run(self._process_async(object_id, file_path))
+            except Exception as e:
+                logger.exception(e, message="Error processing LSASS dump file")
+                return None
+
+    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file in either workflow or standalone mode.
 
         Args:
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
+
+        with DaprClient() as client:
+            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
+            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+
+        if not postgres_connection_string.startswith("postgres://"):
+            raise ValueError(
+                "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
+            )
+
+        self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
+
         try:
             file_enriched = get_file_enriched(object_id)
 
@@ -81,27 +117,30 @@ rule has_dpapi_blob
 
             if file_path:
                 # Use provided file path (if file already downloaded)
-                carved_blobs = asyncio.run(
-                    carve_dpapi_blobs_from_file(file_path, file_enriched.object_id, self.max_blobs)
-                )
+                carved_blobs = await carve_dpapi_blobs_from_file(file_path, file_enriched.object_id, self.max_blobs)
+
             else:
                 # Fallback to downloading the file itself
                 with self.storage.download(file_enriched.object_id) as temp_file:
-                    carved_blobs = asyncio.run(
-                        carve_dpapi_blobs_from_file(temp_file.name, file_enriched.object_id, self.max_blobs)
+                    carved_blobs = await carve_dpapi_blobs_from_file(
+                        temp_file.name, file_enriched.object_id, self.max_blobs
                     )
 
             for carved_blob in carved_blobs:
                 try:
                     dpapi_blob_raw = carved_blob["dpapi_blob_raw"]
                     del carved_blob["dpapi_blob_raw"]  # because of result serialization
-                    carved_blob_dec = asyncio.run(self.dpapi_manager.decrypt_blob(Blob.parse(dpapi_blob_raw)))
+                    carved_blob_dec = await self.dpapi_manager.decrypt_blob(Blob.parse(dpapi_blob_raw))
 
                     if carved_blob_dec:
-                        logger.warning(
-                            "Successfully decrypted blob", masterkey_guid=carved_blob["dpapi_master_key_guid"]
+                        logger.info(
+                            "Successfully decrypted blob",
+                            masterkey_guid=carved_blob["dpapi_master_key_guid"],
+                            b64_dec_blob=base64.b64encode(carved_blob_dec).decode("utf-8"),
                         )
                         # TODO: handle this?
+                except DpapiBlobDecryptionError as e:
+                    logger.warning(f"Blob decryption error: {carved_blob['dpapi_master_key_guid']}. Error: {e}")
                 except Exception as e:
                     logger.warning(
                         f"Unable to decrypt carved DPAPI blob: {carved_blob['dpapi_master_key_guid']}. Error: {e}"

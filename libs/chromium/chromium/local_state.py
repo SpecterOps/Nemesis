@@ -1,12 +1,11 @@
 """Chromium Local State file parsing and database operations."""
 
-import asyncio
 import base64
 import json
 import ntpath
 
 import psycopg
-import structlog
+from common.logger import get_logger
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_linking import add_file_linking
@@ -22,13 +21,13 @@ from .helpers import (
     parse_chromium_file_path,
 )
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
-def process_chromium_local_state(
+async def process_chromium_local_state(
+    dpapi_manager: DpapiManager,
     object_id: str,
     file_path: str | None = None,
-    dpapi_manager: DpapiManager | None = None,
 ) -> dict:
     """Process Chromium Local State file and insert state keys into database.
 
@@ -56,7 +55,7 @@ def process_chromium_local_state(
 
     conn_str = get_postgres_connection_str()
     with psycopg.connect(conn_str) as pg_conn:
-        state_key_data = _insert_state_keys(file_enriched, username, browser, content, pg_conn, dpapi_manager)
+        state_key_data = await _insert_state_keys(file_enriched, username, browser, content, pg_conn, dpapi_manager)
 
     logger.warning("Completed processing Chromium Local State", object_id=object_id)
     return state_key_data
@@ -75,7 +74,7 @@ def _parse_app_bound_key(app_bound_key_b64: str) -> tuple[bytes, str | None]:
         ValueError: If the key doesn't have APPB header
     """
     try:
-        app_bound_key_bytes = base64.b64decode(app_bound_key_b64)
+        app_bound_key_bytes = base64.b64decode(app_bound_key_b64, validate=True)
 
         # Check for APPB header (first 4 bytes)
         if len(app_bound_key_bytes) < 4 or app_bound_key_bytes[:4] != b"APPB":
@@ -97,13 +96,13 @@ def _parse_app_bound_key(app_bound_key_b64: str) -> tuple[bytes, str | None]:
         return base64.b64decode(app_bound_key_b64), None
 
 
-def _insert_state_keys(
+async def _insert_state_keys(
     file_enriched,
     username: str | None,
     browser: str,
     content: str,
     pg_conn,
-    dpapi_manager: DpapiManager | None = None,
+    dpapi_manager: DpapiManager,
 ) -> dict:
     """Parse Local State JSON and insert state keys into chromium.state_keys table."""
     try:
@@ -125,27 +124,32 @@ def _insert_state_keys(
         key_masterkey_guid = None
 
         if encrypted_key_b64:
+            logger.debug("Found app bound key encrypted_key in Local State")
             key_bytes_enc = base64.b64decode(encrypted_key_b64)
 
             if len(key_bytes_enc) < 5 or key_bytes_enc[:5] != b"DPAPI":
                 raise ValueError("Encrypted key does not have DPAPI header")
 
             # Remove DPAPI header and parse remaining as DPAPI blob
-            dpapi_bytes = key_bytes_enc[5:]
+            dpapi_blob_bytes = key_bytes_enc[5:]
 
-            encryption_type, masterkey_guid = detect_encryption_type(dpapi_bytes)
+            encryption_type, masterkey_guid = detect_encryption_type(dpapi_blob_bytes)
             if encryption_type == "dpapi":
                 key_masterkey_guid = masterkey_guid
                 try:
-                    key_bytes_dec = asyncio.run(dpapi_manager.decrypt_blob(Blob.parse(dpapi_bytes)))
+                    key_bytes_dec = await dpapi_manager.decrypt_blob(Blob.parse(dpapi_blob_bytes))
                     if key_bytes_dec:
                         key_is_decrypted = True
                         logger.debug(
-                            "Successfully decrypted regular key",
+                            "Successfully decrypted encrypted_key state key",
                             masterkey_guid=key_masterkey_guid,
                         )
+                    else:
+                        logger.debug("Failed to decrypt encrypted_key state key with DPAPI")
                 except Exception:
                     logger.warning(f"Unable to decrypt state key DPAPI blob: {key_masterkey_guid}")
+            else:
+                raise Exception(f"Unsupported encryption type for v1 state key: {encryption_type}")
 
         # Get app_bound_encrypted_key (post v127)
         app_bound_key_b64 = os_crypt.get("app_bound_encrypted_key")
@@ -153,6 +157,7 @@ def _insert_state_keys(
         app_bound_key_system_masterkey_guid = None
 
         if app_bound_key_b64:
+            logger.debug("Found v2 app bound key encrypted_key in Local State")
             app_bound_key_enc, app_bound_key_system_masterkey_guid = _parse_app_bound_key(app_bound_key_b64)
             logger.warning(f"app_bound_key_system_masterkey_guid: {app_bound_key_system_masterkey_guid}")
 
@@ -168,7 +173,7 @@ def _insert_state_keys(
                 # Parse only the DPAPI portion (after APPB header)
                 if len(app_bound_key_enc) >= 4 and app_bound_key_enc[:4] == b"APPB":
                     dpapi_portion = app_bound_key_enc[4:]
-                    app_bound_key_dec_inter = asyncio.run(dpapi_manager.decrypt_blob(Blob.parse(dpapi_portion)))
+                    app_bound_key_dec_inter = await dpapi_manager.decrypt_blob(Blob.parse(dpapi_portion))
                 else:
                     logger.warning("App-bound key missing APPB header, cannot decrypt")
                     app_bound_key_dec_inter = b""
@@ -178,7 +183,7 @@ def _insert_state_keys(
                         user_blob = Blob.parse(app_bound_key_dec_inter)
                         app_bound_key_user_masterkey_guid = user_blob.masterkey_guid
 
-                        abe_blob_bytes = asyncio.run(dpapi_manager.decrypt_blob(user_blob))
+                        abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob)
                         if abe_blob_bytes:
                             # Parse and derive the final ABE key
                             abe_parsed = parse_abe_blob(abe_blob_bytes)

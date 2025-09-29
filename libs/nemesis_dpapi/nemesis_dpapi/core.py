@@ -21,7 +21,7 @@ from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, field_validator
 
-from .crypto import MasterKeyEncryptionKey
+from .crypto import BlobDecryptionError, MasterKeyEncryptionKey
 from .exceptions import InvalidBackupKeyError, MasterKeyDecryptionError
 
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
@@ -242,7 +242,7 @@ class Blob(BaseModel):
         blob_dpapick = dpapick3_blob.DPAPIBlob(self.raw_bytes)
 
         if not blob_dpapick.decrypt(masterkey.plaintext_key_sha1, entropy):
-            raise ValueError("Failed to decrypt blob with provided master key")
+            raise BlobDecryptionError("Failed to decrypt blob with provided master key")
 
         if not blob_dpapick.cleartext:
             raise Exception("Decryption succeeded but no cleartext available")

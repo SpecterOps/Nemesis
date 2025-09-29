@@ -1,19 +1,22 @@
 # enrichment_modules/chromium_logins/analyzer.py
 
+import asyncio
 from typing import TYPE_CHECKING
 
-import structlog
 import yara_x
 from chromium import process_chromium_local_state
+from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
+from nemesis_dpapi import DpapiManager
 
 if TYPE_CHECKING:
     from nemesis_dpapi import DpapiManager
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class ChromeLocalStateParser(EnrichmentModule):
@@ -77,9 +80,35 @@ rule Chrome_Local_State
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
+        loop = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop
+            pass
+
+        if loop:
+            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
+        else:
+            # No running loop, create a new event loop
+            return asyncio.run(self._process_async(object_id, file_path))
+
+    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Async helper for process method."""
+
+        with DaprClient() as client:
+            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
+            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+
+        if not postgres_connection_string.startswith("postgres://"):
+            raise ValueError(
+                "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
+            )
+
+        self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
         try:
             # Use the chromium library to process and insert into database
-            state_key_data = process_chromium_local_state(object_id, file_path, self.dpapi_manager)
+            state_key_data = await process_chromium_local_state(self.dpapi_manager, object_id, file_path)
 
             # Create enrichment result with parsed data
             enrichment = EnrichmentResult(module_name=self.name)

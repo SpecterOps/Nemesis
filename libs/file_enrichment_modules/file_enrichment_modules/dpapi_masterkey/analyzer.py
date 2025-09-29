@@ -7,7 +7,9 @@ import structlog
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
+from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
+from nemesis_dpapi import DpapiManager
 from nemesis_dpapi.core import MasterKey, MasterKeyFile
 
 if TYPE_CHECKING:
@@ -53,7 +55,41 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         Args:
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
         """
+
+        try:
+            # Check if there's already a running loop
+            loop = asyncio.get_running_loop()
+            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
+        except RuntimeError:
+            # No running loop, create a new event loop
+            try:
+                return asyncio.run(self._process_async(object_id, file_path))
+            except Exception as e:
+                logger.exception(e, message="Error processing LSASS dump file")
+                return None
+
+    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process masterkey file and add to DPAPI manager.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+        """
+        with DaprClient() as client:
+            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
+            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+
+        if not postgres_connection_string.startswith("postgres://"):
+            raise ValueError(
+                "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
+            )
+
+        self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
+
         try:
             file_enriched = get_file_enriched(object_id)
             enrichment_result = EnrichmentResult(module_name=self.name)
@@ -79,10 +115,10 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 )
 
                 # The DPAPI manager handles all decryption automatically
-                asyncio.run(self.dpapi_manager.upsert_masterkey(mk))
+                await self.dpapi_manager.upsert_masterkey(mk)
 
                 # Check if it was decrypted
-                stored_mk = asyncio.run(self.dpapi_manager.get_masterkey(masterkey_file.masterkey_guid))
+                stored_mk = await self.dpapi_manager.get_masterkey(masterkey_file.masterkey_guid)
                 was_decrypted = stored_mk and stored_mk.is_decrypted
 
                 if was_decrypted:

@@ -412,8 +412,8 @@ class WorkflowManager:
                 try:
                     # Use wait_for to implement a timeout
                     processing_time = time.time() - workflow_start_time
-                    logger.info(
-                        "Waiting for workflow completion",
+                    logger.debug(
+                        "Monitoring for workflow completion",
                         processing_time=f"{processing_time:.4f}s",
                     )
 
@@ -552,7 +552,7 @@ class WorkflowManager:
                         "Waiting for workflow completion",
                         processing_time=f"{time.time() - workflow_start_time:.4f}s",
                     )
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(5)
 
                 except Exception as e:
                     # specific case when we're standing the system down, so want to mark this as still running
