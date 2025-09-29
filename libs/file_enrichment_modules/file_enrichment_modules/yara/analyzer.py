@@ -1,14 +1,14 @@
 import base64
 import binascii
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.yara.yara_manager import YaraRuleManager
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def yara_match_to_markdown(match):

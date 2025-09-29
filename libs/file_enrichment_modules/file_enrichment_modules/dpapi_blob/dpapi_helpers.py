@@ -9,7 +9,7 @@ logger = structlog.get_logger(module=__name__)
 
 
 class ParsedDpapiBlob(BaseModel):
-    dpapi_master_key_guid: str | None = str
+    dpapi_master_key_guid: str | None = ""
     dpapi_data_b64: str | None = None
     dpapi_blob_raw: bytes | None = None
     success: bool = False  # true/false if parsing was successful or not

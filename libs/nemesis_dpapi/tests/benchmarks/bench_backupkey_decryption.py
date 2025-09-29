@@ -5,7 +5,8 @@ import json
 from uuid import UUID
 
 import pytest
-from nemesis_dpapi import DomainBackupKey, MasterKeyFile
+from nemesis_dpapi.core import MasterKeyFile
+from nemesis_dpapi.keys import DomainBackupKey
 
 
 class TestMasterkeyDecryptionBenchmarks:

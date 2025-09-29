@@ -21,9 +21,16 @@ from common.models2.dpapi import (
 from Crypto.Hash import SHA1
 from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException
-from nemesis_dpapi import DomainBackupKey, DpapiManager, DpapiSystemCredential
-from nemesis_dpapi.core import MasterKey
-from nemesis_dpapi.crypto import NtlmHash, Password, Pbkdf2Hash, Sha1Hash
+from nemesis_dpapi import (
+    DomainBackupKey,
+    DpapiManager,
+    DpapiSystemCredential,
+    MasterKey,
+    NtlmHash,
+    Password,
+    Pbkdf2Hash,
+    Sha1Hash,
+)
 from nemesis_dpapi.masterkey_decryptor import MasterKeyDecryptorService
 
 logger = get_logger(__name__)

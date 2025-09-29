@@ -3,7 +3,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class CertificateAnalyzer(EnrichmentModule):

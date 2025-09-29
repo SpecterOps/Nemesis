@@ -6,11 +6,11 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from nemesis_dpapi.crypto import MasterKeyEncryptionKey
 from nemesis_dpapi.exceptions import MasterKeyDecryptionError
+from nemesis_dpapi.keys import MasterKeyEncryptionKey
 from nemesis_dpapi.repositories import MasterKeyFilter
 
-from .core import DpapiSystemCredential, MasterKey, MasterKeyFile, MasterKeyPolicy
+from .core import MasterKey, MasterKeyFile, MasterKeyPolicy
 from .eventing import (
     DpapiEvent,
     DpapiObserver,
@@ -18,6 +18,7 @@ from .eventing import (
     NewDpapiSystemCredentialEvent,
     NewEncryptedMasterKeyEvent,
 )
+from .keys import DpapiSystemCredential
 
 if TYPE_CHECKING:
     from .manager import DpapiManager

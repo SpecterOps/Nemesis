@@ -2,8 +2,9 @@
 
 from uuid import UUID
 
-from .core import DomainBackupKey, DpapiSystemCredential, MasterKey
+from .core import MasterKey
 from .exceptions import StorageError
+from .keys import DomainBackupKey, DpapiSystemCredential
 from .repositories import MasterKeyFilter
 
 

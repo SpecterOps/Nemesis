@@ -4,8 +4,9 @@ from uuid import UUID
 
 import asyncpg
 
-from .core import DomainBackupKey, DpapiSystemCredential, MasterKey
+from .core import MasterKey
 from .exceptions import StorageError
+from .keys import DomainBackupKey, DpapiSystemCredential
 from .repositories import MasterKeyFilter
 
 MASTKEYS_TABLE = "dpapi.masterkeys"

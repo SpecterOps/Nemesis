@@ -5,9 +5,9 @@ import tempfile
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-import structlog
 import yara_x
 from chromium import convert_chromium_timestamp, process_chromium_cookies
+from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
@@ -16,7 +16,7 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 if TYPE_CHECKING:
     from nemesis_dpapi import DpapiManager
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class ChromeCookiesParser(EnrichmentModule):

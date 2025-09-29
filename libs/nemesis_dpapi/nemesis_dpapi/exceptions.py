@@ -25,21 +25,13 @@ class MasterKeyNotDecryptedError(DpapiError):
         self.masterkey_guid = masterkey_guid
 
 
-class DpapiBlobDecryptionError(DpapiError):
-    """Raised when DPAPI blob decryption fails."""
-
-    def __init__(self, reason: str) -> None:
-        super().__init__(f"Failed to decrypt DPAPI blob: {reason}")
-        self.reason = reason
-
-
 class StorageError(DpapiError):
     """Raised when storage backend operations fail."""
 
     pass
 
 
-class DpapiCryptoError(Exception):
+class DpapiCryptoError(DpapiError):
     """Base exception for DPAPI cryptographic operations."""
 
     pass
@@ -53,5 +45,17 @@ class InvalidBackupKeyError(DpapiCryptoError):
 
 class MasterKeyDecryptionError(DpapiCryptoError):
     """Raised when masterkey decryption fails."""
+
+    pass
+
+
+class BlobParsingError(DpapiError):
+    """Raised when DPAPI blob data is invalid or malformed."""
+
+    pass
+
+
+class BlobDecryptionError(DpapiError):
+    """Raised when DPAPI blob decryption fails."""
 
     pass

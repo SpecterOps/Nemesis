@@ -3,8 +3,9 @@
 from typing import Any
 from uuid import UUID
 
-from .core import Blob, DomainBackupKey, DpapiSystemCredential, MasterKey
+from .core import Blob, MasterKey
 from .exceptions import MasterKeyNotFoundError
+from .keys import DomainBackupKey, DpapiSystemCredential
 from .protocols import DpapiManagerProtocol
 from .repositories import MasterKeyFilter
 

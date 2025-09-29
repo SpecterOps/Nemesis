@@ -1,8 +1,8 @@
 """Benchmarks for DPAPI masterkey decryption using password credentials."""
 
 import pytest
-from nemesis_dpapi import MasterKey, MasterKeyFile
-from nemesis_dpapi.crypto import CredKey, CredKeyHashType, MasterKeyEncryptionKey
+from nemesis_dpapi.core import MasterKey, MasterKeyFile
+from nemesis_dpapi.keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey
 
 
 class TestMasterkeyPasswordDecryptionBenchmarks:

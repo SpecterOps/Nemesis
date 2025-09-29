@@ -4,7 +4,8 @@ from enum import Enum
 from typing import Protocol
 from uuid import UUID
 
-from .core import DomainBackupKey, DpapiSystemCredential, MasterKey
+from .core import MasterKey
+from .keys import DomainBackupKey, DpapiSystemCredential
 
 
 class MasterKeyFilter(Enum):

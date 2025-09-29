@@ -6,8 +6,8 @@ from uuid import UUID
 
 from pydantic import Field, field_validator
 
-from nemesis_dpapi.core import BaseModel, DpapiSystemCredential
-from nemesis_dpapi.crypto import NtlmHash, Password, Pbkdf2Hash, Sha1Hash
+from nemesis_dpapi.core import BaseModel
+from nemesis_dpapi.keys import DpapiSystemCredential, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
 from nemesis_dpapi.types import Sid
 
 

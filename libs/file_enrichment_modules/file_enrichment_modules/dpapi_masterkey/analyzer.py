@@ -3,19 +3,19 @@ import asyncio
 import re
 from typing import TYPE_CHECKING
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi import DpapiManager
-from nemesis_dpapi.core import MasterKey, MasterKeyFile
+from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile
 
 if TYPE_CHECKING:
     from nemesis_dpapi import DpapiManager
 
-logger = structlog.get_logger(module=__name__)
+
+logger = get_logger(__name__)
 
 
 class DPAPIMasterkeyAnalyzer(EnrichmentModule):

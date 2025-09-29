@@ -3,8 +3,8 @@ from time import perf_counter
 
 from common.logger import get_logger
 
-from .crypto import CredKey, CredKeyHashType, MasterKeyEncryptionKey, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
 from .exceptions import MasterKeyDecryptionError
+from .keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
 from .manager import DpapiManager, MasterKeyFilter
 from .types import Sid
 
@@ -63,6 +63,7 @@ class MasterKeyDecryptorService:
                         logger.info(
                             f"Successfully decrypted master key {masterkey.guid} with {credential_type.__name__}"
                         )
+                        break  # We decrypted it, no need to try other keys
                     except MasterKeyDecryptionError as e:
                         logger.debug(f"Failed to decrypt master key: {e}")
                         continue

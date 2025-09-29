@@ -3,14 +3,14 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from Crypto.Cipher import DES
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 # Port of https://github.com/NetSPI/PowerHuntShares/blob/46238ba37dc85f65f2c1d7960f551ea3d80c236a/Scripts/ConfigParsers/parser-vnc.ini.ps1
 #   Original Author: Scott Sutherland, NetSPI (@_nullbind / nullbind)

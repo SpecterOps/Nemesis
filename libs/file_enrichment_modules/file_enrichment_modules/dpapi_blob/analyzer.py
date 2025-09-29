@@ -1,6 +1,5 @@
 # enrichment_modules/dpapi/analyzer.py
 import asyncio
-import base64
 
 import yara_x
 from common.logger import get_logger
@@ -10,7 +9,7 @@ from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.dpapi_blob.dpapi_helpers import carve_dpapi_blobs_from_file
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi import Blob, DpapiBlobDecryptionError, DpapiManager
+from nemesis_dpapi import Blob, BlobDecryptionError, DpapiManager
 
 logger = get_logger(__name__)
 
@@ -49,7 +48,7 @@ rule has_dpapi_blob
         """
         file_enriched = get_file_enriched(object_id)
         if file_enriched.size > self.size_limit:
-            logger.warning(
+            logger.debug(
                 f"[dpapi_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"
             )
 
@@ -136,11 +135,13 @@ rule has_dpapi_blob
                         logger.info(
                             "Successfully decrypted blob",
                             masterkey_guid=carved_blob["dpapi_master_key_guid"],
-                            b64_dec_blob=base64.b64encode(carved_blob_dec).decode("utf-8"),
+                            # b64_dec_blob=base64.b64encode(carved_blob_dec).decode("utf-8"),
                         )
-                        # TODO: handle this?
-                except DpapiBlobDecryptionError as e:
-                    logger.warning(f"Blob decryption error: {carved_blob['dpapi_master_key_guid']}. Error: {e}")
+                        # TODO: do something with the decrypted blob?
+                except BlobDecryptionError as e:
+                    logger.warning(
+                        f"Unable to decrypt local state DPAPI blob: {carved_blob['dpapi_master_key_guid']}. Error: {e}"
+                    )
                 except Exception as e:
                     logger.warning(
                         f"Unable to decrypt carved DPAPI blob: {carved_blob['dpapi_master_key_guid']}. Error: {e}"

@@ -7,7 +7,7 @@ import asyncpg
 from Crypto.Hash import SHA1
 
 from .auto_decrypt import AutoDecryptionObserver
-from .core import Blob, DomainBackupKey, DpapiSystemCredential, MasterKey
+from .core import Blob, MasterKey
 from .eventing import (
     NewDomainBackupKeyEvent,
     NewDpapiSystemCredentialEvent,
@@ -15,7 +15,8 @@ from .eventing import (
     NewPlaintextMasterKeyEvent,
     Publisher,
 )
-from .exceptions import DpapiBlobDecryptionError, MasterKeyNotDecryptedError, MasterKeyNotFoundError
+from .exceptions import MasterKeyNotDecryptedError, MasterKeyNotFoundError
+from .keys import DomainBackupKey, DpapiSystemCredential
 from .storage_in_memory import (
     InMemoryDomainBackupKeyRepository,
     InMemoryDpapiSystemCredentialRepository,
@@ -177,11 +178,7 @@ class DpapiManager(Publisher, DpapiManagerProtocol):
         if not masterkey.is_decrypted:
             raise MasterKeyNotDecryptedError(blob.masterkey_guid)
 
-        # Decrypt the blob
-        try:
-            return blob.decrypt(masterkey)
-        except Exception as e:
-            raise DpapiBlobDecryptionError(str(e)) from e
+        return blob.decrypt(masterkey)
 
     async def get_masterkey(self, guid: UUID) -> MasterKey | None:
         """Retrieve a masterkey by GUID."""

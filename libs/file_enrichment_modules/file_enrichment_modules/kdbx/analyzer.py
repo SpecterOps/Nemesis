@@ -4,14 +4,14 @@ import tempfile
 import uuid
 from typing import Any
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.kdbx.keepass2john import process_database
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def get_encryption_algorithm_name(uuid_str: str) -> str:

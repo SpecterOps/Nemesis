@@ -7,7 +7,7 @@ from typing import Any
 
 import msoffcrypto
 import olefile
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
@@ -15,7 +15,7 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.office_doc.office2john import extract_file_encryption_hash
 from oletools.olevba import VBA_Parser
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def create_encryption_finding(file_enriched, encryption_hash: str, module_name: str) -> Finding:

@@ -8,21 +8,14 @@ import textwrap
 from typing import TYPE_CHECKING
 
 import psycopg
-import structlog
-from common.models import (
-    EnrichmentResult,
-    FileObject,
-    Finding,
-    FindingCategory,
-    FindingOrigin,
-    Transform,
-)
+from common.logger import get_logger
+from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
-from nemesis_dpapi.core import DpapiSystemCredential
+from nemesis_dpapi import DpapiSystemCredential
 from psycopg.rows import dict_row
 from pypykatz.registry.offline_parser import OffineRegistry as OfflineRegistry
 from regipy.registry import RegistryHive
@@ -30,7 +23,8 @@ from regipy.registry import RegistryHive
 if TYPE_CHECKING:
     from nemesis_dpapi import DpapiManager
 
-logger = structlog.get_logger(module=__name__)
+
+logger = get_logger(__name__)
 
 
 class RegistryHiveAnalyzer(EnrichmentModule):
@@ -53,7 +47,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         # This is because the "strings.txt" of a registry hive
         #   has a matching magic type of the registry hive itself
-        if mime_type != 'application/octet-stream':
+        if mime_type != "application/octet-stream":
             return False
 
         # Check if it's a Windows registry hive

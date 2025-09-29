@@ -5,14 +5,14 @@ import zipfile
 from datetime import UTC, datetime
 
 import py7zr
-import structlog
 from common.helpers import is_container
+from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class ContainerAnalyzer(EnrichmentModule):

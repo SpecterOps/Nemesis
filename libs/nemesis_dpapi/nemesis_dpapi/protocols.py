@@ -3,7 +3,8 @@
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from .core import Blob, DomainBackupKey, DpapiSystemCredential, MasterKey
+from .core import Blob, MasterKey
+from .keys import DomainBackupKey, DpapiSystemCredential
 from .repositories import MasterKeyFilter
 
 

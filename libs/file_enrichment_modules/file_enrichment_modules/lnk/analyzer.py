@@ -5,14 +5,14 @@ import textwrap
 from datetime import datetime
 
 import LnkParse3
-import structlog
 import yaml
+from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def get_lnk_file_display(lnk_file, print_all=False):
