@@ -160,7 +160,7 @@ async def _insert_state_keys(
         if app_bound_key_b64:
             logger.debug("Found v2 app bound key encrypted_key in Local State")
             app_bound_key_enc, app_bound_key_system_masterkey_guid = _parse_app_bound_key(app_bound_key_b64)
-            logger.warning(f"app_bound_key_system_masterkey_guid: {app_bound_key_system_masterkey_guid}")
+            logger.debug(f"app_bound_key_system_masterkey_guid: {app_bound_key_system_masterkey_guid}")
 
             drive, parts = ntpath.splitdrive(file_enriched.path)
             masterkey_path = (
