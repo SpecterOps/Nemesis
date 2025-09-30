@@ -140,11 +140,15 @@ rule has_dpapi_blob
                         # TODO: do something with the decrypted blob?
                 except BlobDecryptionError as e:
                     logger.warning(
-                        f"Unable to decrypt local state DPAPI blob: {carved_blob['dpapi_master_key_guid']}. Error: {e}"
+                        f"Could not decrypt local state DPAPI blob with its masterkey. Error: {e}",
+                        masterkey_guid=carved_blob["dpapi_master_key_guid"],
+                        error_type=type(e).__name__,
                     )
                 except Exception as e:
                     logger.warning(
-                        f"Unable to decrypt carved DPAPI blob: {carved_blob['dpapi_master_key_guid']}. Error: {e}"
+                        f"Unhandled error while decrypting DPAPI blob with masterkey. Error: {e}",
+                        masterkey_guid=carved_blob["dpapi_master_key_guid"],
+                        error_type=type(e).__name__,
                     )
 
             masterkey_guids = sorted({blob["dpapi_master_key_guid"] for blob in carved_blobs if blob["success"]})

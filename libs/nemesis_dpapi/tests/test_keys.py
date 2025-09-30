@@ -2,6 +2,7 @@
 
 import base64
 import json
+from unittest.mock import PropertyMock, patch
 from uuid import UUID
 
 import pytest
@@ -363,6 +364,15 @@ class TestCredKey:
         assert cred_key.key.value == sha1_bytes
         assert cred_key.owf == CredKeyHashType.SHA1
 
+    def test_from_pbkdf2(self):
+        """Test creating CredKey from PBKDF2 hash."""
+        pbkdf2_bytes = bytes.fromhex(credkey_pbkdf2_hash)
+        cred_key = CredKey.from_pbkdf2(pbkdf2_bytes)
+
+        assert isinstance(cred_key.key, Pbkdf2Hash)
+        assert cred_key.key.value == pbkdf2_bytes
+        assert cred_key.owf == CredKeyHashType.PBKDF2
+
 
 class TestMasterKeyEncryptionKey:
     """Test MasterKeyEncryptionKey model."""
@@ -441,6 +451,42 @@ class TestMasterKeyEncryptionKey:
 
         with pytest.raises(ValueError, match="Unsupported digest algorithm"):
             MasterKeyEncryptionKey._derive_mk_key(pwdhash, user_sid, digest="unsupported")
+
+    def test_from_cred_key_type_mismatch_ntlm(self):
+        """Test type mismatch validation for NTLM/MD4 - wrong hash type."""
+        # Create a CredKey with SHA1 hash but mock owf to return NTLM
+        sha1_hash = Sha1Hash(value=b"a" * 20)
+        cred_key = CredKey(key=sha1_hash)
+
+        # Mock the owf property to return NTLM while key is actually SHA1
+        with patch.object(type(cred_key), "owf", new_callable=PropertyMock) as mock_owf:
+            mock_owf.return_value = CredKeyHashType.NTLM
+            with pytest.raises(ValueError, match="Expected NtlmHash for MD4/NTLM key type"):
+                MasterKeyEncryptionKey.from_cred_key(cred_key, user_sid)
+
+    def test_from_cred_key_type_mismatch_sha1(self):
+        """Test type mismatch validation for SHA1 - wrong hash type."""
+        # Create a CredKey with NTLM hash but mock owf to return SHA1
+        ntlm_hash = NtlmHash(value=ntlm_bytes)
+        cred_key = CredKey(key=ntlm_hash)
+
+        # Mock the owf property to return SHA1 while key is actually NTLM
+        with patch.object(type(cred_key), "owf", new_callable=PropertyMock) as mock_owf:
+            mock_owf.return_value = CredKeyHashType.SHA1
+            with pytest.raises(ValueError, match="Expected Sha1Hash for SHA1 key type"):
+                MasterKeyEncryptionKey.from_cred_key(cred_key, user_sid)
+
+    def test_from_cred_key_type_mismatch_pbkdf2(self):
+        """Test type mismatch validation for PBKDF2 - wrong hash type."""
+        # Create a CredKey with NTLM hash but mock owf to return PBKDF2
+        ntlm_hash = NtlmHash(value=ntlm_bytes)
+        cred_key = CredKey(key=ntlm_hash)
+
+        # Mock the owf property to return PBKDF2 while key is actually NTLM
+        with patch.object(type(cred_key), "owf", new_callable=PropertyMock) as mock_owf:
+            mock_owf.return_value = CredKeyHashType.PBKDF2
+            with pytest.raises(ValueError, match="Expected Pbkdf2Hash for PBKDF2 key type"):
+                MasterKeyEncryptionKey.from_cred_key(cred_key, user_sid)
 
 
 class TestHelperFunctions:
@@ -614,6 +660,33 @@ class TestDomainBackupKey:
         with pytest.raises(ValueError):
             DomainBackupKey(guid=guid, key_data="not_bytes")  # type: ignore
 
+    def test_decrypt_masterkey_file_unexpected_key_length(self, get_file_path):
+        """Test decrypting masterkey with unexpected decrypted key length."""
+        from unittest.mock import MagicMock, patch
+
+        # Load valid backup key and masterkey file
+        backupkey_file = get_file_path("backupkey.json")
+        with open(backupkey_file) as f:
+            backupkey_data = json.load(f)
+
+        backup_key = DomainBackupKey(
+            guid=UUID(backupkey_data["backup_key_guid"]),
+            key_data=base64.b64decode(backupkey_data["key"]),
+            domain_controller=backupkey_data["dc"],
+        )
+
+        masterkey_file = MasterKeyFile.parse(get_file_path("masterkey_domain.bin"))
+
+        # Mock the cipher.decrypt to return unexpected length
+        with patch("nemesis_dpapi.keys.PKCS1_v1_5") as mock_pkcs:
+            mock_cipher = MagicMock()
+            # Return decrypted key with unexpected length (not 104 or 128)
+            mock_cipher.decrypt.return_value = b"X" * 100  # 100 bytes (unexpected)
+            mock_pkcs.new.return_value = mock_cipher
+
+            with pytest.raises(Exception, match="Unexpected decrypted key length"):
+                backup_key.decrypt_masterkey_file(masterkey_file)
+
 
 class TestDpapiSystemSecret:
     """Tests for DpapiSystemSecret class."""
@@ -629,6 +702,31 @@ class TestDpapiSystemSecret:
 
         assert secret.user_key == user_key_data
         assert secret.machine_key == machine_key_data
+
+    def test_from_bytes_with_hex_string(self):
+        """Test creating DpapiSystemSecret from hex string."""
+        # Use the actual test data hex strings
+        hex_string = dpapi_system_machine_user_key_hex  # 40 bytes as hex (80 chars)
+
+        secret = DpapiSystemCredential.from_bytes(hex_string)
+
+        assert secret.user_key == bytes.fromhex(dpapi_system_user_key_hex)
+        assert secret.machine_key == bytes.fromhex(dpapi_system_machine_key_hex)
+
+    def test_from_bytes_with_invalid_hex_string(self):
+        """Test from_bytes with invalid hex string raises error."""
+        invalid_hex = "not_valid_hex_string"
+
+        with pytest.raises(ValueError, match="Invalid hex string"):
+            DpapiSystemCredential.from_bytes(invalid_hex)
+
+    def test_from_bytes_with_hex_string_wrong_length(self):
+        """Test from_bytes with hex string of wrong length."""
+        # 60 hex chars = 30 bytes (not 40)
+        wrong_length_hex = "a" * 60
+
+        with pytest.raises(ValueError, match="DPAPI_SYSTEM must be exactly 40 bytes, got 30"):
+            DpapiSystemCredential.from_bytes(wrong_length_hex)
 
     def test_direct_creation_with_bytes(self):
         """Test creating DpapiSystemSecret directly with bytes."""

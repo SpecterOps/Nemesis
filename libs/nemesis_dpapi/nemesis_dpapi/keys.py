@@ -10,8 +10,9 @@ from uuid import UUID  # noqa: TC003 - need for pydantic
 from Crypto.Hash import HMAC, MD4, SHA1, SHA256
 from Crypto.Protocol.KDF import PBKDF2
 from Cryptodome.Cipher import PKCS1_v1_5
-from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
+from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR
 from impacket.dpapi import DomainKey as ImpacketDomainKey
+from impacket.dpapi import privatekeyblob_to_pkcs1
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from .exceptions import InvalidBackupKeyError, MasterKeyDecryptionError
