@@ -342,7 +342,7 @@ class LsassDumpParser(EnrichmentModule):
                         )
 
         # # for debugging
-        # mks = asyncio.run(self.dpapi_manager.get_all_masterkeys())
+        # mks = await self.dpapi_manager.get_all_masterkeys()
         # import pprint
         # pprint.pprint(mks)
 
