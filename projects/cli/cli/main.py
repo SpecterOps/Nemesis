@@ -1,10 +1,8 @@
 # main.py
 import asyncio
 import sys
-from typing import Optional
 
 import click
-
 from cli.config import load_config
 from cli.log import setup_logging
 from cli.monitor import monitor_main
@@ -122,10 +120,14 @@ def get_os_user_and_host_string() -> str:
 @click.option("-w", "--workers", default=10, help="Number of worker threads", show_default=True)
 @click.option("-u", "--username", default="n", help="Basic auth username", show_default=True)
 @click.option("-p", "--password", default="n", help="Basic auth password", show_default=True)
-@click.option("--project", default="assess-test", help="Project name for metadata", show_default=True)
-@click.option("--source", help="Source name for metadata (e.g., 'host://HOST1')")
+@click.option("-s", "--source", default=None, help="Source name for metadata (e.g., 'host://HOST1')", show_default=True)
+@click.option("-j", "--project", default="assess-test", help="Project name for metadata", show_default=True)
 @click.option(
-    "--agent-id", default=("submit" + get_os_user_and_host_string()), help="Agent ID for metadata", show_default=True
+    "-a",
+    "--agent-id",
+    default=("submit" + get_os_user_and_host_string()),
+    help="Agent ID for metadata",
+    show_default=True,
 )
 @click.option(
     "-f",
@@ -174,8 +176,8 @@ def submit(
     agent_id: str,
     file_path: str,
     container: bool,
-    source: Optional[str] = None,
-    filters: Optional[str] = None,
+    source: str | None = None,
+    filters: str | None = None,
     include_pattern: tuple[str, ...] = (),
     exclude_pattern: tuple[str, ...] = (),
     repeat: int = 0,
@@ -228,7 +230,7 @@ def monitor(
     workers: int,
     only_monitor: bool,
     container: bool,
-    source: Optional[str] = None,
+    source: str | None = None,
 ):
     """Monitor a folder for new files and submit them to Nemesis"""
     monitor_main(
