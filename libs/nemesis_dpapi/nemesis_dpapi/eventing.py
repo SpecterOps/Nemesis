@@ -2,9 +2,12 @@
 
 from abc import abstractmethod
 from datetime import UTC, datetime
+from typing import get_args
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from dapr.clients import DaprClient
+from dapr.clients.grpc._response import TopicEventResponse, TopicEventResponseStatus
+from pydantic import Field, field_validator, model_validator
 
 from nemesis_dpapi.core import BaseModel
 from nemesis_dpapi.keys import DpapiSystemCredential, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
@@ -69,6 +72,28 @@ type DpapiEvent = (
 )
 
 
+DAPR_PUBSUB_NAME = "pubsub"
+DAPR_DPAPI_EVENT_TOPIC = "dpapi_events"
+
+DPAPI_EVENT_CLASSES = {cls.__name__: cls for cls in get_args(DpapiEvent.__value__)}
+
+
+class TypedDpapiEvent(BaseModel):
+    """Wrapper class for DpapiEvent with type information for deserialization."""
+
+    type_name: str
+    event: DpapiEvent
+
+    @model_validator(mode="before")
+    @classmethod
+    def deserialize_event(cls, data: dict) -> dict:
+        if isinstance(data, dict) and "type_name" in data and "event" in data:
+            event_class = DPAPI_EVENT_CLASSES.get(data["type_name"])
+            if event_class:
+                data["event"] = event_class(**data["event"])
+        return data
+
+
 class DpapiObserver:
     """Base class for DPAPI event observers."""
 
@@ -89,12 +114,48 @@ class Publisher:
         if observer not in self._observers:
             self._observers.append(observer)
 
-    def unsubscribe(self, observer: DpapiObserver) -> None:
-        """Detach an observer from this subject."""
-        if observer in self._observers:
-            self._observers.remove(observer)
-
     def publish(self, event: DpapiEvent) -> None:
         """Notify all observers of an event."""
         for observer in self._observers:
             observer.update(event)
+
+
+class DaprPublisher(Publisher):
+    """DPAPI event publisher using Dapr pub/sub."""
+
+    def __init__(self, dapr_client: DaprClient):
+        super().__init__()
+        self._dapr_client = dapr_client
+
+    def publish(self, event: DpapiEvent) -> None:
+        """Publish an event to all subscribed observers via Dapr pub/sub."""
+        event_type = event.__class__.__name__
+
+        new_event = TypedDpapiEvent(type_name=event_type, event=event)
+
+        self._dapr_client.publish_event(
+            pubsub_name=DAPR_PUBSUB_NAME,
+            topic_name=DAPR_DPAPI_EVENT_TOPIC,
+            data=new_event.model_dump_json(),
+            data_content_type="application/json",
+        )
+
+    def process_message(self, evnt: TypedDpapiEvent) -> TopicEventResponse:
+        """Process incoming Dapr pub/sub messages."""
+
+        for observer in self._observers:
+            observer.update(evnt.event)
+
+        return TopicEventResponse(TopicEventResponseStatus.success)
+
+    def start(self) -> None:
+        """Start the Dapr client (if needed)."""
+
+        close_fn = self._dapr_client.subscribe_with_handler(
+            pubsub_name=DAPR_PUBSUB_NAME,
+            topic=DAPR_DPAPI_EVENT_TOPIC,
+            handler_fn=lambda event: self.process_message(event),
+            dead_letter_topic="TOPIC_A_DEAD",
+        )
+
+        close_fn()

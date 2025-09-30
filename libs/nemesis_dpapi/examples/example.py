@@ -80,14 +80,14 @@ async def main() -> None:
     print("\n=== Adding Real DPAPI Data ===")
 
     print("=== DPAPI Library Usage with Events ===")
-    async with DpapiManager(storage_backend="memory") as dpapi:
+    async with DpapiManager(storage_backend="memory") as manager:
         # Register custom observer
-        dpapi_monitor = MyDpapiEventMonitor()
-        dpapi.subscribe(dpapi_monitor)
+        monitor = MyDpapiEventMonitor()
+        manager.subscribe(monitor)
 
         # Add masterkeys
         domain_mk_guid = UUID("12345678-1234-5678-9abc-123456789abc")
-        await dpapi.upsert_masterkey(
+        await manager.upsert_masterkey(
             MasterKey(
                 guid=domain_mk_guid,
                 encrypted_key_usercred=masterkey_file.master_key[:-1] + b"\x00",
@@ -96,7 +96,7 @@ async def main() -> None:
         )
 
         cred_mk_guid1 = UUID("87654321-4321-8765-cba9-987654321cba")
-        await dpapi.upsert_masterkey(
+        await manager.upsert_masterkey(
             MasterKey(
                 guid=cred_mk_guid1,
                 encrypted_key_usercred=masterkey_file.master_key[:-1] + b"\x00",
@@ -105,7 +105,7 @@ async def main() -> None:
         )
 
         cred_mk_guid2 = UUID("11111111-2222-3333-4444-555555555555")
-        await dpapi.upsert_masterkey(
+        await manager.upsert_masterkey(
             MasterKey(
                 guid=cred_mk_guid2,
                 encrypted_key_usercred=b"fake_encrypted_cred_masterkey_data_2",
@@ -120,14 +120,14 @@ async def main() -> None:
             guid=UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
             key_data=fake_backup_key_bytes,
         )
-        await dpapi.upsert_domain_backup_key(backup_key)
+        await manager.upsert_domain_backup_key(backup_key)
 
         # Check results after fake backup key
-        all_keys = await dpapi.get_all_masterkeys()
-        decrypted_keys = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        all_keys = await manager.get_all_masterkeys()
+        decrypted_keys = await manager.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"\nAfter fake backup key - Total masterkeys: {len(all_keys)}, Decrypted: {len(decrypted_keys)}")
 
-        await dpapi.upsert_masterkey(
+        await manager.upsert_masterkey(
             MasterKey(
                 guid=masterkey_file.masterkey_guid,
                 encrypted_key_usercred=masterkey_file.master_key,
@@ -141,14 +141,14 @@ async def main() -> None:
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi.upsert_domain_backup_key(real_backup_key)
+        await manager.upsert_domain_backup_key(real_backup_key)
 
         # Give auto-decryption time to work
         await asyncio.sleep(1)
 
         # Check final results
-        all_keys_final = await dpapi.get_all_masterkeys()
-        decrypted_keys_final = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        all_keys_final = await manager.get_all_masterkeys()
+        decrypted_keys_final = await manager.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(
             f"After real backup key - Total masterkeys: {len(all_keys_final)}, Decrypted: {len(decrypted_keys_final)}"
         )
@@ -170,7 +170,7 @@ async def main() -> None:
         print(f"Blob masterkey GUID: {blob.masterkey_guid}")
 
         # Decrypt the blob using the DPAPI manager
-        decrypted_blob_data = await dpapi.decrypt_blob(blob)
+        decrypted_blob_data = await manager.decrypt_blob(blob)
         print(f"Decrypted blob data: {decrypted_blob_data.decode('utf-8')}")
 
         # Update domain_mk_guid to use the real one for blob decryption test

@@ -9,6 +9,7 @@ from Crypto.Hash import SHA1
 from .auto_decrypt import AutoDecryptionObserver
 from .core import Blob, MasterKey
 from .eventing import (
+    DpapiObserver,
     NewDomainBackupKeyEvent,
     NewDpapiSystemCredentialEvent,
     NewEncryptedMasterKeyEvent,
@@ -40,10 +41,12 @@ from .repositories import MasterKeyFilter
 
 
 # TODO: Make thread safe
-class DpapiManager(Publisher, DpapiManagerProtocol):
+class DpapiManager(DpapiManagerProtocol):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
-    def __init__(self, storage_backend: str = "memory", auto_decrypt: bool = True) -> None:
+    def __init__(
+        self, storage_backend: str = "memory", auto_decrypt: bool = True, publisher: Publisher | None = None
+    ) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:
@@ -62,10 +65,15 @@ class DpapiManager(Publisher, DpapiManagerProtocol):
         self._dpapi_system_cred_repo: DpapiSystemCredentialRepository
         self._pg_pool: asyncpg.Pool | None = None
 
+        if publisher is None:
+            self._publisher = Publisher()
+        else:
+            self._publisher = publisher
+
         # Set up auto-decryption if enabled
         if self._auto_decrypt:
             self._auto_decrypt_observer = AutoDecryptionObserver(self)
-            self.subscribe(self._auto_decrypt_observer)
+            self._publisher.subscribe(self._auto_decrypt_observer)
 
     async def _initialize_storage(self) -> None:
         """Initialize storage repositories based on backend type."""
@@ -123,9 +131,17 @@ class DpapiManager(Publisher, DpapiManagerProtocol):
 
         # Publish appropriate event based on what was added
         if new_masterkey.plaintext_key or new_masterkey.plaintext_key_sha1:
-            self.publish(NewPlaintextMasterKeyEvent(masterkey_guid=new_masterkey.guid))
+            self._publisher.publish(NewPlaintextMasterKeyEvent(masterkey_guid=new_masterkey.guid))
         elif new_masterkey.encrypted_key_usercred or new_masterkey.encrypted_key_backup:
-            self.publish(NewEncryptedMasterKeyEvent(masterkey_guid=new_masterkey.guid))
+            self._publisher.publish(NewEncryptedMasterKeyEvent(masterkey_guid=new_masterkey.guid))
+
+    def subscribe(self, observer: DpapiObserver) -> None:
+        """Subscribe an observer to DPAPI events.
+
+        Args:
+            observer: Observer implementing the update(event) method
+        """
+        self._publisher.subscribe(observer)
 
     async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
         """Add or update a domain backup key and decrypt all compatible masterkeys.
@@ -139,7 +155,7 @@ class DpapiManager(Publisher, DpapiManagerProtocol):
 
         await self._backup_key_repo.upsert_backup_key(backup_key)
 
-        self.publish(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
+        self._publisher.publish(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
 
     async def upsert_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
         """Add or update a DPAPI system credential.
