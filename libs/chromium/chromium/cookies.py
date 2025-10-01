@@ -1,7 +1,7 @@
 """Chromium Cookies file parsing and database operations."""
 
-import sqlite3
 import asyncio
+import sqlite3
 
 import psycopg
 import structlog
@@ -126,7 +126,7 @@ def _insert_cookies(
                 try:
                     value_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.parse(encrypted_value)))
                     if value_dec_bytes:
-                        value_dec = value_dec_bytes.decode('utf-8', errors='replace')
+                        value_dec = value_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
                 except:
                     pass
@@ -153,13 +153,15 @@ def _insert_cookies(
                                     # Or just 16-byte suffix
                                     value_dec_bytes = value_dec_bytes[:-16]
 
-                                value_dec = value_dec_bytes.decode('utf-8', errors='replace')
+                                value_dec = value_dec_bytes.decode("utf-8", errors="replace")
                                 is_decrypted = True
                         except Exception as e:
-                            logger.warning("Failed to decrypt cookie with state key",
-                                       state_key_id=state_key_id,
-                                       encryption_type=encryption_type,
-                                       error=str(e))
+                            logger.warning(
+                                "Failed to decrypt cookie with state key",
+                                state_key_id=state_key_id,
+                                encryption_type=encryption_type,
+                                error=str(e),
+                            )
 
             cookie_data = {
                 "originating_object_id": file_enriched.object_id,

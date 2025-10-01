@@ -299,7 +299,7 @@ class WorkflowManager:
             except Exception as e:
                 logger.exception(e, message="Error resetting workflows in database", pid=os.getpid())
 
-            logger.warning("WorkflowManager reset", active_count=len(self.active_workflows), pid=os.getpid())
+            logger.info("WorkflowManager reset", active_count=len(self.active_workflows), pid=os.getpid())
 
             return {
                 "status": "success",
