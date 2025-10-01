@@ -1,20 +1,39 @@
 """Core data types used in the DPAPI library"""
 
+from __future__ import annotations
+
 import json
 import struct
 from enum import IntFlag
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID
 
+from Crypto.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
 from dpapick3 import blob as dpapick3_blob
-from impacket.dpapi import DPAPI_BLOB
+from impacket.dpapi import (
+    DPAPI_BLOB,
+    DPAPI_DOMAIN_RSA_MASTER_KEY,
+    PRIVATE_KEY_BLOB,
+    PVK_FILE_HDR,
+    privatekeyblob_to_pkcs1,
+)
+from impacket.dpapi import DomainKey as ImpacketDomainKey
 from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 
-from .exceptions import BlobDecryptionError, BlobParsingError, MasterKeyDecryptionError
+from .exceptions import (
+    BlobDecryptionError,
+    BlobParsingError,
+    InvalidBackupKeyError,
+    MasterKeyDecryptionError,
+)
 from .keys import MasterKeyEncryptionKey
+
+if TYPE_CHECKING:
+    from .keys import DomainBackupKey
 
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
 
@@ -72,7 +91,7 @@ class MasterKey(BaseModel):
         """Check if masterkey has been decrypted."""
         return self.plaintext_key is not None
 
-    def decrypt(self, master_key_encryption_key: MasterKeyEncryptionKey) -> "MasterKey":
+    def decrypt(self, master_key_encryption_key: MasterKeyEncryptionKey) -> MasterKey:
         """Decrypt the master key using the provided master key encryption key.
 
         Args:
@@ -133,7 +152,7 @@ class Blob(BaseModel):
     raw_bytes: bytes
 
     @classmethod
-    def parse(cls, data_or_path: bytes | str | Path) -> "Blob":
+    def parse(cls, data_or_path: bytes | str | Path) -> Blob:
         """Parse a DPAPI blob from bytes or file path.
 
         Args:
@@ -212,7 +231,7 @@ class Blob(BaseModel):
             raw_bytes=data,
         )
 
-    def decrypt(self, masterkey: "MasterKey", entropy: bytes | None = None) -> bytes:
+    def decrypt(self, masterkey: MasterKey, entropy: bytes | None = None) -> bytes:
         """Decrypt the blob using the provided master key.
 
         Args:
@@ -271,7 +290,7 @@ class MasterKeyFile(BaseModel):
     raw_bytes: bytes | None = None
 
     @classmethod
-    def parse(cls, file_path: str | Path) -> "MasterKeyFile":
+    def parse(cls, file_path: str | Path) -> MasterKeyFile:
         """Parse a masterkey file from disk.
 
         Args:
@@ -372,4 +391,73 @@ class MasterKeyFile(BaseModel):
             backup_key=backup_key,
             domain_backup_key=backup_dc_key,
             raw_bytes=data,
+        )
+
+    def decrypt(self, backup_key: DomainBackupKey) -> MasterKey:
+        """Decrypt this masterkey file using a domain backup key.
+
+        Args:
+            backup_key: The domain backup key to use for decryption
+
+        Returns:
+            MasterKey instance with decrypted key data
+
+        Raises:
+            ValueError: If masterkey file has no domain backup key
+            InvalidBackupKeyError: If domain backup key is invalid or malformed
+            MasterKeyDecryptionError: If decryption fails
+        """
+        if not self.domain_backup_key:
+            raise ValueError("Masterkey file contains no domain backup key data")
+
+        # Validate domain backup key has minimum size for ImpacketDomainKey structure
+        # (4 bytes version + 16 bytes GUID = 20 bytes minimum)
+        if len(self.domain_backup_key) < 20:
+            raise ValueError(
+                f"Domain backup key data too short ({len(self.domain_backup_key)} bytes). "
+                "This appears to be a local backup key, not a domain backup key."
+            )
+
+        try:
+            domain_key = ImpacketDomainKey(self.domain_backup_key)
+        except Exception as e:
+            raise ValueError(f"Failed to parse domain backup key data from master key file: {e}") from e
+
+        try:
+            # Extract the private key from the backup key data
+            key = PRIVATE_KEY_BLOB(backup_key.key_data[len(PVK_FILE_HDR()) :])
+            private = privatekeyblob_to_pkcs1(key)
+            cipher = PKCS1_v1_5.new(private)
+        except Exception as e:
+            raise InvalidBackupKeyError(f"Invalid domain backup key: {e}") from e
+
+        # Decrypt the masterkey (reverse byte order as per Impacket implementation)
+        decrypted_key = cipher.decrypt(domain_key["SecretData"][::-1], None)
+
+        if not decrypted_key:
+            raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
+
+        domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
+        buffer = domain_master_key["buffer"]
+
+        # If it's a version 3 masterkey, skip the first 8 bytes (structure is different)
+        if len(decrypted_key) == 128:
+            key_offset = 8
+        elif len(decrypted_key) == 104:
+            key_offset = 0
+        else:
+            raise MasterKeyDecryptionError(
+                f"Unexpected decrypted key length: {len(decrypted_key)}. Decrypted key: {decrypted_key.hex()}"
+            )
+
+        plaintext_key = buffer[key_offset : key_offset + domain_master_key["cbMasterKey"]]
+        plaintext_key_sha1 = SHA1.new(plaintext_key).digest()
+
+        return MasterKey(
+            guid=self.masterkey_guid,
+            encrypted_key_usercred=self.master_key,
+            encrypted_key_backup=self.domain_backup_key,
+            plaintext_key=plaintext_key,
+            plaintext_key_sha1=plaintext_key_sha1,
+            backup_key_guid=backup_key.guid,
         )

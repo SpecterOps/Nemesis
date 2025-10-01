@@ -9,16 +9,10 @@ from uuid import UUID  # noqa: TC003 - need for pydantic
 
 from Crypto.Hash import HMAC, MD4, SHA1, SHA256
 from Crypto.Protocol.KDF import PBKDF2
-from Cryptodome.Cipher import PKCS1_v1_5
-from impacket.dpapi import DPAPI_DOMAIN_RSA_MASTER_KEY, PRIVATE_KEY_BLOB, PVK_FILE_HDR
-from impacket.dpapi import DomainKey as ImpacketDomainKey
-from impacket.dpapi import privatekeyblob_to_pkcs1
+from impacket.dpapi import PRIVATE_KEY_BLOB, PVK_FILE_HDR
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from .exceptions import InvalidBackupKeyError, MasterKeyDecryptionError
-
 if TYPE_CHECKING:
-    from .core import MasterKey, MasterKeyFile
     from .types import Sid
 
 
@@ -316,69 +310,6 @@ class DomainBackupKey(BaseModel):
             raise ValueError(f"Invalid private key blob: {e}") from e
 
         return v
-
-    def decrypt_masterkey_file(self, masterkey_file: MasterKeyFile) -> MasterKey:
-        """Decrypt a masterkey file using this domain backup key.
-
-        Args:
-            masterkey_file: The masterkey file to decrypt
-
-        Returns:
-            MasterKey instance with decrypted key data
-
-        Raises:
-            MasterKeyDecryptionError: If masterkey file has no domain backup key or decryption fails
-            InvalidBackupKeyError: If domain backup key is invalid or malformed
-        """
-        # Local import to avoid circular dependency
-        from .core import MasterKey
-
-        if not masterkey_file.domain_backup_key:
-            raise ValueError("Masterkey file contains no domain backup key data")
-
-        try:
-            domain_key = ImpacketDomainKey(masterkey_file.domain_backup_key)
-        except Exception as e:
-            raise ValueError(f"Failed to parse domain backup key data from master key file: {e}") from e
-
-        try:
-            # Extract the private key from the backup key data
-            key = PRIVATE_KEY_BLOB(self.key_data[len(PVK_FILE_HDR()) :])
-            private = privatekeyblob_to_pkcs1(key)
-            cipher = PKCS1_v1_5.new(private)
-        except Exception as e:
-            raise InvalidBackupKeyError(f"Invalid domain backup key: {e}") from e
-
-        # Decrypt the masterkey (reverse byte order as per Impacket implementation)
-        decrypted_key = cipher.decrypt(domain_key["SecretData"][::-1], None)
-
-        if not decrypted_key:
-            raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
-
-        domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
-        buffer = domain_master_key["buffer"]
-
-        # If it's a version 3 masterkey, skip the first 8 bytes (structure is different)
-        if len(decrypted_key) == 128:
-            key_offset = 8
-        elif len(decrypted_key) == 104:
-            key_offset = 0
-        else:
-            raise MasterKeyDecryptionError(
-                f"Unexpected decrypted key length: {len(decrypted_key)}. Decrypted key: {decrypted_key.hex()}"
-            )
-
-        plaintext_key = buffer[key_offset : key_offset + domain_master_key["cbMasterKey"]]
-        plaintext_key_sha1 = SHA1.new(plaintext_key).digest()
-
-        return MasterKey(
-            guid=masterkey_file.masterkey_guid,
-            encrypted_key_usercred=masterkey_file.master_key,
-            encrypted_key_backup=masterkey_file.domain_backup_key,
-            plaintext_key=plaintext_key,
-            plaintext_key_sha1=plaintext_key_sha1,
-            backup_key_guid=self.guid,
-        )
 
 
 class DpapiSystemCredential(BaseModel):

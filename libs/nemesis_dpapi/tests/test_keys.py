@@ -557,7 +557,7 @@ class TestDomainBackupKey:
         masterkey_file = MasterKeyFile.parse(get_file_path("masterkey_domain.bin"))
 
         # Decrypt the masterkey
-        decrypted_masterkey = backup_key.decrypt_masterkey_file(masterkey_file)
+        decrypted_masterkey = masterkey_file.decrypt(backup_key)
 
         # Verify decryption succeeded
         assert decrypted_masterkey is not None
@@ -595,7 +595,7 @@ class TestDomainBackupKey:
         # Load the domain masterkey file
 
         # Decrypt the masterkey
-        decrypted_masterkey = backup_key.decrypt_masterkey_file(masterkey_file)
+        decrypted_masterkey = masterkey_file.decrypt(backup_key)
 
         # Verify decryption succeeded
         assert decrypted_masterkey is not None
@@ -640,7 +640,7 @@ class TestDomainBackupKey:
 
         # Should raise MasterKeyDecryptionError since no domain backup key in file
         with pytest.raises(ValueError, match="contains no domain backup key"):
-            backup_key.decrypt_masterkey_file(masterkey_file)
+            masterkey_file.decrypt(backup_key)
 
     def test_domain_backup_key_validation(self):
         """Test that DomainBackupKey validates key_data format."""
@@ -678,14 +678,14 @@ class TestDomainBackupKey:
         masterkey_file = MasterKeyFile.parse(get_file_path("masterkey_domain.bin"))
 
         # Mock the cipher.decrypt to return unexpected length
-        with patch("nemesis_dpapi.keys.PKCS1_v1_5") as mock_pkcs:
+        with patch("nemesis_dpapi.core.PKCS1_v1_5") as mock_pkcs:
             mock_cipher = MagicMock()
             # Return decrypted key with unexpected length (not 104 or 128)
             mock_cipher.decrypt.return_value = b"X" * 100  # 100 bytes (unexpected)
             mock_pkcs.new.return_value = mock_cipher
 
             with pytest.raises(Exception, match="Unexpected decrypted key length"):
-                backup_key.decrypt_masterkey_file(masterkey_file)
+                masterkey_file.decrypt(backup_key)
 
 
 class TestDpapiSystemSecret:

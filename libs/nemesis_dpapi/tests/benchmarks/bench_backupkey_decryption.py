@@ -30,11 +30,11 @@ class TestMasterkeyDecryptionBenchmarks:
         masterkey_file = MasterKeyFile.parse(masterkey_file_path)
 
         # Verify setup works
-        test_result = backup_key.decrypt_masterkey_file(masterkey_file)
+        test_result = masterkey_file.decrypt(backup_key)
         assert test_result.is_decrypted, "Test decryption failed - benchmark cannot proceed"
 
         # Run benchmark
-        result = benchmark(backup_key.decrypt_masterkey_file, masterkey_file)
+        result = benchmark(masterkey_file.decrypt, backup_key)
 
         # Verify result
         assert result.is_decrypted
@@ -59,10 +59,10 @@ class TestMasterkeyDecryptionBenchmarks:
 
         # Warmup
         for _ in range(5):
-            backup_key.decrypt_masterkey_file(masterkey_file)
+            masterkey_file.decrypt(backup_key)
 
         # Benchmark
-        result = benchmark(backup_key.decrypt_masterkey_file, masterkey_file)
+        result = benchmark(masterkey_file.decrypt, backup_key)
 
         # Verify
         assert result.is_decrypted
@@ -89,7 +89,7 @@ class TestMasterkeyDecryptionBenchmarks:
         def batch_decrypt():
             results = []
             for _ in range(iterations):
-                result = backup_key.decrypt_masterkey_file(masterkey_file)
+                result = masterkey_file.decrypt(backup_key)
                 results.append(result)
             return results
 

@@ -72,7 +72,12 @@ async def main() -> None:
 
     masterkey_file = MasterKeyFile.parse(masterkey_file_path)
     backup_key_bytes = base64.b64decode(backup_key_data["key"])
-    fake_backup_key_bytes = backup_key_bytes[0:499] + b"\x00" + backup_key_bytes[500:]
+
+    # Create a fake backup key by corrupting one byte
+    pvk_header_size = 20  # PVK_FILE_HDR size
+    fake_backup_key_bytes = (
+        backup_key_bytes[: pvk_header_size + 32] + b"\xff" + backup_key_bytes[pvk_header_size + 33 :]
+    )
 
     if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
         raise ValueError("Invalid masterkey file")
@@ -104,12 +109,15 @@ async def main() -> None:
             )
         )
 
+        # Create a fake masterkey that won't decrypt
         cred_mk_guid2 = UUID("11111111-2222-3333-4444-555555555555")
         await manager.upsert_masterkey(
             MasterKey(
                 guid=cred_mk_guid2,
-                encrypted_key_usercred=b"fake_encrypted_cred_masterkey_data_2",
-                encrypted_key_backup=b"fake_encrypted_backup_data_2",
+                encrypted_key_usercred=masterkey_file.master_key[:50] + b"\xff" * 20 + masterkey_file.master_key[70:],
+                encrypted_key_backup=masterkey_file.domain_backup_key[:50]
+                + b"\xff" * 30
+                + masterkey_file.domain_backup_key[80:],
             )
         )
 

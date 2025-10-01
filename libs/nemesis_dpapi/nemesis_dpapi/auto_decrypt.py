@@ -133,8 +133,9 @@ class AutoDecryptionObserver(DpapiObserver):
                 )
 
                 try:
-                    result = new_backup_key.decrypt_masterkey_file(masterkey_file)
-                except MasterKeyDecryptionError:
+                    result = masterkey_file.decrypt(new_backup_key)
+                except (MasterKeyDecryptionError, ValueError):
+                    # Skip masterkeys that can't be decrypted (wrong key, local backup key, etc.)
                     continue
 
                 if result:
@@ -189,7 +190,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     domain_backup_key=masterkey.encrypted_key_backup,
                 )
 
-                result = backup_key.decrypt_masterkey_file(masterkey_file)
+                result = masterkey_file.decrypt(backup_key)
             except Exception:
                 logger.debug(f"Failed to decrypt masterkey {masterkey.guid} with backup key {backup_key.guid}")
                 continue
