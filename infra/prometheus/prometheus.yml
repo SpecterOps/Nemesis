@@ -8,11 +8,52 @@ scrape_configs:
     static_configs:
       - targets: ['traefik:8080']
 
-  # - job_name: 'minio'
-  #   metrics_path: /minio/v2/metrics/cluster
-  #   scheme: http
-  #   static_configs:
-  #     - targets: ['minio:9000']
+  - job_name: 'minio'
+    metrics_path: /minio/metrics/v3/cluster/health
+    scheme: http
+    static_configs:
+      - targets: ['minio:9000']
+
+  - job_name: 'minio-api'
+    metrics_path: /minio/metrics/v3/api/requests
+    scheme: http
+    static_configs:
+      - targets: ['minio:9000']
+
+  - job_name: 'minio-bucket-api'
+    metrics_path: /minio/metrics/v3/bucket/api
+    scheme: http
+    static_configs:
+      - targets: ['minio:9000']
+
+  - job_name: 'minio-cluster-usage-buckets'
+    metrics_path: /minio/metrics/v3/cluster/health
+    scheme: http
+    static_configs:
+      - targets: ['minio:9000']
+
+  - job_name: 'minio-cluster-usage-buckets'
+    metrics_path: /minio/metrics/v3/cluster/usage/buckets
+    scheme: http
+    static_configs:
+      - targets: ['minio:9000']
+
+  - job_name: 'minio-cluster-usage-objects'
+    metrics_path: /minio/metrics/v3/cluster/usage/objects
+    scheme: http
+    static_configs:
+      - targets: ['minio:9000']
+
+  - job_name: 'minio-drives'
+    metrics_path: /minio/metrics/v3/system/drive
+    scheme: http
+    static_configs:
+      - targets: ['minio:9000']
+
+  - job_name: 'node-exporter'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['loki:3100']
 
   - job_name: 'prometheus'
     metrics_path: '/prometheus/metrics'
@@ -35,13 +76,15 @@ scrape_configs:
       - targets: ['postgres-exporter:9187']
 
   - job_name: 'rabbitmq'
+    metrics_path: '/metrics'
     static_configs:
       - targets: ['rabbitmq:15692']
 
-  - job_name: 'hasura'
-    metrics_path: '/v1/metrics'
-    static_configs:
-      - targets: ['hasura:8080']
+  # Reserved for enterprise edition only?
+  # - job_name: 'hasura'
+  #   metrics_path: '/v1/metrics'
+  #   static_configs:
+  #     - targets: ['hasura:8080']
 
   - job_name: 'nemesis-web-api'
     metrics_path: '/metrics'

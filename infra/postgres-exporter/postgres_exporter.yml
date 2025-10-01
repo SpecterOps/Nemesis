@@ -1,0 +1,2 @@
+# Postgres Exporter Configuration
+auth_modules: {}

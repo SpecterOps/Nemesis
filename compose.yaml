@@ -323,7 +323,7 @@ services:
     volumes:
     - "./projects/jupyter/notebooks:/home/jovyan/work"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8888/jupyter/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8888/jupyter/api"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -720,10 +720,10 @@ services:
   postgres-exporter:
     profiles: ["monitoring"]
     image: prometheuscommunity/postgres-exporter:latest
-    networks:
-      - nemesis
     environment:
       DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/enrichment?sslmode=disable"
+    volumes:
+      - ./infra/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro
     depends_on:
       postgres: { condition: service_healthy }
 
