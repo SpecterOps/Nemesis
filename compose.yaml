@@ -72,6 +72,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
@@ -136,6 +139,9 @@ services:
         "/dapr/configuration/config.yaml",
         "--app-max-concurrency",
         "1",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -192,6 +198,9 @@ services:
         "/dapr/configuration/config.yaml",
         "--app-max-concurrency",
         "1",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -258,6 +267,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
@@ -365,6 +377,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
@@ -432,6 +447,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
@@ -487,6 +505,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
@@ -546,6 +567,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
@@ -572,6 +596,7 @@ services:
         "--api-timeout=180s",
         "--libreoffice-restart-after=5",
         "--libreoffice-auto-start=true",
+        "--prometheus-collect-interval=10s",
       ]
     environment: { DISABLE_GOOGLE_CHROME: "1" }
     healthcheck:
@@ -602,6 +627,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
@@ -656,6 +684,7 @@ services:
       - RABBITMQ_NODENAME=rabbit@rabbitmq-node # have to do this for persistence reasons
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 10s
@@ -688,8 +717,18 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-exporter:
+    profiles: ["monitoring"]
+    image: prometheuscommunity/postgres-exporter:latest
+    networks:
+      - nemesis
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/enrichment?sslmode=disable"
+    depends_on:
+      postgres: { condition: service_healthy }
+
   hasura:
-    image: hasura/graphql-engine:v2.45.1.cli-migrations-v2
+    image: hasura/graphql-engine:v2.48.6.cli-migrations-v2
     depends_on:
       postgres: { condition: service_healthy }
     environment:
