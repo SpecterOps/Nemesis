@@ -2,6 +2,7 @@
 
 from abc import abstractmethod
 from datetime import UTC, datetime
+from logging import getLogger
 from typing import get_args
 from uuid import UUID
 
@@ -12,6 +13,8 @@ from pydantic import Field, field_validator, model_validator
 from nemesis_dpapi.core import BaseModel
 from nemesis_dpapi.keys import DpapiSystemCredential, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
 from nemesis_dpapi.types import Sid
+
+logger = getLogger(__name__)
 
 
 class NewEncryptedMasterKeyEvent(BaseModel):
@@ -89,7 +92,7 @@ class TypedDpapiEvent(BaseModel):
     def deserialize_event(cls, data: dict) -> dict:
         if isinstance(data, dict) and "type_name" in data and "event" in data:
             event_class = DPAPI_EVENT_CLASSES.get(data["type_name"])
-            if event_class:
+            if event_class and isinstance(data["event"], dict):
                 data["event"] = event_class(**data["event"])
         return data
 
@@ -129,10 +132,11 @@ class DaprPublisher(Publisher):
 
     def publish(self, event: DpapiEvent) -> None:
         """Publish an event to all subscribed observers via Dapr pub/sub."""
-        event_type = event.__class__.__name__
 
+        event_type = event.__class__.__name__
         new_event = TypedDpapiEvent(type_name=event_type, event=event)
 
+        logger.debug("Publishing event of type %s to Dapr: %s", event_type)
         self._dapr_client.publish_event(
             pubsub_name=DAPR_PUBSUB_NAME,
             topic_name=DAPR_DPAPI_EVENT_TOPIC,
@@ -142,6 +146,8 @@ class DaprPublisher(Publisher):
 
     def process_message(self, evnt: TypedDpapiEvent) -> TopicEventResponse:
         """Process incoming Dapr pub/sub messages."""
+
+        logger.debug("Processing event of type %s", evnt.type_name)
 
         for observer in self._observers:
             observer.update(evnt.event)
@@ -155,7 +161,7 @@ class DaprPublisher(Publisher):
             pubsub_name=DAPR_PUBSUB_NAME,
             topic=DAPR_DPAPI_EVENT_TOPIC,
             handler_fn=lambda event: self.process_message(event),
-            dead_letter_topic="TOPIC_A_DEAD",
+            # dead_letter_topic="TOPIC_A_DEAD",
         )
 
         close_fn()

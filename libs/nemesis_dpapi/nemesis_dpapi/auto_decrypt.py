@@ -86,6 +86,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     except MasterKeyDecryptionError:
                         continue
 
+                    print(f"Successfully decrypted masterkey {encrypted_mk.guid} with DPAPI_SYSTEM credential")
                     await self.dpapi_manager.upsert_masterkey(plaintext_mk)
                     break  # Decrypted successfully, no need to try other key
             except Exception as e:
@@ -137,6 +138,9 @@ class AutoDecryptionObserver(DpapiObserver):
                     continue
 
                 if result:
+                    print(
+                        f"Successfully decrypted masterkey {masterkey.guid} with new backup key {new_backup_key.guid}"
+                    )
                     new_mk = MasterKey(
                         guid=masterkey.guid,
                         encrypted_key_usercred=masterkey.encrypted_key_usercred,
@@ -199,6 +203,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     plaintext_key_sha1=result.plaintext_key_sha1,
                     backup_key_guid=result.backup_key_guid,
                 )
+                print(f"Successfully decrypted masterkey {masterkey.guid} with backup key {backup_key.guid}")
                 await self.dpapi_manager._masterkey_repo.upsert_masterkey(new_mk)
                 break
 

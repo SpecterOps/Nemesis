@@ -3,7 +3,6 @@
 import asyncio
 import base64
 import urllib.parse
-from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
 
@@ -31,6 +30,7 @@ from nemesis_dpapi import (
     Pbkdf2Hash,
     Sha1Hash,
 )
+from nemesis_dpapi.eventing import DaprPublisher
 from nemesis_dpapi.masterkey_decryptor import MasterKeyDecryptorService
 
 logger = get_logger(__name__)
@@ -40,10 +40,13 @@ with DaprClient() as client:
     postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
 
 
-# Using lru_cache to create a singleton instance of DpapiManager
-@lru_cache
-def get_dpapi_manager() -> DpapiManager:
-    return DpapiManager(storage_backend=postgres_connection_string)
+async def get_dpapi_manager() -> DpapiManager:
+    client = DaprClient()
+    return DpapiManager(
+        storage_backend=postgres_connection_string,
+        auto_decrypt=True,
+        publisher=DaprPublisher(client),
+    )
 
 
 DpapiManagerDep = Annotated[DpapiManager, Depends(get_dpapi_manager)]
@@ -51,7 +54,7 @@ DpapiManagerDep = Annotated[DpapiManager, Depends(get_dpapi_manager)]
 
 async def dpapi_background_monitor() -> None:
     logger.info("Starting DPAPI background monitor task")
-    dpapi_manager = get_dpapi_manager()
+    dpapi_manager = await get_dpapi_manager()
 
     # Add some sample masterkeys for testing
     # for i in range(64):
