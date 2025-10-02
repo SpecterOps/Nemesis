@@ -26,8 +26,7 @@ async def process_dotnet_event(raw_data, postgres_connection_string: str):
                 parsed_data = json.loads(raw_data)
                 dotnet_output = DotNetOutput(**parsed_data)
             else:
-                logger.warning(f"Unexpected data type: {type(raw_data)}", pid=os.getpid())
-                return
+                raise ValueError(f"Unexpected data type: {type(raw_data)}", pid=os.getpid())
 
             object_id = dotnet_output.object_id
             decompilation_object_id = dotnet_output.decompilation

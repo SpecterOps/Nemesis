@@ -5,12 +5,12 @@ import os
 import random
 from contextlib import asynccontextmanager
 
-import psycopg
 from common.logger import get_logger
 from common.models import CloudEvent, File
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI
+from file_enrichment.postgres_notifications import postgres_notify_listener
 from nemesis_dpapi import DpapiManager as NemesisDpapiManager
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
 from psycopg_pool import ConnectionPool
@@ -21,13 +21,7 @@ from .subscriptions.bulk_enrichment_handler import process_bulk_enrichment_event
 from .subscriptions.dotnet_handler import process_dotnet_event
 from .subscriptions.file_handler import process_file_event
 from .subscriptions.noseyparker_handler import process_noseyparker_event
-from .workflow import (
-    get_workflow_client,
-    initialize_workflow_runtime,
-    reload_yara_rules,
-    shutdown_workflow_runtime,
-    workflow_runtime,
-)
+from .workflow import get_workflow_client, initialize_workflow_runtime, shutdown_workflow_runtime, workflow_runtime
 from .workflow_manager import WorkflowManager
 
 logger = get_logger(__name__)
@@ -55,8 +49,8 @@ workflow_manager: WorkflowManager = None
 bulk_enrichment_tasks = {}  # {enrichment_name: task_info}
 bulk_enrichment_lock = asyncio.Lock()
 
-# PostgreSQL LISTEN/NOTIFY client
-notify_listener_task = None
+postgres_notify_listener_task = None
+background_dpapi_task = None
 
 
 async def recover_interrupted_workflows():
@@ -184,83 +178,10 @@ async def recover_interrupted_workflows():
         # Don't raise - we want the service to continue even if recovery fails
 
 
-async def postgres_notify_listener():
-    """
-    Listen for PostgreSQL NOTIFY events for yara reload and workflow reset.
-    Runs in background task to handle notifications across all workers/replicas.
-    """
-    global workflow_manager
-
-    logger.info("Starting PostgreSQL NOTIFY listener...", pid=os.getppid())
-
-    retry_delay = 1  # Start with 1 second retry delay
-    max_retry_delay = 60  # Max 60 seconds between retries
-
-    while True:
-        try:
-            # Use async connection for LISTEN
-            async with await psycopg.AsyncConnection.connect(postgres_connection_string, autocommit=True) as conn:
-                logger.info("Connected to PostgreSQL for NOTIFY listening", pid=os.getppid())
-                retry_delay = 1  # Reset retry delay on successful connection
-
-                # Listen to our notification channels
-                await conn.execute("LISTEN nemesis_yara_reload")
-                await conn.execute("LISTEN nemesis_workflow_reset")
-
-                logger.info(
-                    "Listening for PostgreSQL notifications on nemesis_yara_reload and nemesis_workflow_reset",
-                    pid=os.getppid(),
-                )
-
-                # Process notifications with timeout to prevent hanging
-                try:
-                    async for notify in conn.notifies():
-                        try:
-                            logger.info(
-                                f"Received PostgreSQL notification: channel={notify.channel}, payload={notify.payload}, pid={os.getpid()}"
-                            )
-
-                            if notify.channel == "nemesis_yara_reload":
-                                logger.info("Processing yara reload notification", pid=os.getppid())
-                                reload_yara_rules()
-
-                            elif notify.channel == "nemesis_workflow_reset":
-                                logger.info("Processing workflow reset notification", pid=os.getppid())
-                                if workflow_manager is not None:
-                                    result = await workflow_manager.reset()
-                                    logger.info("Workflow manager reset completed", result=result)
-                                else:
-                                    logger.warning("Workflow manager not initialized, skipping reset")
-
-                        except Exception as e:
-                            logger.exception(
-                                "Error processing PostgreSQL notification",
-                                channel=notify.channel,
-                                payload=notify.payload,
-                                error=str(e),
-                                pid=os.getpid(),
-                            )
-                except asyncio.CancelledError:
-                    logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
-                    break
-                except Exception as e:
-                    logger.exception("Error in notification loop", error=str(e), pid=os.getpid())
-                    raise
-
-        except Exception as e:
-            logger.exception("PostgreSQL NOTIFY listener connection error", error=str(e), pid=os.getppid())
-
-            # Exponential backoff with jitter
-            await asyncio.sleep(retry_delay + (retry_delay * 0.1))  # Add 10% jitter
-            retry_delay = min(retry_delay * 2, max_retry_delay)
-
-            logger.info(f"Retrying PostgreSQL NOTIFY listener in {retry_delay} seconds...", pid=os.getppid())
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager for workflow runtime setup/teardown"""
-    global module_execution_order, workflow_manager, notify_listener_task, background_dpapi_task
+    global module_execution_order, workflow_manager, postgres_notify_listener_task, background_dpapi_task
 
     logger.info("Initializing workflow runtime...", pid=os.getpid())
 
@@ -269,10 +190,10 @@ async def lifespan(app: FastAPI):
     # Initialize global DpapiManager for the application lifetime
     dapr_client = DaprClient()
     secret = dapr_client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    dpapi_postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
 
     dpapi_manager = NemesisDpapiManager(
-        storage_backend=dpapi_postgres_connection_string,
+        storage_backend=postgres_connection_string,
         auto_decrypt=True,
         publisher=DaprDpapiEventPublisher(dapr_client, loop=app.state.event_loop),
     )
@@ -295,7 +216,9 @@ async def lifespan(app: FastAPI):
         )
 
         # Start PostgreSQL NOTIFY listener in background
-        notify_listener_task = asyncio.create_task(postgres_notify_listener())
+        postgres_notify_listener_task = asyncio.create_task(
+            postgres_notify_listener(postgres_connection_string, workflow_manager)
+        )
         logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
 
         # Start masterkey watcher in background
@@ -336,11 +259,11 @@ async def lifespan(app: FastAPI):
                 logger.info("Masterkey watcher task cancelled", pid=os.getpid())
 
         # Cancel PostgreSQL NOTIFY listener
-        if notify_listener_task and not notify_listener_task.done():
+        if postgres_notify_listener_task and not postgres_notify_listener_task.done():
             logger.info("Cancelling PostgreSQL NOTIFY listener...", pid=os.getppid())
-            notify_listener_task.cancel()
+            postgres_notify_listener_task.cancel()
             try:
-                await notify_listener_task
+                await postgres_notify_listener_task
             except asyncio.CancelledError:
                 logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
 
@@ -359,7 +282,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 dapr_app = DaprApp(app)
 
-# Include routers
+# region API Routers/Endpoints
 app.include_router(dpapi_router)
 app.include_router(enrichments_router)
 
@@ -370,9 +293,10 @@ async def healthcheck():
     return {"status": "healthy"}
 
 
-background_dpapi_task = None
+# endregion
 
 
+# region Dapr Subscriptions
 @dapr_app.subscribe(pubsub="pubsub", topic="file")
 async def process_file(event: CloudEvent[File]):
     """Handler for incoming file events"""
