@@ -4,23 +4,23 @@ import json
 import os
 import random
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 import psycopg
 from common.logger import get_logger
-from common.models import CloudEvent, DotNetOutput, File, NoseyParkerOutput
-from common.state_helpers import get_file_enriched
+from common.models import CloudEvent, File
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI
-from file_enrichment.dotnet import store_dotnet_results
-from file_enrichment.noseyparker import store_noseyparker_results
 from nemesis_dpapi import DpapiManager as NemesisDpapiManager
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
 from psycopg_pool import ConnectionPool
 
 from .routes.dpapi import dpapi_background_monitor, dpapi_router
 from .routes.enrichments import router as enrichments_router
+from .subscriptions.bulk_enrichment_handler import process_bulk_enrichment_event
+from .subscriptions.dotnet_handler import process_dotnet_event
+from .subscriptions.file_handler import process_file_event
+from .subscriptions.noseyparker_handler import process_noseyparker_event
 from .workflow import (
     get_workflow_client,
     initialize_workflow_runtime,
@@ -267,14 +267,14 @@ async def lifespan(app: FastAPI):
     app.state.event_loop = asyncio.get_running_loop()
 
     # Initialize global DpapiManager for the application lifetime
-    with DaprClient() as dapr_client:
-        secret = dapr_client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-        dpapi_postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+    dapr_client = DaprClient()
+    secret = dapr_client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
+    dpapi_postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
 
     dpapi_manager = NemesisDpapiManager(
         storage_backend=dpapi_postgres_connection_string,
         auto_decrypt=True,
-        publisher=DaprDpapiEventPublisher(DaprClient(), loop=app.state.event_loop),
+        publisher=DaprDpapiEventPublisher(dapr_client, loop=app.state.event_loop),
     )
     await dpapi_manager.__aenter__()
     app.state.dpapi_manager = dpapi_manager
@@ -322,7 +322,7 @@ async def lifespan(app: FastAPI):
         logger.info("Shutting down workflow runtime...", pid=os.getpid())
 
         # Cleanup DpapiManager
-        if hasattr(app.state, 'dpapi_manager') and app.state.dpapi_manager:
+        if hasattr(app.state, "dpapi_manager") and app.state.dpapi_manager:
             logger.info("Closing DpapiManager...", pid=os.getpid())
             await app.state.dpapi_manager.__aexit__(None, None, None)
 
@@ -349,6 +349,8 @@ async def lifespan(app: FastAPI):
             await workflow_manager.cleanup()
 
         shutdown_workflow_runtime()
+
+        dapr_client.close()
     except Exception as e:
         logger.error("Error during workflow runtime shutdown", error=str(e), pid=os.getpid())
 
@@ -361,259 +363,37 @@ dapr_app = DaprApp(app)
 app.include_router(dpapi_router)
 app.include_router(enrichments_router)
 
+
+@app.api_route("/healthz", methods=["GET", "HEAD"])
+async def healthcheck():
+    """Health check endpoint for Docker healthcheck."""
+    return {"status": "healthy"}
+
+
 background_dpapi_task = None
-
-
-async def save_file_message(file: File):
-    """Save the file message to the database for recovery purposes"""
-    try:
-        # Only save files that are not nested (originating files)
-        if file.nesting_level and file.nesting_level > 0:
-            logger.debug(
-                "nesting_level > 0, not saving file message",
-                nesting_level=file.nesting_level,
-                object_id=file.object_id,
-                pid=os.getpid(),
-            )
-            return
-
-        def save_to_db():
-            with pool.connection() as conn:
-                with conn.cursor() as cur:
-                    query = """
-                    INSERT INTO files (
-                        object_id, agent_id, source, project, timestamp, expiration,
-                        path, originating_object_id, originating_container_id, nesting_level,
-                        file_creation_time, file_access_time, file_modification_time
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    ) ON CONFLICT (object_id) DO UPDATE SET
-                        agent_id = EXCLUDED.agent_id,
-                        source = EXCLUDED.source,
-                        project = EXCLUDED.project,
-                        timestamp = EXCLUDED.timestamp,
-                        expiration = EXCLUDED.expiration,
-                        path = EXCLUDED.path,
-                        originating_object_id = EXCLUDED.originating_object_id,
-                        originating_container_id = EXCLUDED.originating_container_id,
-                        nesting_level = EXCLUDED.nesting_level,
-                        file_creation_time = EXCLUDED.file_creation_time,
-                        file_access_time = EXCLUDED.file_access_time,
-                        file_modification_time = EXCLUDED.file_modification_time,
-                        updated_at = CURRENT_TIMESTAMP;
-                    """
-
-                    cur.execute(
-                        query,
-                        (
-                            file.object_id,
-                            file.agent_id,
-                            file.source,
-                            file.project,
-                            file.timestamp,
-                            file.expiration,
-                            file.path,
-                            file.originating_object_id,
-                            getattr(file, "originating_container_id", None),
-                            file.nesting_level,
-                            datetime.fromisoformat(file.creation_time) if file.creation_time else None,
-                            datetime.fromisoformat(file.access_time) if file.access_time else None,
-                            datetime.fromisoformat(file.modification_time) if file.modification_time else None,
-                        ),
-                    )
-                    conn.commit()
-
-        await asyncio.to_thread(save_to_db)
-        logger.debug("Successfully saved file message to database", object_id=file.object_id, pid=os.getpid())
-
-    except Exception as e:
-        logger.exception(e, message="Error saving file message to database", object_id=file.object_id, pid=os.getpid())
-        raise
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="file")
 async def process_file(event: CloudEvent[File]):
     """Handler for incoming file events"""
     global workflow_manager
-    try:
-        file = event.data
-
-        # Save the file message to database first for recovery purposes
-        await save_file_message(file)
-
-        workflow_input = {
-            "file": file.model_dump(exclude_unset=True, mode="json"),
-            "execution_order": module_execution_order,
-        }
-
-        # This will block if we're at max capacity, providing natural backpressure
-        await workflow_manager.start_workflow(workflow_input)
-
-    except Exception as e:
-        logger.exception(e, message="Error processing file event", cloud_event=event, pid=os.getpid())
-
-
-# Removed process_yara - replaced by PostgreSQL NOTIFY listener
+    await process_file_event(event.data, workflow_manager, module_execution_order, pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")
 async def process_dotnet_results(event: CloudEvent):
     """Handler for incoming .NET processing results from the dotnet_service."""
-    try:
-        raw_data = event.data
-        logger.debug(f"Received DotNet output event: {raw_data}", pid=os.getpid())
-
-        # Try to parse the event data into our DotNetOutput model
-        try:
-            # If it's already a dict, use it directly
-            if isinstance(raw_data, dict):
-                dotnet_output = DotNetOutput(**raw_data)
-            # If it's a string, try to parse it as JSON
-            elif isinstance(raw_data, str):
-                import json
-
-                parsed_data = json.loads(raw_data)
-                dotnet_output = DotNetOutput(**parsed_data)
-            else:
-                logger.warning(f"Unexpected data type: {type(raw_data)}", pid=os.getpid())
-                return
-
-            object_id = dotnet_output.object_id
-            decompilation_object_id = dotnet_output.decompilation
-            analysis = dotnet_output.get_parsed_analysis()
-
-            logger.debug(f"Processing dotnet results for object {object_id}", pid=os.getpid())
-
-            # Get the file enriched data for creating transforms
-            file_enriched = None
-            try:
-                file_enriched = get_file_enriched(object_id)
-            except Exception as e:
-                logger.warning(f"Could not get file_enriched for {object_id}: {e}", pid=os.getpid())
-
-            # Store the results in the database using our helper function
-            await store_dotnet_results(
-                object_id=object_id,
-                decompilation_object_id=decompilation_object_id,
-                analysis=analysis,
-                postgres_connection_string=postgres_connection_string,
-                file_enriched=file_enriched,
-            )
-
-        except Exception as parsing_error:
-            # If parsing fails, log the error and try to extract what we can
-            logger.warning(f"Error parsing DotNet output as model: {parsing_error}", pid=os.getpid())
-            logger.debug(f"Raw data: {raw_data}", pid=os.getpid())
-
-            # Try to extract object_id at minimum for logging
-            object_id = None
-            if hasattr(raw_data, "get"):
-                object_id = raw_data.get("object_id")
-            elif isinstance(raw_data, dict):
-                object_id = raw_data.get("object_id")
-
-            logger.error(f"Failed to process DotNet output for object_id: {object_id}", pid=os.getpid())
-
-    except Exception as e:
-        logger.exception(e, message="Error processing DotNet output event", pid=os.getpid())
+    await process_dotnet_event(event.data, postgres_connection_string)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")
 async def process_nosey_parker_results(event: CloudEvent):
     """Handler for incoming Nosey Parker scan results"""
-    try:
-        # Extract the raw data
-        raw_data = event.data
-        # logger.debug(f"Received NoseyParker output event: {raw_data}", pid=os.getpid())
-
-        # Try to parse the event data into our NoseyParkerOutput model
-        try:
-            # If it's already a dict, use the from_dict factory method
-            if isinstance(raw_data, dict):
-                nosey_output = NoseyParkerOutput.from_dict(raw_data)
-            # If it's a string, try to parse it as JSON
-            elif isinstance(raw_data, str):
-                import json
-
-                parsed_data = json.loads(raw_data)
-                nosey_output = NoseyParkerOutput.from_dict(parsed_data)
-            else:
-                logger.warning(f"Unexpected data type: {type(raw_data)}", pid=os.getpid())
-                return
-
-            # Now process the properly parsed output
-            object_id = nosey_output.object_id
-            matches = nosey_output.scan_result.matches
-            stats = nosey_output.scan_result.stats
-
-            logger.debug(f"Found {len(matches)} matches for object {object_id}", pid=os.getpid())
-
-            # Store the findings in the database using our helper function
-            await store_noseyparker_results(
-                object_id=object_id,
-                matches=matches,
-                scan_stats=stats,
-                postgres_connection_string=postgres_connection_string,
-            )
-
-        except Exception as parsing_error:
-            # If parsing fails, fall back to direct dictionary access
-            logger.warning(f"Error parsing NoseyParker output as model: {parsing_error}", pid=os.getpid())
-
-            if hasattr(raw_data, "get"):
-                object_id = raw_data.get("object_id")
-                scan_result = raw_data.get("scan_result", {})
-                matches = scan_result.get("matches", [])
-                stats = scan_result.get("stats", {})
-
-                logger.debug(f"Using dict access: Found {len(matches)} matches for {object_id}", pid=os.getpid())
-
-                # Store the findings using direct dict access
-                await store_noseyparker_results(
-                    object_id=f"{object_id}",
-                    matches=matches,
-                    scan_stats=stats,
-                    postgres_connection_string=postgres_connection_string,
-                )
-
-    except Exception as e:
-        logger.exception(e, message="Error processing Nosey Parker output event", pid=os.getpid())
+    await process_noseyparker_event(event.data, postgres_connection_string)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")
 async def process_bulk_enrichment_task(event: CloudEvent):
     """Handler for individual bulk enrichment tasks"""
     global workflow_manager
-    try:
-        data = event.data
-        enrichment_name = data.get("enrichment_name")
-        object_id = data.get("object_id")
-        bulk_id = data.get("bulk_id")
-
-        logger.debug(
-            "Received bulk enrichment task", enrichment_name=enrichment_name, object_id=object_id, bulk_id=bulk_id
-        )
-
-        # Check if module exists
-        if not workflow_runtime or not workflow_runtime.modules:
-            logger.error("Workflow runtime or modules not initialized")
-            return
-
-        if enrichment_name not in workflow_runtime.modules:
-            logger.error(f"Enrichment module '{enrichment_name}' not found")
-            return
-
-        # Prepare workflow input for single enrichment
-        workflow_input = {"enrichment_name": enrichment_name, "object_id": object_id, "bulk_id": bulk_id}
-
-        # This will block if we're at max capacity, providing natural backpressure
-        await workflow_manager.start_workflow_single_enrichment(workflow_input)
-
-    except Exception as e:
-        logger.exception("Error processing bulk enrichment task", cloud_event=event, error=str(e))
-
-
-@app.api_route("/healthz", methods=["GET", "HEAD"])
-async def healthcheck():
-    """Health check endpoint for Docker healthcheck."""
-    return {"status": "healthy"}
+    await process_bulk_enrichment_event(event.data, workflow_manager, workflow_runtime)
