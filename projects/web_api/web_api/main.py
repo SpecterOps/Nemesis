@@ -1342,6 +1342,35 @@ async def run_dotnet_analysis(request: dict = Body(..., description="Request con
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.post(
+    "/agents/translate",
+    tags=["system"],
+    summary="Run text translation",
+    description="Forward text translation request to agents service",
+)
+async def run_translation(request: dict = Body(..., description="Request containing object_id and optional target_language")):
+    """Forward text translation request to agents service."""
+    try:
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/translate"
+        response = requests.post(url, json=request, timeout=120)  # 2 minute timeout for LLM operations
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.warning(f"Failed to run translation: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
+    except requests.Timeout as e:
+        logger.error("Timeout running translation")
+        raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
+    except requests.RequestException as e:
+        logger.exception(e, message="Error connecting to agents service")
+        raise HTTPException(status_code=503, detail="Agents service unavailable") from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(e, message="Error running translation")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @app.get(
     "/system/available-services",
     tags=["system"],

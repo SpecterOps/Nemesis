@@ -260,8 +260,11 @@ const FileViewer = () => {
   const [summarizationStarted, setSummarizationStarted] = useState(false);
   const [credentialAnalysisStarted, setCredentialAnalysisStarted] = useState(false);
   const [dotnetAnalysisStarted, setDotnetAnalysisStarted] = useState(false);
+  const [translationStarted, setTranslationStarted] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showTranslateDialog, setShowTranslateDialog] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState('English');
   const [isLiteLLMAvailable, setIsLiteLLMAvailable] = useState(false);
 
   // Determine where we came from
@@ -622,6 +625,24 @@ const FileViewer = () => {
 
     // Check if file is a .NET assembly based on magic_type
     return fileData?.magic_type && fileData.magic_type.toLowerCase().includes('mono/.net assembly');
+  };
+
+  const shouldShowTranslationButton = () => {
+    if (!isLiteLLMAvailable || translationStarted) return false;
+
+    // Check if a text_translation transform already exists
+    const hasTranslationTransform = fileData?.transforms?.some(transform =>
+      transform.type === 'text_translation'
+    );
+
+    if (hasTranslationTransform) return false;
+
+    // Check if file is plaintext OR has an extracted_text transform
+    const hasExtractedTextTransform = fileData?.transforms?.some(transform =>
+      transform.type === 'extracted_text'
+    );
+
+    return fileData?.is_plaintext || hasExtractedTextTransform;
   };
 
   // Start with hex as fallback
@@ -1054,7 +1075,7 @@ useEffect(() => {
         objectIdToAnalyze = fileData.object_id;
       }
       console.error("objectIdToAnalyze", objectIdToAnalyze);
-      
+
       // Fire-and-forget: don't await the response since analysis runs in background
       fetch(`/api/agents/llm_credential_analysis`, {
         method: 'POST',
@@ -1086,7 +1107,7 @@ useEffect(() => {
 
   const handleConfirmAnalysis = async () => {
     setShowConfirmDialog(false);
-    
+
     try {
       setDotnetAnalysisStarted(true);
 
@@ -1119,6 +1140,51 @@ useEffect(() => {
 
   const handleCancelAnalysis = () => {
     setShowConfirmDialog(false);
+  };
+
+  const handleTranslation = () => {
+    // Show translation dialog
+    setShowTranslateDialog(true);
+  };
+
+  const handleConfirmTranslation = async () => {
+    setShowTranslateDialog(false);
+
+    try {
+      setTranslationStarted(true);
+
+      // Always use the original file's object_id
+      // The backend will figure out where to read the text from
+      const objectIdToTranslate = fileData.object_id;
+
+      // Fire-and-forget: don't await the response since translation runs in background
+      fetch(`/api/agents/translate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          object_id: objectIdToTranslate,
+          target_language: targetLanguage
+        })
+      }).then(response => {
+        if (!response.ok) {
+          console.error('Translation request failed:', response.status);
+        } else {
+          console.log('Translation started successfully');
+        }
+      }).catch(error => {
+        console.error('Error triggering translation:', error);
+      });
+
+    } catch (error) {
+      console.error('Error triggering translation:', error);
+    }
+  };
+
+  const handleCancelTranslation = () => {
+    setShowTranslateDialog(false);
+    setTargetLanguage('English'); // Reset to default
   };
 
   const renderContentTruncationAlert = () => {
@@ -1240,7 +1306,7 @@ useEffect(() => {
                   onClick={handleSummarization}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
                 >
-                  LLM-Summarize Document Text
+                  Summarize Document Text (via LLM)
                 </button>
               )}
               {shouldShowCredentialAnalysisButton() && (
@@ -1248,7 +1314,7 @@ useEffect(() => {
                   onClick={handleCredentialAnalysis}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
                 >
-                  Use LLM to Extract Credentials
+                  Extract Credentials (via LLM)
                 </button>
               )}
               {shouldShowDotNetAnalysisButton() && (
@@ -1256,7 +1322,15 @@ useEffect(() => {
                   onClick={handleDotNetAnalysis}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
                 >
-                  Analyze .NET Assembly (with a LLM)
+                  Analyze .NET Assembly (via LLM)
+                </button>
+              )}
+              {shouldShowTranslationButton() && (
+                <button
+                  onClick={handleTranslation}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
+                >
+                  Translate Document (via LLM)
                 </button>
               )}
             </div>
@@ -1415,7 +1489,7 @@ useEffect(() => {
         </Card>
       </div>
 
-      <LinkedFilesSection 
+      <LinkedFilesSection
         filePath={fileData?.path}
         source={fileData?.source}
       />
@@ -1463,6 +1537,39 @@ useEffect(() => {
           >
             OK
           </button>
+        </div>
+      </Dialog>
+
+      {/* Translation Dialog */}
+      <Dialog open={showTranslateDialog} onOpenChange={setShowTranslateDialog}>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Translate Document
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
+            Enter the target language for translation:
+          </p>
+          <input
+            type="text"
+            value={targetLanguage}
+            onChange={(e) => setTargetLanguage(e.target.value)}
+            className="w-full px-4 py-2 mb-6 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="English"
+          />
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={handleCancelTranslation}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmTranslation}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              Translate
+            </button>
+          </div>
         </div>
       </Dialog>
     </div>

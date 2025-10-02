@@ -79,6 +79,10 @@ class SummaryResponse(BaseModel):
     """Response from text summarization agent."""
     summary: str = Field(..., description="Generated summary of the text content")
 
+class TranslationResponse(BaseModel):
+    """Response from text translation agent."""
+    translated_text: str = Field(..., description="Translated text content in the target language")
+
 class DotNetAnalysisResponse(BaseModel):
     """Response from .NET analysis agent."""
     analysis: str = Field(..., description="Detailed analysis of the .NET assembly")
