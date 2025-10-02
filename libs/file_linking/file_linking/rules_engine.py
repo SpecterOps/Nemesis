@@ -335,7 +335,7 @@ class FileLinkingEngine:
 
                 linkings_created += 1
 
-                logger.warning(
+                logger.debug(
                     "Created programmatic file linking",
                     source_path=source_file_path,
                     linked_path=linked_path,

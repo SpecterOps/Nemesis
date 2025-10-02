@@ -17,6 +17,12 @@ Ensure your machine meets the following requirements:
   - Docker version 28.0.0 or higher is recommended. See [Docker's installation instructions](https://docs.docker.com/engine/install/) for instructions on installing Docker. Running the Docker Engine on Linux or on OS X via Docker Desktop is recommended. If using Docker Desktop, ensure that the VM is configured with sufficient RAM/Disk/swap.
 
 
+**NOTE:** for multi-language support for OCR/document processing, set the `TIKA_OCR_LANGUAGES` ENV var before launching with the [Tesseract language code](https://github.com/tesseract-ocr/tessdata):
+```bash
+$ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
+```
+
+
 ### Step 1: Clone the Nemesis Repository
 ```bash
 git clone https://github.com/SpecterOps/Nemesis

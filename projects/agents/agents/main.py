@@ -16,6 +16,7 @@ from agents.schemas import TriageCategory, TriageRequest, TriageResult
 from agents.tasks.credential_analyzer import analyze_credentials
 from agents.tasks.dotnet_analyzer import analyze_dotnet_assembly
 from agents.tasks.summarizer import summarize_text
+from agents.tasks.translate import translate_text
 from dapr.clients import DaprClient
 
 # from dapr.ext.fastapi import DaprApp # needed if we're doing pub/sub
@@ -580,6 +581,27 @@ def run_dotnet_analysis(request: dict):
 
     except Exception as e:
         logger.exception(e, message="Error running .NET analysis")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/agents/translate")
+def run_translation(request: dict):
+    """Run text translation on a file."""
+    try:
+        object_id = request.get("object_id")
+        if not object_id:
+            return {"success": False, "error": "object_id is required"}
+
+        target_language = request.get("target_language", "English")
+
+        # Create a mock workflow context for compatibility
+        mock_ctx = type("MockContext", (), {})()
+
+        result = translate_text(mock_ctx, {"object_id": object_id, "target_language": target_language})
+        return result
+
+    except Exception as e:
+        logger.exception(e, message="Error running translation")
         return {"success": False, "error": str(e)}
 
 

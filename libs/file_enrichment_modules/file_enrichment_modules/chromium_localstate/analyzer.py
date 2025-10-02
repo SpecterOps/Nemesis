@@ -56,8 +56,8 @@ rule Chrome_Local_State
 
         file_enriched = get_file_enriched(object_id)
 
-        # Check if filename is exactly "Local State" and JSON magic type
-        if not (file_enriched.file_name == "Local State" and "json" in file_enriched.magic_type.lower()):
+        # Check if file is < 5 megs and JSON magic type
+        if not ((file_enriched.size < 5000000) and ("json" in file_enriched.magic_type.lower())):
             return False
 
         if file_path:

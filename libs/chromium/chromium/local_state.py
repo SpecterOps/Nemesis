@@ -3,6 +3,7 @@
 import base64
 import json
 import ntpath
+import asyncio
 
 import psycopg
 from common.logger import get_logger
@@ -192,7 +193,7 @@ async def _insert_state_keys(
                                 app_bound_key_dec = derive_abe_key(abe_parsed)
                                 if app_bound_key_dec:
                                     app_bound_key_is_decrypted = True
-                                    logger.warning(
+                                    logger.debug(
                                         "Successfully derived ABE key",
                                         version=abe_parsed.get("version"),
                                         system_masterkey_guid=app_bound_key_system_masterkey_guid,

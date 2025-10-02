@@ -57,11 +57,57 @@ with DaprClient() as client:
 def init_tika():
     if not jpype.isJVMStarted():
         jpype.startJVM(classpath=["/tika-server-standard.jar"])
-        # Create Tika instance using Java class directly
+
+        # Import Java classes
+        TikaConfig = jpype.JClass("org.apache.tika.config.TikaConfig")
         Tika = jpype.JClass("org.apache.tika.Tika")
         File = jpype.JClass("java.io.File")
-        return Tika(), File
 
+        # Get OCR language from environment variable
+        #   Note: Use underscores for language types, not hyphens (chi_sim not chi-sim)
+        ocr_languages = os.getenv("TIKA_OCR_LANGUAGES", "eng").replace("-", "_").replace(" ", "+")
+        logger.info(f"Configuring Tika with OCR languages: {ocr_languages}")
+
+        # Read the static XML config and substitute the language parameter
+        with open("/tika-config.xml", "r") as f:
+            config_xml = f.read()
+
+        # Replace the hardcoded language with the environment variable value
+        config_xml = config_xml.replace(
+            ">eng<",
+            f">{ocr_languages}<"
+        )
+
+        # Write the modified config to a temporary file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as temp_config:
+            temp_config.write(config_xml)
+            temp_config_path = temp_config.name
+
+        try:
+            # Load Tika with the modified configuration
+            config = TikaConfig(File(temp_config_path))
+            tika_instance = Tika(config)
+            logger.info(f"Tika initialized successfully with OCR languages: {ocr_languages}")
+        except Exception as e:
+            logger.warning(f"Failed to load custom Tika config: {e}, falling back to original config")
+            # Fall back to loading the original unmodified config file
+            try:
+                config = TikaConfig(File("/tika-config.xml"))
+                tika_instance = Tika(config)
+                logger.info("Tika initialized with original config file")
+            except Exception as e2:
+                logger.error(f"Failed to load original Tika config: {e2}")
+                # Last resort - use default Tika without any config file
+                tika_instance = Tika()
+                logger.info("Tika initialized with default configuration")
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(temp_config_path)
+            except:
+                pass
+
+        return tika_instance, File
 
 tika, JavaFile = init_tika()
 

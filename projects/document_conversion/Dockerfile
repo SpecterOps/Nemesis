@@ -3,17 +3,27 @@ ARG PYTHON_BASE_DEV_IMAGE=nemesis-python-base-dev
 ARG PYTHON_BASE_PROD_IMAGE=nemesis-python-base-prod
 FROM ${PYTHON_BASE_DEV_IMAGE} AS base
 
-# Install dependencies in a single RUN command to reduce layers
+ARG TIKA_OCR_LANGUAGES="eng"
+ARG TIKA_VERSION="3.1.0"
+
+# Install dependencies including multiple Tesseract language packs
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         openjdk-17-jre-headless \
         wget \
         tesseract-ocr \
-        tesseract-ocr-eng \
         libpq-dev \
         postgresql-client \
-        binutils && \
-    wget https://archive.apache.org/dist/tika/3.1.0/tika-server-standard-3.1.0.jar -O /tika-server-standard.jar && \
+        binutils \
+        # Install fonts for better CJK support
+        fonts-noto-cjk \
+        fonts-noto-color-emoji && \
+    # Install Tesseract language packs dynamically
+    for lang in ${TIKA_OCR_LANGUAGES}; do \
+        apt-get install -y --no-install-recommends tesseract-ocr-${lang} || echo "Warning: Failed to install tesseract-ocr-${lang}"; \
+    done && \
+    # Download Tika server
+    wget https://archive.apache.org/dist/tika/${TIKA_VERSION}/tika-server-standard-${TIKA_VERSION}.jar -O /tika-server-standard.jar && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -64,16 +74,24 @@ RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
 # FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
+ARG TIKA_OCR_LANGUAGES="eng"
+
 # Install dependencies in a single RUN command to reduce layers
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         openjdk-17-jre-headless \
         wget \
         tesseract-ocr \
-        tesseract-ocr-eng \
         libpq-dev \
         postgresql-client \
-        binutils && \
+        binutils \
+        # Install fonts for better CJK support
+        fonts-noto-cjk \
+        fonts-noto-color-emoji && \
+    # Install Tesseract language packs dynamically
+    for lang in ${TIKA_OCR_LANGUAGES}; do \
+        apt-get install -y --no-install-recommends tesseract-ocr-${lang} || echo "Warning: Failed to install tesseract-ocr-${lang}"; \
+    done && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

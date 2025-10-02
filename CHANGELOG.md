@@ -5,6 +5,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.1.4]
+
+### Added
+
+- Postgres support for DPAPI backend
+- More explanation for DPAPI decryption examples
+- Cookie/Login Data DPAPI value decryption, display in frontend
+- Added `dpapi_masterkey` file enrichment module
+- Severity filter checkboxes for frontend
+- DPAPI decryption benchmarks
+- Multi-language Tika OCR support (`TIKA_OCR_LANGUAGES` ENV var, see `compose.yaml`)
+- Text translation agent
+
+### Changed
+
+- Now use DPAPIck3 for blob decryption
+- Updated DAPR version
+- DPAPI_SYSTEM key pulled from registry parsing is now registered with the backend
+- Updated category filters for frontend
+- Collapsed inbound/outbound labels for linked files in dashboard
+- Update Prometheus endpoints
+- Chromium Local State, Cookies, and Login Data files now don't require hard paths
+
+### Fixed
+
+- Properly use entropy for DPAPI blob decryption
+- Lots of async issues
+- Fixed tag search issue
+- Fix to keep strings.txt from sqlite dbs from processing
+
+
 ## [2.1.3]
 
 ### Added

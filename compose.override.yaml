@@ -124,6 +124,8 @@ services:
       context: .
       dockerfile: ./projects/document_conversion/Dockerfile
       target: dev
+      args:
+        - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES}
     volumes:
       - ./libs/:/src/libs/
       - ./projects/document_conversion/document_conversion:/src/projects/document_conversion/document_conversion
