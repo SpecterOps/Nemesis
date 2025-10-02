@@ -131,13 +131,42 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
                     result = cur.fetchone()
                     if result:
-                        print(f"XXX result: {result}")
                         return str(result["object_id"])  # Convert UUID to string
 
         except Exception as e:
             logger.error(f"Failed to find existing hive {target_hive_path}: {e}")
 
         return None
+
+    def _get_existing_hive_path(self, file_enriched, standard_path: str) -> str:
+        """Get the actual path of an existing hive, or return the standard path if not found."""
+        # First try to find an existing hive
+        object_id = self._find_existing_hive(file_enriched, standard_path)
+
+        if object_id:
+            # Found an existing hive, get its actual path from the database
+            try:
+                with psycopg.connect(self._conninfo, row_factory=dict_row) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT path
+                            FROM files_enriched
+                            WHERE object_id = %s
+                            LIMIT 1
+                        """,
+                            (object_id,),
+                        )
+
+                        result = cur.fetchone()
+                        if result and result["path"]:
+                            logger.debug(f"Found existing hive at {result['path']} instead of {standard_path}")
+                            return result["path"]
+            except Exception as e:
+                logger.error(f"Failed to get path for existing hive {object_id}: {e}")
+
+        # Fall back to standard path if not found or on error
+        return standard_path
 
     def _create_proactive_file_linkings(self, file_enriched, hive_type: str):
         """Create proactive file linkings based on hive type."""
@@ -152,8 +181,12 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         try:
             if hive_type == "SYSTEM":
                 # Link to SAM and SECURITY hives
-                sam_path = f"{drive}\\Windows\\System32\\Config\\SAM"
-                security_path = f"{drive}\\Windows\\System32\\Config\\SECURITY"
+                # First check if they exist at non-standard locations
+                sam_standard_path = f"{drive}\\Windows\\System32\\Config\\SAM"
+                security_standard_path = f"{drive}\\Windows\\System32\\Config\\SECURITY"
+
+                sam_path = self._get_existing_hive_path(file_enriched, sam_standard_path)
+                security_path = self._get_existing_hive_path(file_enriched, security_standard_path)
 
                 add_file_linking(
                     source=file_enriched.source,
@@ -173,7 +206,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
             elif hive_type in ["SAM", "SECURITY"]:
                 # Link to SYSTEM hive
-                system_path = f"{drive}\\Windows\\System32\\Config\\SYSTEM"
+                # First check if it exists at a non-standard location
+                system_standard_path = f"{drive}\\Windows\\System32\\Config\\SYSTEM"
+                system_path = self._get_existing_hive_path(file_enriched, system_standard_path)
 
                 add_file_linking(
                     source=file_enriched.source,
