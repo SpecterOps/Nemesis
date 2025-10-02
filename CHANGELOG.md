@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- DPAPI decryption benchmarks
 - Postgres support for DPAPI backend
 - More explanation for DPAPI decryption examples
 - Cookie/Login Data DPAPI value decryption, display in frontend
 - Added `dpapi_masterkey` file enrichment module
 - Severity filter checkboxes for frontend
+- DPAPI decryption benchmarks
+- Multi-language Tika OCR support (`TIKA_OCR_LANGUAGES` ENV var, see `compose.yaml`)
 
 ### Changed
 

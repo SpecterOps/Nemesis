@@ -532,6 +532,12 @@ services:
       - DAPR_GRPC_PORT=50002
       - DAPR_HTTP_PORT=3501
       - TIKA_CONFIG=/tika-config.xml
+      # If you want to have additional language packs supported (see https://github.com/tesseract-ocr/tessdata for a full list):
+      #   $ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
+      # To change the default:
+      #   - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng chi_sim chi_tra jpn rus deu spa}
+      # Note: each package installed will increase the image size!
+      - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng}
       - MAX_PARALLEL_WORKFLOWS=${MAX_PARALLEL_WORKFLOWS:-5}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
     healthcheck:
