@@ -17,6 +17,7 @@ from .helpers import (
     get_state_key_bytes,
     get_state_key_id,
     parse_chromium_file_path,
+    try_decrypt_with_all_keys
 )
 
 logger = structlog.get_logger(module=__name__)
@@ -117,32 +118,61 @@ def _insert_logins(
             # Get state key ID for key/abe encryption
             state_key_id = None
             if encryption_type in ["key", "abe"]:
-                state_key_id = get_state_key_id(file_enriched.source, username, browser, pg_conn)
-                if state_key_id:
-                    # Retrieve the pre-processed state key for decryption
-                    state_key_bytes = get_state_key_bytes(state_key_id, encryption_type, pg_conn)
-                    if state_key_bytes:
-                        try:
-                            password_dec_bytes = decrypt_chrome_string(password_value, state_key_bytes, encryption_type)
-                            if password_dec_bytes:
-                                # For passwords, may need to strip offset bytes depending on version
-                                if encryption_type == "key" and len(password_dec_bytes) > 32:
-                                    # v10/v11 passwords may have 32-byte prefix + 16-byte suffix
-                                    password_dec_bytes = password_dec_bytes[32:-16]
-                                elif encryption_type == "key" and len(password_dec_bytes) > 16:
-                                    # Or just 16-byte suffix
-                                    password_dec_bytes = password_dec_bytes[:-16]
-                                # v20 passwords typically don't have offset like cookies
+                # Try primary approach: get state key based on username/browser
+                if username:  # Only try primary approach if username was extracted
+                    state_key_id = get_state_key_id(file_enriched.source, username, browser, pg_conn)
+                    if state_key_id:
+                        # Retrieve the pre-processed state key for decryption
+                        state_key_bytes = get_state_key_bytes(state_key_id, encryption_type, pg_conn)
+                        if state_key_bytes:
+                            try:
+                                password_dec_bytes = decrypt_chrome_string(password_value, state_key_bytes, encryption_type)
+                                if password_dec_bytes:
+                                    # For passwords, may need to strip offset bytes depending on version
+                                    if encryption_type == "key" and len(password_dec_bytes) > 32:
+                                        # v10/v11 passwords may have 32-byte prefix + 16-byte suffix
+                                        password_dec_bytes = password_dec_bytes[32:-16]
+                                    elif encryption_type == "key" and len(password_dec_bytes) > 16:
+                                        # Or just 16-byte suffix
+                                        password_dec_bytes = password_dec_bytes[:-16]
+                                    # v20 passwords typically don't have offset like cookies
 
-                                password_value_dec = password_dec_bytes.decode("utf-8", errors="replace")
-                                is_decrypted = True
-                        except Exception as e:
-                            logger.debug(
-                                "Failed to decrypt password with state key",
-                                state_key_id=state_key_id,
-                                encryption_type=encryption_type,
-                                error=str(e),
-                            )
+                                    password_value_dec = password_dec_bytes.decode("utf-8", errors="replace")
+                                    is_decrypted = True
+                            except Exception as e:
+                                logger.debug(
+                                    "Failed to decrypt password with state key",
+                                    state_key_id=state_key_id,
+                                    encryption_type=encryption_type,
+                                    error=str(e),
+                                )
+
+                # Backup approach: try all state keys from the same source if primary failed
+                if not is_decrypted:
+                    logger.debug("Primary decryption failed, trying backup approach with all keys from source",
+                               source=file_enriched.source,
+                               encryption_type=encryption_type)
+                    backup_decrypted_bytes, backup_state_key_id = try_decrypt_with_all_keys(
+                        password_value, file_enriched.source, encryption_type, pg_conn
+                    )
+                    if backup_decrypted_bytes and backup_state_key_id:
+                        # Apply the same offset handling as above
+                        if encryption_type == "abe" and len(backup_decrypted_bytes) > 32:
+                            # v20 cookies typically have 32-byte offset
+                            backup_decrypted_bytes = backup_decrypted_bytes[32:]
+                        elif encryption_type == "key" and len(backup_decrypted_bytes) > 48:
+                            # v10/v11 cookies may have 32-byte prefix + 16-byte suffix
+                            backup_decrypted_bytes = backup_decrypted_bytes[32:-16]
+                        elif encryption_type == "key" and len(backup_decrypted_bytes) > 16:
+                            # Or just 16-byte suffix
+                            backup_decrypted_bytes = backup_decrypted_bytes[:-16]
+
+                        password_value_dec = backup_decrypted_bytes.decode('utf-8', errors='replace')
+                        is_decrypted = True
+                        state_key_id = backup_state_key_id
+                        logger.debug("Successfully decrypted cookie using backup approach",
+                                  state_key_id=backup_state_key_id)
+
 
             login_data = {
                 "originating_object_id": file_enriched.object_id,

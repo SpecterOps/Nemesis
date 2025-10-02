@@ -208,6 +208,148 @@ def get_state_key_bytes(state_key_id: int, encryption_type: str, pg_conn=None) -
             logger.warning("Failed to lookup state key bytes", error=str(e))
             return None
 
+def get_all_state_keys_from_source(source: str, pg_conn=None) -> list[dict]:
+    """Get all decrypted state keys from the same source.
+
+    Args:
+        source: Source value
+        pg_conn: existing Postgres connection
+
+    Returns:
+        List of dictionaries containing state key information
+    """
+    state_keys = []
+
+    if pg_conn:
+        try:
+            with pg_conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, username, browser, key_bytes_dec, key_is_decrypted,
+                              app_bound_key_dec, app_bound_key_is_decrypted
+                       FROM chromium.state_keys WHERE source = %s""",
+                    (source,),
+                )
+                results = cur.fetchall()
+                for result in results:
+                    state_key_info = {
+                        'id': result[0],
+                        'username': result[1],
+                        'browser': result[2],
+                        'key_bytes_dec': result[3] if result[4] else None,  # Only if decrypted
+                        'app_bound_key_dec': result[5] if result[6] else None,  # Only if decrypted
+                    }
+                    state_keys.append(state_key_info)
+                return state_keys
+        except Exception as e:
+            logger.warning("Failed to lookup all state keys from source", error=str(e))
+            return []
+    else:
+        try:
+            conn_str = get_postgres_connection_str()
+            with psycopg.connect(conn_str) as pg_conn:
+                with pg_conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT id, username, browser, key_bytes_dec, key_is_decrypted,
+                                  app_bound_key_dec, app_bound_key_is_decrypted
+                           FROM chromium.state_keys WHERE source = %s""",
+                        (source,),
+                    )
+                    results = cur.fetchall()
+                    for result in results:
+                        state_key_info = {
+                            'id': result[0],
+                            'username': result[1],
+                            'browser': result[2],
+                            'key_bytes_dec': result[3] if result[4] else None,  # Only if decrypted
+                            'app_bound_key_dec': result[5] if result[6] else None,  # Only if decrypted
+                        }
+                        state_keys.append(state_key_info)
+                    return state_keys
+        except Exception as e:
+            logger.warning("Failed to lookup all state keys from source", error=str(e))
+            return []
+
+
+def is_valid_text(data: bytes) -> bool:
+    """Check if decrypted bytes represent valid ASCII or UTF-8 text.
+
+    Args:
+        data: Bytes to validate
+
+    Returns:
+        True if data is valid text, False otherwise
+    """
+    if not data:
+        return False
+
+    try:
+        # Try to decode as UTF-8
+        text = data.decode('utf-8')
+        # Check if it contains mostly printable characters
+        printable_chars = sum(1 for c in text if c.isprintable() or c.isspace())
+        return printable_chars / len(text) > 0.8  # At least 80% printable
+    except UnicodeDecodeError:
+        try:
+            # Try ASCII as fallback
+            text = data.decode('ascii')
+            printable_chars = sum(1 for c in text if c in '\x20-\x7e\t\n\r')
+            return printable_chars / len(text) > 0.8
+        except UnicodeDecodeError:
+            return False
+
+
+def try_decrypt_with_all_keys(encrypted_value: bytes, source: str, encryption_type: str, pg_conn=None) -> tuple[bytes | None, int | None]:
+    """Try to decrypt with all available state keys from the same source.
+
+    Args:
+        encrypted_value: Raw encrypted value bytes
+        source: Source value to look up keys from
+        encryption_type: Either 'key' or 'abe'
+        pg_conn: existing Postgres connection
+
+    Returns:
+        Tuple of (decrypted_bytes, state_key_id) if successful, (None, None) otherwise
+    """
+    if encryption_type not in ["key", "abe"]:
+        return None, None
+
+    state_keys = get_all_state_keys_from_source(source, pg_conn)
+
+    for state_key in state_keys:
+        key_bytes = state_key.get('key_bytes_dec') if encryption_type == "key" else state_key.get('app_bound_key_dec')
+
+        if not key_bytes:
+            continue
+
+        try:
+            decrypted_bytes = decrypt_chrome_string(encrypted_value, key_bytes, encryption_type)
+            if decrypted_bytes:
+                # Apply offset handling for cookies
+                if encryption_type == "abe" and len(decrypted_bytes) > 32:
+                    # v20 cookies typically have 32-byte offset
+                    test_bytes = decrypted_bytes[32:]
+                elif encryption_type == "key" and len(decrypted_bytes) > 48:
+                    # v10/v11 cookies may have 32-byte prefix + 16-byte suffix
+                    test_bytes = decrypted_bytes[32:-16]
+                elif encryption_type == "key" and len(decrypted_bytes) > 16:
+                    # Or just 16-byte suffix
+                    test_bytes = decrypted_bytes[:-16]
+                else:
+                    test_bytes = decrypted_bytes
+
+                # Check if the result is valid text
+                if is_valid_text(test_bytes):
+                    logger.debug("Successfully decrypted with backup key",
+                               state_key_id=state_key['id'],
+                               username=state_key['username'],
+                               browser=state_key['browser'])
+                    return decrypted_bytes, state_key['id']
+        except Exception as e:
+            # Continue trying other keys
+            continue
+
+    return None, None
+
 
 def parse_abe_blob(abe_data: bytes) -> dict | None:
     """Parse ABE (App-Bound Encryption) blob data.

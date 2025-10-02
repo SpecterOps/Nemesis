@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Severity filter checkboxes for frontend
 - DPAPI decryption benchmarks
 - Multi-language Tika OCR support (`TIKA_OCR_LANGUAGES` ENV var, see `compose.yaml`)
+- Text translation agent
 
 ### Changed
 
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated category filters for frontend
 - Collapsed inbound/outbound labels for linked files in dashboard
 - Update Prometheus endpoints
+- Chromium Local State, Cookies, and Login Data files now don't require hard paths
 
 ### Fixed
 

@@ -55,8 +55,7 @@ rule Chrome_Cookies_Tables
 
         file_enriched = get_file_enriched(object_id)
 
-        # Check if filename is exactly "Cookies" and SQLite magic type
-        if not (file_enriched.file_name == "Cookies" and "sqlite 3.x database" in file_enriched.magic_type.lower()):
+        if not "sqlite 3.x database" in file_enriched.magic_type.lower():
             return False
 
         if file_path:
