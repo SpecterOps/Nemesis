@@ -2,6 +2,9 @@
 
 import asyncio
 import base64
+
+# Configure standard Python logger for nemesis_dpapi.eventing to DEBUG level
+import logging
 import urllib.parse
 from typing import Annotated
 from uuid import UUID
@@ -19,7 +22,7 @@ from common.models2.dpapi import (
 )
 from Crypto.Hash import SHA1
 from dapr.clients import DaprClient
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from nemesis_dpapi import (
     DomainBackupKey,
     DpapiManager,
@@ -30,31 +33,76 @@ from nemesis_dpapi import (
     Pbkdf2Hash,
     Sha1Hash,
 )
-from nemesis_dpapi.eventing import DaprPublisher
+from nemesis_dpapi.eventing import (
+    DaprDpapiEventPublisher,
+    DpapiEvent,
+    DpapiObserver,
+    NewEncryptedMasterKeyEvent,
+    NewPlaintextMasterKeyEvent,
+)
 from nemesis_dpapi.masterkey_decryptor import MasterKeyDecryptorService
 
+logging.getLogger("nemesis_dpapi.eventing").setLevel(logging.DEBUG)
+logging.getLogger("nemesis_dpapi.manager").setLevel(logging.DEBUG)
 logger = get_logger(__name__)
 
-with DaprClient() as client:
-    secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+
+class PlaintextMasterKeyMonitor(DpapiObserver):
+    """Observer that monitors for new plaintext masterkeys."""
+
+    async def update(self, evnt: DpapiEvent) -> None:
+        """Called when a DPAPI event occurs."""
+        if isinstance(evnt, NewPlaintextMasterKeyEvent):
+            logger.warning(
+                "New plaintext masterkey detected",
+                event_type=type(evnt).__name__,
+                data=evnt,
+            )
+        elif isinstance(evnt, NewEncryptedMasterKeyEvent):
+            logger.warning(
+                "!!!!!!!!!!!!!!!!!!!! Received NewEncryptedMasterKeyEvent",
+                event_type=type(evnt).__name__,
+                data=evnt,
+            )
+        else:
+            logger.warning(
+                "Received unhandled DPAPI event",
+                event_type=type(evnt).__name__,
+                data=evnt,
+            )
 
 
-async def get_dpapi_manager() -> DpapiManager:
-    client = DaprClient()
-    return DpapiManager(
-        storage_backend=postgres_connection_string,
-        auto_decrypt=True,
-        publisher=DaprPublisher(client),
-    )
+def get_event_loop(request: Request):
+    return request.app.state.event_loop
+
+
+AsyncLoopDep = Annotated[asyncio.AbstractEventLoop, Depends(get_event_loop)]
+
+
+async def get_dpapi_manager(request: Request):
+    """Dependency that returns the global DpapiManager instance."""
+    manager = request.app.state.dpapi_manager
+    if manager is None:
+        raise RuntimeError("DpapiManager not initialized")
+    return manager
 
 
 DpapiManagerDep = Annotated[DpapiManager, Depends(get_dpapi_manager)]
 
 
-async def dpapi_background_monitor() -> None:
+async def get_masterkey_decryptor(dpapi_manager: DpapiManagerDep) -> MasterKeyDecryptorService:
+    return MasterKeyDecryptorService(dpapi_manager)
+
+
+MasterKeyDecryptorDep = Annotated[MasterKeyDecryptorService, Depends(get_masterkey_decryptor)]
+
+
+async def dpapi_background_monitor(dpapi_manager: DpapiManager) -> None:
     logger.info("Starting DPAPI background monitor task")
-    dpapi_manager = await get_dpapi_manager()
+
+    monitor = PlaintextMasterKeyMonitor()
+    logger.info("Subscribing PlaintextMasterKeyMonitor to DPAPI events")
+    await dpapi_manager.subscribe(monitor)
 
     # Add some sample masterkeys for testing
     # for i in range(64):
@@ -82,6 +130,7 @@ async def dpapi_background_monitor() -> None:
     #     except Exception as e:
     #         logger.error(f"Error adding sample masterkey {i + 1}/256: {e}")
 
+    logger.info("Entering DPAPI background monitor loop")
     while True:
         try:
             num_masterkeys = await dpapi_manager.get_all_masterkeys()
@@ -103,11 +152,6 @@ async def dpapi_background_monitor() -> None:
         await asyncio.sleep(5)
 
 
-# Get database connection string
-with DaprClient() as client:
-    secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
-
 # Create the router directly - no prefix to maintain original URLs
 dpapi_router = APIRouter(tags=["dpapi"])
 
@@ -115,6 +159,7 @@ dpapi_router = APIRouter(tags=["dpapi"])
 @dpapi_router.post("/dpapi/credentials")
 async def submit_dpapi_credential(
     dpapi_manager: DpapiManagerDep,
+    decryptor: MasterKeyDecryptorDep,
     request: DpapiCredentialRequest = Body(..., description="The DPAPI credential data"),
 ):
     """Submit DPAPI credential for masterkey decryption."""
@@ -132,7 +177,7 @@ async def submit_dpapi_credential(
             elif isinstance(
                 request, (PasswordCredentialKey, NtlmHashCredentialKey, Sha1CredentialKey, Pbkdf2StrongCredentialKey)
             ):
-                result = await _handle_password_based_credential(dpapi_manager, request)
+                result = await _handle_password_based_credential(decryptor, request)
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported credential type: {request.type}")
 
@@ -220,11 +265,9 @@ async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: 
 
 
 async def _handle_password_based_credential(
-    dpapi_manager: DpapiManager,
+    decryptor: MasterKeyDecryptorService,
     request: PasswordCredentialKey | NtlmHashCredentialKey | Sha1CredentialKey | Pbkdf2StrongCredentialKey,
 ):
-    decryptor = MasterKeyDecryptorService(dpapi_manager)
-
     if isinstance(request, PasswordCredentialKey):
         c = Password(value=request.value)
     elif isinstance(request, NtlmHashCredentialKey):

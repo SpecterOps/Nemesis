@@ -72,7 +72,7 @@ async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
             for mk in decrypted_keys_final:
                 print(f"  Decrypted: {mk.guid} ({len(mk.plaintext_key or b'')} bytes)")
         else:
-            print("✗ No masterkeys were auto-decrypted")
+            print("✗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
 
 
 async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data):
@@ -128,7 +128,7 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
             for mk in decrypted_keys_after:
                 print(f"  Decrypted: {mk.guid} ({len(mk.plaintext_key or b'')} bytes)")
         else:
-            print("✗ No masterkeys were auto-decrypted")
+            print("✗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
 
 
 async def auto_decryption_disabled(mk_domain, backup_key_data):
@@ -168,6 +168,10 @@ async def auto_decryption_disabled(mk_domain, backup_key_data):
 
         if len(decrypted_keys_after) == len(decrypted_keys_before):
             print("✓ Auto-decryption correctly disabled - no automatic decryption occurred")
+        else:
+            print(
+                "✗ Some masterkeys were decrypted despite auto-decryption being disabled! This is unexpected and something is broken!"
+            )
 
 
 async def main():

@@ -44,7 +44,7 @@ from nemesis_dpapi.eventing import (
 class MyDpapiEventMonitor(DpapiObserver):
     """Class that observes DPAPI events."""
 
-    def update(self, event: DpapiEvent) -> None:
+    async def update(self, event: DpapiEvent) -> None:
         """Handler for different types of DPAPI events."""
 
         if isinstance(event, NewEncryptedMasterKeyEvent):
@@ -88,7 +88,7 @@ async def main() -> None:
     async with DpapiManager(storage_backend="memory") as manager:
         # Register custom observer
         monitor = MyDpapiEventMonitor()
-        manager.subscribe(monitor)
+        await manager.subscribe(monitor)
 
         # Add masterkeys
         domain_mk_guid = UUID("12345678-1234-5678-9abc-123456789abc")

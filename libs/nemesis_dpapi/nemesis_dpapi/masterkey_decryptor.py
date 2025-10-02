@@ -51,6 +51,8 @@ class MasterKeyDecryptorService:
             encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
 
             decrypted_count = 0
+
+            logger.info(f"Attempting to decrypt {len(encrypted_masterkeys)} encrypted master keys")
             for masterkey in encrypted_masterkeys:
                 if not masterkey.encrypted_key_usercred:
                     continue

@@ -18,7 +18,6 @@ from dapr.clients import DaprClient
 from dapr.ext.workflow.logger.options import LoggerOptions
 from file_enrichment_modules.module_loader import ModuleLoader
 from file_linking import FileLinkingEngine
-from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)
 
@@ -34,6 +33,7 @@ activity_functions = {}
 download_path = "/tmp/"
 storage = StorageMinio()
 file_linking_engine: FileLinkingEngine = None
+dapr_client_for_dpapi: DaprClient = None
 
 dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
 gotenberg_url = f"http://localhost:{dapr_port}/v1.0/invoke/gotenberg/method/forms/libreoffice/convert"
@@ -49,7 +49,13 @@ with DaprClient() as client:
 if not postgres_connection_string.startswith("postgres://"):
     raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager")
 
-dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
+# Create global DaprClient for DPAPI manager
+# This client will be used throughout the application lifecycle
+# dapr_client_for_dpapi = DaprClient()
+# dpapi_manager = DpapiManager(
+#     storage_backend=postgres_connection_string,
+#     publisher=DaprDpapiEventPublisher(dapr_client_for_dpapi),
+# )
 
 ##########################################
 #
@@ -873,12 +879,12 @@ async def initialize_workflow_runtime():
     }
 
     # janky pass-through for any modules that have a 'dpapi_manager' property
-    for module in workflow_runtime.modules.values():
-        if hasattr(module, "dpapi_manager") and module.dpapi_manager is None:
-            logger.debug(f"Setting 'dpapi_manager' for '{module}'")
-            module.dpapi_manager = dpapi_manager  # type: ignore
-        elif hasattr(workflow_runtime, "dpapi_manager"):
-            logger.debug(f"'dpapi_manager' already set for for '{module}'")
+    # for module in workflow_runtime.modules.values():
+    #     if hasattr(module, "dpapi_manager") and module.dpapi_manager is None:
+    #         logger.debug(f"Setting 'dpapi_manager' for '{module}'")
+    #         module.dpapi_manager = dpapi_manager  # type: ignore
+    #     elif hasattr(workflow_runtime, "dpapi_manager"):
+    #         logger.debug(f"'dpapi_manager' already set for for '{module}'")
 
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)

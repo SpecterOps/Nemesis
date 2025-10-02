@@ -551,17 +551,18 @@ class LsassDumpParser(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
 
+        loop = None
         try:
-            # Check if there's already a running loop
             loop = asyncio.get_running_loop()
-            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
         except RuntimeError:
+            # No running loop
+            pass
+
+        if loop:
+            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
+        else:
             # No running loop, create a new event loop
-            try:
-                return asyncio.run(self._process_async(object_id, file_path))
-            except Exception as e:
-                logger.exception(e, message="Error processing LSASS dump file")
-                return None
+            return asyncio.run(self._process_async(object_id, file_path))
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""

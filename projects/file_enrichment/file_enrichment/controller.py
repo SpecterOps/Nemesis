@@ -15,6 +15,8 @@ from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI
 from file_enrichment.dotnet import store_dotnet_results
 from file_enrichment.noseyparker import store_noseyparker_results
+from nemesis_dpapi import DpapiManager as NemesisDpapiManager
+from nemesis_dpapi.eventing import DaprDpapiEventPublisher
 from psycopg_pool import ConnectionPool
 
 from .routes.dpapi import dpapi_background_monitor, dpapi_router
@@ -262,6 +264,21 @@ async def lifespan(app: FastAPI):
 
     logger.info("Initializing workflow runtime...", pid=os.getpid())
 
+    app.state.event_loop = asyncio.get_running_loop()
+
+    # Initialize global DpapiManager for the application lifetime
+    with DaprClient() as dapr_client:
+        secret = dapr_client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
+        dpapi_postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+
+    dpapi_manager = NemesisDpapiManager(
+        storage_backend=dpapi_postgres_connection_string,
+        auto_decrypt=True,
+        publisher=DaprDpapiEventPublisher(DaprClient(), loop=app.state.event_loop),
+    )
+    await dpapi_manager.__aenter__()
+    app.state.dpapi_manager = dpapi_manager
+
     try:
         # Initialize workflow runtime and modules
         module_execution_order = await initialize_workflow_runtime()
@@ -282,7 +299,7 @@ async def lifespan(app: FastAPI):
         logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
 
         # Start masterkey watcher in background
-        background_dpapi_task = asyncio.create_task(dpapi_background_monitor())
+        background_dpapi_task = asyncio.create_task(dpapi_background_monitor(app.state.dpapi_manager))
         logger.info("Started masterkey watcher task", pid=os.getpid())
 
         # Recover any interrupted workflows before starting normal processing
@@ -303,6 +320,11 @@ async def lifespan(app: FastAPI):
 
     try:
         logger.info("Shutting down workflow runtime...", pid=os.getpid())
+
+        # Cleanup DpapiManager
+        if hasattr(app.state, 'dpapi_manager') and app.state.dpapi_manager:
+            logger.info("Closing DpapiManager...", pid=os.getpid())
+            await app.state.dpapi_manager.__aexit__(None, None, None)
 
         # Cancel masterkey watcher task
         if background_dpapi_task and not background_dpapi_task.done():

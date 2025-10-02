@@ -79,7 +79,7 @@ ENTRYPOINT ["/bin/sh", "-c", " \
     --workers ${UVICORN_WORKERS} \
     --reload \
     --reload-dir ${UVICORN_RELOAD_DIR} \
-"]
+    "]
 ########################
 # Production
 ########################
@@ -94,9 +94,9 @@ FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
 RUN apt-get update && \
     apt-get install -y \
-       libmagic1 libpq5 \
-       binutils \
-         && \
+    libmagic1 libpq5 \
+    binutils \
+    && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -113,6 +113,9 @@ ENV UVICORN_HOST=0.0.0.0 \
     UVICORN_PROXY_HEADERS=1 \
     UVICORN_ACCESS_LOG=false
 
+# Enable asyncio debug mode to detect blocking calls & common asyncio issues
+ENV PYTHONASYNCIODEBUG=1
+
 # TODO: Re-enable when we're ready for release
 # USER nemesis
 
@@ -123,4 +126,4 @@ ENTRYPOINT ["/bin/sh", "-c", "\
     --workers ${UVICORN_WORKERS} \
     --proxy-headers \
     --no-access-log \
-"]
+    "]

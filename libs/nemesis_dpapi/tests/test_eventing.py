@@ -24,14 +24,14 @@ class TestTypedDpapiEventDeserialization:
 
         data = {
             "type_name": "NewPlaintextMasterKeyEvent",
-            "event": {"masterkey_guid": str(masterkey_guid), "timestamp": timestamp.isoformat()},
+            "evnt": {"masterkey_guid": str(masterkey_guid), "timestamp": timestamp.isoformat()},
         }
 
         typed_event = TypedDpapiEvent(**data)
 
         assert typed_event.type_name == "NewPlaintextMasterKeyEvent"
-        assert isinstance(typed_event.event, NewPlaintextMasterKeyEvent)
-        assert typed_event.event.masterkey_guid == masterkey_guid
+        assert isinstance(typed_event.evnt, NewPlaintextMasterKeyEvent)
+        assert typed_event.evnt.masterkey_guid == masterkey_guid
 
     def test_deserialize_from_already_instantiated_event(self):
         """Test deserializing when event is already an instance (not a dict)."""
@@ -40,13 +40,13 @@ class TestTypedDpapiEventDeserialization:
 
         event = NewPlaintextMasterKeyEvent(masterkey_guid=masterkey_guid, timestamp=timestamp)
 
-        data = {"type_name": "NewPlaintextMasterKeyEvent", "event": event}
+        data = {"type_name": "NewPlaintextMasterKeyEvent", "evnt": event}
 
         typed_event = TypedDpapiEvent(**data)
 
         assert typed_event.type_name == "NewPlaintextMasterKeyEvent"
-        assert isinstance(typed_event.event, NewPlaintextMasterKeyEvent)
-        assert typed_event.event.masterkey_guid == masterkey_guid
+        assert isinstance(typed_event.evnt, NewPlaintextMasterKeyEvent)
+        assert typed_event.evnt.masterkey_guid == masterkey_guid
 
     def test_deserialize_encrypted_masterkey_event(self):
         """Test deserializing NewEncryptedMasterKeyEvent."""
@@ -54,24 +54,24 @@ class TestTypedDpapiEventDeserialization:
 
         data = {
             "type_name": "NewEncryptedMasterKeyEvent",
-            "event": {"masterkey_guid": str(masterkey_guid)},
+            "evnt": {"masterkey_guid": str(masterkey_guid)},
         }
 
         typed_event = TypedDpapiEvent(**data)
 
-        assert isinstance(typed_event.event, NewEncryptedMasterKeyEvent)
-        assert typed_event.event.masterkey_guid == masterkey_guid
+        assert isinstance(typed_event.evnt, NewEncryptedMasterKeyEvent)
+        assert typed_event.evnt.masterkey_guid == masterkey_guid
 
     def test_deserialize_domain_backup_key_event(self):
         """Test deserializing NewDomainBackupKeyEvent."""
         backup_key_guid = UUID("11111111-2222-3333-4444-555555555555")
 
-        data = {"type_name": "NewDomainBackupKeyEvent", "event": {"backup_key_guid": str(backup_key_guid)}}
+        data = {"type_name": "NewDomainBackupKeyEvent", "evnt": {"backup_key_guid": str(backup_key_guid)}}
 
         typed_event = TypedDpapiEvent(**data)
 
-        assert isinstance(typed_event.event, NewDomainBackupKeyEvent)
-        assert typed_event.event.backup_key_guid == backup_key_guid
+        assert isinstance(typed_event.evnt, NewDomainBackupKeyEvent)
+        assert typed_event.evnt.backup_key_guid == backup_key_guid
 
     def test_deserialize_dpapi_system_credential_event(self):
         """Test deserializing NewDpapiSystemCredentialEvent."""
@@ -79,14 +79,14 @@ class TestTypedDpapiEventDeserialization:
 
         data = {
             "type_name": "NewDpapiSystemCredentialEvent",
-            "event": {"credential": cred.model_dump()},
+            "evnt": {"credential": cred.model_dump()},
         }
 
         typed_event = TypedDpapiEvent(**data)
 
-        assert isinstance(typed_event.event, NewDpapiSystemCredentialEvent)
-        assert typed_event.event.credential.machine_key == b"0" * 20
-        assert typed_event.event.credential.user_key == b"1" * 20
+        assert isinstance(typed_event.evnt, NewDpapiSystemCredentialEvent)
+        assert typed_event.evnt.credential.machine_key == b"0" * 20
+        assert typed_event.evnt.credential.user_key == b"1" * 20
 
     def test_deserialize_password_derived_credential_event(self):
         """Test deserializing NewPasswordDerivedCredentialEvent."""
@@ -95,7 +95,7 @@ class TestTypedDpapiEventDeserialization:
 
         data = {
             "type_name": "NewPasswordDerivedCredentialEvent",
-            "event": {
+            "evnt": {
                 "type": "Password",
                 "credential": password.model_dump(),
                 "user_sid": str(user_sid),
@@ -104,11 +104,11 @@ class TestTypedDpapiEventDeserialization:
 
         typed_event = TypedDpapiEvent(**data)
 
-        assert isinstance(typed_event.event, NewPasswordDerivedCredentialEvent)
-        assert typed_event.event.type == "Password"
-        assert isinstance(typed_event.event.credential, Password)
-        assert typed_event.event.credential.value == "test123"
-        assert typed_event.event.user_sid == user_sid
+        assert isinstance(typed_event.evnt, NewPasswordDerivedCredentialEvent)
+        assert typed_event.evnt.type == "Password"
+        assert isinstance(typed_event.evnt.credential, Password)
+        assert typed_event.evnt.credential.value == "test123"
+        assert typed_event.evnt.user_sid == user_sid
 
     def test_deserialize_ntlm_hash_credential_event(self):
         """Test deserializing NewPasswordDerivedCredentialEvent with NTLM hash."""
@@ -116,7 +116,7 @@ class TestTypedDpapiEventDeserialization:
 
         data = {
             "type_name": "NewPasswordDerivedCredentialEvent",
-            "event": {
+            "evnt": {
                 "type": "NtlmHash",
                 "credential": ntlm_hash.model_dump(),
             },
@@ -124,6 +124,6 @@ class TestTypedDpapiEventDeserialization:
 
         typed_event = TypedDpapiEvent(**data)
 
-        assert isinstance(typed_event.event, NewPasswordDerivedCredentialEvent)
-        assert typed_event.event.type == "NtlmHash"
-        assert isinstance(typed_event.event.credential, NtlmHash)
+        assert isinstance(typed_event.evnt, NewPasswordDerivedCredentialEvent)
+        assert typed_event.evnt.type == "NtlmHash"
+        assert isinstance(typed_event.evnt.credential, NtlmHash)

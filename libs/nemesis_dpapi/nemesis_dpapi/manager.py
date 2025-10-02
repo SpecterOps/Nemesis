@@ -9,12 +9,13 @@ from Crypto.Hash import SHA1
 from .auto_decrypt import AutoDecryptionObserver
 from .core import Blob, MasterKey
 from .eventing import (
+    DaprDpapiEventPublisher,
     DpapiObserver,
+    InMemoryPublisher,
     NewDomainBackupKeyEvent,
     NewDpapiSystemCredentialEvent,
     NewEncryptedMasterKeyEvent,
     NewPlaintextMasterKeyEvent,
-    Publisher,
 )
 from .exceptions import MasterKeyNotDecryptedError, MasterKeyNotFoundError
 from .keys import DomainBackupKey, DpapiSystemCredential
@@ -45,7 +46,10 @@ class DpapiManager(DpapiManagerProtocol):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
     def __init__(
-        self, storage_backend: str = "memory", auto_decrypt: bool = True, publisher: Publisher | None = None
+        self,
+        storage_backend: str = "memory",
+        auto_decrypt: bool = True,
+        publisher: DaprDpapiEventPublisher | None = None,
     ) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
@@ -66,14 +70,12 @@ class DpapiManager(DpapiManagerProtocol):
         self._pg_pool: asyncpg.Pool | None = None
 
         if publisher is None:
-            self._publisher = Publisher()
+            self._publisher = InMemoryPublisher()
         else:
             self._publisher = publisher
 
-        # Set up auto-decryption if enabled
-        if self._auto_decrypt:
-            self._auto_decrypt_observer = AutoDecryptionObserver(self)
-            self._publisher.subscribe(self._auto_decrypt_observer)
+        # Auto-decryption observer will be set up during async initialization
+        self._auto_decrypt_observer: AutoDecryptionObserver | None = None
 
     async def _initialize_storage(self) -> None:
         """Initialize storage repositories based on backend type."""
@@ -93,6 +95,11 @@ class DpapiManager(DpapiManagerProtocol):
             self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(self._pg_pool)
         else:
             raise ValueError(f"Unsupported storage backend: {self._storage_backend}")
+
+        # Set up auto-decryption observer after storage is initialized
+        if self._auto_decrypt and self._auto_decrypt_observer is None:
+            self._auto_decrypt_observer = AutoDecryptionObserver(self)
+            await self._publisher.register_subscriber(self._auto_decrypt_observer)
 
         self._initialized = True
 
@@ -131,17 +138,17 @@ class DpapiManager(DpapiManagerProtocol):
 
         # Publish appropriate event based on what was added
         if new_masterkey.plaintext_key or new_masterkey.plaintext_key_sha1:
-            self._publisher.publish(NewPlaintextMasterKeyEvent(masterkey_guid=new_masterkey.guid))
+            await self._publisher.publish_event(NewPlaintextMasterKeyEvent(masterkey_guid=new_masterkey.guid))
         elif new_masterkey.encrypted_key_usercred or new_masterkey.encrypted_key_backup:
-            self._publisher.publish(NewEncryptedMasterKeyEvent(masterkey_guid=new_masterkey.guid))
+            await self._publisher.publish_event(NewEncryptedMasterKeyEvent(masterkey_guid=new_masterkey.guid))
 
-    def subscribe(self, observer: DpapiObserver) -> None:
+    async def subscribe(self, observer: DpapiObserver) -> None:
         """Subscribe an observer to DPAPI events.
 
         Args:
             observer: Observer implementing the update(event) method
         """
-        self._publisher.subscribe(observer)
+        await self._publisher.register_subscriber(observer)
 
     async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
         """Add or update a domain backup key and decrypt all compatible masterkeys.
@@ -155,7 +162,7 @@ class DpapiManager(DpapiManagerProtocol):
 
         await self._backup_key_repo.upsert_backup_key(backup_key)
 
-        self._publisher.publish(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
+        await self._publisher.publish_event(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
 
     async def upsert_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
         """Add or update a DPAPI system credential.
@@ -167,7 +174,7 @@ class DpapiManager(DpapiManagerProtocol):
             await self._initialize_storage()
 
         await self._dpapi_system_cred_repo.upsert_credential(cred)
-        self.publish(NewDpapiSystemCredentialEvent(credential=cred))
+        await self._publisher.publish_event(NewDpapiSystemCredentialEvent(credential=cred))
 
     async def decrypt_blob(self, blob: Blob) -> bytes:
         """Decrypt a DPAPI blob using available masterkeys.

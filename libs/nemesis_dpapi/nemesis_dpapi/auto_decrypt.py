@@ -41,7 +41,7 @@ class AutoDecryptionObserver(DpapiObserver):
         self.dpapi_manager = dpapi_manager
         self._background_tasks: set[asyncio.Task] = set()
 
-    def update(self, event: DpapiEvent) -> None:
+    async def update(self, event: DpapiEvent) -> None:
         """Handle DPAPI events, specifically new domain backup keys, encrypted masterkeys, and new credentials."""
         if isinstance(event, NewDomainBackupKeyEvent):
             self._create_task(self._attempt_masterkey_decryption_with_backup_key(event.backup_key_guid))
