@@ -78,7 +78,7 @@ type DpapiEvent = (
 )
 
 
-DAPR_PUBSUB_NAME = "pubsub"
+DAPR_PUBSUB_NAME = "broadcast"
 DAPR_DPAPI_EVENT_TOPIC = "dpapi_events"
 
 DPAPI_EVENT_CLASSES = {cls.__name__: cls for cls in get_args(DpapiEvent.__value__)}
@@ -154,7 +154,7 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
     async def register_subscriber(self, observer: DpapiObserver) -> None:
         """Attach an observer and start the Dapr subscription if not already started."""
 
-        logger.debug(f"Subscribing observer: {observer.__class__.__name__}")
+        logger.debug(f"Subscribing Dapr observer: {observer.__class__.__name__}")
         self._observers.append(observer)
 
         global subscription_started

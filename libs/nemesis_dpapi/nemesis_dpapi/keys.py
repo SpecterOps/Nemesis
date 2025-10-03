@@ -10,7 +10,7 @@ from uuid import UUID  # noqa: TC003 - need for pydantic
 from Crypto.Hash import HMAC, MD4, SHA1, SHA256
 from Crypto.Protocol.KDF import PBKDF2
 from impacket.dpapi import PRIVATE_KEY_BLOB, PVK_FILE_HDR
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 if TYPE_CHECKING:
     from .types import Sid
@@ -319,6 +319,18 @@ class DpapiSystemCredential(BaseModel):
 
     user_key: bytes
     machine_key: bytes
+
+    @field_serializer('user_key', 'machine_key')
+    def serialize_bytes_as_hex(self, value: bytes) -> str:
+        """Serialize bytes fields as hex strings for JSON serialization."""
+        return value.hex()
+
+    def model_dump(self, **kwargs):
+        """Override to serialize bytes as hex strings."""
+        data = super().model_dump(**kwargs)
+        data["user_key"] = self.user_key.hex()
+        data["machine_key"] = self.machine_key.hex()
+        return data
 
     @classmethod
     def from_bytes(cls, dpapi_system_data: bytes | str) -> DpapiSystemCredential:

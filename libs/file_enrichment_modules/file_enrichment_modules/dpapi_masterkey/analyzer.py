@@ -1,19 +1,18 @@
 # enrichment_modules/dpapi_masterkey/analyzer.py
 import asyncio
+import ntpath
 import re
 from typing import TYPE_CHECKING
-import psycopg
-import ntpath
 
-from file_linking.helpers import add_file_linking
+import psycopg
 from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
+from file_linking.helpers import add_file_linking
 from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile
-from nemesis_dpapi.eventing import DaprDpapiEventPublisher
 from psycopg.rows import dict_row
 
 if TYPE_CHECKING:
@@ -28,6 +27,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         super().__init__("dpapi_masterkey")
         self.storage = StorageMinio()
         self.dpapi_manager: DpapiManager | None = None
+        self.loop: asyncio.AbstractEventLoop | None = None
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
@@ -41,7 +41,6 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         with DaprClient() as client:
             secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
             self._conninfo = secret.secret["POSTGRES_CONNECTION_STRING"]
-
 
     def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed as a DPAPI masterkey file.
@@ -62,7 +61,6 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         # Check if filename matches GUID pattern
         file_name_lower = file_enriched.file_name.lower() if file_enriched.file_name else ""
         return self.guid_pattern.match(file_name_lower) is not None
-
 
     def _find_existing_hive(self, file_enriched, target_hive_path: str) -> str | None:
         """Find an existing hive by path."""
@@ -114,7 +112,6 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
 
         return None
 
-
     def _get_existing_hive_path(self, file_enriched, standard_path: str) -> str:
         """Get the actual path of an existing hive, or return the standard path if not found."""
         # First try to find an existing hive
@@ -145,7 +142,6 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         # Fall back to standard path if not found or on error
         return standard_path
 
-
     def _create_proactive_file_linkings(self, file_enriched):
         """Create proactive file linkings for the related registry hives."""
         if not file_enriched.source or not file_enriched.path:
@@ -169,7 +165,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 source_file_path=file_enriched.path,
                 linked_file_path=system_path,
                 link_type="system_hive",
-                collection_reason=f"Needed to decrypt the DPAPI_SYSTEM secret",
+                collection_reason="Needed to decrypt the DPAPI_SYSTEM secret",
             )
 
             add_file_linking(
@@ -182,7 +178,6 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
 
         except Exception as e:
             logger.error(f"Failed to create proactive file linkings: {e}")
-
 
     def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
@@ -224,9 +219,9 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                     "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
                 )
 
-            self.dpapi_manager = DpapiManager(
-                storage_backend=postgres_connection_string, publisher=DaprDpapiEventPublisher(client)
-            )
+            # self.dpapi_manager = DpapiManager(
+            #     storage_backend=postgres_connection_string, publisher=DaprDpapiEventPublisher(client)
+            # )
 
             try:
                 file_enriched = get_file_enriched(object_id)

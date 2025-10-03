@@ -21,7 +21,6 @@ from common.models2.dpapi import (
     Sha1CredentialKey,
 )
 from Crypto.Hash import SHA1
-from dapr.clients import DaprClient
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from nemesis_dpapi import (
     DomainBackupKey,
@@ -34,9 +33,9 @@ from nemesis_dpapi import (
     Sha1Hash,
 )
 from nemesis_dpapi.eventing import (
-    DaprDpapiEventPublisher,
     DpapiEvent,
     DpapiObserver,
+    NewDpapiSystemCredentialEvent,
     NewEncryptedMasterKeyEvent,
     NewPlaintextMasterKeyEvent,
 )
@@ -61,6 +60,12 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
         elif isinstance(evnt, NewEncryptedMasterKeyEvent):
             logger.warning(
                 "!!!!!!!!!!!!!!!!!!!! Received NewEncryptedMasterKeyEvent",
+                event_type=type(evnt).__name__,
+                data=evnt,
+            )
+        elif isinstance(evnt, NewDpapiSystemCredentialEvent):
+            logger.warning(
+                "!!!!!!!!!!!!!!!!!!!! Received NewDpapiSystemCredentialEvent",
                 event_type=type(evnt).__name__,
                 data=evnt,
             )

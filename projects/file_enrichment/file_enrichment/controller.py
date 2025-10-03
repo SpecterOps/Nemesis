@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI):
 
     try:
         # Initialize workflow runtime and modules
-        module_execution_order = await initialize_workflow_runtime()
+        module_execution_order = await initialize_workflow_runtime(dpapi_manager)
 
         # Wait a bit for runtime to initialize
         await asyncio.sleep(5)

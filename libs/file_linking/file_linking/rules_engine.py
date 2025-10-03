@@ -130,10 +130,6 @@ class FileLinkingEngine:
             normalized_patterns = [pattern.replace("\\", "/") for pattern in file_patterns]
             path_match = any(fnmatch.fnmatch(normalized_file_path, pattern) for pattern in normalized_patterns)
 
-            logger.debug(f"normalized_file_path: {normalized_file_path}")
-            logger.debug(f"normalized_patterns: {normalized_patterns}")
-            logger.debug(f"path_match: {path_match}")
-
             if not path_match:
                 return False
 

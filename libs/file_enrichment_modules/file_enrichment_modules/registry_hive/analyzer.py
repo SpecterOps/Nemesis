@@ -33,6 +33,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         self.storage = StorageMinio()
         self.workflows = ["default"]
         self.dpapi_manager: DpapiManager | None = None
+        self.loop: asyncio.AbstractEventLoop | None = None
 
         # Get PostgreSQL connection string
         with DaprClient() as client:
@@ -378,7 +379,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                                             )
 
                                             # Register the DPAPI_SYSTEM credential with the DPAPI manager
-                                            asyncio.run(self._register_dpapi_system_credential(machine_key, user_key))
+                                            asyncio.run_coroutine_threadsafe(
+                                                self._register_dpapi_system_credential(machine_key, user_key), self.loop
+                                            )
 
                                     # For NL$KM secrets, extract raw_secret
                                     elif not secret_value and "raw_secret" in secret_data:
@@ -966,6 +969,11 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         try:
             # Create DPAPI system credential from the machine and user keys
+            logger.debug(
+                "Registering DPAPI_SYSTEM credential with DPAPI manager",
+                machine_key=machine_key.hex(),
+                user_key=user_key.hex(),
+            )
             dpapi_system_cred = DpapiSystemCredential(machine_key=machine_key, user_key=user_key)
 
             # Register with the DPAPI manager - it will automatically decrypt compatible masterkeys
@@ -974,7 +982,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             logger.warning("Successfully registered DPAPI_SYSTEM credential with DPAPI manager")
 
         except Exception as e:
-            logger.warning(f"Failed to register DPAPI_SYSTEM credential: {e}")
+            logger.exception(e, f"Failed to register DPAPI_SYSTEM credential: {e}")
 
 
 def create_enrichment_module() -> EnrichmentModule:

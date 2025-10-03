@@ -1,4 +1,5 @@
 # src/workflow/workflow.py
+import asyncio
 import io
 import json
 import ntpath
@@ -18,6 +19,7 @@ from dapr.clients import DaprClient
 from dapr.ext.workflow.logger.options import LoggerOptions
 from file_enrichment_modules.module_loader import ModuleLoader
 from file_linking import FileLinkingEngine
+from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)
 
@@ -858,9 +860,9 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 ##########################################
 
 
-async def initialize_workflow_runtime():
+async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-    global workflow_runtime, workflow_client, file_linking_engine, dpapi_manager
+    global workflow_runtime, workflow_client, file_linking_engine
 
     # Initialize file linking system with shared instance
     file_linking_engine = FileLinkingEngine(postgres_connection_string)
@@ -879,12 +881,13 @@ async def initialize_workflow_runtime():
     }
 
     # janky pass-through for any modules that have a 'dpapi_manager' property
-    # for module in workflow_runtime.modules.values():
-    #     if hasattr(module, "dpapi_manager") and module.dpapi_manager is None:
-    #         logger.debug(f"Setting 'dpapi_manager' for '{module}'")
-    #         module.dpapi_manager = dpapi_manager  # type: ignore
-    #     elif hasattr(workflow_runtime, "dpapi_manager"):
-    #         logger.debug(f"'dpapi_manager' already set for for '{module}'")
+    for module in workflow_runtime.modules.values():
+        if hasattr(module, "dpapi_manager") and module.dpapi_manager is None:
+            logger.debug(f"Setting 'dpapi_manager' for '{module}'")
+            module.dpapi_manager = dpapi_manager  # type: ignore
+            module.loop = asyncio.get_running_loop()  # type: ignore
+        elif hasattr(workflow_runtime, "dpapi_manager"):
+            logger.debug(f"'dpapi_manager' already set for for '{module}'")
 
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
