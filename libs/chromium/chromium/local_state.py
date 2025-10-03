@@ -3,7 +3,6 @@
 import base64
 import json
 import ntpath
-import asyncio
 
 import psycopg
 from common.logger import get_logger
@@ -12,7 +11,7 @@ from common.storage import StorageMinio
 from file_linking import add_file_linking
 from impacket.dpapi import DPAPI_BLOB
 from impacket.uuid import bin_to_string
-from nemesis_dpapi import Blob, DpapiManager
+from nemesis_dpapi import Blob, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 
 from .helpers import (
     derive_abe_key,
@@ -147,8 +146,14 @@ async def _insert_state_keys(
                         )
                     else:
                         logger.debug("Failed to decrypt encrypted_key state key with DPAPI")
-                except Exception:
-                    logger.warning(f"Unable to decrypt state key DPAPI blob: {key_masterkey_guid}")
+                except (MasterKeyNotFoundError, MasterKeyNotDecryptedError) as e:
+                    logger.debug(
+                        "Masterkey not found or not decrypted for encrypted_key state key",
+                        masterkey_guid=key_masterkey_guid,
+                        reason=type(e).__name__,
+                    )
+                except Exception as e:
+                    logger.warning(f"Unable to decrypt state key DPAPI blob: {key_masterkey_guid}", error=str(e))
             else:
                 raise Exception(f"Unsupported encryption type for v1 state key: {encryption_type}")
 

@@ -4,7 +4,7 @@ import asyncio
 import sqlite3
 
 import psycopg
-import structlog
+from common.logger import get_logger
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from nemesis_dpapi import Blob, DpapiManager
@@ -16,11 +16,12 @@ from .helpers import (
     get_postgres_connection_str,
     get_state_key_bytes,
     get_state_key_id,
+    is_sqlite3,
     parse_chromium_file_path,
-    try_decrypt_with_all_keys
+    try_decrypt_with_all_keys,
 )
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def process_chromium_logins(
@@ -48,6 +49,12 @@ def process_chromium_logins(
         storage = StorageMinio()
         with storage.download(file_enriched.object_id) as temp_file:
             db_path = temp_file.name
+
+    if is_sqlite3(db_path) is False:
+        logger.warning(
+            "Login Data file is not a valid SQLite3 database", object_id=object_id, file_path=file_enriched.path
+        )
+        return
 
     conn_str = get_postgres_connection_str()
     with psycopg.connect(conn_str) as pg_conn:
@@ -126,7 +133,9 @@ def _insert_logins(
                         state_key_bytes = get_state_key_bytes(state_key_id, encryption_type, pg_conn)
                         if state_key_bytes:
                             try:
-                                password_dec_bytes = decrypt_chrome_string(password_value, state_key_bytes, encryption_type)
+                                password_dec_bytes = decrypt_chrome_string(
+                                    password_value, state_key_bytes, encryption_type
+                                )
                                 if password_dec_bytes:
                                     # For passwords, may need to strip offset bytes depending on version
                                     if encryption_type == "key" and len(password_dec_bytes) > 32:
@@ -149,9 +158,11 @@ def _insert_logins(
 
                 # Backup approach: try all state keys from the same source if primary failed
                 if not is_decrypted:
-                    logger.debug("Primary decryption failed, trying backup approach with all keys from source",
-                               source=file_enriched.source,
-                               encryption_type=encryption_type)
+                    logger.debug(
+                        "Primary decryption failed, trying backup approach with all keys from source",
+                        source=file_enriched.source,
+                        encryption_type=encryption_type,
+                    )
                     backup_decrypted_bytes, backup_state_key_id = try_decrypt_with_all_keys(
                         password_value, file_enriched.source, encryption_type, pg_conn
                     )
@@ -167,12 +178,12 @@ def _insert_logins(
                             # Or just 16-byte suffix
                             backup_decrypted_bytes = backup_decrypted_bytes[:-16]
 
-                        password_value_dec = backup_decrypted_bytes.decode('utf-8', errors='replace')
+                        password_value_dec = backup_decrypted_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
                         state_key_id = backup_state_key_id
-                        logger.debug("Successfully decrypted cookie using backup approach",
-                                  state_key_id=backup_state_key_id)
-
+                        logger.debug(
+                            "Successfully decrypted cookie using backup approach", state_key_id=backup_state_key_id
+                        )
 
             login_data = {
                 "originating_object_id": file_enriched.object_id,
@@ -234,5 +245,10 @@ def _insert_logins(
         logger.info("Inserted logins into database", count=len(logins_data))
 
     except Exception as e:
-        logger.exception("Error processing Login Data", error=str(e))
+        logger.exception(
+            "Error processing Login Data",
+            error=str(e),
+            object_id=file_enriched.object_id,
+            file_path=file_enriched.path,
+        )
         raise

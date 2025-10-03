@@ -46,6 +46,9 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         if file_enriched.size > 2048:
             return False
 
+        if file_enriched.is_plaintext:
+            return False
+
         # Check if filename matches GUID pattern
         file_name_lower = file_enriched.file_name.lower() if file_enriched.file_name else ""
         return self.guid_pattern.match(file_name_lower) is not None

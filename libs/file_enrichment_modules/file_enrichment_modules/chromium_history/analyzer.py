@@ -52,6 +52,9 @@ rule Chrome_Downloads_Tables
         if not (file_enriched.file_name == "History" and "sqlite 3.x database" in file_enriched.magic_type.lower()):
             return False
 
+        if file_enriched.is_plaintext:
+            return False
+
         if file_path:
             # Use provided file path
             with open(file_path, "rb") as f:

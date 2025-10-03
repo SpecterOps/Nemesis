@@ -55,7 +55,7 @@ rule Chrome_Cookies_Tables
 
         file_enriched = get_file_enriched(object_id)
 
-        if not "sqlite 3.x database" in file_enriched.magic_type.lower():
+        if "sqlite 3.x database" not in file_enriched.magic_type.lower():
             return False
 
         if file_path:
@@ -65,6 +65,9 @@ rule Chrome_Cookies_Tables
         else:
             # Fallback to downloading the file itself
             file_bytes = self.storage.download_bytes(file_enriched.object_id)
+
+        if file_enriched.is_plaintext:
+            return False
 
         # Verify Chrome cookies tables using Yara
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
@@ -230,7 +233,9 @@ rule Chrome_Cookies_Tables
             return enrichment_result
 
         except Exception as e:
-            logger.exception(e, message="Error processing Chrome Cookies database")
+            logger.exception(
+                e, message="Error processing Chrome Cookies database", object_id=object_id, file_path=file_enriched.path
+            )
 
 
 def create_enrichment_module() -> EnrichmentModule:

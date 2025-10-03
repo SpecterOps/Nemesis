@@ -7,22 +7,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Dialog from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from 'graphql-ws';
 import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileText, Image } from 'lucide-react';
-import { default as React, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import FileDetailsSection from './FileDetailsSection';
-import LinkedFilesSection from './LinkedFilesSection';
-import EnrichmentStatusSection from './EnrichmentStatusSection';
-import { getMonacoLanguage } from './languageMap';
 import CsvViewer from './CsvViewer';
+import EnrichmentStatusSection from './EnrichmentStatusSection';
+import FileDetailsSection from './FileDetailsSection';
+import { getMonacoLanguage } from './languageMap';
+import LinkedFilesSection from './LinkedFilesSection';
 import MonacoContentViewer from './MonacoViewer';
+import SCCMLogViewer from './SCCMLogViewer';
 import SQLiteViewer from './SQLiteViewer';
 import ZipFileViewer from './ZipFileViewer';
-import SCCMLogViewer from './SCCMLogViewer';
 
 
 const MAX_VIEW_SIZE = 1024 * 1024; // 1MB text display limit
@@ -648,59 +648,59 @@ const FileViewer = () => {
   // Start with hex as fallback
   const [activeTab, setActiveTab] = useState('hex');
 
-// Update this useEffect in your FileViewer.jsx component
+  // Update this useEffect in your FileViewer.jsx component
 
-// Set the initial tab based on transform metadata and fallback order
-useEffect(() => {
-  if (fileData || pdfContent) {
-    const tabs = getAvailableTabs();
+  // Set the initial tab based on transform metadata and fallback order
+  useEffect(() => {
+    if (fileData || pdfContent) {
+      const tabs = getAvailableTabs();
 
-    // First check if the file is a ZIP file and we have content for it
-    if (fileData && isZipFile(fileData.file_name, fileData.mime_type) && fileContent) {
-      setActiveTab('zip-explorer');
-      return;
-    }
-
-    // Then check for .zip transforms
-    if (fileData?.transforms) {
-      const zipTransform = fileData.transforms.find(transform =>
-        transform.metadata?.file_name && transform.metadata.file_name.endsWith('.zip')
-      );
-      if (zipTransform) {
-        setActiveTab(zipTransform.transform_object_id);
-        return;
-      }
-    }
-
-    // Then check for PDF transforms
-    if (fileData?.transforms) {
-      const pdfTransform = fileData.transforms.find(transform =>
-        isDisplayableTransform(transform) && transform.type === 'converted_pdf'
-      );
-      if (pdfTransform) {
-        setActiveTab(pdfTransform.transform_object_id);
+      // First check if the file is a ZIP file and we have content for it
+      if (fileData && isZipFile(fileData.file_name, fileData.mime_type) && fileContent) {
+        setActiveTab('zip-explorer');
         return;
       }
 
-      // Then check for transforms with default_display=true
-      const defaultTransform = fileData.transforms.find(transform =>
-        isDisplayableTransform(transform) && transform.metadata?.default_display === true
-      );
-      if (defaultTransform) {
-        setActiveTab(defaultTransform.transform_object_id);
-        return;
+      // Then check for .zip transforms
+      if (fileData?.transforms) {
+        const zipTransform = fileData.transforms.find(transform =>
+          transform.metadata?.file_name && transform.metadata.file_name.endsWith('.zip')
+        );
+        if (zipTransform) {
+          setActiveTab(zipTransform.transform_object_id);
+          return;
+        }
       }
-    }
 
-    // Then follow fallback order: Preview -> Text -> Hex
-    if (hasPreviewableContent) {
-      setActiveTab('preview');
-    } else if (tabs.find(tab => tab.id === 'text')) {
-      setActiveTab('text');
+      // Then check for PDF transforms
+      if (fileData?.transforms) {
+        const pdfTransform = fileData.transforms.find(transform =>
+          isDisplayableTransform(transform) && transform.type === 'converted_pdf'
+        );
+        if (pdfTransform) {
+          setActiveTab(pdfTransform.transform_object_id);
+          return;
+        }
+
+        // Then check for transforms with default_display=true
+        const defaultTransform = fileData.transforms.find(transform =>
+          isDisplayableTransform(transform) && transform.metadata?.default_display === true
+        );
+        if (defaultTransform) {
+          setActiveTab(defaultTransform.transform_object_id);
+          return;
+        }
+      }
+
+      // Then follow fallback order: Preview -> Text -> Hex
+      if (hasPreviewableContent) {
+        setActiveTab('preview');
+      } else if (tabs.find(tab => tab.id === 'text')) {
+        setActiveTab('text');
+      }
+      // If no other conditions met, it will stay as 'hex'
     }
-    // If no other conditions met, it will stay as 'hex'
-  }
-}, [fileData, pdfContent, hasPreviewableContent, fileContent]);
+  }, [fileData, pdfContent, hasPreviewableContent, fileContent]);
 
   // left arrow to go back
   useEffect(() => {
@@ -900,7 +900,7 @@ useEffect(() => {
         <MonacoContentViewer
           content={JSON.stringify(JSON.parse(content), null, 2)}
           language="json"
-          onLanguageChange={() => {}}
+          onLanguageChange={() => { }}
           showLanguageSelect={false}
         />
       );
@@ -929,7 +929,7 @@ useEffect(() => {
       <MonacoContentViewer
         content={jsonContent}
         language="json"
-        onLanguageChange={() => {}}
+        onLanguageChange={() => { }}
         showLanguageSelect={false}
       />
     );
@@ -1447,12 +1447,20 @@ useEffect(() => {
                   ) : tab.id === 'text' ? (
                     fileData?.mime_type === 'application/json' ? (
                       <MonacoContentViewer
-                        content={JSON.stringify(
-                          JSON.parse(textContent || (fileData?.is_plaintext && fileContent ?
-                            new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
-                            '{}')), null, 2)}
+                        content={(() => {
+                          try {
+                            const jsonContent = textContent || (fileData?.is_plaintext && fileContent ?
+                              new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
+                              '{}');
+                            return JSON.stringify(JSON.parse(jsonContent || '{}'), null, 2);
+                          } catch (e) {
+                            return textContent || (fileData?.is_plaintext && fileContent ?
+                              new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
+                              'Invalid JSON');
+                          }
+                        })()}
                         language="json"
-                        onLanguageChange={() => {}}
+                        onLanguageChange={() => { }}
                         showLanguageSelect={false}
                       />
                     ) : fileData?.mime_type === 'text/csv' || fileData?.file_name.endsWith('.csv') ? (
