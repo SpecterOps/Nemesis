@@ -46,7 +46,7 @@ class AutoDecryptionObserver(DpapiObserver):
         if isinstance(event, NewDomainBackupKeyEvent):
             self._create_task(self._attempt_masterkey_decryption_with_backup_key(event.backup_key_guid))
         elif isinstance(event, NewEncryptedMasterKeyEvent):
-            self._create_task(self._attempt_new_masterkey_decryption(event.masterkey_guid))
+            await self._attempt_new_masterkey_decryption(event.masterkey_guid)
         elif isinstance(event, NewDpapiSystemCredentialEvent):
             self._create_task(self._attempt_masterkey_decryption_with_system_credential(event.credential))
 
@@ -60,12 +60,20 @@ class AutoDecryptionObserver(DpapiObserver):
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
 
-    async def _attempt_masterkey_decryption_with_system_credential(self, credential: DpapiSystemCredential) -> None:
+    async def _attempt_masterkey_decryption_with_system_credential(
+        self, credential: DpapiSystemCredential, encrypted_masterkeys: list[MasterKey] | None = None
+    ) -> None:
         """Attempt to decrypt all encrypted masterkeys using the new DPAPI system credentials."""
         start_time = time.perf_counter()
 
         logger.debug("Attempting to decrypt masterkeys with new DPAPI_SYSTEM credential")
-        encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
+
+        if encrypted_masterkeys is None:
+            # TODO: Filter out User masterkeys
+            encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
+
+        if len(encrypted_masterkeys) == 0:
+            return
 
         decrypted_count = 0
         for encrypted_mk in encrypted_masterkeys:
@@ -98,38 +106,42 @@ class AutoDecryptionObserver(DpapiObserver):
         end_time = time.perf_counter()
         logger.debug(f"_attempt_masterkey_decryption_with_system_credential took {end_time - start_time:.4f} seconds")
 
-    async def _attempt_masterkey_decryption_with_backup_key(self, backup_key_guid: UUID) -> None:
-        """Attempt to decrypt all masterkeys using the new backup key."""
+    async def _attempt_masterkey_decryption_with_backup_key(
+        self, backup_key_guid: UUID, encrypted_masterkeys: list[MasterKey] | None = None
+    ) -> None:
+        """Attempt to decrypt masterkeys using a backup key."""
+
         start_time = time.perf_counter()
         try:
-            masterkeys = await self.dpapi_manager.get_all_masterkeys()
-            encrypted_count = len([mk for mk in masterkeys if not mk.is_decrypted])
+            if encrypted_masterkeys is None:
+                # TODO: Filter out SYSTEM masterkeys
+                encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
+                    filter_by=MasterKeyFilter.ENCRYPTED_ONLY
+                )
 
-            if encrypted_count == 0:
+            if len(encrypted_masterkeys) == 0:
                 return
 
-            # Get all backup keys (including the new one)
-            backup_keys = await self.dpapi_manager._backup_key_repo.get_all_backup_keys()
-            new_backup_key = next((bk for bk in backup_keys if bk.guid == backup_key_guid), None)
+            new_backup_key = await self.dpapi_manager._backup_key_repo.get_backup_key(backup_key_guid)
 
             if not new_backup_key:
                 return
 
             # Try to decrypt each encrypted masterkey with the new backup key
-            for masterkey in masterkeys:
-                if masterkey.is_decrypted:
+            for enc_masterkey in encrypted_masterkeys:
+                if enc_masterkey.is_decrypted:
                     continue
 
-                if masterkey.encrypted_key_backup is None:
+                if enc_masterkey.encrypted_key_backup is None:
                     continue
 
                 masterkey_file = MasterKeyFile(
                     version=0,
                     modified=False,
                     file_path=None,
-                    masterkey_guid=masterkey.guid,
+                    masterkey_guid=enc_masterkey.guid,
                     policy=MasterKeyPolicy.NONE,
-                    domain_backup_key=masterkey.encrypted_key_backup,
+                    domain_backup_key=enc_masterkey.encrypted_key_backup,
                 )
 
                 try:
@@ -140,12 +152,12 @@ class AutoDecryptionObserver(DpapiObserver):
 
                 if result:
                     print(
-                        f"Successfully decrypted masterkey {masterkey.guid} with new backup key {new_backup_key.guid}"
+                        f"Successfully decrypted masterkey {enc_masterkey.guid} with new backup key {new_backup_key.guid}"
                     )
                     new_mk = MasterKey(
-                        guid=masterkey.guid,
-                        encrypted_key_usercred=masterkey.encrypted_key_usercred,
-                        encrypted_key_backup=masterkey.encrypted_key_backup,
+                        guid=enc_masterkey.guid,
+                        encrypted_key_usercred=enc_masterkey.encrypted_key_usercred,
+                        encrypted_key_backup=enc_masterkey.encrypted_key_backup,
                         plaintext_key=result.plaintext_key,
                         plaintext_key_sha1=result.plaintext_key_sha1,
                         backup_key_guid=result.backup_key_guid,
@@ -161,7 +173,6 @@ class AutoDecryptionObserver(DpapiObserver):
 
     async def _attempt_new_masterkey_decryption(self, masterkey_guid: UUID) -> None:
         """Attempt to decrypt a new masterkey using existing domain backup keys."""
-        start_time = time.perf_counter()
 
         masterkey = await self.dpapi_manager.get_masterkey(masterkey_guid)
 
@@ -171,6 +182,17 @@ class AutoDecryptionObserver(DpapiObserver):
         if masterkey.is_decrypted:
             return  # Already decrypted
 
+        # We have an encrypted masterkey, try and decrypt with:
+        # - Available domain backup keys
+        # - (TODO) Available DPAPI_SYSTEM credentials
+        # - (TODO) Available user credentials
+        self._create_task(self._decrypt_with_backup_keys(masterkey))
+        # self._create_task(self._decrypt_with_system_credentials(masterkey))
+        # self._create_task(self._decrypt_with_user_credentials(masterkey))
+
+    async def _decrypt_with_backup_keys(self, masterkey: MasterKey) -> None:
+        """Attempt to decrypt a masterkey using all available backup keys."""
+        start_time = time.perf_counter()
         if masterkey.encrypted_key_backup is None:
             return  # Cannot decrypt if there's backup key data
 

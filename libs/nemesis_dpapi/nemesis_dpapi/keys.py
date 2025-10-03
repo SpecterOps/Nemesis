@@ -320,7 +320,15 @@ class DpapiSystemCredential(BaseModel):
     user_key: bytes
     machine_key: bytes
 
-    @field_serializer('user_key', 'machine_key')
+    @field_validator("user_key", "machine_key", mode="before")
+    @classmethod
+    def deserialize_hex_to_bytes(cls, v: bytes | str) -> bytes:
+        """Deserialize hex strings back to bytes."""
+        if isinstance(v, str):
+            return bytes.fromhex(v)
+        return v
+
+    @field_serializer("user_key", "machine_key")
     def serialize_bytes_as_hex(self, value: bytes) -> str:
         """Serialize bytes fields as hex strings for JSON serialization."""
         return value.hex()

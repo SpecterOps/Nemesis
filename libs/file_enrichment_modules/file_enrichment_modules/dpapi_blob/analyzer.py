@@ -21,7 +21,8 @@ class DpapiBlobAnalyzer(EnrichmentModule):
         self.dapr_client = DaprClient()
         self.size_limit = 50000000  # only check the first 50 megs for DPAPI blobs, for performance
         self.max_blobs = 100
-        self.dpapi_manager: DpapiManager | None = None
+        self.dpapi_manager: DpapiManager = None  # type: ignore
+        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
@@ -76,18 +77,7 @@ rule has_dpapi_blob
             EnrichmentResult or None if processing fails
         """
 
-        loop = None
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop
-            pass
-
-        if loop:
-            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
-        else:
-            # No running loop, create a new event loop
-            return asyncio.run(self._process_async(object_id, file_path))
+        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file in either workflow or standalone mode.
@@ -96,17 +86,6 @@ rule has_dpapi_blob
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
-
-        if not postgres_connection_string.startswith("postgres://"):
-            raise ValueError(
-                "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
-            )
-
-        self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
 
         try:
             file_enriched = get_file_enriched(object_id)

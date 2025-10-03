@@ -68,11 +68,11 @@ async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
         print(f"After backup key: {len(all_keys_final)} total, {len(decrypted_keys_final)} decrypted")
 
         if len(decrypted_keys_final) > len(decrypted_keys):
-            print("✓ Auto-decryption successfully decrypted existing masterkeys!")
+            print("✅ Auto-decryption successfully decrypted existing masterkeys!")
             for mk in decrypted_keys_final:
                 print(f"  Decrypted: {mk.guid} ({len(mk.plaintext_key or b'')} bytes)")
         else:
-            print("✗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
+            print("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
 
 
 async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data):
@@ -124,11 +124,11 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
         print(f"After adding masterkeys: {len(all_keys_after)} total, {len(decrypted_keys_after)} decrypted")
 
         if len(decrypted_keys_after) > 0:
-            print("✓ Auto-decryption successfully decrypted new masterkeys!")
+            print("✅ Auto-decryption successfully decrypted new masterkeys!")
             for mk in decrypted_keys_after:
                 print(f"  Decrypted: {mk.guid} ({len(mk.plaintext_key or b'')} bytes)")
         else:
-            print("✗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
+            print("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
 
 
 async def auto_decryption_disabled(mk_domain, backup_key_data):
@@ -167,10 +167,10 @@ async def auto_decryption_disabled(mk_domain, backup_key_data):
         print(f"After backup key: {len(all_keys_after)} total, {len(decrypted_keys_after)} decrypted")
 
         if len(decrypted_keys_after) == len(decrypted_keys_before):
-            print("✓ Auto-decryption correctly disabled - no automatic decryption occurred")
+            print("✅ Auto-decryption correctly disabled - no automatic decryption occurred")
         else:
             print(
-                "✗ Some masterkeys were decrypted despite auto-decryption being disabled! This is unexpected and something is broken!"
+                "❗ Some masterkeys were decrypted despite auto-decryption being disabled! This is unexpected and something is broken!"
             )
 
 

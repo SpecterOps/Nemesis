@@ -28,7 +28,7 @@ async def process_chromium_local_state(
     dpapi_manager: DpapiManager,
     object_id: str,
     file_path: str | None = None,
-) -> dict:
+) -> dict | None:
     """Process Chromium Local State file and insert state keys into database.
 
     Args:
@@ -103,7 +103,7 @@ async def _insert_state_keys(
     content: str,
     pg_conn,
     dpapi_manager: DpapiManager,
-) -> dict:
+) -> dict | None:
     """Parse Local State JSON and insert state keys into chromium.state_keys table."""
     try:
         # Parse JSON content
@@ -205,19 +205,24 @@ async def _insert_state_keys(
                                     )
                                 else:
                                     logger.warning("Failed to derive ABE key")
+                                    return None
                             else:
                                 logger.warning("Failed to parse ABE blob")
+                                return None
                         else:
                             logger.warning("Failed to decrypt ABE blob with user masterkey")
+                            return None
                     except Exception as e:
                         logger.warning(f"Unable to decrypt/process final app bound key blob: {e}")
+                        return None
             except Exception as e:
                 logger.warning(f"Unable to decrypt intermediate/outer app bound key blob: {e}")
+                return None
 
         # Skip if no keys are present
         if not key_bytes_enc and not app_bound_key_enc:
             logger.warning("No encryption keys found in Local State file")
-            return {}
+            return None
 
         # Prepare data for PostgreSQL
         state_key_data = {

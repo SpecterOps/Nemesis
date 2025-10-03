@@ -26,8 +26,9 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
     def __init__(self, standalone: bool = False):
         super().__init__("dpapi_masterkey")
         self.storage = StorageMinio()
-        self.dpapi_manager: DpapiManager | None = None
-        self.loop: asyncio.AbstractEventLoop | None = None
+        self.dpapi_manager: DpapiManager = None  # type: ignore
+        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
+
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
@@ -190,18 +191,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
 
-        loop = None
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop
-            pass
-
-        if loop:
-            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
-        else:
-            # No running loop, create a new event loop
-            return asyncio.run(self._process_async(object_id, file_path))
+        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.

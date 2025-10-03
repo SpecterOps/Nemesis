@@ -1,4 +1,5 @@
 # enrichment_modules/chromium_logins/analyzer.py
+import asyncio
 import csv
 import sqlite3
 import tempfile
@@ -26,7 +27,8 @@ class ChromeLoginsParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-        self.dpapi_manager: DpapiManager
+        self.dpapi_manager: DpapiManager = None  # type: ignore
+        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
 
         # Yara rule to check for Chrome Login Data tables
         self.yara_rule = yara_x.compile("""
@@ -74,6 +76,19 @@ rule Chrome_Logins_Tables
         return should_run
 
     def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Do the file enrichment.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+
+        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
+
+    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome Login Data database.
 
         Args:

@@ -56,7 +56,8 @@ class LsassDumpParser(EnrichmentModule):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
-        self.dpapi_manager: DpapiManager | None = None
+        self.dpapi_manager: DpapiManager = None  # type: ignore
+        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.size_limit = 1024 * 1024 * 100  # 100 MB size limit for LSASS dumps
 
     def should_process(self, object_id: str, file_path: str | None = None) -> bool:
@@ -551,18 +552,7 @@ class LsassDumpParser(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
 
-        loop = None
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop
-            pass
-
-        if loop:
-            return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), loop).result()
-        else:
-            # No running loop, create a new event loop
-            return asyncio.run(self._process_async(object_id, file_path))
+        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
@@ -576,7 +566,7 @@ class LsassDumpParser(EnrichmentModule):
                 "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
             )
 
-        self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
+        # self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
 
         logger.debug("Starting async processing of LSASS dump", object_id=object_id)
 

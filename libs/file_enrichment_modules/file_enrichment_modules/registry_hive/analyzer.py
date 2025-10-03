@@ -32,8 +32,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         super().__init__("registry_hive")
         self.storage = StorageMinio()
         self.workflows = ["default"]
-        self.dpapi_manager: DpapiManager | None = None
-        self.loop: asyncio.AbstractEventLoop | None = None
+        self.dpapi_manager: DpapiManager = None  # type: ignore
+        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
 
         # Get PostgreSQL connection string
         with DaprClient() as client:
@@ -704,6 +704,19 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         return summary
 
     def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Do the file enrichment.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+
+        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
+
+    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process registry hive file and extract relevant information."""
         try:
             file_enriched = get_file_enriched(object_id)
@@ -963,9 +976,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             machine_key: The machine key component (20 bytes)
             user_key: The user key component (20 bytes)
         """
-        if not self.dpapi_manager:
-            logger.warning("DPAPI manager not initialized, skipping DPAPI_SYSTEM credential registration")
-            return
 
         try:
             # Create DPAPI system credential from the machine and user keys
@@ -979,7 +989,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             # Register with the DPAPI manager - it will automatically decrypt compatible masterkeys
             await self.dpapi_manager.upsert_dpapi_system_credential(dpapi_system_cred)
 
-            logger.warning("Successfully registered DPAPI_SYSTEM credential with DPAPI manager")
+            logger.info("Successfully registered DPAPI_SYSTEM credential with DPAPI manager")
 
         except Exception as e:
             logger.exception(e, f"Failed to register DPAPI_SYSTEM credential: {e}")

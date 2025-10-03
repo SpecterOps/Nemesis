@@ -884,3 +884,48 @@ class TestDpapiSystemSecret:
         # Should raise ValueError because length is not exactly 44 bytes
         with pytest.raises(ValueError, match="Incorrect LSA secret size, expected at least 44 bytes, got 77"):
             DpapiSystemCredential.from_lsa_secret(lsa_secret_data)
+
+    def test_serialization_to_json(self):
+        """Test serialization of DpapiSystemCredential to JSON."""
+        user_key = bytes.fromhex(dpapi_system_user_key_hex)
+        machine_key = bytes.fromhex(dpapi_system_machine_key_hex)
+
+        credential = DpapiSystemCredential(user_key=user_key, machine_key=machine_key)
+
+        # Serialize to dict
+        data = credential.model_dump()
+
+        assert data["user_key"] == dpapi_system_user_key_hex
+        assert data["machine_key"] == dpapi_system_machine_key_hex
+
+    def test_deserialization_from_json(self):
+        """Test deserialization of DpapiSystemCredential from JSON with hex strings."""
+        # Create data dict with hex strings (as would be received from JSON)
+        data = {
+            "user_key": dpapi_system_user_key_hex,
+            "machine_key": dpapi_system_machine_key_hex
+        }
+
+        # Deserialize from dict
+        credential = DpapiSystemCredential(**data)
+
+        # Verify bytes are correctly deserialized
+        assert credential.user_key == bytes.fromhex(dpapi_system_user_key_hex)
+        assert credential.machine_key == bytes.fromhex(dpapi_system_machine_key_hex)
+
+    def test_round_trip_serialization(self):
+        """Test round-trip serialization/deserialization maintains data integrity."""
+        user_key = bytes.fromhex(dpapi_system_user_key_hex)
+        machine_key = bytes.fromhex(dpapi_system_machine_key_hex)
+
+        original = DpapiSystemCredential(user_key=user_key, machine_key=machine_key)
+
+        # Serialize to dict
+        data = original.model_dump()
+
+        # Deserialize back
+        restored = DpapiSystemCredential(**data)
+
+        # Verify they match
+        assert restored.user_key == original.user_key
+        assert restored.machine_key == original.machine_key
