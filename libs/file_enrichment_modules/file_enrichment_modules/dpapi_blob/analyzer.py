@@ -9,7 +9,7 @@ from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.dpapi_blob.dpapi_helpers import carve_dpapi_blobs_from_file
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi import Blob, BlobDecryptionError, DpapiManager
+from nemesis_dpapi import Blob, BlobDecryptionError, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 
 logger = get_logger(__name__)
 
@@ -144,6 +144,11 @@ rule has_dpapi_blob
                         f"Could not decrypt local state DPAPI blob with its masterkey. Error: {e}",
                         masterkey_guid=carved_blob["dpapi_master_key_guid"],
                         error_type=type(e).__name__,
+                    )
+                except (MasterKeyNotDecryptedError, MasterKeyNotFoundError) as e:
+                    logger.debug(
+                        f"Blob with GUID masterkey {carved_blob['dpapi_master_key_guid']} not decrypted.",
+                        reason=type(e).__name__,
                     )
                 except Exception as e:
                     logger.warning(

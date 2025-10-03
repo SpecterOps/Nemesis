@@ -3,6 +3,7 @@
 import re
 import struct
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 
 import psycopg
 import structlog
@@ -13,6 +14,16 @@ from nemesis_dpapi import Blob
 logger = structlog.get_logger(module=__name__)
 
 
+def is_sqlite3(filename):
+    try:
+        with open(filename, "rb") as f:
+            header = f.read(16)
+        return header.startswith(b"SQLite format 3\0")
+    except OSError:
+        return False
+
+
+@lru_cache(maxsize=1)
 def get_postgres_connection_str() -> str:
     """Get PostgreSQL connection string from Dapr."""
     with DaprClient() as client:
@@ -208,6 +219,7 @@ def get_state_key_bytes(state_key_id: int, encryption_type: str, pg_conn=None) -
             logger.warning("Failed to lookup state key bytes", error=str(e))
             return None
 
+
 def get_all_state_keys_from_source(source: str, pg_conn=None) -> list[dict]:
     """Get all decrypted state keys from the same source.
 
@@ -232,11 +244,11 @@ def get_all_state_keys_from_source(source: str, pg_conn=None) -> list[dict]:
                 results = cur.fetchall()
                 for result in results:
                     state_key_info = {
-                        'id': result[0],
-                        'username': result[1],
-                        'browser': result[2],
-                        'key_bytes_dec': result[3] if result[4] else None,  # Only if decrypted
-                        'app_bound_key_dec': result[5] if result[6] else None,  # Only if decrypted
+                        "id": result[0],
+                        "username": result[1],
+                        "browser": result[2],
+                        "key_bytes_dec": result[3] if result[4] else None,  # Only if decrypted
+                        "app_bound_key_dec": result[5] if result[6] else None,  # Only if decrypted
                     }
                     state_keys.append(state_key_info)
                 return state_keys
@@ -257,11 +269,11 @@ def get_all_state_keys_from_source(source: str, pg_conn=None) -> list[dict]:
                     results = cur.fetchall()
                     for result in results:
                         state_key_info = {
-                            'id': result[0],
-                            'username': result[1],
-                            'browser': result[2],
-                            'key_bytes_dec': result[3] if result[4] else None,  # Only if decrypted
-                            'app_bound_key_dec': result[5] if result[6] else None,  # Only if decrypted
+                            "id": result[0],
+                            "username": result[1],
+                            "browser": result[2],
+                            "key_bytes_dec": result[3] if result[4] else None,  # Only if decrypted
+                            "app_bound_key_dec": result[5] if result[6] else None,  # Only if decrypted
                         }
                         state_keys.append(state_key_info)
                     return state_keys
@@ -284,21 +296,23 @@ def is_valid_text(data: bytes) -> bool:
 
     try:
         # Try to decode as UTF-8
-        text = data.decode('utf-8')
+        text = data.decode("utf-8")
         # Check if it contains mostly printable characters
         printable_chars = sum(1 for c in text if c.isprintable() or c.isspace())
         return printable_chars / len(text) > 0.8  # At least 80% printable
     except UnicodeDecodeError:
         try:
             # Try ASCII as fallback
-            text = data.decode('ascii')
-            printable_chars = sum(1 for c in text if c in '\x20-\x7e\t\n\r')
+            text = data.decode("ascii")
+            printable_chars = sum(1 for c in text if c in "\x20-\x7e\t\n\r")
             return printable_chars / len(text) > 0.8
         except UnicodeDecodeError:
             return False
 
 
-def try_decrypt_with_all_keys(encrypted_value: bytes, source: str, encryption_type: str, pg_conn=None) -> tuple[bytes | None, int | None]:
+def try_decrypt_with_all_keys(
+    encrypted_value: bytes, source: str, encryption_type: str, pg_conn=None
+) -> tuple[bytes | None, int | None]:
     """Try to decrypt with all available state keys from the same source.
 
     Args:
@@ -316,7 +330,7 @@ def try_decrypt_with_all_keys(encrypted_value: bytes, source: str, encryption_ty
     state_keys = get_all_state_keys_from_source(source, pg_conn)
 
     for state_key in state_keys:
-        key_bytes = state_key.get('key_bytes_dec') if encryption_type == "key" else state_key.get('app_bound_key_dec')
+        key_bytes = state_key.get("key_bytes_dec") if encryption_type == "key" else state_key.get("app_bound_key_dec")
 
         if not key_bytes:
             continue
@@ -339,12 +353,14 @@ def try_decrypt_with_all_keys(encrypted_value: bytes, source: str, encryption_ty
 
                 # Check if the result is valid text
                 if is_valid_text(test_bytes):
-                    logger.debug("Successfully decrypted with backup key",
-                               state_key_id=state_key['id'],
-                               username=state_key['username'],
-                               browser=state_key['browser'])
-                    return decrypted_bytes, state_key['id']
-        except Exception as e:
+                    logger.debug(
+                        "Successfully decrypted with backup key",
+                        state_key_id=state_key["id"],
+                        username=state_key["username"],
+                        browser=state_key["browser"],
+                    )
+                    return decrypted_bytes, state_key["id"]
+        except Exception:
             # Continue trying other keys
             continue
 

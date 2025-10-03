@@ -50,6 +50,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         if mime_type != "application/octet-stream":
             return False
 
+        if file_enriched.is_plaintext:
+            return False
+
         # Check if it's a Windows registry hive
         return any(
             hive_type in magic_type
@@ -899,8 +902,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                                     if secret.get("decrypted", False) and secret.get("value"):
                                         # Show decrypted value, but truncate if too long
                                         value = str(secret["value"])
-                                        if len(value) > 50:
-                                            value = value[:50] + "..."
+                                        if len(value) > 256:
+                                            value = value[:256] + "..."
                                         yaml_output.append(f"    {secret['name']}: {value}")
                                     else:
                                         yaml_output.append(f"    {secret['name']}: Encrypted")

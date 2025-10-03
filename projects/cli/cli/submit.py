@@ -207,6 +207,7 @@ def submit_main(
     exclude_pattern: tuple[str, ...] = (),
     pattern_type: str = "glob",
     repeat: int = 0,
+    folder: Optional[str] = None,
 ):
     """Submit files to Nemesis for processing.
 
@@ -238,6 +239,10 @@ def submit_main(
 
         # Submit file twice (original + 1 repeat):
         main.py submit /etc/issue --repeat 1
+
+        # Upload files with custom parent folder path:
+        main.py submit /tmp/data --folder "C:\\Users\\Admin\\Documents" -r
+        # Files at /tmp/data/file.txt will have path "C:\\Users\\Admin\\Documents\\file.txt"
     """
     try:
         if debug:
@@ -282,6 +287,7 @@ def submit_main(
             source=source,
             file_filters=file_filters,
             repeat=repeat,
+            folder=folder,
         )
 
         if not success:
@@ -306,6 +312,7 @@ def submit_files(
     source: Optional[str] = None,
     file_filters: Optional[dict] = None,
     repeat: int = 0,
+    folder: Optional[str] = None,
 ):
     """Submit files to Nemesis"""
 
@@ -388,6 +395,8 @@ def submit_files(
                     container,
                     source,
                     file_filters,
+                    paths,
+                    folder,
                 ),
             )
             thread.start()
@@ -458,6 +467,67 @@ def validate_auth(host_port: str, auth: Optional[tuple[str, str]] = None) -> boo
         return False
 
 
+def calculate_metadata_path(file_path: Path, base_paths: Optional[list[Path]], folder: Optional[str]) -> str:
+    """
+    Calculate the path to use in metadata, applying folder transformation if specified.
+
+    If folder is provided:
+    - Find the common base from base_paths
+    - Calculate relative path from that base
+    - Join with the folder parameter
+
+    Otherwise, return the file path as-is.
+    """
+    if not folder or not base_paths:
+        return str(file_path)
+
+    # Resolve to absolute paths
+    abs_file_path = file_path.resolve()
+
+    # Find which base path this file is under
+    matching_base = None
+    for base_path in base_paths:
+        abs_base = base_path.resolve()
+        try:
+            # Check if file is under this base path
+            abs_file_path.relative_to(abs_base)
+            matching_base = abs_base
+            break
+        except ValueError:
+            # Not under this base, try next
+            continue
+
+    if matching_base is None:
+        # File is not under any base path, use as-is
+        return str(file_path)
+
+    # Calculate relative path from the matching base
+    try:
+        if matching_base.is_file():
+            # Base is a file, so the relative part is just the filename
+            rel_path = abs_file_path.name
+        else:
+            # Base is a directory, calculate relative path
+            rel_path = abs_file_path.relative_to(matching_base)
+    except ValueError:
+        # Shouldn't happen, but fallback
+        return str(file_path)
+
+    # Ensure folder ends with path separator if it doesn't
+    folder_normalized = folder.rstrip('/\\')
+
+    # Join folder with relative path using OS-appropriate separator
+    # Use the separator style from the folder parameter
+    if '\\' in folder:
+        # Windows-style path
+        result = folder_normalized + '\\' + str(rel_path).replace('/', '\\')
+    else:
+        # Unix-style path
+        result = folder_normalized + '/' + str(rel_path).replace('\\', '/')
+
+    return result
+
+
 def create_metadata(
     path: str,
     project: str = "assess-test",
@@ -521,6 +591,8 @@ def upload_file(
     container: bool = False,
     source: Optional[str] = None,
     file_filters: Optional[dict] = None,
+    base_paths: Optional[list[Path]] = None,
+    folder: Optional[str] = None,
 ) -> tuple[bool, Optional[str], int]:
     """
     Attempt to upload a file with retry logic. Returns (success, error_message, bytes_uploaded).
@@ -534,7 +606,10 @@ def upload_file(
             if not os.access(file_path, os.R_OK):
                 raise PermissionError(f"No read permission for {file_path}")
 
-            metadata = create_metadata(str(file_path), project, agent_id, source, file_filters)
+            # Calculate the metadata path (transformed if folder is provided)
+            metadata_path = calculate_metadata_path(file_path, base_paths, folder)
+
+            metadata = create_metadata(metadata_path, project, agent_id, source, file_filters)
             file_size = file_path.stat().st_size
 
             endpoint = "/api/containers" if container else "/api/files"
@@ -597,6 +672,8 @@ def concurrent_worker(
     container: bool = False,
     source: Optional[str] = None,
     file_filters: Optional[dict] = None,
+    base_paths: Optional[list[Path]] = None,
+    folder: Optional[str] = None,
 ):
     """Worker thread to process (file, submission_number) pairs from the queue"""
     while not stop_event.is_set():
@@ -606,7 +683,7 @@ def concurrent_worker(
             break
 
         success, error, bytes_uploaded = upload_file(
-            file_path, host_port, session, auth, project, agent_id, container, source, file_filters
+            file_path, host_port, session, auth, project, agent_id, container, source, file_filters, base_paths, folder
         )
         if success:
             tracker.add_success(file_path, bytes_uploaded)
@@ -640,6 +717,8 @@ def worker(
     container: bool = False,
     source: Optional[str] = None,
     file_filters: Optional[dict] = None,
+    base_paths: Optional[list[Path]] = None,
+    folder: Optional[str] = None,
 ):
     """Worker thread to process files from the queue"""
     while not stop_event.is_set():
@@ -649,7 +728,7 @@ def worker(
             break
 
         success, error, bytes_uploaded = upload_file(
-            file_path, host_port, session, auth, project, agent_id, container, source, file_filters
+            file_path, host_port, session, auth, project, agent_id, container, source, file_filters, base_paths, folder
         )
         if success:
             tracker.add_success(file_path, bytes_uploaded)

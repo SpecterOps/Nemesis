@@ -164,6 +164,13 @@ def get_os_user_and_host_string() -> str:
     help="Number of additional times to repeat the submission (default: 0 - no repeat)",
     show_default=True,
 )
+@click.option(
+    "--folder",
+    type=str,
+    default=None,
+    help="Parent folder path to prepend to all uploaded file paths (e.g., 'C:\\Users\\Admin')",
+    show_default=False,
+)
 def submit(
     debug: bool,
     paths: tuple[str, ...],
@@ -181,6 +188,7 @@ def submit(
     include_pattern: tuple[str, ...] = (),
     exclude_pattern: tuple[str, ...] = (),
     repeat: int = 0,
+    folder: str | None = None,
 ):
     """Submit files to Nemesis for processing"""
     pattern_type: str = "glob"  # only handle glob formats if passed manually, for now
@@ -202,6 +210,7 @@ def submit(
         exclude_pattern,
         pattern_type,
         repeat,
+        folder,
     )
 
 

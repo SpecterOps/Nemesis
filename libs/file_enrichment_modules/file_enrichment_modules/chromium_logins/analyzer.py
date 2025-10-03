@@ -54,7 +54,10 @@ rule Chrome_Logins_Tables
 
         file_enriched = get_file_enriched(object_id)
 
-        if not "sqlite 3.x database" in file_enriched.magic_type.lower():
+        if "sqlite 3.x database" not in file_enriched.magic_type.lower():
+            return False
+
+        if file_enriched.is_plaintext:
             return False
 
         if file_path:
@@ -203,7 +206,12 @@ rule Chrome_Logins_Tables
             return enrichment_result
 
         except Exception as e:
-            logger.exception(e, message="Error processing Chrome Login Data database")
+            logger.exception(
+                e,
+                message="Error processing Chrome Login Data database",
+                object_id=object_id,
+                file_path=file_enriched.path,
+            )
 
 
 def create_enrichment_module() -> EnrichmentModule:

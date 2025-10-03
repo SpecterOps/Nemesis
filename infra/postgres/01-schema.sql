@@ -385,7 +385,8 @@ CREATE TABLE IF NOT EXISTS file_listings (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     path_lower TEXT GENERATED ALWAYS AS (LOWER(path)) STORED,
-    UNIQUE(source, path_lower)
+    UNIQUE(source, path_lower),
+    FOREIGN KEY (object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE
 );
 
 -- Create indexes for efficient queries

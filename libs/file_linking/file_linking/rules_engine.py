@@ -13,12 +13,12 @@ import posixpath
 from dataclasses import dataclass
 from typing import Any
 
-import structlog
 import yaml
+from common.logger import get_logger
 
 from .database_service import FileLinkingDatabaseService, FileListingStatus, _normalize_file_path
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -129,6 +129,10 @@ class FileLinkingEngine:
             normalized_file_path = file_path.replace("\\", "/")
             normalized_patterns = [pattern.replace("\\", "/") for pattern in file_patterns]
             path_match = any(fnmatch.fnmatch(normalized_file_path, pattern) for pattern in normalized_patterns)
+
+            logger.debug(f"normalized_file_path: {normalized_file_path}")
+            logger.debug(f"normalized_patterns: {normalized_patterns}")
+            logger.debug(f"path_match: {path_match}")
 
             if not path_match:
                 return False
