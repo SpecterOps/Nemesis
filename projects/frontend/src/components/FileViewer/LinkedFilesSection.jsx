@@ -5,7 +5,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ExternalLink, FileText } from 'lucide-react';
+import Dialog from "@/components/ui/dialog";
+import { ExternalLink, FileText, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -14,6 +15,8 @@ const LinkedFilesSection = ({ filePath, source }) => {
   const [fileStatusMap, setFileStatusMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [linkingToDelete, setLinkingToDelete] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -209,8 +212,63 @@ const LinkedFilesSection = ({ filePath, source }) => {
     // Normalize both paths for comparison
     const normalizedPath1 = linking.file_path_1.replace(/\\/g, '/');
     const normalizedCurrentPath = currentPath.replace(/\\/g, '/');
-    
+
     return normalizedPath1 === normalizedCurrentPath ? 'outbound' : 'inbound';
+  };
+
+  const handleDeleteClick = (linkingId) => {
+    setLinkingToDelete(linkingId);
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!linkingToDelete) return;
+
+    try {
+      const mutation = {
+        query: `
+          mutation DeleteLinking($linkingId: bigint!) {
+            delete_file_linkings_by_pk(linking_id: $linkingId) {
+              linking_id
+            }
+          }
+        `,
+        variables: { linkingId: linkingToDelete }
+      };
+
+      const response = await fetch('/hasura/v1/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+        },
+        body: JSON.stringify(mutation)
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const result = await response.json();
+      if (result.errors) {
+        throw new Error(result.errors[0].message);
+      }
+
+      // Remove the deleted linking from the state
+      setLinkedFiles(linkedFiles.filter(linking => linking.linking_id !== linkingToDelete));
+      setShowDeleteDialog(false);
+      setLinkingToDelete(null);
+    } catch (err) {
+      console.error('Error deleting linking:', err);
+      setError(err.message);
+      setShowDeleteDialog(false);
+      setLinkingToDelete(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteDialog(false);
+    setLinkingToDelete(null);
   };
 
   if (loading) {
@@ -248,7 +306,8 @@ const LinkedFilesSection = ({ filePath, source }) => {
   }
 
   return (
-    <Card className="bg-white dark:bg-dark-secondary shadow-lg transition-colors">
+    <>
+      <Card className="bg-white dark:bg-dark-secondary shadow-lg transition-colors">
       <CardHeader className="pb-4">
         <CardTitle className="text-gray-900 dark:text-gray-100 flex items-center gap-2">
           Linked Files
@@ -293,12 +352,24 @@ const LinkedFilesSection = ({ filePath, source }) => {
               return (
                 <div
                   key={group.linkingId}
-                  className={`flex items-start justify-between p-3 rounded-lg transition-colors ${
+                  className={`relative flex items-start justify-between p-3 rounded-lg transition-colors ${
                     isCollected
                       ? 'bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 border border-green-200 dark:border-green-800'
                       : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >
+                  {!isCollected && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(group.linkingId);
+                      }}
+                      className="absolute top-2 right-2 p-1 rounded-full bg-red-600 hover:bg-red-700 text-white transition-colors"
+                      title="Delete this linking"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                   <div className="flex items-start space-x-3 flex-1 min-w-0">
                     <div className="flex flex-col items-center flex-shrink-0">
                       <FileText className={`w-4 h-4 mt-1 ${
@@ -365,6 +436,30 @@ const LinkedFilesSection = ({ filePath, source }) => {
         </div>
       </CardContent>
     </Card>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Delete this linking?
+          </h3>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={handleCancelDelete}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg transition-colors"
+            >
+              No
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              Yes
+            </button>
+          </div>
+        </div>
+      </Dialog>
+    </>
   );
 };
 

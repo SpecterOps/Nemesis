@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DPAPI decryption benchmarks
 - Multi-language Tika OCR support (`TIKA_OCR_LANGUAGES` ENV var, see `compose.yaml`)
 - Text translation agent
+- Ability to delete file linkings from the FileViewer
 
 ### Changed
 
@@ -27,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Collapsed inbound/outbound labels for linked files in dashboard
 - Update Prometheus endpoints
 - Chromium Local State, Cookies, and Login Data files now don't require hard paths
+- Reg hive file linkings now done programmatically instead of via rules
+- SYSTEM masterkey file linkings now done programmatically instead of via rules
 
 ### Fixed
 
