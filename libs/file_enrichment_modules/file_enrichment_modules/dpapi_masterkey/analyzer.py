@@ -2,7 +2,10 @@
 import asyncio
 import re
 from typing import TYPE_CHECKING
+import psycopg
+import ntpath
 
+from file_linking.helpers import add_file_linking
 from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
@@ -11,6 +14,7 @@ from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
+from psycopg.rows import dict_row
 
 if TYPE_CHECKING:
     from nemesis_dpapi import DpapiManager
@@ -33,6 +37,12 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             re.IGNORECASE,
         )
 
+        # Get PostgreSQL connection string
+        with DaprClient() as client:
+            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
+            self._conninfo = secret.secret["POSTGRES_CONNECTION_STRING"]
+
+
     def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed as a DPAPI masterkey file.
 
@@ -49,6 +59,127 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         # Check if filename matches GUID pattern
         file_name_lower = file_enriched.file_name.lower() if file_enriched.file_name else ""
         return self.guid_pattern.match(file_name_lower) is not None
+
+
+    def _find_existing_hive(self, file_enriched, target_hive_path: str) -> str | None:
+        """Find an existing hive by path."""
+        try:
+            with psycopg.connect(self._conninfo, row_factory=dict_row) as conn:
+                with conn.cursor() as cur:
+                    # Look for existing hive by path
+                    cur.execute(
+                        """
+                        SELECT object_id
+                        FROM files_enriched
+                        WHERE source = %s
+                        AND LOWER(path) = LOWER(%s)
+                        ORDER BY timestamp DESC
+                        LIMIT 1
+                    """,
+                        (file_enriched.source, target_hive_path),
+                    )
+
+                    result = cur.fetchone()
+                    if result:
+                        return str(result["object_id"])  # Convert UUID to string
+
+                    # Fallback query: look for registry files by magic_type and enrichment results
+                    # Extract the hive type from the target path (e.g., SECURITY from ...\\Windows\\System32\\Config\\SECURITY)
+                    target_hive_type = ntpath.basename(target_hive_path).upper()
+
+                    cur.execute(
+                        """
+                        SELECT fe.object_id
+                        FROM files_enriched fe
+                        JOIN enrichments e ON fe.object_id = e.object_id
+                        WHERE fe.source = %s
+                        AND fe.magic_type = 'MS Windows registry file, NT/2000 or above'
+                        AND e.module_name = 'registry_hive'
+                        AND e.result_data->'results'->'hive_type' = %s
+                        ORDER BY fe.timestamp DESC
+                        LIMIT 1
+                    """,
+                        (file_enriched.source, f'"{target_hive_type}"'),
+                    )
+
+                    result = cur.fetchone()
+                    if result:
+                        return str(result["object_id"])  # Convert UUID to string
+
+        except Exception as e:
+            logger.error(f"Failed to find existing hive {target_hive_path}: {e}")
+
+        return None
+
+
+    def _get_existing_hive_path(self, file_enriched, standard_path: str) -> str:
+        """Get the actual path of an existing hive, or return the standard path if not found."""
+        # First try to find an existing hive
+        object_id = self._find_existing_hive(file_enriched, standard_path)
+
+        if object_id:
+            # Found an existing hive, get its actual path from the database
+            try:
+                with psycopg.connect(self._conninfo, row_factory=dict_row) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT path
+                            FROM files_enriched
+                            WHERE object_id = %s
+                            LIMIT 1
+                        """,
+                            (object_id,),
+                        )
+
+                        result = cur.fetchone()
+                        if result and result["path"]:
+                            logger.debug(f"Found existing hive at {result['path']} instead of {standard_path}")
+                            return result["path"]
+            except Exception as e:
+                logger.error(f"Failed to get path for existing hive {object_id}: {e}")
+
+        # Fall back to standard path if not found or on error
+        return standard_path
+
+
+    def _create_proactive_file_linkings(self, file_enriched):
+        """Create proactive file linkings for the related registry hives."""
+        if not file_enriched.source or not file_enriched.path:
+            return
+
+        drive, _ = ntpath.splitdrive(file_enriched.path)
+        if not drive:
+            logger.warning(f"Could not extract drive from path: {file_enriched.path}")
+            return
+
+        try:
+            # Link to SYSTEM and SECURITY hives, needed to decrypt the SYSTEM masterkeys
+            system_standard_path = f"{drive}\\Windows\\System32\\Config\\SYSTEM"
+            security_standard_path = f"{drive}\\Windows\\System32\\Config\\SECURITY"
+
+            system_path = self._get_existing_hive_path(file_enriched, system_standard_path)
+            security_path = self._get_existing_hive_path(file_enriched, security_standard_path)
+
+            add_file_linking(
+                source=file_enriched.source,
+                source_file_path=file_enriched.path,
+                linked_file_path=system_path,
+                link_type="system_hive",
+                collection_reason=f"Needed to decrypt the DPAPI_SYSTEM secret",
+            )
+
+            add_file_linking(
+                source=file_enriched.source,
+                source_file_path=file_enriched.path,
+                linked_file_path=security_path,
+                link_type="security_hive",
+                collection_reason="Needed to decrypt the DPAPI_SYSTEM secret",
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to create proactive file linkings: {e}")
+
 
     def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
@@ -102,6 +233,12 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 if file_path:
                     # Use provided file path
                     masterkey_file = self._parse_masterkey_file(file_path)
+                    try:
+                        # MasterKeyPolicy bit of NO_BACKUP, present for just SYSTEM keys
+                        if masterkey_file.policy.value & 2:
+                            self._create_proactive_file_linkings(file_enriched)
+                    except:
+                        pass
                 else:
                     # Download the file and parse it
                     with self.storage.download(file_enriched.object_id) as temp_file:
