@@ -184,3 +184,14 @@
 - table:
     name: state_keys
     schema: chromium
+
+# `dpapi` schema
+- table:
+    name: masterkeys
+    schema: dpapi
+- table:
+    name: system_credentials
+    schema: dpapi
+- table:
+    name: domain_backup_keys
+    schema: dpapi
