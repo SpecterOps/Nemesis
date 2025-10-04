@@ -62,7 +62,7 @@ class TestMasterKeyFile:
         assert masterkey.master_key and len(masterkey.master_key) == 176
         assert masterkey.local_key and len(masterkey.local_key) == 144
         assert not masterkey.backup_key
-        assert masterkey.domain_backup_key and len(masterkey.domain_backup_key) == 428
+        assert masterkey.domain_backup_key and len(masterkey.domain_backup_key.raw_bytes) == 428
 
     def test_parse_valid_masterkey_file_local(self):
         """Test parsing a valid masterkey file from a local account."""

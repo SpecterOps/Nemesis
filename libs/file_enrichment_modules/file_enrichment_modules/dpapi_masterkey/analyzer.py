@@ -237,10 +237,12 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
 
                 # Create MasterKey object and add to DPAPI manager
                 if self.dpapi_manager:
+                    backup_key = masterkey_file.domain_backup_key
                     mk = MasterKey(
                         guid=masterkey_file.masterkey_guid,
                         encrypted_key_usercred=masterkey_file.master_key,
-                        encrypted_key_backup=masterkey_file.domain_backup_key,
+                        encrypted_key_backup=backup_key.raw_bytes if backup_key else None,
+                        backup_key_guid=backup_key.guid_key if backup_key else None,
                     )
 
                     # The DPAPI manager handles all decryption automatically

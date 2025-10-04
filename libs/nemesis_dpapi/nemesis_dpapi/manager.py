@@ -224,6 +224,12 @@ class DpapiManager(DpapiManagerProtocol):
             await self._initialize_storage()
         return await self._masterkey_repo.get_all_masterkeys(filter_by, backup_key_guid)
 
+    async def get_system_credential(self, guid: UUID) -> DpapiSystemCredential | None:
+        """Retrieve a DPAPI system credential by GUID."""
+        if not self._initialized:
+            await self._initialize_storage()
+        return await self._dpapi_system_cred_repo.get_credential(guid)
+
     async def close(self) -> None:
         """Close the manager and cleanup resources."""
         if self._pg_pool:

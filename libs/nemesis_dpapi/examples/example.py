@@ -1,5 +1,6 @@
 """Example showing DPAPI usage with eventing.
 
+To run this example: poetry run python /home/itadmin/code/Nemesis/libs/nemesis_dpapi/examples/example.py
 This example demonstrates the complete DPAPI workflow including:
 
 1. Event monitoring setup
@@ -22,7 +23,6 @@ This example demonstrates the complete DPAPI workflow including:
    - Parses the blob to extract its masterkey GUID
    - Decrypts the blob using the previously loaded masterkeys
    - Displays the decrypted plaintext content
-
 """
 
 import asyncio
@@ -71,13 +71,6 @@ async def main() -> None:
         backup_key_data = json.load(f)
 
     masterkey_file = MasterKeyFile.parse(masterkey_file_path)
-    backup_key_bytes = base64.b64decode(backup_key_data["key"])
-
-    # Create a fake backup key by corrupting one byte
-    pvk_header_size = 20  # PVK_FILE_HDR size
-    fake_backup_key_bytes = (
-        backup_key_bytes[: pvk_header_size + 32] + b"\xff" + backup_key_bytes[pvk_header_size + 33 :]
-    )
 
     if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
         raise ValueError("Invalid masterkey file")
@@ -90,58 +83,16 @@ async def main() -> None:
         monitor = MyDpapiEventMonitor()
         await manager.subscribe(monitor)
 
-        # Add masterkeys
-        domain_mk_guid = UUID("12345678-1234-5678-9abc-123456789abc")
-        await manager.upsert_masterkey(
-            MasterKey(
-                guid=domain_mk_guid,
-                encrypted_key_usercred=masterkey_file.master_key[:-1] + b"\x00",
-                encrypted_key_backup=masterkey_file.domain_backup_key[:-1] + b"\x00",
-            )
-        )
-
-        cred_mk_guid1 = UUID("87654321-4321-8765-cba9-987654321cba")
-        await manager.upsert_masterkey(
-            MasterKey(
-                guid=cred_mk_guid1,
-                encrypted_key_usercred=masterkey_file.master_key[:-1] + b"\x00",
-                encrypted_key_backup=masterkey_file.domain_backup_key[:-1] + b"\x00",
-            )
-        )
-
-        # Create a fake masterkey that won't decrypt
-        cred_mk_guid2 = UUID("11111111-2222-3333-4444-555555555555")
-        await manager.upsert_masterkey(
-            MasterKey(
-                guid=cred_mk_guid2,
-                encrypted_key_usercred=masterkey_file.master_key[:50] + b"\xff" * 20 + masterkey_file.master_key[70:],
-                encrypted_key_backup=masterkey_file.domain_backup_key[:50]
-                + b"\xff" * 30
-                + masterkey_file.domain_backup_key[80:],
-            )
-        )
-
-        print("Added 3 masterkeys")
-
-        # Add domain backup key (fake one first)
-        backup_key = DomainBackupKey(
-            guid=UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
-            key_data=fake_backup_key_bytes,
-        )
-        await manager.upsert_domain_backup_key(backup_key)
-
-        # Check results after fake backup key
-        all_keys = await manager.get_all_masterkeys()
-        decrypted_keys = await manager.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
-        print(f"\nAfter fake backup key - Total masterkeys: {len(all_keys)}, Decrypted: {len(decrypted_keys)}")
-
+        # Add the real masterkey from the test fixture
         await manager.upsert_masterkey(
             MasterKey(
                 guid=masterkey_file.masterkey_guid,
                 encrypted_key_usercred=masterkey_file.master_key,
-                encrypted_key_backup=masterkey_file.domain_backup_key,
+                encrypted_key_backup=masterkey_file.domain_backup_key.raw_bytes,
             )
         )
+
+        print("Added 1 masterkey")
 
         # Add real backup key
         real_backup_key = DomainBackupKey(
@@ -173,17 +124,12 @@ async def main() -> None:
             blob_data = f.read()
 
         # Parse blob to get its structure and masterkey GUID
-
         blob = Blob.parse(blob_data)
         print(f"Blob masterkey GUID: {blob.masterkey_guid}")
 
         # Decrypt the blob using the DPAPI manager
         decrypted_blob_data = await manager.decrypt_blob(blob)
         print(f"Decrypted blob data: {decrypted_blob_data.decode('utf-8')}")
-
-        # Update domain_mk_guid to use the real one for blob decryption test
-        if decrypted_keys_final:
-            domain_mk_guid = masterkey_file.masterkey_guid
 
 
 if __name__ == "__main__":

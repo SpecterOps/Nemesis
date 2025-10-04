@@ -6,10 +6,10 @@ import json
 import struct
 from enum import IntFlag
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 from uuid import UUID
 
-from Crypto.Cipher import PKCS1_v1_5
+from Cryptodome.Cipher import PKCS1_v1_5
 from Cryptodome.Hash import SHA1
 from dpapick3 import blob as dpapick3_blob
 from impacket.dpapi import (
@@ -19,17 +19,11 @@ from impacket.dpapi import (
     PVK_FILE_HDR,
     privatekeyblob_to_pkcs1,
 )
-from impacket.dpapi import DomainKey as ImpacketDomainKey
 from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 
-from .exceptions import (
-    BlobDecryptionError,
-    BlobParsingError,
-    InvalidBackupKeyError,
-    MasterKeyDecryptionError,
-)
+from .exceptions import BlobDecryptionError, BlobParsingError, InvalidBackupKeyError, MasterKeyDecryptionError
 from .keys import MasterKeyEncryptionKey
 
 if TYPE_CHECKING:
@@ -56,6 +50,24 @@ class BaseModel(PydanticBaseModel):
         """
         parsed = json.loads(data, **kwargs)
         return cls.model_validate(parsed)
+
+
+class FlagMixin:
+    def has_any(self: Self, flags: Self) -> bool:
+        """True if *any* bit in `flags` is set in `self`."""
+        return bool(self & flags)
+
+    def has_all(self: Self, flags: Self) -> bool:
+        """True if *all* bits in `flags` are set in `self`."""
+        return (self & flags) == flags
+
+    def enable(self: Self, flags: Self) -> Self:
+        """Return self | flags."""
+        return self | flags
+
+    def disable(self: Self, flags: Self) -> Self:
+        """Return self with `flags` cleared."""
+        return self & ~flags
 
 
 class MasterKeyPolicy(IntFlag):
@@ -261,6 +273,95 @@ class Blob(BaseModel):
         return blob_dpapick.cleartext
 
 
+class BackupKeyRecoveryBlob(BaseModel):
+    """Represents a BACKUPKEY_RECOVERY_BLOB structure.
+
+    Used for backup key recovery operations in DPAPI.
+    """
+
+    model_config = {"frozen": True}
+
+    raw_bytes: bytes
+
+    version: int
+    cb_encrypted_master_key: int
+    cb_encrypted_payload: int
+    guid_key: UUID
+    encrypted_master_key: bytes
+    encrypted_payload: bytes
+
+    @classmethod
+    def parse(cls, data: bytes) -> BackupKeyRecoveryBlob:
+        """Parse a BACKUPKEY_RECOVERY_BLOB from bytes.
+
+        Args:
+            data: Raw bytes containing the BACKUPKEY_RECOVERY_BLOB structure
+
+        Returns:
+            BackupKeyRecoveryBlob instance with parsed data
+
+        Raises:
+            ValueError: If data is too short or invalid
+        """
+        if len(data) < 28:  # Minimum size: 4 + 4 + 4 + 16
+            raise ValueError(f"Data too short for BACKUPKEY_RECOVERY_BLOB: {len(data)} bytes")
+
+        # Parse header: DWORD version, DWORD cbEncryptedMasterKey, DWORD cbEncryptedPayload
+        blob_header = struct.unpack("<III", data[:12])
+        version = blob_header[0]
+        cb_encrypted_master_key = blob_header[1]
+        cb_encrypted_payload = blob_header[2]
+
+        # Validate version (typically 2 for BACKUPKEY_RECOVERY_BLOB)
+        if version not in (1, 2, 3):
+            raise ValueError(f"Unexpected BACKUPKEY_RECOVERY_BLOB version: {version}")
+
+        # Validate data sizes are reasonable
+        if cb_encrypted_master_key > len(data) or cb_encrypted_payload > len(data):
+            raise ValueError(
+                f"Invalid sizes: cb_encrypted_master_key={cb_encrypted_master_key}, "
+                f"cb_encrypted_payload={cb_encrypted_payload}, data_len={len(data)}"
+            )
+
+        # Validate total size matches expected size
+        expected_size = 28 + cb_encrypted_master_key + cb_encrypted_payload
+        if len(data) < expected_size:
+            raise ValueError(f"Data too short: expected {expected_size} bytes, got {len(data)} bytes")
+
+        # Parse GUID (16 bytes starting at offset 12)
+        guid_bytes = data[12:28]
+        data1, data2, data3 = struct.unpack("<IHH", guid_bytes[:8])
+        data4 = guid_bytes[8:16]
+        guid_key = UUID(f"{data1:08x}-{data2:04x}-{data3:04x}-{data4[0]:02x}{data4[1]:02x}-{data4[2:].hex()}")
+
+        # Extract encrypted master key and payload
+        offset_emk = 28
+        encrypted_master_key = data[offset_emk : offset_emk + cb_encrypted_master_key]
+        offset_ep = offset_emk + cb_encrypted_master_key
+        encrypted_payload = data[offset_ep : offset_ep + cb_encrypted_payload]
+
+        # Validate we got the expected amount of data
+        if len(encrypted_master_key) != cb_encrypted_master_key:
+            raise ValueError(
+                f"Encrypted master key size mismatch: expected {cb_encrypted_master_key}, "
+                f"got {len(encrypted_master_key)}"
+            )
+        if len(encrypted_payload) != cb_encrypted_payload:
+            raise ValueError(
+                f"Encrypted payload size mismatch: expected {cb_encrypted_payload}, got {len(encrypted_payload)}"
+            )
+
+        return cls(
+            raw_bytes=data,
+            version=version,
+            cb_encrypted_master_key=cb_encrypted_master_key,
+            cb_encrypted_payload=cb_encrypted_payload,
+            guid_key=guid_key,
+            encrypted_master_key=encrypted_master_key,
+            encrypted_payload=encrypted_payload,
+        )
+
+
 class MasterKeyFile(BaseModel):
     """Represents a DPAPI masterkey file structure.
 
@@ -284,10 +385,10 @@ class MasterKeyFile(BaseModel):
     backup_key: bytes | None = None
 
     # Domain backup key ("DC recovery key" in MS parlance) protected masterkey data (pbBBK - backup backup key?).
-    domain_backup_key: bytes | None = None
+    domain_backup_key: BackupKeyRecoveryBlob | None = None
 
     # Raw bytes of the entire master key file
-    raw_bytes: bytes | None = None
+    raw_bytes: bytes
 
     @classmethod
     def parse(cls, file_path: str | Path) -> MasterKeyFile:
@@ -378,7 +479,8 @@ class MasterKeyFile(BaseModel):
 
         backup_dc_key = None
         if cb_bbk > 0:
-            backup_dc_key = data[offset : offset + cb_bbk]
+            backup_dc_key_bytes = data[offset : offset + cb_bbk]
+            backup_dc_key = BackupKeyRecoveryBlob.parse(backup_dc_key_bytes)
 
         return cls(
             version=version,
@@ -410,19 +512,6 @@ class MasterKeyFile(BaseModel):
         if not self.domain_backup_key:
             raise ValueError("Masterkey file contains no domain backup key data")
 
-        # Validate domain backup key has minimum size for ImpacketDomainKey structure
-        # (4 bytes version + 16 bytes GUID = 20 bytes minimum)
-        if len(self.domain_backup_key) < 20:
-            raise ValueError(
-                f"Domain backup key data too short ({len(self.domain_backup_key)} bytes). "
-                "This appears to be a local backup key, not a domain backup key."
-            )
-
-        try:
-            domain_key = ImpacketDomainKey(self.domain_backup_key)
-        except Exception as e:
-            raise ValueError(f"Failed to parse domain backup key data from master key file: {e}") from e
-
         try:
             # Extract the private key from the backup key data
             key = PRIVATE_KEY_BLOB(backup_key.key_data[len(PVK_FILE_HDR()) :])
@@ -431,8 +520,8 @@ class MasterKeyFile(BaseModel):
         except Exception as e:
             raise InvalidBackupKeyError(f"Invalid domain backup key: {e}") from e
 
-        # Decrypt the masterkey (reverse byte order as per Impacket implementation)
-        decrypted_key = cipher.decrypt(domain_key["SecretData"][::-1], None)
+        # Decrypt the masterkey. Encrypted masterkey is in reverse byte order (per Impacket implementation)
+        decrypted_key = cipher.decrypt(self.domain_backup_key.encrypted_master_key[::-1], None)
 
         if not decrypted_key:
             raise MasterKeyDecryptionError("Failed to decrypt masterkey with backup key")
@@ -456,7 +545,7 @@ class MasterKeyFile(BaseModel):
         return MasterKey(
             guid=self.masterkey_guid,
             encrypted_key_usercred=self.master_key,
-            encrypted_key_backup=self.domain_backup_key,
+            encrypted_key_backup=self.domain_backup_key.raw_bytes,
             plaintext_key=plaintext_key,
             plaintext_key_sha1=plaintext_key_sha1,
             backup_key_guid=backup_key.guid,

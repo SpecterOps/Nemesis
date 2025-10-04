@@ -41,7 +41,7 @@ async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
                     encrypted_key_usercred=mk_domain.master_key,
-                    encrypted_key_backup=mk_domain.domain_backup_key,
+                    encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes if mk_domain.domain_backup_key else None,
                 )
             )
 

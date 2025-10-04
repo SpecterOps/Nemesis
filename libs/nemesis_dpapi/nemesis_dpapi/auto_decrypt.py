@@ -10,7 +10,7 @@ from nemesis_dpapi.exceptions import MasterKeyDecryptionError
 from nemesis_dpapi.keys import MasterKeyEncryptionKey
 from nemesis_dpapi.repositories import MasterKeyFilter
 
-from .core import MasterKey, MasterKeyFile, MasterKeyPolicy
+from .core import BackupKeyRecoveryBlob, MasterKey, MasterKeyFile, MasterKeyPolicy
 from .eventing import (
     DpapiEvent,
     DpapiObserver,
@@ -182,13 +182,21 @@ class AutoDecryptionObserver(DpapiObserver):
                 if enc_masterkey.encrypted_key_backup is None:
                     continue
 
+                # Parse the encrypted backup key bytes into a BackupKeyRecoveryBlob
+                try:
+                    backup_key_blob = BackupKeyRecoveryBlob.parse(enc_masterkey.encrypted_key_backup)
+                except Exception:
+                    # Skip if we can't parse the backup key blob
+                    continue
+
                 masterkey_file = MasterKeyFile(
                     version=0,
                     modified=False,
                     file_path=None,
                     masterkey_guid=enc_masterkey.guid,
                     policy=MasterKeyPolicy.NONE,
-                    domain_backup_key=enc_masterkey.encrypted_key_backup,
+                    domain_backup_key=backup_key_blob,
+                    raw_bytes=b"",  # Not needed for decryption
                 )
 
                 try:
