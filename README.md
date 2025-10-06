@@ -57,7 +57,7 @@ Presentations:
 
 | Title                                                                      | Date         |
 |----------------------------------------------------------------------------|--------------|
-| [*x33fcon 2025*](https://github.com/UNC1739/Nemesis.git)                   | Jun 13, 2025 |
+| [*x33fcon 2025*](https://www.youtube.com/watch?v=RjLqfhQGUnE)              | Jun 13, 2025 |
 | [*SAINTCON 2023*](https://www.youtube.com/watch?v=0q9u2hDcpIo)             | Oct 24, 2023 |
 | [*BSidesAugusta 2023*](https://www.youtube.com/watch?v=Ug9r7lCF_FA)        | Oct 7, 2023  |
 | [*44CON 2023*](https://www.youtube.com/watch?v=tjPTLBGI7K8)                | Sep 15, 2023 |
