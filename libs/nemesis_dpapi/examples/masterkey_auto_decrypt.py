@@ -23,10 +23,90 @@ domain backup keys are added to the DpapiManager. It runs three scenarios:
 import asyncio
 import base64
 import json
+import struct
 from pathlib import Path
 from uuid import UUID
 
+from Crypto.PublicKey import RSA
+
 from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKey, MasterKeyFile, MasterKeyFilter
+
+
+def create_incorrect_backup_key(correct_key_data: bytes) -> bytes:
+    """Create a valid but incorrect domain backup key by generating a new RSA key.
+
+    This creates a properly formatted PVK file with a different RSA key pair,
+    ensuring the backup key will pass all validation checks but fail to decrypt.
+    """
+    # Parse the original PVK header to get the structure
+    magic, version, key_spec, encrypt_type, encrypt_data_size, pvk_size = struct.unpack("<6I", correct_key_data[:24])
+
+    # Generate a new RSA key with the same size (2048 bits is typical for DPAPI)
+    # We'll use a smaller size for faster generation in the example
+    new_rsa_key = RSA.generate(2048)
+
+    # Export as DER format (PKCS#1 private key)
+    private_key_der = new_rsa_key.export_key(format='DER', pkcs=1)
+
+    # Convert DER to Microsoft's PRIVATE_KEY_BLOB format
+    # The PRIVATE_KEY_BLOB format is:
+    # PUBLICKEYSTRUC (8 bytes) + RSAPUBKEY (variable)
+    # For simplicity, we'll use the impacket structure from a generated key
+    from impacket.dpapi import PRIVATE_KEY_BLOB
+
+    # Create a PRIVATE_KEY_BLOB from our RSA key
+    # Structure: magic (4) + bitlen (4) + pubexp (4) + modulus + prime1 + prime2 + exp1 + exp2 + coef + privexp
+    n = new_rsa_key.n
+    e = new_rsa_key.e
+    d = new_rsa_key.d
+    p = new_rsa_key.p
+    q = new_rsa_key.q
+
+    # Calculate additional RSA-CRT parameters
+    dmp1 = d % (p - 1)
+    dmq1 = d % (q - 1)
+    iqmp = pow(q, -1, p)
+
+    # Get bit length
+    bitlen = new_rsa_key.size_in_bits()
+    bytelen = bitlen // 8
+    halflen = bytelen // 2
+
+    # Build the PRIVATEKEYBLOB structure
+    # BLOBHEADER
+    blob = struct.pack('<BBBB', 0x07, 0x02, 0x00, 0x00)  # bType=PRIVATEKEYBLOB, bVersion=2, reserved, algorithm
+    blob += struct.pack('<I', 0x00024000 | 0x0000A400)  # CALG_RSA_KEYX
+
+    # RSAPUBKEY
+    blob += struct.pack('<4s', b'RSA2')  # magic
+    blob += struct.pack('<I', bitlen)  # bitlen
+    blob += struct.pack('<I', e)  # pubexp
+
+    # Private key components (all little-endian)
+    def to_bytes_le(num, length):
+        return num.to_bytes(length, byteorder='little')
+
+    blob += to_bytes_le(n, bytelen)  # modulus
+    blob += to_bytes_le(p, halflen)  # prime1
+    blob += to_bytes_le(q, halflen)  # prime2
+    blob += to_bytes_le(dmp1, halflen)  # exponent1
+    blob += to_bytes_le(dmq1, halflen)  # exponent2
+    blob += to_bytes_le(iqmp, halflen)  # coefficient
+    blob += to_bytes_le(d, bytelen)  # privateExponent
+
+    new_pvk_size = len(blob)
+
+    # Build new PVK file with same header structure but new key
+    new_pvk = struct.pack('<6I', magic, version, key_spec, encrypt_type, encrypt_data_size, new_pvk_size)
+
+    # Add encrypted data if present (we'll use empty since encrypt_type should be 0)
+    if encrypt_data_size > 0:
+        new_pvk += b'\x00' * encrypt_data_size
+
+    # Add the new private key blob
+    new_pvk += blob
+
+    return new_pvk
 
 
 async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
@@ -52,6 +132,7 @@ async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
 
         # Add the domain backup key - this should trigger automatic decryption
         print("\n2. Adding domain backup key (should decrypt domain masterkey)...")
+        # Use the correct backup key to demonstrate successful auto-decryption
         backup_key = DomainBackupKey(
             guid=UUID(backup_key_data["backup_key_guid"]),
             key_data=base64.b64decode(backup_key_data["key"]),
@@ -80,6 +161,7 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
     async with DpapiManager(storage_backend="memory") as dpapi2:
         # Add domain backup key first
         print("\n3. Adding domain backup key first...")
+        # Use the correct backup key to demonstrate successful auto-decryption
         backup_key = DomainBackupKey(
             guid=UUID(backup_key_data["backup_key_guid"]),
             key_data=base64.b64decode(backup_key_data["key"]),
@@ -101,7 +183,7 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
                     encrypted_key_usercred=mk_domain.master_key,
-                    encrypted_key_backup=mk_domain.domain_backup_key,
+                    encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes,
                 )
             )
 
@@ -143,7 +225,7 @@ async def auto_decryption_disabled(mk_domain, backup_key_data):
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
                     encrypted_key_usercred=mk_domain.master_key,
-                    encrypted_key_backup=mk_domain.domain_backup_key,
+                    encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes,
                 )
             )
 
@@ -153,9 +235,12 @@ async def auto_decryption_disabled(mk_domain, backup_key_data):
         print(f"Before backup key: {len(all_keys_before)} total, {len(decrypted_keys_before)} decrypted")
 
         # Add backup key - should NOT trigger auto-decryption
+        # Create a valid but incorrect backup key with a different RSA key
+        correct_key_data = base64.b64decode(backup_key_data["key"])
+        incorrect_key_data = create_incorrect_backup_key(correct_key_data)
         backup_key_disabled = DomainBackupKey(
             guid=UUID(backup_key_data["backup_key_guid"]),
-            key_data=base64.b64decode(backup_key_data["key"]),
+            key_data=incorrect_key_data,
             domain_controller=backup_key_data["dc"],
         )
         await dpapi_no_auto.upsert_domain_backup_key(backup_key_disabled)
