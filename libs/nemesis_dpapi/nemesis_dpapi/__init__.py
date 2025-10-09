@@ -1,6 +1,6 @@
 """DPAPI utility library for Windows Data Protection API operations."""
 
-from .core import Blob, MasterKey, MasterKeyFile, MasterKeyPolicy
+from .core import Blob, MasterKey, MasterKeyFile, MasterKeyPolicy, UserAccountType
 from .exceptions import (
     BlobDecryptionError,
     DpapiError,
@@ -32,6 +32,7 @@ __all__ = [
     "MasterKeyPolicy",
     "MasterKeyFile",
     "MasterKeyFilter",
+    "UserAccountType",
     # Keys
     "CredKey",
     "CredKeyHashType",

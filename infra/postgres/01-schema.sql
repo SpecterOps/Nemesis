@@ -750,7 +750,8 @@ CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
     encrypted_key_backup BYTEA,
     plaintext_key BYTEA,
     plaintext_key_sha1 BYTEA,
-    backup_key_guid TEXT
+    backup_key_guid TEXT,
+    user_account_type TEXT DEFAULT 'unknown'
 );
 
 CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (

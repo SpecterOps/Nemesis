@@ -10,7 +10,7 @@ from nemesis_dpapi.exceptions import MasterKeyDecryptionError
 from nemesis_dpapi.keys import MasterKeyEncryptionKey
 from nemesis_dpapi.repositories import MasterKeyFilter
 
-from .core import BackupKeyRecoveryBlob, MasterKey, MasterKeyFile, MasterKeyPolicy
+from .core import BackupKeyRecoveryBlob, MasterKey, MasterKeyFile, MasterKeyPolicy, UserAccountType
 from .eventing import (
     DpapiEvent,
     DpapiObserver,
@@ -118,7 +118,15 @@ class AutoDecryptionObserver(DpapiObserver):
 
         if encrypted_masterkeys is None:
             # TODO: Filter out User masterkeys
-            encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
+            encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
+                filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.SYSTEM
+            )
+            encrypted_masterkeys += await self.dpapi_manager.get_all_masterkeys(
+                filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.SYSTEM_USER
+            )
+            encrypted_masterkeys += await self.dpapi_manager.get_all_masterkeys(
+                filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.UNKNOWN
+            )
 
         if len(encrypted_masterkeys) == 0:
             return
@@ -195,6 +203,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     file_path=None,
                     masterkey_guid=enc_masterkey.guid,
                     policy=MasterKeyPolicy.NONE,
+                    user_account_type=enc_masterkey.user_account_type,
                     domain_backup_key=backup_key_blob,
                     raw_bytes=b"",  # Not needed for decryption
                 )
@@ -211,6 +220,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     )
                     new_mk = MasterKey(
                         guid=enc_masterkey.guid,
+                        user_account_type=enc_masterkey.user_account_type,
                         encrypted_key_usercred=enc_masterkey.encrypted_key_usercred,
                         encrypted_key_backup=enc_masterkey.encrypted_key_backup,
                         plaintext_key=result.plaintext_key,
@@ -242,6 +252,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     file_path=None,
                     masterkey_guid=masterkey.guid,
                     policy=MasterKeyPolicy.NONE,
+                    user_account_type=masterkey.user_account_type,
                     domain_backup_key=masterkey.encrypted_key_backup,
                 )
 
@@ -253,6 +264,7 @@ class AutoDecryptionObserver(DpapiObserver):
             if result:
                 new_mk = MasterKey(
                     guid=masterkey.guid,
+                    user_account_type=masterkey.user_account_type,
                     encrypted_key_usercred=masterkey.encrypted_key_usercred,
                     encrypted_key_backup=masterkey.encrypted_key_backup,
                     plaintext_key=result.plaintext_key,

@@ -7,7 +7,7 @@ import asyncpg
 from Crypto.Hash import SHA1
 
 from .auto_decrypt import AutoDecryptionObserver
-from .core import Blob, MasterKey
+from .core import Blob, MasterKey, UserAccountType
 from .eventing import (
     DaprDpapiEventPublisher,
     DpapiObserver,
@@ -203,26 +203,33 @@ class DpapiManager(DpapiManagerProtocol):
 
         return blob.decrypt(masterkey)
 
-    async def get_masterkey(self, guid: UUID) -> MasterKey | None:
-        """Retrieve a masterkey by GUID."""
+    async def get_masterkey(self, guid: UUID, user_account_type: UserAccountType | None = None) -> MasterKey | None:
+        """Retrieve a masterkey by GUID.
+
+        Args:
+            guid: Masterkey GUID to retrieve
+            user_account_type: Optional filter by user account type
+        """
         if not self._initialized:
             await self._initialize_storage()
-        return await self._masterkey_repo.get_masterkey(guid)
+        return await self._masterkey_repo.get_masterkey(guid, user_account_type)
 
     async def get_all_masterkeys(
         self,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
+        user_account_type: UserAccountType | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering.
 
         Args:
             filter_by: Filter by decryption status (default: ALL)
             backup_key_guid: Filter by backup key GUID (default: None for all)
+            user_account_type: Filter by user account type (default: None for all)
         """
         if not self._initialized:
             await self._initialize_storage()
-        return await self._masterkey_repo.get_all_masterkeys(filter_by, backup_key_guid)
+        return await self._masterkey_repo.get_all_masterkeys(filter_by, backup_key_guid, user_account_type)
 
     async def get_system_credential(self, guid: UUID) -> DpapiSystemCredential | None:
         """Retrieve a DPAPI system credential by GUID."""

@@ -6,7 +6,7 @@ from unittest.mock import PropertyMock, patch
 from uuid import UUID
 
 import pytest
-from nemesis_dpapi.core import Blob, MasterKey, MasterKeyFile
+from nemesis_dpapi.core import Blob, MasterKey, MasterKeyFile, UserAccountType
 from nemesis_dpapi.keys import (
     CredKey,
     CredKeyHashType,
@@ -618,6 +618,7 @@ class TestDomainBackupKey:
         await manager.upsert_masterkey(
             MasterKey(
                 guid=decrypted_masterkey.guid,
+                user_account_type=UserAccountType.UNKNOWN,
                 plaintext_key=decrypted_masterkey.plaintext_key,
                 plaintext_key_sha1=decrypted_masterkey.plaintext_key_sha1,
             )

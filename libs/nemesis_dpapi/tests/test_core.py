@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pytest
 from impacket.dpapi import DPAPI_BLOB
-from nemesis_dpapi.core import Blob, MasterKey, MasterKeyFile, MasterKeyPolicy
+from nemesis_dpapi.core import Blob, MasterKey, MasterKeyFile, MasterKeyPolicy, UserAccountType
 from nemesis_dpapi.exceptions import BlobDecryptionError
 from nemesis_dpapi.keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey
 
@@ -252,6 +252,7 @@ class TestMasterKey:
 
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -274,6 +275,7 @@ class TestMasterKey:
         masterkey_file = MasterKeyFile.parse(get_file_path("masterkey_system.bin"))
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -294,6 +296,7 @@ class TestMasterKey:
         masterkey_file = MasterKeyFile.parse(get_file_path("masterkey_systemuser.bin"))
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -313,7 +316,7 @@ class TestMasterKey:
         from uuid import uuid4
 
         # Create MasterKey without encrypted_key_usercred
-        masterkey = MasterKey(guid=uuid4())
+        masterkey = MasterKey(guid=uuid4(), user_account_type=UserAccountType.UNKNOWN)
 
         # Create dummy encryption key
         cred_key = CredKey.from_password("dummy", CredKeyHashType.NTLM)
@@ -331,7 +334,7 @@ class TestBlobDecrypt:
         """Test DPAPI blob decryption with unencrypted master key."""
         blob = Blob.parse(blob_without_entropy)
         # Create an unencrypted master key
-        masterkey = MasterKey(guid=blob.masterkey_guid)
+        masterkey = MasterKey(guid=blob.masterkey_guid, user_account_type=UserAccountType.UNKNOWN)
 
         with pytest.raises(ValueError, match="Master key must be decrypted before use"):
             blob.decrypt(masterkey)
@@ -342,7 +345,10 @@ class TestBlobDecrypt:
         # Create a master key with wrong SHA1 hash
         wrong_masterkey_sha1 = b"wrong_key" + b"\x00" * 8  # 20 bytes
         masterkey = MasterKey(
-            guid=blob.masterkey_guid, plaintext_key=b"dummy_key" * 8, plaintext_key_sha1=wrong_masterkey_sha1
+            guid=blob.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
+            plaintext_key=b"dummy_key" * 8,
+            plaintext_key_sha1=wrong_masterkey_sha1,
         )
 
         with pytest.raises(BlobDecryptionError):
@@ -354,7 +360,10 @@ class TestBlobDecrypt:
 
         masterkey_sha1_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
         masterkey = MasterKey(
-            guid=blob.masterkey_guid, plaintext_key=masterkey_bytes, plaintext_key_sha1=masterkey_sha1_bytes
+            guid=blob.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
+            plaintext_key=masterkey_bytes,
+            plaintext_key_sha1=masterkey_sha1_bytes,
         )
 
         entropy = bytes([1, 2, 3, 4, 5])
@@ -371,7 +380,10 @@ class TestBlobDecrypt:
 
         masterkey_sha1_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
         masterkey = MasterKey(
-            guid=blob.masterkey_guid, plaintext_key=masterkey_bytes, plaintext_key_sha1=masterkey_sha1_bytes
+            guid=blob.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
+            plaintext_key=masterkey_bytes,
+            plaintext_key_sha1=masterkey_sha1_bytes,
         )
 
         decrypted_data = blob.decrypt(masterkey)
@@ -393,6 +405,7 @@ class TestBlobDecrypt:
         # Create a proper master key object
         masterkey = MasterKey(
             guid=blob.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             plaintext_key=b"dummy_key" * 8,  # We only need the SHA1 hash for decryption
             plaintext_key_sha1=masterkey_sha1_bytes,
         )

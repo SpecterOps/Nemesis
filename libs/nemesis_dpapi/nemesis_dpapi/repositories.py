@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Protocol
 from uuid import UUID
 
-from .core import MasterKey
+from .core import MasterKey, UserAccountType
 from .keys import DomainBackupKey, DpapiSystemCredential
 
 
@@ -23,20 +23,27 @@ class MasterKeyRepository(Protocol):
         """Add or update a masterkey in storage."""
         ...
 
-    async def get_masterkey(self, guid: UUID) -> MasterKey | None:
-        """Retrieve a masterkey by GUID."""
+    async def get_masterkey(self, guid: UUID, user_account_type: UserAccountType | None = None) -> MasterKey | None:
+        """Retrieve a masterkey by GUID.
+
+        Args:
+            guid: Masterkey GUID to retrieve
+            user_account_type: Optional filter by user account type
+        """
         ...
 
     async def get_all_masterkeys(
         self,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
+        user_account_type: UserAccountType | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering.
 
         Args:
             filter_by: Filter by decryption status (default: ALL)
             backup_key_guid: Filter by backup key GUID (default: None for all)
+            user_account_type: Filter by user account type (default: None for all)
         """
         ...
 

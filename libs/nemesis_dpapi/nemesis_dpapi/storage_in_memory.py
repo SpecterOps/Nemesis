@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from .core import MasterKey
+from .core import MasterKey, UserAccountType
 from .exceptions import StorageError
 from .keys import DomainBackupKey, DpapiSystemCredential
 from .repositories import MasterKeyFilter
@@ -18,14 +18,36 @@ class InMemoryMasterKeyRepository:
         """Add or update a masterkey in storage."""
         self._masterkeys[masterkey.guid] = masterkey
 
-    async def get_masterkey(self, guid: UUID) -> MasterKey | None:
-        """Retrieve a masterkey by GUID."""
-        return self._masterkeys.get(guid)
+    async def get_masterkey(self, guid: UUID, user_account_type: UserAccountType | None = None) -> MasterKey | None:
+        """Retrieve a masterkey by GUID.
+
+        Args:
+            guid: Masterkey GUID to retrieve
+            user_account_type: Optional filter by user account type
+        """
+        masterkey = self._masterkeys.get(guid)
+        if masterkey is None:
+            return None
+
+        # Apply user account type filter if specified
+        if user_account_type is not None and masterkey.user_account_type != user_account_type:
+            return None
+
+        return masterkey
 
     async def get_all_masterkeys(
-        self, filter_by: MasterKeyFilter = MasterKeyFilter.ALL, backup_key_guid: UUID | None = None
+        self,
+        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        backup_key_guid: UUID | None = None,
+        user_account_type: UserAccountType | None = None,
     ) -> list[MasterKey]:
-        """Retrieve masterkeys with optional filtering."""
+        """Retrieve masterkeys with optional filtering.
+
+        Args:
+            filter_by: Filter by decryption status (default: ALL)
+            backup_key_guid: Filter by backup key GUID (default: None for all)
+            user_account_type: Filter by user account type (default: None for all)
+        """
         masterkeys = list(self._masterkeys.values())
 
         # Filter by decryption status
@@ -37,6 +59,10 @@ class InMemoryMasterKeyRepository:
         # Filter by backup key GUID
         if backup_key_guid is not None:
             masterkeys = [mk for mk in masterkeys if mk.backup_key_guid == backup_key_guid]
+
+        # Filter by user account type
+        if user_account_type is not None:
+            masterkeys = [mk for mk in masterkeys if mk.user_account_type == user_account_type]
 
         return masterkeys
 

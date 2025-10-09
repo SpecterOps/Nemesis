@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import struct
-from enum import IntFlag
+from enum import Enum, IntFlag
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 from uuid import UUID
@@ -79,6 +79,16 @@ class MasterKeyPolicy(FlagMixin, IntFlag):
     DPAPI_OWF = 0x4  # Use the DPAPI One way function of the password (SHA_1(pw))
 
 
+class UserAccountType(str, Enum):
+    """Classification of the user account type for a masterkey."""
+
+    UNKNOWN = "unknown"  # Account type could not be determined
+    LOCAL_USER = "local_user"  # Local user account
+    DOMAIN_USER = "domain_user"  # Domain user account
+    SYSTEM = "system"  # SYSTEM machine user, LocalService, NetworkService
+    SYSTEM_USER = "system_user"  # The machine's DPAPI SYSTEM user
+
+
 class MasterKey(BaseModel):
     """Represents a DPAPI masterkey.
 
@@ -89,9 +99,11 @@ class MasterKey(BaseModel):
         backup_key_guid: GUID of the domain backup key used to encrypt this masterkey.
         plaintext_key: Decrypted masterkey data.
         plaintext_key_sha1: SHA1 hash of the plaintext masterkey. AKA the Master Key (MK) Encryption Key.
+        user_account_type: Type of user account this masterkey belongs to.
     """
 
     guid: UUID
+    user_account_type: UserAccountType
     encrypted_key_usercred: bytes | None = None
     encrypted_key_backup: bytes | None = None
     plaintext_key: bytes | None = None
@@ -113,6 +125,7 @@ class MasterKey(BaseModel):
             f"  plaintext_key: {self.plaintext_key.hex() if self.plaintext_key else None}",
             f"  plaintext_key_sha1: {self.plaintext_key_sha1.hex() if self.plaintext_key_sha1 else None}",
             f"  backup_key_guid: {self.backup_key_guid}",
+            f"  user_account_type: {self.user_account_type.value}",
         ]
         return "\r\n".join(lines)
 
@@ -437,6 +450,7 @@ class MasterKeyFile(BaseModel):
             f"  file_path: {self.file_path}",
             f"  masterkey_guid: {self.masterkey_guid}",
             f"  policy: {self.policy} ({policy_str})\n",
+            f"  user_account_type: {self.user_account_type.value}\n",
             f"master_key: {self.master_key.hex() if self.master_key else None}\n",
             f"local_key: {self.local_key.hex() if self.local_key else None}\n",
             f"backup_key: {self.backup_key.hex() if self.backup_key else None}\n",
@@ -445,11 +459,14 @@ class MasterKeyFile(BaseModel):
         return "\n".join(lines)
 
     @classmethod
-    def parse(cls, file_path: str | Path) -> MasterKeyFile:
+    def parse(
+        cls, file_path: str | Path, user_account_type: UserAccountType = UserAccountType.UNKNOWN
+    ) -> MasterKeyFile:
         """Parse a masterkey file from disk.
 
         Args:
             file_path: Path to the masterkey file
+            user_account_type: Type of user account this masterkey belongs to (default: UNKNOWN)
 
         Returns:
             MasterKeyFile instance with parsed data
@@ -542,6 +559,7 @@ class MasterKeyFile(BaseModel):
             file_path=None,  # Invalid on disk, set to None
             masterkey_guid=guid,
             policy=MasterKeyPolicy(policy),
+            user_account_type=user_account_type,
             master_key=master_key,
             local_key=local_key,
             backup_key=backup_key,
@@ -598,6 +616,7 @@ class MasterKeyFile(BaseModel):
 
         return MasterKey(
             guid=self.masterkey_guid,
+            user_account_type=self.user_account_type,
             encrypted_key_usercred=self.master_key,
             encrypted_key_backup=self.domain_backup_key.raw_bytes,
             plaintext_key=plaintext_key,
