@@ -9,11 +9,103 @@ from uuid import UUID  # noqa: TC003 - need for pydantic
 
 from Crypto.Hash import HMAC, MD4, SHA1, SHA256
 from Crypto.Protocol.KDF import PBKDF2
-from impacket.dpapi import PRIVATE_KEY_BLOB, PVK_FILE_HDR
+from impacket.dpapi import PRIVATE_KEY_BLOB
 from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 if TYPE_CHECKING:
     from .types import Sid
+
+
+# PVK file format constants
+PVK_MAGIC = 0xB0B5F11E
+PVK_FILE_VERSION_0 = 0
+PVK_NO_ENCRYPT = 0
+MAX_PVK_FILE_LEN = 4096
+
+
+class PvkFileHeader(BaseModel):
+    """PVK file header structure.
+
+    Based on the Microsoft PVK file format:
+    typedef struct _FILE_HDR {
+        DWORD dwMagic;
+        DWORD dwVersion;
+        DWORD dwKeySpec;
+        DWORD dwEncryptType;
+        DWORD cbEncryptData;
+        DWORD cbPvk;
+    } FILE_HDR, *PFILE_HDR;
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    magic: int  # Should be PVK_MAGIC (0xb0b5f11e)
+    version: int  # Should be PVK_FILE_VERSION_0 (0)
+    key_spec: int  # Key specification
+    encrypt_type: int  # Encryption type (PVK_NO_ENCRYPT = 0)
+    encrypt_data_size: int  # Size of encrypted data
+    pvk_size: int  # Size of private key data
+
+    encrypted_data: bytes
+    private_key: bytes
+
+    @classmethod
+    def parse(cls, data: bytes) -> PvkFileHeader:
+        """Parse PVK file header from bytes.
+
+        Args:
+            data: Raw bytes containing the PVK file header and key data
+
+        Returns:
+            Parsed PvkFileHeader instance
+
+        Raises:
+            ValueError: If data is too short or header is invalid
+        """
+        if len(data) < 24:
+            raise ValueError(f"Data too short for PVK header: {len(data)} bytes, need at least 24")
+
+        magic, version, key_spec, encrypt_type, encrypt_data_size, pvk_size = struct.unpack("<6I", data[:24])
+
+        if magic != PVK_MAGIC:
+            raise ValueError(f"Invalid PVK magic: 0x{magic:08x}, expected 0x{PVK_MAGIC:08x}")
+
+        if version != PVK_FILE_VERSION_0:
+            raise ValueError(f"Invalid PVK version: {version}, expected {PVK_FILE_VERSION_0}")
+
+        if encrypt_data_size > MAX_PVK_FILE_LEN:
+            raise ValueError(f"Encrypted data size too large: {encrypt_data_size}, max {MAX_PVK_FILE_LEN}")
+
+        if pvk_size == 0 or pvk_size > MAX_PVK_FILE_LEN:
+            raise ValueError(f"Invalid PVK size: {pvk_size}, must be 1-{MAX_PVK_FILE_LEN}")
+
+        # Parse encrypted data (if present) and private key
+        offset = 24
+
+        # Extract encrypted data if present
+        if encrypt_data_size > 0:
+            if len(data) < offset + encrypt_data_size:
+                raise ValueError(f"Data too short for encrypted data: need {offset + encrypt_data_size} bytes")
+            encrypted_data = data[offset:offset + encrypt_data_size]
+            offset += encrypt_data_size
+        else:
+            encrypted_data = b""
+
+        # Extract private key data
+        if len(data) < offset + pvk_size:
+            raise ValueError(f"Data too short for private key: need {offset + pvk_size} bytes")
+        private_key = data[offset:offset + pvk_size]
+
+        return cls(
+            magic=magic,
+            version=version,
+            key_spec=key_spec,
+            encrypt_type=encrypt_type,
+            encrypt_data_size=encrypt_data_size,
+            pvk_size=pvk_size,
+            encrypted_data=encrypted_data,
+            private_key=private_key,
+        )
 
 
 class Password(BaseModel):
@@ -287,25 +379,23 @@ class DomainBackupKey(BaseModel):
         if not isinstance(v, bytes):
             raise ValueError("key_data must be bytes")
 
-        # Check minimum size - PVK header is at least 20 bytes
-        pvk_header_size = len(PVK_FILE_HDR())
+        # Check minimum size - PVK header is 24 bytes
+        pvk_header_size = 24
         if len(v) < pvk_header_size:
             raise ValueError(
                 f"key_data too short: {len(v)} bytes, minimum {pvk_header_size} bytes required for PVK header"
             )
 
         try:
-            # Validate PVK header can be parsed
-            PVK_FILE_HDR(v[:pvk_header_size])
+            # Validate PVK header and full structure can be parsed
+            # This validates magic number, version, sizes, and private key blob
+            header = PvkFileHeader.parse(v)
         except Exception as e:
             raise ValueError(f"Invalid PVK file header: {e}") from e
 
         try:
-            # Validate PRIVATE_KEY_BLOB can be parsed from the remaining data
-            private_key_data = v[pvk_header_size:]
-            if len(private_key_data) == 0:
-                raise ValueError("No private key data found after PVK header")
-            PRIVATE_KEY_BLOB(private_key_data)
+            # Validate PRIVATE_KEY_BLOB can be parsed from the private key data
+            PRIVATE_KEY_BLOB(header.private_key)
         except Exception as e:
             raise ValueError(f"Invalid private key blob: {e}") from e
 

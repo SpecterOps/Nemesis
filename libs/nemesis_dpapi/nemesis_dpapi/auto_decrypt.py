@@ -221,7 +221,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     await self.dpapi_manager._masterkey_repo.upsert_masterkey(new_mk)
 
         except Exception as e:
-            logger.error(f"Auto-decrypt error: {e}")
+            logger.error(f"Auto-decrypt _attempt_masterkey_decryption_with_backup_key error: {e}")
 
     async def _decrypt_with_backup_keys(self, masterkey: MasterKey) -> None:
         """Attempt to decrypt a masterkey using all available backup keys."""

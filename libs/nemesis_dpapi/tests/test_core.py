@@ -61,8 +61,19 @@ class TestMasterKeyFile:
         assert masterkey.file_path is None
         assert masterkey.master_key and len(masterkey.master_key) == 176
         assert masterkey.local_key and len(masterkey.local_key) == 144
+
+        # Check backup key struct
         assert not masterkey.backup_key
-        assert masterkey.domain_backup_key and len(masterkey.domain_backup_key.raw_bytes) == 428
+
+        # Check domain backup key struct
+        assert masterkey.domain_backup_key
+        assert len(masterkey.domain_backup_key.raw_bytes) == 428
+        assert masterkey.domain_backup_key.version == 3
+        assert masterkey.domain_backup_key.cb_encrypted_master_key == 256
+        assert masterkey.domain_backup_key.cb_encrypted_payload == 144
+        assert str(masterkey.domain_backup_key.guid_key) == "7efa51b1-2523-45bf-acba-2e15ecf4f1e7"
+        assert masterkey.domain_backup_key.encrypted_master_key.hex().startswith("e200130192")
+        assert masterkey.domain_backup_key.encrypted_payload.hex().startswith("132f05f5")
 
     def test_parse_valid_masterkey_file_local(self):
         """Test parsing a valid masterkey file from a local account."""

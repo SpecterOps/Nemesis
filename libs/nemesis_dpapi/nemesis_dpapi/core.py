@@ -70,7 +70,7 @@ class FlagMixin:
         return self & ~flags
 
 
-class MasterKeyPolicy(IntFlag):
+class MasterKeyPolicy(FlagMixin, IntFlag):
     """Policy bits for DPAPI masterkey."""
 
     NONE = 0x0  # No special policy
@@ -102,6 +102,19 @@ class MasterKey(BaseModel):
     def is_decrypted(self) -> bool:
         """Check if masterkey has been decrypted."""
         return self.plaintext_key is not None
+
+    def __str__(self) -> str:
+        """Return a string representation of the MasterKey with all properties."""
+        lines = [
+            f"MasterKey({self.guid})",
+            f"  guid: {self.guid}",
+            f"  encrypted_key_usercred: {self.encrypted_key_usercred.hex() if self.encrypted_key_usercred else None}",
+            f"  encrypted_key_backup: {self.encrypted_key_backup.hex() if self.encrypted_key_backup else None}",
+            f"  plaintext_key: {self.plaintext_key.hex() if self.plaintext_key else None}",
+            f"  plaintext_key_sha1: {self.plaintext_key_sha1.hex() if self.plaintext_key_sha1 else None}",
+            f"  backup_key_guid: {self.backup_key_guid}",
+        ]
+        return "\r\n".join(lines)
 
     def decrypt(self, master_key_encryption_key: MasterKeyEncryptionKey) -> MasterKey:
         """Decrypt the master key using the provided master key encryption key.
@@ -276,7 +289,7 @@ class Blob(BaseModel):
 class BackupKeyRecoveryBlob(BaseModel):
     """Represents a BACKUPKEY_RECOVERY_BLOB structure.
 
-    Used for backup key recovery operations in DPAPI.
+    Used for domain backup key recovery operations in DPAPI.
     """
 
     model_config = {"frozen": True}
@@ -290,6 +303,19 @@ class BackupKeyRecoveryBlob(BaseModel):
     encrypted_master_key: bytes
     encrypted_payload: bytes
 
+    def __str__(self) -> str:
+        """Return a string representation of the BackupKeyRecoveryBlob with all properties."""
+        lines = [
+            "BackupKeyRecoveryBlob()",
+            f"  version: {self.version}",
+            f"  cb_encrypted_master_key: {self.cb_encrypted_master_key}",
+            f"  cb_encrypted_payload: {self.cb_encrypted_payload}",
+            f"  guid_key: {self.guid_key}",
+            f"  encrypted_master_key: {self.encrypted_master_key.hex()}",
+            f"  encrypted_payload: {self.encrypted_payload.hex()}",
+        ]
+        return "\n".join(lines)
+
     @classmethod
     def parse(cls, data: bytes) -> BackupKeyRecoveryBlob:
         """Parse a BACKUPKEY_RECOVERY_BLOB from bytes.
@@ -301,7 +327,7 @@ class BackupKeyRecoveryBlob(BaseModel):
             BackupKeyRecoveryBlob instance with parsed data
 
         Raises:
-            ValueError: If data is too short or invalid
+            ValueError: If the data format is not a valid BACKUPKEY_RECOVERY_BLOB structure
         """
         if len(data) < 28:  # Minimum size: 4 + 4 + 4 + 16
             raise ValueError(f"Data too short for BACKUPKEY_RECOVERY_BLOB: {len(data)} bytes")
@@ -389,6 +415,34 @@ class MasterKeyFile(BaseModel):
 
     # Raw bytes of the entire master key file
     raw_bytes: bytes
+
+    def __str__(self) -> str:
+        """Return a string representation of the MasterKeyFile with all properties."""
+        # Interpret policy flags
+        policy_str = str(self.policy.name) if self.policy else "NONE"
+        if self.policy and self.policy != MasterKeyPolicy.NONE:
+            flags = []
+            if self.policy.has_any(MasterKeyPolicy.LOCAL_BACKUP):
+                flags.append("LOCAL_BACKUP")
+            if self.policy.has_any(MasterKeyPolicy.NO_BACKUP):
+                flags.append("NO_BACKUP")
+            if self.policy.has_any(MasterKeyPolicy.DPAPI_OWF):
+                flags.append("DPAPI_OWF")
+            policy_str = " | ".join(flags) if flags else "NONE"
+
+        lines = [
+            "MasterKeyFile()",
+            f"  version: {self.version}",
+            f"  modified: {self.modified}",
+            f"  file_path: {self.file_path}",
+            f"  masterkey_guid: {self.masterkey_guid}",
+            f"  policy: {self.policy} ({policy_str})\n",
+            f"master_key: {self.master_key.hex() if self.master_key else None}\n",
+            f"local_key: {self.local_key.hex() if self.local_key else None}\n",
+            f"backup_key: {self.backup_key.hex() if self.backup_key else None}\n",
+            f"domain_backup_key: {self.domain_backup_key}",
+        ]
+        return "\n".join(lines)
 
     @classmethod
     def parse(cls, file_path: str | Path) -> MasterKeyFile:

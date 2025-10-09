@@ -687,6 +687,18 @@ class TestDomainBackupKey:
             with pytest.raises(Exception, match="Unexpected decrypted key length"):
                 masterkey_file.decrypt(backup_key)
 
+    def test_parse_backup_key(self):
+        backup_key_b64 = "HvG1sAAAAAABAAAAAAAAAAAAAACUBAAABwIAAACkAABSU0EyAAgAAAEAAQBBif0kcBLSPpOCv+azdnH4mDEDV5UDHl6AVhDmI8AcZPBmYm0/ftO5xXFmsqrQvt9iZsWQP7nG1nzMjGdRq1F9jFKjIqVTjdzgPwEBXxQln6MCqaHPjx6K8/J6He06Y/mf4MueNDv+kWMEsnyayM3Se3RqYia8dR0PAmzJgntKIqbDG8S5c3WbfF3QYhGldkBPgAPuESB0EPg3TcAvXVP88/6oe9BIV8TzYH6CRFd7PaBdq+0YTRejKWALjPrRoNpEW0Uyosgeu4txQNjf57UbOKU4fJ6VoJYRDqvvw1+O4Lui4R6g+gwEByr2W09rcHg2LCEJDUvQSNvRf/FBoq3Hl3Ub7vWs5no65gerQAA0odxPbPKG1MKaexd9bsYynJMwm6TFn/0ram1AxBZrk2Vd9etnefYr4+6ztGaoY9cf5tUG6nK3TUQdLGs6ohmb4JGsRIO6VpLvYylCD+5hpwaDPiqM2il8nHaMLR+QDrRtu2OHzgzgAX0uKP+jq5CNnNbnwvbkyKf75TzcwXzC28d70wl78ud9GkGYmbUY2b/nvkquGsZbnBEV6hIqpZOyTr6SfCmbx9neH5dPhzOm3boXSRiZI/XXCjCk6xvoyyfLiDeatbnEOgGC/+vd5qYVLjR154CCwbQoHfORsTN5q6XlyfBpaYp+qYzl8x/n09Ev7lGLM8FLgLqvOIwwpmzlKCFxFU8JOxOubp4x6/Fgy8nx7m5wtD2uam4WKiKlX26IxCQNAzfThXsjuTi2kaE6vvIk+TM9OkD/ZdzIEIZ62/GVdy1Ns3GMQbk1fBq2+idtQiAweg4zubsoGr2kk0DbbSKrOf9nmxMK/jNP+SKlPrKxExtYlkZbJc//P0IuQ90C4uTZELAADBWWtZrDYozmA3sMnIUQRv6CZMpRU70FKkKqnGtjXtQgX3R6OhIqj5tyCkxu4sFKg4nLzzT4GrMLIqHjtSQ7TuCV4C0yUlJ8PGMKMXBTD0k2IoYbuzKkPfoc6TFaAKf6F0qgH7ZfJgHOD9bWhTP8U8UG3Bo3cHIZXWbg25VE0YQpFxxoNRIHTfLbz5W7opcY5I9ljfQ61+5qkZNcMGl7AGJBU5EJzBQnoJv1DiN0HuoFZHDFoKiq/KV1YkTLDf3yTqCNPWhuwOXOYwDjzM9QyC6tH76jv7fegIu5v2RurhXqLp4IxlnVEYL3AWGexfArKxhmuymUsggEz/y9pOGZdKrmbjixg1vLR3nPAUYnYCmMXc6jAa8HijoTQH0h9d7swEbvPMCH+P1eOUdvW9QxY6GZL3329jUQoIr2zYrUDh0X92q9ZsGkGaNW1P6iHYrZBIwtebNegjcSMboLgeeYxHCPjycfl3shLEu3vV7Wi6VPa6k77ezYYxeelqc6PMjcy2nhHslEoISf3KNH3lpk0/fc0xrTDpZcPpYXr5sI0KZh5IyAwriiqvY9ksSz6tNNS41h0xnWAjtSBITDJnbHJNK3SvCH5gM3/zVrI0RvlLrQaiYMMGd5W2WPSoq0YMKp39ByP+mKMcAn2ic="
+        backup_key_bytes = base64.b64decode(backup_key_b64, validate=True)
+
+        from Cryptodome.Cipher import PKCS1_v1_5
+        from impacket.dpapi import PRIVATE_KEY_BLOB, PVK_FILE_HDR, privatekeyblob_to_pkcs1
+
+        # Extract the private key from the backup key data
+        key = PRIVATE_KEY_BLOB(backup_key_bytes[len(PVK_FILE_HDR()) :])
+        private = privatekeyblob_to_pkcs1(key)
+        cipher = PKCS1_v1_5.new(private)
+
 
 class TestDpapiSystemSecret:
     """Tests for DpapiSystemSecret class."""
@@ -901,10 +913,7 @@ class TestDpapiSystemSecret:
     def test_deserialization_from_json(self):
         """Test deserialization of DpapiSystemCredential from JSON with hex strings."""
         # Create data dict with hex strings (as would be received from JSON)
-        data = {
-            "user_key": dpapi_system_user_key_hex,
-            "machine_key": dpapi_system_machine_key_hex
-        }
+        data = {"user_key": dpapi_system_user_key_hex, "machine_key": dpapi_system_machine_key_hex}
 
         # Deserialize from dict
         credential = DpapiSystemCredential(**data)
