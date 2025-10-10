@@ -289,6 +289,10 @@ class AutoDecryptionObserver(DpapiObserver):
 
     async def _decrypt_with_system_credentials(self, masterkey: MasterKey) -> None:
         """Attempt to decrypt a masterkey using all available DPAPI_SYSTEM credentials."""
+
+        if masterkey.user_account_type == UserAccountType.USER:
+            return  # Skip user masterkeys
+
         start_time = time.perf_counter()
         if masterkey.encrypted_key_usercred is None:
             return  # Cannot decrypt if there's no user credential data
