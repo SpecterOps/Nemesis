@@ -209,15 +209,16 @@ async def submit_dpapi_credential(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
-async def _handle_domain_backup_key_credential(dpapi_manager: DpapiManager, request: DomainBackupKeyCredential) -> dict:
+async def _handle_domain_backup_key_credential(dpapi_manager: DpapiManager, backup_key: DomainBackupKeyCredential) -> dict:
     """Handle domain backup key credential submission."""
 
     # Decode URL encoded value for string-based credentials
-    credential_value = urllib.parse.unquote(request.value)
+    credential_value = urllib.parse.unquote(backup_key.value)
     pvk_data = base64.b64decode(credential_value, validate=True)
     backup_key = DomainBackupKey(
-        guid=UUID(request.guid),  # Use the provided GUID
+        guid=UUID(backup_key.guid),  # Use the provided GUID
         key_data=pvk_data,
+        domain_controller=backup_key.domain_controller,
     )
     await dpapi_manager.upsert_domain_backup_key(backup_key)
     return {"status": "success", "type": "domain_backup_key"}
