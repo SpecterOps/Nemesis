@@ -246,6 +246,13 @@ class AutoDecryptionObserver(DpapiObserver):
         # Try to decrypt the masterkey with each backup key
         for backup_key in backup_keys:
             try:
+                # Parse the encrypted backup key bytes into a BackupKeyRecoveryBlob
+                try:
+                    backup_key_blob = BackupKeyRecoveryBlob.from_bytes(masterkey.encrypted_key_backup)
+                except Exception:
+                    # Skip if we can't parse the backup key blob
+                    continue
+
                 masterkey_file = MasterKeyFile(
                     version=0,
                     modified=False,
@@ -253,7 +260,8 @@ class AutoDecryptionObserver(DpapiObserver):
                     masterkey_guid=masterkey.guid,
                     policy=MasterKeyPolicy.NONE,
                     user_account_type=masterkey.user_account_type,
-                    domain_backup_key=masterkey.encrypted_key_backup,
+                    domain_backup_key=backup_key_blob,
+                    raw_bytes=b"",  # Not needed for decryption
                 )
 
                 result = masterkey_file.decrypt(backup_key)

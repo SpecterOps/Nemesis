@@ -73,10 +73,6 @@
             "name": "projects → noseyparker_scanner"
         },
         {
-            "path": "../projects/triage",
-            "name": "projects → triage"
-        },
-        {
             "path": "../projects/web_api",
             "name": "projects → web_api"
         },
