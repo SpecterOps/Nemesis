@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import struct
 from enum import Enum, IntFlag
 from pathlib import Path
@@ -83,10 +84,59 @@ class UserAccountType(str, Enum):
     """Classification of the user account type for a masterkey."""
 
     UNKNOWN = "unknown"  # Account type could not be determined
-    LOCAL_USER = "local_user"  # Local user account
-    DOMAIN_USER = "domain_user"  # Domain user account
+    USER = "user"  # Domain or local user account
     SYSTEM = "system"  # SYSTEM machine user, LocalService, NetworkService
     SYSTEM_USER = "system_user"  # The machine's DPAPI SYSTEM user
+
+    @classmethod
+    def from_path(cls, path: str | None) -> UserAccountType:
+        """Determine the user account type from a masterkey file path.
+
+        Args:
+            path: The file path to the masterkey file
+
+        Returns:
+            UserAccountType based on the path pattern
+
+        Examples:
+            - C:\\Users\\username\\AppData\\Roaming\\Microsoft\\Protect\\S-1-5-21-...\\{GUID} -> USER
+            - C:\\Windows\\System32\\Microsoft\\Protect\\S-1-5-18\\... -> SYSTEM
+            - C:\\Windows\\System32\\Microsoft\\Protect\\S-1-5-18\\User\\... -> SYSTEM_USER
+            - C:\\Windows\\ServiceProfiles\\LocalService\\... -> SYSTEM
+            - C:\\Windows\\ServiceProfiles\\NetworkService\\... -> SYSTEM
+        """
+        if not path:
+            return cls.UNKNOWN
+
+        # Normalize path to lowercase and use forward slashes for easier matching
+        normalized_path = path.lower().replace("\\", "/")
+
+        # Check for SYSTEM account with User subdirectory (SYSTEM_USER)
+        # Pattern: .../Windows/System32/Microsoft/Protect/S-1-5-18/User/...
+        if re.search(r"/windows/system32/microsoft/protect/s-1-5-18/user/", normalized_path):
+            return cls.SYSTEM_USER
+
+        # Check for SYSTEM account patterns (SYSTEM, LocalService, NetworkService)
+        # Pattern: .../Windows/System32/Microsoft/Protect/S-1-5-18/...
+        if re.search(r"/windows/system32/microsoft/protect/s-1-5-18/", normalized_path):
+            return cls.SYSTEM
+
+        # Check for LocalService or NetworkService in ServiceProfiles
+        # Pattern: .../Windows/ServiceProfiles/(LocalService|NetworkService)/...
+        if re.search(r"/windows/serviceprofiles/(localservice|networkservice)/", normalized_path):
+            return cls.SYSTEM
+
+        # Check for user profiles with DPAPI protect directory
+        # Pattern: .../Users/.../AppData/Roaming/Microsoft/Protect/S-1-5-21-.../...
+        if re.search(r"/users/.+/appdata/roaming/microsoft/protect/s-1-5-21-[\d-]+/[0-9a-f-]+", normalized_path):
+            return cls.USER
+
+        # Fallback: Check for any user profile with Microsoft Protect
+        if re.search(r"/users/.+/appdata/roaming/microsoft/protect/", normalized_path):
+            return cls.USER
+
+        # Default to UNKNOWN if we can't determine the type
+        return cls.UNKNOWN
 
 
 class MasterKey(BaseModel):
@@ -190,18 +240,41 @@ class Blob(BaseModel):
     raw_bytes: bytes
 
     @classmethod
-    def parse(cls, data_or_path: bytes | str | Path) -> Blob:
-        """Parse a DPAPI blob from bytes or file path.
+    def from_file(cls, file_path: str | Path) -> Blob:
+        """Parse a DPAPI blob from a file path.
 
         Args:
-            data_or_path: Either raw bytes or path to blob file
+            file_path: Path to the blob file
 
         Returns:
-            DpapiBlob instance with parsed data
+            Blob instance with parsed data
 
         Raises:
             ValueError: If blob format is invalid
             FileNotFoundError: If file doesn't exist
+        """
+        file_path = Path(file_path)
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"Blob file not found: {file_path}")
+
+        with open(file_path, "rb") as f:
+            data = f.read()
+
+        return cls.from_bytes(data)
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> Blob:
+        """Parse a DPAPI blob from raw bytes.
+
+        Args:
+            data: Raw blob bytes
+
+        Returns:
+            Blob instance with parsed data
+
+        Raises:
+            ValueError: If blob format is invalid
         """
 
         def _parse_guid(data: bytes) -> UUID:
@@ -210,15 +283,6 @@ class Blob(BaseModel):
             data4 = data[8:16]  # Keep as bytes (big-endian)
 
             return UUID(f"{data1:08x}-{data2:04x}-{data3:04x}-{data4[0]:02x}{data4[1]:02x}-{data4[2:].hex()}")
-
-        if isinstance(data_or_path, (str, Path)):
-            file_path = Path(data_or_path)
-            if not file_path.exists():
-                raise FileNotFoundError(f"Blob file not found: {file_path}")
-            with open(file_path, "rb") as f:
-                data = f.read()
-        else:
-            data = data_or_path
 
         try:
             dpapi_blob = DPAPI_BLOB(data)
@@ -330,7 +394,31 @@ class BackupKeyRecoveryBlob(BaseModel):
         return "\n".join(lines)
 
     @classmethod
-    def parse(cls, data: bytes) -> BackupKeyRecoveryBlob:
+    def from_file(cls, file_path: str | Path) -> BackupKeyRecoveryBlob:
+        """Parse a BACKUPKEY_RECOVERY_BLOB from a file path.
+
+        Args:
+            file_path: Path to the BACKUPKEY_RECOVERY_BLOB file
+
+        Returns:
+            BackupKeyRecoveryBlob instance with parsed data
+
+        Raises:
+            ValueError: If format is invalid
+            FileNotFoundError: If file doesn't exist
+        """
+        file_path = Path(file_path)
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"Blob file not found: {file_path}")
+
+        with open(file_path, "rb") as f:
+            data = f.read()
+
+        return cls.from_bytes(data)
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> BackupKeyRecoveryBlob:
         """Parse a BACKUPKEY_RECOVERY_BLOB from bytes.
 
         Args:
@@ -413,6 +501,7 @@ class MasterKeyFile(BaseModel):
     file_path: None
     masterkey_guid: UUID
     policy: MasterKeyPolicy
+    user_account_type: UserAccountType
 
     # Masterkey data (pbMK)
     master_key: bytes | None = None
@@ -459,7 +548,7 @@ class MasterKeyFile(BaseModel):
         return "\n".join(lines)
 
     @classmethod
-    def parse(
+    def from_file(
         cls, file_path: str | Path, user_account_type: UserAccountType = UserAccountType.UNKNOWN
     ) -> MasterKeyFile:
         """Parse a masterkey file from disk.
@@ -483,6 +572,22 @@ class MasterKeyFile(BaseModel):
         with open(file_path, "rb") as f:
             data = f.read()
 
+        return cls.from_bytes(data, user_account_type=user_account_type)
+
+    @classmethod
+    def from_bytes(cls, data: bytes, user_account_type: UserAccountType = UserAccountType.UNKNOWN) -> MasterKeyFile:
+        """Parse a masterkey from raw bytes.
+
+        Args:
+            data: Raw masterkey file bytes
+            user_account_type: Type of user account this masterkey belongs to (default: UNKNOWN)
+
+        Returns:
+            MasterKeyFile instance with parsed data
+
+        Raises:
+            ValueError: If file format is invalid
+        """
         if len(data) < 44:  # Minimum size for MASTERKEY_STORED_ON_DISK header
             raise ValueError("File too small to contain valid masterkey data")
 
@@ -551,7 +656,7 @@ class MasterKeyFile(BaseModel):
         backup_dc_key = None
         if cb_bbk > 0:
             backup_dc_key_bytes = data[offset : offset + cb_bbk]
-            backup_dc_key = BackupKeyRecoveryBlob.parse(backup_dc_key_bytes)
+            backup_dc_key = BackupKeyRecoveryBlob.from_bytes(backup_dc_key_bytes)
 
         return cls(
             version=version,

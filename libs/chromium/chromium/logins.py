@@ -115,7 +115,7 @@ def _insert_logins(
             # Try DPAPI decryption first
             if masterkey_guid and dpapi_manager:
                 try:
-                    password_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.parse(password_value)))
+                    password_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.from_bytes(password_value)))
                     if password_dec_bytes:
                         password_value_dec = password_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True

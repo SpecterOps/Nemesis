@@ -12,7 +12,7 @@ from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
-from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile
+from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile, UserAccountType
 from psycopg.rows import dict_row
 
 if TYPE_CHECKING:
@@ -193,6 +193,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
 
         return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
 
+
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
 
@@ -200,98 +201,62 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
 
-            if not postgres_connection_string.startswith("postgres://"):
-                raise ValueError(
-                    "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
+        try:
+            file_enriched = get_file_enriched(object_id)
+            file_enriched = get_file_enriched(object_id)
+            enrichment_result = EnrichmentResult(module_name=self.name)
+
+            # Parse the masterkey file
+            if file_path:
+                # Use provided file path
+                masterkey_file = MasterKeyFile.from_file(file_path)
+                if masterkey_file.policy.value & 2:
+                    self._create_proactive_file_linkings(file_enriched)
+            else:
+                # Download the file and parse it
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    masterkey_file = MasterKeyFile.from_file(temp_file.name)
+
+            backup_key = masterkey_file.domain_backup_key
+            mk = MasterKey(
+                guid=masterkey_file.masterkey_guid,
+                encrypted_key_usercred=masterkey_file.master_key,
+                encrypted_key_backup=backup_key.raw_bytes if backup_key else None,
+                backup_key_guid=backup_key.guid_key if backup_key else None,
+                user_account_type=UserAccountType.from_path(file_enriched.path)
+            )
+
+            # The DPAPI manager handles all decryption automatically
+            await self.dpapi_manager.upsert_masterkey(mk)
+
+            # Check if it was decrypted
+            stored_mk = await self.dpapi_manager.get_masterkey(masterkey_file.masterkey_guid)
+            was_decrypted = stored_mk and stored_mk.is_decrypted
+
+            if was_decrypted:
+                logger.info(f"Successfully processed and decrypted masterkey {masterkey_file.masterkey_guid}")
+            else:
+                logger.debug(
+                    f"Successfully processed masterkey {masterkey_file.masterkey_guid} (not decrypted - may need additional keys)"
                 )
 
-            # self.dpapi_manager = DpapiManager(
-            #     storage_backend=postgres_connection_string, publisher=DaprDpapiEventPublisher(client)
-            # )
+            # Prepare results data
+            results_data = {
+                "masterkey_guid": str(masterkey_file.masterkey_guid),
+                "version": masterkey_file.version,
+                "policy": masterkey_file.policy.value if masterkey_file.policy else 0,
+                "has_master_key": masterkey_file.master_key is not None,
+                "has_local_key": masterkey_file.local_key is not None,
+                "has_backup_key": masterkey_file.backup_key is not None,
+                "has_domain_backup_key": masterkey_file.domain_backup_key is not None,
+            }
 
-            try:
-                file_enriched = get_file_enriched(object_id)
-                enrichment_result = EnrichmentResult(module_name=self.name)
+            enrichment_result.results = results_data
+            return enrichment_result
 
-                # Parse the masterkey file
-                if file_path:
-                    # Use provided file path
-                    masterkey_file = self._parse_masterkey_file(file_path)
-                    try:
-                        # MasterKeyPolicy bit of NO_BACKUP, present for just SYSTEM keys
-                        if masterkey_file.policy.value & 2:
-                            self._create_proactive_file_linkings(file_enriched)
-                    except:
-                        pass
-                else:
-                    # Download the file and parse it
-                    with self.storage.download(file_enriched.object_id) as temp_file:
-                        masterkey_file = self._parse_masterkey_file(temp_file.name)
-
-                if not masterkey_file:
-                    return None
-
-                # Create MasterKey object and add to DPAPI manager
-                if self.dpapi_manager:
-                    backup_key = masterkey_file.domain_backup_key
-                    mk = MasterKey(
-                        guid=masterkey_file.masterkey_guid,
-                        encrypted_key_usercred=masterkey_file.master_key,
-                        encrypted_key_backup=backup_key.raw_bytes if backup_key else None,
-                        backup_key_guid=backup_key.guid_key if backup_key else None,
-                    )
-
-                    # The DPAPI manager handles all decryption automatically
-                    await self.dpapi_manager.upsert_masterkey(mk)
-
-                    # Check if it was decrypted
-                    stored_mk = await self.dpapi_manager.get_masterkey(masterkey_file.masterkey_guid)
-                    was_decrypted = stored_mk and stored_mk.is_decrypted
-
-                    if was_decrypted:
-                        logger.info(f"Successfully processed and decrypted masterkey {masterkey_file.masterkey_guid}")
-                    else:
-                        logger.debug(
-                            f"Successfully processed masterkey {masterkey_file.masterkey_guid} (not decrypted - may need additional keys)"
-                        )
-                else:
-                    logger.warning("[dpapi_masterkey] self.dpapi_manager not initialized!")
-
-                # Prepare results data
-                results_data = {
-                    "masterkey_guid": str(masterkey_file.masterkey_guid),
-                    "version": masterkey_file.version,
-                    "policy": masterkey_file.policy.value if masterkey_file.policy else 0,
-                    "has_master_key": masterkey_file.master_key is not None,
-                    "has_local_key": masterkey_file.local_key is not None,
-                    "has_backup_key": masterkey_file.backup_key is not None,
-                    "has_domain_backup_key": masterkey_file.domain_backup_key is not None,
-                }
-
-                enrichment_result.results = results_data
-                return enrichment_result
-
-            except Exception as e:
-                logger.exception(e, message="Error in DPAPI masterkey process()")
-
-    def _parse_masterkey_file(self, file_path: str) -> MasterKeyFile | None:
-        """Parse a masterkey file using nemesis_dpapi.
-
-        Args:
-            file_path: Path to the masterkey file
-
-        Returns:
-            Parsed MasterKeyFile or None if parsing fails
-        """
-        try:
-            return MasterKeyFile.parse(file_path)
         except Exception as e:
-            logger.warning(f"Failed to parse masterkey file {file_path}: {e}")
-            return None
+            logger.exception(e, message="Error in DPAPI masterkey process()")
 
 
 def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:

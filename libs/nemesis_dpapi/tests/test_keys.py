@@ -554,7 +554,7 @@ class TestDomainBackupKey:
         )
 
         # Load the domain masterkey file
-        masterkey_file = MasterKeyFile.parse(get_file_path("masterkey_domain.bin"))
+        masterkey_file = MasterKeyFile.from_file(get_file_path("masterkey_domain.bin"))
 
         # Decrypt the masterkey
         decrypted_masterkey = masterkey_file.decrypt(backup_key)
@@ -579,8 +579,8 @@ class TestDomainBackupKey:
         """Test decrypting a domain masterkey file using backup key."""
         # Load the backup key from fixtures
         backupkey_file = get_file_path("old_format/dpapi_domain_backupkey.json")
-        masterkey_file = MasterKeyFile.parse(get_file_path("old_format/ab998260-e99d-4871-8f4b-d922b2848ce6"))
-        blob = Blob.parse(get_file_path("old_format/dpapi_blob.bin"))
+        masterkey_file = MasterKeyFile.from_file(get_file_path("old_format/ab998260-e99d-4871-8f4b-d922b2848ce6"))
+        blob = Blob.from_file(get_file_path("old_format/dpapi_blob.bin"))
 
         with open(backupkey_file) as f:
             backupkey_data = json.load(f)
@@ -637,7 +637,7 @@ class TestDomainBackupKey:
         backup_key = DomainBackupKey.model_construct(guid=uuid4(), key_data=b"fake_key_data")
 
         # Load the local masterkey file (no domain backup key)
-        masterkey_file = MasterKeyFile.parse("tests/fixtures/masterkey_local.bin")
+        masterkey_file = MasterKeyFile.from_file("tests/fixtures/masterkey_local.bin")
 
         # Should raise MasterKeyDecryptionError since no domain backup key in file
         with pytest.raises(ValueError, match="contains no domain backup key"):
@@ -676,7 +676,7 @@ class TestDomainBackupKey:
             domain_controller=backupkey_data["dc"],
         )
 
-        masterkey_file = MasterKeyFile.parse(get_file_path("masterkey_domain.bin"))
+        masterkey_file = MasterKeyFile.from_file(get_file_path("masterkey_domain.bin"))
 
         # Mock the cipher.decrypt to return unexpected length
         with patch("nemesis_dpapi.core.PKCS1_v1_5") as mock_pkcs:

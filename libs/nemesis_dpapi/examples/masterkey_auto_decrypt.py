@@ -274,8 +274,8 @@ async def main():
     mk_domain_file = fixtures_path / "masterkey_domain.bin"
     mk_local_file = fixtures_path / "masterkey_local.bin"
 
-    mk_domain = MasterKeyFile.parse(mk_domain_file)
-    mk_local = MasterKeyFile.parse(mk_local_file)
+    mk_domain = MasterKeyFile.from_file(mk_domain_file)
+    mk_local = MasterKeyFile.from_file(mk_local_file)
 
     # Run all scenarios
     await masterkeys_first_then_backup_key(mk_domain, backup_key_data)

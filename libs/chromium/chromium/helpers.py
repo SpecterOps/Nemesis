@@ -111,7 +111,7 @@ def detect_encryption_type(encrypted_value: bytes) -> tuple[str, str | None]:
     # Check for DPAPI (first 4 bytes are \x01\x00\x00\x00)
     if encrypted_value[:4] == b"\x01\x00\x00\x00":
         try:
-            blob = Blob.parse(encrypted_value)
+            blob = Blob.from_bytes(encrypted_value)
             return "dpapi", str(blob.masterkey_guid)
         except Exception as e:
             raise Exception(f"Found DPAPI app bound key, but couldn't parse blob: {str(e)}") from e

@@ -25,6 +25,10 @@ pytsk3 = "^20250312"
 watchdog = "^6.0.0"
 pyyaml = "^6.0.2"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.2"
+pytest-asyncio = "^1.2.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

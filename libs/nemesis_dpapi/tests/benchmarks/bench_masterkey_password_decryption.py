@@ -1,7 +1,7 @@
 """Benchmarks for DPAPI masterkey decryption using password credentials."""
 
 import pytest
-from nemesis_dpapi.core import MasterKey, MasterKeyFile
+from nemesis_dpapi.core import MasterKey, MasterKeyFile, UserAccountType
 from nemesis_dpapi.keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey
 
 
@@ -12,11 +12,12 @@ class TestMasterkeyPasswordDecryptionBenchmarks:
         """Benchmark decrypting a single masterkey using password."""
         # Load masterkey file that can be decrypted with password
         masterkey_file_path = get_file_path("masterkey_domain.bin")
-        masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+        masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
         # Create MasterKey object from the file
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -43,11 +44,12 @@ class TestMasterkeyPasswordDecryptionBenchmarks:
         """Benchmark trying multiple hash types for password-based decryption."""
         # Load masterkey file
         masterkey_file_path = get_file_path("masterkey_domain.bin")
-        masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+        masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
         # Create MasterKey object from the file
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -92,11 +94,12 @@ class TestMasterkeyPasswordDecryptionBenchmarks:
         """Benchmark password decryption for specific hash types."""
         # Load masterkey file
         masterkey_file_path = get_file_path("masterkey_domain.bin")
-        masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+        masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
         # Create MasterKey object from the file
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -134,11 +137,12 @@ class TestMasterkeyPasswordDecryptionBenchmarks:
         """Benchmark multiple consecutive password-based masterkey decryptions."""
         # Load masterkey file
         masterkey_file_path = get_file_path("masterkey_domain.bin")
-        masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+        masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
         # Create MasterKey object from the file
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 

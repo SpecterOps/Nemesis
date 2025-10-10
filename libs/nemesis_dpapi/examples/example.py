@@ -70,7 +70,7 @@ async def main() -> None:
     with open(backup_key_path) as f:
         backup_key_data = json.load(f)
 
-    masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+    masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
     if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
         raise ValueError("Invalid masterkey file")
@@ -124,7 +124,7 @@ async def main() -> None:
             blob_data = f.read()
 
         # Parse blob to get its structure and masterkey GUID
-        blob = Blob.parse(blob_data)
+        blob = Blob.from_bytes(blob_data)
         print(f"Blob masterkey GUID: {blob.masterkey_guid}")
 
         # Decrypt the blob using the DPAPI manager

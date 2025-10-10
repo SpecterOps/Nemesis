@@ -33,6 +33,10 @@
             "name": "libs → nemesis_dpapi"
         },
         {
+            "path": "../projects/agents",
+            "name": "projects → agents"
+        },
+        {
             "path": "../projects/alerting",
             "name": "projects → alerting"
         },
@@ -94,13 +98,13 @@
             "**/CVS": true,
             "**/Thumbs.db": true,
         },
-        "[python]": {
-            "diffEditor.ignoreTrimWhitespace": false,
-            "editor.wordBasedSuggestions": "off",
-            "editor.formatOnSave": true,
-            "editor.defaultFormatter": "charliermarsh.ruff"
-        },
-        "python.defaultInterpreterPath": "python",
+        // "[python]": {
+        //     "diffEditor.ignoreTrimWhitespace": false,
+        //     "editor.wordBasedSuggestions": "off",
+        //     "editor.formatOnSave": true,
+        //     "editor.defaultFormatter": "charliermarsh.ruff"
+        // },
+        // "python.defaultInterpreterPath": "python",
         // "python.pixiToolPath": "",
         // "python.pipenvPath": "",
     },

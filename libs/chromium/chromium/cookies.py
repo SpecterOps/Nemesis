@@ -130,7 +130,7 @@ def _insert_cookies(
             value_dec = None
             if masterkey_guid and dpapi_manager:
                 try:
-                    value_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.parse(encrypted_value)))
+                    value_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.from_bytes(encrypted_value)))
                     if value_dec_bytes:
                         value_dec = value_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True

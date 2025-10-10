@@ -109,7 +109,7 @@ rule has_dpapi_blob
                 try:
                     dpapi_blob_raw = carved_blob["dpapi_blob_raw"]
                     del carved_blob["dpapi_blob_raw"]  # because of result serialization
-                    carved_blob_dec = await self.dpapi_manager.decrypt_blob(Blob.parse(dpapi_blob_raw))
+                    carved_blob_dec = await self.dpapi_manager.decrypt_blob(Blob.from_bytes(dpapi_blob_raw))
 
                     if carved_blob_dec:
                         logger.info(
@@ -168,6 +168,11 @@ List of unique masterkey GUIDs associated with the found blobs:
 
         except Exception as e:
             logger.exception(e, message="Error in DPAPI process()")
+
+
+def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:
+    """Factory function that creates the analyzer in either standalone or service mode."""
+    return DpapiBlobAnalyzer(standalone=standalone)
 
 
 def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:

@@ -86,7 +86,7 @@ class PvkFileHeader(BaseModel):
         if encrypt_data_size > 0:
             if len(data) < offset + encrypt_data_size:
                 raise ValueError(f"Data too short for encrypted data: need {offset + encrypt_data_size} bytes")
-            encrypted_data = data[offset:offset + encrypt_data_size]
+            encrypted_data = data[offset : offset + encrypt_data_size]
             offset += encrypt_data_size
         else:
             encrypted_data = b""
@@ -94,7 +94,7 @@ class PvkFileHeader(BaseModel):
         # Extract private key data
         if len(data) < offset + pvk_size:
             raise ValueError(f"Data too short for private key: need {offset + pvk_size} bytes")
-        private_key = data[offset:offset + pvk_size]
+        private_key = data[offset : offset + pvk_size]
 
         return cls(
             magic=magic,

@@ -192,7 +192,7 @@ class AutoDecryptionObserver(DpapiObserver):
 
                 # Parse the encrypted backup key bytes into a BackupKeyRecoveryBlob
                 try:
-                    backup_key_blob = BackupKeyRecoveryBlob.parse(enc_masterkey.encrypted_key_backup)
+                    backup_key_blob = BackupKeyRecoveryBlob.from_bytes(enc_masterkey.encrypted_key_backup)
                 except Exception:
                     # Skip if we can't parse the backup key blob
                     continue

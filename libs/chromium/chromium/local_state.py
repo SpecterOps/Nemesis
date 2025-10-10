@@ -100,8 +100,6 @@ def _parse_app_bound_key(app_bound_key_b64: str) -> tuple[bytes, str | None]:
 def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid: UUID) -> None:
     """Add file linking entry for user masterkey."""
 
-    # TODO: Improve file linking entry for the masterkey file
-
     # Skip trying to figure out the username/drive if we can
     if r"AppData/Local/Google/Chrome/User Data" in file_enriched.path:
         masterkey_path = ntpath.abspath(
@@ -109,10 +107,14 @@ def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid
             + f"../../../../../Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
         )
     else:
+        # Not an AppData path, so build path based on the drive letter and username (if available)
         drive, _ = ntpath.splitdrive(file_enriched.path)
-        masterkey_path = (
-            f"{drive}/Users/{username}/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
-        )
+
+        if username:
+            masterkey_path = f"{drive}/Users/{username}/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
+        else:
+            # No username, so just use placeholder. e.g. if uploaded via the UI with no path info
+            masterkey_path = f"{drive}/Users/<WINDOWS_USERNAME>/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
 
     add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:user_masterkey")
 
@@ -158,7 +160,7 @@ async def _insert_state_keys(
             if encryption_type != "dpapi":
                 raise Exception(f"Unsupported encryption type for v1 state key: {encryption_type}")
 
-            dpapi_blob = Blob.parse(dpapi_blob_bytes)
+            dpapi_blob = Blob.from_bytes(dpapi_blob_bytes)
             key_masterkey_guid = str(dpapi_blob.masterkey_guid)
             try:
                 key_bytes_dec = await dpapi_manager.decrypt_blob(dpapi_blob)
@@ -205,13 +207,13 @@ async def _insert_state_keys(
                 # Parse only the DPAPI portion (after APPB header)
                 if len(app_bound_key_enc) >= 4 and app_bound_key_enc[:4] == b"APPB":
                     dpapi_portion = app_bound_key_enc[4:]
-                    app_bound_key_dec_inter = await dpapi_manager.decrypt_blob(Blob.parse(dpapi_portion))
+                    app_bound_key_dec_inter = await dpapi_manager.decrypt_blob(Blob.from_bytes(dpapi_portion))
                 else:
                     logger.warning("App-bound key missing APPB header, cannot decrypt")
                     app_bound_key_dec_inter = b""
 
                 if app_bound_key_dec_inter:
-                    user_blob = Blob.parse(app_bound_key_dec_inter)
+                    user_blob = Blob.from_bytes(app_bound_key_dec_inter)
                     app_bound_key_user_masterkey_guid = str(user_blob.masterkey_guid)
 
                     try:

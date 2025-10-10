@@ -205,7 +205,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     source_file_path=file_enriched.path,
                     linked_file_path=security_path,
                     link_type="registry_system",
-                    collection_reason="SYSTEM hive can decrypt SECURITY LSA secrets",
+                    collection_reason="SYSTEM hive required to decrypt SECURITY data",
                 )
 
             elif hive_type in ["SAM", "SECURITY"]:
@@ -955,7 +955,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
                 displayable_parsed = Transform(
                     type="displayable_parsed",
-                    object_id=display_object_id,
+                    object_id=str(display_object_id),
                     metadata={
                         "file_name": f"{file_enriched.file_name}_{hive_type.lower()}_analysis.txt",
                         "display_type_in_dashboard": "monaco",

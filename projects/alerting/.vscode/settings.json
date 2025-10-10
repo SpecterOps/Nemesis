@@ -6,15 +6,13 @@
         "editor.formatOnSave": false
     },
     "[python]": {
-        "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
-            "source.fixAll": "explicit",
-            "source.organizeImports": "explicit"
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
         },
         "editor.defaultFormatter": "charliermarsh.ruff"
     },
     "autoDocstring.docstringFormat": "google",
-    "editor.formatOnSave": true,
     "files.exclude": {
         "**/.DS_Store": true,
         "**/.git": true,

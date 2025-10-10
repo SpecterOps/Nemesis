@@ -27,7 +27,7 @@ class TestMasterkeyDecryptionBenchmarks:
 
         # Load masterkey file
         masterkey_file_path = get_file_path("masterkey_domain.bin")
-        masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+        masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
         # Verify setup works
         test_result = masterkey_file.decrypt(backup_key)
@@ -55,7 +55,7 @@ class TestMasterkeyDecryptionBenchmarks:
         )
 
         masterkey_file_path = get_file_path("masterkey_domain.bin")
-        masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+        masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
         # Warmup
         for _ in range(5):
@@ -84,7 +84,7 @@ class TestMasterkeyDecryptionBenchmarks:
         )
 
         masterkey_file_path = get_file_path("masterkey_domain.bin")
-        masterkey_file = MasterKeyFile.parse(masterkey_file_path)
+        masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
         def batch_decrypt():
             results = []
