@@ -47,14 +47,16 @@ class MyDpapiEventMonitor(DpapiObserver):
     async def update(self, event: DpapiEvent) -> None:
         """Handler for different types of DPAPI events."""
 
+        name = type(self).__name__
+
         if isinstance(event, NewEncryptedMasterKeyEvent):
-            print(f"New encrypted masterkey added: {event.masterkey_guid}")
+            print(f"{name}: New encrypted masterkey added: {event.masterkey_guid}")
         elif isinstance(event, NewDomainBackupKeyEvent):
-            print(f"New domain backup key added: {event.backup_key_guid}")
+            print(f"{name}: New domain backup key added: {event.backup_key_guid}")
         elif isinstance(event, NewPlaintextMasterKeyEvent):
-            print(f"New plaintext masterkey added: {event.masterkey_guid}")
+            print(f"{name}: New plaintext masterkey added: {event.masterkey_guid}")
         else:
-            print(f"Event received: {type(event).__name__}")
+            print(f"{name}: Event received: {type(event).__name__}")
 
 
 async def main() -> None:
@@ -89,18 +91,22 @@ async def main() -> None:
                 guid=masterkey_file.masterkey_guid,
                 encrypted_key_usercred=masterkey_file.master_key,
                 encrypted_key_backup=masterkey_file.domain_backup_key.raw_bytes,
+                user_account_type=masterkey_file.user_account_type,
             )
         )
 
-        print("Added 1 masterkey")
+        print("[*] Added 1 masterkey:")
+        print(f"- MasterKey GUID  : {masterkey_file.masterkey_guid}")
+        print(f"- Backup Key GUID : {masterkey_file.domain_backup_key.guid_key}")
 
-        # Add real backup key
         real_backup_key = DomainBackupKey(
             guid=UUID(backup_key_data["backup_key_guid"]),
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
         await manager.upsert_domain_backup_key(real_backup_key)
+
+        print("[*] Added domain backup key: {real_backup_key.guid}")
 
         # Give auto-decryption time to work
         await asyncio.sleep(1)
@@ -109,7 +115,7 @@ async def main() -> None:
         all_keys_final = await manager.get_all_masterkeys()
         decrypted_keys_final = await manager.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(
-            f"After real backup key - Total masterkeys: {len(all_keys_final)}, Decrypted: {len(decrypted_keys_final)}"
+            f"[*] After real backup key - Total masterkeys: {len(all_keys_final)}, Decrypted: {len(decrypted_keys_final)}"
         )
 
         # Print the decrypted masterkeys  in the form of {GUID}:SHA1
@@ -125,11 +131,11 @@ async def main() -> None:
 
         # Parse blob to get its structure and masterkey GUID
         blob = Blob.from_bytes(blob_data)
-        print(f"Blob masterkey GUID: {blob.masterkey_guid}")
+        print(f"[*] Blob masterkey GUID: {blob.masterkey_guid}")
 
         # Decrypt the blob using the DPAPI manager
         decrypted_blob_data = await manager.decrypt_blob(blob)
-        print(f"Decrypted blob data: {decrypted_blob_data.decode('utf-8')}")
+        print(f"[*] Decrypted blob data: {decrypted_blob_data.decode('utf-8')}")
 
 
 if __name__ == "__main__":

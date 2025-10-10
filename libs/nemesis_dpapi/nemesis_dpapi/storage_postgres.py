@@ -145,13 +145,15 @@ class PostgresDomainBackupKeyRepository:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 f"""
-                INSERT INTO {BACKUPKEYS_TABLE} (guid, key_data)
-                VALUES ($1, $2)
+                INSERT INTO {BACKUPKEYS_TABLE} (guid, key_data, domain_controller)
+                VALUES ($1, $2, $3)
                 ON CONFLICT (guid) DO UPDATE SET
-                    key_data = EXCLUDED.key_data
+                    key_data = EXCLUDED.key_data,
+                    domain_controller = EXCLUDED.domain_controller
                 """,
                 str(key.guid),
                 key.key_data,
+                key.domain_controller,
             )
 
     async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:

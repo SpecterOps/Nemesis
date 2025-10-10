@@ -28,7 +28,6 @@ from pathlib import Path
 from uuid import UUID
 
 from Crypto.PublicKey import RSA
-
 from nemesis_dpapi import DomainBackupKey, DpapiManager, MasterKey, MasterKeyFile, MasterKeyFilter
 
 
@@ -52,7 +51,6 @@ def create_incorrect_backup_key(correct_key_data: bytes) -> bytes:
     # The PRIVATE_KEY_BLOB format is:
     # PUBLICKEYSTRUC (8 bytes) + RSAPUBKEY (variable)
     # For simplicity, we'll use the impacket structure from a generated key
-    from impacket.dpapi import PRIVATE_KEY_BLOB
 
     # Create a PRIVATE_KEY_BLOB from our RSA key
     # Structure: magic (4) + bitlen (4) + pubexp (4) + modulus + prime1 + prime2 + exp1 + exp2 + coef + privexp
@@ -120,6 +118,7 @@ async def masterkeys_first_then_backup_key(mk_domain, backup_key_data):
             await dpapi.upsert_masterkey(
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
+                    user_account_type=mk_domain.user_account_type,
                     encrypted_key_usercred=mk_domain.master_key,
                     encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes if mk_domain.domain_backup_key else None,
                 )
@@ -182,6 +181,7 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
             await dpapi2.upsert_masterkey(
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
+                    user_account_type=mk_domain.user_account_type,
                     encrypted_key_usercred=mk_domain.master_key,
                     encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes,
                 )
@@ -192,6 +192,7 @@ async def backup_key_first_then_masterkeys(mk_domain, mk_local, backup_key_data)
             await dpapi2.upsert_masterkey(
                 MasterKey(
                     guid=mk_local.masterkey_guid,
+                    user_account_type=mk_local.user_account_type,
                     encrypted_key_usercred=mk_local.master_key,
                     encrypted_key_backup=mk_local.backup_key,
                 )
@@ -224,6 +225,7 @@ async def auto_decryption_disabled(mk_domain, backup_key_data):
             await dpapi_no_auto.upsert_masterkey(
                 MasterKey(
                     guid=mk_domain.masterkey_guid,
+                    user_account_type=mk_domain.user_account_type,
                     encrypted_key_usercred=mk_domain.master_key,
                     encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes,
                 )

@@ -172,7 +172,10 @@ class AutoDecryptionObserver(DpapiObserver):
             if encrypted_masterkeys is None:
                 # TODO: Filter out SYSTEM masterkeys
                 encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
-                    filter_by=MasterKeyFilter.ENCRYPTED_ONLY
+                    filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.USER
+                )
+                encrypted_masterkeys += await self.dpapi_manager.get_all_masterkeys(
+                    filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.UNKNOWN
                 )
 
             if len(encrypted_masterkeys) == 0:
@@ -191,12 +194,18 @@ class AutoDecryptionObserver(DpapiObserver):
                 if enc_masterkey.encrypted_key_backup is None:
                     continue
 
+                if enc_masterkey.user_account_type not in (UserAccountType.USER, UserAccountType.UNKNOWN):
+                    continue
+
                 # Parse the encrypted backup key bytes into a BackupKeyRecoveryBlob
                 try:
                     backup_key_blob = BackupKeyRecoveryBlob.from_bytes(enc_masterkey.encrypted_key_backup)
                 except Exception:
                     # Skip if we can't parse the backup key blob
                     continue
+
+                if backup_key_blob.guid_key != new_backup_key.guid:
+                    continue  # This backup key does not match the masterkey's backup key GUID
 
                 masterkey_file = MasterKeyFile(
                     version=0,
