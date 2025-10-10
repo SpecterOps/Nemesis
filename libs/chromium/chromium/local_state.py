@@ -195,7 +195,7 @@ async def _insert_state_keys(
             app_bound_key_enc, app_bound_key_system_masterkey_guid = _parse_app_bound_key(app_bound_key_b64)
             logger.debug(f"app_bound_key_system_masterkey_guid: {app_bound_key_system_masterkey_guid}")
 
-        drive, parts = ntpath.splitdrive(file_enriched.path)
+            drive, parts = ntpath.splitdrive(file_enriched.path)
             masterkey_path = (
                 f"{drive}/Windows/System32/Microsoft/Protect/S-1-5-18/User/{app_bound_key_system_masterkey_guid}"
             )
