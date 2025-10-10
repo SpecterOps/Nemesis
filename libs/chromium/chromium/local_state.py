@@ -3,6 +3,7 @@
 import base64
 import json
 import ntpath
+from uuid import UUID
 
 import psycopg
 from common.logger import get_logger
@@ -96,6 +97,26 @@ def _parse_app_bound_key(app_bound_key_b64: str) -> tuple[bytes, str | None]:
         return base64.b64decode(app_bound_key_b64), None
 
 
+def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid: UUID) -> None:
+    """Add file linking entry for user masterkey."""
+
+    # TODO: Improve file linking entry for the masterkey file
+
+    # Skip trying to figure out the username/drive if we can
+    if r"AppData/Local/Google/Chrome/User Data" in file_enriched.path:
+        masterkey_path = ntpath.abspath(
+            file_enriched.path
+            + f"../../../../../Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
+        )
+    else:
+        drive, _ = ntpath.splitdrive(file_enriched.path)
+        masterkey_path = (
+            f"{drive}/Users/{username}/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
+        )
+
+    add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:user_masterkey")
+
+
 async def _insert_state_keys(
     file_enriched,
     username: str | None,
@@ -133,29 +154,33 @@ async def _insert_state_keys(
             # Remove DPAPI header and parse remaining as DPAPI blob
             dpapi_blob_bytes = key_bytes_enc[5:]
 
-            encryption_type, masterkey_guid = detect_encryption_type(dpapi_blob_bytes)
-            if encryption_type == "dpapi":
-                key_masterkey_guid = masterkey_guid
-                try:
-                    key_bytes_dec = await dpapi_manager.decrypt_blob(Blob.parse(dpapi_blob_bytes))
-                    if key_bytes_dec:
-                        key_is_decrypted = True
-                        logger.debug(
-                            "Successfully decrypted encrypted_key state key",
-                            masterkey_guid=key_masterkey_guid,
-                        )
-                    else:
-                        logger.debug("Failed to decrypt encrypted_key state key with DPAPI")
-                except (MasterKeyNotFoundError, MasterKeyNotDecryptedError) as e:
-                    logger.debug(
-                        "Masterkey not found or not decrypted for encrypted_key state key",
-                        masterkey_guid=key_masterkey_guid,
-                        reason=type(e).__name__,
-                    )
-                except Exception as e:
-                    logger.warning(f"Unable to decrypt state key DPAPI blob: {key_masterkey_guid}", error=str(e))
-            else:
+            encryption_type, _ = detect_encryption_type(dpapi_blob_bytes)
+            if encryption_type != "dpapi":
                 raise Exception(f"Unsupported encryption type for v1 state key: {encryption_type}")
+
+            dpapi_blob = Blob.parse(dpapi_blob_bytes)
+            key_masterkey_guid = str(dpapi_blob.masterkey_guid)
+            try:
+                key_bytes_dec = await dpapi_manager.decrypt_blob(dpapi_blob)
+                if key_bytes_dec:
+                    key_is_decrypted = True
+                    logger.debug(
+                        "Successfully decrypted encrypted_key state key",
+                        masterkey_guid=dpapi_blob.masterkey_guid,
+                    )
+                else:
+                    logger.debug("Failed to decrypt encrypted_key state key with DPAPI")
+            except (MasterKeyNotFoundError, MasterKeyNotDecryptedError) as e:
+                logger.debug(
+                    "Masterkey not found or not decrypted for encrypted_key state key",
+                    masterkey_guid=dpapi_blob.masterkey_guid,
+                    reason=type(e).__name__,
+                )
+
+                _add_user_masterkey_link(file_enriched, username, dpapi_blob.masterkey_guid)
+
+            except Exception as e:
+                logger.warning(f"Unable to decrypt state key DPAPI blob: {dpapi_blob.masterkey_guid}", error=str(e))
 
         # Get app_bound_encrypted_key (post v127)
         app_bound_key_b64 = os_crypt.get("app_bound_encrypted_key")
@@ -186,10 +211,10 @@ async def _insert_state_keys(
                     app_bound_key_dec_inter = b""
 
                 if app_bound_key_dec_inter:
-                    try:
-                        user_blob = Blob.parse(app_bound_key_dec_inter)
-                        app_bound_key_user_masterkey_guid = user_blob.masterkey_guid
+                    user_blob = Blob.parse(app_bound_key_dec_inter)
+                    app_bound_key_user_masterkey_guid = str(user_blob.masterkey_guid)
 
+                    try:
                         abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob)
                         if abe_blob_bytes:
                             # Parse and derive the final ABE key
@@ -212,8 +237,18 @@ async def _insert_state_keys(
                         else:
                             logger.warning("Failed to decrypt ABE blob with user masterkey")
                             return None
+                    except (MasterKeyNotFoundError, MasterKeyNotDecryptedError) as e:
+                        logger.debug(
+                            "ABE key not decrypted. Masterkey not found or not decrypted",
+                            masterkey_guid=user_blob.masterkey_guid,
+                            reason=type(e).__name__,
+                        )
+
+                        _add_user_masterkey_link(file_enriched, username, user_blob.masterkey_guid)
+
                     except Exception as e:
                         logger.warning(f"Unable to decrypt/process final app bound key blob: {e}")
+
                         return None
             except Exception as e:
                 logger.warning(f"Unable to decrypt intermediate/outer app bound key blob: {e}")

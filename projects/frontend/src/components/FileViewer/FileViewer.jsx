@@ -14,6 +14,7 @@ import { createClient } from 'graphql-ws';
 import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileText, Image } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { cachedFetch } from '@/utils/fileCache';
 import CsvViewer from './CsvViewer';
 import EnrichmentStatusSection from './EnrichmentStatusSection';
 import FileDetailsSection from './FileDetailsSection';
@@ -392,7 +393,7 @@ const FileViewer = () => {
                 );
 
                 newTransforms.forEach(async (transform) => {
-                  const response = await fetch(`/api/files/${transform.transform_object_id}`);
+                  const response = await cachedFetch(`/api/files/${transform.transform_object_id}`);
                   if (response.ok) {
                     const content = await response.arrayBuffer();
                     setTransformData(prev => ({
@@ -794,7 +795,7 @@ const FileViewer = () => {
         // If file is under size limit, fetch the file content content
 
         if (file.size <= MAX_RENDERABLE_VIEW_SIZE) {
-          const contentResponse = await fetch(`/api/files/${file.object_id}`);
+          const contentResponse = await cachedFetch(`/api/files/${file.object_id}`);
           if (contentResponse.ok) {
             const buffer = await contentResponse.arrayBuffer();
 
@@ -815,24 +816,39 @@ const FileViewer = () => {
           }
         }
 
-        // Handle transforms
+        // Handle transforms - fetch in parallel
         if (file.transforms) {
-          for (const transform of file.transforms) {
-            if (isDisplayableTransform(transform)) {
-              const response = await fetch(`/api/files/${transform.transform_object_id}`);
+          const transformPromises = file.transforms
+            .filter(isDisplayableTransform)
+            .map(async (transform) => {
+              const response = await cachedFetch(`/api/files/${transform.transform_object_id}`);
               if (response.ok) {
                 const content = await response.arrayBuffer();
-                setTransformData(prev => ({
-                  ...prev,
-                  [transform.transform_object_id]: {
-                    content,
-                    type: transform.metadata.display_type_in_dashboard,
-                    fileName: transform.metadata.file_name
-                  }
-                }));
+                return {
+                  id: transform.transform_object_id,
+                  content,
+                  type: transform.metadata.display_type_in_dashboard,
+                  fileName: transform.metadata.file_name
+                };
               }
+              return null;
+            });
+
+          const transformResults = await Promise.all(transformPromises);
+
+          // Update state with all transforms at once
+          const newTransformData = {};
+          transformResults.forEach(result => {
+            if (result) {
+              newTransformData[result.id] = {
+                content: result.content,
+                type: result.type,
+                fileName: result.fileName
+              };
             }
-          }
+          });
+
+          setTransformData(newTransformData);
         }
       } catch (err) {
         setError(err.message);

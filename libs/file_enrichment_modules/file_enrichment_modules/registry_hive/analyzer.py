@@ -642,15 +642,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 if secrets:
                     summary += "**LSA Secrets**:\n\n"
                     for secret in secrets[:10]:  # Limit to first 10
-                        if isinstance(secret, dict) and "name" in secret:
-                            if secret.get("decrypted", False) and secret.get("value"):
-                                # Show decrypted value, but truncate if too long
-                                value = str(secret["value"])
-                                if len(value) > 100:
-                                    value = value[:100] + "..."
-                                summary += f"* **{secret['name']}**: `{value}`\n"
-                            else:
-                                summary += f"* **{secret['name']}**: Encrypted data present\n"
+                        outputStr = self._get_lsa_secret_output_string(secret, truncate_length=100, markdown=True)
+                        summary += f"- {outputStr}\n"
                     if len(secrets) > 10:
                         summary += f"* ... and {len(secrets) - 10} more secrets\n"
                     summary += "\n"
@@ -678,22 +671,15 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             secrets = analysis_results.get("lsa_secrets", [])
             summary += f"**LSA Secrets Found**: {len(secrets)}\n\n"
             if analysis_results.get("bootkey_available"):
-                summary += "**Note**: Linked SYSTEM hive found - secret decryption possible\n\n"
+                summary += "**Note**: Linked SYSTEM hive found - LSA secret decryption possible\n\n"
             else:
-                summary += "**Note**: No linked SYSTEM hive - secrets encrypted\n\n"
+                summary += "**Note**: No linked SYSTEM hive - LSA secrets encrypted\n\n"
 
             if secrets:
                 summary += "## LSA Secrets\n\n"
                 for secret in secrets[:10]:  # Limit to first 10
-                    if isinstance(secret, dict) and "name" in secret:
-                        if secret.get("decrypted", False) and secret.get("value"):
-                            # Show decrypted value, but truncate if too long
-                            value = str(secret["value"])
-                            if len(value) > 100:
-                                value = value[:100] + "..."
-                            summary += f"* **{secret['name']}**: `{value}`\n"
-                        else:
-                            summary += f"* **{secret['name']}**: Encrypted data present\n"
+                    outputStr = self._get_lsa_secret_output_string(secret, truncate_length=100, markdown=True)
+                    summary += f"- {outputStr}\n"
                 if len(secrets) > 10:
                     summary += f"* ... and {len(secrets) - 10} more secrets\n"
                 summary += "\n"
@@ -732,6 +718,31 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         except Exception as e:
             logger.exception(e, message="Error processing registry hive file")
             return None
+
+    def _get_lsa_secret_output_string(self, secret: dict, truncate_length: int = 8196, markdown: bool = False) -> str:
+        keyStr = f"**{secret['name']}**" if markdown else secret["name"]
+
+        if not isinstance(secret, dict):
+            raise ValueError("Expect a LSA secret dictionary")
+
+        if "name" not in secret:
+            raise ValueError("Expect a LSA secret dictionary with 'name' key")
+
+        if not secret.get("decrypted", False):
+            return f"{keyStr}: Encrypted data"
+
+        if not secret.get("value"):
+            return f"{keyStr}: No Value"
+
+        # Show decrypted value, but truncate if too long
+        value = secret["value"]
+
+        if len(value) > truncate_length:
+            value = value[:truncate_length] + "..."
+
+        value = f"`{value}`" if markdown else value
+
+        return f"{keyStr}: {value}"
 
     def _analyze_registry_hive_file(self, hive_file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze registry hive file and generate enrichment result."""
@@ -913,16 +924,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                         yaml_output.append(f"  LSA Secrets Found: {len(secrets)}")
                         if secrets:
                             yaml_output.append("  LSA Secrets:")
-                            for secret in secrets[:10]:
-                                if isinstance(secret, dict) and "name" in secret:
-                                    if secret.get("decrypted", False) and secret.get("value"):
-                                        # Show decrypted value, but truncate if too long
-                                        value = str(secret["value"])
-                                        if len(value) > 256:
-                                            value = value[:256] + "..."
-                                        yaml_output.append(f"    {secret['name']}: {value}")
-                                    else:
-                                        yaml_output.append(f"    {secret['name']}: Encrypted")
+                            for secret in secrets:
+                                outputStr = self._get_lsa_secret_output_string(secret)
+                                yaml_output.append(f"    {outputStr}")
 
                 elif hive_type == "SAM":
                     accounts = analysis_results.get("accounts", [])
@@ -939,16 +943,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     yaml_output.append(f"Bootkey Available: {analysis_results.get('bootkey_available', False)}")
                     if secrets:
                         yaml_output.append("\nLSA Secrets:")
-                        for secret in secrets[:10]:
-                            if isinstance(secret, dict) and "name" in secret:
-                                if secret.get("decrypted", False) and secret.get("value"):
-                                    # Show decrypted value, but truncate if too long
-                                    value = str(secret["value"])
-                                    if len(value) > 50:
-                                        value = value[:50] + "..."
-                                    yaml_output.append(f"  {secret['name']}: {value}")
-                                else:
-                                    yaml_output.append(f"  {secret['name']}: Encrypted")
+                        for secret in secrets:
+                            outputStr = self._get_lsa_secret_output_string(secret)
+                            yaml_output.append(f"    {outputStr}")
 
                 display_content = textwrap.indent("\n".join(yaml_output), "   ")
                 tmp_file.write(display_content)

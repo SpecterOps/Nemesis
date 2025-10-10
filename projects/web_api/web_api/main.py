@@ -1,6 +1,7 @@
 import asyncio
 import fcntl
 import json
+import ntpath
 import os
 import urllib.parse
 import uuid
@@ -8,6 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path as PathLib
 from typing import Annotated
+from urllib.parse import urlparse
 
 import psycopg
 import requests
@@ -183,6 +185,15 @@ async def send_postgres_notify(channel: str, payload: str = ""):
         raise
 
 
+def is_valid_uri(uri):
+    try:
+        result = urlparse(uri)
+        # Check if scheme and netloc are present (for absolute URIs)
+        return all([result.scheme, result.netloc])
+    except Exception:
+        return False
+
+
 #######################################
 #
 # file routes
@@ -246,6 +257,21 @@ async def upload_file(
         metadata_dict = file_metadata.model_dump()
         metadata_dict["object_id"] = object_id
 
+        # Normalize path
+        path = metadata_dict["path"]
+        if is_valid_uri(path):
+            path = metadata_dict["path"]
+        else:
+            # Assume it's a path if it's not a URI
+            if ntpath.isabs(path):
+                path = ntpath.abspath(path)
+            else:
+                pass
+
+            path = path.replace("\\", "/")
+
+        metadata_dict["path"] = path
+
         # Handle expiration - use timestamp + default_expiration_days if not provided
         if metadata_dict.get("expiration") is None:
             # Get the timestamp (either provided or the default we just set)
@@ -300,13 +326,13 @@ async def download_file(
 
         headers = {"Content-Type": "text/plain" if raw else "application/octet-stream"}
 
-        if not raw:
-            if name:
-                filename = urllib.parse.quote(name)
-                headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-            else:
-                headers["Content-Disposition"] = f'attachment; filename="{object_id}"'
+        if name:
+            filename = urllib.parse.quote(name)
+            headers["Content-Disposition"] = f'attachment; filename="{filename}"'
         else:
+            headers["Content-Disposition"] = f'attachment; filename="{object_id}"'
+
+        if raw:
             headers["X-Content-Type-Options"] = "nosniff"
 
         return StreamingResponse(
@@ -1348,7 +1374,9 @@ async def run_dotnet_analysis(request: dict = Body(..., description="Request con
     summary="Run text translation",
     description="Forward text translation request to agents service",
 )
-async def run_translation(request: dict = Body(..., description="Request containing object_id and optional target_language")):
+async def run_translation(
+    request: dict = Body(..., description="Request containing object_id and optional target_language"),
+):
     """Forward text translation request to agents service."""
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/translate"
