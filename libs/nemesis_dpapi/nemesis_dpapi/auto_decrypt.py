@@ -28,12 +28,13 @@ logger = getLogger(__name__)
 
 
 class AutoDecryptionObserver(DpapiObserver):
-    """Automatically decrypts encrypted masterkeys with domain backup keys.
+    """Automatically decrypts encrypted masterkeys with available decryption keys.
 
-    This class monitors DPAPI events related to new domain backup keys and encrypted masterkeys.
-    When new domain backup keys are added, it attempts to decrypt any encrypted masterkeys
-    using the new backup key. When new encrypted masterkeys are added, it attempts to decrypt
-    them using existing backup keys.
+    This class monitors DPAPI events and attempts automatic decryption of masterkeys:
+    - When new domain backup keys are added, attempts to decrypt existing encrypted masterkeys
+    - When new DPAPI_SYSTEM credentials are added, attempts to decrypt existing encrypted masterkeys
+    - When new encrypted masterkeys are added, attempts to decrypt them using all available
+      domain backup keys and DPAPI_SYSTEM credentials
     """
 
     def __init__(self, dpapi_manager: "DpapiManager"):
@@ -237,7 +238,7 @@ class AutoDecryptionObserver(DpapiObserver):
         """Attempt to decrypt a masterkey using all available backup keys."""
         start_time = time.perf_counter()
         if masterkey.encrypted_key_backup is None:
-            return  # Cannot decrypt if there's backup key data
+            return  # Cannot decrypt if there's no backup key data
 
         backup_keys = await self.dpapi_manager._backup_key_repo.get_all_backup_keys()
         if not backup_keys:
