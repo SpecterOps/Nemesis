@@ -70,6 +70,18 @@ RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
 
 # FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
+
+# Install runtime dependencies for psycopg and .NET
+RUN apt-get update && \
+    apt-get install -y libpq5 libicu72 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy .NET runtime from base stage
+ENV DOTNET_ROOT=/usr/local/dotnet \
+    PATH=/usr/local/dotnet:$PATH
+COPY --from=base /usr/local/dotnet /usr/local/dotnet
+
 COPY --from=bundle /venv /venv
 
 
