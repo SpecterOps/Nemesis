@@ -4,7 +4,7 @@ from uuid import UUID
 
 import asyncpg
 
-from .core import MasterKey, UserAccountType
+from .core import MasterKey, MasterKeyType
 from .exceptions import StorageError
 from .keys import DomainBackupKey, DpapiSystemCredential
 from .repositories import MasterKeyFilter
@@ -26,7 +26,7 @@ class PostgresMasterKeyRepository:
             await conn.execute(
                 f"""
                 INSERT INTO {MASTKEYS_TABLE} (guid, encrypted_key_usercred, encrypted_key_backup,
-                                      plaintext_key, plaintext_key_sha1, backup_key_guid, user_account_type)
+                                      plaintext_key, plaintext_key_sha1, backup_key_guid, masterkey_type)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (guid) DO UPDATE SET
                     encrypted_key_usercred = EXCLUDED.encrypted_key_usercred,
@@ -34,7 +34,7 @@ class PostgresMasterKeyRepository:
                     plaintext_key = EXCLUDED.plaintext_key,
                     plaintext_key_sha1 = EXCLUDED.plaintext_key_sha1,
                     backup_key_guid = EXCLUDED.backup_key_guid,
-                    user_account_type = EXCLUDED.user_account_type
+                    masterkey_type = EXCLUDED.masterkey_type
                 """,
                 str(masterkey.guid),
                 masterkey.encrypted_key_usercred,
@@ -42,23 +42,23 @@ class PostgresMasterKeyRepository:
                 masterkey.plaintext_key,
                 masterkey.plaintext_key_sha1,
                 str(masterkey.backup_key_guid) if masterkey.backup_key_guid else None,
-                masterkey.user_account_type.value,
+                masterkey.masterkey_type.value,
             )
 
-    async def get_masterkey(self, guid: UUID, user_account_type: UserAccountType | None = None) -> MasterKey | None:
+    async def get_masterkey(self, guid: UUID, masterkey_type: MasterKeyType | None = None) -> MasterKey | None:
         """Retrieve a masterkey by GUID.
 
         Args:
             guid: Masterkey GUID to retrieve
-            user_account_type: Optional filter by user account type
+            masterkey_type: Optional filter by user account type
         """
         async with self.pool.acquire() as conn:
             query = f"SELECT * FROM {MASTKEYS_TABLE} WHERE guid = $1"
             params = [str(guid)]
 
-            if user_account_type is not None:
-                query += " AND user_account_type = $2"
-                params.append(user_account_type.value)
+            if masterkey_type is not None:
+                query += " AND masterkey_type = $2"
+                params.append(masterkey_type.value)
 
             row = await conn.fetchrow(query, *params)
             if not row:
@@ -66,7 +66,9 @@ class PostgresMasterKeyRepository:
 
             return MasterKey(
                 guid=UUID(row["guid"]),
-                user_account_type=UserAccountType(row["user_account_type"]) if row.get("user_account_type") else UserAccountType.UNKNOWN,
+                masterkey_type=MasterKeyType(row["masterkey_type"])
+                if row.get("masterkey_type")
+                else MasterKeyType.UNKNOWN,
                 encrypted_key_usercred=row["encrypted_key_usercred"],
                 encrypted_key_backup=row["encrypted_key_backup"],
                 plaintext_key=row["plaintext_key"],
@@ -78,14 +80,14 @@ class PostgresMasterKeyRepository:
         self,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
-        user_account_type: list[UserAccountType] | None = None,
+        masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering.
 
         Args:
             filter_by: Filter by decryption status (default: ALL)
             backup_key_guid: Filter by backup key GUID (default: None for all)
-            user_account_type: Filter by user account types (default: None for all)
+            masterkey_type: Filter by user account types (default: None for all)
         """
         async with self.pool.acquire() as conn:
             # Build query based on filters
@@ -97,10 +99,10 @@ class PostgresMasterKeyRepository:
                 conditions.append(f"backup_key_guid = ${len(params) + 1}")
                 params.append(str(backup_key_guid))
 
-            if user_account_type is not None and len(user_account_type) > 0:
+            if masterkey_type is not None and len(masterkey_type) > 0:
                 # Use ANY for matching multiple values
-                conditions.append(f"user_account_type = ANY(${len(params) + 1})")
-                params.append([t.value for t in user_account_type])
+                conditions.append(f"masterkey_type = ANY(${len(params) + 1})")
+                params.append([t.value for t in masterkey_type])
 
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
@@ -109,7 +111,9 @@ class PostgresMasterKeyRepository:
             masterkeys = [
                 MasterKey(
                     guid=UUID(row["guid"]),
-                    user_account_type=UserAccountType(row["user_account_type"]) if row.get("user_account_type") else UserAccountType.UNKNOWN,
+                    masterkey_type=MasterKeyType(row["masterkey_type"])
+                    if row.get("masterkey_type")
+                    else MasterKeyType.UNKNOWN,
                     encrypted_key_usercred=row["encrypted_key_usercred"],
                     encrypted_key_backup=row["encrypted_key_backup"],
                     plaintext_key=row["plaintext_key"],

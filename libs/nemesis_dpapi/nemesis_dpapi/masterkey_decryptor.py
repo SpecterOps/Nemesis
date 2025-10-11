@@ -3,7 +3,7 @@ from time import perf_counter
 
 from common.logger import get_logger
 
-from .core import UserAccountType
+from .core import MasterKeyType
 from .exceptions import MasterKeyDecryptionError
 from .keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
 from .manager import DpapiManager, MasterKeyFilter
@@ -48,7 +48,7 @@ class MasterKeyDecryptorService:
 
             encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
                 filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
-                user_account_type=[UserAccountType.USER],
+                masterkey_type=[MasterKeyType.USER],
             )
 
             decrypted_count = 0

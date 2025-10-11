@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pytest
 from impacket.dpapi import DPAPI_BLOB
-from nemesis_dpapi.core import Blob, MasterKey, MasterKeyFile, MasterKeyPolicy, UserAccountType
+from nemesis_dpapi.core import Blob, MasterKey, MasterKeyFile, MasterKeyPolicy, MasterKeyType
 from nemesis_dpapi.exceptions import BlobDecryptionError
 from nemesis_dpapi.keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey
 
@@ -252,7 +252,7 @@ class TestMasterKey:
 
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -275,7 +275,7 @@ class TestMasterKey:
         masterkey_file = MasterKeyFile.from_file(get_file_path("masterkey_system.bin"))
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -296,7 +296,7 @@ class TestMasterKey:
         masterkey_file = MasterKeyFile.from_file(get_file_path("masterkey_systemuser.bin"))
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -316,7 +316,7 @@ class TestMasterKey:
         from uuid import uuid4
 
         # Create MasterKey without encrypted_key_usercred
-        masterkey = MasterKey(guid=uuid4(), user_account_type=UserAccountType.UNKNOWN)
+        masterkey = MasterKey(guid=uuid4(), masterkey_type=MasterKeyType.UNKNOWN)
 
         # Create dummy encryption key
         cred_key = CredKey.from_password("dummy", CredKeyHashType.NTLM)
@@ -334,7 +334,7 @@ class TestBlobDecrypt:
         """Test DPAPI blob decryption with unencrypted master key."""
         blob = Blob.from_bytes(blob_without_entropy)
         # Create an unencrypted master key
-        masterkey = MasterKey(guid=blob.masterkey_guid, user_account_type=UserAccountType.UNKNOWN)
+        masterkey = MasterKey(guid=blob.masterkey_guid, masterkey_type=MasterKeyType.UNKNOWN)
 
         with pytest.raises(ValueError, match="Master key must be decrypted before use"):
             blob.decrypt(masterkey)
@@ -346,7 +346,7 @@ class TestBlobDecrypt:
         wrong_masterkey_sha1 = b"wrong_key" + b"\x00" * 8  # 20 bytes
         masterkey = MasterKey(
             guid=blob.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             plaintext_key=b"dummy_key" * 8,
             plaintext_key_sha1=wrong_masterkey_sha1,
         )
@@ -361,7 +361,7 @@ class TestBlobDecrypt:
         masterkey_sha1_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
         masterkey = MasterKey(
             guid=blob.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             plaintext_key=masterkey_bytes,
             plaintext_key_sha1=masterkey_sha1_bytes,
         )
@@ -381,7 +381,7 @@ class TestBlobDecrypt:
         masterkey_sha1_bytes = bytes.fromhex("17FD87F91D25A18ABD9BCD66B6D9F3C6BFC16778")
         masterkey = MasterKey(
             guid=blob.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             plaintext_key=masterkey_bytes,
             plaintext_key_sha1=masterkey_sha1_bytes,
         )
@@ -405,7 +405,7 @@ class TestBlobDecrypt:
         # Create a proper master key object
         masterkey = MasterKey(
             guid=blob.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             plaintext_key=b"dummy_key" * 8,  # We only need the SHA1 hash for decryption
             plaintext_key_sha1=masterkey_sha1_bytes,
         )
@@ -467,16 +467,16 @@ class TestBlobParse:
         assert blob.encrypted_data == blob_impacket["Data"] == blob_dpapick.cipherText
 
 
-class TestUserAccountType:
-    """Tests for UserAccountType.from_path() method."""
+class TestMasterKeyType:
+    """Tests for MasterKeyType.from_path() method."""
 
     def test_from_path_none(self):
         """Test from_path returns UNKNOWN for None path."""
-        assert UserAccountType.from_path(None) == UserAccountType.UNKNOWN
+        assert MasterKeyType.from_path(None) == MasterKeyType.UNKNOWN
 
     def test_from_path_empty_string(self):
         """Test from_path returns UNKNOWN for empty string."""
-        assert UserAccountType.from_path("") == UserAccountType.UNKNOWN
+        assert MasterKeyType.from_path("") == MasterKeyType.UNKNOWN
 
     def test_from_path_system_user(self):
         """Test from_path correctly identifies SYSTEM_USER paths."""
@@ -486,7 +486,7 @@ class TestUserAccountType:
             r"/Windows/System32/Microsoft/Protect/S-1-5-18/User/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         for path in test_paths:
-            assert UserAccountType.from_path(path) == UserAccountType.SYSTEM_USER, f"Failed for path: {path}"
+            assert MasterKeyType.from_path(path) == MasterKeyType.SYSTEM_USER, f"Failed for path: {path}"
 
     def test_from_path_system(self):
         """Test from_path correctly identifies SYSTEM paths."""
@@ -496,7 +496,7 @@ class TestUserAccountType:
             r"/Windows/System32/Microsoft/Protect/S-1-5-18/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         for path in test_paths:
-            assert UserAccountType.from_path(path) == UserAccountType.SYSTEM, f"Failed for path: {path}"
+            assert MasterKeyType.from_path(path) == MasterKeyType.SYSTEM, f"Failed for path: {path}"
 
     def test_from_path_system_service_profiles(self):
         """Test from_path correctly identifies LocalService and NetworkService paths."""
@@ -507,7 +507,7 @@ class TestUserAccountType:
             r"/Windows/ServiceProfiles/LocalService/AppData/Roaming/Microsoft/Protect/S-1-5-19/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         for path in test_paths:
-            assert UserAccountType.from_path(path) == UserAccountType.SYSTEM, f"Failed for path: {path}"
+            assert MasterKeyType.from_path(path) == MasterKeyType.SYSTEM, f"Failed for path: {path}"
 
     def test_from_path_user_with_sid(self):
         """Test from_path correctly identifies USER paths with SID."""
@@ -518,7 +518,7 @@ class TestUserAccountType:
             r"/Users/john.doe/AppData/Roaming/Microsoft/Protect/S-1-5-21-3821320868-1508310791-3575676346-1103/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         for path in test_paths:
-            assert UserAccountType.from_path(path) == UserAccountType.USER, f"Failed for path: {path}"
+            assert MasterKeyType.from_path(path) == MasterKeyType.USER, f"Failed for path: {path}"
 
     def test_from_path_user_with_protect_fallback(self):
         """Test from_path correctly identifies USER paths using fallback pattern."""
@@ -527,7 +527,7 @@ class TestUserAccountType:
             r"C:\Users\Administrator\AppData\Roaming\Microsoft\Protect" + "\\somedir",
         ]
         for path in test_paths:
-            assert UserAccountType.from_path(path) == UserAccountType.USER, f"Failed for path: {path}"
+            assert MasterKeyType.from_path(path) == MasterKeyType.USER, f"Failed for path: {path}"
 
     def test_from_path_unknown_patterns(self):
         """Test from_path returns UNKNOWN for unrecognized patterns."""
@@ -538,17 +538,17 @@ class TestUserAccountType:
             r"D:\Temp\test.bin",
         ]
         for path in test_paths:
-            assert UserAccountType.from_path(path) == UserAccountType.UNKNOWN, f"Failed for path: {path}"
+            assert MasterKeyType.from_path(path) == MasterKeyType.UNKNOWN, f"Failed for path: {path}"
 
     def test_from_path_case_insensitive(self):
         """Test from_path is case-insensitive."""
         paths_and_expected = [
-            (r"c:\windows\system32\microsoft\protect\s-1-5-18\user\guid", UserAccountType.SYSTEM_USER),
-            (r"C:\WINDOWS\SYSTEM32\MICROSOFT\PROTECT\S-1-5-18\GUID", UserAccountType.SYSTEM),
-            (r"C:\users\JohnDoe\appdata\roaming\microsoft\protect\s-1-5-21-111-222-333-1001\guid", UserAccountType.USER),
+            (r"c:\windows\system32\microsoft\protect\s-1-5-18\user\guid", MasterKeyType.SYSTEM_USER),
+            (r"C:\WINDOWS\SYSTEM32\MICROSOFT\PROTECT\S-1-5-18\GUID", MasterKeyType.SYSTEM),
+            (r"C:\users\JohnDoe\appdata\roaming\microsoft\protect\s-1-5-21-111-222-333-1001\guid", MasterKeyType.USER),
         ]
         for path, expected in paths_and_expected:
-            assert UserAccountType.from_path(path) == expected, f"Failed for path: {path}"
+            assert MasterKeyType.from_path(path) == expected, f"Failed for path: {path}"
 
     def test_from_path_mixed_slashes(self):
         """Test from_path handles mixed forward and backward slashes."""
@@ -556,5 +556,5 @@ class TestUserAccountType:
             r"C:\Windows/System32\Microsoft/Protect\S-1-5-18/User\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
             r"C:/Users\john.doe/AppData\Roaming/Microsoft\Protect/S-1-5-21-111-222-333-1001\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
-        assert UserAccountType.from_path(test_paths[0]) == UserAccountType.SYSTEM_USER
-        assert UserAccountType.from_path(test_paths[1]) == UserAccountType.USER
+        assert MasterKeyType.from_path(test_paths[0]) == MasterKeyType.SYSTEM_USER
+        assert MasterKeyType.from_path(test_paths[1]) == MasterKeyType.USER

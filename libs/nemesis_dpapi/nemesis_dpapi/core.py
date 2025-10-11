@@ -80,23 +80,27 @@ class MasterKeyPolicy(FlagMixin, IntFlag):
     DPAPI_OWF = 0x4  # Use the DPAPI One way function of the password (SHA_1(pw))
 
 
-class UserAccountType(str, Enum):
-    """Classification of the user account type for a masterkey."""
+class MasterKeyType(str, Enum):
+    """Type of DPAPI masterkey, which determines the decryption method.
 
-    UNKNOWN = "unknown"  # Account type could not be determined
-    USER = "user"  # Domain or local user account
-    SYSTEM = "system"  # SYSTEM machine user, LocalService, NetworkService
-    SYSTEM_USER = "system_user"  # The machine's DPAPI SYSTEM user
+    This classification is based on the account type that generated the masterkey
+    and determines which credentials or keys are needed for decryption.
+    """
+
+    UNKNOWN = "unknown"  # Masterkey type could not be determined from the file path
+    USER = "user"  # User-level masterkey (domain or local user account) - decrypted with user password and/or domain backup key
+    SYSTEM = "system"  # System-level masterkey (SYSTEM, LocalService, or NetworkService) - decrypted with DPAPI_SYSTEM machine key
+    SYSTEM_USER = "system_user"  # Machine's DPAPI SYSTEM user masterkey - decrypted with DPAPI_SYSTEM user key
 
     @classmethod
-    def from_path(cls, path: str | None) -> UserAccountType:
+    def from_path(cls, path: str | None) -> MasterKeyType:
         """Determine the user account type from a masterkey file path.
 
         Args:
             path: The file path to the masterkey file
 
         Returns:
-            UserAccountType based on the path pattern
+            MasterKeyType based on the path pattern
 
         Examples:
             - C:\\Users\\username\\AppData\\Roaming\\Microsoft\\Protect\\S-1-5-21-...\\{GUID} -> USER
@@ -149,11 +153,11 @@ class MasterKey(BaseModel):
         backup_key_guid: GUID of the domain backup key used to encrypt this masterkey.
         plaintext_key: Decrypted masterkey data.
         plaintext_key_sha1: SHA1 hash of the plaintext masterkey. AKA the Master Key (MK) Encryption Key.
-        user_account_type: Type of user account this masterkey belongs to.
+        masterkey_type: Type of user account this masterkey belongs to.
     """
 
     guid: UUID
-    user_account_type: UserAccountType
+    masterkey_type: MasterKeyType
     encrypted_key_usercred: bytes | None = None
     encrypted_key_backup: bytes | None = None
     plaintext_key: bytes | None = None
@@ -175,7 +179,7 @@ class MasterKey(BaseModel):
             f"  plaintext_key: {self.plaintext_key.hex() if self.plaintext_key else None}",
             f"  plaintext_key_sha1: {self.plaintext_key_sha1.hex() if self.plaintext_key_sha1 else None}",
             f"  backup_key_guid: {self.backup_key_guid}",
-            f"  user_account_type: {self.user_account_type.value}",
+            f"  masterkey_type: {self.masterkey_type.value}",
         ]
         return "\r\n".join(lines)
 
@@ -501,7 +505,7 @@ class MasterKeyFile(BaseModel):
     file_path: None
     masterkey_guid: UUID
     policy: MasterKeyPolicy
-    user_account_type: UserAccountType
+    masterkey_type: MasterKeyType
 
     # Masterkey data (pbMK)
     master_key: bytes | None = None
@@ -539,7 +543,7 @@ class MasterKeyFile(BaseModel):
             f"  file_path: {self.file_path}",
             f"  masterkey_guid: {self.masterkey_guid}",
             f"  policy: {self.policy} ({policy_str})\n",
-            f"  user_account_type: {self.user_account_type.value}\n",
+            f"  masterkey_type: {self.masterkey_type.value}\n",
             f"master_key: {self.master_key.hex() if self.master_key else None}\n",
             f"local_key: {self.local_key.hex() if self.local_key else None}\n",
             f"backup_key: {self.backup_key.hex() if self.backup_key else None}\n",
@@ -548,14 +552,12 @@ class MasterKeyFile(BaseModel):
         return "\n".join(lines)
 
     @classmethod
-    def from_file(
-        cls, file_path: str | Path, user_account_type: UserAccountType = UserAccountType.UNKNOWN
-    ) -> MasterKeyFile:
+    def from_file(cls, file_path: str | Path, masterkey_type: MasterKeyType = MasterKeyType.UNKNOWN) -> MasterKeyFile:
         """Parse a masterkey file from disk.
 
         Args:
             file_path: Path to the masterkey file
-            user_account_type: Type of user account this masterkey belongs to (default: UNKNOWN)
+            masterkey_type: Type of user account this masterkey belongs to (default: UNKNOWN)
 
         Returns:
             MasterKeyFile instance with parsed data
@@ -572,15 +574,15 @@ class MasterKeyFile(BaseModel):
         with open(file_path, "rb") as f:
             data = f.read()
 
-        return cls.from_bytes(data, user_account_type=user_account_type)
+        return cls.from_bytes(data, masterkey_type=masterkey_type)
 
     @classmethod
-    def from_bytes(cls, data: bytes, user_account_type: UserAccountType = UserAccountType.UNKNOWN) -> MasterKeyFile:
+    def from_bytes(cls, data: bytes, masterkey_type: MasterKeyType = MasterKeyType.UNKNOWN) -> MasterKeyFile:
         """Parse a masterkey from raw bytes.
 
         Args:
             data: Raw masterkey file bytes
-            user_account_type: Type of user account this masterkey belongs to (default: UNKNOWN)
+            masterkey_type: Type of user account this masterkey belongs to (default: UNKNOWN)
 
         Returns:
             MasterKeyFile instance with parsed data
@@ -664,7 +666,7 @@ class MasterKeyFile(BaseModel):
             file_path=None,  # Invalid on disk, set to None
             masterkey_guid=guid,
             policy=MasterKeyPolicy(policy),
-            user_account_type=user_account_type,
+            masterkey_type=masterkey_type,
             master_key=master_key,
             local_key=local_key,
             backup_key=backup_key,
@@ -721,7 +723,7 @@ class MasterKeyFile(BaseModel):
 
         return MasterKey(
             guid=self.masterkey_guid,
-            user_account_type=self.user_account_type,
+            masterkey_type=self.masterkey_type,
             encrypted_key_usercred=self.master_key,
             encrypted_key_backup=self.domain_backup_key.raw_bytes,
             plaintext_key=plaintext_key,

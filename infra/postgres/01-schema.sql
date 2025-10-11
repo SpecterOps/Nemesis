@@ -751,7 +751,7 @@ CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
     plaintext_key BYTEA,
     plaintext_key_sha1 BYTEA,
     backup_key_guid TEXT,
-    user_account_type TEXT DEFAULT 'unknown',
+    masterkey_type TEXT DEFAULT 'unknown',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

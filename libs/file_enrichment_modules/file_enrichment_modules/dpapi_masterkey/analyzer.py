@@ -12,7 +12,7 @@ from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
-from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile, UserAccountType
+from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile, MasterKeyType
 from psycopg.rows import dict_row
 
 if TYPE_CHECKING:
@@ -224,7 +224,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 encrypted_key_usercred=masterkey_file.master_key,
                 encrypted_key_backup=backup_key.raw_bytes if backup_key else None,
                 backup_key_guid=backup_key.guid_key if backup_key else None,
-                user_account_type=UserAccountType.from_path(file_enriched.path)
+                masterkey_type=MasterKeyType.from_path(file_enriched.path)
             )
 
             # The DPAPI manager handles all decryption automatically

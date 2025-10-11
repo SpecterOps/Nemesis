@@ -1,7 +1,7 @@
 """Benchmarks for DPAPI masterkey decryption using password credentials."""
 
 import pytest
-from nemesis_dpapi.core import MasterKey, MasterKeyFile, UserAccountType
+from nemesis_dpapi.core import MasterKey, MasterKeyFile, MasterKeyType
 from nemesis_dpapi.keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey
 
 
@@ -17,7 +17,7 @@ class TestMasterkeyPasswordDecryptionBenchmarks:
         # Create MasterKey object from the file
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -49,7 +49,7 @@ class TestMasterkeyPasswordDecryptionBenchmarks:
         # Create MasterKey object from the file
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -99,7 +99,7 @@ class TestMasterkeyPasswordDecryptionBenchmarks:
         # Create MasterKey object from the file
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 
@@ -142,7 +142,7 @@ class TestMasterkeyPasswordDecryptionBenchmarks:
         # Create MasterKey object from the file
         masterkey = MasterKey(
             guid=masterkey_file.masterkey_guid,
-            user_account_type=UserAccountType.UNKNOWN,
+            masterkey_type=MasterKeyType.UNKNOWN,
             encrypted_key_usercred=masterkey_file.master_key,
         )
 

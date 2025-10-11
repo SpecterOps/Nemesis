@@ -91,7 +91,7 @@ async def main() -> None:
                 guid=masterkey_file.masterkey_guid,
                 encrypted_key_usercred=masterkey_file.master_key,
                 encrypted_key_backup=masterkey_file.domain_backup_key.raw_bytes,
-                user_account_type=masterkey_file.user_account_type,
+                masterkey_type=masterkey_file.masterkey_type,
             )
         )
 

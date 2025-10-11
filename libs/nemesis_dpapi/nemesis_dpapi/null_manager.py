@@ -3,7 +3,7 @@
 from typing import Any
 from uuid import UUID
 
-from .core import Blob, MasterKey, UserAccountType
+from .core import Blob, MasterKey, MasterKeyType
 from .exceptions import MasterKeyNotFoundError
 from .keys import DomainBackupKey, DpapiSystemCredential
 from .protocols import DpapiManagerProtocol
@@ -45,7 +45,7 @@ class NullDpapiManager(DpapiManagerProtocol):
         self,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
-        user_account_type: list[UserAccountType] | None = None,
+        masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering (always returns empty list)."""
         return []

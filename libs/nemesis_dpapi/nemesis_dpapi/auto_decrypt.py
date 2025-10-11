@@ -10,7 +10,7 @@ from nemesis_dpapi.exceptions import MasterKeyDecryptionError
 from nemesis_dpapi.keys import MasterKeyEncryptionKey
 from nemesis_dpapi.repositories import MasterKeyFilter
 
-from .core import BackupKeyRecoveryBlob, MasterKey, MasterKeyFile, MasterKeyPolicy, UserAccountType
+from .core import BackupKeyRecoveryBlob, MasterKey, MasterKeyFile, MasterKeyPolicy, MasterKeyType
 from .eventing import (
     DpapiEvent,
     DpapiObserver,
@@ -121,7 +121,7 @@ class AutoDecryptionObserver(DpapiObserver):
             # Filter out User masterkeys
             encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
                 filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
-                user_account_type=[UserAccountType.SYSTEM, UserAccountType.SYSTEM_USER, UserAccountType.UNKNOWN],
+                masterkey_type=[MasterKeyType.SYSTEM, MasterKeyType.SYSTEM_USER, MasterKeyType.UNKNOWN],
             )
 
         if len(encrypted_masterkeys) == 0:
@@ -168,7 +168,7 @@ class AutoDecryptionObserver(DpapiObserver):
                 # Filter out SYSTEM masterkeys
                 encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
                     filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
-                    user_account_type=[UserAccountType.USER, UserAccountType.UNKNOWN],
+                    masterkey_type=[MasterKeyType.USER, MasterKeyType.UNKNOWN],
                 )
 
             if len(encrypted_masterkeys) == 0:
@@ -187,7 +187,7 @@ class AutoDecryptionObserver(DpapiObserver):
                 if enc_masterkey.encrypted_key_backup is None:
                     continue
 
-                if enc_masterkey.user_account_type not in (UserAccountType.USER, UserAccountType.UNKNOWN):
+                if enc_masterkey.masterkey_type not in (MasterKeyType.USER, MasterKeyType.UNKNOWN):
                     continue
 
                 # Parse the encrypted backup key bytes into a BackupKeyRecoveryBlob
@@ -206,7 +206,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     file_path=None,
                     masterkey_guid=enc_masterkey.guid,
                     policy=MasterKeyPolicy.NONE,
-                    user_account_type=enc_masterkey.user_account_type,
+                    masterkey_type=enc_masterkey.masterkey_type,
                     domain_backup_key=backup_key_blob,
                     raw_bytes=b"",  # Not needed for decryption
                 )
@@ -223,7 +223,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     )
                     new_mk = MasterKey(
                         guid=enc_masterkey.guid,
-                        user_account_type=enc_masterkey.user_account_type,
+                        masterkey_type=enc_masterkey.masterkey_type,
                         encrypted_key_usercred=enc_masterkey.encrypted_key_usercred,
                         encrypted_key_backup=enc_masterkey.encrypted_key_backup,
                         plaintext_key=result.plaintext_key,
@@ -262,7 +262,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     file_path=None,
                     masterkey_guid=masterkey.guid,
                     policy=MasterKeyPolicy.NONE,
-                    user_account_type=masterkey.user_account_type,
+                    masterkey_type=masterkey.masterkey_type,
                     domain_backup_key=backup_key_blob,
                     raw_bytes=b"",  # Not needed for decryption
                 )
@@ -275,7 +275,7 @@ class AutoDecryptionObserver(DpapiObserver):
             if result:
                 new_mk = MasterKey(
                     guid=masterkey.guid,
-                    user_account_type=masterkey.user_account_type,
+                    masterkey_type=masterkey.masterkey_type,
                     encrypted_key_usercred=masterkey.encrypted_key_usercred,
                     encrypted_key_backup=masterkey.encrypted_key_backup,
                     plaintext_key=result.plaintext_key,
@@ -292,7 +292,7 @@ class AutoDecryptionObserver(DpapiObserver):
     async def _decrypt_with_system_credentials(self, masterkey: MasterKey) -> None:
         """Attempt to decrypt a masterkey using all available DPAPI_SYSTEM credentials."""
 
-        if masterkey.user_account_type == UserAccountType.USER:
+        if masterkey.masterkey_type == MasterKeyType.USER:
             return  # Skip user masterkeys
 
         start_time = time.perf_counter()
