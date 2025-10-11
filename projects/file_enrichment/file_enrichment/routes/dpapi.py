@@ -267,7 +267,7 @@ async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: 
 
     dpapi_system_bytes = bytes.fromhex(request.value)
     dpapi_system_key = DpapiSystemCredential.from_bytes(dpapi_system_bytes)
-    await dpapi_manager.upsert_dpapi_system_credential(dpapi_system_key)
+    await dpapi_manager.upsert_system_credential(dpapi_system_key)
 
     return {"status": "success", "type": "dpapi_system"}
 

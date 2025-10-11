@@ -984,7 +984,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             dpapi_system_cred = DpapiSystemCredential(machine_key=machine_key, user_key=user_key)
 
             # Register with the DPAPI manager - it will automatically decrypt compatible masterkeys
-            await self.dpapi_manager.upsert_dpapi_system_credential(dpapi_system_cred)
+            await self.dpapi_manager.upsert_system_credential(dpapi_system_cred)
 
             logger.info("Successfully registered DPAPI_SYSTEM credential with DPAPI manager")
 

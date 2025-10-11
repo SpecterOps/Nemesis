@@ -29,7 +29,7 @@ class NullDpapiManager(DpapiManagerProtocol):
         """Add or update a domain backup key (does nothing)."""
         pass
 
-    async def upsert_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
+    async def upsert_system_credential(self, cred: DpapiSystemCredential) -> None:
         """Add or update a DPAPI system credential (does nothing)."""
         pass
 
@@ -54,7 +54,3 @@ class NullDpapiManager(DpapiManagerProtocol):
     async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
         """Retrieve domain backup key(s) (always returns empty list)."""
         return []
-
-    async def close(self) -> None:
-        """Close the manager and cleanup resources (does nothing)."""
-        pass

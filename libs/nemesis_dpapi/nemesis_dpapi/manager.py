@@ -112,6 +112,14 @@ class DpapiManager(DpapiManagerProtocol):
         if self._pg_pool:
             await self._pg_pool.close()
 
+    async def subscribe(self, observer: DpapiObserver) -> None:
+        """Subscribe an observer to DPAPI events.
+
+        Args:
+            observer: Observer implementing the update(event) method
+        """
+        await self._publisher.register_subscriber(observer)
+
     async def upsert_masterkey(
         self,
         masterkey: MasterKey,
@@ -141,13 +149,27 @@ class DpapiManager(DpapiManagerProtocol):
         elif new_masterkey.encrypted_key_usercred or new_masterkey.encrypted_key_backup:
             await self._publisher.publish_event(NewEncryptedMasterKeyEvent(masterkey_guid=new_masterkey.guid))
 
-    async def subscribe(self, observer: DpapiObserver) -> None:
-        """Subscribe an observer to DPAPI events.
+    async def get_masterkeys(
+        self,
+        guid: UUID | None = None,
+        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        backup_key_guid: UUID | None = None,
+        masterkey_type: list[MasterKeyType] | None = None,
+    ) -> list[MasterKey]:
+        """Retrieve masterkey(s) with optional filtering.
 
         Args:
-            observer: Observer implementing the update(event) method
+            guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
+            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
+            masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
+
+        Returns:
+            A list of MasterKeys (empty list if no matches)
         """
-        await self._publisher.register_subscriber(observer)
+        if not self._initialized:
+            await self._initialize_storage()
+        return await self._masterkey_repo.get_masterkeys(guid, filter_by, backup_key_guid, masterkey_type)
 
     async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
         """Add or update a domain backup key and decrypt all compatible masterkeys.
@@ -163,7 +185,21 @@ class DpapiManager(DpapiManagerProtocol):
 
         await self._publisher.publish_event(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
 
-    async def upsert_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
+    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
+        """Retrieve domain backup key(s).
+
+        Args:
+            guid: Optional specific backup key GUID to retrieve. If provided, returns a list with one key or empty list.
+
+        Returns:
+            A list of DomainBackupKey objects (empty list if no matches)
+        """
+        if not self._initialized:
+            await self._initialize_storage()
+
+        return await self._backup_key_repo.get_backup_keys(guid)
+
+    async def upsert_system_credential(self, cred: DpapiSystemCredential) -> None:
         """Add or update a DPAPI system credential.
 
         Args:
@@ -174,6 +210,24 @@ class DpapiManager(DpapiManagerProtocol):
 
         await self._dpapi_system_cred_repo.upsert_credential(cred)
         await self._publisher.publish_event(NewDpapiSystemCredentialEvent(credential=cred))
+
+    async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
+        """Retrieve DPAPI system credential(s).
+
+        Args:
+            guid: Optional specific credential GUID to retrieve. If provided, returns a list with one credential or empty list.
+
+        Returns:
+            A list of DpapiSystemCredential objects (empty list if no matches)
+        """
+        if not self._initialized:
+            await self._initialize_storage()
+
+        if guid is not None:
+            credential = await self._dpapi_system_cred_repo.get_credential(guid)
+            return [credential] if credential else []
+
+        return await self._dpapi_system_cred_repo.get_all_credentials()
 
     async def decrypt_blob(self, blob: Blob) -> bytes:
         """Decrypt a DPAPI blob using available masterkeys.
@@ -202,62 +256,3 @@ class DpapiManager(DpapiManagerProtocol):
             raise MasterKeyNotDecryptedError(blob.masterkey_guid)
 
         return blob.decrypt(masterkey)
-
-    async def get_masterkeys(
-        self,
-        guid: UUID | None = None,
-        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
-        backup_key_guid: UUID | None = None,
-        masterkey_type: list[MasterKeyType] | None = None,
-    ) -> list[MasterKey]:
-        """Retrieve masterkey(s) with optional filtering.
-
-        Args:
-            guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
-            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
-            backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
-            masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
-
-        Returns:
-            A list of MasterKeys (empty list if no matches)
-        """
-        if not self._initialized:
-            await self._initialize_storage()
-        return await self._masterkey_repo.get_masterkeys(guid, filter_by, backup_key_guid, masterkey_type)
-
-    async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
-        """Retrieve DPAPI system credential(s).
-
-        Args:
-            guid: Optional specific credential GUID to retrieve. If provided, returns a list with one credential or empty list.
-
-        Returns:
-            A list of DpapiSystemCredential objects (empty list if no matches)
-        """
-        if not self._initialized:
-            await self._initialize_storage()
-
-        if guid is not None:
-            credential = await self._dpapi_system_cred_repo.get_credential(guid)
-            return [credential] if credential else []
-
-        return await self._dpapi_system_cred_repo.get_all_credentials()
-
-    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
-        """Retrieve domain backup key(s).
-
-        Args:
-            guid: Optional specific backup key GUID to retrieve. If provided, returns a list with one key or empty list.
-
-        Returns:
-            A list of DomainBackupKey objects (empty list if no matches)
-        """
-        if not self._initialized:
-            await self._initialize_storage()
-
-        return await self._backup_key_repo.get_backup_keys(guid)
-
-    async def close(self) -> None:
-        """Close the manager and cleanup resources."""
-        if self._pg_pool:
-            await self._pg_pool.close()

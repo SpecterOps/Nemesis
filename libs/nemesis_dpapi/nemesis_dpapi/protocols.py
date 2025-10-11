@@ -28,7 +28,7 @@ class DpapiManagerProtocol(Protocol):
         """Add or update a domain backup key."""
         ...
 
-    async def upsert_dpapi_system_credential(self, cred: DpapiSystemCredential) -> None:
+    async def upsert_system_credential(self, cred: DpapiSystemCredential) -> None:
         """Add or update a DPAPI system credential."""
         ...
 
@@ -62,8 +62,4 @@ class DpapiManagerProtocol(Protocol):
 
     async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
         """Retrieve domain backup key(s)."""
-        ...
-
-    async def close(self) -> None:
-        """Close the manager and cleanup resources."""
         ...
