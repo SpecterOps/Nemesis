@@ -1,6 +1,6 @@
 """Protocol definitions for DPAPI components."""
 
-from typing import Protocol, runtime_checkable
+from typing import Protocol, Self, runtime_checkable
 from uuid import UUID
 
 from .core import Blob, MasterKey, MasterKeyType
@@ -12,11 +12,11 @@ from .repositories import MasterKeyFilter
 class DpapiManagerProtocol(Protocol):
     """Protocol defining the interface for DPAPI managers."""
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         """Async context manager entry."""
         ...
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit."""
         ...
 

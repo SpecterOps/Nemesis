@@ -45,7 +45,7 @@ def create_incorrect_backup_key(correct_key_data: bytes) -> bytes:
     new_rsa_key = RSA.generate(2048)
 
     # Export as DER format (PKCS#1 private key)
-    private_key_der = new_rsa_key.export_key(format="DER", pkcs=1)
+    # private_key_der = new_rsa_key.export_key(format="DER", pkcs=1)
 
     # Convert DER to Microsoft's PRIVATE_KEY_BLOB format
     # The PRIVATE_KEY_BLOB format is:
@@ -155,7 +155,9 @@ async def masterkeys_first_then_backup_key(mk_domain: MasterKeyFile, backup_key_
             print("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
 
 
-async def backup_key_first_then_masterkeys(mk_domain: MasterKeyFile, mk_local: MasterKeyFile, backup_key_data: dict[str, str]) -> None:
+async def backup_key_first_then_masterkeys(
+    mk_domain: MasterKeyFile, mk_local: MasterKeyFile, backup_key_data: dict[str, str]
+) -> None:
     print("\n📋 Scenario 2: backup key added first, then masterkeys")
     async with DpapiManager(storage_backend="memory") as dpapi2:
         # Add domain backup key first

@@ -1,6 +1,6 @@
 """Null DPAPI manager implementation."""
 
-from typing import Any
+from typing import Any, Self
 from uuid import UUID
 
 from .core import Blob, MasterKey, MasterKeyType
@@ -13,7 +13,7 @@ from .repositories import MasterKeyFilter
 class NullDpapiManager(DpapiManagerProtocol):
     """Null object implementation of DPAPI manager that does nothing when methods are invoked."""
 
-    async def __aenter__(self) -> "NullDpapiManager":
+    async def __aenter__(self) -> Self:
         """Async context manager entry."""
         return self
 

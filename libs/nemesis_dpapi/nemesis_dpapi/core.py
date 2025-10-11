@@ -25,10 +25,9 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict
 
 from .exceptions import BlobDecryptionError, BlobParsingError, InvalidBackupKeyError, MasterKeyDecryptionError
-from .keys import MasterKeyEncryptionKey
 
 if TYPE_CHECKING:
-    from .keys import DomainBackupKey
+    from .keys import DomainBackupKey, MasterKeyEncryptionKey
 
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
 

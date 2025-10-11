@@ -1,6 +1,6 @@
 """Main DPAPI manager class."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 from uuid import UUID
 
 import asyncpg
@@ -103,12 +103,12 @@ class DpapiManager(DpapiManagerProtocol):
 
         self._initialized = True
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         """Async context manager entry."""
         await self._initialize_storage()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit."""
         if self._pg_pool:
             await self._pg_pool.close()
