@@ -56,13 +56,13 @@ async def carve_dpapi_blobs_from_bytes(
             blob = await parse_dpapi_blob(raw_bytes[current_pos:])
             if not blob.success:
                 if file_name != "" and object_id != "":
-                    await logger.awarning(
+                    logger.warning(
                         "carve_dpapi_blobs_from_bytes: blob.rawData is None",
                         file_name=file_name,
                         object_id=object_id,
                     )
                 else:
-                    await logger.awarning("carve_dpapi_blobs_from_bytes: blob.rawData is None")
+                    logger.warning("carve_dpapi_blobs_from_bytes: blob.rawData is None")
                 current_pos += 1
             elif blob.dpapi_data_b64:
                 current_pos += len(base64.b64decode(blob.dpapi_data_b64))
@@ -71,9 +71,9 @@ async def carve_dpapi_blobs_from_bytes(
                     dpapi_blobs.append(blob)
         except Exception as e:
             if file_name != "":
-                await logger.awarning(f"exception parsing file {file_name} for dpapi blobs: {e}")
+                logger.warning(f"exception parsing file {file_name} for dpapi blobs: {e}")
             else:
-                await logger.awarning(f"exception parsing bytes for dpapi blobs: {e}")
+                logger.warning(f"exception parsing bytes for dpapi blobs: {e}")
             return dpapi_blobs
         loc = raw_bytes.find(dpapi_signature, current_pos)
 
@@ -93,7 +93,7 @@ async def carve_dpapi_blobs_from_bytes(
                     blob = await parse_dpapi_blob(dpapi_blob_raw)
                     current_pos += end_loc - loc
                     if not blob.success:
-                        await logger.awarning(
+                        logger.warning(
                             "carve_dpapi_blobs: blob.rawData is None",
                             file_name=file_name,
                             object_id=object_id,
@@ -104,9 +104,9 @@ async def carve_dpapi_blobs_from_bytes(
                             dpapi_blobs.append(blob)
                 except Exception as e:
                     if file_name != "":
-                        await logger.awarning(f"exception parsing file {file_name} for b64dpapi blobs: {e}")
+                        logger.warning(f"exception parsing file {file_name} for b64dpapi blobs: {e}")
                     else:
-                        await logger.awarning(f"exception parsing bytes for dpapi blobs: {e}")
+                        logger.warning(f"exception parsing bytes for b64dpapi blobs: {e}")
                     return dpapi_blobs
             loc = raw_bytes.find(dpapi_b64_signature, current_pos)
 

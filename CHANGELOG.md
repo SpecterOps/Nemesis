@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-language Tika OCR support (`TIKA_OCR_LANGUAGES` ENV var, see `compose.yaml`)
 - Text translation agent
 - Ability to delete file linkings from the FileViewer
+- Dapr pubsub integration for DPAPI-related revents
 
 ### Changed
 
