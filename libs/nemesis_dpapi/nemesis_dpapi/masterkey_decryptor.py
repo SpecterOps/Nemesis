@@ -3,15 +3,13 @@ from time import perf_counter
 
 from common.logger import get_logger
 
+from .core import UserAccountType
 from .exceptions import MasterKeyDecryptionError
 from .keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
 from .manager import DpapiManager, MasterKeyFilter
 from .types import Sid
 
 logger = get_logger(__name__)
-
-
-# TODO: Use Dapr workflows for the background tasks
 
 
 class MasterKeyDecryptorService:
@@ -48,7 +46,10 @@ class MasterKeyDecryptorService:
         try:
             logger.info(f"Starting background decryption for credential type: {credential_type.__name__}")
 
-            encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
+            encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
+                filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
+                user_account_type=UserAccountType.USER,
+            )
 
             decrypted_count = 0
 

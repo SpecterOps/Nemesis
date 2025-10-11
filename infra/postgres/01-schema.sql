@@ -751,18 +751,40 @@ CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
     plaintext_key BYTEA,
     plaintext_key_sha1 BYTEA,
     backup_key_guid TEXT,
-    user_account_type TEXT DEFAULT 'unknown'
+    user_account_type TEXT DEFAULT 'unknown',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (
     guid TEXT PRIMARY KEY,
     key_data BYTEA NOT NULL,
-    domain_controller TEXT
+    domain_controller TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS dpapi.system_credentials (
     id SERIAL PRIMARY KEY,
     user_key BYTEA NOT NULL,
     machine_key BYTEA NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_key, machine_key)
 );
+
+-- Create triggers for DPAPI tables
+CREATE OR REPLACE TRIGGER update_dpapi_masterkeys_updated_at
+    BEFORE UPDATE ON dpapi.masterkeys
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE OR REPLACE TRIGGER update_dpapi_domain_backup_keys_updated_at
+    BEFORE UPDATE ON dpapi.domain_backup_keys
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE OR REPLACE TRIGGER update_dpapi_system_credentials_updated_at
+    BEFORE UPDATE ON dpapi.system_credentials
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
