@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-from typing import Optional
 
 import aiohttp
 import structlog
@@ -59,7 +58,7 @@ async def wait_for_litellm() -> bool:
     return False
 
 
-async def get_token_from_dapr() -> Optional[str]:
+async def get_token_from_dapr() -> str | None:
     """Retrieve token from Dapr state store"""
     try:
         logger.info(f"Checking Dapr state store for existing token (key: {TOKEN_KEY})...")
@@ -121,7 +120,7 @@ async def validate_token(token: str) -> bool:
     return False
 
 
-async def create_new_token() -> Optional[str]:
+async def create_new_token() -> str | None:
     """Create a new user/token with budget limit"""
     logger.info("Attempting to create new chat service user with budget limit...")
 

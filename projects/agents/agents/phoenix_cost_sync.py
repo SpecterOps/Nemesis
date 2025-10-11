@@ -1,6 +1,5 @@
 """Sync LiteLLM model pricing to Phoenix for cost tracking."""
 import os
-from typing import Dict, Optional
 
 import asyncpg
 import httpx
@@ -10,7 +9,7 @@ from dapr.clients import DaprClient
 logger = structlog.get_logger(__name__)
 
 
-async def fetch_litellm_model_info(admin_key: str) -> Optional[Dict]:
+async def fetch_litellm_model_info(admin_key: str) -> dict | None:
     """
     Fetch model information including pricing from LiteLLM.
 
@@ -34,7 +33,7 @@ async def fetch_litellm_model_info(admin_key: str) -> Optional[Dict]:
         return None
 
 
-def extract_model_pricing(model_info: Dict, model_name: str = "default") -> Optional[Dict]:
+def extract_model_pricing(model_info: dict, model_name: str = "default") -> dict | None:
     """
     Extract pricing information for a specific model from LiteLLM response.
 
@@ -76,7 +75,7 @@ def extract_model_pricing(model_info: Dict, model_name: str = "default") -> Opti
     return None
 
 
-async def insert_phoenix_model_pricing(database_url: str, model_name: str, pricing: Dict) -> bool:
+async def insert_phoenix_model_pricing(database_url: str, model_name: str, pricing: dict) -> bool:
     """
     Insert model and pricing data directly into Phoenix PostgreSQL database.
 
@@ -98,7 +97,7 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
             # First check if model already exists
             existing_model = await conn.fetchrow(
                 """
-                SELECT id FROM generative_models 
+                SELECT id FROM generative_models
                 WHERE name = $1 AND deleted_at IS NULL
                 """,
                 model_name
@@ -117,7 +116,7 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
                 # Insert new model into generative_models table
                 model_id = await conn.fetchval(
                     """
-                    INSERT INTO generative_models 
+                    INSERT INTO generative_models
                     (name, name_pattern, provider, is_built_in, created_at, updated_at)
                     VALUES ($1, $2, $3, $4, NOW(), NOW())
                     RETURNING id
@@ -132,7 +131,7 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
             # Insert token prices for input tokens
             await conn.execute(
                 """
-                INSERT INTO token_prices 
+                INSERT INTO token_prices
                 (model_id, token_type, is_prompt, base_rate, customization)
                 VALUES ($1, $2, $3, $4, $5)
                 """,
@@ -146,7 +145,7 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
             # Insert token prices for output tokens
             await conn.execute(
                 """
-                INSERT INTO token_prices 
+                INSERT INTO token_prices
                 (model_id, token_type, is_prompt, base_rate, customization)
                 VALUES ($1, $2, $3, $4, $5)
                 """,
@@ -201,7 +200,7 @@ async def sync_pricing_to_phoenix(model_name: str = "default") -> bool:
             try:
                 with DaprClient() as client:
                     secret = client.get_secret(
-                        store_name="nemesis-secret-store", 
+                        store_name="nemesis-secret-store",
                         key="LITELLM_ADMIN_KEY"
                     )
                     admin_key = secret.secret.get("LITELLM_ADMIN_KEY")
@@ -254,7 +253,7 @@ async def sync_pricing_to_phoenix(model_name: str = "default") -> bool:
         return False
 
 
-def get_synced_pricing() -> Optional[Dict]:
+def get_synced_pricing() -> dict | None:
     """
     Get the synced pricing information from environment variables.
 

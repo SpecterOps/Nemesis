@@ -5,17 +5,16 @@ import tempfile
 
 import psycopg
 import structlog
+from agents.base_agent import BaseAgent
+from agents.model_manager import ModelManager
+from agents.prompt_manager import PromptManager
+from agents.schemas import CredentialAnalysisResponse, CredentialWithContext
 from common.models import FileObject, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
-
-from agents.base_agent import BaseAgent
-from agents.model_manager import ModelManager
-from agents.prompt_manager import PromptManager
-from agents.schemas import CredentialAnalysisResponse, CredentialWithContext
 
 logger = structlog.get_logger(__name__)
 

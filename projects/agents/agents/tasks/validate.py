@@ -1,15 +1,14 @@
 """Validation agent for security findings using Pydantic AI."""
 
 import structlog
-from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
-from pydantic_ai import Agent
-from pydantic_ai.settings import ModelSettings
-
 from agents.base_agent import BaseAgent
 from agents.logger import set_agent_metadata
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import TriageCategory, ValidateResponse
+from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
+from pydantic_ai import Agent
+from pydantic_ai.settings import ModelSettings
 
 logger = structlog.get_logger(__name__)
 

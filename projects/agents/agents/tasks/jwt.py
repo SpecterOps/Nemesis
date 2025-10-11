@@ -1,11 +1,10 @@
 """JWT analysis agent for validating JWT findings."""
 
 import structlog
-from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
-
 from agents.base_agent import BaseAgent
 from agents.logger import set_agent_metadata
 from agents.schemas import JWTAnalysis, TriageCategory
+from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 logger = structlog.get_logger(__name__)
 

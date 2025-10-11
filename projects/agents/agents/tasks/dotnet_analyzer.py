@@ -14,6 +14,10 @@ from pathlib import Path
 
 import psycopg
 import structlog
+from agents.base_agent import BaseAgent
+from agents.model_manager import ModelManager
+from agents.prompt_manager import PromptManager
+from agents.schemas import DotNetAnalysisResponse
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
@@ -22,11 +26,6 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
 from pythonnet import load  # type: ignore [import-untyped]
-
-from agents.base_agent import BaseAgent
-from agents.model_manager import ModelManager
-from agents.prompt_manager import PromptManager
-from agents.schemas import DotNetAnalysisResponse
 
 logger = structlog.get_logger(__name__)
 

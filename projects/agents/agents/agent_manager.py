@@ -5,7 +5,6 @@ import inspect
 from pathlib import Path
 
 import structlog
-
 from agents.base_agent import BaseAgent
 
 logger = structlog.get_logger(__name__)

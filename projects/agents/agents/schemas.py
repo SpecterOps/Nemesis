@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -21,11 +21,11 @@ class TriageRequest(BaseModel):
     """Schema for triage workflow input"""
     finding_id: int = Field(..., description="Unique finding identifier")
     finding_name: str = Field(..., description="Name/type of the finding")
-    category: Optional[str] = Field(None, description="Finding category")
-    severity: Optional[Union[int, str]] = Field(None, description="Finding severity level (0-10 or string)")
+    category: str | None = Field(None, description="Finding category")
+    severity: Union[int, str] | None = Field(None, description="Finding severity level (0-10 or string)")
     object_id: str = Field(..., description="Object storage ID")
-    data: List[str] = Field(..., description="Finding data payload")
-    raw_data: Optional[Dict[str, Any]] = Field(None, description="Raw finding data")
+    data: list[str] = Field(..., description="Finding data payload")
+    raw_data: dict[str, Any] | None = Field(None, description="Raw finding data")
     file_path: str = Field(..., description="Path of the file associated with finding")
 
     @field_validator('severity')
@@ -36,8 +36,8 @@ class TriageRequest(BaseModel):
 
         try:
             severity_int = int(v)
-        except (ValueError, TypeError):
-            raise ValueError(f"Severity must be convertible to integer, got: {v}")
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Severity must be convertible to integer, got: {v}") from e
 
         if not 0 <= severity_int <= 10:
             raise ValueError(f"Severity must be between 0 and 10, got: {severity_int}")
@@ -64,7 +64,7 @@ class ValidateResponse(BaseModel):
     )
     explanation: str = Field(..., description="Accurate but concise 1 sentence explanation for the decision")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence score 0-1.0")
-    true_positive_context: Optional[str] = Field(None, description="Context/risk for true_positive decisions. Only required for true_positive findings.")
+    true_positive_context: str | None = Field(None, description="Context/risk for true_positive decisions. Only required for true_positive findings.")
 
 class CredentialWithContext(BaseModel):
     """A credential with its surrounding textual context."""
@@ -73,7 +73,7 @@ class CredentialWithContext(BaseModel):
 
 class CredentialAnalysisResponse(BaseModel):
     """Response from credential analysis agent."""
-    credentials: List[CredentialWithContext] = Field(default_factory=list, description="List of extracted credentials with their surrounding context")
+    credentials: list[CredentialWithContext] = Field(default_factory=list, description="List of extracted credentials with their surrounding context")
 
 class SummaryResponse(BaseModel):
     """Response from text summarization agent."""
@@ -92,6 +92,6 @@ class TriageResult(BaseModel):
     finding_id: int = Field(..., description="ID of the finding that was triaged")
     decision: str = Field(..., description="Triage decision made")
     explanation: str = Field(..., description="Explanation for the triage decision")
-    confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Confidence score 0-1.0 (optional)")
-    true_positive_context: Optional[str] = Field(None, description="Context/risk for true_positive decisions")
+    confidence: float | None = Field(None, ge=0.0, le=1.0, description="Confidence score 0-1.0 (optional)")
+    true_positive_context: str | None = Field(None, description="Context/risk for true_positive decisions")
     success: bool = Field(..., description="Whether the triage process completed successfully")

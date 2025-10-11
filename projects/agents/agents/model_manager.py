@@ -1,12 +1,10 @@
 """Centralized model management for all agent activities."""
-from typing import Optional
 
 import structlog
-from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.providers.openai import OpenAIProvider
-
 from agents.helpers import create_rate_limit_client
 from agents.logger import setup_phoenix_llm_tracing
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -14,9 +12,9 @@ logger = structlog.get_logger(__name__)
 class ModelManager:
     """Singleton manager for LLM model instances used across all activities."""
 
-    _model: Optional[OpenAIModel] = None
-    _token: Optional[str] = None
-    _model_name: Optional[str] = None
+    _model: OpenAIModel | None = None
+    _token: str | None = None
+    _model_name: str | None = None
     _base_url: str = "http://litellm:4000/"
     _instrumentation_enabled: bool = False
 
@@ -43,7 +41,7 @@ class ModelManager:
         )
 
     @classmethod
-    def get_model(cls) -> Optional[OpenAIModel]:
+    def get_model(cls) -> OpenAIModel | None:
         """
         Get the shared model instance, creating it if necessary.
 
