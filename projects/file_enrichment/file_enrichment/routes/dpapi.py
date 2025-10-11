@@ -31,6 +31,7 @@ from nemesis_dpapi import (
     Password,
     Pbkdf2Hash,
     Sha1Hash,
+    UserAccountType,
 )
 from nemesis_dpapi.eventing import (
     DpapiEvent,
@@ -245,6 +246,7 @@ async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: Ma
 
         masterkey = MasterKey(
             guid=masterkey_guid,
+            user_account_type=UserAccountType.UNKNOWN,
             plaintext_key=masterkey_data,
             plaintext_key_sha1=SHA1.new(masterkey_data).digest(),
         )

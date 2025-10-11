@@ -12,7 +12,7 @@ from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
-from nemesis_dpapi import DpapiManager, MasterKey
+from nemesis_dpapi import DpapiManager, MasterKey, UserAccountType
 from pypykatz.pypykatz import pypykatz
 
 if TYPE_CHECKING:
@@ -241,6 +241,7 @@ class LsassDumpParser(EnrichmentModule):
 
                             mk = MasterKey(
                                 guid=UUID(str(cred.key_guid)),
+                                user_account_type=UserAccountType.UNKNOWN,
                                 plaintext_key=masterkey_bytes,
                                 plaintext_key_sha1=sha1_masterkey_bytes,
                             )
