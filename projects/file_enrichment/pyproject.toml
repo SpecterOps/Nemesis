@@ -43,6 +43,7 @@ uvicorn = "^0.37.0"
 dapr-ext-fastapi = "1.15.0"
 durabletask-dapr = "0.2.0a7"
 regipy = "^5.2.0"
+dapr = "1.16.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"

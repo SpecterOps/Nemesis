@@ -9,7 +9,7 @@ readme = "README.md"
 python = "^3.12"
 fastapi = { extras = ["all"], version = "^0.115.6" }
 structlog = "^25.1.0"
-dapr = "1.15.0"
+dapr = "1.16.0"
 pydantic = "^2.10.4"
 uvicorn = "^0.34.0"
 python-multipart = "^0.0.20"

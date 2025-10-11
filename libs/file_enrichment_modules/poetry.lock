@@ -618,14 +618,14 @@ test-randomorder = ["pytest-randomly"]
 
 [[package]]
 name = "dapr"
-version = "1.15.0"
+version = "1.16.0"
 description = "The official release of Dapr Python SDK."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "dapr-1.15.0-py3-none-any.whl", hash = "sha256:0093bf6df5eb9a14fbab60191a619438e0b6b336f60a7994e184276bcc35d5fb"},
-    {file = "dapr-1.15.0.tar.gz", hash = "sha256:6b2373084143f164cb00702758b17a14fc4442314a1f3e2be36ee008d486c47a"},
+    {file = "dapr-1.16.0-py3-none-any.whl", hash = "sha256:076dd559a0b450eae24b1c2ae779c9299ed3e06a05c1f72719a6613af8d19ced"},
+    {file = "dapr-1.16.0.tar.gz", hash = "sha256:c7e3d005552a598d07608d0d502b2bc432e86678f94b2beccc13a096b9198684"},
 ]
 
 [package.dependencies]
@@ -2258,4 +2258,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "9ecd164719b6de18a5231a45f5854969a7e04a5467466c1ff831ea1385b54391"
+content-hash = "94c7d39b15bc7a21312f5f4112760ad04b26483a1e17c59a1e107ff4ba927acf"

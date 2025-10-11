@@ -9,7 +9,7 @@ readme = "README.md"
 python = ">=3.12,<4.0"
 impacket = ">=0.12.0,<0.13.0"
 psycopg = {extras = ["binary"], version = ">=3.0.0,<4.0.0"}
-dapr = "1.15.0"
+dapr = "1.16.0"
 structlog = ">=20.0.0,<30.0.0"
 nemesis-dpapi = { path = "../nemesis_dpapi", develop = true }
 file-linking = { path = "../file_linking", develop = true }
