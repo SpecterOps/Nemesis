@@ -56,6 +56,14 @@ class DpapiManagerProtocol(Protocol):
         """
         ...
 
+    async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
+        """Retrieve DPAPI system credential(s)."""
+        ...
+
+    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
+        """Retrieve domain backup key(s)."""
+        ...
+
     async def close(self) -> None:
         """Close the manager and cleanup resources."""
         ...

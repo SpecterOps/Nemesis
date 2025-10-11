@@ -232,6 +232,38 @@ class DpapiManager(DpapiManagerProtocol):
             await self._initialize_storage()
         return await self._dpapi_system_cred_repo.get_credential(guid)
 
+    async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
+        """Retrieve DPAPI system credential(s).
+
+        Args:
+            guid: Optional specific credential GUID to retrieve. If provided, returns a list with one credential or empty list.
+
+        Returns:
+            A list of DpapiSystemCredential objects (empty list if no matches)
+        """
+        if not self._initialized:
+            await self._initialize_storage()
+
+        if guid is not None:
+            credential = await self._dpapi_system_cred_repo.get_credential(guid)
+            return [credential] if credential else []
+
+        return await self._dpapi_system_cred_repo.get_all_credentials()
+
+    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
+        """Retrieve domain backup key(s).
+
+        Args:
+            guid: Optional specific backup key GUID to retrieve. If provided, returns a list with one key or empty list.
+
+        Returns:
+            A list of DomainBackupKey objects (empty list if no matches)
+        """
+        if not self._initialized:
+            await self._initialize_storage()
+
+        return await self._backup_key_repo.get_backup_keys(guid)
+
     async def close(self) -> None:
         """Close the manager and cleanup resources."""
         if self._pg_pool:

@@ -156,18 +156,22 @@ class PostgresDomainBackupKeyRepository:
                 key.domain_controller,
             )
 
-    async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:
-        """Retrieve a backup key by GUID."""
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(f"SELECT * FROM {BACKUPKEYS_TABLE} WHERE guid = $1", str(guid))
-            if not row:
-                return None
+    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
+        """Retrieve backup key(s).
 
-            return DomainBackupKey(guid=UUID(row["guid"]), key_data=row["key_data"])
+        Args:
+            guid: Optional specific backup key GUID to retrieve. If provided, returns a list with one key or empty list.
 
-    async def get_all_backup_keys(self) -> list[DomainBackupKey]:
-        """Retrieve all backup keys."""
+        Returns:
+            A list of DomainBackupKey objects (empty list if no matches)
+        """
         async with self.pool.acquire() as conn:
+            if guid is not None:
+                row = await conn.fetchrow(f"SELECT * FROM {BACKUPKEYS_TABLE} WHERE guid = $1", str(guid))
+                if not row:
+                    return []
+                return [DomainBackupKey(guid=UUID(row["guid"]), key_data=row["key_data"])]
+
             rows = await conn.fetch(f"SELECT * FROM {BACKUPKEYS_TABLE}")
             return [DomainBackupKey(guid=UUID(row["guid"]), key_data=row["key_data"]) for row in rows]
 

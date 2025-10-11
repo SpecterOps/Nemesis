@@ -169,7 +169,7 @@ async def backup_key_first_then_masterkeys(mk_domain: MasterKeyFile, mk_local: M
         await dpapi2.upsert_domain_backup_key(backup_key)
 
         # Check initial state (should have backup key but no masterkeys)
-        backup_keys = await dpapi2._backup_key_repo.get_all_backup_keys()
+        backup_keys = await dpapi2.get_backup_keys()
         all_keys_before = await dpapi2.get_masterkeys()
         print(f"Initial state: {len(backup_keys)} backup keys, {len(all_keys_before)} masterkeys")
 

@@ -175,10 +175,12 @@ class AutoDecryptionObserver(DpapiObserver):
             if not encrypted_masterkeys:
                 return
 
-            new_backup_key = await self.dpapi_manager._backup_key_repo.get_backup_key(backup_key_guid)
+            backup_keys = await self.dpapi_manager.get_backup_keys(guid=backup_key_guid)
 
-            if not new_backup_key:
+            if not backup_keys:
                 return
+
+            new_backup_key = backup_keys[0]
 
             # Try to decrypt each encrypted masterkey with the new backup key
             for enc_masterkey in encrypted_masterkeys:
@@ -232,7 +234,7 @@ class AutoDecryptionObserver(DpapiObserver):
                         backup_key_guid=result.backup_key_guid,
                     )
 
-                    await self.dpapi_manager._masterkey_repo.upsert_masterkey(new_mk)
+                    await self.dpapi_manager.upsert_masterkey(new_mk)
 
         except Exception as e:
             logger.error(f"Auto-decrypt _attempt_masterkey_decryption_with_backup_key error: {e}")
@@ -243,7 +245,7 @@ class AutoDecryptionObserver(DpapiObserver):
         if masterkey.encrypted_key_backup is None:
             return  # Cannot decrypt if there's no backup key data
 
-        backup_keys = await self.dpapi_manager._backup_key_repo.get_all_backup_keys()
+        backup_keys = await self.dpapi_manager.get_backup_keys()
         if not backup_keys:
             return
 
@@ -284,7 +286,7 @@ class AutoDecryptionObserver(DpapiObserver):
                     backup_key_guid=result.backup_key_guid,
                 )
                 print(f"Successfully decrypted masterkey {masterkey.guid} with backup key {backup_key.guid}")
-                await self.dpapi_manager._masterkey_repo.upsert_masterkey(new_mk)
+                await self.dpapi_manager.upsert_masterkey(new_mk)
                 break
 
         end_time = time.perf_counter()
@@ -300,7 +302,7 @@ class AutoDecryptionObserver(DpapiObserver):
         if masterkey.encrypted_key_usercred is None:
             return  # Cannot decrypt if there's no user credential data
 
-        system_credentials = await self.dpapi_manager._dpapi_system_cred_repo.get_all_credentials()
+        system_credentials = await self.dpapi_manager.get_system_credentials()
         if not system_credentials:
             return
 

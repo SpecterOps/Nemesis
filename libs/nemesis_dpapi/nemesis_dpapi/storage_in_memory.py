@@ -77,12 +77,19 @@ class InMemoryDomainBackupKeyRepository:
         """Add or update a domain backup key in storage."""
         self._backup_keys[key.guid] = key
 
-    async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:
-        """Retrieve a backup key by GUID."""
-        return self._backup_keys.get(guid)
+    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
+        """Retrieve backup key(s).
 
-    async def get_all_backup_keys(self) -> list[DomainBackupKey]:
-        """Retrieve all backup keys."""
+        Args:
+            guid: Optional specific backup key GUID to retrieve. If provided, returns a list with one key or empty list.
+
+        Returns:
+            A list of DomainBackupKey objects (empty list if no matches)
+        """
+        if guid is not None:
+            key = self._backup_keys.get(guid)
+            return [key] if key is not None else []
+
         return list(self._backup_keys.values())
 
     async def delete_backup_key(self, guid: UUID) -> None:

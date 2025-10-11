@@ -47,6 +47,14 @@ class NullDpapiManager(DpapiManagerProtocol):
         """Retrieve masterkey(s) with optional filtering (always returns empty list)."""
         return []
 
+    async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
+        """Retrieve DPAPI system credential(s) (always returns empty list)."""
+        return []
+
+    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
+        """Retrieve domain backup key(s) (always returns empty list)."""
+        return []
+
     async def close(self) -> None:
         """Close the manager and cleanup resources (does nothing)."""
         pass

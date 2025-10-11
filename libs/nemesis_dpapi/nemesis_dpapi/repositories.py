@@ -55,12 +55,15 @@ class DomainBackupKeyRepository(Protocol):
         """Add or update a domain backup key in storage."""
         ...
 
-    async def get_backup_key(self, guid: UUID) -> DomainBackupKey | None:
-        """Retrieve a backup key by GUID."""
-        ...
+    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
+        """Retrieve backup key(s).
 
-    async def get_all_backup_keys(self) -> list[DomainBackupKey]:
-        """Retrieve all backup keys."""
+        Args:
+            guid: Optional specific backup key GUID to retrieve. If provided, returns a list with one key or empty list.
+
+        Returns:
+            A list of DomainBackupKey objects (empty list if no matches)
+        """
         ...
 
     async def delete_backup_key(self, guid: UUID) -> None:
