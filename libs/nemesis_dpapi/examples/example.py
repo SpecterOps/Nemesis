@@ -31,7 +31,7 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from nemesis_dpapi import Blob, DomainBackupKey, DpapiManager, MasterKey, MasterKeyFile, MasterKeyFilter
+from nemesis_dpapi import Blob, DomainBackupKey, DpapiManager, EncryptionFilter, MasterKey, MasterKeyFile
 from nemesis_dpapi.eventing import (
     DpapiEvent,
     DpapiObserver,
@@ -95,7 +95,7 @@ async def main() -> None:
             )
         )
 
-        encrypted_mks = await manager.get_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
+        encrypted_mks = await manager.get_masterkeys(encryption_filter=EncryptionFilter.ENCRYPTED_ONLY)
         if len(encrypted_mks) == 1:
             print("[✅] Added 1 masterkey:")
         else:
@@ -118,7 +118,7 @@ async def main() -> None:
 
         # Check final results
         all_keys_final = await manager.get_masterkeys()
-        decrypted_keys_final = await manager.get_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        decrypted_keys_final = await manager.get_masterkeys(encryption_filter=EncryptionFilter.DECRYPTED_ONLY)
 
         if len(decrypted_keys_final) == 0:
             raise ValueError("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")

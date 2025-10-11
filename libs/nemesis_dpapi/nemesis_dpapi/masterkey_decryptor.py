@@ -6,7 +6,7 @@ from common.logger import get_logger
 from .core import MasterKeyType
 from .exceptions import MasterKeyDecryptionError
 from .keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
-from .manager import DpapiManager, MasterKeyFilter
+from .manager import DpapiManager, EncryptionFilter
 from .types import Sid
 
 logger = get_logger(__name__)
@@ -47,7 +47,7 @@ class MasterKeyDecryptorService:
             logger.info(f"Starting background decryption for credential type: {credential_type.__name__}")
 
             encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
-                filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
+                encryption_filter=EncryptionFilter.ENCRYPTED_ONLY,
                 masterkey_type=[MasterKeyType.USER],
             )
 

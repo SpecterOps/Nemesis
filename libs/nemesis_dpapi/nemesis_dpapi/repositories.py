@@ -8,12 +8,12 @@ from .core import MasterKey, MasterKeyType
 from .keys import DomainBackupKey, DpapiSystemCredential
 
 
-class MasterKeyFilter(Enum):
-    """Filter options for masterkey queries."""
+class EncryptionFilter(Enum):
+    """Encryption filter options for masterkey queries."""
 
-    ALL = "all"
-    ENCRYPTED_ONLY = "encrypted_only"
-    DECRYPTED_ONLY = "decrypted_only"
+    ALL = "all"  # Return all masterkeys
+    ENCRYPTED_ONLY = "encrypted_only"  # Return only encrypted masterkeys
+    DECRYPTED_ONLY = "decrypted_only"  # Return only decrypted masterkeys
 
 
 class MasterKeyRepository(Protocol):
@@ -26,7 +26,7 @@ class MasterKeyRepository(Protocol):
     async def get_masterkeys(
         self,
         guid: UUID | None = None,
-        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        encryption_filter: EncryptionFilter = EncryptionFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
@@ -34,7 +34,7 @@ class MasterKeyRepository(Protocol):
 
         Args:
             guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
-            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            encryption_filter: Filter by decryption status (default: ALL). Ignored if guid is provided.
             backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
             masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
 

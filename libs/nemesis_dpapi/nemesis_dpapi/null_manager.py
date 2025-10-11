@@ -7,7 +7,7 @@ from .core import Blob, MasterKey, MasterKeyType
 from .exceptions import MasterKeyNotFoundError
 from .keys import DomainBackupKey, DpapiSystemCredential
 from .protocols import DpapiManagerProtocol
-from .repositories import MasterKeyFilter
+from .repositories import EncryptionFilter
 
 
 class NullDpapiManager(DpapiManagerProtocol):
@@ -40,7 +40,7 @@ class NullDpapiManager(DpapiManagerProtocol):
     async def get_masterkeys(
         self,
         guid: UUID | None = None,
-        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        encryption_filter: EncryptionFilter = EncryptionFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:

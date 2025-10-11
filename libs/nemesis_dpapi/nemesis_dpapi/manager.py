@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     )
 
 from .protocols import DpapiManagerProtocol
-from .repositories import MasterKeyFilter
+from .repositories import EncryptionFilter
 
 
 class DpapiManager(DpapiManagerProtocol):
@@ -152,7 +152,7 @@ class DpapiManager(DpapiManagerProtocol):
     async def get_masterkeys(
         self,
         guid: UUID | None = None,
-        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        encryption_filter: EncryptionFilter = EncryptionFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
@@ -160,7 +160,7 @@ class DpapiManager(DpapiManagerProtocol):
 
         Args:
             guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
-            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            encryption_filter: Filter by decryption status (default: ALL). Ignored if guid is provided.
             backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
             masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
 
@@ -169,7 +169,7 @@ class DpapiManager(DpapiManagerProtocol):
         """
         if not self._initialized:
             await self._initialize_storage()
-        return await self._masterkey_repo.get_masterkeys(guid, filter_by, backup_key_guid, masterkey_type)
+        return await self._masterkey_repo.get_masterkeys(guid, encryption_filter, backup_key_guid, masterkey_type)
 
     async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
         """Add or update a domain backup key and decrypt all compatible masterkeys.

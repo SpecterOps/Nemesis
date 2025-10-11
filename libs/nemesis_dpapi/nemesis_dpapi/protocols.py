@@ -5,7 +5,7 @@ from uuid import UUID
 
 from .core import Blob, MasterKey, MasterKeyType
 from .keys import DomainBackupKey, DpapiSystemCredential
-from .repositories import MasterKeyFilter
+from .repositories import EncryptionFilter
 
 
 @runtime_checkable
@@ -39,7 +39,7 @@ class DpapiManagerProtocol(Protocol):
     async def get_masterkeys(
         self,
         guid: UUID | None = None,
-        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        encryption_filter: EncryptionFilter = EncryptionFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
@@ -47,7 +47,7 @@ class DpapiManagerProtocol(Protocol):
 
         Args:
             guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
-            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            encryption_filter: Filter by decryption status (default: ALL). Ignored if guid is provided.
             backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
             masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
 

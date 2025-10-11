@@ -8,7 +8,7 @@ from uuid import UUID
 
 from nemesis_dpapi.exceptions import MasterKeyDecryptionError
 from nemesis_dpapi.keys import MasterKeyEncryptionKey
-from nemesis_dpapi.repositories import MasterKeyFilter
+from nemesis_dpapi.repositories import EncryptionFilter
 
 from .core import BackupKeyRecoveryBlob, MasterKey, MasterKeyFile, MasterKeyPolicy, MasterKeyType
 from .eventing import (
@@ -121,7 +121,7 @@ class AutoDecryptionObserver(DpapiObserver):
         if encrypted_masterkeys is None:
             # Filter out User masterkeys
             encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
-                filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
+                encryption_filter=EncryptionFilter.ENCRYPTED_ONLY,
                 masterkey_type=[MasterKeyType.SYSTEM, MasterKeyType.SYSTEM_USER, MasterKeyType.UNKNOWN],
             )
 
@@ -168,7 +168,7 @@ class AutoDecryptionObserver(DpapiObserver):
             if encrypted_masterkeys is None:
                 # Filter out SYSTEM masterkeys
                 encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
-                    filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
+                    encryption_filter=EncryptionFilter.ENCRYPTED_ONLY,
                     masterkey_type=[MasterKeyType.USER, MasterKeyType.UNKNOWN],
                 )
 

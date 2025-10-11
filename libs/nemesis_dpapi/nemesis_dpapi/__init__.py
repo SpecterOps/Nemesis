@@ -21,7 +21,7 @@ from .keys import (
     Sha1Hash,
 )
 from .manager import DpapiManager
-from .repositories import MasterKeyFilter
+from .repositories import EncryptionFilter
 
 __all__ = [
     # Main classes
@@ -31,7 +31,7 @@ __all__ = [
     "MasterKeyDecryptionError",
     "MasterKeyPolicy",
     "MasterKeyFile",
-    "MasterKeyFilter",
+    "EncryptionFilter",
     "MasterKeyType",
     # Keys
     "CredKey",

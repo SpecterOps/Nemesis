@@ -7,7 +7,7 @@ import asyncpg
 from .core import MasterKey, MasterKeyType
 from .exceptions import StorageError
 from .keys import DomainBackupKey, DpapiSystemCredential
-from .repositories import MasterKeyFilter
+from .repositories import EncryptionFilter
 
 MASTKEYS_TABLE = "dpapi.masterkeys"
 BACKUPKEYS_TABLE = "dpapi.domain_backup_keys"
@@ -48,7 +48,7 @@ class PostgresMasterKeyRepository:
     async def get_masterkeys(
         self,
         guid: UUID | None = None,
-        filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
+        encryption_filter: EncryptionFilter = EncryptionFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
@@ -56,7 +56,7 @@ class PostgresMasterKeyRepository:
 
         Args:
             guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
-            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            encryption_filter: Filter by decryption status (default: ALL). Ignored if guid is provided.
             backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
             masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
 
@@ -119,9 +119,9 @@ class PostgresMasterKeyRepository:
             ]
 
             # Apply decryption filter in Python (could be optimized to SQL)
-            if filter_by == MasterKeyFilter.ENCRYPTED_ONLY:
+            if encryption_filter == EncryptionFilter.ENCRYPTED_ONLY:
                 masterkeys = [mk for mk in masterkeys if not mk.is_decrypted]
-            elif filter_by == MasterKeyFilter.DECRYPTED_ONLY:
+            elif encryption_filter == EncryptionFilter.DECRYPTED_ONLY:
                 masterkeys = [mk for mk in masterkeys if mk.is_decrypted]
 
             return masterkeys
