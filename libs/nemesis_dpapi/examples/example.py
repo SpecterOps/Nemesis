@@ -95,7 +95,11 @@ async def main() -> None:
             )
         )
 
-        print("[*] Added 1 masterkey:")
+        if len(await manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)) == 1:
+            print("[✅] Added 1 masterkey:")
+        else:
+            raise ValueError("Failed to add encrypted masterkey")
+
         print(f"- MasterKey GUID  : {masterkey_file.masterkey_guid}")
         print(f"- Backup Key GUID : {masterkey_file.domain_backup_key.guid_key}")
 
@@ -106,7 +110,7 @@ async def main() -> None:
         )
         await manager.upsert_domain_backup_key(real_backup_key)
 
-        print("[*] Added domain backup key: {real_backup_key.guid}")
+        print(f"[✅] Added domain backup key: {real_backup_key.guid}")
 
         # Give auto-decryption time to work
         await asyncio.sleep(1)
@@ -114,9 +118,13 @@ async def main() -> None:
         # Check final results
         all_keys_final = await manager.get_all_masterkeys()
         decrypted_keys_final = await manager.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
-        print(
-            f"[*] After real backup key - Total masterkeys: {len(all_keys_final)}, Decrypted: {len(decrypted_keys_final)}"
-        )
+
+        if len(decrypted_keys_final) == 0:
+            print("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
+        else:
+            print(
+                f"[✅] Auto-decryption success! Total masterkeys: {len(all_keys_final)}, Decrypted: {len(decrypted_keys_final)}"
+            )
 
         # Print the decrypted masterkeys  in the form of {GUID}:SHA1
         for key in decrypted_keys_final:
@@ -136,6 +144,9 @@ async def main() -> None:
         # Decrypt the blob using the DPAPI manager
         decrypted_blob_data = await manager.decrypt_blob(blob)
         print(f"[*] Decrypted blob data: {decrypted_blob_data.decode('utf-8')}")
+
+        if decrypted_blob_data == b"test":
+            print("[✅] Blob decrypted successfully and matches expected plaintext")
 
 
 if __name__ == "__main__":
