@@ -36,17 +36,24 @@ class DpapiManagerProtocol(Protocol):
         """Decrypt a DPAPI blob using available masterkeys."""
         ...
 
-    async def get_masterkey(self, guid: UUID) -> MasterKey | None:
-        """Retrieve a masterkey by GUID."""
-        ...
-
-    async def get_all_masterkeys(
+    async def get_masterkeys(
         self,
+        guid: UUID | None = None,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
-        """Retrieve masterkeys with optional filtering."""
+        """Retrieve masterkey(s) with optional filtering.
+
+        Args:
+            guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
+            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
+            masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
+
+        Returns:
+            A list of MasterKeys (empty list if no matches)
+        """
         ...
 
     async def close(self) -> None:

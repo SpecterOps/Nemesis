@@ -37,17 +37,14 @@ class NullDpapiManager(DpapiManagerProtocol):
         """Decrypt a DPAPI blob (always fails)."""
         raise MasterKeyNotFoundError(blob.masterkey_guid)
 
-    async def get_masterkey(self, guid: UUID) -> MasterKey | None:
-        """Retrieve a masterkey by GUID (always returns None)."""
-        return None
-
-    async def get_all_masterkeys(
+    async def get_masterkeys(
         self,
+        guid: UUID | None = None,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
-        """Retrieve masterkeys with optional filtering (always returns empty list)."""
+        """Retrieve masterkey(s) with optional filtering (always returns empty list)."""
         return []
 
     async def close(self) -> None:

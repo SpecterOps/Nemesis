@@ -194,42 +194,37 @@ class DpapiManager(DpapiManagerProtocol):
             await self._initialize_storage()
 
         # Find the required masterkey
-        masterkey = await self._masterkey_repo.get_masterkey(blob.masterkey_guid)
-        if not masterkey:
+        masterkeys = await self._masterkey_repo.get_masterkeys(guid=blob.masterkey_guid)
+        if not masterkeys:
             raise MasterKeyNotFoundError(blob.masterkey_guid)
 
+        masterkey = masterkeys[0]
         if not masterkey.is_decrypted:
             raise MasterKeyNotDecryptedError(blob.masterkey_guid)
 
         return blob.decrypt(masterkey)
 
-    async def get_masterkey(self, guid: UUID, masterkey_type: MasterKeyType | None = None) -> MasterKey | None:
-        """Retrieve a masterkey by GUID.
-
-        Args:
-            guid: Masterkey GUID to retrieve
-            masterkey_type: Optional filter by user account type
-        """
-        if not self._initialized:
-            await self._initialize_storage()
-        return await self._masterkey_repo.get_masterkey(guid, masterkey_type)
-
-    async def get_all_masterkeys(
+    async def get_masterkeys(
         self,
+        guid: UUID | None = None,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
-        """Retrieve masterkeys with optional filtering.
+        """Retrieve masterkey(s) with optional filtering.
 
         Args:
-            filter_by: Filter by decryption status (default: ALL)
-            backup_key_guid: Filter by backup key GUID (default: None for all)
-            masterkey_type: Filter by user account types (default: None for all)
+            guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
+            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
+            masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
+
+        Returns:
+            A list of MasterKeys (empty list if no matches)
         """
         if not self._initialized:
             await self._initialize_storage()
-        return await self._masterkey_repo.get_all_masterkeys(filter_by, backup_key_guid, masterkey_type)
+        return await self._masterkey_repo.get_masterkeys(guid, filter_by, backup_key_guid, masterkey_type)
 
     async def get_system_credential(self, guid: UUID) -> DpapiSystemCredential | None:
         """Retrieve a DPAPI system credential by GUID."""

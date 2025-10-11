@@ -18,36 +18,30 @@ class InMemoryMasterKeyRepository:
         """Add or update a masterkey in storage."""
         self._masterkeys[masterkey.guid] = masterkey
 
-    async def get_masterkey(self, guid: UUID, masterkey_type: MasterKeyType | None = None) -> MasterKey | None:
-        """Retrieve a masterkey by GUID.
-
-        Args:
-            guid: Masterkey GUID to retrieve
-            masterkey_type: Optional filter by user account type
-        """
-        masterkey = self._masterkeys.get(guid)
-        if masterkey is None:
-            return None
-
-        # Apply user account type filter if specified
-        if masterkey_type is not None and masterkey.masterkey_type != masterkey_type:
-            return None
-
-        return masterkey
-
-    async def get_all_masterkeys(
+    async def get_masterkeys(
         self,
+        guid: UUID | None = None,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
-        """Retrieve masterkeys with optional filtering.
+        """Retrieve masterkey(s) with optional filtering.
 
         Args:
-            filter_by: Filter by decryption status (default: ALL)
-            backup_key_guid: Filter by backup key GUID (default: None for all)
-            masterkey_type: Filter by user account types (default: None for all)
+            guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
+            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
+            masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
+
+        Returns:
+            A list of MasterKeys (empty list if no matches)
         """
+        # If guid is provided, return single masterkey as a list
+        if guid is not None:
+            mk = self._masterkeys.get(guid)
+            return [mk] if mk is not None else []
+
+        # Otherwise, return filtered list
         masterkeys = list(self._masterkeys.values())
 
         # Filter by decryption status

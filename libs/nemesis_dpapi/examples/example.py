@@ -95,7 +95,8 @@ async def main() -> None:
             )
         )
 
-        if len(await manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)) == 1:
+        encrypted_mks = await manager.get_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)
+        if len(encrypted_mks) == 1:
             print("[✅] Added 1 masterkey:")
         else:
             raise ValueError("❗Failed to add encrypted masterkey")
@@ -116,8 +117,8 @@ async def main() -> None:
         await asyncio.sleep(1)
 
         # Check final results
-        all_keys_final = await manager.get_all_masterkeys()
-        decrypted_keys_final = await manager.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        all_keys_final = await manager.get_masterkeys()
+        decrypted_keys_final = await manager.get_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
 
         if len(decrypted_keys_final) == 0:
             raise ValueError("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")

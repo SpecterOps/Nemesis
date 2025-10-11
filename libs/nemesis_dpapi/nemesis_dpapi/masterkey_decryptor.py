@@ -46,7 +46,7 @@ class MasterKeyDecryptorService:
         try:
             logger.info(f"Starting background decryption for credential type: {credential_type.__name__}")
 
-            encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
+            encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
                 filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
                 masterkey_type=[MasterKeyType.USER],
             )

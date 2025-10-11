@@ -139,7 +139,7 @@ async def dpapi_background_monitor(dpapi_manager: DpapiManager) -> None:
     logger.info("Entering DPAPI background monitor loop")
     while True:
         try:
-            num_masterkeys = await dpapi_manager.get_all_masterkeys()
+            num_masterkeys = await dpapi_manager.get_masterkeys()
             num_dec_masterkeys = len([mk for mk in num_masterkeys if mk.is_decrypted])
             num_enc_masterkeys = len([mk for mk in num_masterkeys if not mk.is_decrypted])
             backupkeys = await dpapi_manager._backup_key_repo.get_all_backup_keys()
@@ -238,8 +238,8 @@ async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: Ma
         masterkey_data = bytes.fromhex(master_key_data.key_hex)
 
         # Check if masterkey already exists
-        existing_masterkey = await dpapi_manager.get_masterkey(masterkey_guid)
-        if existing_masterkey is not None and existing_masterkey.is_decrypted:
+        existing_masterkeys = await dpapi_manager.get_masterkeys(guid=masterkey_guid)
+        if existing_masterkeys and existing_masterkeys[0].is_decrypted:
             logger.info(f"Master key {masterkey_guid} already exists, skipping")
             existing_guids.append(str(masterkey_guid))
             continue

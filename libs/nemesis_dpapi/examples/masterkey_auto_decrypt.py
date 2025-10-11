@@ -125,8 +125,8 @@ async def masterkeys_first_then_backup_key(mk_domain: MasterKeyFile, backup_key_
             )
 
         # Check initial state
-        all_keys = await dpapi.get_all_masterkeys()
-        decrypted_keys = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        all_keys = await dpapi.get_masterkeys()
+        decrypted_keys = await dpapi.get_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"Initial state: {len(all_keys)} total, {len(decrypted_keys)} decrypted")
 
         # Add the domain backup key - this should trigger automatic decryption
@@ -143,8 +143,8 @@ async def masterkeys_first_then_backup_key(mk_domain: MasterKeyFile, backup_key_
         await asyncio.sleep(0.1)
 
         # Check final state - should show more decrypted keys if auto-decryption worked
-        all_keys_final = await dpapi.get_all_masterkeys()
-        decrypted_keys_final = await dpapi.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        all_keys_final = await dpapi.get_masterkeys()
+        decrypted_keys_final = await dpapi.get_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"After backup key: {len(all_keys_final)} total, {len(decrypted_keys_final)} decrypted")
 
         if len(decrypted_keys_final) > len(decrypted_keys):
@@ -170,7 +170,7 @@ async def backup_key_first_then_masterkeys(mk_domain: MasterKeyFile, mk_local: M
 
         # Check initial state (should have backup key but no masterkeys)
         backup_keys = await dpapi2._backup_key_repo.get_all_backup_keys()
-        all_keys_before = await dpapi2.get_all_masterkeys()
+        all_keys_before = await dpapi2.get_masterkeys()
         print(f"Initial state: {len(backup_keys)} backup keys, {len(all_keys_before)} masterkeys")
 
         # Add masterkeys - these should be auto-decrypted using existing backup key
@@ -202,8 +202,8 @@ async def backup_key_first_then_masterkeys(mk_domain: MasterKeyFile, mk_local: M
         await asyncio.sleep(0.1)
 
         # Check final state
-        all_keys_after = await dpapi2.get_all_masterkeys()
-        decrypted_keys_after = await dpapi2.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        all_keys_after = await dpapi2.get_masterkeys()
+        decrypted_keys_after = await dpapi2.get_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"After adding masterkeys: {len(all_keys_after)} total, {len(decrypted_keys_after)} decrypted")
 
         if len(decrypted_keys_after) > 0:
@@ -232,8 +232,8 @@ async def auto_decryption_disabled(mk_domain: MasterKeyFile, backup_key_data: di
             )
 
         # Check state before backup key
-        all_keys_before = await dpapi_no_auto.get_all_masterkeys()
-        decrypted_keys_before = await dpapi_no_auto.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        all_keys_before = await dpapi_no_auto.get_masterkeys()
+        decrypted_keys_before = await dpapi_no_auto.get_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"Before backup key: {len(all_keys_before)} total, {len(decrypted_keys_before)} decrypted")
 
         # Add backup key - should NOT trigger auto-decryption
@@ -249,8 +249,8 @@ async def auto_decryption_disabled(mk_domain: MasterKeyFile, backup_key_data: di
         await asyncio.sleep(0.1)
 
         # Check state after backup key
-        all_keys_after = await dpapi_no_auto.get_all_masterkeys()
-        decrypted_keys_after = await dpapi_no_auto.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
+        all_keys_after = await dpapi_no_auto.get_masterkeys()
+        decrypted_keys_after = await dpapi_no_auto.get_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
         print(f"After backup key: {len(all_keys_after)} total, {len(decrypted_keys_after)} decrypted")
 
         if len(decrypted_keys_after) == len(decrypted_keys_before):

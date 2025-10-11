@@ -231,8 +231,8 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             await self.dpapi_manager.upsert_masterkey(mk)
 
             # Check if it was decrypted
-            stored_mk = await self.dpapi_manager.get_masterkey(masterkey_file.masterkey_guid)
-            was_decrypted = stored_mk and stored_mk.is_decrypted
+            stored_mks = await self.dpapi_manager.get_masterkeys(guid=masterkey_file.masterkey_guid)
+            was_decrypted = len(stored_mks) > 0 and stored_mks[0].is_decrypted
 
             if was_decrypted:
                 logger.info(f"Successfully processed and decrypted masterkey {masterkey_file.masterkey_guid}")

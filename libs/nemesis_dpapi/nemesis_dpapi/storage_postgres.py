@@ -45,51 +45,46 @@ class PostgresMasterKeyRepository:
                 masterkey.masterkey_type.value,
             )
 
-    async def get_masterkey(self, guid: UUID, masterkey_type: MasterKeyType | None = None) -> MasterKey | None:
-        """Retrieve a masterkey by GUID.
-
-        Args:
-            guid: Masterkey GUID to retrieve
-            masterkey_type: Optional filter by user account type
-        """
-        async with self.pool.acquire() as conn:
-            query = f"SELECT * FROM {MASTKEYS_TABLE} WHERE guid = $1"
-            params = [str(guid)]
-
-            if masterkey_type is not None:
-                query += " AND masterkey_type = $2"
-                params.append(masterkey_type.value)
-
-            row = await conn.fetchrow(query, *params)
-            if not row:
-                return None
-
-            return MasterKey(
-                guid=UUID(row["guid"]),
-                masterkey_type=MasterKeyType(row["masterkey_type"])
-                if row.get("masterkey_type")
-                else MasterKeyType.UNKNOWN,
-                encrypted_key_usercred=row["encrypted_key_usercred"],
-                encrypted_key_backup=row["encrypted_key_backup"],
-                plaintext_key=row["plaintext_key"],
-                plaintext_key_sha1=row["plaintext_key_sha1"],
-                backup_key_guid=UUID(row["backup_key_guid"]) if row["backup_key_guid"] else None,
-            )
-
-    async def get_all_masterkeys(
+    async def get_masterkeys(
         self,
+        guid: UUID | None = None,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
-        """Retrieve masterkeys with optional filtering.
+        """Retrieve masterkey(s) with optional filtering.
 
         Args:
-            filter_by: Filter by decryption status (default: ALL)
-            backup_key_guid: Filter by backup key GUID (default: None for all)
-            masterkey_type: Filter by user account types (default: None for all)
+            guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
+            filter_by: Filter by decryption status (default: ALL). Ignored if guid is provided.
+            backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
+            masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
+
+        Returns:
+            A list of MasterKeys (empty list if no matches)
         """
         async with self.pool.acquire() as conn:
+            # If guid is provided, return single masterkey as a list
+            if guid is not None:
+                query = f"SELECT * FROM {MASTKEYS_TABLE} WHERE guid = $1"
+                row = await conn.fetchrow(query, str(guid))
+                if not row:
+                    return []
+
+                mk = MasterKey(
+                    guid=UUID(row["guid"]),
+                    masterkey_type=MasterKeyType(row["masterkey_type"])
+                    if row.get("masterkey_type")
+                    else MasterKeyType.UNKNOWN,
+                    encrypted_key_usercred=row["encrypted_key_usercred"],
+                    encrypted_key_backup=row["encrypted_key_backup"],
+                    plaintext_key=row["plaintext_key"],
+                    plaintext_key_sha1=row["plaintext_key_sha1"],
+                    backup_key_guid=UUID(row["backup_key_guid"]) if row["backup_key_guid"] else None,
+                )
+                return [mk]
+
+            # Otherwise, return filtered list
             # Build query based on filters
             query = f"SELECT * FROM {MASTKEYS_TABLE}"
             params = []

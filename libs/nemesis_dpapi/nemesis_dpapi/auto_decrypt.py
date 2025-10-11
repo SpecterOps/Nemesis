@@ -77,11 +77,12 @@ class AutoDecryptionObserver(DpapiObserver):
     async def _handle_new_encrypted_masterkey(self, event: NewEncryptedMasterKeyEvent) -> None:
         """Attempt to decrypt a new masterkey using existing domain backup keys."""
 
-        masterkey = await self.dpapi_manager.get_masterkey(event.masterkey_guid)
+        masterkeys = await self.dpapi_manager.get_masterkeys(guid=event.masterkey_guid)
 
-        if not masterkey:
+        if not masterkeys:
             raise ValueError(f"New masterkey {event.masterkey_guid} not found in the DB!")
 
+        masterkey = masterkeys[0]
         if masterkey.is_decrypted:
             return  # Already decrypted
 
@@ -119,12 +120,12 @@ class AutoDecryptionObserver(DpapiObserver):
 
         if encrypted_masterkeys is None:
             # Filter out User masterkeys
-            encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
+            encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
                 filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
                 masterkey_type=[MasterKeyType.SYSTEM, MasterKeyType.SYSTEM_USER, MasterKeyType.UNKNOWN],
             )
 
-        if len(encrypted_masterkeys) == 0:
+        if not encrypted_masterkeys:
             return
 
         decrypted_count = 0
@@ -166,12 +167,12 @@ class AutoDecryptionObserver(DpapiObserver):
         try:
             if encrypted_masterkeys is None:
                 # Filter out SYSTEM masterkeys
-                encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
+                encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
                     filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
                     masterkey_type=[MasterKeyType.USER, MasterKeyType.UNKNOWN],
                 )
 
-            if len(encrypted_masterkeys) == 0:
+            if not encrypted_masterkeys:
                 return
 
             new_backup_key = await self.dpapi_manager._backup_key_repo.get_backup_key(backup_key_guid)
