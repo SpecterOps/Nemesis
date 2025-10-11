@@ -41,7 +41,6 @@ from .protocols import DpapiManagerProtocol
 from .repositories import MasterKeyFilter
 
 
-# TODO: Make thread safe
 class DpapiManager(DpapiManagerProtocol):
     """Main DPAPI manager for handling masterkeys, backup keys, and blob decryption."""
 
@@ -225,12 +224,6 @@ class DpapiManager(DpapiManagerProtocol):
         if not self._initialized:
             await self._initialize_storage()
         return await self._masterkey_repo.get_masterkeys(guid, filter_by, backup_key_guid, masterkey_type)
-
-    async def get_system_credential(self, guid: UUID) -> DpapiSystemCredential | None:
-        """Retrieve a DPAPI system credential by GUID."""
-        if not self._initialized:
-            await self._initialize_storage()
-        return await self._dpapi_system_cred_repo.get_credential(guid)
 
     async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
         """Retrieve DPAPI system credential(s).
