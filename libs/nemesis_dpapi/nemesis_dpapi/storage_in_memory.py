@@ -3,9 +3,10 @@
 from uuid import UUID
 
 from .core import MasterKey, MasterKeyType
-from .exceptions import StorageError
+from .exceptions import StorageError, WriteOnceViolationError
 from .keys import DomainBackupKey, DpapiSystemCredential
 from .repositories import EncryptionFilter
+from .validation import check_write_once_conflicts
 
 
 class InMemoryMasterKeyRepository:
@@ -15,7 +16,35 @@ class InMemoryMasterKeyRepository:
         self._masterkeys: dict[UUID, MasterKey] = {}
 
     async def upsert_masterkey(self, masterkey: MasterKey) -> None:
-        """Add or update a masterkey in storage."""
+        """Add or update a masterkey in storage with write-once semantics.
+
+        Write-once enforcement: Fields can only be set once. Once a field has a non-NULL value,
+        it cannot be changed to a different value (including NULL).
+
+        Raises:
+            WriteOnceViolationError: If attempting to modify fields that already have values
+        """
+        if masterkey.guid in self._masterkeys:
+            existing = self._masterkeys[masterkey.guid]
+
+            # Check write-once constraints - ensure consistency with PostgreSQL implementation
+            conflicts = check_write_once_conflicts(
+                existing,
+                masterkey,
+                fields=[
+                    "encrypted_key_usercred",
+                    "encrypted_key_backup",
+                    "plaintext_key",
+                    "plaintext_key_sha1",
+                    "backup_key_guid",
+                    "masterkey_type",
+                ],
+            )
+
+            if conflicts:
+                raise WriteOnceViolationError("masterkey", str(masterkey.guid), conflicts)
+
+        # Insert or update (only reached if no conflicts)
         self._masterkeys[masterkey.guid] = masterkey
 
     async def get_masterkeys(
@@ -74,7 +103,28 @@ class InMemoryDomainBackupKeyRepository:
         self._backup_keys: dict[UUID, DomainBackupKey] = {}
 
     async def upsert_backup_key(self, key: DomainBackupKey) -> None:
-        """Add or update a domain backup key in storage."""
+        """Add or update a domain backup key in storage with write-once semantics.
+
+        Write-once enforcement: Fields can only be set once. Once a field has a non-NULL value,
+        it cannot be changed to a different value (including NULL).
+
+        Raises:
+            WriteOnceViolationError: If attempting to modify fields that already have values
+        """
+        if key.guid in self._backup_keys:
+            existing = self._backup_keys[key.guid]
+
+            # Check write-once constraints - ensure consistency with PostgreSQL implementation
+            conflicts = check_write_once_conflicts(
+                existing,
+                key,
+                fields=["key_data", "domain_controller"],
+            )
+
+            if conflicts:
+                raise WriteOnceViolationError("backup_key", str(key.guid), conflicts)
+
+        # Insert or update (only reached if no conflicts)
         self._backup_keys[key.guid] = key
 
     async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:

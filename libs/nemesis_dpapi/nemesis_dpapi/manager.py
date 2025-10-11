@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Self
 from uuid import UUID
 
 import asyncpg
-from Crypto.Hash import SHA1
 
 from .auto_decrypt import AutoDecryptionObserver
 from .core import Blob, MasterKey, MasterKeyType
@@ -17,7 +16,7 @@ from .eventing import (
     NewEncryptedMasterKeyEvent,
     NewPlaintextMasterKeyEvent,
 )
-from .exceptions import MasterKeyNotDecryptedError, MasterKeyNotFoundError
+from .exceptions import MasterKeyNotDecryptedError, MasterKeyNotFoundError, WriteOnceViolationError
 from .keys import DomainBackupKey, DpapiSystemCredential
 from .storage_in_memory import (
     InMemoryDomainBackupKeyRepository,
@@ -29,6 +28,7 @@ from .storage_postgres import (
     PostgresDpapiSystemCredentialRepository,
     PostgresMasterKeyRepository,
 )
+from .validation import check_write_once_conflicts, validate_and_calculate_sha1, validate_no_empty_string
 
 if TYPE_CHECKING:
     from .repositories import (
@@ -126,21 +126,54 @@ class DpapiManager(DpapiManagerProtocol):
     ) -> None:
         """Add or update a masterkey (encrypted or plaintext).
 
+        This method enforces write-once semantics: once a field is set to a non-NULL value,
+        it cannot be changed to a different value. Fields can only be written once.
+
         Args:
             masterkey: MasterKey object to add or update
+
+        Raises:
+            ValueError: If plaintext_key and plaintext_key_sha1 don't match
+            WriteOnceViolationError: If attempting to modify fields that already have values
         """
         if not self._initialized:
             await self._initialize_storage()
 
-        calculated_sha1 = None
-        if masterkey.plaintext_key and not masterkey.plaintext_key_sha1:
-            calculated_sha1 = SHA1.new(masterkey.plaintext_key).digest()
+        # Validate and calculate SHA1 hash
+        # This ensures integrity: if plaintext_key is provided, SHA1 is calculated and verified
+        validated_sha1 = validate_and_calculate_sha1(
+            masterkey.plaintext_key,
+            masterkey.plaintext_key_sha1,
+        )
+
+        # Create updated masterkey with validated SHA1 if it changed
+        if validated_sha1 != masterkey.plaintext_key_sha1:
             new_masterkey = masterkey.model_copy(
-                update={"plaintext_key_sha1": calculated_sha1},
+                update={"plaintext_key_sha1": validated_sha1},
             )
         else:
             new_masterkey = masterkey
 
+        # Check write-once constraints against existing record
+        existing_list = await self._masterkey_repo.get_masterkeys(guid=new_masterkey.guid)
+        if existing_list:
+            existing = existing_list[0]
+            conflicts = check_write_once_conflicts(
+                existing,
+                new_masterkey,
+                fields=[
+                    "encrypted_key_usercred",
+                    "encrypted_key_backup",
+                    "plaintext_key",
+                    "plaintext_key_sha1",
+                    "backup_key_guid",
+                    "masterkey_type",
+                ],
+            )
+            if conflicts:
+                raise WriteOnceViolationError("masterkey", str(new_masterkey.guid), conflicts)
+
+        # Call repository to perform the upsert (repository layer also enforces write-once at SQL level)
         await self._masterkey_repo.upsert_masterkey(new_masterkey)
 
         # Publish appropriate event based on what was added
@@ -174,13 +207,36 @@ class DpapiManager(DpapiManagerProtocol):
     async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
         """Add or update a domain backup key and decrypt all compatible masterkeys.
 
+        This method enforces write-once semantics: once a field is set to a non-NULL value,
+        it cannot be changed to a different value. Fields can only be written once.
+
         Args:
             backup_key: Domain backup key to add or update
+
+        Raises:
+            ValueError: If domain_controller is an empty string
+            WriteOnceViolationError: If attempting to modify fields that already have values
         """
 
         if not self._initialized:
             await self._initialize_storage()
 
+        # Validate that domain_controller is not an empty string (NULL or non-empty only)
+        validate_no_empty_string(backup_key.domain_controller, "domain_controller")
+
+        # Check write-once constraints against existing record
+        existing_list = await self._backup_key_repo.get_backup_keys(guid=backup_key.guid)
+        if existing_list:
+            existing = existing_list[0]
+            conflicts = check_write_once_conflicts(
+                existing,
+                backup_key,
+                fields=["key_data", "domain_controller"],
+            )
+            if conflicts:
+                raise WriteOnceViolationError("backup_key", str(backup_key.guid), conflicts)
+
+        # Call repository to perform the upsert (repository layer also enforces write-once at SQL level)
         await self._backup_key_repo.upsert_backup_key(backup_key)
 
         await self._publisher.publish_event(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
