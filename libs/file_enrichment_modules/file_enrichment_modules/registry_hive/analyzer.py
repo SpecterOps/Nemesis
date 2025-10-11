@@ -289,7 +289,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         if not system_file:
             # Cannot parse SECURITY without SYSTEM - pypykatz requires SYSTEM hive
-            logger.warning("Cannot process SECURITY hive without SYSTEM hive - pypykatz requires both")
+            logger.debug("Cannot process SECURITY hive without SYSTEM hive - pypykatz requires both")
             return results
 
         # Create persistent copies of both files that pypykatz can access
