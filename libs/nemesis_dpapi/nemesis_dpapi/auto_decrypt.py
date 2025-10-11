@@ -118,15 +118,10 @@ class AutoDecryptionObserver(DpapiObserver):
         logger.debug("Attempting to decrypt masterkeys with new DPAPI_SYSTEM credential")
 
         if encrypted_masterkeys is None:
-            # TODO: Filter out User masterkeys
+            # Filter out User masterkeys
             encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
-                filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.SYSTEM
-            )
-            encrypted_masterkeys += await self.dpapi_manager.get_all_masterkeys(
-                filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.SYSTEM_USER
-            )
-            encrypted_masterkeys += await self.dpapi_manager.get_all_masterkeys(
-                filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.UNKNOWN
+                filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
+                user_account_type=[UserAccountType.SYSTEM, UserAccountType.SYSTEM_USER, UserAccountType.UNKNOWN],
             )
 
         if len(encrypted_masterkeys) == 0:
@@ -170,12 +165,10 @@ class AutoDecryptionObserver(DpapiObserver):
 
         try:
             if encrypted_masterkeys is None:
-                # TODO: Filter out SYSTEM masterkeys
+                # Filter out SYSTEM masterkeys
                 encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
-                    filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.USER
-                )
-                encrypted_masterkeys += await self.dpapi_manager.get_all_masterkeys(
-                    filter_by=MasterKeyFilter.ENCRYPTED_ONLY, user_account_type=UserAccountType.UNKNOWN
+                    filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
+                    user_account_type=[UserAccountType.USER, UserAccountType.UNKNOWN],
                 )
 
             if len(encrypted_masterkeys) == 0:

@@ -218,14 +218,14 @@ class DpapiManager(DpapiManagerProtocol):
         self,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
-        user_account_type: UserAccountType | None = None,
+        user_account_type: list[UserAccountType] | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering.
 
         Args:
             filter_by: Filter by decryption status (default: ALL)
             backup_key_guid: Filter by backup key GUID (default: None for all)
-            user_account_type: Filter by user account type (default: None for all)
+            user_account_type: Filter by user account types (default: None for all)
         """
         if not self._initialized:
             await self._initialize_storage()

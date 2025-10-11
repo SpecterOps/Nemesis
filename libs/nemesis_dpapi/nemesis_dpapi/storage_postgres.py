@@ -78,14 +78,14 @@ class PostgresMasterKeyRepository:
         self,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
-        user_account_type: UserAccountType | None = None,
+        user_account_type: list[UserAccountType] | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering.
 
         Args:
             filter_by: Filter by decryption status (default: ALL)
             backup_key_guid: Filter by backup key GUID (default: None for all)
-            user_account_type: Filter by user account type (default: None for all)
+            user_account_type: Filter by user account types (default: None for all)
         """
         async with self.pool.acquire() as conn:
             # Build query based on filters
@@ -97,9 +97,10 @@ class PostgresMasterKeyRepository:
                 conditions.append(f"backup_key_guid = ${len(params) + 1}")
                 params.append(str(backup_key_guid))
 
-            if user_account_type is not None:
-                conditions.append(f"user_account_type = ${len(params) + 1}")
-                params.append(user_account_type.value)
+            if user_account_type is not None and len(user_account_type) > 0:
+                # Use ANY for matching multiple values
+                conditions.append(f"user_account_type = ANY(${len(params) + 1})")
+                params.append([t.value for t in user_account_type])
 
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)

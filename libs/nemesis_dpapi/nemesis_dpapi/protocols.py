@@ -3,7 +3,7 @@
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from .core import Blob, MasterKey
+from .core import Blob, MasterKey, UserAccountType
 from .keys import DomainBackupKey, DpapiSystemCredential
 from .repositories import MasterKeyFilter
 
@@ -44,6 +44,7 @@ class DpapiManagerProtocol(Protocol):
         self,
         filter_by: MasterKeyFilter = MasterKeyFilter.ALL,
         backup_key_guid: UUID | None = None,
+        user_account_type: list[UserAccountType] | None = None,
     ) -> list[MasterKey]:
         """Retrieve masterkeys with optional filtering."""
         ...

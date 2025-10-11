@@ -48,7 +48,7 @@ class MasterKeyDecryptorService:
 
             encrypted_masterkeys = await self.dpapi_manager.get_all_masterkeys(
                 filter_by=MasterKeyFilter.ENCRYPTED_ONLY,
-                user_account_type=UserAccountType.USER,
+                user_account_type=[UserAccountType.USER],
             )
 
             decrypted_count = 0
