@@ -62,12 +62,12 @@ class PostgresMasterKeyRepository:
                     AND ({MASTKEYS_TABLE}.masterkey_type IS NULL OR
                          {MASTKEYS_TABLE}.masterkey_type = EXCLUDED.masterkey_type)
                 """,
-                masterkey.guid,
+                str(masterkey.guid),
                 masterkey.encrypted_key_usercred,
                 masterkey.encrypted_key_backup,
                 masterkey.plaintext_key,
                 masterkey.plaintext_key_sha1,
-                masterkey.backup_key_guid,
+                str(masterkey.backup_key_guid) if masterkey.backup_key_guid else None,
                 masterkey.masterkey_type.value,
             )
 
@@ -99,7 +99,7 @@ class PostgresMasterKeyRepository:
             # If guid is provided, return single masterkey as a list
             if guid is not None:
                 query = f"SELECT * FROM {MASTKEYS_TABLE} WHERE guid = $1"
-                row = await conn.fetchrow(query, guid)
+                row = await conn.fetchrow(query, str(guid))
                 if not row:
                     return []
 
@@ -124,7 +124,7 @@ class PostgresMasterKeyRepository:
 
             if backup_key_guid is not None:
                 conditions.append(f"backup_key_guid = ${len(params) + 1}")
-                params.append(backup_key_guid)
+                params.append(str(backup_key_guid))
 
             if masterkey_type is not None and len(masterkey_type) > 0:
                 # Use ANY for matching multiple values
@@ -161,7 +161,7 @@ class PostgresMasterKeyRepository:
     async def delete_masterkey(self, guid: UUID) -> None:
         """Delete a masterkey by GUID."""
         async with self.pool.acquire() as conn:
-            result = await conn.execute(f"DELETE FROM {MASTKEYS_TABLE} WHERE guid = $1", guid)
+            result = await conn.execute(f"DELETE FROM {MASTKEYS_TABLE} WHERE guid = $1", str(guid))
             if result == "DELETE 0":
                 raise StorageError(f"Masterkey {guid} not found")
 
@@ -201,7 +201,7 @@ class PostgresDomainBackupKeyRepository:
                     AND ({BACKUPKEYS_TABLE}.domain_controller IS NULL OR
                          {BACKUPKEYS_TABLE}.domain_controller = EXCLUDED.domain_controller)
                 """,
-                key.guid,
+                str(key.guid),
                 key.key_data,
                 key.domain_controller,
             )
@@ -217,7 +217,7 @@ class PostgresDomainBackupKeyRepository:
         """
         async with self.pool.acquire() as conn:
             if guid is not None:
-                row = await conn.fetchrow(f"SELECT * FROM {BACKUPKEYS_TABLE} WHERE guid = $1", guid)
+                row = await conn.fetchrow(f"SELECT * FROM {BACKUPKEYS_TABLE} WHERE guid = $1", str(guid))
                 if not row:
                     return []
                 return [DomainBackupKey(guid=row["guid"], key_data=row["key_data"])]
@@ -228,7 +228,7 @@ class PostgresDomainBackupKeyRepository:
     async def delete_backup_key(self, guid: UUID) -> None:
         """Delete a backup key by GUID."""
         async with self.pool.acquire() as conn:
-            result = await conn.execute(f"DELETE FROM {BACKUPKEYS_TABLE} WHERE guid = $1", guid)
+            result = await conn.execute(f"DELETE FROM {BACKUPKEYS_TABLE} WHERE guid = $1", str(guid))
             if result == "DELETE 0":
                 raise StorageError(f"Domain backup key {guid} not found")
 
