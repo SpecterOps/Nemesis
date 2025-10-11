@@ -75,7 +75,7 @@ async def main() -> None:
     masterkey_file = MasterKeyFile.from_file(masterkey_file_path)
 
     if not masterkey_file or not masterkey_file.master_key or not masterkey_file.domain_backup_key:
-        raise ValueError("Invalid masterkey file")
+        raise ValueError("❗Invalid masterkey file")
 
     print("\n=== Adding Real DPAPI Data ===")
 
@@ -98,7 +98,7 @@ async def main() -> None:
         if len(await manager.get_all_masterkeys(filter_by=MasterKeyFilter.ENCRYPTED_ONLY)) == 1:
             print("[✅] Added 1 masterkey:")
         else:
-            raise ValueError("Failed to add encrypted masterkey")
+            raise ValueError("❗Failed to add encrypted masterkey")
 
         print(f"- MasterKey GUID  : {masterkey_file.masterkey_guid}")
         print(f"- Backup Key GUID : {masterkey_file.domain_backup_key.guid_key}")
@@ -120,7 +120,7 @@ async def main() -> None:
         decrypted_keys_final = await manager.get_all_masterkeys(filter_by=MasterKeyFilter.DECRYPTED_ONLY)
 
         if len(decrypted_keys_final) == 0:
-            print("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
+            raise ValueError("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
         else:
             print(
                 f"[✅] Auto-decryption success! Total masterkeys: {len(all_keys_final)}, Decrypted: {len(decrypted_keys_final)}"
