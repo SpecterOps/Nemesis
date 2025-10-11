@@ -645,18 +645,18 @@ typing-extensions = ">=4.4.0"
 
 [[package]]
 name = "dapr-ext-fastapi"
-version = "1.15.0"
+version = "1.16.0"
 description = "The official release of Dapr FastAPI extension."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "dapr-ext-fastapi-1.15.0.tar.gz", hash = "sha256:d5411d24c6dcc256041b29383caa95d6024e58ab094ad24f7e72b9396bc245b0"},
-    {file = "dapr_ext_fastapi-1.15.0-py3-none-any.whl", hash = "sha256:429f15345a4b2fb89586fe691d9c8addba0001246c54cf0fc7e5c7c3a6075c97"},
+    {file = "dapr-ext-fastapi-1.16.0.tar.gz", hash = "sha256:10108c3831ae2164c1589c86e6b86fe8ee146650514961841d9ab5eb783f4a76"},
+    {file = "dapr_ext_fastapi-1.16.0-py3-none-any.whl", hash = "sha256:9dcc0aaceb361c5132295450a71d4f9ddec09ab5848dbfe2a8b0cf9050fd903e"},
 ]
 
 [package.dependencies]
-dapr = ">=1.15.0"
+dapr = ">=1.16.0"
 fastapi = ">=0.60.1"
 uvicorn = ">=0.11.6"
 
@@ -3398,4 +3398,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "62e8e433dbffbd2fef7d1bcad64daaa2f99007ec73d70940f15212960f7a4235"
+content-hash = "6024f6ec7da328a006c5539e9d7cceb900258d5d8b03d6b48997964ed1b76035"

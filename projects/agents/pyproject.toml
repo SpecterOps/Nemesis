@@ -9,7 +9,7 @@ python = ">=3.12,<3.14"
 fastapi = "^0.115.6"
 uvicorn = "^0.34.0"
 dapr = "1.16.0"
-dapr-ext-fastapi = "1.15.0"
+dapr-ext-fastapi = "1.16.0"
 structlog = "^25.1.0"
 pydantic = "^2.10.4"
 typing-extensions = "^4.12.2"
@@ -18,7 +18,7 @@ websockets = "^14.2"
 # pydantic-ai-slim = {extras = ["retries"], version = "^0.7.1"}
 common = { path = "../../libs/common", develop = true }
 pydantic-ai = "^0.7.1"
-dapr-ext-workflow = "1.15.0"
+dapr-ext-workflow = "1.16.0"
 logfire = "^4.3.3"
 colorlog = "^6.9.0"
 opentelemetry-instrumentation-fastapi = "^0.57b0"
@@ -31,6 +31,7 @@ openinference-instrumentation-pydantic-ai = {version = "^0.1.4", python = ">=3.1
 asyncpg = "^0.30.0"
 psycopg = "^3.2.9"
 pythonnet = "^3.0.4"
+protobuf = "6.31.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"

@@ -19,7 +19,7 @@ nemesis_dpapi = { path = "../../libs/nemesis_dpapi", develop = true }
 tomli = "^2.2.1"
 asyncpg = "^0.30.0"
 requests = "^2.32.3"
-dapr-ext-fastapi = "1.15.0"
+dapr-ext-fastapi = "1.16.0"
 psycopg = {extras = ["pool"], version = "^3.2.9"}
 pytsk3 = "^20250312"
 watchdog = "^6.0.0"
