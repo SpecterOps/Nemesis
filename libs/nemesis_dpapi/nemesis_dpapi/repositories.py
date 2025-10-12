@@ -51,7 +51,7 @@ class MasterKeyRepository(Protocol):
 class DomainBackupKeyRepository(Protocol):
     """Protocol for domain backup key storage operations."""
 
-    async def upsert_backup_key(self, key: DomainBackupKey) -> None:
+    async def upsert_backup_key(self, key: DomainBackupKey) -> int:
         """Add or update a domain backup key in storage."""
         ...
 

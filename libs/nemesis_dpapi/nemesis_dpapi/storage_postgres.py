@@ -172,17 +172,20 @@ class PostgresDomainBackupKeyRepository:
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def upsert_backup_key(self, key: DomainBackupKey) -> None:
+    async def upsert_backup_key(self, key: DomainBackupKey) -> int:
         """Add or update a domain backup key in storage with write-once semantics.
 
         Write-once enforcement: Fields can only be set once. Once a field has a non-NULL value,
         it cannot be changed to a different value (including NULL).
 
+        Returns:
+            The ID of the inserted or updated backup key
+
         Raises:
             WriteOnceViolationError: If attempting to modify fields that already have values
         """
         async with self.pool.acquire() as conn:
-            await conn.execute(
+            row = await conn.fetchrow(
                 f"""
                 INSERT INTO {BACKUPKEYS_TABLE} (guid, key_data, domain_controller)
                 VALUES ($1, $2, $3)
@@ -200,11 +203,13 @@ class PostgresDomainBackupKeyRepository:
                      {BACKUPKEYS_TABLE}.key_data = EXCLUDED.key_data)
                     AND ({BACKUPKEYS_TABLE}.domain_controller IS NULL OR
                          {BACKUPKEYS_TABLE}.domain_controller = EXCLUDED.domain_controller)
+                RETURNING id
                 """,
                 str(key.guid),
                 key.key_data,
                 key.domain_controller,
             )
+            return row["id"]
 
     async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
         """Retrieve backup key(s).

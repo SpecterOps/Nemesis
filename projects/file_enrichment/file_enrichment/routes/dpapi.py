@@ -221,8 +221,8 @@ async def _handle_domain_backup_key_credential(dpapi_manager: DpapiManager, back
         key_data=pvk_data,
         domain_controller=backup_key.domain_controller,
     )
-    await dpapi_manager.upsert_domain_backup_key(backup_key)
-    return {"status": "success", "type": "domain_backup_key"}
+    backup_key_id = await dpapi_manager.upsert_domain_backup_key(backup_key)
+    return {"status": "success", "type": "domain_backup_key", "id": backup_key_id}
 
 
 async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: MasterKeyGuidPairList) -> dict:

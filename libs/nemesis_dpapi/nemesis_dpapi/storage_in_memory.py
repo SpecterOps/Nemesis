@@ -101,12 +101,17 @@ class InMemoryDomainBackupKeyRepository:
 
     def __init__(self) -> None:
         self._backup_keys: dict[UUID, DomainBackupKey] = {}
+        self._backup_key_ids: dict[UUID, int] = {}
+        self._next_id: int = 1
 
-    async def upsert_backup_key(self, key: DomainBackupKey) -> None:
+    async def upsert_backup_key(self, key: DomainBackupKey) -> int:
         """Add or update a domain backup key in storage with write-once semantics.
 
         Write-once enforcement: Fields can only be set once. Once a field has a non-NULL value,
         it cannot be changed to a different value (including NULL).
+
+        Returns:
+            The ID of the inserted or updated backup key
 
         Raises:
             WriteOnceViolationError: If attempting to modify fields that already have values
@@ -124,8 +129,16 @@ class InMemoryDomainBackupKeyRepository:
             if conflicts:
                 raise WriteOnceViolationError("backup_key", str(key.guid), conflicts)
 
-        # Insert or update (only reached if no conflicts)
+            # Update existing key, return existing ID
+            self._backup_keys[key.guid] = key
+            return self._backup_key_ids[key.guid]
+
+        # Insert new key with new ID
+        key_id = self._next_id
+        self._next_id += 1
         self._backup_keys[key.guid] = key
+        self._backup_key_ids[key.guid] = key_id
+        return key_id
 
     async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
         """Retrieve backup key(s).

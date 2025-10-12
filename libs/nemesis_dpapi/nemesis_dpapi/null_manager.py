@@ -25,9 +25,9 @@ class NullDpapiManager(DpapiManagerProtocol):
         """Add or update a masterkey (does nothing)."""
         pass
 
-    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
+    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> int:
         """Add or update a domain backup key (does nothing)."""
-        pass
+        return 0
 
     async def upsert_system_credential(self, cred: DpapiSystemCredential) -> None:
         """Add or update a DPAPI system credential (does nothing)."""

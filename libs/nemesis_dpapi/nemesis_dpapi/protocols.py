@@ -24,7 +24,7 @@ class DpapiManagerProtocol(Protocol):
         """Add or update a masterkey (encrypted or plaintext)."""
         ...
 
-    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
+    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> int:
         """Add or update a domain backup key."""
         ...
 

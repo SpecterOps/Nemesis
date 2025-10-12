@@ -757,7 +757,8 @@ CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
 );
 
 CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (
-    guid UUID PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    guid UUID UNIQUE NOT NULL,
     key_data BYTEA NOT NULL,
     domain_controller TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

@@ -204,7 +204,7 @@ class DpapiManager(DpapiManagerProtocol):
             await self._initialize_storage()
         return await self._masterkey_repo.get_masterkeys(guid, encryption_filter, backup_key_guid, masterkey_type)
 
-    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> None:
+    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> int:
         """Add or update a domain backup key and decrypt all compatible masterkeys.
 
         This method enforces write-once semantics: once a field is set to a non-NULL value,
@@ -212,6 +212,9 @@ class DpapiManager(DpapiManagerProtocol):
 
         Args:
             backup_key: Domain backup key to add or update
+
+        Returns:
+            The ID of the inserted or updated backup key
 
         Raises:
             ValueError: If domain_controller is an empty string
@@ -237,9 +240,11 @@ class DpapiManager(DpapiManagerProtocol):
                 raise WriteOnceViolationError("backup_key", str(backup_key.guid), conflicts)
 
         # Call repository to perform the upsert (repository layer also enforces write-once at SQL level)
-        await self._backup_key_repo.upsert_backup_key(backup_key)
+        backup_key_id = await self._backup_key_repo.upsert_backup_key(backup_key)
 
         await self._publisher.publish_event(NewDomainBackupKeyEvent(backup_key_guid=backup_key.guid))
+
+        return backup_key_id
 
     async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
         """Retrieve domain backup key(s).
