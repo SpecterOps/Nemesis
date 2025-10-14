@@ -166,7 +166,10 @@ class MasterKey(BaseModel):
     @property
     def is_decrypted(self) -> bool:
         """Check if masterkey has been decrypted."""
-        return self.plaintext_key is not None
+
+        # We only need to check if the sha1 is there because there's a constraint
+        # that if plaintext_key is set, plaintext_key_sha1 must also be set
+        return self.plaintext_key_sha1 is not None
 
     def __str__(self) -> str:
         """Return a string representation of the MasterKey with all properties."""
@@ -351,9 +354,6 @@ class Blob(BaseModel):
         """
         if not masterkey.is_decrypted:
             raise ValueError("Master key must be decrypted before use")
-
-        if masterkey.plaintext_key_sha1 is None:
-            raise ValueError("Master key SHA1 hash is required for decryption")
 
         blob_dpapick = dpapick3_blob.DPAPIBlob(self.raw_bytes)
 
