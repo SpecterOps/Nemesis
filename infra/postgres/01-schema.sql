@@ -745,12 +745,13 @@ CREATE TABLE IF NOT EXISTS chromium.cookies (
 CREATE SCHEMA dpapi;
 
 CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
-    guid UUID PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    guid TEXT UNIQUE NOT NULL,
     encrypted_key_usercred BYTEA,
     encrypted_key_backup BYTEA,
     plaintext_key BYTEA,
     plaintext_key_sha1 BYTEA,
-    backup_key_guid UUID,
+    backup_key_guid TEXT,
     masterkey_type TEXT DEFAULT 'unknown',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -758,7 +759,7 @@ CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
 
 CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (
     id SERIAL PRIMARY KEY,
-    guid UUID UNIQUE NOT NULL,
+    guid TEXT UNIQUE NOT NULL,
     key_data BYTEA NOT NULL,
     domain_controller TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

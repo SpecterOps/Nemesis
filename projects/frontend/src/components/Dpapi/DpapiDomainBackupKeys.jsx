@@ -26,6 +26,13 @@ const Row = React.memo(({ index, style, data }) => {
       className="flex items-center border-b dark:border-gray-700 transition-colors dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700"
     >
       <div
+        className={`px-4 flex-shrink-0 w-24 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'id' ? 'bg-green-200 dark:bg-green-800' : ''}`}
+        onDoubleClick={() => handleCellDoubleClick(record.id, 'id')}
+        title="Double-click to copy"
+      >
+        <span className="block truncate font-mono">{record.id || ''}</span>
+      </div>
+      <div
         className={`px-4 flex-shrink-0 w-96 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'guid' ? 'bg-green-200 dark:bg-green-800' : ''}`}
         onDoubleClick={() => handleCellDoubleClick(record.guid, 'guid')}
         title="Double-click to copy"
@@ -86,7 +93,7 @@ const DpapiDomainBackupKeys = () => {
   const [dcFilter, setDcFilter] = useState(() => searchParams.get('dc') || '');
   const [sortColumn, setSortColumn] = useState(() => {
     const col = searchParams.get('sort_column');
-    return (col === 'guid' || col === 'domain_controller') ? col : 'guid';
+    return (col === 'id' || col === 'guid' || col === 'domain_controller') ? col : 'id';
   });
   const [sortDirection, setSortDirection] = useState(() => searchParams.get('sort_direction') || 'asc');
 
@@ -99,11 +106,21 @@ const DpapiDomainBackupKeys = () => {
     const conditions = [];
 
     if (guidFilter) {
-      conditions.push({ guid: { _ilike: guidFilter.replace(/\*/g, '%') } });
+      // If user provided wildcards, use them as-is; otherwise add wildcards around the term
+      const hasWildcard = guidFilter.includes('*');
+      const pattern = hasWildcard
+        ? guidFilter.replace(/\*/g, '%')
+        : `%${guidFilter}%`;
+      conditions.push({ guid: { _ilike: pattern } });
     }
 
     if (dcFilter) {
-      conditions.push({ domain_controller: { _ilike: dcFilter.replace(/\*/g, '%') } });
+      // If user provided wildcards, use them as-is; otherwise add wildcards around the term
+      const hasWildcard = dcFilter.includes('*');
+      const pattern = hasWildcard
+        ? dcFilter.replace(/\*/g, '%')
+        : `%${dcFilter}%`;
+      conditions.push({ domain_controller: { _ilike: pattern } });
     }
 
     return conditions.length > 1 ? { _and: conditions } : conditions[0] || {};
@@ -116,14 +133,18 @@ const DpapiDomainBackupKeys = () => {
   };
 
   useEffect(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams);
 
     if (guidFilter) {
       params.set('guid', guidFilter);
+    } else {
+      params.delete('guid');
     }
 
     if (dcFilter) {
       params.set('dc', dcFilter);
+    } else {
+      params.delete('dc');
     }
 
     params.set('sort_column', sortColumn);
@@ -145,6 +166,7 @@ const DpapiDomainBackupKeys = () => {
                 where: $where,
                 order_by: $order_by
               ) {
+                id
                 guid
                 domain_controller
               }
@@ -227,6 +249,15 @@ const DpapiDomainBackupKeys = () => {
 
       {/* Headers */}
       <div className="flex border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <SortableHeader
+          column="id"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
+          onSort={handleSort}
+          className="flex-shrink-0 w-24"
+        >
+          ID
+        </SortableHeader>
         <SortableHeader
           column="guid"
           currentSort={sortColumn}

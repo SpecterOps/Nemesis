@@ -121,7 +121,12 @@ const DpapiMasterKeys = () => {
     const conditions = [];
 
     if (guidFilter) {
-      conditions.push({ guid: { _ilike: guidFilter.replace(/\*/g, '%') } });
+      // If user provided wildcards, use them as-is; otherwise add wildcards around the term
+      const hasWildcard = guidFilter.includes('*');
+      const pattern = hasWildcard
+        ? guidFilter.replace(/\*/g, '%')
+        : `%${guidFilter}%`;
+      conditions.push({ guid: { _ilike: pattern } });
     }
 
     return conditions.length > 0 ? conditions[0] : {};
@@ -134,10 +139,12 @@ const DpapiMasterKeys = () => {
   };
 
   useEffect(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams);
 
     if (guidFilter) {
       params.set('guid', guidFilter);
+    } else {
+      params.delete('guid');
     }
 
     params.set('sort_column', sortColumn);

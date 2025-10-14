@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import DpapiMasterKeys from './DpapiMasterKeys';
 import DpapiDomainBackupKeys from './DpapiDomainBackupKeys';
 import DpapiSubmitCredential from './DpapiSubmitCredential';
 
 const Dpapi = () => {
-  const [activeTab, setActiveTab] = useState('masterKeys');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'masterKeys';
 
   const tabs = [
     { id: 'masterKeys', label: 'Master Keys', component: DpapiMasterKeys },
@@ -15,7 +16,7 @@ const Dpapi = () => {
   const ActiveComponent = tabs.find(tab => tab.id === activeTab)?.component;
 
   const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
   };
 
   return (
