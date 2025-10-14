@@ -39,6 +39,7 @@ dapr-ext-workflow = "1.16.0"
 dapr = "1.16.0"
 durabletask-dapr = "0.2.0a8"
 protobuf = "6.31.1"
+pillow = "^11.3.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"
