@@ -290,7 +290,7 @@ class DpapiManager(DpapiManagerProtocol):
 
         return await self._dpapi_system_cred_repo.get_all_credentials()
 
-    async def decrypt_blob(self, blob: Blob) -> bytes:
+    async def decrypt_blob(self, blob: Blob, entropy: bytes | None = None) -> bytes:
         """Decrypt a DPAPI blob using available masterkeys.
 
         Args:
@@ -316,4 +316,4 @@ class DpapiManager(DpapiManagerProtocol):
         if not masterkey.is_decrypted:
             raise MasterKeyNotDecryptedError(blob.masterkey_guid)
 
-        return blob.decrypt(masterkey)
+        return blob.decrypt(masterkey, entropy)

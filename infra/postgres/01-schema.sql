@@ -676,6 +676,23 @@ CREATE TABLE chromium.state_keys (
     UNIQUE (source, username, browser)
 );
 
+-- AES keys extracted from a CNG "Google Chromekey1" CNG file from C:\ProgramData\Microsoft\Crypto\SystemKeys\
+--      Used in v3 of the Chromium ABE decryption
+CREATE TABLE chromium.chrome_keys (
+    id SERIAL PRIMARY KEY,
+    originating_object_id UUID,
+    agent_id VARCHAR(255),
+    source VARCHAR(1000),                               -- should only be one key per host/source
+    project VARCHAR(255),
+
+    key_masterkey_guid UUID,                            -- associated _system_ masterkey GUID for key_bytes_enc
+    key_bytes_enc BYTEA NOT NULL,                       -- the raw DPAPI blob bytes from the CNG file
+    key_bytes_dec BYTEA NOT NULL,                       -- completely dec AES key value
+    key_is_decrypted BOOLEAN,
+
+    UNIQUE (key_masterkey_guid)
+);
+
 -- "logins" table in "Login Data" file
 CREATE TABLE IF NOT EXISTS chromium.logins (
     id SERIAL PRIMARY KEY,
