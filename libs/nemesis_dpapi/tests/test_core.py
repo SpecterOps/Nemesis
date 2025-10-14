@@ -496,8 +496,10 @@ class TestBlobDecrypt:
             )
         )
 
+        assert blob.masterkey_guid == masterkey.guid
+
         # Test our new Blob.decrypt method
-        entropy = b"xT5rZW5qVVbrvpuA"
+        entropy = b"xT5rZW5qVVbrvpuA\x00"
         decrypted_data = blob.decrypt(masterkey, entropy=entropy)
         assert isinstance(decrypted_data, bytes)
         assert len(decrypted_data) > 0
