@@ -22,7 +22,7 @@ from impacket.dpapi import (
 )
 from impacket.dpapi import MasterKey as ImpacketMasterKey
 from pydantic import BaseModel as PydanticBaseModel
-from pydantic import ConfigDict
+from pydantic import ConfigDict, model_validator
 
 from .exceptions import BlobDecryptionError, BlobParsingError, InvalidBackupKeyError, MasterKeyDecryptionError
 
@@ -162,6 +162,30 @@ class MasterKey(BaseModel):
     plaintext_key: bytes | None = None
     plaintext_key_sha1: bytes | None = None
     backup_key_guid: UUID | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def compute_plaintext_key_sha1(cls, data: dict) -> dict:
+        """Auto-calculate plaintext_key_sha1 from plaintext_key if not provided, or validate if both are provided."""
+        # Handle both dict and model instance inputs
+        if isinstance(data, dict):
+            plaintext_key = data.get("plaintext_key")
+            plaintext_key_sha1 = data.get("plaintext_key_sha1")
+
+            if plaintext_key is not None:
+                expected_sha1 = SHA1.new(plaintext_key).digest()
+
+                if plaintext_key_sha1 is None:
+                    # Auto-calculate if not provided
+                    data["plaintext_key_sha1"] = expected_sha1
+                elif plaintext_key_sha1 != expected_sha1:
+                    # Validate if both are provided
+                    raise ValueError(
+                        f"plaintext_key_sha1 does not match the SHA1 hash of plaintext_key. "
+                        f"Expected: {expected_sha1.hex()}, Got: {plaintext_key_sha1.hex()}"
+                    )
+
+        return data
 
     @property
     def is_decrypted(self) -> bool:
@@ -358,7 +382,16 @@ class Blob(BaseModel):
         blob_dpapick = dpapick3_blob.DPAPIBlob(self.raw_bytes)
 
         if not blob_dpapick.decrypt(masterkey.plaintext_key_sha1, entropy):
-            raise BlobDecryptionError("Failed to decrypt blob with provided master key")
+            # Failed with DPAPIPick, let's try impacket
+
+            dpapi_blob = DPAPI_BLOB(self.raw_bytes)
+            try:
+                decrypted_data = dpapi_blob.decrypt(masterkey.plaintext_key_sha1, entropy)
+                if decrypted_data is None:
+                    raise BlobDecryptionError("Failed to decrypt blob with provided master key")
+                return decrypted_data
+            except Exception as e:
+                raise BlobDecryptionError(f"Failed to decrypt blob with provided master key: {e}") from e
 
         if not blob_dpapick.cleartext:
             raise Exception("Decryption succeeded but no cleartext available")

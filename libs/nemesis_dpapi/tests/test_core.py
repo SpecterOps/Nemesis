@@ -2,13 +2,14 @@
 
 import base64
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from impacket.dpapi import DPAPI_BLOB
 from nemesis_dpapi.core import Blob, MasterKey, MasterKeyFile, MasterKeyPolicy, MasterKeyType
 from nemesis_dpapi.exceptions import BlobDecryptionError
 from nemesis_dpapi.keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey
+from pydantic import ValidationError
 
 masterkey_uuid = UUID("ed93694f-5a6d-46e2-b821-219f2c0ecd4d")
 masterkey_bytes = bytes.fromhex(
@@ -326,6 +327,63 @@ class TestMasterKey:
         with pytest.raises(ValueError, match="No encrypted user credential key available for decryption"):
             masterkey.decrypt(mk_encryption_key)
 
+    def test_masterkey_auto_calculates_sha1(self):
+        """Test that MasterKey auto-calculates plaintext_key_sha1 when only plaintext_key is provided."""
+
+        # Create MasterKey with only plaintext_key (no plaintext_key_sha1)
+        masterkey = MasterKey(
+            guid=uuid4(),
+            masterkey_type=MasterKeyType.UNKNOWN,
+            plaintext_key=masterkey_bytes,
+        )
+
+        # Verify plaintext_key_sha1 was auto-calculated
+        assert masterkey.plaintext_key_sha1 is not None
+        assert masterkey.plaintext_key_sha1 == masterkey_sha1_bytes
+        assert masterkey.is_decrypted
+
+    def test_masterkey_frozen(self):
+        """Test that MasterKey is frozen (immutable)."""
+
+        masterkey = MasterKey(guid=uuid4(), masterkey_type=MasterKeyType.UNKNOWN)
+
+        # Should not be able to modify frozen model
+        with pytest.raises(ValidationError):
+            masterkey.guid = uuid4()  # type: ignore
+
+    def test_masterkey_validates_correct_sha1(self):
+        """Test that MasterKey accepts correct plaintext_key_sha1."""
+        from uuid import uuid4
+
+        plaintext_key = masterkey_bytes
+        correct_sha1 = masterkey_sha1_bytes
+
+        # Should accept correct SHA1
+        masterkey = MasterKey(
+            guid=uuid4(),
+            masterkey_type=MasterKeyType.UNKNOWN,
+            plaintext_key=plaintext_key,
+            plaintext_key_sha1=correct_sha1,
+        )
+
+        assert masterkey.plaintext_key_sha1 == correct_sha1
+        assert masterkey.is_decrypted
+
+    def test_masterkey_rejects_incorrect_sha1(self):
+        """Test that MasterKey rejects incorrect plaintext_key_sha1."""
+
+        plaintext_key = masterkey_bytes
+        incorrect_sha1 = b"0" * 20  # Wrong SHA1
+
+        # Should reject incorrect SHA1
+        with pytest.raises(ValidationError, match="plaintext_key_sha1 does not match"):
+            MasterKey(
+                guid=uuid4(),
+                masterkey_type=MasterKeyType.UNKNOWN,
+                plaintext_key=plaintext_key,
+                plaintext_key_sha1=incorrect_sha1,
+            )
+
 
 class TestBlobDecrypt:
     """Test Blob.decrypt() method."""
@@ -343,12 +401,11 @@ class TestBlobDecrypt:
         """Test DPAPI blob decryption with wrong masterkey."""
         blob = Blob.from_bytes(blob_without_entropy)
         # Create a master key with wrong SHA1 hash
-        wrong_masterkey_sha1 = b"wrong_key" + b"\x00" * 8  # 20 bytes
+
         masterkey = MasterKey(
             guid=blob.masterkey_guid,
             masterkey_type=MasterKeyType.UNKNOWN,
             plaintext_key=b"dummy_key" * 8,
-            plaintext_key_sha1=wrong_masterkey_sha1,
         )
 
         with pytest.raises(BlobDecryptionError):
@@ -406,7 +463,6 @@ class TestBlobDecrypt:
         masterkey = MasterKey(
             guid=blob.masterkey_guid,
             masterkey_type=MasterKeyType.UNKNOWN,
-            plaintext_key=b"dummy_key" * 8,  # We only need the SHA1 hash for decryption
             plaintext_key_sha1=masterkey_sha1_bytes,
         )
 

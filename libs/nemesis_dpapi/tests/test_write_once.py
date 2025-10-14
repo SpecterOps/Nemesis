@@ -1,9 +1,8 @@
 """Tests for write-once semantics in upsert operations."""
 
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
-
 from nemesis_dpapi.core import MasterKey, MasterKeyType
 from nemesis_dpapi.exceptions import WriteOnceViolationError
 from nemesis_dpapi.keys import DomainBackupKey
@@ -209,22 +208,6 @@ class TestMasterKeyWriteOnce:
             assert result[0].plaintext_key_sha1 == expected_sha1
 
     @pytest.mark.asyncio
-    async def test_sha1_verification_rejects_mismatch(self):
-        """Should reject when provided SHA1 doesn't match plaintext_key."""
-        async with DpapiManager(storage_backend="memory") as manager:
-            guid = uuid4()
-
-            masterkey = MasterKey(
-                guid=guid,
-                masterkey_type=MasterKeyType.USER,
-                plaintext_key=b"my_plaintext_key",
-                plaintext_key_sha1=b"0" * 20,  # Wrong SHA1
-            )
-
-            with pytest.raises(ValueError, match="does not match calculated SHA1"):
-                await manager.upsert_masterkey(masterkey)
-
-    @pytest.mark.asyncio
     async def test_sha1_verification_accepts_correct_hash(self):
         """Should accept when provided SHA1 matches plaintext_key."""
         async with DpapiManager(storage_backend="memory") as manager:
@@ -373,7 +356,7 @@ class TestDomainBackupKeyWriteOnce:
         async with DpapiManager(storage_backend="memory") as manager:
             guid = uuid4()
             key_data1 = self._create_valid_backup_key_data()
-            key_data2 = self._create_valid_backup_key_data() + b"\xFF"  # Different
+            key_data2 = self._create_valid_backup_key_data() + b"\xff"  # Different
 
             # First insert
             backup_key1 = DomainBackupKey(guid=guid, key_data=key_data1)
