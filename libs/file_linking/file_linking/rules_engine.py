@@ -361,22 +361,3 @@ class FileLinkingEngine:
 
         return linkings_created
 
-    def reload_rules(self) -> None:
-        """Reload all rules from disk."""
-        self.rules.clear()
-        self._load_rules()
-        logger.info("Reloaded file linking rules", count=len(self.rules))
-
-    def get_rules_summary(self) -> list[dict[str, Any]]:
-        """Get summary of loaded rules."""
-        return [
-            {
-                "name": rule.name,
-                "description": rule.description,
-                "category": rule.category,
-                "enabled": rule.enabled,
-                "trigger_count": len(rule.triggers),
-                "linked_files_count": len(rule.linked_files),
-            }
-            for rule in self.rules
-        ]
