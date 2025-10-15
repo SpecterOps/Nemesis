@@ -34,7 +34,6 @@ workflow_client: wf.DaprWorkflowClient = None
 activity_functions = {}
 download_path = "/tmp/"
 storage = StorageMinio()
-file_linking_engine: FileLinkingEngine = None
 dapr_client_for_dpapi: DaprClient = None
 
 dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
@@ -50,6 +49,8 @@ with DaprClient() as client:
 
 if not postgres_connection_string.startswith("postgres://"):
     raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager")
+
+file_linking_engine = FileLinkingEngine(postgres_connection_string)
 
 # Create global DaprClient for DPAPI manager
 # This client will be used throughout the application lifecycle
@@ -417,9 +418,6 @@ def check_file_linkings(ctx, activity_input):
     try:
         # Use the global file linking engine instance
         global file_linking_engine
-        if file_linking_engine is None:
-            logger.warning("File linking engine not initialized, skipping file linking check")
-            return {"linkings_created": 0, "error": "engine_not_initialized"}
 
         # Convert file_enriched model to dict for the rules engine
         file_data = file_enriched.model_dump() if hasattr(file_enriched, "model_dump") else file_enriched.__dict__
@@ -862,10 +860,8 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 
 async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-    global workflow_runtime, workflow_client, file_linking_engine
+    global workflow_runtime, workflow_client
 
-    # Initialize file linking system with shared instance
-    file_linking_engine = FileLinkingEngine(postgres_connection_string)
 
     # Load enrichment modules
     module_loader = ModuleLoader()
