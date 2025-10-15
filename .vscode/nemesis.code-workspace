@@ -95,16 +95,9 @@
             "**/.venv": true,
             "**/CVS": true,
             "**/Thumbs.db": true,
+            "projects/frontend/node_modules": true,
+            "projects/frontend/dist": true
         },
-        // "[python]": {
-        //     "diffEditor.ignoreTrimWhitespace": false,
-        //     "editor.wordBasedSuggestions": "off",
-        //     "editor.formatOnSave": true,
-        //     "editor.defaultFormatter": "charliermarsh.ruff"
-        // },
-        // "python.defaultInterpreterPath": "python",
-        // "python.pixiToolPath": "",
-        // "python.pipenvPath": "",
     },
     "extensions": {
         "recommendations": [
