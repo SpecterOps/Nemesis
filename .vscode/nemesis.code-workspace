@@ -84,6 +84,8 @@
     "settings": {
         "files.exclude": {
             "**/__pycache__": true,
+            "**/.benchmarks": true,
+            "**/.ruff_cache": true,
             "**/.DS_Store": true,
             "**/.git": true,
             "**/.hg": true,
