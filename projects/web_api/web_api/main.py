@@ -168,10 +168,13 @@ async def send_postgres_notify(channel: str, payload: str = ""):
 
         # Send NOTIFY using async connection
         async with await psycopg.AsyncConnection.connect(postgres_connection_string) as conn:
-            # Escape the payload to prevent SQL injection
-            escaped_payload = payload.replace("'", "''")
-            notify_cmd = f"NOTIFY {channel}, '{escaped_payload}'"
-            logger.debug(f"PostgreSQL notify_cmd: {notify_cmd}")
+            # Use psycopg.sql for type-safe query construction
+            from psycopg import sql
+            notify_cmd = sql.SQL("NOTIFY {}, {}").format(
+                sql.Identifier(channel),
+                sql.Literal(payload)
+            )
+            logger.debug(f"PostgreSQL NOTIFY: {channel} with payload: {payload}")
             await conn.execute(notify_cmd)
             logger.info(f"Sent PostgreSQL NOTIFY: {channel} with payload: {payload}")
 
