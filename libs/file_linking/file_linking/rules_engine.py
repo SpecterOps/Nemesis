@@ -15,10 +15,20 @@ from typing import Any
 
 import yaml
 from common.logger import get_logger
+from common.models import FileEnriched
 
 from .database_service import FileLinkingDatabaseService, FileListingStatus, _normalize_file_path
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class Trigger:
+    """Represents a trigger condition for a linking rule."""
+
+    file_patterns: list[str]
+    mime_patterns: list[str]
+    magic_patterns: list[str]
 
 
 @dataclass
@@ -40,7 +50,7 @@ class LinkingRule:
     description: str
     category: str
     enabled: bool
-    triggers: list[dict[str, Any]]
+    triggers: list[Trigger]
     linked_files: list[LinkedFile]
 
 
@@ -89,6 +99,17 @@ class FileLinkingEngine:
             with open(rule_path) as f:
                 data = yaml.safe_load(f)
 
+            # Convert triggers dictionaries to Trigger objects
+            triggers = []
+            for trigger_data in data.get("triggers", []):
+                triggers.append(
+                    Trigger(
+                        file_patterns=trigger_data.get("file_patterns", []),
+                        mime_patterns=trigger_data.get("mime_patterns", []),
+                        magic_patterns=trigger_data.get("magic_patterns", []),
+                    )
+                )
+
             # Convert linked_files dictionaries to LinkedFile objects
             linked_files = []
             for lf_data in data.get("linked_files", []):
@@ -107,7 +128,7 @@ class FileLinkingEngine:
                 description=data["description"],
                 category=data["category"],
                 enabled=data.get("enabled", True),
-                triggers=data.get("triggers", []),
+                triggers=triggers,
                 linked_files=linked_files,
             )
 
@@ -115,34 +136,29 @@ class FileLinkingEngine:
             logger.exception("Error parsing rule file", rule_path=rule_path, error=str(e))
             return None
 
-    def _matches_trigger(self, file_enriched: dict[str, Any], trigger: dict[str, Any]) -> bool:
-        """Check if a file matches a trigger condition."""
-        file_path = file_enriched.get("path", "")
-        mime_type = file_enriched.get("mime_type", "")
-        magic_type = file_enriched.get("magic_type", "")
+    def _matches_trigger(self, file_enriched: FileEnriched, trigger: Trigger) -> bool:
+        """Check if a file matches a path, mime type, or magic type trigger condition."""
+        file_path = file_enriched.path
+        mime_type = file_enriched.mime_type
+        magic_type = file_enriched.magic_type
 
         # Check file patterns
-        file_patterns = trigger.get("file_patterns", [])
-        logger.debug(f"file_patterns: {file_patterns}")
-        if file_patterns:
-            # Normalize path separators for cross-platform matching
-            normalized_file_path = file_path.replace("\\", "/")
-            normalized_patterns = [pattern.replace("\\", "/") for pattern in file_patterns]
-            path_match = any(fnmatch.fnmatch(normalized_file_path, pattern) for pattern in normalized_patterns)
+        logger.debug(f"file_patterns: {trigger.file_patterns}")
+
+        if trigger.file_patterns:
+            path_match = any(fnmatch.fnmatch(file_path, pattern) for pattern in trigger.file_patterns)
 
             if not path_match:
                 return False
 
         # Check MIME types
-        mime_types = trigger.get("mime_types", [])
-        if mime_types and mime_type not in mime_types:
+        if trigger.mime_patterns and mime_type not in trigger.mime_patterns:
             logger.debug("path_match but mime types mismatch")
             return False
 
         # Check magic patterns
-        magic_patterns = trigger.get("magic_patterns", [])
-        if magic_patterns:
-            magic_match = any(pattern in magic_type for pattern in magic_patterns)
+        if trigger.magic_patterns:
+            magic_match = any(pattern in magic_type for pattern in trigger.magic_patterns)
             if not magic_match:
                 logger.debug("path_match but magic string mismatch")
                 return False
@@ -207,7 +223,7 @@ class FileLinkingEngine:
 
         return expanded
 
-    def process_file(self, file_enriched: dict[str, Any]) -> int:
+    def process_file(self, file_enriched: FileEnriched) -> int:
         """
         Process a file against all loaded rules and create linkings.
 
@@ -217,13 +233,16 @@ class FileLinkingEngine:
         Returns:
             int: Number of linkings created
         """
-        if not file_enriched.get("path"):
-            logger.debug("Skipping file with no path", object_id=file_enriched.get("object_id"))
-            return 0
 
         linkings_created = 0
-        file_path = file_enriched["path"]
-        source = file_enriched.get("source", file_enriched.get("agent_id", "unknown"))
+        file_path = file_enriched.path
+
+        if file_enriched.source:
+            source = file_enriched.source
+        elif file_enriched.agent_id:
+            source = file_enriched.agent_id
+        else:
+            source = "unknown"
 
         logger.debug(
             f"Processing file: {file_path}, source: {source}, file_enriched keys: {list(file_enriched.keys())}"

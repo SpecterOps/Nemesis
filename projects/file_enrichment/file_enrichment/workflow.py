@@ -416,14 +416,8 @@ def check_file_linkings(ctx, activity_input):
     file_enriched = get_file_enriched(object_id)
 
     try:
-        # Use the global file linking engine instance
         global file_linking_engine
-
-        # Convert file_enriched model to dict for the rules engine
-        file_data = file_enriched.model_dump() if hasattr(file_enriched, "model_dump") else file_enriched.__dict__
-
-        # Process the file and create linkings
-        linkings_created = file_linking_engine.process_file(file_data)
+        linkings_created = file_linking_engine.process_file(file_enriched)
 
         logger.debug("File linking check complete", object_id=object_id, linkings_created=linkings_created)
 
