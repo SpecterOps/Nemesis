@@ -151,7 +151,7 @@ class FileLinkingEngine:
 
         # Check MIME types
         if trigger.mime_patterns and mime_type not in trigger.mime_patterns:
-            logger.debug("path_match but mime types mismatch")
+            logger.debug(f"path_match but mime types mismatch: {mime_type}")
             return False
 
         # Check magic patterns

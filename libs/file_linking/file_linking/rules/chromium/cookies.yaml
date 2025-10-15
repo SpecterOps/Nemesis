@@ -7,6 +7,7 @@ triggers:
   - file_patterns:
       - "**/User Data/Default/Network/Cookies"
     mime_patterns:
+      - "application/vnd.sqlite3"
       - "application/vnd.sqlite3; charset=binary"
 
 linked_files:

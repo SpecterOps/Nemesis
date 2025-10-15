@@ -224,3 +224,100 @@ class TestMatchesTrigger:
         )
 
         assert engine._matches_trigger(file_enriched, trigger) is True
+
+
+class TestChromiumCookiesLinking:
+    """Tests for Chromium cookies linking to Local State file."""
+
+    @pytest.fixture
+    def engine(self, tmp_path):
+        """Create a FileLinkingEngine with the actual chromium cookies rule."""
+        # Use the real rules directory to load the cookies.yaml rule
+        import os
+
+        rules_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "file_linking", "rules")
+        return FileLinkingEngine(postgres_connection_string="postgresql://dummy", rules_dir=rules_dir)
+
+    def test_chromium_cookies_links_to_local_state_windows(self, engine):
+        """Test that Chromium Cookies file creates a link to Local State on Windows paths."""
+        cookies_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Network/Cookies"
+        expected_local_state_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Local State"
+
+        file_cookies = create_file_enriched(
+            object_id="test-cookies-001",
+            path=cookies_path,
+            mime_type="application/vnd.sqlite3; charset=binary",
+            magic_type="SQLite 3.x database",
+        )
+
+        # Find the chromium_cookies rule
+        rule = next((r for r in engine.rules if r.name == "chromium_cookies"), None)
+        assert rule is not None, "chromium_cookies rule should be loaded"
+        assert rule.enabled is True, "chromium_cookies rule should be enabled"
+
+        # Verify the rule triggers
+        trigger_matched = False
+        for trigger in rule.triggers:
+            if engine._matches_trigger(file_cookies, trigger):
+                trigger_matched = True
+                break
+        assert trigger_matched is True, "Cookies file should match the rule trigger"
+
+        # Verify the linked file configuration
+        assert len(rule.linked_files) == 1, "Should have exactly one linked file"
+        linked_file = rule.linked_files[0]
+        assert linked_file.name == "local_state", "Linked file should be named 'local_state'"
+        assert linked_file.priority == "high", "Priority should be high"
+        assert "master key" in linked_file.collection_reason.lower(), "Should mention master key in reason"
+
+        # Verify path template expansion
+        assert len(linked_file.path_templates) == 1, "Should have exactly one path template"
+        template = linked_file.path_templates[0]
+        expanded_path = engine._expand_path_template(template, cookies_path)
+        assert expanded_path == expected_local_state_path, f"Expected {expected_local_state_path}, got {expanded_path}"
+
+    def test_chromium_cookies_wrong_mime_type_no_match(self, engine):
+        """Test that a file with the right path but wrong MIME type doesn't trigger the rule."""
+        cookies_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Network/Cookies"
+
+        file_wrong_mime = create_file_enriched(
+            object_id="test-cookies-004",
+            path=cookies_path,
+            mime_type="text/plain",  # Wrong MIME type
+            magic_type="ASCII text",
+        )
+
+        # Find the chromium_cookies rule
+        rule = next((r for r in engine.rules if r.name == "chromium_cookies"), None)
+        assert rule is not None, "chromium_cookies rule should be loaded"
+
+        # Verify the rule does NOT trigger
+        trigger_matched = False
+        for trigger in rule.triggers:
+            if engine._matches_trigger(file_wrong_mime, trigger):
+                trigger_matched = True
+                break
+        assert trigger_matched is False, "File with wrong MIME type should not match"
+
+    def test_chromium_cookies_wrong_path_no_match(self, engine):
+        """Test that a SQLite file with the wrong path doesn't trigger the rule."""
+        history_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/History"
+
+        file_history = create_file_enriched(
+            object_id="test-history-001",
+            path=history_path,
+            mime_type="application/vnd.sqlite3; charset=binary",
+            magic_type="SQLite 3.x database",
+        )
+
+        # Find the chromium_cookies rule
+        rule = next((r for r in engine.rules if r.name == "chromium_cookies"), None)
+        assert rule is not None, "chromium_cookies rule should be loaded"
+
+        # Verify the rule does NOT trigger
+        trigger_matched = False
+        for trigger in rule.triggers:
+            if engine._matches_trigger(file_history, trigger):
+                trigger_matched = True
+                break
+        assert trigger_matched is False, "History file should not match cookies rule"
