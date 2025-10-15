@@ -1,9 +1,8 @@
 import json
 
 import psycopg
-from dapr.clients import DaprClient
-
 from common.models import FileEnriched
+from dapr.clients import DaprClient
 
 from .logger import get_logger
 
