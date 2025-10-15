@@ -77,7 +77,7 @@ class FileLinkingEngine:
 
         rules_loaded = 0
 
-        for root, dirs, files in os.walk(self.rules_dir):
+        for root, _, files in os.walk(self.rules_dir):
             for file in files:
                 if file.endswith(".yaml") or file.endswith(".yml"):
                     rule_path = os.path.join(root, file)
@@ -220,7 +220,7 @@ class FileLinkingEngine:
             source = "unknown"
 
         logger.debug(
-            f"Processing file: {file_path}, source: {source}, file_enriched keys: {list(file_enriched.keys())}"
+            f"Processing file: {file_path}, source: {source}, file_enriched: {list(file_enriched.model_dump().keys())}"
         )
 
         # Mark the current file as collected (save for two commonly derived files)
@@ -229,7 +229,7 @@ class FileLinkingEngine:
                 source=source,
                 path=file_path,
                 status=FileListingStatus.COLLECTED,
-                object_id=file_enriched.get("object_id"),
+                object_id=file_enriched.object_id,
             )
 
         # Process each rule

@@ -26,25 +26,15 @@ const LinkedFilesSection = ({ filePath, source }) => {
 
     const fetchLinkedFiles = async () => {
       try {
-        // Normalize path by replacing backslashes with forward slashes
-        const normalizedFilePath = filePath.replace(/\\/g, '/');
-
-        // Debug: log what we're searching for
-        // console.log('LinkedFiles: Original filePath:', filePath);
-        // console.log('LinkedFiles: Normalized filePath:', normalizedFilePath, 'source:', source);
-        // console.log('LinkedFiles: Component props - filePath type:', typeof filePath, 'source type:', typeof source);
-
         const query = {
           query: `
-            query GetLinkedFiles($filePath: String!, $normalizedFilePath: String!, $source: String!) {
+            query GetLinkedFiles($filePath: String!, $source: String!) {
               file_linkings(where: {
                 _and: [
                   { source: { _eq: $source } },
                   { _or: [
                     { file_path_1: { _eq: $filePath } },
-                    { file_path_2: { _eq: $filePath } },
-                    { file_path_1: { _eq: $normalizedFilePath } },
-                    { file_path_2: { _eq: $normalizedFilePath } }
+                    { file_path_2: { _eq: $filePath } }
                   ]}
                 ]
               }) {
@@ -56,7 +46,7 @@ const LinkedFilesSection = ({ filePath, source }) => {
               }
             }
           `,
-          variables: { filePath: filePath, normalizedFilePath: normalizedFilePath, source }
+          variables: { filePath, source }
         };
 
         const response = await fetch('/hasura/v1/graphql', {
@@ -79,8 +69,6 @@ const LinkedFilesSection = ({ filePath, source }) => {
 
         const linkedFilesResult = result.data.file_linkings || [];
 
-        // console.log('LinkedFiles: Query result:', linkedFilesResult);
-
         // Now fetch file status for each linked file
         const statusMap = new Map();
 
@@ -88,28 +76,13 @@ const LinkedFilesSection = ({ filePath, source }) => {
           // Collect all unique linked file paths
           const linkedPaths = new Set();
           linkedFilesResult.forEach(linking => {
-            const normalizedCurrentPath = normalizedFilePath;
-            const originalCurrentPath = filePath;
-            const normalizedPath1 = linking.file_path_1.replace(/\\/g, '/');
-            const normalizedPath2 = linking.file_path_2.replace(/\\/g, '/');
-
-            // Add the path that's not the current file (check both original and normalized)
-            if (linking.file_path_1 !== originalCurrentPath && normalizedPath1 !== normalizedCurrentPath) {
+            // Add the path that's not the current file
+            if (linking.file_path_1 !== filePath) {
               linkedPaths.add(linking.file_path_1);
             }
-            if (linking.file_path_2 !== originalCurrentPath && normalizedPath2 !== normalizedCurrentPath) {
+            if (linking.file_path_2 !== filePath) {
               linkedPaths.add(linking.file_path_2);
             }
-          });
-
-          // console.log('LinkedFiles: Linked paths to check status for:', Array.from(linkedPaths));
-          // console.log('LinkedFiles: Current file path (normalized):', normalizedFilePath);
-
-          // Query file status for each linked path - also include normalized versions
-          const allPathsToCheck = new Set();
-          linkedPaths.forEach(path => {
-            allPathsToCheck.add(path);
-            allPathsToCheck.add(path.replace(/\\/g, '/'));
           });
 
           const statusQuery = {
@@ -127,7 +100,7 @@ const LinkedFilesSection = ({ filePath, source }) => {
                 }
               }
             `,
-            variables: { paths: Array.from(allPathsToCheck), source }
+            variables: { paths: Array.from(linkedPaths), source }
           };
 
           const statusResponse = await fetch('/hasura/v1/graphql', {
@@ -144,27 +117,12 @@ const LinkedFilesSection = ({ filePath, source }) => {
             if (!statusResult.errors) {
               const fileListingsResult = statusResult.data.file_listings || [];
 
-              // Create status map with both normalized and original path keys
+              // Create status map
               fileListingsResult.forEach(file => {
-                const normalizedPath = file.path.replace(/\\/g, '/');
-                const fileInfo = {
+                statusMap.set(file.path, {
                   status: file.status,
                   object_id: file.object_id
-                };
-
-                // Store with both original and normalized paths as keys
-                statusMap.set(file.path, fileInfo);
-                statusMap.set(normalizedPath, fileInfo);
-              });
-
-              // console.log('LinkedFiles: Status query result:', fileListingsResult);
-              // console.log('LinkedFiles: Status map:', statusMap);
-
-              // Debug: Check what paths we're actually looking for vs what we got
-              Array.from(linkedPaths).forEach(path => {
-                const normalizedPath = path.replace(/\\/g, '/');
-                const found = statusMap.get(path) || statusMap.get(normalizedPath);
-                // console.log(`LinkedFiles: Path "${path}" (normalized: "${normalizedPath}") -> Status:`, found);
+                });
               });
             }
           }
@@ -199,20 +157,11 @@ const LinkedFilesSection = ({ filePath, source }) => {
   };
 
   const getLinkedFilePath = (linking, currentPath) => {
-    // Normalize both paths for comparison
-    const normalizedPath1 = linking.file_path_1.replace(/\\/g, '/');
-    const normalizedPath2 = linking.file_path_2.replace(/\\/g, '/');
-    const normalizedCurrentPath = currentPath.replace(/\\/g, '/');
-
-    return normalizedPath1 === normalizedCurrentPath ? linking.file_path_2 : linking.file_path_1;
+    return linking.file_path_1 === currentPath ? linking.file_path_2 : linking.file_path_1;
   };
 
   const getRelationshipDirection = (linking, currentPath) => {
-    // Normalize both paths for comparison
-    const normalizedPath1 = linking.file_path_1.replace(/\\/g, '/');
-    const normalizedCurrentPath = currentPath.replace(/\\/g, '/');
-
-    return normalizedPath1 === normalizedCurrentPath ? 'outbound' : 'inbound';
+    return linking.file_path_1 === currentPath ? 'outbound' : 'inbound';
   };
 
   const handleDeleteClick = (linkingId) => {
@@ -323,17 +272,15 @@ const LinkedFilesSection = ({ filePath, source }) => {
 
               linkedFiles.forEach((linking) => {
                 const linkedPath = getLinkedFilePath(linking, filePath);
-                const normalizedLinkedPath = linkedPath.replace(/\\/g, '/');
                 const direction = getRelationshipDirection(linking, filePath);
 
-                if (groupedFiles.has(normalizedLinkedPath)) {
-                  const existing = groupedFiles.get(normalizedLinkedPath);
+                if (groupedFiles.has(linkedPath)) {
+                  const existing = groupedFiles.get(linkedPath);
                   existing.directions.add(direction);
                   existing.linkTypes.add(linking.link_type);
                 } else {
-                  groupedFiles.set(normalizedLinkedPath, {
+                  groupedFiles.set(linkedPath, {
                     linkedPath,
-                    normalizedLinkedPath,
                     directions: new Set([direction]),
                     linkTypes: new Set([linking.link_type].filter(Boolean)),
                     linkingId: linking.linking_id
@@ -344,8 +291,8 @@ const LinkedFilesSection = ({ filePath, source }) => {
               return Array.from(groupedFiles.values()).map((group) => {
                 const fileName = group.linkedPath.split(/[\/\\]/).pop() || group.linkedPath;
 
-                // Get file status info - try both normalized and original path
-                let fileInfo = fileStatusMap.get(group.normalizedLinkedPath) || fileStatusMap.get(group.linkedPath);
+                // Get file status info
+                let fileInfo = fileStatusMap.get(group.linkedPath);
                 const isCollected = fileInfo?.status === 'collected' && fileInfo?.object_id;
 
                 return (

@@ -209,7 +209,7 @@ class File(BaseModel):
     project: str
     timestamp: datetime
     expiration: datetime
-    path: str | None = None
+    path: str #| None = None
     originating_object_id: str | None = None
     originating_container_id: str | None = None
     nesting_level: int | None = None

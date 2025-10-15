@@ -382,7 +382,7 @@ class Blob(BaseModel):
         blob_dpapick = dpapick3_blob.DPAPIBlob(self.raw_bytes)
 
         if not blob_dpapick.decrypt(masterkey.plaintext_key_sha1, entropy):
-            raise BlobDecryptionError(f"Failed to decrypt blob with provided master key: {e}") from e
+            raise BlobDecryptionError(f"Failed to decrypt blob with provided master key: {masterkey.guid}")
 
         if not blob_dpapick.cleartext:
             raise Exception("Decryption succeeded but no cleartext available")

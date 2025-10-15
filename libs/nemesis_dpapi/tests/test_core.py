@@ -405,7 +405,7 @@ class TestBlobDecrypt:
         masterkey = MasterKey(
             guid=blob.masterkey_guid,
             masterkey_type=MasterKeyType.UNKNOWN,
-            plaintext_key=b"dummy_key" * 8,
+            plaintext_key=b"d" * 20,
         )
 
         with pytest.raises(BlobDecryptionError):
