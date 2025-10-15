@@ -631,7 +631,7 @@ async def get_status():
             "status_counts": status_counts,
             "active_details": db_active_workflows,
             "metrics": metrics,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -697,7 +697,7 @@ async def get_failed():
         return {
             "failed_count": len(failed_workflows),
             "workflows": failed_workflows,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
     except Exception as e:
         logger.exception(e, message="Error getting failed workflow information")
@@ -1091,7 +1091,7 @@ async def trigger_cleanup(request: CleanupRequest = Body(default=None, descripti
             await monitor.purge_all_rabbitmq_queues()
 
         # Return combined results
-        return {"status": "completed", "services": results, "timestamp": datetime.now().isoformat()}
+        return {"status": "completed", "services": results, "timestamp": datetime.now(UTC).isoformat()}
 
     except requests.Timeout as e:
         service = getattr(e, "request", None)
@@ -1211,11 +1211,11 @@ async def get_available_agents():
             return {
                 "agents": [],
                 "total_count": 0,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "note": "Agents service unavailable or no agents found",
             }
 
-        return {"agents": agents, "total_count": len(agents), "timestamp": datetime.now().isoformat()}
+        return {"agents": agents, "total_count": len(agents), "timestamp": datetime.now(UTC).isoformat()}
 
     except Exception as e:
         logger.exception(e, message="Error getting available agents")
@@ -1249,7 +1249,7 @@ async def get_agents_spend_data():
                 "total_completion_tokens": 0,
                 "total_requests": 0,
                 "error": "Agents service unavailable",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
     except requests.RequestException as e:
@@ -1262,7 +1262,7 @@ async def get_agents_spend_data():
             "total_completion_tokens": 0,
             "total_requests": 0,
             "error": f"Connection error: {str(e)}",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
     except Exception as e:
         logger.exception(e, message="Error getting agents spend data")
