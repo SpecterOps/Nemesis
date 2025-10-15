@@ -19,7 +19,6 @@ from common.models import (
 )
 from dapr.clients import DaprClient
 
-# logger = structlog.get_logger(module=__name__)
 logger = get_logger(__name__)
 
 

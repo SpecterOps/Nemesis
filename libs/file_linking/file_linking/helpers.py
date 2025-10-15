@@ -5,12 +5,12 @@ This module provides a simple interface for enrichment modules to register
 file relationships they discover during analysis.
 """
 
-import structlog
 from common.db import get_postgres_connection_str
+from common.logger import get_logger
 
 from .rules_engine import FileLinkingEngine
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def add_file_linkings(

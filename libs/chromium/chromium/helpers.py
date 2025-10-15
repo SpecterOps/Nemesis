@@ -5,12 +5,9 @@ import struct
 from datetime import UTC, datetime, timedelta
 
 import psycopg
-import structlog
 from common.db import get_postgres_connection_str
 from Crypto.Cipher import AES, ChaCha20_Poly1305
 from nemesis_dpapi import Blob
-
-logger = structlog.get_logger(module=__name__)
 
 
 def is_sqlite3(filename):

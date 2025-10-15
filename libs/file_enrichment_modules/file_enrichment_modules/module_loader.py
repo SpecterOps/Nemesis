@@ -3,10 +3,10 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class EnrichmentModule:

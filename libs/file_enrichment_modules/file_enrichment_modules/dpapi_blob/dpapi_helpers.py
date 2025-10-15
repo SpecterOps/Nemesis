@@ -1,11 +1,11 @@
 import base64
 
-import structlog
+from common.logger import get_logger
 from impacket.dpapi import DPAPI_BLOB
 from impacket.uuid import bin_to_string
 from pydantic import BaseModel
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class ParsedDpapiBlob(BaseModel):

@@ -9,15 +9,15 @@ from typing import Any
 
 import psycopg
 import pytsk3
-import structlog
 from common.db import get_postgres_connection_str
+from common.logger import get_logger
 from common.models import File as FileModel
 from common.models2.api import FileFilters
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from fastapi import HTTPException
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 # Dapr state store name for container processing
 DAPR_STORE_NAME = "container_processing"
@@ -229,10 +229,6 @@ class FilePathFilter:
         """Normalize path separators and format for consistent matching"""
         # Convert backslashes to forward slashes
         normalized = path.replace("\\", "/")
-
-        # Remove leading slash for consistency
-        if normalized.startswith("/"):
-            normalized = normalized[1:]
 
         return normalized
 

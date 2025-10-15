@@ -5,14 +5,14 @@ from datetime import UTC, datetime
 
 import plyara
 import psycopg
-import structlog
 import yara_x
 from common.db import get_postgres_connection_str
 from common.dependency_checks import check_directory_exists
+from common.logger import get_logger
 from plyara import utils as plyara_utils
 from psycopg.rows import dict_row
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 YARA_RULES_FOLDER_PATH = os.getenv("YARA_RULES_FOLDER_PATH", "/yara_rules/")
 check_directory_exists(YARA_RULES_FOLDER_PATH)

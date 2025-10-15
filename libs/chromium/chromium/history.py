@@ -3,13 +3,13 @@
 import sqlite3
 
 import psycopg
-import structlog
+from common.logger import get_logger
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 
 from .helpers import convert_chromium_timestamp, get_postgres_connection_str, parse_chromium_file_path
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def process_chromium_history(object_id: str, file_path: str | None = None) -> None:

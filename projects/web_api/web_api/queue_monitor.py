@@ -4,10 +4,10 @@ from datetime import datetime
 from typing import Any
 
 import aiohttp
-import structlog
+from common.logger import get_logger
 from dapr.clients import DaprClient
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 class WorkflowQueueMonitor:

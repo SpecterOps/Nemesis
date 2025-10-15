@@ -5,16 +5,15 @@ from datetime import datetime
 from typing import Optional
 
 import psycopg
-import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from common.db import get_postgres_connection_str
+from common.logger import get_logger
 from common.storage import StorageMinio
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-# Configure structured logging
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 # Global variables
 scheduler = AsyncIOScheduler()

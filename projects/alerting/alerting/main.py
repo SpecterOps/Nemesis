@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 import apprise
-import structlog
+from common.logger import get_logger
 from common.models import Alert, CloudEvent
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
@@ -14,7 +14,7 @@ from gql import Client, gql
 from gql.transport.websockets import WebsocketsTransport
 from pydantic import BaseModel
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 apobj = apprise.Apprise()
 is_initialized = False
 

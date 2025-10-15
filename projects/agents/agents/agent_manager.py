@@ -4,10 +4,10 @@ import importlib
 import inspect
 from pathlib import Path
 
-import structlog
 from agents.base_agent import BaseAgent
+from common.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 class AgentManager:

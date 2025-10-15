@@ -1,13 +1,13 @@
 """Rate limit handling for HTTP clients with Retry-After support."""
 import openai
-import structlog
 from agents.litellm_startup import litellm_startup
+from common.logger import get_logger
 from gql import gql
 from httpx import AsyncClient, HTTPStatusError
 from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def create_rate_limit_client():

@@ -2,10 +2,10 @@
 
 from abc import ABC, abstractmethod
 
-import structlog
+from common.logger import get_logger
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 class BaseAgent(ABC):

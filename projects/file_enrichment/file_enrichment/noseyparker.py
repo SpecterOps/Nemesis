@@ -12,7 +12,6 @@ from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
 
-# logger = structlog.get_logger(module=__name__)
 logger = get_logger(__name__)
 
 

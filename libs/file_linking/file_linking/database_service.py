@@ -7,9 +7,9 @@ Handles all database operations for file_listings and file_linkings tables.
 from enum import Enum
 
 import psycopg
-import structlog
+from common.logger import get_logger
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class FileListingStatus(str, Enum):

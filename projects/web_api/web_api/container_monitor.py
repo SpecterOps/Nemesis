@@ -9,13 +9,13 @@ from pathlib import Path
 from queue import Empty, Queue
 from typing import Any
 
-import structlog
 import yaml
+from common.logger import get_logger
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 from web_api.large_containers import LargeContainerProcessor
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 MOUNTED_CONTAINER_PATH = os.getenv("MOUNTED_CONTAINER_PATH", "/mounted-containers")
 COMPLETED_FOLDER = "completed"

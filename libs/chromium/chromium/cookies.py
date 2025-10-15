@@ -4,7 +4,7 @@ import asyncio
 import sqlite3
 
 import psycopg
-import structlog
+from common.logger import get_logger
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from nemesis_dpapi import Blob, DpapiManager
@@ -21,7 +21,7 @@ from .helpers import (
     try_decrypt_with_all_keys,
 )
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def process_chromium_cookies(
