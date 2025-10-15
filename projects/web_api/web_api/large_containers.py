@@ -10,6 +10,7 @@ from typing import Any
 import psycopg
 import pytsk3
 import structlog
+from common.db import get_postgres_connection_str
 from common.models import File as FileModel
 from common.models2.api import FileFilters
 from common.storage import StorageMinio
@@ -650,9 +651,7 @@ class LargeContainerProcessor:
         }
 
         # Get postgres connection string from Dapr secrets
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            self.postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+        self.postgres_connection_string = get_postgres_connection_str()
 
     def create_container_record(
         self,

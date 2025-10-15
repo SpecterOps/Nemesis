@@ -7,8 +7,8 @@ import plyara
 import psycopg
 import structlog
 import yara_x
+from common.db import get_postgres_connection_str
 from common.dependency_checks import check_directory_exists
-from dapr.clients import DaprClient
 from plyara import utils as plyara_utils
 from psycopg.rows import dict_row
 
@@ -25,12 +25,7 @@ class YaraRuleManager:
         self.parser = plyara.Plyara()
         self._compiler = yara_x.Compiler()
         self._compiled_rules: yara_x.Rules | None = None
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
-
-        self._conninfo = postgres_connection_string
+        self._conninfo = get_postgres_connection_str()
 
         # Load and compile rules from disk first
         self._process_disk_rules()

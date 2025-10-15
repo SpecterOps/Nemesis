@@ -2,14 +2,15 @@
 import asyncio
 import io
 import json
-import ntpath
 import os
 import pathlib
+import posixpath
 
 import common.helpers as helpers
 import dapr.ext.workflow as wf
 import magic
 import psycopg
+from common.db import get_postgres_connection_str
 from common.helpers import create_text_reader, get_file_extension, is_container
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, WORKFLOW_RUNTIME_LOG_LEVEL, get_logger
 from common.models import Alert, EnrichmentResult, NoseyParkerInput
@@ -43,9 +44,7 @@ nemesis_url = os.getenv("NEMESIS_URL", "http://localhost/")
 nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_url
 
 
-with DaprClient() as client:
-    secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+postgres_connection_string = get_postgres_connection_str()
 
 if not postgres_connection_string.startswith("postgres://"):
     raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager")
@@ -180,7 +179,7 @@ def get_basic_analysis(ctx, activity_input):
         else:
             is_plaintext = False
         basic_analysis = {
-            "file_name": ntpath.basename(path),
+            "file_name": posixpath.basename(path),
             "extension": get_file_extension(path),
             "size": pathlib.Path(file.name).stat().st_size,
             "hashes": {

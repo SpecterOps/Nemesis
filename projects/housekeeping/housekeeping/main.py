@@ -2,15 +2,15 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 import psycopg
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from common.db import get_postgres_connection_str
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from pydantic import BaseModel
 
 # Configure structured logging
@@ -22,9 +22,7 @@ is_initialized = False
 storage = StorageMinio()
 background_tasks = set()
 
-with DaprClient() as client:
-    secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+postgres_connection_string = get_postgres_connection_str()
 
 
 def get_db_connection():
@@ -38,7 +36,7 @@ def get_db_connection():
         raise
 
 
-async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> List[str]:
+async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> list[str]:
     """
     Get a list of all object_ids from files, files_enriched, and files_enriched_dataset tables
     that have passed their expiration date.
@@ -76,7 +74,7 @@ async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> 
             conn.close()
 
 
-async def get_transform_object_ids(object_ids: List[str]) -> List[str]:
+async def get_transform_object_ids(object_ids: list[str]) -> list[str]:
     """
     Get all transform_object_ids that relate to the given object_ids.
     """
@@ -108,7 +106,7 @@ async def get_transform_object_ids(object_ids: List[str]) -> List[str]:
             conn.close()
 
 
-async def delete_database_entries(object_ids: List[str]) -> bool:
+async def delete_database_entries(object_ids: list[str]) -> bool:
     """
     Delete expired entries from database tables.
     Return True if successful, False otherwise.

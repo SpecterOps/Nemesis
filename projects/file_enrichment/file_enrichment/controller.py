@@ -2,6 +2,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
+from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import CloudEvent, File
 from dapr.clients import DaprClient
@@ -32,9 +33,7 @@ max_workflow_execution_time = int(
 logger.info(f"max_parallel_workflows: {max_parallel_workflows}", pid=os.getpid())
 logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
 
-with DaprClient() as client:
-    secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+postgres_connection_string = get_postgres_connection_str()
 
 pool = ConnectionPool(
     postgres_connection_string, min_size=max_parallel_workflows, max_size=(3 * max_parallel_workflows)
@@ -62,8 +61,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize global DpapiManager for the application lifetime
     dapr_client = DaprClient()
-    secret = dapr_client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+    postgres_connection_string = get_postgres_connection_str(dapr_client)
 
     dpapi_manager = NemesisDpapiManager(
         storage_backend=postgres_connection_string,

@@ -564,8 +564,8 @@ class TestMasterKeyType:
     def test_from_path_system_user(self):
         """Test from_path correctly identifies SYSTEM_USER paths."""
         test_paths = [
-            r"C:\Windows\System32\Microsoft\Protect\S-1-5-18\User\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
-            r"C:\WINDOWS\SYSTEM32\MICROSOFT\PROTECT\S-1-5-18\USER\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/Windows/System32/Microsoft/Protect/S-1-5-18/User/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/WINDOWS/SYSTEM32/MICROSOFT/PROTECT/S-1-5-18/USER/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
             r"/Windows/System32/Microsoft/Protect/S-1-5-18/User/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         for path in test_paths:
@@ -574,8 +574,8 @@ class TestMasterKeyType:
     def test_from_path_system(self):
         """Test from_path correctly identifies SYSTEM paths."""
         test_paths = [
-            r"C:\Windows\System32\Microsoft\Protect\S-1-5-18\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
-            r"C:\WINDOWS\SYSTEM32\MICROSOFT\PROTECT\S-1-5-18\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/Windows/System32/Microsoft/Protect/S-1-5-18/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/WINDOWS/SYSTEM32/MICROSOFT/PROTECT/S-1-5-18/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
             r"/Windows/System32/Microsoft/Protect/S-1-5-18/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         for path in test_paths:
@@ -584,9 +584,9 @@ class TestMasterKeyType:
     def test_from_path_system_service_profiles(self):
         """Test from_path correctly identifies LocalService and NetworkService paths."""
         test_paths = [
-            r"C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\Microsoft\Protect\S-1-5-19\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
-            r"C:\Windows\ServiceProfiles\NetworkService\AppData\Roaming\Microsoft\Protect\S-1-5-20\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
-            r"C:\WINDOWS\SERVICEPROFILES\LOCALSERVICE\APPDATA\ROAMING\MICROSOFT\PROTECT\S-1-5-19\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/Windows/ServiceProfiles/LocalService/AppData/Roaming/Microsoft/Protect/S-1-5-19/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/Windows/ServiceProfiles/NetworkService/AppData/Roaming/Microsoft/Protect/S-1-5-20/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/WINDOWS/SERVICEPROFILES/LOCALSERVICE/APPDATA/ROAMING/MICROSOFT/PROTECT/S-1-5-19/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
             r"/Windows/ServiceProfiles/LocalService/AppData/Roaming/Microsoft/Protect/S-1-5-19/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         for path in test_paths:
@@ -595,9 +595,9 @@ class TestMasterKeyType:
     def test_from_path_user_with_sid(self):
         """Test from_path correctly identifies USER paths with SID."""
         test_paths = [
-            r"C:\Users\john.doe\AppData\Roaming\Microsoft\Protect\S-1-5-21-3821320868-1508310791-3575676346-1103\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
-            r"C:\Users\Administrator\AppData\Roaming\Microsoft\Protect\S-1-5-21-1234567890-1234567890-1234567890-500\387a062d-f8b6-4661-b2c5-eecbb9f80afb",
-            r"C:\USERS\TESTUSER\APPDATA\ROAMING\MICROSOFT\PROTECT\S-1-5-21-111-222-333-1001\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/Users/john.doe/AppData/Roaming/Microsoft/Protect/S-1-5-21-3821320868-1508310791-3575676346-1103/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/Users/Administrator/AppData/Roaming/Microsoft/Protect/S-1-5-21-1234567890-1234567890-1234567890-500/387a062d-f8b6-4661-b2c5-eecbb9f80afb",
+            r"C:/USERS/TESTUSER/APPDATA/ROAMING/MICROSOFT/PROTECT/S-1-5-21-111-222-333-1001/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
             r"/Users/john.doe/AppData/Roaming/Microsoft/Protect/S-1-5-21-3821320868-1508310791-3575676346-1103/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         for path in test_paths:
@@ -606,8 +606,8 @@ class TestMasterKeyType:
     def test_from_path_user_with_protect_fallback(self):
         """Test from_path correctly identifies USER paths using fallback pattern."""
         test_paths = [
-            r"C:\Users\john.doe\AppData\Roaming\Microsoft\Protect\somefile",
-            r"C:\Users\Administrator\AppData\Roaming\Microsoft\Protect" + "\\somedir",
+            r"C:/Users/john.doe/AppData/Roaming/Microsoft/Protect/somefile",
+            r"C:/Users/Administrator/AppData/Roaming/Microsoft/Protect/somedir",
         ]
         for path in test_paths:
             assert MasterKeyType.from_path(path) == MasterKeyType.USER, f"Failed for path: {path}"
@@ -626,9 +626,9 @@ class TestMasterKeyType:
     def test_from_path_case_insensitive(self):
         """Test from_path is case-insensitive."""
         paths_and_expected = [
-            (r"c:\windows\system32\microsoft\protect\s-1-5-18\user\guid", MasterKeyType.SYSTEM_USER),
-            (r"C:\WINDOWS\SYSTEM32\MICROSOFT\PROTECT\S-1-5-18\GUID", MasterKeyType.SYSTEM),
-            (r"C:\users\JohnDoe\appdata\roaming\microsoft\protect\s-1-5-21-111-222-333-1001\guid", MasterKeyType.USER),
+            (r"c:/windows/system32/microsoft/protect/s-1-5-18/user/guid", MasterKeyType.SYSTEM_USER),
+            (r"C:/WINDOWS/SYSTEM32/MICROSOFT/PROTECT/S-1-5-18/GUID", MasterKeyType.SYSTEM),
+            (r"C:/users/JohnDoe/appdata/roaming/microsoft/protect/s-1-5-21-111-222-333-1001/guid", MasterKeyType.USER),
         ]
         for path, expected in paths_and_expected:
             assert MasterKeyType.from_path(path) == expected, f"Failed for path: {path}"
@@ -636,8 +636,8 @@ class TestMasterKeyType:
     def test_from_path_mixed_slashes(self):
         """Test from_path handles mixed forward and backward slashes."""
         test_paths = [
-            r"C:\Windows/System32\Microsoft/Protect\S-1-5-18/User\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
-            r"C:/Users\john.doe/AppData\Roaming/Microsoft\Protect/S-1-5-21-111-222-333-1001\ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/Windows/System32/Microsoft/Protect/S-1-5-18/User/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
+            r"C:/Users/john.doe/AppData/Roaming/Microsoft/Protect/S-1-5-21-111-222-333-1001/ed93694f-5a6d-46e2-b821-219f2c0ecd4d",
         ]
         assert MasterKeyType.from_path(test_paths[0]) == MasterKeyType.SYSTEM_USER
         assert MasterKeyType.from_path(test_paths[1]) == MasterKeyType.USER

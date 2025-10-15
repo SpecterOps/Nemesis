@@ -43,7 +43,7 @@ class TestMatchesTrigger:
 
     def test_matches_trigger_chromium_cookies(self, engine):
         """Test matching Chromium cookies with various trigger conditions."""
-        cookies_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Network/Cookies"
+        cookies_path = "/C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Network/Cookies"
         sqlite_mime = "application/vnd.sqlite3; charset=binary"
         sqlite_magic = "SQLite 3.x database"
 
@@ -321,3 +321,184 @@ class TestChromiumCookiesLinking:
                 trigger_matched = True
                 break
         assert trigger_matched is False, "History file should not match cookies rule"
+
+
+class TestChromiumLocalStateLinking:
+    """Tests for Chromium Local State linking to Login Data and Cookies files."""
+
+    @pytest.fixture
+    def engine(self, tmp_path):
+        """Create a FileLinkingEngine with the actual chromium local_state rule."""
+        import os
+
+        rules_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "file_linking", "rules")
+        return FileLinkingEngine(postgres_connection_string="postgresql://dummy", rules_dir=rules_dir)
+
+    def test_chromium_local_state_links_to_login_data_and_cookies_windows(self, engine):
+        """Test that Chromium Local State file creates links to Login Data and Cookies on Windows paths."""
+        local_state_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Local State"
+        expected_login_data_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Login Data"
+        expected_cookies_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Network/Cookies"
+
+        file_local_state = create_file_enriched(
+            object_id="test-local-state-001",
+            path=local_state_path,
+            mime_type="application/json",
+            magic_type="JSON data",
+        )
+
+        # Find the chromium_local_state rule
+        rule = next((r for r in engine.rules if r.name == "chromium_local_state"), None)
+        assert rule is not None, "chromium_local_state rule should be loaded"
+        assert rule.enabled is True, "chromium_local_state rule should be enabled"
+
+        # Verify the rule triggers
+        trigger_matched = False
+        for trigger in rule.triggers:
+            if engine._matches_trigger(file_local_state, trigger):
+                trigger_matched = True
+                break
+        assert trigger_matched is True, "Local State file should match the rule trigger"
+
+        # Verify the linked files configuration
+        assert len(rule.linked_files) == 2, "Should have exactly two linked files"
+
+        # Check login_data linked file
+        login_data_file = next((lf for lf in rule.linked_files if lf.name == "login_data"), None)
+        assert login_data_file is not None, "Should have login_data linked file"
+        assert login_data_file.priority == "high", "login_data priority should be high"
+        assert "login credentials" in login_data_file.collection_reason.lower(), "Should mention login credentials"
+
+        # Check cookies linked file
+        cookies_file = next((lf for lf in rule.linked_files if lf.name == "cookies"), None)
+        assert cookies_file is not None, "Should have cookies linked file"
+        assert cookies_file.priority == "high", "cookies priority should be high"
+        assert "cookie" in cookies_file.collection_reason.lower(), "Should mention cookies"
+
+        # Verify path template expansion for login_data
+        assert len(login_data_file.path_templates) == 1, "login_data should have exactly one path template"
+        login_template = login_data_file.path_templates[0]
+        expanded_login_path = engine._expand_path_template(login_template, local_state_path)
+        assert expanded_login_path == expected_login_data_path, f"Expected {expected_login_data_path}, got {expanded_login_path}"
+
+        # Verify path template expansion for cookies
+        assert len(cookies_file.path_templates) == 1, "cookies should have exactly one path template"
+        cookies_template = cookies_file.path_templates[0]
+        expanded_cookies_path = engine._expand_path_template(cookies_template, local_state_path)
+        assert expanded_cookies_path == expected_cookies_path, f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+
+    def test_chromium_local_state_links_opera_browser(self, engine):
+        """Test that Opera browser Local State file creates correct links."""
+        local_state_path = "C:/Users/Bob/AppData/Roaming/Opera Software/Opera Stable/Local State"
+        expected_login_data_path = "C:/Users/Bob/AppData/Roaming/Opera Software/Opera Stable/Default/Login Data"
+        expected_cookies_path = "C:/Users/Bob/AppData/Roaming/Opera Software/Opera Stable/Default/Network/Cookies"
+
+        file_local_state = create_file_enriched(
+            object_id="test-local-state-opera-001",
+            path=local_state_path,
+            mime_type="application/json",
+            magic_type="JSON data",
+        )
+
+        # Find the chromium_local_state rule
+        rule = next((r for r in engine.rules if r.name == "chromium_local_state"), None)
+        assert rule is not None, "chromium_local_state rule should be loaded"
+
+        # Verify the rule triggers for Opera paths
+        trigger_matched = False
+        for trigger in rule.triggers:
+            if engine._matches_trigger(file_local_state, trigger):
+                trigger_matched = True
+                break
+        assert trigger_matched is True, "Opera Local State file should match the rule trigger"
+
+        # Verify path template expansion
+        login_data_file = next((lf for lf in rule.linked_files if lf.name == "login_data"), None)
+        cookies_file = next((lf for lf in rule.linked_files if lf.name == "cookies"), None)
+
+        expanded_login_path = engine._expand_path_template(login_data_file.path_templates[0], local_state_path)
+        expanded_cookies_path = engine._expand_path_template(cookies_file.path_templates[0], local_state_path)
+
+        assert expanded_login_path == expected_login_data_path, f"Expected {expected_login_data_path}, got {expanded_login_path}"
+        assert expanded_cookies_path == expected_cookies_path, f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+
+    def test_chromium_local_state_links_posix_paths(self, engine):
+        """Test that Local State file works with POSIX-style paths (e.g., from Linux collection)."""
+        local_state_path = "/C/Users/Alice/AppData/Local/Google/Chrome/User Data/Local State"
+        expected_login_data_path = "/C/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Login Data"
+        expected_cookies_path = "/C/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Network/Cookies"
+
+        file_local_state = create_file_enriched(
+            object_id="test-local-state-posix-001",
+            path=local_state_path,
+            mime_type="application/json",
+            magic_type="JSON data",
+        )
+
+        # Find the chromium_local_state rule
+        rule = next((r for r in engine.rules if r.name == "chromium_local_state"), None)
+        assert rule is not None, "chromium_local_state rule should be loaded"
+
+        # Verify the rule triggers
+        trigger_matched = False
+        for trigger in rule.triggers:
+            if engine._matches_trigger(file_local_state, trigger):
+                trigger_matched = True
+                break
+        assert trigger_matched is True, "POSIX-style Local State file should match the rule trigger"
+
+        # Verify path template expansion
+        login_data_file = next((lf for lf in rule.linked_files if lf.name == "login_data"), None)
+        cookies_file = next((lf for lf in rule.linked_files if lf.name == "cookies"), None)
+
+        expanded_login_path = engine._expand_path_template(login_data_file.path_templates[0], local_state_path)
+        expanded_cookies_path = engine._expand_path_template(cookies_file.path_templates[0], local_state_path)
+
+        assert expanded_login_path == expected_login_data_path, f"Expected {expected_login_data_path}, got {expanded_login_path}"
+        assert expanded_cookies_path == expected_cookies_path, f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+
+    def test_chromium_local_state_wrong_mime_type_no_match(self, engine):
+        """Test that a file with the right path but wrong MIME type doesn't trigger the rule."""
+        local_state_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Local State"
+
+        file_wrong_mime = create_file_enriched(
+            object_id="test-local-state-004",
+            path=local_state_path,
+            mime_type="text/plain",  # Wrong MIME type
+            magic_type="ASCII text",
+        )
+
+        # Find the chromium_local_state rule
+        rule = next((r for r in engine.rules if r.name == "chromium_local_state"), None)
+        assert rule is not None, "chromium_local_state rule should be loaded"
+
+        # Verify the rule does NOT trigger
+        trigger_matched = False
+        for trigger in rule.triggers:
+            if engine._matches_trigger(file_wrong_mime, trigger):
+                trigger_matched = True
+                break
+        assert trigger_matched is False, "File with wrong MIME type should not match"
+
+    def test_chromium_local_state_wrong_path_no_match(self, engine):
+        """Test that a JSON file with the wrong path doesn't trigger the rule."""
+        wrong_path = "C:/Users/Alice/AppData/Local/Google/Chrome/User Data/Default/Preferences"
+
+        file_wrong_path = create_file_enriched(
+            object_id="test-preferences-001",
+            path=wrong_path,
+            mime_type="application/json",
+            magic_type="JSON data",
+        )
+
+        # Find the chromium_local_state rule
+        rule = next((r for r in engine.rules if r.name == "chromium_local_state"), None)
+        assert rule is not None, "chromium_local_state rule should be loaded"
+
+        # Verify the rule does NOT trigger
+        trigger_matched = False
+        for trigger in rule.triggers:
+            if engine._matches_trigger(file_wrong_path, trigger):
+                trigger_matched = True
+                break
+        assert trigger_matched is False, "Preferences file should not match local_state rule"

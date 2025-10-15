@@ -1,23 +1,18 @@
 import json
 
 import psycopg
+from common.db import get_postgres_connection_str
 from common.models import FileEnriched
-from dapr.clients import DaprClient
 
 from .logger import get_logger
 
 logger = get_logger(__name__)
 
 
-with DaprClient() as client:
-    secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
-
-
 def get_file_enriched(object_id: str) -> FileEnriched:
     """Retrieve a file_enriched record from PostgreSQL and parse it into a FileEnriched object."""
     try:
-        with psycopg.connect(postgres_connection_string) as conn:
+        with psycopg.connect(get_postgres_connection_str()) as conn:
             with conn.cursor() as cur:
                 # Query remains the same
                 cur.execute(

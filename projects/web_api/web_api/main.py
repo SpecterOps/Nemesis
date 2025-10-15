@@ -13,7 +13,8 @@ from urllib.parse import urlparse
 
 import psycopg
 import requests
-import structlog
+from common.db import get_postgres_connection_str
+from common.logger import get_logger
 from common.models import CloudEvent
 from common.models import File as FileModel
 from common.models2.api import (
@@ -26,7 +27,7 @@ from common.models2.api import (
 )
 from common.models2.dpapi import DpapiCredentialRequest
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import Body, FastAPI, File, Form, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -47,7 +48,7 @@ from web_api.models.responses import (
 )
 from web_api.queue_monitor import WorkflowQueueMonitor
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 # TODO: is this needed really?
 VERSION = "0.1.0"
@@ -152,10 +153,7 @@ _db_pool = None
 def get_db_pool():
     global _db_pool
     if _db_pool is None:
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
-        _db_pool = ConnectionPool(postgres_connection_string, min_size=1, max_size=5)
+        _db_pool = ConnectionPool(get_postgres_connection_str(), min_size=1, max_size=5)
     return _db_pool
 
 
@@ -166,10 +164,7 @@ async def send_postgres_notify(channel: str, payload: str = ""):
     Used so we can signal _all_ UVICORN workers in one or more replicas.
     """
     try:
-        # Get connection string
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+        postgres_connection_string = get_postgres_connection_str()
 
         # Send NOTIFY using async connection
         async with await psycopg.AsyncConnection.connect(postgres_connection_string) as conn:
@@ -200,6 +195,21 @@ def is_valid_uri(uri):
 #
 #######################################
 
+def normalize_path(path: str) -> str:
+    """Normalize file paths to use forward slashes and remove redundant separators.
+
+    TODO: Standardize on URIs?
+    """
+    if is_valid_uri(path):
+        return path
+
+    if ntpath.isabs(path):
+        path = ntpath.abspath(path)
+    else:
+        pass
+
+    path = path.replace("\\", "/")
+    return path
 
 @app.post(
     "/files",
@@ -238,53 +248,35 @@ async def upload_file(
         if metadata_dict.get("timestamp") is None:
             current_utc = datetime.now(UTC)
             metadata_dict["timestamp"] = current_utc.isoformat()
-            logger.debug("Set default timestamp", timestamp=metadata_dict["timestamp"])
 
         file_metadata = FileMetadata(**metadata_dict)
 
         logger.info(
             "Received file upload request",
             filename=file.filename,
-            content_type=file.content_type,
             has_metadata=metadata is not None,
+            metadata=file_metadata.model_dump(),
         )
 
-        # Upload file
+
         object_id = storage.upload_uploadfile(file)
-        logger.info("File uploaded to datalake", object_id=object_id)
+        logger.debug("File uploaded to datalake", object_id=object_id)
 
-        # Handle metadata if provided
-        metadata_dict = file_metadata.model_dump()
-        metadata_dict["object_id"] = object_id
-
-        # Normalize path
-        path = metadata_dict["path"]
-        if is_valid_uri(path):
-            path = metadata_dict["path"]
-        else:
-            # Assume it's a path if it's not a URI
-            if ntpath.isabs(path):
-                path = ntpath.abspath(path)
-            else:
-                pass
-
-            path = path.replace("\\", "/")
-
-        metadata_dict["path"] = path
+        file_metadata.path = normalize_path(file_metadata.path)
 
         # Handle expiration - use timestamp + default_expiration_days if not provided
-        if metadata_dict.get("expiration") is None:
-            # Get the timestamp (either provided or the default we just set)
+        if file_metadata.expiration is None:
             timestamp_dt = file_metadata.timestamp
             if timestamp_dt is None:
-                # This shouldn't happen since we set it above, but just in case
                 timestamp_dt = datetime.now(UTC)
 
             expiration_dt = timestamp_dt + timedelta(days=default_expiration_days)
-            metadata_dict["expiration"] = expiration_dt.isoformat()
-            logger.debug("Set default expiration", expiration=metadata_dict["expiration"])
+            file_metadata.expiration = expiration_dt
+            logger.debug("Set default expiration", expiration=file_metadata.expiration.isoformat())
 
-        submission_id = await submit_file_metadata_internal(metadata_dict)
+
+        file_model = FileModel.from_file_metadata(file_metadata, str(object_id))
+        submission_id = await submit_file(file_model)
 
         logger.info("Metadata submitted", submission_id=submission_id)
         return FileWithMetadataResponse(object_id=object_id, submission_id=submission_id)
@@ -844,11 +836,11 @@ async def run_bulk_enrichment(
             }
 
         # Publish individual enrichment tasks to pub/sub
-        with DaprClient() as client:
+        async with DaprClient() as client:
             for object_id in object_ids:
                 task_data = {"enrichment_name": enrichment_name, "object_id": str(object_id)}
 
-                client.publish_event(
+                await client.publish_event(
                     pubsub_name="pubsub",
                     topic_name="bulk-enrichment-task",
                     data=json.dumps(task_data),
@@ -1478,18 +1470,12 @@ async def get_container_monitor_status():
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-async def submit_file_metadata_internal(metadata: dict) -> uuid.UUID:
+async def submit_file(file_data: FileModel) -> uuid.UUID:
     """
     Internal function to handle metadata submission.
     Returns a submission ID.
     """
     try:
-        try:
-            file_data = FileModel.model_validate(metadata)
-        except ValidationError as e:
-            logger.error("Validation error in file metadata", errors=e.errors())
-            raise HTTPException(status_code=400, detail=e.errors()) from e
-
         if not storage.check_bucket_exists():
             logger.error("Bucket doesn't exist, file likely not uploaded first")
             raise HTTPException(status_code=400, detail="Bucket doesn't exist")
@@ -1500,12 +1486,12 @@ async def submit_file_metadata_internal(metadata: dict) -> uuid.UUID:
 
         submission_id = uuid.uuid4()
 
-        with DaprClient() as client:
+        async with DaprClient() as client:
             data = file_data.model_dump(
                 exclude_unset=True,
                 mode="json",
             )
-            client.publish_event(
+            await client.publish_event(
                 pubsub_name="pubsub",
                 topic_name="file",
                 data=json.dumps(data),

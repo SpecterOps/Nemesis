@@ -13,6 +13,7 @@ import msoffcrypto
 import olefile
 import psycopg  # noqa: F401
 import requests
+from common.db import get_postgres_connection_str
 from common.helpers import can_convert_to_pdf, can_extract_plaintext, extract_all_strings
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, WORKFLOW_RUNTIME_LOG_LEVEL, get_logger
 from common.models import CloudEvent, File, FileEnriched, Transform
@@ -48,9 +49,7 @@ workflow_lock = asyncio.Lock()  # For synchronizing access to active_workflows
 
 workflow_runtime = WorkflowRuntime(logger_options=LoggerOptions(log_level=WORKFLOW_RUNTIME_LOG_LEVEL))
 
-with DaprClient() as client:
-    secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+postgres_connection_string = get_postgres_connection_str()
 
 
 # Initialize Java Runtime and Tika
@@ -73,10 +72,7 @@ def init_tika():
             config_xml = f.read()
 
         # Replace the hardcoded language with the environment variable value
-        config_xml = config_xml.replace(
-            ">eng<",
-            f">{ocr_languages}<"
-        )
+        config_xml = config_xml.replace(">eng<", f">{ocr_languages}<")
 
         # Write the modified config to a temporary file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as temp_config:
@@ -108,6 +104,7 @@ def init_tika():
                 pass
 
         return tika_instance, File
+
 
 tika, JavaFile = init_tika()
 

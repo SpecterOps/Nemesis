@@ -10,11 +10,11 @@ from uuid import UUID
 
 import psycopg
 import yara_x
+from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
 from file_enrichment_modules.cng_file.cng_parser import (
     BCRYPT_KEY_DATA_BLOB_MAGIC,
     extract_dpapi_blob_from_cng_property,
@@ -36,11 +36,7 @@ class CngFileAnalyzer(EnrichmentModule):
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.workflows = ["default"]
-
-        # Get PostgreSQL connection string
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            self._conninfo = secret.secret["POSTGRES_CONNECTION_STRING"]
+        self._conninfo = get_postgres_connection_str()
 
         # Yara rule to identify CNG files
         self.yara_rule = yara_x.compile("""
@@ -325,7 +321,7 @@ rule is_cng_file
                     # Extract final 32-byte key material
                     final_key_material = extract_final_key_material(decrypted_key)
                     if final_key_material:
-                        logger.debug(f"Extracted final 32-byte key material for database storage")
+                        logger.debug("Extracted final 32-byte key material for database storage")
 
                 except (MasterKeyNotDecryptedError, MasterKeyNotFoundError) as e:
                     logger.debug(
@@ -378,7 +374,7 @@ rule is_cng_file
                             # Extract final 32-byte key material
                             final_key_material = extract_final_key_material(decrypted_key)
                             if final_key_material:
-                                logger.info(f"Extracted final 32-byte key material for database storage")
+                                logger.info("Extracted final 32-byte key material for database storage")
 
                         except Exception as decrypt_error:
                             logger.warning(f"Failed to decrypt extracted blob: {decrypt_error}")
@@ -406,7 +402,7 @@ rule is_cng_file
                         logger.warning(f"Failed to process extracted blob: {e2}")
                 else:
                     # Not a DPAPI blob, might be plaintext or other format
-                    logger.info(f"Private key is not DPAPI encrypted, checking for BCRYPT format...")
+                    logger.info("Private key is not DPAPI encrypted, checking for BCRYPT format...")
                     await self._check_bcrypt_key_blob(private_key_data)
 
         except Exception as e:

@@ -2,10 +2,11 @@
 
 import base64
 import json
-import ntpath
+import posixpath
 from uuid import UUID
 
 import psycopg
+from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
@@ -97,24 +98,29 @@ def _parse_app_bound_key(app_bound_key_b64: str) -> tuple[bytes, str | None]:
         return base64.b64decode(app_bound_key_b64), None
 
 
+
 def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid: UUID) -> None:
     """Add file linking entry for user masterkey."""
 
     # Skip trying to figure out the username/drive if we can
     if r"AppData/Local/Google/Chrome/User Data" in file_enriched.path:
-        masterkey_path = ntpath.abspath(
-            file_enriched.path
-            + f"../../../../../Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
+        masterkey_path = posixpath.normpath(
+            posixpath.join(
+                file_enriched.path,
+                "../../../../../Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>",
+                str(masterkey_guid),
+            )
         )
     else:
         # Not an AppData path, so build path based on the drive letter and username (if available)
-        drive, _ = ntpath.splitdrive(file_enriched.path)
+        drive = get_drive_from_path(file_enriched.path)
 
-        if username:
-            masterkey_path = f"{drive}/Users/{username}/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
-        else:
-            # No username, so just use placeholder. e.g. if uploaded via the UI with no path info
-            masterkey_path = f"{drive}/Users/<WINDOWS_USERNAME>/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
+        if not username:
+            username = "<WINDOWS_USERNAME>"
+
+        masterkey_path = (
+            f"{drive}/Users/{username}/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
+        )
 
     add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:user_masterkey")
 
@@ -221,7 +227,7 @@ async def _insert_state_keys(
             app_bound_key_enc, app_bound_key_system_masterkey_guid = _parse_app_bound_key(app_bound_key_b64)
             logger.debug(f"app_bound_key_system_masterkey_guid: {app_bound_key_system_masterkey_guid}")
 
-            drive, parts = ntpath.splitdrive(file_enriched.path)
+            drive = get_drive_from_path(file_enriched.path)
             masterkey_path = (
                 f"{drive}/Windows/System32/Microsoft/Protect/S-1-5-18/User/{app_bound_key_system_masterkey_guid}"
             )

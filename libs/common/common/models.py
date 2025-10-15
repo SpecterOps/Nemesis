@@ -1,11 +1,14 @@
 # src/common/models.py
 from datetime import datetime
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
 from .logger import get_logger
+
+if TYPE_CHECKING:
+    from .models2.api import FileMetadata
 
 logger = get_logger(__name__)
 
@@ -221,6 +224,28 @@ class File(BaseModel):
         exclude_none = True
         exclude_unset = True
         json_encoders = {datetime: lambda dt: dt.isoformat()}
+
+    @classmethod
+    def from_file_metadata(cls, metadata: "FileMetadata", object_id: str) -> "File":
+        """
+        Create a File instance from FileMetadata and object_id.
+
+        Args:
+            metadata: FileMetadata object containing upload metadata
+            object_id: The object ID of the uploaded file
+
+        Returns:
+            File instance ready for submission
+        """
+        return cls(
+            object_id=object_id,
+            agent_id=metadata.agent_id,
+            source=metadata.source,
+            project=metadata.project,
+            timestamp=metadata.timestamp,
+            expiration=metadata.expiration,
+            path=metadata.path,
+        )
 
 
 ##########################################

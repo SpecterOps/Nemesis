@@ -6,11 +6,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyType
 from pypykatz.pypykatz import pypykatz
@@ -558,9 +558,7 @@ class LsassDumpParser(EnrichmentModule):
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
 
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+        postgres_connection_string = get_postgres_connection_str()
 
         if not postgres_connection_string.startswith("postgres://"):
             raise ValueError(

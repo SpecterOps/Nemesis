@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 
 DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
 
+# Pre-compiled regex patterns for MasterKeyType path matching
+_PATTERN_SYSTEM_USER = re.compile(r"/windows/system32/microsoft/protect/s-1-5-18/user/", re.IGNORECASE)
+_PATTERN_SYSTEM = re.compile(r"/windows/system32/microsoft/protect/s-1-5-18/", re.IGNORECASE)
+_PATTERN_SERVICE_PROFILES = re.compile(r"/windows/serviceprofiles/(localservice|networkservice)/", re.IGNORECASE)
+_PATTERN_USER_FULL = re.compile(r"/users/.+/appdata/roaming/microsoft/protect/s-1-5-21-[\d-]+/[0-9a-f-]+", re.IGNORECASE)
+_PATTERN_USER_FALLBACK = re.compile(r"/users/.+/appdata/roaming/microsoft/protect/", re.IGNORECASE)
+
 
 class BaseModel(PydanticBaseModel):
     model_config = ConfigDict(
@@ -102,40 +109,37 @@ class MasterKeyType(str, Enum):
             MasterKeyType based on the path pattern
 
         Examples:
-            - C:\\Users\\username\\AppData\\Roaming\\Microsoft\\Protect\\S-1-5-21-...\\{GUID} -> USER
-            - C:\\Windows\\System32\\Microsoft\\Protect\\S-1-5-18\\... -> SYSTEM
-            - C:\\Windows\\System32\\Microsoft\\Protect\\S-1-5-18\\User\\... -> SYSTEM_USER
-            - C:\\Windows\\ServiceProfiles\\LocalService\\... -> SYSTEM
-            - C:\\Windows\\ServiceProfiles\\NetworkService\\... -> SYSTEM
+            - /C:/Users/username/AppData/Roaming/Microsoft/Protect/S-1-5-21-.../{GUID} -> USER
+            - /C:/Windows/System32/Microsoft/Protect/S-1-5-18/... -> SYSTEM
+            - /C:/Windows/System32/Microsoft/Protect/S-1-5-18/User/... -> SYSTEM_USER
+            - /C:/Windows/ServiceProfiles/LocalService/... -> SYSTEM
+            - /C:/Windows/ServiceProfiles/NetworkService/... -> SYSTEM
         """
         if not path:
             return cls.UNKNOWN
 
-        # Normalize path to lowercase and use forward slashes for easier matching
-        normalized_path = path.lower().replace("\\", "/")
-
         # Check for SYSTEM account with User subdirectory (SYSTEM_USER)
         # Pattern: .../Windows/System32/Microsoft/Protect/S-1-5-18/User/...
-        if re.search(r"/windows/system32/microsoft/protect/s-1-5-18/user/", normalized_path):
+        if _PATTERN_SYSTEM_USER.search(path):
             return cls.SYSTEM_USER
 
         # Check for SYSTEM account patterns (SYSTEM, LocalService, NetworkService)
         # Pattern: .../Windows/System32/Microsoft/Protect/S-1-5-18/...
-        if re.search(r"/windows/system32/microsoft/protect/s-1-5-18/", normalized_path):
+        if _PATTERN_SYSTEM.search(path):
             return cls.SYSTEM
 
         # Check for LocalService or NetworkService in ServiceProfiles
         # Pattern: .../Windows/ServiceProfiles/(LocalService|NetworkService)/...
-        if re.search(r"/windows/serviceprofiles/(localservice|networkservice)/", normalized_path):
+        if _PATTERN_SERVICE_PROFILES.search(path):
             return cls.SYSTEM
 
         # Check for user profiles with DPAPI protect directory
         # Pattern: .../Users/.../AppData/Roaming/Microsoft/Protect/S-1-5-21-.../...
-        if re.search(r"/users/.+/appdata/roaming/microsoft/protect/s-1-5-21-[\d-]+/[0-9a-f-]+", normalized_path):
+        if _PATTERN_USER_FULL.search(path):
             return cls.USER
 
         # Fallback: Check for any user profile with Microsoft Protect
-        if re.search(r"/users/.+/appdata/roaming/microsoft/protect/", normalized_path):
+        if _PATTERN_USER_FALLBACK.search(path):
             return cls.USER
 
         # Default to UNKNOWN if we can't determine the type

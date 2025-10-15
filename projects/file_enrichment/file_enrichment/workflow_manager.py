@@ -6,6 +6,7 @@ import time
 import uuid
 from datetime import datetime
 
+from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
@@ -14,8 +15,6 @@ from psycopg_pool import ConnectionPool
 from .tracing import get_tracer
 from .workflow import enrichment_workflow, get_workflow_client
 
-# configure_logging()
-# logger = structlog.get_logger(module=__name__)
 logger = get_logger(__name__)
 monitoring_enabled = os.getenv("NEMESIS_MONITORING", "").lower() == "enabled"
 
@@ -31,12 +30,7 @@ class WorkflowManager:
         self.max_execution_time = max_execution_time
         self.max_concurrent = max_concurrent
         self.background_tasks = set()  # Track background tasks to prevent GC
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
-
-        self.pool = ConnectionPool(postgres_connection_string, min_size=max_concurrent, max_size=(3 * max_concurrent))
+        self.pool = ConnectionPool(get_postgres_connection_str(), min_size=max_concurrent, max_size=(3 * max_concurrent))
 
         # Start background cleanup task
         cleanup_task = asyncio.create_task(self._cleanup_loop())

@@ -109,8 +109,8 @@ class FileMetadata(BaseModel):
     agent_id: str
     source: str | None = None
     project: str
-    timestamp: datetime | None = Field(default=None, description="ISO 8601 formatted timestamp")
-    expiration: datetime | None = Field(default=None, description="ISO 8601 formatted expiration date")
+    timestamp: datetime | None = Field(default=None, description="ISO 8601 formatted timestamp of when the data was collected")
+    expiration: datetime | None = Field(default=None, description="ISO 8601 formatted expiration date (when the data should be deleted)")
     path: str
     file_filters: FileFilters | None = Field(
         default=None, description="Optional file filtering configuration for container extraction"

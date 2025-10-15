@@ -3,12 +3,11 @@
 import re
 import struct
 from datetime import UTC, datetime, timedelta
-from functools import lru_cache
 
 import psycopg
 import structlog
+from common.db import get_postgres_connection_str
 from Crypto.Cipher import AES, ChaCha20_Poly1305
-from dapr.clients import DaprClient
 from nemesis_dpapi import Blob
 
 logger = structlog.get_logger(module=__name__)
@@ -22,13 +21,6 @@ def is_sqlite3(filename):
     except OSError:
         return False
 
-
-@lru_cache(maxsize=1)
-def get_postgres_connection_str() -> str:
-    """Get PostgreSQL connection string from Dapr."""
-    with DaprClient() as client:
-        secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-        return secret.secret["POSTGRES_CONNECTION_STRING"]
 
 
 def convert_chromium_timestamp(timestamp: int, str_format: bool = False) -> datetime | str | None:

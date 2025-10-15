@@ -1,6 +1,6 @@
 import hashlib
 import io
-import ntpath
+import posixpath
 import re
 import subprocess
 from typing import BinaryIO
@@ -251,7 +251,7 @@ def sanitize_file_path(file_path: str, num_chars=4):
 
 def get_file_extension(filepath):
     # Get just the final filename component of the path
-    base_name = ntpath.basename(filepath)
+    base_name = posixpath.basename(filepath)
 
     # Split on the last dot, but only if the dot isn't the first character
     if base_name.startswith(".") or "." not in base_name:
@@ -261,6 +261,59 @@ def get_file_extension(filepath):
     if len(name_parts) > 1:
         return "." + name_parts[-1]
     return ""
+
+def get_drive_from_path(path: str) -> str | None:
+    parts = path.split("/")
+
+    # Handle paths without leading slash (e.g., "C:/Users/...")
+    if len(parts) >= 1 and parts[0]:
+        drive_part = parts[0]
+
+        # Validate drive part
+        if not drive_part:
+            return None
+
+        # Must be exactly 2 characters: letter + colon
+        if len(drive_part) != 2:
+            return None
+
+        # Second character must be ':'
+        if drive_part[1] != ":":
+            return None
+
+        # First character must be a letter (A-Z or a-z)
+        if not drive_part[0].isalpha():
+            return None
+
+        # Return drive without trailing slash for paths without leading slash
+        return drive_part
+
+    # For paths like "/C:/Users/...", parts[0] is empty and parts[1] contains the drive
+    if len(parts) >= 2:
+        drive_part = parts[1]
+
+        # Validate drive part
+        if not drive_part:
+            return None
+
+        # Must be exactly 2 characters: letter + colon
+        if len(drive_part) != 2:
+            return None
+
+        # Second character must be ':'
+        if drive_part[1] != ":":
+            return None
+
+        # First character must be a letter (A-Z or a-z)
+        if not drive_part[0].isalpha():
+            return None
+
+        # Return "/" + drive letter with colon
+        # e.g., "C:" -> "/C:"
+        return f"/{drive_part}"
+
+    return None
+
 
 
 def extract_all_strings(filename: str, min_len: int = 5):

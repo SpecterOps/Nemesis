@@ -516,14 +516,8 @@ def calculate_metadata_path(file_path: Path, base_paths: Optional[list[Path]], f
     # Ensure folder ends with path separator if it doesn't
     folder_normalized = folder.rstrip('/\\')
 
-    # Join folder with relative path using OS-appropriate separator
-    # Use the separator style from the folder parameter
-    if '\\' in folder:
-        # Windows-style path
-        result = folder_normalized + '\\' + str(rel_path).replace('/', '\\')
-    else:
-        # Unix-style path
-        result = folder_normalized + '/' + str(rel_path).replace('\\', '/')
+    # Join folder with relative path using Unix-style paths
+    result = folder_normalized + '/' + str(rel_path).replace('\\', '/')
 
     return result
 

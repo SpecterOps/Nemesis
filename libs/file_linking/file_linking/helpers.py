@@ -6,17 +6,11 @@ file relationships they discover during analysis.
 """
 
 import structlog
-from dapr.clients import DaprClient
+from common.db import get_postgres_connection_str
 
 from .rules_engine import FileLinkingEngine
 
 logger = structlog.get_logger(module=__name__)
-
-
-def _get_postgres_conn_str():
-    with DaprClient() as client:
-        secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-        return secret.secret["POSTGRES_CONNECTION_STRING"]
 
 
 def add_file_linkings(
@@ -62,7 +56,7 @@ def add_file_linkings(
     """
 
     try:
-        file_linking_engine = FileLinkingEngine(_get_postgres_conn_str())
+        file_linking_engine = FileLinkingEngine(get_postgres_connection_str())
     except Exception as e:
         logger.exception(e, "[add_file_linkings]")
 

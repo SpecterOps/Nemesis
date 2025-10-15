@@ -1,15 +1,16 @@
 # enrichment_modules/dpapi_masterkey/analyzer.py
 import asyncio
-import ntpath
+import posixpath
 import re
 from typing import TYPE_CHECKING
 
 import psycopg
+from common.db import get_postgres_connection_str
+from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
 from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile, MasterKeyType
@@ -37,11 +38,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
             re.IGNORECASE,
         )
-
-        # Get PostgreSQL connection string
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            self._conninfo = secret.secret["POSTGRES_CONNECTION_STRING"]
+        self._conninfo = get_postgres_connection_str()
 
     def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed as a DPAPI masterkey file.
@@ -86,8 +83,8 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                         return str(result["object_id"])  # Convert UUID to string
 
                     # Fallback query: look for registry files by magic_type and enrichment results
-                    # Extract the hive type from the target path (e.g., SECURITY from ...\\Windows\\System32\\Config\\SECURITY)
-                    target_hive_type = ntpath.basename(target_hive_path).upper()
+                    # Extract the hive type from the target path (e.g., SECURITY from .../Windows/System32/Config/SECURITY)
+                    target_hive_type = posixpath.basename(target_hive_path).upper()
 
                     cur.execute(
                         """
@@ -148,15 +145,15 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         if not file_enriched.source or not file_enriched.path:
             return
 
-        drive, _ = ntpath.splitdrive(file_enriched.path)
+        drive = get_drive_from_path(file_enriched.path)
         if not drive:
             logger.warning(f"Could not extract drive from path: {file_enriched.path}")
             return
 
         try:
             # Link to SYSTEM and SECURITY hives, needed to decrypt the SYSTEM masterkeys
-            system_standard_path = f"{drive}\\Windows\\System32\\Config\\SYSTEM"
-            security_standard_path = f"{drive}\\Windows\\System32\\Config\\SECURITY"
+            system_standard_path = f"{drive}/Windows/System32/Config/SYSTEM"
+            security_standard_path = f"{drive}/Windows/System32/Config/SECURITY"
 
             system_path = self._get_existing_hive_path(file_enriched, system_standard_path)
             security_path = self._get_existing_hive_path(file_enriched, security_standard_path)
