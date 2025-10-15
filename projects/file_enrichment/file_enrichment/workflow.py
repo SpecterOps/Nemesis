@@ -51,14 +51,6 @@ if not postgres_connection_string.startswith("postgres://"):
 
 file_linking_engine = FileLinkingEngine(postgres_connection_string)
 
-# Create global DaprClient for DPAPI manager
-# This client will be used throughout the application lifecycle
-# dapr_client_for_dpapi = DaprClient()
-# dpapi_manager = DpapiManager(
-#     storage_backend=postgres_connection_string,
-#     publisher=DaprDpapiEventPublisher(dapr_client_for_dpapi),
-# )
-
 ##########################################
 #
 # region Helper functions
