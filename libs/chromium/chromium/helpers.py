@@ -65,9 +65,6 @@ def parse_chromium_file_path(file_path: str) -> tuple[str | None, str]:
         Tuple of (username, browser_name)
     """
 
-    # normalize first
-    file_path = file_path.replace("\\", "/")
-
     # Chrome/Edge/Brave pattern
     match = re.search(
         r".*/(?P<username>[^/]+)/AppData/Local/(?:Google|Microsoft|BraveSoftware)/(?P<browser>Chrome|Edge|Brave-Browser)/",

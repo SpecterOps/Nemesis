@@ -7,17 +7,15 @@ Processes files to detect relationships and create linkings based on:
 """
 
 import fnmatch
-import ntpath
 import os
 import posixpath
 from dataclasses import dataclass
-from typing import Any
 
 import yaml
 from common.logger import get_logger
 from common.models import FileEnriched
 
-from .database_service import FileLinkingDatabaseService, FileListingStatus, _normalize_file_path
+from .database_service import FileLinkingDatabaseService, FileListingStatus
 
 logger = get_logger(__name__)
 
@@ -165,29 +163,17 @@ class FileLinkingEngine:
 
         return True
 
-    def _expand_path_template(self, template: str, file_enriched: dict[str, Any]) -> str:
+    def _expand_path_template(self, template: str, file_path: str) -> str:
         """Expand a path template with file-specific values."""
-        file_path = file_enriched.get("path", "")
 
         if not file_path:
             return template
 
-        # Use appropriate path handling based on path style
-        if "\\" in file_path:
-            # Windows-style path - force ntpath usage
-            parent_dir = ntpath.dirname(file_path)
-            basename = ntpath.splitext(ntpath.basename(file_path))[0]
-            filename = ntpath.basename(file_path)
-            extension = ntpath.splitext(file_path)[1]
-        else:
-            # Unix-style path - use posixpath
-            parent_dir = posixpath.dirname(file_path)
-            basename = posixpath.splitext(posixpath.basename(file_path))[0]
-            filename = posixpath.basename(file_path)
-            extension = posixpath.splitext(file_path)[1]
-
-        # Debug logging
-        logger.debug(f"Path parsing - file_path: {file_path}, parent_dir: {parent_dir}")
+        # Files are already normalized to posix paths, so base it off that
+        parent_dir = posixpath.dirname(file_path)
+        basename = posixpath.splitext(posixpath.basename(file_path))[0]
+        filename = posixpath.basename(file_path)
+        extension = posixpath.splitext(file_path)[1]
 
         replacements = {
             "{parent_dir}": parent_dir,
@@ -203,23 +189,8 @@ class FileLinkingEngine:
 
         logger.debug(f"Template: {template}, File path: {file_path}, Expanded before normpath: {expanded}")
 
-        # Resolve relative path navigation using appropriate path library
-        if "\\" in file_path:
-            # Windows-style path - use ntpath
-            expanded = ntpath.normpath(expanded)
-        else:
-            # Unix-style path - use posixpath
-            expanded = posixpath.normpath(expanded)
-
-        # Normalize the final path to use the same separator as the original file path
-        if "\\" in file_path:
-            # Windows-style paths - convert forward slashes to backslashes
-            expanded = expanded.replace("/", "\\")
-        else:
-            # Unix-style paths - convert backslashes to forward slashes
-            expanded = expanded.replace("\\", "/")
-
-        logger.debug(f"normpath expanded: {expanded}")
+        expanded = posixpath.normpath(expanded)
+        logger.debug(f"Final expanded path: {expanded}")
 
         return expanded
 
@@ -252,7 +223,7 @@ class FileLinkingEngine:
         if not file_path.endswith("/strings.txt") and not file_path.endswith("/decompiled.zip"):
             self.db_service.add_file_listing(
                 source=source,
-                path=_normalize_file_path(file_path),
+                path=file_path,
                 status=FileListingStatus.COLLECTED,
                 object_id=file_enriched.get("object_id"),
             )
@@ -268,12 +239,12 @@ class FileLinkingEngine:
                         # Process linked files for this rule
                         for linked_file in rule.linked_files:
                             for template in linked_file.path_templates:
-                                linked_path = self._expand_path_template(template, file_enriched)
+                                linked_path = self._expand_path_template(template, file_enriched.path)
 
                                 # Add file listing
                                 self.db_service.add_file_listing(
                                     source=source,
-                                    path=_normalize_file_path(linked_path),
+                                    path=linked_path,
                                     status=FileListingStatus.NEEDS_TO_BE_COLLECTED,
                                 )
 
@@ -281,8 +252,8 @@ class FileLinkingEngine:
                                 link_type = f"{rule.category}:{linked_file.name}"
                                 self.db_service.add_file_linking(
                                     source=source,
-                                    file_path_1=_normalize_file_path(file_path),
-                                    file_path_2=_normalize_file_path(linked_path),
+                                    file_path_1=file_path,
+                                    file_path_2=linked_path,
                                     link_type=link_type,
                                 )
 
@@ -336,7 +307,7 @@ class FileLinkingEngine:
                 # Add file listing
                 self.db_service.add_file_listing(
                     source=source,
-                    path=_normalize_file_path(linked_path),
+                    path=linked_path,
                     status=FileListingStatus.NEEDS_TO_BE_COLLECTED,
                 )
 
@@ -347,8 +318,8 @@ class FileLinkingEngine:
 
                 self.db_service.add_file_linking(
                     source=source,
-                    file_path_1=_normalize_file_path(source_file_path),
-                    file_path_2=_normalize_file_path(linked_path),
+                    file_path_1=source_file_path,
+                    file_path_2=linked_path,
                     link_type=full_link_type,
                 )
 

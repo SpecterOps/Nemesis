@@ -8,7 +8,6 @@ file relationships they discover during analysis.
 import structlog
 from dapr.clients import DaprClient
 
-from .database_service import FileLinkingDatabaseService, FileListingStatus, _normalize_file_path
 from .rules_engine import FileLinkingEngine
 
 logger = structlog.get_logger(module=__name__)
@@ -121,24 +120,3 @@ def add_file_linking(
         )
         > 0
     )
-
-
-def add_file_listing(source: str, path: str, status: FileListingStatus, object_id: str | None = None) -> bool:
-    """
-    Add a single file listing (convenience function).
-
-    Args:
-        source: Source identifier (e.g., agnt_id/source)
-        path: File path
-        status: Current collection status
-        object_id: UUID if file is already collected
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        database_service = FileLinkingDatabaseService(_get_postgres_conn_str())
-        return database_service.add_file_listing(source, _normalize_file_path(path), status, object_id)
-    except Exception as e:
-        logger.exception(e, "[add_file_listing]")
-        return False

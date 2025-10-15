@@ -5,7 +5,7 @@ This module provides rule-based detection and tracking of file dependencies and 
 """
 
 from .database_service import FileLinkingDatabaseService, FileListingStatus
-from .helpers import add_file_linking, add_file_listing
+from .helpers import add_file_linking
 from .rules_engine import FileLinkingEngine
 
 __all__ = [
@@ -13,5 +13,4 @@ __all__ = [
     "FileLinkingDatabaseService",
     "FileListingStatus",
     "add_file_linking",
-    "add_file_listing",
 ]
