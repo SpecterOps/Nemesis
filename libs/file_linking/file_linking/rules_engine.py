@@ -196,7 +196,11 @@ class FileLinkingEngine:
 
     def process_file(self, file_enriched: FileEnriched) -> int:
         """
-        Process a file against all loaded rules and create linkings.
+        Process an enriched file through the rules engine to identify and link related files.
+
+        Evaluates the file against all loaded rule triggers. When a match is found,
+        expands path templates to identify related files, marks them for collection,
+        and creates linkings between the source file and related files.
 
         Args:
             file_enriched: File data from files_enriched table
