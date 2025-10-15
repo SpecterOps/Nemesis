@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
 
-import psycopg
+import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from common.db import get_postgres_connection_str
@@ -24,11 +24,11 @@ background_tasks = set()
 postgres_connection_string = get_postgres_connection_str()
 
 
-def get_db_connection():
-    """Create and return a database connection using psycopg."""
+async def get_db_connection():
+    """Create and return a database connection using asyncpg."""
 
     try:
-        conn = psycopg.connect(postgres_connection_string)
+        conn = await asyncpg.connect(postgres_connection_string)
         return conn
     except Exception as e:
         logger.exception(e, message="Failed to get database connection")
@@ -45,32 +45,32 @@ async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> 
                          If None, current datetime is used.
                          If datetime.max, all objects will be considered expired.
     """
+    conn = None
     try:
-        conn = get_db_connection()
+        conn = await get_db_connection()
         comparison_date = expiration_date if expiration_date is not None else datetime.now()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT object_id
-                FROM (
-                    SELECT object_id FROM files WHERE expiration < %s
-                    UNION
-                    SELECT object_id FROM files_enriched WHERE expiration < %s
-                    UNION
-                    SELECT object_id FROM files_enriched_dataset WHERE expiration < %s
-                ) AS expired
-                """,
-                (comparison_date, comparison_date, comparison_date),
-            )
-            return [str(record[0]) for record in cur.fetchall()]
+        records = await conn.fetch(
+            """
+            SELECT DISTINCT object_id
+            FROM (
+                SELECT object_id FROM files WHERE expiration < $1
+                UNION
+                SELECT object_id FROM files_enriched WHERE expiration < $2
+                UNION
+                SELECT object_id FROM files_enriched_dataset WHERE expiration < $3
+            ) AS expired
+            """,
+            comparison_date, comparison_date, comparison_date,
+        )
+        return [str(record["object_id"]) for record in records]
 
     except Exception as e:
         logger.exception(e, message="Error getting expired object IDs from database")
         return []
     finally:
         if conn:
-            conn.close()
+            await conn.close()
 
 
 async def get_transform_object_ids(object_ids: list[str]) -> list[str]:
@@ -80,29 +80,28 @@ async def get_transform_object_ids(object_ids: list[str]) -> list[str]:
     if not object_ids:
         return []
 
+    conn = None
     try:
-        conn = get_db_connection()
-        with conn.cursor() as cur:
-            # Get all transform_object_ids related to the expired object_ids
-            cur.execute(
-                """
-                SELECT transform_object_id
-                FROM transforms
-                WHERE object_id = ANY(%s::uuid[])
-                """,
-                (object_ids,),
-            )
-            transform_records = cur.fetchall()
+        conn = await get_db_connection()
+        # Get all transform_object_ids related to the expired object_ids
+        transform_records = await conn.fetch(
+            """
+            SELECT transform_object_id
+            FROM transforms
+            WHERE object_id = ANY($1::uuid[])
+            """,
+            object_ids,
+        )
 
         # Extract and return the transform_object_ids
-        transform_object_ids = [str(record[0]) for record in transform_records]
+        transform_object_ids = [str(record["transform_object_id"]) for record in transform_records]
         return transform_object_ids
     except Exception as e:
         logger.exception(e, message="Error getting transform object IDs from database")
         return []
     finally:
         if conn:
-            conn.close()
+            await conn.close()
 
 
 async def delete_database_entries(object_ids: list[str]) -> bool:
@@ -113,40 +112,42 @@ async def delete_database_entries(object_ids: list[str]) -> bool:
     if not object_ids:
         return True
 
+    conn = None
     try:
-        conn = get_db_connection()
-        with conn.cursor() as cur:
+        conn = await get_db_connection()
+
+        # Start a transaction
+        async with conn.transaction():
             # The CASCADE delete should handle related records in other tables due to the foreign key constraints
             # defined in the schema
 
             # Delete from files_enriched_dataset
-            cur.execute(
+            await conn.execute(
                 """
                 DELETE FROM files_enriched_dataset
-                WHERE object_id = ANY(%s::uuid[])
+                WHERE object_id = ANY($1::uuid[])
                 """,
-                (object_ids,),
+                object_ids,
             )
 
             # Delete from files_enriched (will cascade to transforms, enrichments, etc.)
-            cur.execute(
+            await conn.execute(
                 """
                 DELETE FROM files_enriched
-                WHERE object_id = ANY(%s::uuid[])
+                WHERE object_id = ANY($1::uuid[])
                 """,
-                (object_ids,),
+                object_ids,
             )
 
             # Delete from files
-            cur.execute(
+            await conn.execute(
                 """
                 DELETE FROM files
-                WHERE object_id = ANY(%s::uuid[])
+                WHERE object_id = ANY($1::uuid[])
                 """,
-                (object_ids,),
+                object_ids,
             )
 
-        conn.commit()
         logger.info("Successfully deleted database entries", object_count=len(object_ids))
         return True
     except Exception as e:
@@ -154,7 +155,70 @@ async def delete_database_entries(object_ids: list[str]) -> bool:
         return False
     finally:
         if conn:
-            conn.close()
+            await conn.close()
+
+
+async def delete_expired_dpapi_data(expiration_date: Optional[datetime] = None) -> bool:
+    """
+    Delete expired entries from the dpapi tables based on their created_at timestamp.
+
+    Args:
+        expiration_date: Optional date to use for comparison instead of current datetime.
+                         If None, current datetime is used.
+                         If datetime.max, all dpapi data will be considered expired.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    conn = None
+    try:
+        conn = await get_db_connection()
+
+        # Use provided expiration date or current datetime
+        comparison_date = expiration_date if expiration_date is not None else datetime.now()
+
+        # Define queries based on the expiration_date
+        if expiration_date != datetime.max:
+            # Delete dpapi.masterkeys
+            await conn.execute(
+                """
+                DELETE FROM dpapi.masterkeys
+                WHERE created_at < $1
+                """,
+                comparison_date,
+            )
+
+            # Delete dpapi.domain_backup_keys
+            await conn.execute(
+                """
+                DELETE FROM dpapi.domain_backup_keys
+                WHERE created_at < $1
+                """,
+                comparison_date,
+            )
+
+            # Delete dpapi.system_credentials
+            await conn.execute(
+                """
+                DELETE FROM dpapi.system_credentials
+                WHERE created_at < $1
+                """,
+                comparison_date,
+            )
+        else:
+            # Delete all records from dpapi tables
+            await conn.execute("DELETE FROM dpapi.masterkeys")
+            await conn.execute("DELETE FROM dpapi.domain_backup_keys")
+            await conn.execute("DELETE FROM dpapi.system_credentials")
+
+        return True
+
+    except Exception as e:
+        logger.exception(e, message="Error deleting expired dpapi data")
+        return False
+    finally:
+        if conn:
+            await conn.close()
 
 
 async def delete_expired_containers(expiration_date: Optional[datetime] = None) -> bool:
@@ -169,49 +233,59 @@ async def delete_expired_containers(expiration_date: Optional[datetime] = None) 
     Returns:
         bool: True if successful, False otherwise.
     """
+    conn = None
     try:
-        conn = get_db_connection()
+        conn = await get_db_connection()
 
         # Use provided expiration date or current datetime
         comparison_date = expiration_date if expiration_date is not None else datetime.now()
 
-        # Define the WHERE clause based on the expiration_date
-        where_clause = "WHERE 1=1"  # Default to delete all records if datetime.max
-        params = tuple()
-
+        # Define queries based on the expiration_date
         if expiration_date != datetime.max:
-            where_clause = "WHERE expiration < %s"
-            params = (comparison_date,)
-
-        with conn.cursor() as cur:
             # First, get count of records that will be deleted for logging
-            cur.execute(
-                f"""
+            count_result = await conn.fetchval(
+                """
                 SELECT COUNT(*)
                 FROM container_processing
-                {where_clause}
+                WHERE expiration < $1
                 """,
-                params,
+                comparison_date,
             )
-            count_to_delete = cur.fetchone()[0]
 
-            if count_to_delete == 0:
+            if count_result == 0:
                 logger.info("No expired containers found to delete")
                 return True
 
             # Delete expired entries from container_processing table
-            cur.execute(
-                f"""
+            await conn.execute(
+                """
                 DELETE FROM container_processing
-                {where_clause}
+                WHERE expiration < $1
                 """,
-                params,
+                comparison_date,
+            )
+        else:
+            # Delete all records
+            count_result = await conn.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM container_processing
+                """
             )
 
-        conn.commit()
+            if count_result == 0:
+                logger.info("No expired containers found to delete")
+                return True
+
+            await conn.execute(
+                """
+                DELETE FROM container_processing
+                """
+            )
+
         logger.info(
             "Successfully deleted expired containers",
-            container_count=count_to_delete,
+            container_count=count_result,
             expiration_date=comparison_date if expiration_date != datetime.max else "all",
         )
         return True
@@ -221,7 +295,17 @@ async def delete_expired_containers(expiration_date: Optional[datetime] = None) 
         return False
     finally:
         if conn:
-            conn.close()
+            await conn.close()
+
+
+def _log_cleanup_result(result, success_msg: str, error_msg: str, round_num: int):
+    """Helper function to log cleanup operation results."""
+    if isinstance(result, Exception):
+        logger.exception(result, message=error_msg)
+    elif result:
+        logger.info(success_msg, round=round_num)
+    else:
+        logger.error(error_msg, round=round_num)
 
 
 async def run_cleanup_job(expiration_date: Optional[datetime] = None):
@@ -237,46 +321,39 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
 
     logger.info("Starting cleanup job", custom_expiration=expiration_date is not None, expiration_date=expiration_date)
 
-    # Check if the service is initialized
     if not is_initialized:
         logger.error("Cleanup job aborted - service not initialized")
         return
 
     try:
-        # we do this three times over a minute to round up weird processing edge cases (hopefully)
-        for x in range(3):
-            # Step 1: Get expired object IDs from database using the provided expiration date
+        # Run cleanup three times over a minute to catch processing edge cases
+        for round_num in range(1, 4):
+            # Get expired object IDs from database
             expired_object_ids = await get_expired_object_ids(expiration_date)
-            logger.info("Found expired objects", count=len(expired_object_ids), round=(x + 1))
+            logger.info("Found expired objects", count=len(expired_object_ids), round=round_num)
 
-            if not expired_object_ids:
-                logger.info("No expired objects found, cleanup job completed", round=(x + 1))
-                return
+            # Process file objects if any were found
+            if expired_object_ids:
+                transform_object_ids = await get_transform_object_ids(expired_object_ids)
+                logger.info("Found related transform objects", count=len(transform_object_ids), round=round_num)
 
-            # Step 2: Get related transform object IDs
-            transform_object_ids = await get_transform_object_ids(expired_object_ids)
-            logger.info("Found related transform objects", count=len(transform_object_ids), round=(x + 1))
+                all_object_ids = list(set(expired_object_ids + transform_object_ids))
+                deleted_count = storage.delete_objects(all_object_ids)
+                logger.info("Deleted objects from Minio", count=deleted_count, total=len(all_object_ids), round=round_num)
 
-            # Step 3: Combine all object IDs that need to be deleted from Minio
-            all_object_ids = list(set(expired_object_ids + transform_object_ids))
+            # Run database deletions in parallel
+            logger.info("Starting parallel database cleanup operations", round=round_num)
+            db_result, container_result, dpapi_result = await asyncio.gather(
+                delete_database_entries(expired_object_ids),
+                delete_expired_containers(expiration_date),
+                delete_expired_dpapi_data(expiration_date),
+                return_exceptions=True,
+            )
 
-            # Step 4: Delete objects from Minio using the StorageMinio instance
-            deleted_count = storage.delete_objects(all_object_ids)
-            logger.info("Deleted objects from Minio", count=deleted_count, total=len(all_object_ids), round=(x + 1))
-
-            # Step 5: Delete database entries
-            db_delete_success = await delete_database_entries(expired_object_ids)
-            if db_delete_success:
-                logger.info("Successfully deleted database entries", round=(x + 1))
-            else:
-                logger.error("Failed to delete some database entries during cleanup job", round=(x + 1))
-
-            # Step 6: delete any expired containers
-            container_delete_success = await delete_expired_containers(expiration_date)
-            if container_delete_success:
-                logger.info("Successfully deleted container entries", round=(x + 1))
-            else:
-                logger.error("Failed to delete some container entries during cleanup job", round=(x + 1))
+            # Log results
+            _log_cleanup_result(db_result, "Successfully deleted database entries", "Failed to delete database entries", round_num)
+            _log_cleanup_result(container_result, "Successfully deleted container entries", "Failed to delete container entries", round_num)
+            _log_cleanup_result(dpapi_result, "Successfully deleted dpapi data", "Failed to delete dpapi data", round_num)
 
             await asyncio.sleep(20)
 

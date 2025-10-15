@@ -10,11 +10,11 @@ import {
 import Dialog from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from '@/contexts/UserContext';
+import { cachedFetch } from '@/utils/fileCache';
 import { createClient } from 'graphql-ws';
 import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileText, Image } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { cachedFetch } from '@/utils/fileCache';
 import CsvViewer from './CsvViewer';
 import EnrichmentStatusSection from './EnrichmentStatusSection';
 import FileDetailsSection from './FileDetailsSection';
@@ -317,12 +317,26 @@ const FileViewer = () => {
       if (!response.ok) throw new Error('Network response was not ok');
 
       const result = await response.json();
-      if (result.errors) throw new Error(result.errors[0].message);
+      if (result.errors) {
+        const errorMessage = result.errors[0].message;
+
+        // Silently handle foreign key violations (file doesn't exist)
+        if (errorMessage.includes('foreign key constraint') && errorMessage.includes('fk_files_view_history_object_id')) {
+          return;
+        }
+
+        throw new Error(errorMessage);
+      }
 
     } catch (err) {
       // If there's an error, remove the flag so it can be retried
       recordedViews.delete(objectId);
-      console.error('Failed to record file view:', err);
+
+      // Only log non-foreign-key errors
+      const errorMessage = err.message || '';
+      if (!errorMessage.includes('foreign key constraint')) {
+        console.error('Failed to record file view:', err);
+      }
     }
   };
 
@@ -789,6 +803,12 @@ const FileViewer = () => {
         }
 
         const file = result.data.files_enriched[0];
+
+        // Check if file exists
+        if (!file) {
+          throw new Error(`File not found: The file with UUID ${objectId} does not exist in the database`);
+        }
+
         setFileData(file);
         setCurrentLanguage(getMonacoLanguage(file.file_name, file.mime_type));
 

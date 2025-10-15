@@ -15,6 +15,7 @@ pydantic = "^2.10.4"
 psycopg = "^3.2.4"
 apscheduler = "^3.11.0"
 common = { path = "../../libs/common", develop = true }
+asyncpg = "^0.30.0"
 
 
 [tool.poetry.group.dev.dependencies]
