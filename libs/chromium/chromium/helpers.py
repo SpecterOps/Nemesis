@@ -367,7 +367,10 @@ def try_decrypt_with_all_keys(
     return None, None
 
 
-def parse_abe_blob(abe_data: bytes) -> dict | None:
+def byte_xor(ba1, ba2):
+    return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
+
+def parse_abe_blob(abe_data: bytes, chromekey: bytes | None = None) -> dict | None:
     """Parse ABE (App-Bound Encryption) blob data.
 
     Args:
@@ -392,10 +395,17 @@ def parse_abe_blob(abe_data: bytes) -> dict | None:
             abe_parsed["tag"] = content[12 + 32 : 12 + 32 + 16]
         else:  # Version 3
             # Version|encAES|IV|ciphertext|tag, 1|32|12|32|16 bytes
+            # adapted from:
+            #   https://github.com/KingOfTheNOPs/cookie-monster/blob/4ec4b3555682ac1e71a6428a4b0f45b2cf1fd8f7/decrypt.py
+            #   https://github.com/tijldeneut/diana/blob/b9473b5004ecf1d7bdd5852232b5cd06a5378e5e/diana-browserdec.py
             abe_parsed["encrAES"] = content[:32]
             abe_parsed["iv"] = content[32 : 32 + 12]
             abe_parsed["cipherdata"] = content[32 + 12 : 32 + 12 + 32]
             abe_parsed["tag"] = content[32 + 12 + 32 : 32 + 12 + 32 + 16]
+
+            if chromekey:
+                xor_key = bytes.fromhex("CCF8A1CEC56605B8517552BA1A2D061C03A29E90274FB2FCF59BA4B75C392390")
+                abe_parsed["xored_aes_key"] = byte_xor(chromekey, xor_key)
         return abe_parsed
     except Exception as e:
         logger.warning("Failed to parse ABE blob", error=str(e))
@@ -424,8 +434,11 @@ def derive_abe_key(abe_data: dict) -> bytes | None:
                 nonce=abe_data["iv"],
             )
         elif abe_data["version"] == 3:
-            # TODO: Version 3 requires CNG decryption of encrypted AES key
-            logger.warning("ABE version 3 not yet supported - requires CNG decryption")
+            if abe_data["xored_aes_key"]:
+                cipher = AES.new(abe_data["xored_aes_key"], AES.MODE_GCM, nonce=abe_data["iv"])
+            else:
+                # Version 3 requires CNG decryption of encrypted AES key
+                logger.warning("xored_aes_key not present, ABE version 3 requires CNG decrypted (or memory-extracted) 'Google Chromekey1'")
             return None
         else:
             logger.warning("Unknown ABE version", version=abe_data["version"])

@@ -119,6 +119,29 @@ def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid
     add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:user_masterkey")
 
 
+def _get_chromekey_from_source(source: str, pg_conn) -> bytes | None:
+    """Get decrypted Chrome key from chrome_keys table by source.
+
+    Args:
+        source: Source value to match
+        pg_conn: PostgreSQL connection
+
+    Returns:
+        Decrypted key bytes if found and decrypted, None otherwise
+    """
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute(
+                "SELECT key_bytes_dec FROM chromium.chrome_keys WHERE source = %s AND key_is_decrypted = TRUE",
+                (source,),
+            )
+            result = cur.fetchone()
+            return result[0] if result else None
+    except Exception as e:
+        logger.warning("Failed to lookup chrome key from source", error=str(e))
+        return None
+
+
 async def _insert_state_keys(
     file_enriched,
     username: str | None,
@@ -134,6 +157,9 @@ async def _insert_state_keys(
 
         # Extract os_crypt section
         os_crypt = data.get("os_crypt", {})
+
+        # Get Chrome key from chrome_keys table if available
+        chromekey = _get_chromekey_from_source(file_enriched.source, pg_conn)
 
         key_bytes_dec = b""
         key_is_decrypted = False
@@ -220,7 +246,7 @@ async def _insert_state_keys(
                         abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob)
                         if abe_blob_bytes:
                             # Parse and derive the final ABE key
-                            abe_parsed = parse_abe_blob(abe_blob_bytes)
+                            abe_parsed = parse_abe_blob(abe_blob_bytes, chromekey)
                             if abe_parsed:
                                 app_bound_key_dec = derive_abe_key(abe_parsed)
                                 if app_bound_key_dec:
