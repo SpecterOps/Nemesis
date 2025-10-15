@@ -302,44 +302,36 @@ class FileLinkingEngine:
         """
         linkings_created = 0
 
-        try:
-            for linked_path in linked_file_paths:
-                # Add file listing
-                self.db_service.add_file_listing(
-                    source=source,
-                    path=linked_path,
-                    status=FileListingStatus.NEEDS_TO_BE_COLLECTED,
-                )
-
-                # Add file linking
-                full_link_type = link_type  # f"programmatic:{link_type}"
-                if collection_reason:
-                    full_link_type += f":{collection_reason}"
-
-                self.db_service.add_file_linking(
-                    source=source,
-                    file_path_1=source_file_path,
-                    file_path_2=linked_path,
-                    link_type=full_link_type,
-                )
-
-                linkings_created += 1
-
-                logger.debug(
-                    "Created programmatic file linking",
-                    source_path=source_file_path,
-                    linked_path=linked_path,
-                    link_type=full_link_type,
-                )
-
-        except Exception as e:
-            logger.exception(
-                "Error creating programmatic linkings",
+        for linked_path in linked_file_paths:
+            # Add file listing
+            self.db_service.add_file_listing(
                 source=source,
-                source_file_path=source_file_path,
-                linked_file_paths=linked_file_paths,
-                error=str(e),
+                path=linked_path,
+                status=FileListingStatus.NEEDS_TO_BE_COLLECTED,
             )
+
+            # Add file linking
+            full_link_type = link_type  # f"programmatic:{link_type}"
+            if collection_reason:
+                full_link_type += f":{collection_reason}"
+
+            self.db_service.add_file_linking(
+                source=source,
+                file_path_1=source_file_path,
+                file_path_2=linked_path,
+                link_type=full_link_type,
+            )
+
+            linkings_created += 1
+
+            logger.debug(
+                "Created programmatic file linking",
+                source_path=source_file_path,
+                linked_path=linked_path,
+                link_type=full_link_type,
+            )
+
+
 
         if linkings_created > 0:
             logger.info(
