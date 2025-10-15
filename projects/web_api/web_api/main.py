@@ -170,10 +170,8 @@ async def send_postgres_notify(channel: str, payload: str = ""):
         async with await psycopg.AsyncConnection.connect(postgres_connection_string) as conn:
             # Use psycopg.sql for type-safe query construction
             from psycopg import sql
-            notify_cmd = sql.SQL("NOTIFY {}, {}").format(
-                sql.Identifier(channel),
-                sql.Literal(payload)
-            )
+
+            notify_cmd = sql.SQL("NOTIFY {}, {}").format(sql.Identifier(channel), sql.Literal(payload))
             logger.debug(f"PostgreSQL NOTIFY: {channel} with payload: {payload}")
             await conn.execute(notify_cmd)
             logger.info(f"Sent PostgreSQL NOTIFY: {channel} with payload: {payload}")
@@ -198,6 +196,7 @@ def is_valid_uri(uri):
 #
 #######################################
 
+
 def normalize_path(path: str) -> str:
     """Normalize file paths to use forward slashes and remove redundant separators.
 
@@ -213,6 +212,7 @@ def normalize_path(path: str) -> str:
 
     path = path.replace("\\", "/")
     return path
+
 
 @app.post(
     "/files",
@@ -261,7 +261,6 @@ async def upload_file(
             metadata=file_metadata.model_dump(),
         )
 
-
         object_id = storage.upload_uploadfile(file)
         logger.debug("File uploaded to datalake", object_id=object_id)
 
@@ -276,7 +275,6 @@ async def upload_file(
             expiration_dt = timestamp_dt + timedelta(days=default_expiration_days)
             file_metadata.expiration = expiration_dt
             logger.debug("Set default expiration", expiration=file_metadata.expiration.isoformat())
-
 
         file_model = FileModel.from_file_metadata(file_metadata, str(object_id))
         submission_id = await submit_file(file_model)
@@ -535,9 +533,14 @@ async def get_status():
                         FROM workflows
                     """)
                     metrics_row = cur.fetchone()
-                    completed_count, failed_count, running_count, avg_time, min_time, max_time, samples_count = (
-                        metrics_row
-                    )
+                    if metrics_row is None:
+                        # No workflows found, return default values
+                        completed_count = failed_count = running_count = samples_count = 0
+                        avg_time = min_time = max_time = None
+                    else:
+                        completed_count, failed_count, running_count, avg_time, min_time, max_time, samples_count = (
+                            metrics_row
+                        )
 
                     # Get active workflow details from database
                     cur.execute("""
@@ -672,7 +675,7 @@ async def get_failed():
                         ORDER BY start_time DESC
                         LIMIT 100
                     """)
-                    columns = [desc[0] for desc in cur.description]
+                    columns = [desc[0] for desc in cur.description] if cur.description else []
                     failed_workflows = []
 
                     for row in cur.fetchall():
