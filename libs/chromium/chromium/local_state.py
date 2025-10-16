@@ -276,14 +276,11 @@ async def _insert_state_keys(
                                         system_masterkey_guid=app_bound_key_system_masterkey_guid,
                                     )
                                 else:
-                                    logger.warning("Failed to derive ABE key")
-                                    return None
+                                    raise Exception("Failed to derive ABE key")
                             else:
-                                logger.warning("Failed to parse ABE blob")
-                                return None
+                                raise Exception("Failed to parse ABE blob")
                         else:
-                            logger.warning("Failed to decrypt ABE blob with user masterkey")
-                            return None
+                            raise Exception("Failed to decrypt ABE blob with user masterkey")
                     except (MasterKeyNotFoundError, MasterKeyNotDecryptedError) as e:
                         logger.debug(
                             "ABE key not decrypted. Masterkey not found or not decrypted",
@@ -296,10 +293,8 @@ async def _insert_state_keys(
                     except Exception as e:
                         logger.warning(f"Unable to decrypt/process final app bound key blob: {e}")
 
-                        return None
             except Exception as e:
                 logger.warning(f"Unable to decrypt intermediate/outer app bound key blob: {e}")
-                return None
 
         # Skip if no keys are present
         if not key_bytes_enc and not app_bound_key_enc:
@@ -703,14 +698,15 @@ async def retry_decrypt_state_keys_for_masterkey(
             with pg_conn.cursor() as cur:
                 # Build query based on masterkey type for optimization
                 if masterkey_type == "system":
-                    # SYSTEM keys only used for ABE stage 1
+                    # SYSTEM keys only used for v2 ABE stage 1
                     query = """
                         SELECT DISTINCT id FROM chromium.state_keys
                         WHERE app_bound_key_system_masterkey_guid = %s
                         AND length(app_bound_key_dec_inter) = 0
                     """
+                    cur.execute(query, (str(masterkey_guid),))
                 elif masterkey_type == "user":
-                    # USER keys used for both v1 and ABE stage 2
+                    # USER keys used for both v1 and v2 ABE stage 2
                     query = """
                         SELECT DISTINCT id FROM chromium.state_keys
                         WHERE (key_masterkey_guid = %s AND key_is_decrypted = FALSE)
@@ -727,12 +723,9 @@ async def retry_decrypt_state_keys_for_masterkey(
                     """
                     cur.execute(query, (str(masterkey_guid), str(masterkey_guid), str(masterkey_guid)))
 
-                if masterkey_type != "user":
-                    cur.execute(query, (str(masterkey_guid),))
-
                 state_key_ids = [row[0] for row in cur.fetchall()]
 
-            logger.warning(
+            logger.debug(
                 "Found state keys potentially waiting for masterkey",
                 masterkey_guid=masterkey_guid,
                 masterkey_type=masterkey_type,

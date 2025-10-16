@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ability to delete file linkings from the FileViewer
 - Dapr pubsub integration for DPAPI-related revents
 - Bumped Dapr version to 1.16.1
+- CNG/Chromekey file enrichment module (parser + decryptor)
+- Chromium ABE v3 decryption (via decrypted CNG keys)
+- `exif_metadata` file enrichment module for supported image files
+- Retroactive decryption for Chromium Local State files when plaintext masterkeys are submitted/decrypted
 
 ### Changed
 
@@ -39,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lots of async issues
 - Fixed tag search issue
 - Fix to keep strings.txt from sqlite dbs from processing
+- Path normalization (now standardized)
+- Countless linting and other fixes
 
 
 ## [2.1.3]

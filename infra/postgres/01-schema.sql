@@ -662,15 +662,15 @@ CREATE TABLE chromium.state_keys (
     browser TEXT,                                       -- browser name extracted from user data directory, if applicable
 
     key_masterkey_guid UUID,                            -- associated masterkey GUID for key_bytes_enc
-    key_bytes_enc BYTEA NOT NULL,                       -- os_crypt.encrypted_key in Chromium `Local State` file (pre v127)
-    key_bytes_dec BYTEA NOT NULL,
+    key_bytes_enc BYTEA,                                -- os_crypt.encrypted_key in Chromium `Local State` file (pre v127)
+    key_bytes_dec BYTEA,
     key_is_decrypted BOOLEAN,
 
-    app_bound_key_enc BYTEA NOT NULL,                   -- os_crypt.app_bound_encrypted_key in Chromium `Local State` file (post v127)
+    app_bound_key_enc BYTEA,                            -- os_crypt.app_bound_encrypted_key in Chromium `Local State` file (post v127)
     app_bound_key_system_masterkey_guid UUID,           -- associated _system_ masterkey GUID for key_bytes_enc
     app_bound_key_user_masterkey_guid UUID,             -- associated _user_ masterkey GUID for key_bytes_enc
-    app_bound_key_dec_inter BYTEA NOT NULL,             -- intermediate dec value after the SYSTEM key has been used
-    app_bound_key_dec BYTEA NOT NULL,                   -- completely dec value
+    app_bound_key_dec_inter BYTEA,                      -- intermediate dec value after the SYSTEM key has been used
+    app_bound_key_dec BYTEA,                            -- completely dec value
     app_bound_key_is_decrypted BOOLEAN,
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
@@ -687,8 +687,8 @@ CREATE TABLE chromium.chrome_keys (
     project VARCHAR(255),
 
     key_masterkey_guid UUID,                            -- associated _system_ masterkey GUID for key_bytes_enc
-    key_bytes_enc BYTEA NOT NULL,                       -- the raw DPAPI blob bytes from the CNG file
-    key_bytes_dec BYTEA NOT NULL,                       -- completely dec AES key value
+    key_bytes_enc BYTEA,                                -- the raw DPAPI blob bytes from the CNG file
+    key_bytes_dec BYTEA,                                -- completely dec AES key value
     key_is_decrypted BOOLEAN,
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
