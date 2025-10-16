@@ -59,10 +59,8 @@ rule is_cng_file
         $modified = { 4D 00 6F 00 64 00 69 00 66 00 69 00 65 00 64 00 }
 
     condition:
-        // CNG header at start of file
-        $cng_header at 0 or
-        // Or has characteristic UTF-16LE strings
-        ($priv_key_props or ($priv_key and $modified))
+        // CNG header at start of file + characteristic UTF-16LE strings
+        $cng_header at 0 and ($priv_key_props or ($priv_key and $modified))
 }
 """)
 

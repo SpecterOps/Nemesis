@@ -9,6 +9,7 @@ import urllib.parse
 from typing import Annotated
 from uuid import UUID
 
+from chromium import retry_decrypt_state_keys_for_masterkey
 from common.logger import get_logger
 from common.models2.dpapi import (
     DomainBackupKeyCredential,
@@ -50,14 +51,36 @@ logger = get_logger(__name__)
 class PlaintextMasterKeyMonitor(DpapiObserver):
     """Observer that monitors for new plaintext masterkeys."""
 
+    def __init__(self, dpapi_manager: DpapiManager):
+        """Initialize the monitor with a reference to the DpapiManager."""
+        self.dpapi_manager = dpapi_manager
+
     async def update(self, evnt: DpapiEvent) -> None:
         """Called when a DPAPI event occurs."""
         if isinstance(evnt, NewPlaintextMasterKeyEvent):
             logger.warning(
-                "New plaintext masterkey detected",
+                "New plaintext masterkey detected, checking for state_keys to decrypt",
                 event_type=type(evnt).__name__,
-                data=evnt,
+                masterkey_guid=evnt.masterkey_guid,
             )
+
+            # Get the masterkey to check its type
+            masterkeys = await self.dpapi_manager.get_masterkeys(guid=evnt.masterkey_guid)
+            masterkey_type = masterkeys[0].masterkey_type.value if masterkeys else None
+
+            result = await retry_decrypt_state_keys_for_masterkey(
+                evnt.masterkey_guid,
+                self.dpapi_manager,
+                masterkey_type,
+            )
+
+            logger.warning(
+                "Completed retroactive state_key decryption",
+                masterkey_guid=evnt.masterkey_guid,
+                masterkey_type=masterkey_type,
+                result=result,
+            )
+
         elif isinstance(evnt, NewEncryptedMasterKeyEvent):
             logger.warning(
                 "!!!!!!!!!!!!!!!!!!!! Received NewEncryptedMasterKeyEvent",
@@ -106,7 +129,7 @@ MasterKeyDecryptorDep = Annotated[MasterKeyDecryptorService, Depends(get_masterk
 async def dpapi_background_monitor(dpapi_manager: DpapiManager) -> None:
     logger.info("Starting DPAPI background monitor task")
 
-    monitor = PlaintextMasterKeyMonitor()
+    monitor = PlaintextMasterKeyMonitor(dpapi_manager)
     logger.info("Subscribing PlaintextMasterKeyMonitor to DPAPI events")
     await dpapi_manager.subscribe(monitor)
 

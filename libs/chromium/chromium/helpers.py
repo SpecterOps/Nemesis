@@ -5,10 +5,12 @@ import struct
 from datetime import UTC, datetime, timedelta
 
 import psycopg
+from common.logger import get_logger
 from common.db import get_postgres_connection_str
 from Crypto.Cipher import AES, ChaCha20_Poly1305
 from nemesis_dpapi import Blob
 
+logger = get_logger(__name__)
 
 def is_sqlite3(filename):
     try:
@@ -382,7 +384,7 @@ def parse_abe_blob(abe_data: bytes, chromekey: bytes | None = None) -> dict | No
         else:  # Version 3
             # Version|encAES|IV|ciphertext|tag, 1|32|12|32|16 bytes
             # adapted from:
-            #   https://github.com/KingOfTheNOPs/cookie-monster/blob/4ec4b3555682ac1e71a6428a4b0f45b2cf1fd8f7/decrypt.py
+            #   https://github.com/runassu/chrome_v20_decryption/blob/e8f244543e98266d50884aba2778e0ccedefa45d/decrypt_chrome_v20_cookie.py#L42-L69
             #   https://github.com/tijldeneut/diana/blob/b9473b5004ecf1d7bdd5852232b5cd06a5378e5e/diana-browserdec.py
             abe_parsed["encrAES"] = content[:32]
             abe_parsed["iv"] = content[32 : 32 + 12]
@@ -390,14 +392,18 @@ def parse_abe_blob(abe_data: bytes, chromekey: bytes | None = None) -> dict | No
             abe_parsed["tag"] = content[32 + 12 + 32 : 32 + 12 + 32 + 16]
 
             if chromekey:
+                # gotta make sure to specify the \x00*16 IV here
+                cipher = AES.new(chromekey, AES.MODE_CBC, b'\x00' * 16)
+                result = cipher.decrypt(abe_parsed["encrAES"])
                 xor_key = bytes.fromhex("CCF8A1CEC56605B8517552BA1A2D061C03A29E90274FB2FCF59BA4B75C392390")
-                abe_parsed["xored_aes_key"] = byte_xor(chromekey, xor_key)
+                abe_parsed["xored_aes_key"] = byte_xor(result, xor_key)
         return abe_parsed
     except Exception as e:
         logger.warning("Failed to parse ABE blob", error=str(e))
         return None
 
 
+# Ref: https://github.com/runassu/chrome_v20_decryption/blob/e8f244543e98266d50884aba2778e0ccedefa45d/decrypt_chrome_v20_cookie.py#L121-L135
 def derive_abe_key(abe_data: dict) -> bytes | None:
     """Derive ABE key from parsed ABE data.
 
@@ -424,8 +430,8 @@ def derive_abe_key(abe_data: dict) -> bytes | None:
                 cipher = AES.new(abe_data["xored_aes_key"], AES.MODE_GCM, nonce=abe_data["iv"])
             else:
                 # Version 3 requires CNG decryption of encrypted AES key
-                logger.warning("xored_aes_key not present, ABE version 3 requires CNG decrypted (or memory-extracted) 'Google Chromekey1'")
-            return None
+                logger.warning("xored_aes_key not present, ABE version 3 requires CNG decrypted 'Google Chromekey1'")
+                return None
         else:
             logger.warning("Unknown ABE version", version=abe_data["version"])
             return None

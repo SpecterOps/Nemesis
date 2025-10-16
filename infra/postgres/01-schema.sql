@@ -695,6 +695,11 @@ CREATE TABLE chromium.chrome_keys (
     UNIQUE (key_masterkey_guid)
 );
 
+-- Create indexes for masterkey GUID lookups on state_keys
+CREATE INDEX IF NOT EXISTS idx_state_keys_key_masterkey_guid ON chromium.state_keys(key_masterkey_guid) WHERE key_is_decrypted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_state_keys_app_bound_system_mk_guid ON chromium.state_keys(app_bound_key_system_masterkey_guid) WHERE length(app_bound_key_dec_inter) = 0;
+CREATE INDEX IF NOT EXISTS idx_state_keys_app_bound_user_mk_guid ON chromium.state_keys(app_bound_key_user_masterkey_guid) WHERE app_bound_key_is_decrypted = FALSE;
+
 -- "logins" table in "Login Data" file
 CREATE TABLE IF NOT EXISTS chromium.logins (
     id SERIAL PRIMARY KEY,

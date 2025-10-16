@@ -2,6 +2,10 @@
 
 This module parses Windows CNG (Cryptography Next Generation) key files
 and attempts to decrypt their contents using DPAPI.
+
+Specifically, we're only (currently) focused on the CNG file that holds the
+KEY_DATA_BLOB_MAGIC "Google Chromekey1" AES key for v3 of Chromium
+App-Bound Encryption.
 """
 
 import struct
@@ -15,6 +19,7 @@ from common.logger import get_logger
 logger = get_logger(__name__)
 
 
+# Ref - https://pkg.go.dev/github.com/ElMostafaIdrassi/goncrypt#section-readme
 BCRYPT_KEY_DATA_BLOB_MAGIC = 0x4D42444B     # 'KDBM'
 BCRYPT_RSAPUBLIC_MAGIC = 0x31415352         # 'RSA1'
 BCRYPT_RSAPRIVATE_MAGIC = 0x32415352        # 'RSA2'
@@ -48,6 +53,7 @@ class CngKeyFile:
     private_key: bytes | None           # May be DPAPI encrypted
 
 
+# Ref - https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_key_data_blob_header
 @dataclass
 class BcryptKeyDataBlobHeader:
     """BCRYPT_KEY_DATA_BLOB_HEADER structure."""
