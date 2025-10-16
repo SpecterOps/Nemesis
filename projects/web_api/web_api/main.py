@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 import psycopg
 import requests
 from common.db import get_postgres_connection_str
+from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import CloudEvent
 from common.models import File as FileModel
@@ -211,6 +212,11 @@ def normalize_path(path: str) -> str:
         pass
 
     path = path.replace("\\", "/")
+
+    drive = get_drive_from_path(path)
+    if drive is not None and len(drive) == 2 and drive[1] == ":":
+        path = "/" + path
+
     return path
 
 

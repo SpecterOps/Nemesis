@@ -263,6 +263,33 @@ def get_file_extension(filepath):
     return ""
 
 def get_drive_from_path(path: str) -> str | None:
+    """
+    Extract Windows drive letter from a file path.
+
+    Supports two path formats:
+    1. POSIX-style with leading slash: "/C:/Users/..." or "/D:/Data/..."
+    2. Windows-style without leading slash: "C:/Users/..." or "D:/Data/..."
+
+    Args:
+        path: File path string to parse
+
+    Returns:
+        str | None: Drive letter with colon, or None if no valid drive found
+            - For POSIX-style paths: Returns with leading slash (e.g., "/C:", "/D:")
+            - For Windows-style paths: Returns without leading slash (e.g., "C:", "D:")
+
+    Examples:
+        >>> get_drive_from_path("/C:/Users/john/file.txt")
+        '/C:'
+        >>> get_drive_from_path("C:/Users/john/file.txt")
+        'C:'
+        >>> get_drive_from_path("/D:/Data/files")
+        '/D:'
+        >>> get_drive_from_path("invalid/path")
+        None
+
+    Supported drive letters: A-Z (case-insensitive)
+    """
     parts = path.split("/")
 
     # Handle paths without leading slash (e.g., "C:/Users/...")
