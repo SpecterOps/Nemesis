@@ -459,23 +459,29 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
 
             # Run database deletions in parallel
             logger.info("Starting parallel database cleanup operations", round=round_num)
-            db_result, container_result, dpapi_result, chromium_result, file_listings_result, file_linkings_result = await asyncio.gather(
+            # db_result, container_result, dpapi_result, chromium_result, file_listings_result, file_linkings_result = await asyncio.gather(
+            #     delete_database_entries(expired_object_ids),
+            #     delete_expired_containers(expiration_date),
+            #     delete_expired_dpapi_data(expiration_date),
+            #     delete_expired_chromium_data(expiration_date),
+            #     delete_expired_file_listings(expiration_date),
+            #     delete_expired_file_linkings(expiration_date),
+            #     return_exceptions=True,
+            # )
+
+            db_result, container_result = await asyncio.gather(
                 delete_database_entries(expired_object_ids),
                 delete_expired_containers(expiration_date),
-                delete_expired_dpapi_data(expiration_date),
-                delete_expired_chromium_data(expiration_date),
-                delete_expired_file_listings(expiration_date),
-                delete_expired_file_linkings(expiration_date),
                 return_exceptions=True,
             )
 
             # Log results
             _log_cleanup_result(db_result, "Successfully deleted database entries", "Failed to delete database entries", round_num)
             _log_cleanup_result(container_result, "Successfully deleted container entries", "Failed to delete container entries", round_num)
-            _log_cleanup_result(dpapi_result, "Successfully deleted dpapi data", "Failed to delete dpapi data", round_num)
-            _log_cleanup_result(chromium_result, "Successfully deleted chromium data", "Failed to delete chromium data", round_num)
-            _log_cleanup_result(file_listings_result, "Successfully deleted file_listings", "Failed to delete file_listings", round_num)
-            _log_cleanup_result(file_linkings_result, "Successfully deleted file_linkings", "Failed to delete file_linkings", round_num)
+            # _log_cleanup_result(dpapi_result, "Successfully deleted dpapi data", "Failed to delete dpapi data", round_num)
+            # _log_cleanup_result(chromium_result, "Successfully deleted chromium data", "Failed to delete chromium data", round_num)
+            # _log_cleanup_result(file_listings_result, "Successfully deleted file_listings", "Failed to delete file_listings", round_num)
+            # _log_cleanup_result(file_linkings_result, "Successfully deleted file_linkings", "Failed to delete file_linkings", round_num)
 
             logger.info(f"Cleanup job round {round_num} complete")
 

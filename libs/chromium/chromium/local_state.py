@@ -113,7 +113,7 @@ def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid
         )
     else:
         # Not an AppData path, so build path based on the drive letter and username (if available)
-        drive = get_drive_from_path(file_enriched.path)
+        drive = get_drive_from_path(file_enriched.path) or ""
 
         if not username:
             username = "<WINDOWS_USERNAME>"
@@ -227,7 +227,7 @@ async def _insert_state_keys(
             app_bound_key_enc, app_bound_key_system_masterkey_guid = _parse_app_bound_key(app_bound_key_b64)
             logger.debug(f"app_bound_key_system_masterkey_guid: {app_bound_key_system_masterkey_guid}")
 
-            drive = get_drive_from_path(file_enriched.path)
+            drive = get_drive_from_path(file_enriched.path) or ""
             masterkey_path = (
                 f"{drive}/Windows/System32/Microsoft/Protect/S-1-5-18/User/{app_bound_key_system_masterkey_guid}"
             )

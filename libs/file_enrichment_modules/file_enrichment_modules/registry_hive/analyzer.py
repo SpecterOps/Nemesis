@@ -174,10 +174,10 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         if not file_enriched.source or not file_enriched.path:
             return
 
-        drive = get_drive_from_path(file_enriched.path)
-        if not drive:
-            logger.warning(f"Could not extract drive from path: {file_enriched.path}")
-            return
+        drive = get_drive_from_path(file_enriched.path) or ""
+        # if not drive:
+        #     logger.warning(f"Could not extract drive from path: {file_enriched.path}")
+        #     return
 
         try:
             if hive_type == "SYSTEM":
@@ -763,42 +763,42 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             analysis_results = self._process_system_hive(hive_file_path)
 
             # Also check for and process existing SAM/SECURITY hives
-            drive = get_drive_from_path(file_enriched.path)
-            if drive:
-                sam_path = f"{drive}/Windows/System32/Config/SAM"
-                security_path = f"{drive}/Windows/System32/Config/SECURITY"
+            drive = get_drive_from_path(file_enriched.path) or ""
+            # if drive:
+            sam_path = f"{drive}/Windows/System32/Config/SAM"
+            security_path = f"{drive}/Windows/System32/Config/SECURITY"
 
-                sam_object_id = self._find_existing_hive(file_enriched, sam_path)
-                security_object_id = self._find_existing_hive(file_enriched, security_path)
+            sam_object_id = self._find_existing_hive(file_enriched, sam_path)
+            security_object_id = self._find_existing_hive(file_enriched, security_path)
 
-                # Process SAM if found
-                if sam_object_id:
-                    try:
-                        with self.storage.download(sam_object_id) as sam_temp_file:
-                            sam_results = self._process_sam_hive(sam_temp_file.name, hive_file_path)
-                            analysis_results["sam_analysis"] = sam_results
-                            logger.debug(f"Processed paired SAM hive for SYSTEM: {sam_path}")
-                    except Exception as e:
-                        logger.error(f"Failed to process paired SAM hive: {e}")
+            # Process SAM if found
+            if sam_object_id:
+                try:
+                    with self.storage.download(sam_object_id) as sam_temp_file:
+                        sam_results = self._process_sam_hive(sam_temp_file.name, hive_file_path)
+                        analysis_results["sam_analysis"] = sam_results
+                        logger.debug(f"Processed paired SAM hive for SYSTEM: {sam_path}")
+                except Exception as e:
+                    logger.error(f"Failed to process paired SAM hive: {e}")
 
-                # Process SECURITY if found
-                if security_object_id:
-                    try:
-                        with self.storage.download(security_object_id) as security_temp_file:
-                            sam_results = self._process_security_hive(security_temp_file.name, hive_file_path)
-                            analysis_results["security_analysis"] = sam_results
-                            logger.debug(f"Processed paired SECURITY hive for SYSTEM: {security_path}")
-                    except Exception as e:
-                        logger.error(f"Failed to process paired SECURITY hive: {e}")
+            # Process SECURITY if found
+            if security_object_id:
+                try:
+                    with self.storage.download(security_object_id) as security_temp_file:
+                        sam_results = self._process_security_hive(security_temp_file.name, hive_file_path)
+                        analysis_results["security_analysis"] = sam_results
+                        logger.debug(f"Processed paired SECURITY hive for SYSTEM: {security_path}")
+                except Exception as e:
+                    logger.error(f"Failed to process paired SECURITY hive: {e}")
 
         elif hive_type in ["SAM", "SECURITY"]:
             # Look for SYSTEM hive
-            drive = get_drive_from_path(file_enriched.path)
+            drive = get_drive_from_path(file_enriched.path) or ""
             system_object_id = None
 
-            if drive:
-                system_path = f"{drive}/Windows/System32/Config/SYSTEM"
-                system_object_id = self._find_existing_hive(file_enriched, system_path)
+            # if drive:
+            system_path = f"{drive}/Windows/System32/Config/SYSTEM"
+            system_object_id = self._find_existing_hive(file_enriched, system_path)
 
             if system_object_id:
                 # Download the SYSTEM hive
