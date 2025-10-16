@@ -419,6 +419,9 @@ def _log_cleanup_result(result, success_msg: str, error_msg: str, round_num: int
         logger.error(error_msg, round=round_num)
 
 
+_CLEANUP_RETRY_COUNT = 3
+_CLEANUP_RETRY_DELAY = 20
+
 async def run_cleanup_job(expiration_date: Optional[datetime] = None):
     """
     Main job function that runs the cleanup process.
@@ -430,6 +433,8 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
     """
     global storage, is_initialized
 
+    # TODO: Purge Dapr workflow state data either through the Dapr API (purge) or directly in the DB's "state" table.
+
     logger.info("Starting cleanup job", custom_expiration=expiration_date is not None, expiration_date=expiration_date)
 
     if not is_initialized:
@@ -438,7 +443,7 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
 
     try:
         # Run cleanup three times over a minute to catch processing edge cases
-        for round_num in range(1, 4):
+        for round_num in range(0, _CLEANUP_RETRY_COUNT):
             # Get expired object IDs from database
             expired_object_ids = await get_expired_object_ids(expiration_date)
             logger.info("Found expired objects", count=len(expired_object_ids), round=round_num)
@@ -472,9 +477,13 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
             _log_cleanup_result(file_listings_result, "Successfully deleted file_listings", "Failed to delete file_listings", round_num)
             _log_cleanup_result(file_linkings_result, "Successfully deleted file_linkings", "Failed to delete file_linkings", round_num)
 
-            await asyncio.sleep(20)
+            logger.info(f"Cleanup job round {round_num} complete")
 
-        logger.info("Cleanup job complete")
+            if round_num < _CLEANUP_RETRY_COUNT - 1:
+                logger.info(f"Waiting {_CLEANUP_RETRY_DELAY} seconds before next cleanup round")
+                await asyncio.sleep(_CLEANUP_RETRY_DELAY)
+
+        logger.info("Cleanup completed!")
 
     except Exception as e:
         logger.exception(e, message="Error running cleanup job")
