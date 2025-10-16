@@ -673,6 +673,7 @@ CREATE TABLE chromium.state_keys (
     app_bound_key_dec BYTEA NOT NULL,                   -- completely dec value
     app_bound_key_is_decrypted BOOLEAN,
 
+    FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
     UNIQUE (source, username, browser)
 );
 
@@ -690,6 +691,7 @@ CREATE TABLE chromium.chrome_keys (
     key_bytes_dec BYTEA NOT NULL,                       -- completely dec AES key value
     key_is_decrypted BOOLEAN,
 
+    FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
     UNIQUE (key_masterkey_guid)
 );
 

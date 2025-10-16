@@ -20,19 +20,17 @@ scheduler = AsyncIOScheduler()
 is_initialized = False
 storage = StorageMinio()
 background_tasks = set()
+db_pool = None
 
 postgres_connection_string = get_postgres_connection_str()
 
 
-async def get_db_connection():
-    """Create and return a database connection using asyncpg."""
-
-    try:
-        conn = await asyncpg.connect(postgres_connection_string)
-        return conn
-    except Exception as e:
-        logger.exception(e, message="Failed to get database connection")
-        raise
+async def get_db_pool():
+    """Get the global database connection pool."""
+    global db_pool
+    if db_pool is None:
+        raise RuntimeError("Database pool not initialized")
+    return db_pool
 
 
 async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> list[str]:
@@ -45,32 +43,29 @@ async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> 
                          If None, current datetime is used.
                          If datetime.max, all objects will be considered expired.
     """
-    conn = None
     try:
-        conn = await get_db_connection()
+        pool = await get_db_pool()
         comparison_date = expiration_date if expiration_date is not None else datetime.now()
 
-        records = await conn.fetch(
-            """
-            SELECT DISTINCT object_id
-            FROM (
-                SELECT object_id FROM files WHERE expiration < $1
-                UNION
-                SELECT object_id FROM files_enriched WHERE expiration < $2
-                UNION
-                SELECT object_id FROM files_enriched_dataset WHERE expiration < $3
-            ) AS expired
-            """,
-            comparison_date, comparison_date, comparison_date,
-        )
-        return [str(record["object_id"]) for record in records]
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                SELECT DISTINCT object_id
+                FROM (
+                    SELECT object_id FROM files WHERE expiration < $1
+                    UNION
+                    SELECT object_id FROM files_enriched WHERE expiration < $2
+                    UNION
+                    SELECT object_id FROM files_enriched_dataset WHERE expiration < $3
+                ) AS expired
+                """,
+                comparison_date, comparison_date, comparison_date,
+            )
+            return [str(record["object_id"]) for record in records]
 
     except Exception as e:
         logger.exception(e, message="Error getting expired object IDs from database")
         return []
-    finally:
-        if conn:
-            await conn.close()
 
 
 async def get_transform_object_ids(object_ids: list[str]) -> list[str]:
@@ -80,28 +75,25 @@ async def get_transform_object_ids(object_ids: list[str]) -> list[str]:
     if not object_ids:
         return []
 
-    conn = None
     try:
-        conn = await get_db_connection()
-        # Get all transform_object_ids related to the expired object_ids
-        transform_records = await conn.fetch(
-            """
-            SELECT transform_object_id
-            FROM transforms
-            WHERE object_id = ANY($1::uuid[])
-            """,
-            object_ids,
-        )
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            # Get all transform_object_ids related to the expired object_ids
+            transform_records = await conn.fetch(
+                """
+                SELECT transform_object_id
+                FROM transforms
+                WHERE object_id = ANY($1::uuid[])
+                """,
+                object_ids,
+            )
 
-        # Extract and return the transform_object_ids
-        transform_object_ids = [str(record["transform_object_id"]) for record in transform_records]
-        return transform_object_ids
+            # Extract and return the transform_object_ids
+            transform_object_ids = [str(record["transform_object_id"]) for record in transform_records]
+            return transform_object_ids
     except Exception as e:
         logger.exception(e, message="Error getting transform object IDs from database")
         return []
-    finally:
-        if conn:
-            await conn.close()
 
 
 async def delete_database_entries(object_ids: list[str]) -> bool:
@@ -112,50 +104,195 @@ async def delete_database_entries(object_ids: list[str]) -> bool:
     if not object_ids:
         return True
 
-    conn = None
     try:
-        conn = await get_db_connection()
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            # Start a transaction
+            async with conn.transaction():
+                # The CASCADE delete should handle related records in other tables due to the foreign key constraints
+                # defined in the schema
 
-        # Start a transaction
-        async with conn.transaction():
-            # The CASCADE delete should handle related records in other tables due to the foreign key constraints
-            # defined in the schema
+                # Delete from files_enriched_dataset
+                await conn.execute(
+                    """
+                    DELETE FROM files_enriched_dataset
+                    WHERE object_id = ANY($1::uuid[])
+                    """,
+                    object_ids,
+                )
 
-            # Delete from files_enriched_dataset
-            await conn.execute(
-                """
-                DELETE FROM files_enriched_dataset
-                WHERE object_id = ANY($1::uuid[])
-                """,
-                object_ids,
+                # Delete from files_enriched (will cascade to transforms, enrichments, etc.)
+                await conn.execute(
+                    """
+                    DELETE FROM files_enriched
+                    WHERE object_id = ANY($1::uuid[])
+                    """,
+                    object_ids,
+                )
+
+                # Delete from files
+                await conn.execute(
+                    """
+                    DELETE FROM files
+                    WHERE object_id = ANY($1::uuid[])
+                    """,
+                    object_ids,
+                )
+
+            logger.info(
+                "Successfully deleted database entries",
+                object_count=len(object_ids),
             )
-
-            # Delete from files_enriched (will cascade to transforms, enrichments, etc.)
-            await conn.execute(
-                """
-                DELETE FROM files_enriched
-                WHERE object_id = ANY($1::uuid[])
-                """,
-                object_ids,
-            )
-
-            # Delete from files
-            await conn.execute(
-                """
-                DELETE FROM files
-                WHERE object_id = ANY($1::uuid[])
-                """,
-                object_ids,
-            )
-
-        logger.info("Successfully deleted database entries", object_count=len(object_ids))
-        return True
+            return True
     except Exception as e:
         logger.exception(e, message="Error deleting database entries")
         return False
-    finally:
-        if conn:
-            await conn.close()
+
+
+async def delete_expired_chromium_data(expiration_date: Optional[datetime] = None) -> bool:
+    """
+    Delete chromium data only when expiration_date is datetime.max (delete all mode).
+    Otherwise, CASCADE deletion handles chromium data when files are deleted.
+
+    Args:
+        expiration_date: Optional date to use for comparison.
+                         Only deletes if expiration_date == datetime.max.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    # Only delete chromium data in "delete all" mode
+    if expiration_date != datetime.max:
+        # TODO: Delete based on expiration timestamp (currently not in the schema)
+        logger.info("Skipping chromium deletion - CASCADE will handle expired entries")
+        return True
+
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            # Delete all records from chromium tables in a transaction
+            async with conn.transaction():
+                await conn.execute("DELETE FROM chromium.history")
+                await conn.execute("DELETE FROM chromium.downloads")
+                await conn.execute("DELETE FROM chromium.state_keys")
+                await conn.execute("DELETE FROM chromium.chrome_keys")
+                await conn.execute("DELETE FROM chromium.logins")
+                await conn.execute("DELETE FROM chromium.cookies")
+
+            logger.info("Successfully deleted all chromium data")
+            return True
+
+    except Exception as e:
+        logger.exception(e, message="Error deleting chromium data")
+        return False
+
+
+async def delete_expired_file_listings(expiration_date: Optional[datetime] = None) -> bool:
+    """
+    Delete expired entries from the file_listings table based on their created_at timestamp.
+
+    Args:
+        expiration_date: Optional date to use for comparison instead of current datetime.
+                         If None, current datetime is used.
+                         If datetime.max, all file_listings will be considered expired.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            # Use provided expiration date or current datetime
+            comparison_date = expiration_date if expiration_date is not None else datetime.now()
+
+            # Use DELETE...RETURNING to get count in a single query
+            if expiration_date != datetime.max:
+                deleted_records = await conn.fetch(
+                    """
+                    DELETE FROM file_listings
+                    WHERE created_at < $1
+                    RETURNING listing_id
+                    """,
+                    comparison_date,
+                )
+            else:
+                deleted_records = await conn.fetch(
+                    """
+                    DELETE FROM file_listings
+                    RETURNING listing_id
+                    """
+                )
+
+            count_result = len(deleted_records)
+
+            if count_result == 0:
+                logger.info("No expired file_listings found to delete")
+                return True
+
+            logger.info(
+                "Successfully deleted expired file_listings",
+                file_listings_count=count_result,
+                expiration_date=comparison_date if expiration_date != datetime.max else "all",
+            )
+            return True
+
+    except Exception as e:
+        logger.exception(e, message="Error deleting expired file_listings")
+        return False
+
+
+async def delete_expired_file_linkings(expiration_date: Optional[datetime] = None) -> bool:
+    """
+    Delete expired entries from the file_linkings table based on their created_at timestamp.
+
+    Args:
+        expiration_date: Optional date to use for comparison instead of current datetime.
+                         If None, current datetime is used.
+                         If datetime.max, all file_linkings will be considered expired.
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            # Use provided expiration date or current datetime
+            comparison_date = expiration_date if expiration_date is not None else datetime.now()
+
+            # Use DELETE...RETURNING to get count in a single query
+            if expiration_date != datetime.max:
+                deleted_records = await conn.fetch(
+                    """
+                    DELETE FROM file_linkings
+                    WHERE created_at < $1
+                    RETURNING linking_id
+                    """,
+                    comparison_date,
+                )
+            else:
+                deleted_records = await conn.fetch(
+                    """
+                    DELETE FROM file_linkings
+                    RETURNING linking_id
+                    """
+                )
+
+            count_result = len(deleted_records)
+
+            if count_result == 0:
+                logger.info("No expired file_linkings found to delete")
+                return True
+
+            logger.info(
+                "Successfully deleted expired file_linkings",
+                file_linkings_count=count_result,
+                expiration_date=comparison_date if expiration_date != datetime.max else "all",
+            )
+            return True
+
+    except Exception as e:
+        logger.exception(e, message="Error deleting expired file_linkings")
+        return False
 
 
 async def delete_expired_dpapi_data(expiration_date: Optional[datetime] = None) -> bool:
@@ -170,55 +307,52 @@ async def delete_expired_dpapi_data(expiration_date: Optional[datetime] = None) 
     Returns:
         bool: True if successful, False otherwise.
     """
-    conn = None
     try:
-        conn = await get_db_connection()
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            # Use provided expiration date or current datetime
+            comparison_date = expiration_date if expiration_date is not None else datetime.now()
 
-        # Use provided expiration date or current datetime
-        comparison_date = expiration_date if expiration_date is not None else datetime.now()
+            # Delete all dpapi tables in a transaction
+            async with conn.transaction():
+                if expiration_date != datetime.max:
+                    # Delete dpapi.masterkeys
+                    await conn.execute(
+                        """
+                        DELETE FROM dpapi.masterkeys
+                        WHERE created_at < $1
+                        """,
+                        comparison_date,
+                    )
 
-        # Define queries based on the expiration_date
-        if expiration_date != datetime.max:
-            # Delete dpapi.masterkeys
-            await conn.execute(
-                """
-                DELETE FROM dpapi.masterkeys
-                WHERE created_at < $1
-                """,
-                comparison_date,
-            )
+                    # Delete dpapi.domain_backup_keys
+                    await conn.execute(
+                        """
+                        DELETE FROM dpapi.domain_backup_keys
+                        WHERE created_at < $1
+                        """,
+                        comparison_date,
+                    )
 
-            # Delete dpapi.domain_backup_keys
-            await conn.execute(
-                """
-                DELETE FROM dpapi.domain_backup_keys
-                WHERE created_at < $1
-                """,
-                comparison_date,
-            )
+                    # Delete dpapi.system_credentials
+                    await conn.execute(
+                        """
+                        DELETE FROM dpapi.system_credentials
+                        WHERE created_at < $1
+                        """,
+                        comparison_date,
+                    )
+                else:
+                    # Delete all records from dpapi tables
+                    await conn.execute("DELETE FROM dpapi.masterkeys")
+                    await conn.execute("DELETE FROM dpapi.domain_backup_keys")
+                    await conn.execute("DELETE FROM dpapi.system_credentials")
 
-            # Delete dpapi.system_credentials
-            await conn.execute(
-                """
-                DELETE FROM dpapi.system_credentials
-                WHERE created_at < $1
-                """,
-                comparison_date,
-            )
-        else:
-            # Delete all records from dpapi tables
-            await conn.execute("DELETE FROM dpapi.masterkeys")
-            await conn.execute("DELETE FROM dpapi.domain_backup_keys")
-            await conn.execute("DELETE FROM dpapi.system_credentials")
-
-        return True
+            return True
 
     except Exception as e:
         logger.exception(e, message="Error deleting expired dpapi data")
         return False
-    finally:
-        if conn:
-            await conn.close()
 
 
 async def delete_expired_containers(expiration_date: Optional[datetime] = None) -> bool:
@@ -233,69 +367,46 @@ async def delete_expired_containers(expiration_date: Optional[datetime] = None) 
     Returns:
         bool: True if successful, False otherwise.
     """
-    conn = None
     try:
-        conn = await get_db_connection()
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            # Use provided expiration date or current datetime
+            comparison_date = expiration_date if expiration_date is not None else datetime.now()
 
-        # Use provided expiration date or current datetime
-        comparison_date = expiration_date if expiration_date is not None else datetime.now()
+            # Use DELETE...RETURNING to get count in a single query
+            if expiration_date != datetime.max:
+                deleted_records = await conn.fetch(
+                    """
+                    DELETE FROM container_processing
+                    WHERE expiration < $1
+                    RETURNING container_id
+                    """,
+                    comparison_date,
+                )
+            else:
+                deleted_records = await conn.fetch(
+                    """
+                    DELETE FROM container_processing
+                    RETURNING container_id
+                    """
+                )
 
-        # Define queries based on the expiration_date
-        if expiration_date != datetime.max:
-            # First, get count of records that will be deleted for logging
-            count_result = await conn.fetchval(
-                """
-                SELECT COUNT(*)
-                FROM container_processing
-                WHERE expiration < $1
-                """,
-                comparison_date,
-            )
-
-            if count_result == 0:
-                logger.info("No expired containers found to delete")
-                return True
-
-            # Delete expired entries from container_processing table
-            await conn.execute(
-                """
-                DELETE FROM container_processing
-                WHERE expiration < $1
-                """,
-                comparison_date,
-            )
-        else:
-            # Delete all records
-            count_result = await conn.fetchval(
-                """
-                SELECT COUNT(*)
-                FROM container_processing
-                """
-            )
+            count_result = len(deleted_records)
 
             if count_result == 0:
                 logger.info("No expired containers found to delete")
                 return True
 
-            await conn.execute(
-                """
-                DELETE FROM container_processing
-                """
+            logger.info(
+                "Successfully deleted expired containers",
+                container_count=count_result,
+                expiration_date=comparison_date if expiration_date != datetime.max else "all",
             )
-
-        logger.info(
-            "Successfully deleted expired containers",
-            container_count=count_result,
-            expiration_date=comparison_date if expiration_date != datetime.max else "all",
-        )
-        return True
+            return True
 
     except Exception as e:
         logger.exception(e, message="Error deleting expired containers")
         return False
-    finally:
-        if conn:
-            await conn.close()
 
 
 def _log_cleanup_result(result, success_msg: str, error_msg: str, round_num: int):
@@ -343,10 +454,13 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
 
             # Run database deletions in parallel
             logger.info("Starting parallel database cleanup operations", round=round_num)
-            db_result, container_result, dpapi_result = await asyncio.gather(
+            db_result, container_result, dpapi_result, chromium_result, file_listings_result, file_linkings_result = await asyncio.gather(
                 delete_database_entries(expired_object_ids),
                 delete_expired_containers(expiration_date),
                 delete_expired_dpapi_data(expiration_date),
+                delete_expired_chromium_data(expiration_date),
+                delete_expired_file_listings(expiration_date),
+                delete_expired_file_linkings(expiration_date),
                 return_exceptions=True,
             )
 
@@ -354,6 +468,9 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
             _log_cleanup_result(db_result, "Successfully deleted database entries", "Failed to delete database entries", round_num)
             _log_cleanup_result(container_result, "Successfully deleted container entries", "Failed to delete container entries", round_num)
             _log_cleanup_result(dpapi_result, "Successfully deleted dpapi data", "Failed to delete dpapi data", round_num)
+            _log_cleanup_result(chromium_result, "Successfully deleted chromium data", "Failed to delete chromium data", round_num)
+            _log_cleanup_result(file_listings_result, "Successfully deleted file_listings", "Failed to delete file_listings", round_num)
+            _log_cleanup_result(file_linkings_result, "Successfully deleted file_linkings", "Failed to delete file_linkings", round_num)
 
             await asyncio.sleep(20)
 
@@ -366,10 +483,19 @@ async def run_cleanup_job(expiration_date: Optional[datetime] = None):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan manager for FastAPI - handles startup and shutdown events"""
-    global storage, scheduler, is_initialized
+    global storage, scheduler, is_initialized, db_pool
 
     try:
         logger.info("Initializing Housekeeping Service")
+
+        # Initialize database connection pool
+        db_pool = await asyncpg.create_pool(
+            postgres_connection_string,
+            min_size=2,
+            max_size=10,
+            command_timeout=60,
+        )
+        logger.info("Database connection pool initialized", min_size=2, max_size=10)
 
         # Get the cron schedule from environment or use default (midnight every day)
         cron_schedule = os.getenv("CLEANUP_SCHEDULE", "0 0 * * *")
@@ -398,6 +524,11 @@ async def lifespan(app: FastAPI):
         if scheduler.running:
             scheduler.shutdown()
             logger.info("Scheduler shutdown")
+
+        # Close database connection pool
+        if db_pool:
+            await db_pool.close()
+            logger.info("Database connection pool closed")
 
     except Exception as e:
         logger.exception(e, message="Error during service initialization")
