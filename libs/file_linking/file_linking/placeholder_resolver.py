@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 from common.logger import get_logger
 
+from file_linking.database_service import FileLinkingDatabaseService
+
 logger = get_logger(__name__)
 
 
@@ -35,6 +37,11 @@ PLACEHOLDERS = [
         pattern=r"(S-1-5-(?:18|19|20|21-\d+-\d+-\d+-\d+))",
         description="Windows SID (supports user and system SIDs)",
     ),
+    PlaceholderDefinition(
+        name="<UNIVERSALLY_UNIQUE_ID>",
+        pattern=r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+        description="UUID/GUID in standard format (8-4-4-4-12 hex digits)",
+    ),
 ]
 
 
@@ -47,7 +54,7 @@ class PlaceholderResolver:
     2. Backward: Placeholder path needed → check if real file already exists
     """
 
-    def __init__(self, db_service):
+    def __init__(self, db_service: FileLinkingDatabaseService):
         """
         Initialize the placeholder resolver.
 

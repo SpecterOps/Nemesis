@@ -64,6 +64,20 @@ class TestPlaceholdersRegistry:
         assert pattern.match("S-1-5-19")  # LOCAL SERVICE
         assert pattern.match("S-1-5-20")  # NETWORK SERVICE
 
+    def test_universally_unique_id_placeholder(self):
+        """Test that UNIVERSALLY_UNIQUE_ID placeholder is defined correctly."""
+        uuid_placeholder = next((p for p in PLACEHOLDERS if "UNIVERSALLY_UNIQUE_ID" in p.name), None)
+        assert uuid_placeholder is not None
+        assert uuid_placeholder.name == "<UNIVERSALLY_UNIQUE_ID>"
+        # Test pattern matches valid UUIDs
+        pattern = re.compile(uuid_placeholder.pattern)
+        assert pattern.match("f26c165b-53c8-414e-8abb-ec5f0f52df22")
+        assert pattern.match("550e8400-e29b-41d4-a716-446655440000")
+        assert pattern.match("ABCDEF12-3456-7890-ABCD-EF1234567890")  # Mixed case
+        # Test pattern rejects invalid formats
+        assert not pattern.match("invalid-uuid")
+        assert not pattern.match("f26c165b53c8414e8abbec5f0f52df22")  # No hyphens
+
 
 class TestConvertPlaceholderToRegex:
     """Tests for _convert_placeholder_to_regex method."""
@@ -187,7 +201,14 @@ class TestTryResolvePlaceholderPath:
     def setup_method(self):
         """Setup test fixtures."""
         self.db_service = MagicMock()
+        # Methods used by PlaceholderResolver
+        self.db_service.get_placeholder_entries = AsyncMock()
         self.db_service.get_collected_files = AsyncMock()
+        self.db_service.update_file_listing_path = AsyncMock(return_value=True)
+        self.db_service.update_file_linking_path = AsyncMock(return_value=True)
+        # Additional methods for completeness (not currently used by PlaceholderResolver)
+        self.db_service.add_file_listing = AsyncMock(return_value=True)
+        self.db_service.add_file_linking = AsyncMock(return_value=True)
         self.resolver = PlaceholderResolver(self.db_service)
 
     async def test_resolve_backward_full_path(self):
@@ -261,10 +282,14 @@ class TestPlaceholderResolutionScenarios:
     def setup_method(self):
         """Setup test fixtures."""
         self.db_service = MagicMock()
+        # Methods used by PlaceholderResolver
         self.db_service.get_placeholder_entries = AsyncMock()
         self.db_service.get_collected_files = AsyncMock()
         self.db_service.update_file_listing_path = AsyncMock(return_value=True)
         self.db_service.update_file_linking_path = AsyncMock(return_value=True)
+        # Additional methods for completeness (not currently used by PlaceholderResolver)
+        self.db_service.add_file_listing = AsyncMock(return_value=True)
+        self.db_service.add_file_linking = AsyncMock(return_value=True)
         self.resolver = PlaceholderResolver(self.db_service)
 
     async def test_chromium_masterkey_resolution(self):
@@ -323,3 +348,51 @@ class TestPlaceholderResolutionScenarios:
         placeholder_names = [p.name for p in PLACEHOLDERS]
         assert "<WINDOWS_USERNAME>" in placeholder_names
         assert "<WINDOWS_SECURITY_IDENTIFIER>" in placeholder_names
+
+    async def test_cng_system_private_key_forward_resolution(self):
+        """Test forward resolution of CNG system private key path with UUID placeholder."""
+        # Scenario: Chrome Local State creates placeholder for CNG system private key,
+        # then real key file arrives (forward propagation)
+        placeholder_path = (
+            "/C:/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<UNIVERSALLY_UNIQUE_ID>"
+        )
+
+        self.db_service.get_placeholder_entries.return_value = [
+            {
+                "table_name": "file_linkings",
+                "path": placeholder_path,
+            }
+        ]
+
+        # Real CNG system private key file arrives
+        real_path = "/C:/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_f26c165b-53c8-414e-8abb-ec5f0f52df22"
+        source = "test-agent"
+
+        count = await self.resolver.resolve_placeholders_for_file(real_path, source)
+
+        assert count == 1
+        call_args = self.db_service.update_file_linking_path.call_args
+        assert call_args[0][0] == source
+        assert call_args[0][1] == placeholder_path
+        assert call_args[0][2] == real_path
+
+    async def test_cng_system_private_key_backward_resolution(self):
+        """Test backward resolution of CNG system private key path with UUID placeholder."""
+        # Scenario: Real key file already exists in DB, then Chrome Local State
+        # tries to create placeholder entry (backward propagation)
+
+        # Real CNG system private key file already collected
+        real_path = "/C:/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_f26c165b-53c8-414e-8abb-ec5f0f52df22"
+        self.db_service.get_collected_files.return_value = [real_path]
+
+        # Placeholder path being created
+        placeholder_path = (
+            "/C:/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<UNIVERSALLY_UNIQUE_ID>"
+        )
+        source = "test-agent"
+
+        result = await self.resolver.try_resolve_placeholder_path(source, placeholder_path)
+
+        # Should return the real path instead of None
+        assert result == real_path
+        self.db_service.get_collected_files.assert_called_once_with(source)

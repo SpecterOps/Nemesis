@@ -232,8 +232,16 @@ async def _insert_state_keys(
                 f"{drive}/Windows/System32/Microsoft/Protect/S-1-5-18/User/{app_bound_key_system_masterkey_guid}"
             )
 
+            # Filename format: <hash>_<machineGuid>
+            # Hash comes from Chromium calling NCryptOpenKey with the key name of "Google Chromekey1"
+            # Hashing algorithm is described here: https://gist.github.com/leechristensen/40acb67ff5b788d6b78d81443b66b444
+            cng_system_private_key_path = (
+                f"{drive}/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<UNIVERSALLY_UNIQUE_ID>"
+            )
+
             # add the masterkey file path (now that we know the key GUID) as a link/listing
             await add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:system_masterkey")
+            await add_file_linking(file_enriched.source, file_enriched.path, cng_system_private_key_path, "windows:cng_system_private_key")
 
             try:
                 # Parse only the DPAPI portion (after APPB header)
