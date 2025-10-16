@@ -236,7 +236,7 @@ async def _insert_state_keys(
             # Hash comes from Chromium calling NCryptOpenKey with the key name of "Google Chromekey1"
             # Hashing algorithm is described here: https://gist.github.com/leechristensen/40acb67ff5b788d6b78d81443b66b444
             cng_system_private_key_path = (
-                f"{drive}/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<UNIVERSALLY_UNIQUE_ID>"
+                f"{drive}/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<WINDOWS_MACHINE_GUID>"
             )
 
             # add the masterkey file path (now that we know the key GUID) as a link/listing

@@ -38,9 +38,9 @@ PLACEHOLDERS = [
         description="Windows SID (supports user and system SIDs)",
     ),
     PlaceholderDefinition(
-        name="<UNIVERSALLY_UNIQUE_ID>",
+        name="<WINDOWS_MACHINE_GUID>",
         pattern=r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
-        description="UUID/GUID in standard format (8-4-4-4-12 hex digits)",
+        description="Windows Machine GUID (8-4-4-4-12 hex digits)",
     ),
 ]
 

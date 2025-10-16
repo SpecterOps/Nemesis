@@ -64,11 +64,11 @@ class TestPlaceholdersRegistry:
         assert pattern.match("S-1-5-19")  # LOCAL SERVICE
         assert pattern.match("S-1-5-20")  # NETWORK SERVICE
 
-    def test_universally_unique_id_placeholder(self):
-        """Test that UNIVERSALLY_UNIQUE_ID placeholder is defined correctly."""
-        uuid_placeholder = next((p for p in PLACEHOLDERS if "UNIVERSALLY_UNIQUE_ID" in p.name), None)
+    def test_windows_machine_guid_placeholder(self):
+        """Test that WINDOWS_MACHINE_GUID placeholder is defined correctly."""
+        uuid_placeholder = next((p for p in PLACEHOLDERS if "WINDOWS_MACHINE_GUID" in p.name), None)
         assert uuid_placeholder is not None
-        assert uuid_placeholder.name == "<UNIVERSALLY_UNIQUE_ID>"
+        assert uuid_placeholder.name == "<WINDOWS_MACHINE_GUID>"
         # Test pattern matches valid UUIDs
         pattern = re.compile(uuid_placeholder.pattern)
         assert pattern.match("f26c165b-53c8-414e-8abb-ec5f0f52df22")
@@ -354,7 +354,7 @@ class TestPlaceholderResolutionScenarios:
         # Scenario: Chrome Local State creates placeholder for CNG system private key,
         # then real key file arrives (forward propagation)
         placeholder_path = (
-            "/C:/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<UNIVERSALLY_UNIQUE_ID>"
+            "/C:/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<WINDOWS_MACHINE_GUID>"
         )
 
         self.db_service.get_placeholder_entries.return_value = [
@@ -387,7 +387,7 @@ class TestPlaceholderResolutionScenarios:
 
         # Placeholder path being created
         placeholder_path = (
-            "/C:/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<UNIVERSALLY_UNIQUE_ID>"
+            "/C:/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<WINDOWS_MACHINE_GUID>"
         )
         source = "test-agent"
 
