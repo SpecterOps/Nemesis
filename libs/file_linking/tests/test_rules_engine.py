@@ -502,3 +502,295 @@ class TestChromiumLocalStateLinking:
                 trigger_matched = True
                 break
         assert trigger_matched is False, "Preferences file should not match local_state rule"
+
+
+@pytest.mark.asyncio
+class TestPlaceholderResolutionIntegration:
+    """Integration tests for placeholder resolution in file linking."""
+
+    @pytest.fixture
+    def engine(self, tmp_path):
+        """Create a FileLinkingEngine with test database."""
+        from unittest.mock import AsyncMock
+
+        rules_dir = tmp_path / "rules"
+        rules_dir.mkdir()
+
+        # Using a mock connection since we're testing logic, not actual DB
+        engine = FileLinkingEngine(postgres_connection_string="postgresql://test", rules_dir=str(rules_dir))
+
+        # Mock the database service methods (now async)
+        engine.db_service.add_file_listing = AsyncMock(return_value=True)
+        engine.db_service.add_file_linking = AsyncMock(return_value=True)
+
+        return engine
+
+    async def test_forward_resolution_placeholder_first_real_file_later(self, engine):
+        """Test forward resolution: placeholder exists in DB, real file arrives."""
+        from unittest.mock import AsyncMock
+
+        # Setup: Placeholder entry already exists
+        placeholder_path = "/C:/Users/<WINDOWS_USERNAME>/AppData/Roaming/file.txt"
+        engine.db_service.get_placeholder_entries = AsyncMock(
+            return_value=[{"table_name": "file_listings", "path": placeholder_path}]
+        )
+        engine.db_service.update_file_listing_path = AsyncMock(return_value=True)
+
+        # Real file arrives
+        real_file = create_file_enriched(
+            object_id="test-file-001",
+            path="/C:/Users/john.doe/AppData/Roaming/file.txt",
+            mime_type="application/octet-stream",
+            magic_type="data",
+        )
+        real_file.source = "test-agent"
+
+        # Process the file (which triggers forward resolution)
+        await engine.apply_linking_rules(real_file)
+
+        # Verify forward resolution was called and placeholder was updated
+        # Called twice: once for file_listings, once for file_linkings
+        assert engine.db_service.get_placeholder_entries.call_count == 2
+        engine.db_service.update_file_listing_path.assert_called_once()
+        call_args = engine.db_service.update_file_listing_path.call_args
+        assert call_args[0][1] == placeholder_path  # old path
+        assert call_args[0][2] == "/C:/Users/john.doe/AppData/Roaming/file.txt"  # new path
+
+    async def test_backward_resolution_real_file_first_placeholder_later(self, engine):
+        """Test backward resolution: real file exists, placeholder path created."""
+        from pathlib import Path
+        from unittest.mock import AsyncMock
+
+        # Setup: Real file already collected
+        real_path = "/C:/Users/john.doe/AppData/Roaming/Microsoft/Protect/S-1-5-21-123-456-789-1000/abc123"
+        engine.db_service.get_collected_files = AsyncMock(return_value=[real_path])
+        engine.db_service.get_placeholder_entries = AsyncMock(return_value=[])
+
+        # Create a rule that generates a placeholder path
+        import yaml
+
+        rule_content = """
+name: "test_placeholder_rule"
+description: "Test rule that creates placeholder paths"
+category: "test"
+enabled: true
+
+triggers:
+  - file_patterns:
+      - "**/Local State"
+    mime_patterns:
+      - "application/json"
+
+linked_files:
+  - name: "masterkey"
+    description: "User masterkey"
+    path_templates:
+      - "{parent_dir}/../../../Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/abc123"
+    priority: "high"
+    collection_reason: "Test placeholder"
+"""
+        rule_file = Path(engine.rules_dir) / "test.yaml"
+        with open(rule_file, "w") as f:
+            f.write(rule_content)
+
+        # Reload rules
+        engine._load_rules()
+
+        # Trigger file that creates placeholder path
+        trigger_file = create_file_enriched(
+            object_id="test-trigger-001",
+            path="/C:/Users/john.doe/AppData/Local/Google/Chrome/User Data/Local State",
+            mime_type="application/json",
+            magic_type="JSON data",
+        )
+        trigger_file.source = "test-agent"
+
+        # Process the trigger file
+        await engine.apply_linking_rules(trigger_file)
+
+        # Verify backward resolution was attempted
+        engine.db_service.get_collected_files.assert_called()
+
+    async def test_chromium_masterkey_resolution_full_path(self, engine):
+        """Test resolution of Chromium masterkey with full paths."""
+        from unittest.mock import AsyncMock
+
+        placeholder_path = (
+            "/C:/Users/<WINDOWS_USERNAME>/AppData/Roaming/Microsoft/Protect/"
+            "<WINDOWS_SECURITY_IDENTIFIER>/abc-123-def-456"
+        )
+        real_path = (
+            "/C:/Users/john.doe/AppData/Roaming/Microsoft/Protect/"
+            "S-1-5-21-1234567890-1234567890-1234567890-1000/abc-123-def-456"
+        )
+
+        engine.db_service.get_placeholder_entries = AsyncMock(
+            return_value=[{"table_name": "file_listings", "path": placeholder_path}]
+        )
+        engine.db_service.update_file_listing_path = AsyncMock(return_value=True)
+
+        # Real masterkey file arrives
+        masterkey_file = create_file_enriched(
+            object_id="test-masterkey-001",
+            path=real_path,
+            mime_type="application/octet-stream",
+            magic_type="data",
+        )
+        masterkey_file.source = "test-agent"
+
+        await engine.apply_linking_rules(masterkey_file)
+
+        # Verify resolution occurred
+        engine.db_service.update_file_listing_path.assert_called_once()
+        call_args = engine.db_service.update_file_listing_path.call_args
+        assert "john.doe" in call_args[0][2]
+        assert "S-1-5-21-" in call_args[0][2]
+
+    async def test_username_placeholder_resolution(self, engine):
+        """Test USERNAME placeholder resolution."""
+        from unittest.mock import AsyncMock
+
+        placeholder_path = "/C:/Users/<WINDOWS_USERNAME>/Documents/file.txt"
+        real_path = "/C:/Users/alice.smith/Documents/file.txt"
+
+        engine.db_service.get_placeholder_entries = AsyncMock(
+            return_value=[{"table_name": "file_listings", "path": placeholder_path}]
+        )
+        engine.db_service.update_file_listing_path = AsyncMock(return_value=True)
+
+        file_enriched = create_file_enriched(
+            object_id="test-001", path=real_path, mime_type="text/plain", magic_type="ASCII text"
+        )
+        file_enriched.source = "test-agent"
+
+        await engine.apply_linking_rules(file_enriched)
+
+        engine.db_service.update_file_listing_path.assert_called_once()
+        call_args = engine.db_service.update_file_listing_path.call_args
+        assert call_args[0][2] == real_path
+
+    async def test_sid_placeholder_resolution(self, engine):
+        """Test SID placeholder resolution."""
+        from unittest.mock import AsyncMock
+
+        placeholder_path = "/C:/Windows/System32/config/systemprofile/AppData/Local/<WINDOWS_SECURITY_IDENTIFIER>/file.dat"
+        real_path = "/C:/Windows/System32/config/systemprofile/AppData/Local/S-1-5-18/file.dat"
+
+        engine.db_service.get_placeholder_entries = AsyncMock(
+            return_value=[{"table_name": "file_listings", "path": placeholder_path}]
+        )
+        engine.db_service.update_file_listing_path = AsyncMock(return_value=True)
+
+        file_enriched = create_file_enriched(
+            object_id="test-001", path=real_path, mime_type="application/octet-stream", magic_type="data"
+        )
+        file_enriched.source = "test-agent"
+
+        await engine.apply_linking_rules(file_enriched)
+
+        engine.db_service.update_file_listing_path.assert_called_once()
+        call_args = engine.db_service.update_file_listing_path.call_args
+        assert "S-1-5-18" in call_args[0][2]
+
+    async def test_both_placeholders_same_path(self, engine):
+        """Test multiple placeholders in the same path."""
+        from unittest.mock import AsyncMock
+
+        placeholder_path = (
+            "/C:/Users/<WINDOWS_USERNAME>/AppData/Roaming/Microsoft/Protect/"
+            "<WINDOWS_SECURITY_IDENTIFIER>/masterkey"
+        )
+        real_path = (
+            "/C:/Users/bob.jones/AppData/Roaming/Microsoft/Protect/"
+            "S-1-5-21-9876543210-9876543210-9876543210-5000/masterkey"
+        )
+
+        engine.db_service.get_placeholder_entries = AsyncMock(
+            return_value=[{"table_name": "file_listings", "path": placeholder_path}]
+        )
+        engine.db_service.update_file_listing_path = AsyncMock(return_value=True)
+
+        file_enriched = create_file_enriched(
+            object_id="test-001", path=real_path, mime_type="application/octet-stream", magic_type="data"
+        )
+        file_enriched.source = "test-agent"
+
+        await engine.apply_linking_rules(file_enriched)
+
+        engine.db_service.update_file_listing_path.assert_called_once()
+        call_args = engine.db_service.update_file_listing_path.call_args
+        resolved_path = call_args[0][2]
+        assert "bob.jones" in resolved_path
+        assert "S-1-5-21-" in resolved_path
+
+    async def test_no_resolution_when_no_match(self, engine):
+        """Test that placeholder stays when no matching file exists."""
+        from unittest.mock import AsyncMock
+
+        # Placeholder for different path
+        placeholder_path = "/C:/Users/<WINDOWS_USERNAME>/AppData/different.txt"
+
+        engine.db_service.get_placeholder_entries = AsyncMock(
+            return_value=[{"table_name": "file_listings", "path": placeholder_path}]
+        )
+        engine.db_service.update_file_listing_path = AsyncMock(return_value=True)
+
+        # Real file with non-matching path
+        file_enriched = create_file_enriched(
+            object_id="test-001",
+            path="/C:/Users/john.doe/Documents/other.txt",
+            mime_type="text/plain",
+            magic_type="ASCII text",
+        )
+        file_enriched.source = "test-agent"
+
+        await engine.apply_linking_rules(file_enriched)
+
+        # No resolution should occur
+        engine.db_service.update_file_listing_path.assert_not_called()
+
+    async def test_case_insensitive_windows_paths(self, engine):
+        """Test that resolution works with different case variations."""
+        from unittest.mock import AsyncMock
+
+        placeholder_path = "/C:/Users/<WINDOWS_USERNAME>/AppData/file.txt"
+        real_path_different_case = "/c:/users/john.doe/appdata/file.txt"
+
+        engine.db_service.get_placeholder_entries = AsyncMock(
+            return_value=[{"table_name": "file_listings", "path": placeholder_path}]
+        )
+        engine.db_service.update_file_listing_path = AsyncMock(return_value=True)
+
+        file_enriched = create_file_enriched(
+            object_id="test-001", path=real_path_different_case, mime_type="text/plain", magic_type="ASCII text"
+        )
+        file_enriched.source = "test-agent"
+
+        await engine.apply_linking_rules(file_enriched)
+
+        # Should resolve despite case differences
+        engine.db_service.update_file_listing_path.assert_called_once()
+
+    async def test_source_isolation(self, engine):
+        """Test that placeholders from different sources don't cross-resolve."""
+        from unittest.mock import AsyncMock
+
+        # Placeholder from source-1
+        placeholder_path = "/C:/Users/<WINDOWS_USERNAME>/AppData/file.txt"
+        engine.db_service.get_placeholder_entries = AsyncMock(
+            return_value=[]  # No placeholders for source-2
+        )
+
+        # Real file from source-2 (different source)
+        file_enriched = create_file_enriched(
+            object_id="test-001",
+            path="/C:/Users/john.doe/AppData/file.txt",
+            mime_type="text/plain",
+            magic_type="ASCII text",
+        )
+        file_enriched.source = "source-2"
+
+        await engine.apply_linking_rules(file_enriched)
+
+        # Verify query was called with correct source
+        engine.db_service.get_placeholder_entries.assert_called_with("source-2")

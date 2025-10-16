@@ -13,7 +13,7 @@ from .rules_engine import FileLinkingEngine
 logger = get_logger(__name__)
 
 
-def add_file_linkings(
+async def add_file_linkings(
     source: str,
     source_file_path: str,
     linked_file_paths: list[str],
@@ -46,7 +46,7 @@ def add_file_linkings(
             "C:\\Windows\\System32\\advapi32.dll"
         ]
 
-        add_file_linkings(
+        await add_file_linkings(
             source="agent123",
             source_file_path="C:\\malware\\sample.exe",
             linked_file_paths=linked_paths,
@@ -59,16 +59,13 @@ def add_file_linkings(
         file_linking_engine = FileLinkingEngine(get_postgres_connection_str())
     except Exception as e:
         logger.exception(e, "[add_file_linkings]")
-
-    if not file_linking_engine:
-        logger.error("[add_file_linkings] File linking engine not initialized")
         return 0
 
     if not linked_file_paths:
         return 0
 
     try:
-        return file_linking_engine.add_programmatic_linking(
+        return await file_linking_engine.add_programmatic_linking(
             source=source,
             source_file_path=source_file_path,
             linked_file_paths=linked_file_paths,
@@ -88,11 +85,13 @@ def add_file_linkings(
         return 0
 
 
-def add_file_linking(
+async def add_file_linking(
     source: str, source_file_path: str, linked_file_path: str, link_type: str, collection_reason: str | None = None
 ) -> bool:
     """
     Add a single file linking (convenience function).
+
+    Uses FileLinkingEngine.add_programmatic_linking() which handles placeholder resolution.
 
     Args:
         source: Source identifier
@@ -105,7 +104,7 @@ def add_file_linking(
         bool: True if successful, False otherwise
     """
     return (
-        add_file_linkings(
+        await add_file_linkings(
             source=source,
             source_file_path=source_file_path,
             linked_file_paths=[linked_file_path],

@@ -140,15 +140,15 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         # Fall back to standard path if not found or on error
         return standard_path
 
-    def _create_proactive_file_linkings(self, file_enriched):
+    async def _create_proactive_file_linkings(self, file_enriched):
         """Create proactive file linkings for the related registry hives."""
         if not file_enriched.source or not file_enriched.path:
             return
 
-        drive = get_drive_from_path(file_enriched.path)
-        if not drive:
-            logger.warning(f"Could not extract drive from path: {file_enriched.path}")
-            return
+        drive = get_drive_from_path(file_enriched.path) or ""
+        # if not drive:
+        #     logger.warning(f"Could not extract drive from path: {file_enriched.path}")
+        #     return
 
         try:
             # Link to SYSTEM and SECURITY hives, needed to decrypt the SYSTEM masterkeys
@@ -158,7 +158,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             system_path = self._get_existing_hive_path(file_enriched, system_standard_path)
             security_path = self._get_existing_hive_path(file_enriched, security_standard_path)
 
-            add_file_linking(
+            await add_file_linking(
                 source=file_enriched.source,
                 source_file_path=file_enriched.path,
                 linked_file_path=system_path,
@@ -166,7 +166,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 collection_reason="Needed to decrypt the DPAPI_SYSTEM secret",
             )
 
-            add_file_linking(
+            await add_file_linking(
                 source=file_enriched.source,
                 source_file_path=file_enriched.path,
                 linked_file_path=security_path,
@@ -209,7 +209,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 # Use provided file path
                 masterkey_file = MasterKeyFile.from_file(file_path)
                 if masterkey_file.policy.value & 2:
-                    self._create_proactive_file_linkings(file_enriched)
+                    await self._create_proactive_file_linkings(file_enriched)
             else:
                 # Download the file and parse it
                 with self.storage.download(file_enriched.object_id) as temp_file:

@@ -169,7 +169,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         # Fall back to standard path if not found or on error
         return standard_path
 
-    def _create_proactive_file_linkings(self, file_enriched, hive_type: str):
+    async def _create_proactive_file_linkings(self, file_enriched, hive_type: str):
         """Create proactive file linkings based on hive type."""
         if not file_enriched.source or not file_enriched.path:
             return
@@ -189,7 +189,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 sam_path = self._get_existing_hive_path(file_enriched, sam_standard_path)
                 security_path = self._get_existing_hive_path(file_enriched, security_standard_path)
 
-                add_file_linking(
+                await add_file_linking(
                     source=file_enriched.source,
                     source_file_path=file_enriched.path,
                     linked_file_path=sam_path,
@@ -197,7 +197,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     collection_reason="SYSTEM hive can decrypt SAM accounts",
                 )
 
-                add_file_linking(
+                await add_file_linking(
                     source=file_enriched.source,
                     source_file_path=file_enriched.path,
                     linked_file_path=security_path,
@@ -211,7 +211,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 system_standard_path = f"{drive}/Windows/System32/Config/SYSTEM"
                 system_path = self._get_existing_hive_path(file_enriched, system_standard_path)
 
-                add_file_linking(
+                await add_file_linking(
                     source=file_enriched.source,
                     source_file_path=file_enriched.path,
                     linked_file_path=system_path,
@@ -706,11 +706,11 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
             # Use provided file_path if available, otherwise download
             if file_path:
-                return self._analyze_registry_hive_file(file_path, file_enriched)
+                return await self._analyze_registry_hive_file(file_path, file_enriched)
             else:
                 # Download the file to a temporary location
                 with self.storage.download(file_enriched.object_id) as temp_file:
-                    return self._analyze_registry_hive_file(temp_file.name, file_enriched)
+                    return await self._analyze_registry_hive_file(temp_file.name, file_enriched)
 
         except Exception as e:
             logger.exception(e, message="Error processing registry hive file")
@@ -741,7 +741,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         return f"{keyStr}: {value}"
 
-    def _analyze_registry_hive_file(self, hive_file_path: str, file_enriched) -> EnrichmentResult | None:
+    async def _analyze_registry_hive_file(self, hive_file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze registry hive file and generate enrichment result."""
         enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
@@ -755,7 +755,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         linked_system_object_id = None
 
         # Create proactive file linkings
-        self._create_proactive_file_linkings(file_enriched, hive_type)
+        await self._create_proactive_file_linkings(file_enriched, hive_type)
 
         # Process based on hive type
         if hive_type == "SYSTEM":

@@ -90,6 +90,12 @@ rule Chrome_Local_State
             state_key_data = await process_chromium_local_state(self.dpapi_manager, object_id, file_path)
 
             if state_key_data:
+                # Debug: Check for coroutines in state_key_data
+                import inspect
+                for key, value in state_key_data.items():
+                    if inspect.iscoroutine(value):
+                        logger.error(f"FOUND COROUTINE IN state_key_data['{key}']!")
+
                 enrichment = EnrichmentResult(module_name=self.name)
                 enrichment.results = {"parsed": state_key_data}
 

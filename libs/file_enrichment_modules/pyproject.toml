@@ -18,6 +18,7 @@ psycopg = "^3.2.4"
 common = { path = "../common", develop = true }
 nemesis_dpapi = { path = "../nemesis_dpapi", develop = true }
 file_linking = { path = "../file_linking", develop = true }
+chromium = { path = "../chromium", develop = true }
 lnkparse3 = "^1.5.0"
 dapr = "1.16.0"
 

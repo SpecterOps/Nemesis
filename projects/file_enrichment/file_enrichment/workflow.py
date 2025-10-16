@@ -50,6 +50,7 @@ if not postgres_connection_string.startswith("postgres://"):
     raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager")
 
 file_linking_engine = FileLinkingEngine(postgres_connection_string)
+asyncio_loop: asyncio.AbstractEventLoop = None
 
 ##########################################
 #
@@ -406,18 +407,22 @@ def check_file_linkings(ctx, activity_input):
     object_id = activity_input["object_id"]
     file_enriched = get_file_enriched(object_id)
 
-    try:
-        global file_linking_engine
-        linkings_created = file_linking_engine.process_file(file_enriched)
+    async def process_async(ctx, activity_input):
+        try:
+            global file_linking_engine
+            linkings_created = await file_linking_engine.apply_linking_rules(file_enriched)
 
-        logger.debug("File linking check complete", object_id=object_id, linkings_created=linkings_created)
+            logger.debug("File linking check complete", object_id=object_id, linkings_created=linkings_created)
 
-        return {"linkings_created": linkings_created}
+            return {"linkings_created": linkings_created}
 
-    except Exception as e:
-        logger.exception("Error in file linking check", object_id=object_id, error=str(e))
-        # Don't raise to ensure workflow can complete
-        return {"linkings_created": 0, "error": str(e)}
+        except Exception as e:
+            logger.exception("Error in file linking check", object_id=object_id, error=str(e))
+            # Don't raise to ensure workflow can complete
+            return {"linkings_created": 0, "error": str(e)}
+    global asyncio_loop
+
+    return asyncio.run_coroutine_threadsafe(process_async(ctx, activity_input), asyncio_loop).result()
 
 
 @workflow_runtime.activity
@@ -599,6 +604,40 @@ def run_enrichment_modules(ctx, activity_input: dict):
                     result: EnrichmentResult = module.process(object_id, temp_file.name)
 
                     if result:
+                        # Debug: Check for coroutines in the result before serialization
+                        import inspect
+                        def check_for_coroutines(obj, path="root"):
+                            """Recursively check for coroutines in nested structures."""
+                            if inspect.iscoroutine(obj):
+                                logger.error(f"FOUND COROUTINE at {path}: {obj}")
+                                return True
+                            elif isinstance(obj, dict):
+                                for key, value in obj.items():
+                                    if check_for_coroutines(value, f"{path}.{key}"):
+                                        return True
+                            elif isinstance(obj, (list, tuple)):
+                                for i, item in enumerate(obj):
+                                    if check_for_coroutines(item, f"{path}[{i}]"):
+                                        return True
+                            return False
+
+                        # Check the result object
+                        try:
+                            result_dict = result.model_dump(mode="json")
+                            if check_for_coroutines(result_dict, f"result({module_name})"):
+                                logger.error(
+                                    "Coroutine found in enrichment result before serialization",
+                                    module_name=module_name,
+                                    object_id=object_id,
+                                    result_keys=list(result_dict.keys()) if isinstance(result_dict, dict) else None,
+                                )
+                        except Exception as debug_err:
+                            logger.error(
+                                "Error during coroutine debug check",
+                                module_name=module_name,
+                                error=str(debug_err),
+                            )
+
                         # Store enrichment result directly in database (same as before)
                         with psycopg.connect(postgres_connection_string) as conn:
                             with conn.cursor() as cur:
@@ -747,8 +786,31 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
                     processing_time=f"{ctx.current_utc_datetime - start_time}",
                 )
         except Exception as e:
+            import traceback
+
+            # Extract detailed information about each task
+            task_details = []
+            for i, task in enumerate(enrichment_tasks):
+                task_info = {
+                    "index": i,
+                    "type": type(task).__name__,
+                    "repr": repr(task),
+                }
+                # Try to extract activity name if available
+                if hasattr(task, '_activity_name'):
+                    task_info["activity_name"] = task._activity_name
+                if hasattr(task, '_input'):
+                    task_info["input"] = str(task._input)[:200]  # Truncate long inputs
+                task_details.append(task_info)
+
             logger.exception(
-                "Error in enrichment tasks - handle_file_if_plaintext or enrichment_module_workflow", error=str(e)
+                "Error in enrichment tasks - handle_file_if_plaintext or enrichment_module_workflow",
+                error=str(e),
+                error_type=type(e).__name__,
+                error_args=e.args,
+                traceback=traceback.format_exc(),
+                enrichment_tasks_count=len(enrichment_tasks),
+                enrichment_tasks_details=task_details,
             )
             raise
 
@@ -845,13 +907,14 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 
 async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-    global workflow_runtime, workflow_client
-
+    global workflow_runtime, workflow_client, asyncio_loop
 
     # Load enrichment modules
     module_loader = ModuleLoader()
     await module_loader.load_modules()
     workflow_runtime.modules = module_loader.modules
+
+    asyncio_loop = asyncio.get_running_loop()
 
     # Filter modules by workflow and determine execution order
     workflow_name = "default"  # This could be made configurable later

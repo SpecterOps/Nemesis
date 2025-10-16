@@ -16,6 +16,7 @@ from common.logger import get_logger
 from common.models import FileEnriched
 
 from .database_service import FileLinkingDatabaseService, FileListingStatus
+from .placeholder_resolver import PlaceholderResolver
 
 logger = get_logger(__name__)
 
@@ -61,6 +62,7 @@ class FileLinkingEngine:
 
     def __init__(self, postgres_connection_string: str, rules_dir: str | None = None):
         self.db_service = FileLinkingDatabaseService(postgres_connection_string)
+        self.placeholder_resolver = PlaceholderResolver(self.db_service)
         self.rules: list[LinkingRule] = []
 
         if rules_dir is None:
@@ -163,6 +165,100 @@ class FileLinkingEngine:
 
         return True
 
+    async def _resolve_backward(self, source: str, linked_path: str) -> tuple[str, FileListingStatus]:
+        """
+        Perform backward resolution: check if a placeholder path has a matching real file.
+
+        Args:
+            source: Source identifier
+            linked_path: Path that may contain placeholders
+
+        Returns:
+            Tuple of (resolved_path, status) where:
+            - resolved_path: The real path if found, otherwise the original linked_path
+            - status: COLLECTED if resolved, NEEDS_TO_BE_COLLECTED otherwise
+        """
+        status = FileListingStatus.NEEDS_TO_BE_COLLECTED
+        final_path = linked_path
+
+        if "<" in linked_path and ">" in linked_path:
+            try:
+                resolved_path = await self.placeholder_resolver.try_resolve_placeholder_path(source, linked_path)
+                if resolved_path:
+                    logger.info(
+                        "Backward resolution: found existing file for placeholder",
+                        placeholder_path=linked_path,
+                        real_path=resolved_path,
+                        source=source,
+                    )
+                    final_path = resolved_path
+                    status = FileListingStatus.COLLECTED
+            except Exception as e:
+                logger.warning(
+                    "Error in backward placeholder resolution",
+                    linked_path=linked_path,
+                    source=source,
+                    error=str(e),
+                )
+
+        return final_path, status
+
+    async def _resolve_forward_for_table(
+        self, source: str, real_path: str, table_name: str
+    ) -> None:
+        """
+        Perform forward resolution for a specific table: check if a real path matches placeholders.
+
+        Resolves ALL matching placeholders, not just the first one.
+
+        Args:
+            source: Source identifier
+            real_path: The real file path (no placeholders)
+            table_name: Either "file_listings" or "file_linkings"
+        """
+        if "<" in real_path and ">" in real_path:
+            # This is a placeholder, not a real path, skip forward resolution
+            return
+
+        try:
+            placeholder_entries = await self.db_service.get_placeholder_entries(source)
+
+            for entry in placeholder_entries:
+                if entry["table_name"] != table_name:
+                    continue
+
+                placeholder_path = entry["path"]
+
+                # Convert placeholder to regex and try to match
+                pattern = self.placeholder_resolver._convert_placeholder_to_regex(placeholder_path)
+                if pattern and pattern.match(real_path):
+                    # This real path matches an existing placeholder
+                    resolved_path = self.placeholder_resolver._replace_placeholders_with_captures(
+                        placeholder_path, pattern.match(real_path)
+                    )
+
+                    logger.info(
+                        f"Forward resolution matched placeholder in {table_name}",
+                        placeholder_path=placeholder_path,
+                        real_path=real_path,
+                        source=source,
+                    )
+
+                    # Update the placeholder in the appropriate table
+                    if table_name == "file_listings":
+                        await self.db_service.update_file_listing_path(source, placeholder_path, resolved_path)
+                    elif table_name == "file_linkings":
+                        await self.db_service.update_file_linking_path(source, placeholder_path, resolved_path)
+                    # Continue checking other placeholders (no break)
+
+        except Exception as e:
+            logger.warning(
+                f"Error in forward placeholder resolution for {table_name}",
+                real_path=real_path,
+                source=source,
+                error=str(e),
+            )
+
     def _expand_path_template(self, template: str, file_path: str) -> str:
         """Expand a path template with file-specific values."""
 
@@ -194,13 +290,17 @@ class FileLinkingEngine:
 
         return expanded
 
-    def process_file(self, file_enriched: FileEnriched) -> int:
+    async def apply_linking_rules(self, file_enriched: FileEnriched) -> int:
         """
-        Process an enriched file through the rules engine to identify and link related files.
+        Apply YAML-based linking rules to an enriched file.
 
         Evaluates the file against all loaded rule triggers. When a match is found,
         expands path templates to identify related files, marks them for collection,
         and creates linkings between the source file and related files.
+
+        Also performs bidirectional placeholder resolution:
+        - Forward: resolves existing placeholder entries using this real file
+        - Backward: checks if placeholder paths already have matching real files
 
         Args:
             file_enriched: File data from files_enriched table
@@ -223,15 +323,23 @@ class FileLinkingEngine:
             f"Processing file: {file_path}, source: {source}, file_enriched: {list(file_enriched.model_dump().keys())}"
         )
 
-        # Mark the current file as collected (save for two commonly derived files)
-        if not file_path.endswith("/strings.txt") and not file_path.endswith("/decompiled.zip"):
-            self.db_service.add_file_listing(
-                source=source,
-                path=file_path,
-                status=FileListingStatus.COLLECTED,
-                object_id=file_enriched.object_id,
-            )
-            logger.debug("Adding file listing (collected)", file_path=file_path, source=source)
+        # Skip marking these commonly derived files as collected
+        if file_path.endswith("/strings.txt") or file_path.endswith("/decompiled.zip"):
+            return
+
+        # Forward resolution: Try to resolve existing placeholder entries with this real file
+        # IMPORTANT: Do this BEFORE add_file_listing so the placeholder gets updated first,
+        # then add_file_listing will find the updated row and not create a duplicate
+        await self._resolve_forward_for_table(source, file_path, "file_listings")
+        await self._resolve_forward_for_table(source, file_path, "file_linkings")
+
+        await self.db_service.add_file_listing(
+            source=source,
+            path=file_path,
+            status=FileListingStatus.COLLECTED,
+            object_id=file_enriched.object_id,
+        )
+        logger.debug("Adding file listing (collected)", file_path=file_path, source=source)
 
         # Process each rule
         for rule in self.rules:
@@ -246,16 +354,20 @@ class FileLinkingEngine:
                             for template in linked_file.path_templates:
                                 linked_path = self._expand_path_template(template, file_enriched.path)
 
+                                # Backward resolution: If linked_path contains placeholders,
+                                # check if a matching real file already exists
+                                linked_path, status = await self._resolve_backward(source, linked_path)
+
                                 # Add file listing
-                                self.db_service.add_file_listing(
+                                await self.db_service.add_file_listing(
                                     source=source,
                                     path=linked_path,
-                                    status=FileListingStatus.NEEDS_TO_BE_COLLECTED,
+                                    status=status,
                                 )
 
                                 # Add file linking
                                 link_type = f"{rule.category}:{linked_file.name}"
-                                self.db_service.add_file_linking(
+                                await self.db_service.add_file_linking(
                                     source=source,
                                     file_path_1=file_path,
                                     file_path_2=linked_path,
@@ -284,7 +396,7 @@ class FileLinkingEngine:
 
         return linkings_created
 
-    def add_programmatic_linking(
+    async def add_programmatic_linking(
         self,
         source: str,
         source_file_path: str,
@@ -294,6 +406,10 @@ class FileLinkingEngine:
     ) -> int:
         """
         Add file linkings programmatically (called by enrichment modules).
+
+        Performs bidirectional placeholder resolution:
+        - If linked_path has placeholders: checks if real file exists (backward resolution)
+        - If linked_path is real: checks if placeholder exists and resolves it (forward resolution)
 
         Args:
             source: Source identifier
@@ -308,22 +424,31 @@ class FileLinkingEngine:
         linkings_created = 0
 
         for linked_path in linked_file_paths:
+            # Backward resolution: If linked_path contains placeholders,
+            # check if a matching real file already exists in file_listings
+            final_linked_path, status = await self._resolve_backward(source, linked_path)
+
+            # Forward resolution: If linked_path is a real path,
+            # check if placeholders exist that match it, and resolve them
+            await self._resolve_forward_for_table(source, final_linked_path, "file_linkings")
+            await self._resolve_forward_for_table(source, final_linked_path, "file_listings")
+
             # Add file listing
-            self.db_service.add_file_listing(
+            await self.db_service.add_file_listing(
                 source=source,
-                path=linked_path,
-                status=FileListingStatus.NEEDS_TO_BE_COLLECTED,
+                path=final_linked_path,
+                status=status,
             )
 
             # Add file linking
-            full_link_type = link_type  # f"programmatic:{link_type}"
+            full_link_type = link_type
             if collection_reason:
                 full_link_type += f":{collection_reason}"
 
-            self.db_service.add_file_linking(
+            await self.db_service.add_file_linking(
                 source=source,
                 file_path_1=source_file_path,
-                file_path_2=linked_path,
+                file_path_2=final_linked_path,
                 link_type=full_link_type,
             )
 
@@ -332,18 +457,8 @@ class FileLinkingEngine:
             logger.debug(
                 "Created programmatic file linking",
                 source_path=source_file_path,
-                linked_path=linked_path,
+                linked_path=final_linked_path,
                 link_type=full_link_type,
-            )
-
-
-
-        if linkings_created > 0:
-            logger.info(
-                "Created programmatic file linkings",
-                source_file_path=source_file_path,
-                linkings_created=linkings_created,
-                link_type=link_type,
             )
 
         return linkings_created

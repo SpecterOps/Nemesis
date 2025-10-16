@@ -99,7 +99,7 @@ def _parse_app_bound_key(app_bound_key_b64: str) -> tuple[bytes, str | None]:
 
 
 
-def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid: UUID) -> None:
+async def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid: UUID) -> None:
     """Add file linking entry for user masterkey."""
 
     # Skip trying to figure out the username/drive if we can
@@ -122,7 +122,7 @@ def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid
             f"{drive}/Users/{username}/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
         )
 
-    add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:user_masterkey")
+    await add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:user_masterkey")
 
 
 def _get_chromekey_from_source(source: str, pg_conn) -> bytes | None:
@@ -211,7 +211,7 @@ async def _insert_state_keys(
                     reason=type(e).__name__,
                 )
 
-                _add_user_masterkey_link(file_enriched, username, dpapi_blob.masterkey_guid)
+                await _add_user_masterkey_link(file_enriched, username, dpapi_blob.masterkey_guid)
 
             except Exception as e:
                 logger.warning(f"Unable to decrypt state key DPAPI blob: {dpapi_blob.masterkey_guid}", error=str(e))
@@ -233,7 +233,7 @@ async def _insert_state_keys(
             )
 
             # add the masterkey file path (now that we know the key GUID) as a link/listing
-            add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:system_masterkey")
+            await add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:system_masterkey")
 
             try:
                 # Parse only the DPAPI portion (after APPB header)
@@ -278,7 +278,7 @@ async def _insert_state_keys(
                             reason=type(e).__name__,
                         )
 
-                        _add_user_masterkey_link(file_enriched, username, user_blob.masterkey_guid)
+                        await _add_user_masterkey_link(file_enriched, username, user_blob.masterkey_guid)
 
                     except Exception as e:
                         logger.warning(f"Unable to decrypt/process final app bound key blob: {e}")

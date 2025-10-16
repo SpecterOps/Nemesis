@@ -14,11 +14,11 @@ class EnrichmentModule:
         self.name = name
         self.dependencies = dependencies or []
 
-    async def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str) -> bool:
         """Determine if this module should process the given file."""
         raise NotImplementedError
 
-    async def process(self, object_id: str) -> EnrichmentResult | None:
+    def process(self, object_id: str) -> EnrichmentResult | None:
         """Process the file and return enrichment results."""
         raise NotImplementedError
 
