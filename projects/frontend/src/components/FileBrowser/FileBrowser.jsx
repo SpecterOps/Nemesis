@@ -1,19 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Folder, 
-  File, 
-  ArrowLeft, 
-  Home, 
-  ChevronRight, 
-  AlertTriangle, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle,
+  ChevronRight,
+  Clock,
+  File,
+  Folder,
+  FolderTree,
   HardDrive,
-  Search,
+  Home,
   List,
-  FolderTree
+  Search,
+  XCircle
 } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 // Status badge component
 const StatusBadge = ({ status, count }) => {
@@ -51,7 +51,7 @@ const SourceCard = ({ source, totalFiles, statusCounts, onSourceClick }) => {
   };
 
   return (
-    <div 
+    <div
       onClick={() => onSourceClick(source)}
       className="bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-lg transition-shadow"
     >
@@ -69,7 +69,7 @@ const SourceCard = ({ source, totalFiles, statusCounts, onSourceClick }) => {
         </div>
       </div>
       <div className="space-y-2">
-        {Object.entries(statusCounts).map(([status, count]) => 
+        {Object.entries(statusCounts).map(([status, count]) =>
           count > 0 && <StatusBadge key={status} status={status} count={count} />
         )}
       </div>
@@ -80,29 +80,28 @@ const SourceCard = ({ source, totalFiles, statusCounts, onSourceClick }) => {
 // Breadcrumb navigation
 const Breadcrumb = ({ currentPath, onNavigate }) => {
   const pathParts = currentPath ? currentPath.split('/').filter(Boolean) : [];
-  
+
   return (
     <div className="flex items-center space-x-1 text-sm text-gray-600 dark:text-gray-400 mb-4">
-      <button 
+      <button
         onClick={() => onNavigate('')}
         className="flex items-center hover:text-blue-600 dark:hover:text-blue-400"
       >
         <Home className="w-4 h-4 mr-1" />
         Root
       </button>
-      
+
       {pathParts.map((part, index) => {
         const partialPath = pathParts.slice(0, index + 1).join('/');
         const isLast = index === pathParts.length - 1;
-        
+
         return (
           <React.Fragment key={index}>
             <ChevronRight className="w-4 h-4" />
-            <button 
+            <button
               onClick={() => !isLast && onNavigate(partialPath)}
-              className={`hover:text-blue-600 dark:hover:text-blue-400 ${
-                isLast ? 'text-gray-900 dark:text-gray-100 font-medium' : ''
-              }`}
+              className={`hover:text-blue-600 dark:hover:text-blue-400 ${isLast ? 'text-gray-900 dark:text-gray-100 font-medium' : ''
+                }`}
             >
               {part}
             </button>
@@ -117,7 +116,7 @@ const Breadcrumb = ({ currentPath, onNavigate }) => {
 const FileItem = ({ item, onItemClick, onFileClick }) => {
   const isFile = item.item_type === 'file';
   const Icon = isFile ? File : Folder;
-  
+
   const handleClick = () => {
     if (isFile && item.status === 'collected' && item.object_id) {
       onFileClick(item.object_id);
@@ -127,7 +126,7 @@ const FileItem = ({ item, onItemClick, onFileClick }) => {
   };
 
   return (
-    <div 
+    <div
       onClick={handleClick}
       className={`
         flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 
@@ -141,24 +140,64 @@ const FileItem = ({ item, onItemClick, onFileClick }) => {
           {item.name}
         </span>
       </div>
-      
+
       {isFile && <StatusBadge status={item.status} />}
     </div>
   );
 };
 
 // Simple file path item for collection list view
-const FilePathItem = ({ filePath }) => {
+const FilePathItem = ({ pathData }) => {
+  const { path, linkings } = pathData;
+
+  const handleFileClick = (objectId) => {
+    if (objectId) {
+      window.open(`/files/${objectId}`, '_blank');
+    }
+  };
+
   return (
-    <div className="p-2 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-      <div className="flex items-center space-x-2">
-        <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-        <span className="text-sm text-gray-900 dark:text-gray-100 font-mono break-all">
-          {filePath}
-        </span>
+    <div className="p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+      <div className="flex items-start space-x-2">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-gray-900 dark:text-gray-100 font-mono break-all mb-1">
+            {path}
+          </div>
+          {linkings && linkings.length > 0 && (
+            <div className="space-y-1 mt-2">
+              {linkings.map((linking, idx) => (
+                <div key={idx} className="text-xs text-gray-600 dark:text-gray-400 pl-3 border-l-2 border-yellow-300 dark:border-yellow-600">
+                  <div className="font-medium text-yellow-700 dark:text-yellow-400">
+                    Collection reason: {linking.reason}
+                  </div>
+                  <div className="font-mono text-gray-500 dark:text-gray-500">
+                    Linked to by{' '}
+                    {linking.requiredByObjectId ? (
+                      <button
+                        onClick={() => handleFileClick(linking.requiredByObjectId)}
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline break-all inline"
+                      >
+                        {linking.requiredBy}
+                      </button>
+                    ) : (
+                      <span className="break-all">{linking.requiredBy}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
+};
+
+// Helper function to normalize paths by removing leading slashes
+const normalizePath = (path) => {
+  if (!path) return '';
+  // Remove leading slashes to ensure consistent path parsing
+  return path.replace(/^\/+/, '');
 };
 
 // Main FileBrowser component
@@ -241,8 +280,8 @@ const FileBrowser = () => {
       setError(null);
 
       // Use LIKE patterns for efficient database filtering
-      const pathPrefix = path === '' ? '' : `${path}/`;
-      const pathPattern = path === '' ? '%' : `${path}/%`;
+      // Database paths have leading slashes, so we need to add them back for the query
+      const pathPattern = path === '' ? '%' : `/${path}/%`;
 
       const query = {
         query: `
@@ -286,16 +325,17 @@ const FileBrowser = () => {
       const currentLevel = path === '' ? 0 : path.split('/').length;
 
       result.data.file_listings.forEach(item => {
-        const itemPath = item.path;
-        const pathParts = itemPath.split('/');
-        
+        // Normalize the path to remove leading slashes
+        const normalizedPath = normalizePath(item.path);
+        const pathParts = normalizedPath.split('/');
+
         // Only process items at the next level down
-        if (pathParts.length === currentLevel + 1 || 
-           (pathParts.length > currentLevel + 1 && pathParts.slice(0, currentLevel + 1).join('/') === (path === '' ? pathParts[0] : `${path}/${pathParts[currentLevel]}`))) {
-          
+        if (pathParts.length === currentLevel + 1 ||
+          (pathParts.length > currentLevel + 1 && pathParts.slice(0, currentLevel + 1).join('/') === (path === '' ? pathParts[0] : `${path}/${pathParts[currentLevel]}`))) {
+
           const childName = pathParts[currentLevel];
           const childPath = pathParts.slice(0, currentLevel + 1).join('/');
-          
+
           if (!childrenMap.has(childName)) {
             const isFile = pathParts.length === currentLevel + 1;
             childrenMap.set(childName, {
@@ -333,9 +373,10 @@ const FileBrowser = () => {
       setLoading(true);
       setError(null);
 
-      const query = {
+      // Fetch file listings (needs collection), linkings, and collected files with object_ids
+      const queries = {
         query: `
-          query GetCollectionPaths($source: String!) {
+          query GetCollectionPathsAndLinkings($source: String!) {
             file_listings(
               where: {
                 source: {_eq: $source},
@@ -344,6 +385,24 @@ const FileBrowser = () => {
               order_by: {path: asc}
             ) {
               path
+            }
+            file_linkings(
+              where: {
+                source: {_eq: $source}
+              }
+            ) {
+              file_path_1
+              file_path_2
+              link_type
+            }
+            collected_files: file_listings(
+              where: {
+                source: {_eq: $source},
+                status: {_eq: "collected"}
+              }
+            ) {
+              path
+              object_id
             }
           }
         `,
@@ -356,7 +415,7 @@ const FileBrowser = () => {
           'Content-Type': 'application/json',
           'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
         },
-        body: JSON.stringify(query)
+        body: JSON.stringify(queries)
       });
 
       if (!response.ok) {
@@ -368,8 +427,32 @@ const FileBrowser = () => {
         throw new Error(result.errors[0].message);
       }
 
-      const paths = result.data.file_listings.map(item => item.path);
-      setCollectionPaths(paths);
+      // Build a map of file path -> object_id for collected files
+      const objectIdMap = new Map();
+      result.data.collected_files.forEach(file => {
+        objectIdMap.set(file.path, file.object_id);
+      });
+
+      // Build a map of file_path_2 -> linkings for quick lookup
+      const linkingsMap = new Map();
+      result.data.file_linkings.forEach(linking => {
+        if (!linkingsMap.has(linking.file_path_2)) {
+          linkingsMap.set(linking.file_path_2, []);
+        }
+        linkingsMap.get(linking.file_path_2).push({
+          requiredBy: linking.file_path_1,
+          requiredByObjectId: objectIdMap.get(linking.file_path_1) || null,
+          reason: linking.link_type
+        });
+      });
+
+      // Combine paths with their linking reasons
+      const pathsWithReasons = result.data.file_listings.map(item => ({
+        path: item.path,
+        linkings: linkingsMap.get(item.path) || []
+      }));
+
+      setCollectionPaths(pathsWithReasons);
     } catch (err) {
       console.error('Error fetching collection paths:', err);
       setError(err.message);
@@ -429,8 +512,8 @@ const FileBrowser = () => {
   );
 
   // Filter collection paths based on search term
-  const filteredCollectionPaths = collectionPaths.filter(path =>
-    path.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredCollectionPaths = collectionPaths.filter(pathData =>
+    pathData.path.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (error) {
@@ -452,7 +535,7 @@ const FileBrowser = () => {
       <div className="flex justify-between items-center">
         <div className="flex items-center space-x-4">
           {selectedSource && (
-            <button 
+            <button
               onClick={handleBackToSources}
               className="flex items-center space-x-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
             >
@@ -460,12 +543,12 @@ const FileBrowser = () => {
               <span>Back to Sources</span>
             </button>
           )}
-          
+
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
             {selectedSource ? `Files - ${selectedSource}` : 'File Browser'}
           </h1>
         </div>
-        
+
         {selectedSource && (
           <div className="flex items-center space-x-4">
             {/* View Toggle */}
@@ -473,22 +556,20 @@ const FileBrowser = () => {
               <span className="text-sm text-gray-600 dark:text-gray-400">View:</span>
               <button
                 onClick={handleToggleView}
-                className={`flex items-center space-x-2 px-3 py-2 text-sm rounded-md transition-colors ${
-                  !showCollectionList
-                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
+                className={`flex items-center space-x-2 px-3 py-2 text-sm rounded-md transition-colors ${!showCollectionList
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
               >
                 <FolderTree className="w-4 h-4" />
                 <span>Tree</span>
               </button>
               <button
                 onClick={handleToggleView}
-                className={`flex items-center space-x-2 px-3 py-2 text-sm rounded-md transition-colors ${
-                  showCollectionList
-                    ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
+                className={`flex items-center space-x-2 px-3 py-2 text-sm rounded-md transition-colors ${showCollectionList
+                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
               >
                 <List className="w-4 h-4" />
                 <span>Files That Need Collection</span>
@@ -541,9 +622,9 @@ const FileBrowser = () => {
           {/* Header - only show breadcrumbs in tree view */}
           {!showCollectionList && (
             <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-              <Breadcrumb 
-                currentPath={currentPath} 
-                onNavigate={handlePathNavigate} 
+              <Breadcrumb
+                currentPath={currentPath}
+                onNavigate={handlePathNavigate}
               />
             </div>
           )}
@@ -570,8 +651,8 @@ const FileBrowser = () => {
               </div>
             ) : showCollectionList ? (
               filteredCollectionPaths.length > 0 ? (
-                filteredCollectionPaths.map((filePath, index) => (
-                  <FilePathItem key={`${filePath}-${index}`} filePath={filePath} />
+                filteredCollectionPaths.map((pathData, index) => (
+                  <FilePathItem key={`${pathData.path}-${index}`} pathData={pathData} />
                 ))
               ) : (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">

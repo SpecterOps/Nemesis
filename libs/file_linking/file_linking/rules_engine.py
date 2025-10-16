@@ -231,6 +231,7 @@ class FileLinkingEngine:
                 status=FileListingStatus.COLLECTED,
                 object_id=file_enriched.object_id,
             )
+            logger.debug("Adding file listing (collected)", file_path=file_path, source=source)
 
         # Process each rule
         for rule in self.rules:
