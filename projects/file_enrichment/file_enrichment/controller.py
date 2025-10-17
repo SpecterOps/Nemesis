@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import CloudEvent, File
-from common.workflows import set_fastapi_loop
+from common.workflows.setup import set_fastapi_loop
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI

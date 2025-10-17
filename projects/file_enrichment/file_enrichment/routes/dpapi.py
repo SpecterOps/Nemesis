@@ -9,7 +9,7 @@ import urllib.parse
 from typing import Annotated
 from uuid import UUID
 
-from chromium import retry_decrypt_state_keys_for_masterkey
+from chromium import retry_decrypt_chrome_keys_for_masterkey, retry_decrypt_state_keys_for_masterkey
 from common.logger import get_logger
 from common.models2.dpapi import (
     DomainBackupKeyCredential,
@@ -58,7 +58,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
     async def update(self, evnt: DpapiEvent) -> None:
         """Called when a DPAPI event occurs."""
         if isinstance(evnt, NewPlaintextMasterKeyEvent):
-            logger.warning(
+            logger.debug(
                 "New plaintext masterkey detected, checking for state_keys to decrypt",
                 event_type=type(evnt).__name__,
                 masterkey_guid=evnt.masterkey_guid,
@@ -68,13 +68,28 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
             masterkeys = await self.dpapi_manager.get_masterkeys(guid=evnt.masterkey_guid)
             masterkey_type = masterkeys[0].masterkey_type.value if masterkeys else None
 
+            # Try to decrypt chrome_keys with this masterkey
+            chrome_key_result = await retry_decrypt_chrome_keys_for_masterkey(
+                evnt.masterkey_guid,
+                self.dpapi_manager,
+                masterkey_type,
+            )
+
+            logger.debug(
+                "Completed retroactive chrome_key decryption",
+                masterkey_guid=evnt.masterkey_guid,
+                masterkey_type=masterkey_type,
+                result=chrome_key_result,
+            )
+
+            # Then try to decrypt any state keys with this masterkey
             result = await retry_decrypt_state_keys_for_masterkey(
                 evnt.masterkey_guid,
                 self.dpapi_manager,
                 masterkey_type,
             )
 
-            logger.warning(
+            logger.debug(
                 "Completed retroactive state_key decryption",
                 masterkey_guid=evnt.masterkey_guid,
                 masterkey_type=masterkey_type,
@@ -267,15 +282,25 @@ async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: Ma
             existing_guids.append(str(masterkey_guid))
             continue
 
-        masterkey = MasterKey(
-            guid=masterkey_guid,
-            masterkey_type=MasterKeyType.UNKNOWN,
-            plaintext_key=masterkey_data,
-            plaintext_key_sha1=SHA1.new(masterkey_data).digest(),
-        )
-
-        await dpapi_manager.upsert_masterkey(masterkey)
-        processed_guids.append(str(masterkey_guid))
+        if len(masterkey_data) == 20:
+            masterkey = MasterKey(
+                guid=masterkey_guid,
+                masterkey_type=MasterKeyType.UNKNOWN,
+                plaintext_key_sha1=masterkey_data,
+            )
+            await dpapi_manager.upsert_masterkey(masterkey)
+            processed_guids.append(str(masterkey_guid))
+        elif len(masterkey_data) == 64:
+            masterkey = MasterKey(
+                guid=masterkey_guid,
+                masterkey_type=MasterKeyType.UNKNOWN,
+                plaintext_key=masterkey_data,
+                plaintext_key_sha1=SHA1.new(masterkey_data).digest(),
+            )
+            await dpapi_manager.upsert_masterkey(masterkey)
+            processed_guids.append(str(masterkey_guid))
+        else:
+            logger.warning(f"[_handle_master_key_guid_pairs] len(masterkey_data) is not 20 or 64, not handling: {len(masterkey_data)}")
 
     return {
         "status": "success",

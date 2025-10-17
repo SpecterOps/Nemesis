@@ -292,8 +292,6 @@ rule is_cng_file
             Dict with masterkey_guid, is_decrypted, and decrypted_key_hex (if decrypted)
         """
         try:
-            logger.debug(f"Private key data ({len(private_key_data)} bytes): {private_key_data.hex()}")
-
             # ref https://github.com/gentilkiwi/mimikatz/blob/152b208916c27d7d1fc32d10e64879721c4d06af/modules/kull_m_key.h#L13
             #   can't forget the null terminator ;)
             cng_key_blob_entropy = b'xT5rZW5qVVbrvpuA\x00'
