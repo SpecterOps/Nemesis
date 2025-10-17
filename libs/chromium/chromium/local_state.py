@@ -241,7 +241,7 @@ async def _insert_state_keys(
 
             # add the masterkey file path (now that we know the key GUID) as a link/listing
             await add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:system_masterkey")
-            await add_file_linking(file_enriched.source, file_enriched.path, cng_system_private_key_path, "windows:cng_system_private_key")
+            await add_file_linking(file_enriched.source, file_enriched.path, cng_system_private_key_path, "windows:cng_system_private_key - Contains Chrome key used to encrypt the Local State")
 
             try:
                 # Parse only the DPAPI portion (after APPB header)

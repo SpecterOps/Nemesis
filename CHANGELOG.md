@@ -9,26 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Postgres support for DPAPI backend
-- More explanation for DPAPI decryption examples
-- Cookie/Login Data DPAPI value decryption, display in frontend
-- Added `dpapi_masterkey` file enrichment module
-- Severity filter checkboxes for frontend
-- DPAPI decryption benchmarks
+- Auto-decryption of Chromium and DPAPI related data:
+  - Cookie and Login Data(saved passwords) DPAPI value decryption
+  - Added Chromium UI page to display Cookie/Login Data
+  - CNG/Chromekey file enrichment module (parser + decryptor)
+  - Chromium ABE v3 decryption (via decrypted CNG keys)
+- nemesis_dpapi support library:
+  - Added Postgres support for DPAPI backend
+  - Dapr pubsub integration for DPAPI-related event broadcasting
+  - Added uniqueness and write constraints to prevent duplicate master/backup keys
+  - Can now differentiate between user/system masterkeys
+  - Added docs, examples, tests, and decryption benchmarks
+  - Added support for v3 masterkeys decrypted with backup key
+- New file enrichment modules:
+  - `dpapi_masterkey` - Extracts encrypted masterkeys from user/system DPAPI masterkey files and decrypts them, if possible.
+  - `exif_metadata` file enrichment module for supported image files
+  - Added `cng_file`
+- Added support for async code in Dapr activities used in enrichment modules
+- Findings Page: Modified the Severities filter button to use checkboxes
 - Multi-language Tika OCR support (`TIKA_OCR_LANGUAGES` ENV var, see `compose.yaml`)
 - Text translation agent
-- Ability to delete file linkings from the FileViewer
-- Dapr pubsub integration for DPAPI-related revents
-- Bumped Dapr version to 1.16.1
-- CNG/Chromekey file enrichment module (parser + decryptor)
-- Chromium ABE v3 decryption (via decrypted CNG keys)
-- `exif_metadata` file enrichment module for supported image files
 - Retroactive decryption for Chromium Local State files when plaintext masterkeys are submitted/decrypted
+- File linking:
+  - Enchanced file linking with placeholders in the path that resolve once a matching file is collected.
+  - File Viewer: Added ability to delete file linkings from the FileViewer
+  - File Browser: Added the collection reason and "Linked to by" fields on the "Files that need collection" option
+- CLI: add a `--folder` option to the submit command that allows you to specify the path to the root folder of uploaded files.
 
 ### Changed
 
 - Now use DPAPIck3 for blob decryption
-- Updated DAPR version
+- Bumped Dapr version to 1.16.1
 - DPAPI_SYSTEM key pulled from registry parsing is now registered with the backend
 - Updated category filters for frontend
 - Collapsed inbound/outbound labels for linked files in dashboard
@@ -36,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Chromium Local State, Cookies, and Login Data files now don't require hard paths
 - Reg hive file linkings now done programmatically instead of via rules
 - SYSTEM masterkey file linkings now done programmatically instead of via rules
+- Added more details to errors that cause a workflow to die
+- Optimized DPAPI masterkey decryption based on the type of masterkey
+- Converted several DB calls to async code
+- Optimized the housekeeping code to run in parallel and use transactions (where possible)
 
 ### Fixed
 
@@ -43,7 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lots of async issues
 - Fixed tag search issue
 - Fix to keep strings.txt from sqlite dbs from processing
-- Path normalization (now standardized)
+- Path normalization: Fixed many bugs, removed lots of duplicate normalization, standardized normalization upon initial ingestion.
 - Countless linting and other fixes
 
 
