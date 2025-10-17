@@ -3,7 +3,11 @@
 from .cookies import process_chromium_cookies
 from .helpers import convert_chromium_timestamp
 from .history import process_chromium_history
-from .local_state import process_chromium_local_state, retry_decrypt_state_keys_for_masterkey
+from .local_state import (
+    process_chromium_local_state,
+    retry_decrypt_state_keys_for_masterkey,
+)
+from .chromekey import retry_decrypt_chrome_keys_for_masterkey
 from .logins import process_chromium_logins
 
 __all__ = [
@@ -12,5 +16,6 @@ __all__ = [
     "process_chromium_cookies",
     "process_chromium_logins",
     "process_chromium_local_state",
+    "retry_decrypt_chrome_keys_for_masterkey",
     "retry_decrypt_state_keys_for_masterkey",
 ]

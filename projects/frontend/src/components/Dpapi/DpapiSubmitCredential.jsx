@@ -334,8 +334,8 @@ const DpapiSubmitCredential = () => {
                 id="master-key-data"
                 value={masterKeyData}
                 onChange={(e) => setMasterKeyData(e.target.value)}
-                placeholder={`6d2bd107-a942-4c0d-bf2a-8b3d1264cf73:0826EC6BC801252E401902AB09FE1068052D07001
-12345678-1234-1234-1234-123456789012:ABCDEF1234567890ABCDEF1234567890ABCDEF12`}
+                placeholder={`{6d2bd107-a942-4c0d-bf2a-8b3d1264cf73}:0826EC6BC801252E40190...
+{12345678-1234-1234-1234-123456789012}:ABCDEF1234567890ABCDE...`}
                 rows={6}
                 className="block w-full px-1 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-vertical font-mono"
                 required
