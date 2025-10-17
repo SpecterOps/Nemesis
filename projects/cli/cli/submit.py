@@ -146,7 +146,7 @@ def parse_filters(
 
     # If inline patterns are provided, build the filter object
     elif include_patterns or exclude_patterns:
-        file_filters = {"pattern_type": pattern_type}
+        file_filters: dict = {"pattern_type": pattern_type}
 
         if include_patterns:
             file_filters["include"] = list(include_patterns)
@@ -537,7 +537,7 @@ def create_metadata(
     file_filters: Optional[dict] = None,
 ) -> dict:
     """Create metadata dictionary for file submission"""
-    metadata = {
+    metadata: dict = {
         "agent_id": agent_id,
         "project": project,
         # "timestamp": datetime.now(UTC).isoformat(), # these have defaults in the submission API now
