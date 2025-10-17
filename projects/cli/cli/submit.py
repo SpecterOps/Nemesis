@@ -478,7 +478,7 @@ def calculate_metadata_path(file_path: Path, base_paths: Optional[list[Path]], f
 
     Otherwise, return the file path as-is.
     """
-    if not folder or not base_paths:
+    if folder is None or not base_paths:
         return str(file_path)
 
     # Resolve to absolute paths
@@ -513,11 +513,18 @@ def calculate_metadata_path(file_path: Path, base_paths: Optional[list[Path]], f
         # Shouldn't happen, but fallback
         return str(file_path)
 
+    # Normalize the relative path to use forward slashes
+    rel_path_normalized = str(rel_path).replace('\\', '/')
+
+    # If folder is empty string, return just the relative path without any prefix
+    if folder == "":
+        return rel_path_normalized
+
     # Ensure folder ends with path separator if it doesn't
     folder_normalized = folder.rstrip('/\\')
 
     # Join folder with relative path using Unix-style paths
-    result = folder_normalized + '/' + str(rel_path).replace('\\', '/')
+    result = folder_normalized + '/' + rel_path_normalized
 
     return result
 
