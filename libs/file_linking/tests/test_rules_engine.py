@@ -567,7 +567,6 @@ class TestPlaceholderResolutionIntegration:
         engine.db_service.get_placeholder_entries = AsyncMock(return_value=[])
 
         # Create a rule that generates a placeholder path
-        import yaml
 
         rule_content = """
 name: "test_placeholder_rule"
@@ -673,8 +672,8 @@ linked_files:
         """Test SID placeholder resolution."""
         from unittest.mock import AsyncMock
 
-        placeholder_path = "/C:/Windows/System32/config/systemprofile/AppData/Local/<WINDOWS_SECURITY_IDENTIFIER>/file.dat"
-        real_path = "/C:/Windows/System32/config/systemprofile/AppData/Local/S-1-5-18/file.dat"
+        placeholder_path = "/C:/Windows/System32/Config/systemprofile/AppData/Local/<WINDOWS_SECURITY_IDENTIFIER>/file.dat"
+        real_path = "/C:/Windows/System32/Config/systemprofile/AppData/Local/S-1-5-18/file.dat"
 
         engine.db_service.get_placeholder_entries = AsyncMock(
             return_value=[{"table_name": "file_listings", "path": placeholder_path}]

@@ -292,7 +292,7 @@ rule is_cng_file
             Dict with masterkey_guid, is_decrypted, and decrypted_key_hex (if decrypted)
         """
         try:
-            logger.info(f"Private key data ({len(private_key_data)} bytes): {private_key_data.hex()}")
+            logger.debug(f"Private key data ({len(private_key_data)} bytes): {private_key_data.hex()}")
 
             # ref https://github.com/gentilkiwi/mimikatz/blob/152b208916c27d7d1fc32d10e64879721c4d06af/modules/kull_m_key.h#L13
             #   can't forget the null terminator ;)
@@ -301,9 +301,9 @@ rule is_cng_file
             # Try to parse as DPAPI blob directly (CNG private keys are direct DPAPI blobs)
             try:
                 blob = Blob.from_bytes(private_key_data)
-                logger.info(f"Private key is DPAPI encrypted with masterkey: {blob.masterkey_guid}")
+                logger.debug(f"Private key is DPAPI encrypted with masterkey: {blob.masterkey_guid}")
                 import base64
-                logger.info(f"blob: {base64.b64encode(blob.encrypted_data).decode('utf-8')}")
+                logger.debug(f"blob: {base64.b64encode(blob.encrypted_data).decode('utf-8')}")
 
                 # Attempt decryption
                 decrypted_key = None
@@ -353,14 +353,14 @@ rule is_cng_file
 
             except Exception as e:
                 # If direct parsing fails, try extracting from property wrapper
-                logger.info(f"Direct DPAPI parsing failed ({e}), trying property extraction...")
+                logger.debug(f"Direct DPAPI parsing failed ({e}), trying property extraction...")
                 dpapi_blob_data = extract_dpapi_blob_from_cng_property(private_key_data)
 
                 if dpapi_blob_data and dpapi_blob_data != private_key_data:
-                    logger.info(f"Extracted {len(dpapi_blob_data)} bytes from property wrapper")
+                    logger.debug(f"Extracted {len(dpapi_blob_data)} bytes from property wrapper")
                     try:
                         blob = Blob.from_bytes(dpapi_blob_data)
-                        logger.info(f"Extracted blob uses masterkey: {blob.masterkey_guid}")
+                        logger.debug(f"Extracted blob uses masterkey: {blob.masterkey_guid}")
 
                         # Attempt decryption
                         final_key_material = None

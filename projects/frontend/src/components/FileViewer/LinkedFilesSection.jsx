@@ -76,11 +76,11 @@ const LinkedFilesSection = ({ filePath, source }) => {
           // Collect all unique linked file paths
           const linkedPaths = new Set();
           linkedFilesResult.forEach(linking => {
-            // Add the path that's not the current file
-            if (linking.file_path_1 !== filePath) {
+            // Add the path that's not the current file (case-insensitive comparison)
+            if (linking.file_path_1.toLowerCase() !== filePath.toLowerCase()) {
               linkedPaths.add(linking.file_path_1);
             }
-            if (linking.file_path_2 !== filePath) {
+            if (linking.file_path_2.toLowerCase() !== filePath.toLowerCase()) {
               linkedPaths.add(linking.file_path_2);
             }
           });
@@ -117,11 +117,12 @@ const LinkedFilesSection = ({ filePath, source }) => {
             if (!statusResult.errors) {
               const fileListingsResult = statusResult.data.file_listings || [];
 
-              // Create status map
+              // Create status map with case-insensitive keys
               fileListingsResult.forEach(file => {
-                statusMap.set(file.path, {
+                statusMap.set(file.path.toLowerCase(), {
                   status: file.status,
-                  object_id: file.object_id
+                  object_id: file.object_id,
+                  originalPath: file.path
                 });
               });
             }
@@ -157,11 +158,11 @@ const LinkedFilesSection = ({ filePath, source }) => {
   };
 
   const getLinkedFilePath = (linking, currentPath) => {
-    return linking.file_path_1 === currentPath ? linking.file_path_2 : linking.file_path_1;
+    return linking.file_path_1.toLowerCase() === currentPath.toLowerCase() ? linking.file_path_2 : linking.file_path_1;
   };
 
   const getRelationshipDirection = (linking, currentPath) => {
-    return linking.file_path_1 === currentPath ? 'outbound' : 'inbound';
+    return linking.file_path_1.toLowerCase() === currentPath.toLowerCase() ? 'outbound' : 'inbound';
   };
 
   const handleDeleteClick = (linkingId) => {
@@ -267,19 +268,20 @@ const LinkedFilesSection = ({ filePath, source }) => {
         <CardContent>
           <div className="space-y-3">
             {(() => {
-              // Group linked files by path to merge entries with different directions
+              // Group linked files by path to merge entries with different directions (case-insensitive)
               const groupedFiles = new Map();
 
               linkedFiles.forEach((linking) => {
                 const linkedPath = getLinkedFilePath(linking, filePath);
                 const direction = getRelationshipDirection(linking, filePath);
+                const pathKey = linkedPath.toLowerCase();
 
-                if (groupedFiles.has(linkedPath)) {
-                  const existing = groupedFiles.get(linkedPath);
+                if (groupedFiles.has(pathKey)) {
+                  const existing = groupedFiles.get(pathKey);
                   existing.directions.add(direction);
                   existing.linkTypes.add(linking.link_type);
                 } else {
-                  groupedFiles.set(linkedPath, {
+                  groupedFiles.set(pathKey, {
                     linkedPath,
                     directions: new Set([direction]),
                     linkTypes: new Set([linking.link_type].filter(Boolean)),
@@ -291,8 +293,8 @@ const LinkedFilesSection = ({ filePath, source }) => {
               return Array.from(groupedFiles.values()).map((group) => {
                 const fileName = group.linkedPath.split(/[\/\\]/).pop() || group.linkedPath;
 
-                // Get file status info
-                let fileInfo = fileStatusMap.get(group.linkedPath);
+                // Get file status info (case-insensitive lookup)
+                let fileInfo = fileStatusMap.get(group.linkedPath.toLowerCase());
                 const isCollected = fileInfo?.status === 'collected' && fileInfo?.object_id;
 
                 return (
