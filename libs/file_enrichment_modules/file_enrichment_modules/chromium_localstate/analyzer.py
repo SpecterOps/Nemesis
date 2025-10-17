@@ -73,14 +73,14 @@ rule Chrome_Local_State
 
         return should_run
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome Local State files.
 
         Args:
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
-        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
+        return await self._process_async(object_id, file_path)
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
@@ -92,6 +92,7 @@ rule Chrome_Local_State
             if state_key_data:
                 # Debug: Check for coroutines in state_key_data
                 import inspect
+
                 for key, value in state_key_data.items():
                     if inspect.iscoroutine(value):
                         logger.error(f"FOUND COROUTINE IN state_key_data['{key}']!")

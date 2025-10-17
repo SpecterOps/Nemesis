@@ -5,7 +5,7 @@ import os
 
 from common.logger import get_logger
 from common.models import DotNetOutput
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from file_enrichment.dotnet import store_dotnet_results
 
 logger = get_logger(__name__)
@@ -37,7 +37,7 @@ async def process_dotnet_event(raw_data, postgres_connection_string: str):
             # Get the file enriched data for creating transforms
             file_enriched = None
             try:
-                file_enriched = get_file_enriched(object_id)
+                file_enriched = await get_file_enriched_async(object_id)
             except Exception as e:
                 logger.warning(f"Could not get file_enriched for {object_id}: {e}", pid=os.getpid())
 

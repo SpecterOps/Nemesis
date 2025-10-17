@@ -13,7 +13,7 @@ import yara_x
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import EnrichmentResult
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched, get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.cng_file.cng_parser import (
     BCRYPT_KEY_DATA_BLOB_MAGIC,
@@ -86,7 +86,7 @@ rule is_cng_file
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
         return should_run
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process CNG file and extract/decrypt contents.
 
         Args:
@@ -96,8 +96,7 @@ rule is_cng_file
         Returns:
             EnrichmentResult or None if processing fails
         """
-
-        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
+        return await self._process_async(object_id, file_path)
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process CNG file asynchronously.
@@ -108,7 +107,7 @@ rule is_cng_file
         """
 
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
             enrichment_result = EnrichmentResult(module_name=self.name)
 
             logger.info(f"Processing CNG file: {file_enriched.path} ({file_enriched.object_id})")
@@ -183,7 +182,7 @@ rule is_cng_file
 
         # ref https://github.com/gentilkiwi/mimikatz/blob/152b208916c27d7d1fc32d10e64879721c4d06af/modules/kull_m_key.h#L12
         #   can't forget the null terminator ;)
-        cng_key_properties_entropy = b'6jnkd5J3ZdQDtrsu\x00'
+        cng_key_properties_entropy = b"6jnkd5J3ZdQDtrsu\x00"
 
         try:
             # Parse as DPAPI blob
@@ -193,10 +192,7 @@ rule is_cng_file
             # Attempt decryption
             try:
                 decrypted_props = await self.dpapi_manager.decrypt_blob(blob, entropy=cng_key_properties_entropy)
-                logger.info(
-                    f"Successfully decrypted private properties! "
-                    f"Size: {len(decrypted_props)} bytes"
-                )
+                logger.info(f"Successfully decrypted private properties! Size: {len(decrypted_props)} bytes")
 
                 # Try to parse decrypted properties
                 from file_enrichment_modules.cng_file.cng_parser import parse_cng_properties
@@ -210,23 +206,16 @@ rule is_cng_file
             except (MasterKeyNotDecryptedError, MasterKeyNotFoundError) as e:
                 logger.debug(
                     f"Cannot decrypt private properties: masterkey {blob.masterkey_guid} not available",
-                    reason=type(e).__name__
+                    reason=type(e).__name__,
                 )
             except BlobDecryptionError as e:
-                logger.warning(
-                    f"Failed to decrypt private properties blob: {e}",
-                    masterkey_guid=blob.masterkey_guid
-                )
+                logger.warning(f"Failed to decrypt private properties blob: {e}", masterkey_guid=blob.masterkey_guid)
 
         except Exception as e:
             logger.warning(f"Error processing private properties as DPAPI blob: {e}")
 
     async def _store_chrome_key(
-        self,
-        file_enriched,
-        masterkey_guid: UUID,
-        encrypted_bytes: bytes,
-        decrypted_bytes: bytes | None = None
+        self, file_enriched, masterkey_guid: UUID, encrypted_bytes: bytes, decrypted_bytes: bytes | None = None
     ) -> None:
         """Store Chrome key data in the database.
 
@@ -268,8 +257,8 @@ rule is_cng_file
                             masterkey_guid,
                             encrypted_bytes,
                             decrypted_bytes,
-                            decrypted_bytes is not None
-                        )
+                            decrypted_bytes is not None,
+                        ),
                     )
                     conn.commit()
 
@@ -280,7 +269,9 @@ rule is_cng_file
         except Exception as e:
             logger.error(f"Failed to store Chrome key: {e}")
 
-    async def _decrypt_private_key(self, file_enriched, private_key_data: bytes, cng_file_name: str = "") -> dict | None:
+    async def _decrypt_private_key(
+        self, file_enriched, private_key_data: bytes, cng_file_name: str = ""
+    ) -> dict | None:
         """Attempt to decrypt private key data and store in database.
 
         Args:
@@ -296,13 +287,14 @@ rule is_cng_file
 
             # ref https://github.com/gentilkiwi/mimikatz/blob/152b208916c27d7d1fc32d10e64879721c4d06af/modules/kull_m_key.h#L13
             #   can't forget the null terminator ;)
-            cng_key_blob_entropy = b'xT5rZW5qVVbrvpuA\x00'
+            cng_key_blob_entropy = b"xT5rZW5qVVbrvpuA\x00"
 
             # Try to parse as DPAPI blob directly (CNG private keys are direct DPAPI blobs)
             try:
                 blob = Blob.from_bytes(private_key_data)
                 logger.debug(f"Private key is DPAPI encrypted with masterkey: {blob.masterkey_guid}")
                 import base64
+
                 logger.debug(f"blob: {base64.b64encode(blob.encrypted_data).decode('utf-8')}")
 
                 # Attempt decryption
@@ -324,13 +316,10 @@ rule is_cng_file
                 except (MasterKeyNotDecryptedError, MasterKeyNotFoundError) as e:
                     logger.debug(
                         f"Cannot decrypt private key: masterkey {blob.masterkey_guid} not available",
-                        reason=type(e).__name__
+                        reason=type(e).__name__,
                     )
                 except BlobDecryptionError as e:
-                    logger.warning(
-                        f"Failed to decrypt private key blob: {e}",
-                        masterkey_guid=blob.masterkey_guid
-                    )
+                    logger.warning(f"Failed to decrypt private key blob: {e}", masterkey_guid=blob.masterkey_guid)
 
                 # Store in database only if this is Google Chromekey1
                 if cng_file_name == "Google Chromekey1":
@@ -338,14 +327,11 @@ rule is_cng_file
                         file_enriched=file_enriched,
                         masterkey_guid=blob.masterkey_guid,
                         encrypted_bytes=private_key_data,
-                        decrypted_bytes=final_key_material
+                        decrypted_bytes=final_key_material,
                     )
 
                 # Return results
-                result = {
-                    "masterkey_guid": str(blob.masterkey_guid),
-                    "is_decrypted": final_key_material is not None
-                }
+                result = {"masterkey_guid": str(blob.masterkey_guid), "is_decrypted": final_key_material is not None}
                 if final_key_material:
                     result["decrypted_key_hex"] = final_key_material.hex()
 
@@ -366,7 +352,9 @@ rule is_cng_file
                         final_key_material = None
                         try:
                             decrypted_key = await self.dpapi_manager.decrypt_blob(blob, entropy=cng_key_blob_entropy)
-                            logger.info(f"Successfully decrypted extracted private key! Size: {len(decrypted_key)} bytes")
+                            logger.info(
+                                f"Successfully decrypted extracted private key! Size: {len(decrypted_key)} bytes"
+                            )
                             await self._check_bcrypt_key_blob(decrypted_key)
 
                             # Extract final 32-byte key material
@@ -383,13 +371,13 @@ rule is_cng_file
                                 file_enriched=file_enriched,
                                 masterkey_guid=blob.masterkey_guid,
                                 encrypted_bytes=dpapi_blob_data,
-                                decrypted_bytes=final_key_material
+                                decrypted_bytes=final_key_material,
                             )
 
                         # Return results
                         result = {
                             "masterkey_guid": str(blob.masterkey_guid),
-                            "is_decrypted": final_key_material is not None
+                            "is_decrypted": final_key_material is not None,
                         }
                         if final_key_material:
                             result["decrypted_key_hex"] = final_key_material.hex()
@@ -427,10 +415,7 @@ rule is_cng_file
             # Extract final 32 bytes
             final_key = extract_final_key_material(key_data)
             if final_key:
-                logger.info(
-                    f"Extracted final 32-byte key material: "
-                    f"{final_key.hex()}"
-                )
+                logger.info(f"Extracted final 32-byte key material: {final_key.hex()}")
             else:
                 logger.warning("Failed to extract final 32-byte key material")
         else:

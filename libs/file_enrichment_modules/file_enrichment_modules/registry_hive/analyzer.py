@@ -12,7 +12,7 @@ from common.db import get_postgres_connection_str
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched, get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
@@ -276,7 +276,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         return results
 
-    def _process_security_hive(self, security_file: str, system_file: str | None) -> dict:
+    async def _process_security_hive(self, security_file: str, system_file: str | None) -> dict:
         """Process SECURITY hive to extract LSA secrets using pypykatz."""
         results = {
             "lsa_secrets": [],
@@ -376,9 +376,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                                             )
 
                                             # Register the DPAPI_SYSTEM credential with the DPAPI manager
-                                            asyncio.run_coroutine_threadsafe(
-                                                self._register_dpapi_system_credential(machine_key, user_key), self.loop
-                                            )
+                                            await self._register_dpapi_system_credential(machine_key, user_key)
 
                                     # For NL$KM secrets, extract raw_secret
                                     elif not secret_value and "raw_secret" in secret_data:
@@ -686,7 +684,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         return summary
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Do the file enrichment.
 
         Args:
@@ -696,13 +694,12 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         Returns:
             EnrichmentResult or None if processing fails
         """
-
-        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
+        return await self._process_async(object_id, file_path)
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process registry hive file and extract relevant information."""
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -785,7 +782,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             if security_object_id:
                 try:
                     with self.storage.download(security_object_id) as security_temp_file:
-                        sam_results = self._process_security_hive(security_temp_file.name, hive_file_path)
+                        sam_results = await self._process_security_hive(security_temp_file.name, hive_file_path)
                         analysis_results["security_analysis"] = sam_results
                         logger.debug(f"Processed paired SECURITY hive for SYSTEM: {security_path}")
                 except Exception as e:
@@ -807,7 +804,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                         if hive_type == "SAM":
                             analysis_results = self._process_sam_hive(hive_file_path, system_temp_file.name)
                         else:  # SECURITY
-                            analysis_results = self._process_security_hive(hive_file_path, system_temp_file.name)
+                            analysis_results = await self._process_security_hive(hive_file_path, system_temp_file.name)
                         logger.debug(f"Processed {hive_type} hive with SYSTEM bootkey")
 
                 except Exception as e:
@@ -816,7 +813,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     if hive_type == "SAM":
                         analysis_results = self._process_sam_hive(hive_file_path, None)
                     else:  # SECURITY
-                        analysis_results = self._process_security_hive(hive_file_path, None)
+                        analysis_results = await self._process_security_hive(hive_file_path, None)
                     logger.debug(f"Processed {hive_type} hive without SYSTEM bootkey (download error)")
 
             else:
@@ -824,7 +821,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 if hive_type == "SAM":
                     analysis_results = self._process_sam_hive(hive_file_path, None)
                 else:  # SECURITY
-                    analysis_results = self._process_security_hive(hive_file_path, None)
+                    analysis_results = await self._process_security_hive(hive_file_path, None)
                 logger.debug(f"Processed {hive_type} hive without SYSTEM bootkey")
 
             # Store reference to system hive if found

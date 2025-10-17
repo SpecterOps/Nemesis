@@ -14,7 +14,7 @@ from common.db import get_postgres_connection_str
 from common.helpers import create_text_reader, get_file_extension, is_container
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, get_logger
 from common.models import Alert, EnrichmentResult, NoseyParkerInput
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from common.workflows.setup import wf_runtime, workflow_activity
 from dapr.clients import DaprClient
@@ -399,24 +399,20 @@ async def check_file_linkings(ctx, activity_input):
     """
 
     object_id = activity_input["object_id"]
-    file_enriched = get_file_enriched(object_id)
+    file_enriched = await get_file_enriched_async(object_id)
 
-    async def process_async(ctx, activity_input):
-        try:
-            global file_linking_engine
-            linkings_created = await file_linking_engine.apply_linking_rules(file_enriched)
+    try:
+        global file_linking_engine
+        linkings_created = await file_linking_engine.apply_linking_rules(file_enriched)
 
-            logger.debug("File linking check complete", object_id=object_id, linkings_created=linkings_created)
+        logger.debug("File linking check complete", object_id=object_id, linkings_created=linkings_created)
 
-            return {"linkings_created": linkings_created}
+        return {"linkings_created": linkings_created}
 
-        except Exception as e:
-            logger.exception("Error in file linking check", object_id=object_id, error=str(e))
-            # Don't raise to ensure workflow can complete
-            return {"linkings_created": 0, "error": str(e)}
-    global asyncio_loop
-
-    return asyncio.run_coroutine_threadsafe(process_async(ctx, activity_input), asyncio_loop).result()
+    except Exception as e:
+        logger.exception("Error in file linking check", object_id=object_id, error=str(e))
+        # Don't raise to ensure workflow can complete
+        return {"linkings_created": 0, "error": str(e)}
 
 
 @workflow_activity
@@ -425,7 +421,7 @@ async def publish_findings_alerts(ctx, activity_input):
     Activity to publish enriched file data to pubsub after retrieving from state store.
     """
     object_id = activity_input["object_id"]
-    file_enriched = get_file_enriched(object_id)
+    file_enriched = await get_file_enriched_async(object_id)
 
     # Fetch findings from the database for this object_id
     with psycopg.connect(postgres_connection_string) as conn:
@@ -487,7 +483,7 @@ async def handle_file_if_plaintext(ctx, activity_input):
     send a pub/sub message to NoseyParker
     """
     object_id = activity_input["object_id"]
-    file_enriched = get_file_enriched(object_id)
+    file_enriched = await get_file_enriched_async(object_id)
 
     # if the file is plaintext, make sure we index it
     if file_enriched.is_plaintext:
@@ -513,7 +509,7 @@ async def publish_enriched_file(ctx, activity_input):
     Activity to publish enriched file data to pubsub after retrieving from state store.
     """
     object_id = activity_input["object_id"]
-    file_enriched = get_file_enriched(object_id)
+    file_enriched = await get_file_enriched_async(object_id)
 
     try:
         with DaprClient() as client:
@@ -595,7 +591,14 @@ async def run_enrichment_modules(ctx, activity_input: dict):
                     module = wf_runtime.modules[module_name]
                     logger.debug("Starting module processing", module_name=module_name)
 
-                    result: EnrichmentResult = module.process(object_id, temp_file.name)
+                    # Check if the module's process method returns a coroutine (async)
+                    result_or_coro = module.process(object_id, temp_file.name)
+                    if hasattr(result_or_coro, '__await__'):
+                        # It's a coroutine, await it
+                        result: EnrichmentResult = await result_or_coro
+                    else:
+                        # It's a synchronous result
+                        result: EnrichmentResult = result_or_coro
 
                     if result:
                         # Debug: Check for coroutines in the result before serialization

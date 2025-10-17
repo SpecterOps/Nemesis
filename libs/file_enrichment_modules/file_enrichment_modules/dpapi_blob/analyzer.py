@@ -4,7 +4,7 @@ import asyncio
 import yara_x
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched, get_file_enriched_async
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.dpapi_blob.dpapi_helpers import carve_dpapi_blobs_from_file
@@ -47,7 +47,9 @@ rule has_dpapi_blob
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
+        logger.info(f"Checking if file {object_id} should be processed by DPAPI blob analyzer")
         file_enriched = get_file_enriched(object_id)
+        logger.info(f"Got file {object_id} should be processed by DPAPI blob analyzer")
         if file_enriched.size > self.size_limit:
             logger.debug(
                 f"[dpapi_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"
@@ -66,7 +68,7 @@ rule has_dpapi_blob
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
         return should_run
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process LSASS dump file and extract credentials.
 
         Args:
@@ -76,8 +78,8 @@ rule has_dpapi_blob
         Returns:
             EnrichmentResult or None if processing fails
         """
-
-        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
+        logger.info(f"Starting async for DPAPI blob analysis for object_id {object_id}")
+        return await self._process_async(object_id, file_path)
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file in either workflow or standalone mode.
@@ -88,7 +90,9 @@ rule has_dpapi_blob
         """
 
         try:
-            file_enriched = get_file_enriched(object_id)
+            logger.info(f"Starting DPAPI blob analysis for object_id {object_id}")
+            file_enriched = await get_file_enriched_async(object_id)
+            logger.info(f"Retrieved enriched file data for object_id {object_id}")
 
             enrichment_result = EnrichmentResult(module_name=self.name)
 
@@ -168,11 +172,6 @@ List of unique masterkey GUIDs associated with the found blobs:
 
         except Exception as e:
             logger.exception(e, message="Error in DPAPI process()")
-
-
-def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:
-    """Factory function that creates the analyzer in either standalone or service mode."""
-    return DpapiBlobAnalyzer(standalone=standalone)
 
 
 def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:

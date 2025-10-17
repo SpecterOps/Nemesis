@@ -4,9 +4,8 @@ from functools import wraps
 from typing import Any
 
 import dapr.ext.workflow as wf
+from common.logger import WORKFLOW_RUNTIME_LOG_LEVEL
 from dapr.ext.workflow.logger.options import LoggerOptions
-
-from .logger import WORKFLOW_RUNTIME_LOG_LEVEL
 
 wf_runtime: wf.WorkflowRuntime = wf.WorkflowRuntime(
     logger_options=LoggerOptions(

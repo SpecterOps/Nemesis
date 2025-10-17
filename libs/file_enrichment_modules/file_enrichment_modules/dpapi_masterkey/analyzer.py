@@ -9,7 +9,7 @@ from common.db import get_postgres_connection_str
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched, get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
@@ -177,7 +177,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         except Exception as e:
             logger.error(f"Failed to create proactive file linkings: {e}")
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
 
         Args:
@@ -187,9 +187,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         Returns:
             EnrichmentResult or None if processing fails
         """
-
-        return asyncio.run_coroutine_threadsafe(self._process_async(object_id, file_path), self.loop).result()
-
+        return await self._process_async(object_id, file_path)
 
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
@@ -200,8 +198,8 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         """
 
         try:
-            file_enriched = get_file_enriched(object_id)
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
             enrichment_result = EnrichmentResult(module_name=self.name)
 
             # Parse the masterkey file
@@ -221,7 +219,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 encrypted_key_usercred=masterkey_file.master_key,
                 encrypted_key_backup=backup_key.raw_bytes if backup_key else None,
                 backup_key_guid=backup_key.guid_key if backup_key else None,
-                masterkey_type=MasterKeyType.from_path(file_enriched.path)
+                masterkey_type=MasterKeyType.from_path(file_enriched.path),
             )
 
             # The DPAPI manager handles all decryption automatically

@@ -105,7 +105,7 @@ class SqliteParser(EnrichmentModule):
             "sqlite 3.x database" in file_enriched.magic_type.lower()
             or file_enriched.file_name.lower().endswith(".sqlite")
         )
-        return (should_run and not file_enriched.is_plaintext)
+        return should_run and not file_enriched.is_plaintext
 
     def _analyze_sqlite_database(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze SQLite database file and generate enrichment result.

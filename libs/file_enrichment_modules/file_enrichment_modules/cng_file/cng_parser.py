@@ -12,7 +12,6 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
-from uuid import UUID
 
 from common.logger import get_logger
 
@@ -20,15 +19,16 @@ logger = get_logger(__name__)
 
 
 # Ref - https://pkg.go.dev/github.com/ElMostafaIdrassi/goncrypt#section-readme
-BCRYPT_KEY_DATA_BLOB_MAGIC = 0x4D42444B     # 'KDBM'
-BCRYPT_RSAPUBLIC_MAGIC = 0x31415352         # 'RSA1'
-BCRYPT_RSAPRIVATE_MAGIC = 0x32415352        # 'RSA2'
-BCRYPT_RSAFULLPRIVATE_BLOB = 0x33415352     # 'RSA3'
+BCRYPT_KEY_DATA_BLOB_MAGIC = 0x4D42444B  # 'KDBM'
+BCRYPT_RSAPUBLIC_MAGIC = 0x31415352  # 'RSA1'
+BCRYPT_RSAPRIVATE_MAGIC = 0x32415352  # 'RSA2'
+BCRYPT_RSAFULLPRIVATE_BLOB = 0x33415352  # 'RSA3'
 
 
 @dataclass
 class CngPropertyHeader:
     """CNG property header structure."""
+
     name_length: int
     property_length: int
     name: str
@@ -38,6 +38,7 @@ class CngPropertyHeader:
 @dataclass
 class CngKeyFile:
     """Parsed CNG key file structure."""
+
     version: int
     header_length: int
     type: int
@@ -49,14 +50,15 @@ class CngKeyFile:
     name: str
     public_properties: list[CngPropertyHeader]
     public_key: bytes | None
-    private_properties: bytes | None    # DPAPI blob
-    private_key: bytes | None           # May be DPAPI encrypted
+    private_properties: bytes | None  # DPAPI blob
+    private_key: bytes | None  # May be DPAPI encrypted
 
 
 # Ref - https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/ns-bcrypt-bcrypt_key_data_blob_header
 @dataclass
 class BcryptKeyDataBlobHeader:
     """BCRYPT_KEY_DATA_BLOB_HEADER structure."""
+
     magic: int
     version: int
     key_data_length: int
@@ -80,7 +82,7 @@ def parse_cng_properties(data: bytes, offset: int = 0) -> list[CngPropertyHeader
             break
 
         # Read property header: name_length (4) + property_length (4)
-        name_len, prop_len = struct.unpack("<II", data[pos:pos + 8])
+        name_len, prop_len = struct.unpack("<II", data[pos : pos + 8])
         pos += 8
 
         if name_len == 0 or prop_len == 0:
@@ -90,22 +92,17 @@ def parse_cng_properties(data: bytes, offset: int = 0) -> list[CngPropertyHeader
         if pos + name_len > len(data):
             break
 
-        name = data[pos:pos + name_len].decode("utf-16le", errors="ignore").rstrip("\x00")
+        name = data[pos : pos + name_len].decode("utf-16le", errors="ignore").rstrip("\x00")
         pos += name_len
 
         # Read property data
         if pos + prop_len > len(data):
             break
 
-        prop_data = data[pos:pos + prop_len]
+        prop_data = data[pos : pos + prop_len]
         pos += prop_len
 
-        properties.append(CngPropertyHeader(
-            name_length=name_len,
-            property_length=prop_len,
-            name=name,
-            data=prop_data
-        ))
+        properties.append(CngPropertyHeader(name_length=name_len, property_length=prop_len, name=name, data=prop_data))
 
     return properties
 
@@ -136,8 +133,7 @@ def extract_dpapi_blob_from_cng_property(data: bytes) -> bytes | None:
         struct_len, prop_type, unk, name_len, property_len = struct.unpack("<IIIII", data[:20])
 
         logger.debug(
-            f"CNG property: struct_len={struct_len}, type={prop_type}, "
-            f"name_len={name_len}, property_len={property_len}"
+            f"CNG property: struct_len={struct_len}, type={prop_type}, name_len={name_len}, property_len={property_len}"
         )
 
         # Calculate offset to property data
@@ -145,11 +141,13 @@ def extract_dpapi_blob_from_cng_property(data: bytes) -> bytes | None:
         property_offset = 20 + name_len
 
         if property_offset + property_len > len(data):
-            logger.error(f"Property data extends beyond buffer: offset={property_offset}, len={property_len}, data_len={len(data)}")
+            logger.error(
+                f"Property data extends beyond buffer: offset={property_offset}, len={property_len}, data_len={len(data)}"
+            )
             return None
 
         # Extract the property data (should be DPAPI blob)
-        dpapi_blob = data[property_offset:property_offset + property_len]
+        dpapi_blob = data[property_offset : property_offset + property_len]
 
         # Verify it looks like a DPAPI blob (starts with version 0x00000001)
         if len(dpapi_blob) >= 4:
@@ -203,8 +201,7 @@ def parse_cng_stream(stream: BinaryIO) -> CngKeyFile | None:
             return None
 
         # Parse header fields
-        (version, unk, name_len, key_type,
-         public_len, privprop_len, privkey_len) = struct.unpack(
+        (version, unk, name_len, key_type, public_len, privprop_len, privkey_len) = struct.unpack(
             "<IIIIIII", header_data[:28]
         )
 
@@ -245,7 +242,9 @@ def parse_cng_stream(stream: BinaryIO) -> CngKeyFile | None:
         if privprop_len > 0:
             private_properties = stream.read(privprop_len)
             if len(private_properties) < privprop_len:
-                logger.error(f"Unexpected EOF reading private properties: expected {privprop_len}, got {len(private_properties)}")
+                logger.error(
+                    f"Unexpected EOF reading private properties: expected {privprop_len}, got {len(private_properties)}"
+                )
                 return None
 
         # Read private key DPAPI blob (privkey_len bytes)
@@ -269,7 +268,7 @@ def parse_cng_stream(stream: BinaryIO) -> CngKeyFile | None:
             public_properties=public_properties,
             public_key=public_key,
             private_properties=private_properties,
-            private_key=private_key
+            private_key=private_key,
         )
 
     except Exception as e:
@@ -294,11 +293,7 @@ def parse_bcrypt_key_data_blob(data: bytes) -> BcryptKeyDataBlobHeader | None:
     if magic != BCRYPT_KEY_DATA_BLOB_MAGIC:
         return None
 
-    return BcryptKeyDataBlobHeader(
-        magic=magic,
-        version=version,
-        key_data_length=key_len
-    )
+    return BcryptKeyDataBlobHeader(magic=magic, version=version, key_data_length=key_len)
 
 
 def extract_final_key_material(decrypted_data: bytes) -> bytes | None:
