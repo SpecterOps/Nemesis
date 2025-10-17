@@ -4,8 +4,8 @@ This module processes Windows CNG (Cryptography Next Generation) key files,
 parsing their structure and attempting to decrypt DPAPI-protected components.
 """
 
-import asyncio
 import struct
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import psycopg
@@ -25,6 +25,9 @@ from file_enrichment_modules.cng_file.cng_parser import (
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import Blob, BlobDecryptionError, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 from psycopg.rows import dict_row
+
+if TYPE_CHECKING:
+    import asyncio
 
 logger = get_logger(__name__)
 

@@ -98,7 +98,7 @@ class ContainerAnalyzer(EnrichmentModule):
             report_lines.append(f"- Total size: {self._format_size(total_size)}")
 
             git_repo_count = 0
-            for filepath, size in sorted(files):
+            for filepath, _size in sorted(files):
                 if filepath.endswith(".git/config") or filepath.endswith(".git\\config"):
                     git_repo_count += 1
             if git_repo_count > 0:

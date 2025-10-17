@@ -1,7 +1,7 @@
 # src/common/models.py
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -297,10 +297,7 @@ class WorkflowStatus(BaseModel):
     result: dict | None = None
 
 
-T = TypeVar("T")
-
-
-class CloudEvent(BaseModel, Generic[T]):
+class CloudEvent[T](BaseModel):
     """Cloud event schema used in Dapr pub/sub"""
 
     data: T

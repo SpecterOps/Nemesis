@@ -698,7 +698,7 @@ class TestDomainBackupKey:
         # Extract the private key from the backup key data
         key = PRIVATE_KEY_BLOB(backup_key_bytes[len(PVK_FILE_HDR()) :])
         private = privatekeyblob_to_pkcs1(key)
-        cipher = PKCS1_v1_5.new(private)
+        PKCS1_v1_5.new(private)
 
 
 class TestDpapiSystemSecret:

@@ -341,7 +341,7 @@ def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> dict | 
                         continue
                     else:
                         # Final attempt failed, re-raise the last exception
-                        raise last_exception
+                        raise last_exception from e
 
             if not extracted_text:
                 return None

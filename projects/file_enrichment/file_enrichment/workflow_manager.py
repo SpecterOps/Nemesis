@@ -192,7 +192,7 @@ class WorkflowManager:
             if stale_workflows:
                 logger.warning(f"Found {len(stale_workflows)} stale workflows, cleaning up...", pid=os.getpid())
 
-                for wf_id, object_id, runtime_seconds in stale_workflows:
+                for wf_id, _object_id, runtime_seconds in stale_workflows:
                     logger.info(f"Cleaning up stale workflow {wf_id}, runtime: {runtime_seconds:.2f}s", pid=os.getpid())
 
                     # Try to terminate the workflow in Dapr

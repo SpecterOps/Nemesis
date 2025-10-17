@@ -1,5 +1,4 @@
 # enrichment_modules/dpapi_masterkey/analyzer.py
-import asyncio
 import posixpath
 import re
 from typing import TYPE_CHECKING
@@ -17,6 +16,8 @@ from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile, MasterKeyType
 from psycopg.rows import dict_row
 
 if TYPE_CHECKING:
+    import asyncio
+
     from nemesis_dpapi import DpapiManager
 
 

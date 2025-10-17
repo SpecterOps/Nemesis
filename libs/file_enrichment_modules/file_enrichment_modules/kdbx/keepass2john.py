@@ -120,8 +120,10 @@ def process_kdbx2_database(fp, filename, keyfile=None):
         if len(enc_iv) != 16:
             raise EOFError("Failed to read enc_iv")
 
-        num_groups = read_uint32_le(fp)
-        num_entries = read_uint32_le(fp)
+        # num_groups
+        read_uint32_le(fp)
+        # num_entries
+        read_uint32_le(fp)
 
         contents_hash = fp.read(32)
         if len(contents_hash) != 32:

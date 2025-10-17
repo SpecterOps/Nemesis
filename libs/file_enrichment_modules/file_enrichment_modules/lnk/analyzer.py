@@ -25,18 +25,18 @@ def get_lnk_file_display(lnk_file, print_all=False):
             return identifier.upper().replace("_", " ")
         return identifier.capitalize().replace("_", " ")
 
-    def make_keys_nice(input, uppercase=False):
-        if isinstance(input, list):
-            return [make_keys_nice(item) for item in input]
-        if isinstance(input, dict):
-            if "class" in input:
-                key = input.pop("class")
-                return {key: make_keys_nice(input)}
+    def make_keys_nice(data, uppercase=False):
+        if isinstance(data, list):
+            return [make_keys_nice(item) for item in data]
+        if isinstance(data, dict):
+            if "class" in data:
+                key = data.pop("class")
+                return {key: make_keys_nice(data)}
             result = {}
-            for key, value in input.items():
+            for key, value in data.items():
                 result[nice_id(key, uppercase)] = make_keys_nice(value)
             return result
-        return input
+        return data
 
     # remove r_hotkey from header and reformat flags
     res["header"].pop("r_hotkey")

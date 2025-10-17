@@ -15,6 +15,7 @@ from agents.prompt_manager import PromptManager
 from agents.schemas import TriageCategory, TriageRequest, TriageResult
 from agents.tasks.credential_analyzer import analyze_credentials
 from agents.tasks.dotnet_analyzer import analyze_dotnet_assembly
+from agents.tasks.jwt import validate_jwt_finding
 from agents.tasks.summarizer import summarize_text
 from agents.tasks.translate import translate_text
 from dapr.clients import DaprClient

@@ -101,7 +101,7 @@ rule Keytab_File
 
             # Components (principal parts)
             components = []
-            for i in range(num_components):
+            for _i in range(num_components):
                 if offset + 2 > len(entry_data):
                     return None
                 comp_len = unpack(">h", entry_data[offset : offset + 2])[0]

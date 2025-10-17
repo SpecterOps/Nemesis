@@ -456,7 +456,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
             return result
 
         (
-            id,
+            record_id,
             source,
             username,
             browser,

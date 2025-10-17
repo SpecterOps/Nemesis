@@ -22,7 +22,8 @@ exclude = [
     "dist",
     "node_modules",
     "venv",
-    "libs/file_enrichment_modules/file_enrichment_modules/office_doc/office2john.py"
+    "libs/file_enrichment_modules/file_enrichment_modules/office_doc/office2john.py",
+    "projects/jupyter/jupyter_config.py",
 ]
 
 line-length = 120

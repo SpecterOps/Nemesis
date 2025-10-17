@@ -206,7 +206,7 @@ def parse_cng_stream(stream: BinaryIO) -> CngKeyFile | None:
         )
 
         # Read unkArray[16] - last 16 bytes of header
-        unk_array = header_data[28:44]
+        # unk_array = header_data[28:44]
 
         logger.debug(
             f"CNG header: version={version}, unk={unk}, name_len={name_len}, "
