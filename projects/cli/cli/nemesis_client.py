@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import BinaryIO, Optional, Union
 
 import requests
+from cli.config import NemesisConfig
 from common.models2.api import (
     APIInfo,
     ErrorResponse,
@@ -15,8 +16,6 @@ from common.models2.api import (
 )
 from requests.auth import HTTPBasicAuth
 from requests_toolbelt import MultipartEncoder
-
-from cli.config import NemesisConfig
 
 logger = logging.getLogger(__name__)
 

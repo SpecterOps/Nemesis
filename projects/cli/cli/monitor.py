@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import Optional
 
 import click
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
-
 from cli.log import setup_logging
 from cli.submit import submit_files
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 
 class NewFileHandler(FileSystemEventHandler):

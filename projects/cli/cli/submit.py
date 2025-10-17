@@ -358,7 +358,9 @@ def submit_files(
     stop_event = Event()
 
     if total_submissions > 1:
-        logger.info(f"Starting {total_submissions} concurrent submissions ({total_files} files × {total_submissions} submissions = {total_operations} total operations)")
+        logger.info(
+            f"Starting {total_submissions} concurrent submissions ({total_files} files × {total_submissions} submissions = {total_operations} total operations)"
+        )
 
     # Create progress bar for all operations
     with tqdm(
@@ -514,17 +516,17 @@ def calculate_metadata_path(file_path: Path, base_paths: Optional[list[Path]], f
         return str(file_path)
 
     # Normalize the relative path to use forward slashes
-    rel_path_normalized = str(rel_path).replace('\\', '/')
+    rel_path_normalized = str(rel_path).replace("\\", "/")
 
     # If folder is empty string, return just the relative path without any prefix
     if folder == "":
         return rel_path_normalized
 
     # Ensure folder ends with path separator if it doesn't
-    folder_normalized = folder.rstrip('/\\')
+    folder_normalized = folder.rstrip("/\\")
 
     # Join folder with relative path using Unix-style paths
-    result = folder_normalized + '/' + rel_path_normalized
+    result = folder_normalized + "/" + rel_path_normalized
 
     return result
 

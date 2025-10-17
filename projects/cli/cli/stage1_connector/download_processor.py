@@ -8,10 +8,9 @@ from pathlib import Path
 from typing import Optional, Union
 
 import plyvel
-from common.models2.api import FileMetadata, FileWithMetadataResponse
-
 from cli.nemesis_client import NemesisClient
 from cli.stage1_connector.outflankc2_client import Download, Implant, OutflankC2Client
+from common.models2.api import FileMetadata, FileWithMetadataResponse
 
 logger = logging.getLogger(__name__)
 

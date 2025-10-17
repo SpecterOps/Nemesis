@@ -3,7 +3,6 @@ import asyncio
 import logging
 
 import urllib3
-
 from cli.config import Config, OutflankConfig
 from cli.log import setup_logging
 from cli.nemesis_client import NemesisClient
