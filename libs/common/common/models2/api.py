@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import UTC, datetime
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, BeforeValidator, Field, field_validator
@@ -11,14 +11,6 @@ logger = logging.getLogger(__name__)
 
 class ErrorResponse(BaseModel):
     detail: str = Field(..., description="Error message details")
-
-
-class ValidationError(BaseModel):
-    """Model representing a validation error"""
-
-    loc: list[Union[str, int]]
-    msg: str
-    type: str
 
 
 class FileWithMetadataResponse(BaseModel):
@@ -98,7 +90,7 @@ class FileFilters(BaseModel):
                 try:
                     re.compile(pattern, re.IGNORECASE)
                 except re.error as e:
-                    raise ValueError(f"Invalid regex pattern '{pattern}': {e}")
+                    raise ValueError(f"Invalid regex pattern '{pattern}': {e}") from e
 
         return v
 
@@ -109,8 +101,12 @@ class FileMetadata(BaseModel):
     agent_id: str
     source: str | None = None
     project: str
-    timestamp: datetime | None = Field(default=None, description="ISO 8601 formatted timestamp of when the data was collected")
-    expiration: datetime | None = Field(default=None, description="ISO 8601 formatted expiration date (when the data should be deleted)")
+    timestamp: datetime | None = Field(
+        default=None, description="ISO 8601 formatted timestamp of when the data was collected"
+    )
+    expiration: datetime | None = Field(
+        default=None, description="ISO 8601 formatted expiration date (when the data should be deleted)"
+    )
     path: str
     file_filters: FileFilters | None = Field(
         default=None, description="Optional file filtering configuration for container extraction"

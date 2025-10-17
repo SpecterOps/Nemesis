@@ -10,7 +10,7 @@ from .logger import get_logger
 logger = get_logger(__name__)
 
 # Single source of truth for file_enriched query (using psycopg style with %s placeholders)
-FILE_ENRICHED_SELECT_QUERY = """
+_FILE_ENRICHED_SELECT_QUERY = """
     SELECT
         object_id, agent_id, source, project, timestamp, expiration,
         path, file_name, extension, size, magic_type, mime_type,
@@ -20,13 +20,13 @@ FILE_ENRICHED_SELECT_QUERY = """
     FROM files_enriched
 """
 
-FILE_ENRICHED_SELECT_QUERY_PSYCHOPG = f"""
-{FILE_ENRICHED_SELECT_QUERY}
+_FILE_ENRICHED_SELECT_QUERY_PSYCHOPG = f"""
+{_FILE_ENRICHED_SELECT_QUERY}
 WHERE object_id = %s
 """
 
-FILE_ENRICHED_SELECT_QUERY_ASYNCPG = f"""
-{FILE_ENRICHED_SELECT_QUERY}
+_FILE_ENRICHED_SELECT_QUERY_ASYNCPG = f"""
+{_FILE_ENRICHED_SELECT_QUERY}
 WHERE object_id = $1
 """
 
@@ -94,7 +94,7 @@ def get_file_enriched(object_id: str) -> FileEnriched:
     try:
         with psycopg.connect(get_postgres_connection_str()) as conn:
             with conn.cursor() as cur:
-                cur.execute(FILE_ENRICHED_SELECT_QUERY_PSYCHOPG, (object_id,))
+                cur.execute(_FILE_ENRICHED_SELECT_QUERY_PSYCHOPG, (object_id,))
 
                 result = cur.fetchone()
                 if not result:
@@ -140,7 +140,7 @@ async def get_file_enriched_async(object_id: str, connection_string: str | None 
     try:
         conn = await asyncpg.connect(connection_string)
         try:
-            row = await conn.fetchrow(FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)
+            row = await conn.fetchrow(_FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)
 
             if not row:
                 raise ValueError(f"No file_enriched record found for object_id {object_id}")
