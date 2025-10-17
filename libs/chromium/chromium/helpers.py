@@ -5,8 +5,8 @@ import struct
 from datetime import UTC, datetime, timedelta
 
 import psycopg
-from common.logger import get_logger
 from common.db import get_postgres_connection_str
+from common.logger import get_logger
 from Crypto.Cipher import AES, ChaCha20_Poly1305
 from nemesis_dpapi import Blob
 

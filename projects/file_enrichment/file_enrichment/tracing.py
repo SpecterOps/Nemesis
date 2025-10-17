@@ -8,8 +8,8 @@
 # from opentelemetry.sdk.trace.export import BatchSpanProcessor
 # from opentelemetry.semconv.resource import ResourceAttributes
 
-from typing import Any, Optional
 from contextlib import contextmanager
+from typing import Any
 
 
 class NoOpSpan:
@@ -21,7 +21,7 @@ class NoOpSpan:
     def set_attributes(self, attributes: dict) -> None:
         pass
 
-    def add_event(self, name: str, attributes: Optional[dict] = None) -> None:
+    def add_event(self, name: str, attributes: dict | None = None) -> None:
         pass
 
     def set_status(self, status: Any) -> None:

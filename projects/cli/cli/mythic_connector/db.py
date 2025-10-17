@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 import plyvel
 
@@ -21,7 +20,7 @@ class Database:
         """
         self.db = plyvel.DB(path, create_if_missing=True)
 
-    def get(self, key: str) -> Optional[int]:
+    def get(self, key: str) -> int | None:
         """Get an integer value from the database.
 
         Args:

@@ -5,7 +5,6 @@ import tempfile
 import zipfile
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Optional
 
 import jpype
 import jpype.imports  # noqa: F401
@@ -68,7 +67,7 @@ def init_tika():
         logger.info(f"Configuring Tika with OCR languages: {ocr_languages}")
 
         # Read the static XML config and substitute the language parameter
-        with open("/tika-config.xml", "r") as f:
+        with open("/tika-config.xml") as f:
             config_xml = f.read()
 
         # Replace the hardcoded language with the environment variable value
@@ -298,7 +297,7 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
             )
 
         logger.info(
-            f"Published new file message for transform",
+            "Published new file message for transform",
             new_object_id=transform.object_id,
             originating_object_id=file_enriched.object_id,
         )
@@ -308,7 +307,7 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
 
 
 @workflow_runtime.activity
-def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> Optional[dict]:
+def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> dict | None:
     """Extract text using Tika."""
     object_id = file_input.get("object_id")
     result = None
@@ -401,7 +400,7 @@ def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> Optiona
 
 
 @workflow_runtime.activity
-def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> Optional[dict]:
+def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dict | None:
     """Extract strings from binary files."""
     object_id = file_input.get("object_id")
     result = None
@@ -480,7 +479,7 @@ def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> Optional[
 
 
 @workflow_runtime.activity
-def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> Optional[dict]:
+def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict | None:
     """Convert file to PDF using Gotenberg."""
     object_id = file_input.get("object_id")
     result = None

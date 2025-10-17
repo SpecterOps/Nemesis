@@ -8,7 +8,6 @@ import time
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Event, Thread
-from typing import Optional
 
 import click
 import colorlog
@@ -63,7 +62,7 @@ class UploadTracker:
             self.bytes_uploaded += bytes_uploaded
             self.successes.append((path, bytes_uploaded))
 
-    def add_failure(self, path: Path, error: Optional[str]):
+    def add_failure(self, path: Path, error: str | None):
         """Track a failed upload with path and error message"""
         with self.lock:
             self.failed += 1
@@ -113,11 +112,11 @@ class UploadTracker:
 
 
 def parse_filters(
-    filters_file: Optional[str],
+    filters_file: str | None,
     include_patterns: tuple[str, ...],
     exclude_patterns: tuple[str, ...],
     pattern_type: str,
-) -> Optional[dict]:
+) -> dict | None:
     """Parse filter options into the format expected by the API"""
 
     # If a filters file is provided, load it
@@ -201,13 +200,13 @@ def submit_main(
     agent_id: str,
     file_path: str,
     container: bool,
-    source: Optional[str] = None,
-    filters: Optional[str] = None,
+    source: str | None = None,
+    filters: str | None = None,
     include_pattern: tuple[str, ...] = (),
     exclude_pattern: tuple[str, ...] = (),
     pattern_type: str = "glob",
     repeat: int = 0,
-    folder: Optional[str] = None,
+    folder: str | None = None,
 ):
     """Submit files to Nemesis for processing.
 
@@ -309,10 +308,10 @@ def submit_files(
     project: str = "assess-test",
     agent_id: str = "submit.sh",
     container: bool = False,
-    source: Optional[str] = None,
-    file_filters: Optional[dict] = None,
+    source: str | None = None,
+    file_filters: dict | None = None,
     repeat: int = 0,
-    folder: Optional[str] = None,
+    folder: str | None = None,
 ):
     """Submit files to Nemesis"""
 
@@ -443,7 +442,7 @@ def stream_files(paths: list[Path], recursive: bool, file_queue: Queue) -> int:
     return total_files
 
 
-def validate_auth(host_port: str, auth: Optional[tuple[str, str]] = None) -> bool:
+def validate_auth(host_port: str, auth: tuple[str, str] | None = None) -> bool:
     """
     Validate authentication credentials before starting uploads.
     Returns True if auth is valid or not required, False otherwise.
@@ -469,7 +468,7 @@ def validate_auth(host_port: str, auth: Optional[tuple[str, str]] = None) -> boo
         return False
 
 
-def calculate_metadata_path(file_path: Path, base_paths: Optional[list[Path]], folder: Optional[str]) -> str:
+def calculate_metadata_path(file_path: Path, base_paths: list[Path] | None, folder: str | None) -> str:
     """
     Calculate the path to use in metadata, applying folder transformation if specified.
 
@@ -535,8 +534,8 @@ def create_metadata(
     path: str,
     project: str = "assess-test",
     agent_id: str = "submit.sh",
-    source: Optional[str] = None,
-    file_filters: Optional[dict] = None,
+    source: str | None = None,
+    file_filters: dict | None = None,
 ) -> dict:
     """Create metadata dictionary for file submission"""
     metadata: dict = {
@@ -588,15 +587,15 @@ def upload_file(
     file_path: Path,
     host_port: str,
     session: requests.Session,
-    auth: Optional[tuple[str, str]] = None,
+    auth: tuple[str, str] | None = None,
     project: str = "assess-test",
     agent_id: str = "submit.sh",
     container: bool = False,
-    source: Optional[str] = None,
-    file_filters: Optional[dict] = None,
-    base_paths: Optional[list[Path]] = None,
-    folder: Optional[str] = None,
-) -> tuple[bool, Optional[str], int]:
+    source: str | None = None,
+    file_filters: dict | None = None,
+    base_paths: list[Path] | None = None,
+    folder: str | None = None,
+) -> tuple[bool, str | None, int]:
     """
     Attempt to upload a file with retry logic. Returns (success, error_message, bytes_uploaded).
     If success is True, error_message will be None.
@@ -669,14 +668,14 @@ def concurrent_worker(
     error_queue: Queue,
     stop_event: Event,
     verbose: bool,
-    auth: Optional[tuple[str, str]] = None,
+    auth: tuple[str, str] | None = None,
     project: str = "assess-test",
     agent_id: str = "submit.sh",
     container: bool = False,
-    source: Optional[str] = None,
-    file_filters: Optional[dict] = None,
-    base_paths: Optional[list[Path]] = None,
-    folder: Optional[str] = None,
+    source: str | None = None,
+    file_filters: dict | None = None,
+    base_paths: list[Path] | None = None,
+    folder: str | None = None,
 ):
     """Worker thread to process (file, submission_number) pairs from the queue"""
     while not stop_event.is_set():
@@ -714,14 +713,14 @@ def worker(
     error_queue: Queue,
     stop_event: Event,
     verbose: bool,
-    auth: Optional[tuple[str, str]] = None,
+    auth: tuple[str, str] | None = None,
     project: str = "assess-test",
     agent_id: str = "submit.sh",
     container: bool = False,
-    source: Optional[str] = None,
-    file_filters: Optional[dict] = None,
-    base_paths: Optional[list[Path]] = None,
-    folder: Optional[str] = None,
+    source: str | None = None,
+    file_filters: dict | None = None,
+    base_paths: list[Path] | None = None,
+    folder: str | None = None,
 ):
     """Worker thread to process files from the queue"""
     while not stop_event.is_set():

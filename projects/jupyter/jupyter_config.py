@@ -1,6 +1,7 @@
 """Jupyter configuration for Nemesis environment"""
 
 import os
+
 from jupyter_server.auth import passwd
 
 # Server configuration
@@ -26,7 +27,7 @@ else:
 
     if os.path.exists(password_file):
         # Read existing password
-        with open(password_file, 'r') as f:
+        with open(password_file) as f:
             random_password = f.read().strip()
     else:
         # Generate new random password and save it

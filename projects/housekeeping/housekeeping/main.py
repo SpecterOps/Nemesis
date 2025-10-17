@@ -2,7 +2,6 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Optional
 
 import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -33,7 +32,7 @@ async def get_db_pool():
     return db_pool
 
 
-async def get_expired_object_ids(expiration_date: Optional[datetime] = None) -> list[str]:
+async def get_expired_object_ids(expiration_date: datetime | None = None) -> list[str]:
     """
     Get a list of all object_ids from files, files_enriched, and files_enriched_dataset tables
     that have passed their expiration date.
@@ -149,7 +148,7 @@ async def delete_database_entries(object_ids: list[str]) -> bool:
         return False
 
 
-async def delete_expired_chromium_data(expiration_date: Optional[datetime] = None) -> bool:
+async def delete_expired_chromium_data(expiration_date: datetime | None = None) -> bool:
     """
     Delete chromium data only when expiration_date is datetime.max (delete all mode).
     Otherwise, CASCADE deletion handles chromium data when files are deleted.
@@ -187,7 +186,7 @@ async def delete_expired_chromium_data(expiration_date: Optional[datetime] = Non
         return False
 
 
-async def delete_expired_file_listings(expiration_date: Optional[datetime] = None) -> bool:
+async def delete_expired_file_listings(expiration_date: datetime | None = None) -> bool:
     """
     Delete expired entries from the file_listings table based on their created_at timestamp.
 
@@ -241,7 +240,7 @@ async def delete_expired_file_listings(expiration_date: Optional[datetime] = Non
         return False
 
 
-async def delete_expired_file_linkings(expiration_date: Optional[datetime] = None) -> bool:
+async def delete_expired_file_linkings(expiration_date: datetime | None = None) -> bool:
     """
     Delete expired entries from the file_linkings table based on their created_at timestamp.
 
@@ -295,7 +294,7 @@ async def delete_expired_file_linkings(expiration_date: Optional[datetime] = Non
         return False
 
 
-async def delete_expired_dpapi_data(expiration_date: Optional[datetime] = None) -> bool:
+async def delete_expired_dpapi_data(expiration_date: datetime | None = None) -> bool:
     """
     Delete expired entries from the dpapi tables based on their created_at timestamp.
 
@@ -355,7 +354,7 @@ async def delete_expired_dpapi_data(expiration_date: Optional[datetime] = None) 
         return False
 
 
-async def delete_expired_containers(expiration_date: Optional[datetime] = None) -> bool:
+async def delete_expired_containers(expiration_date: datetime | None = None) -> bool:
     """
     Delete expired entries from the container_processing table.
 
@@ -422,7 +421,7 @@ def _log_cleanup_result(result, success_msg: str, error_msg: str, round_num: int
 _CLEANUP_RETRY_COUNT = 3
 _CLEANUP_RETRY_DELAY = 20
 
-async def run_cleanup_job(expiration_date: Optional[datetime] = None):
+async def run_cleanup_job(expiration_date: datetime | None = None):
     """
     Main job function that runs the cleanup process.
 
@@ -553,7 +552,7 @@ async def lifespan(app: FastAPI):
 # Create model for trigger request
 class CleanupRequest(BaseModel):
     # None means use current datetime, "all" means clean everything
-    expiration: Optional[str] = None
+    expiration: str | None = None
 
 
 # Create FastAPI application with lifespan handler

@@ -3,7 +3,6 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import click
 from cli.log import setup_logging
@@ -96,7 +95,7 @@ def monitor_main(
     only_monitor: bool,
     workers: int,
     container: bool,
-    source: Optional[str] = None,
+    source: str | None = None,
 ):
     """Monitor a folder for new files and submit them to Nemesis"""
     try:

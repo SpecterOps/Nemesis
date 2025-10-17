@@ -2,7 +2,6 @@
 
 import pytest
 from Crypto.Hash import SHA1
-
 from nemesis_dpapi.validation import (
     check_write_once_conflicts,
     validate_and_calculate_sha1,

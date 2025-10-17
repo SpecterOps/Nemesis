@@ -2,7 +2,6 @@ import asyncio
 import os
 import re
 from contextlib import asynccontextmanager
-from typing import Optional
 
 import apprise
 from common.logger import get_logger
@@ -85,10 +84,10 @@ dapr_app = DaprApp(app)
 
 
 class TestAlert(BaseModel):
-    title: Optional[str] = "Nemesis Alert"
+    title: str | None = "Nemesis Alert"
     body: str
-    service: Optional[str] = None
-    tag: Optional[str] = None
+    service: str | None = None
+    tag: str | None = None
 
 
 async def handle_feedback_subscription():

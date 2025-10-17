@@ -3,7 +3,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
@@ -203,7 +203,7 @@ class OutflankC2Client:
             raise
 
     @requires_auth
-    async def get_current_user(self) -> Optional[str]:
+    async def get_current_user(self) -> str | None:
         """Get the currently authenticated username."""
         if not self._access_token:
             self.logger.warning("No access token available")

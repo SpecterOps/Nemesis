@@ -5,7 +5,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 import plyvel
 from cli.nemesis_client import NemesisClient
@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DownloadedFileInfo:
-    file_path: Optional[Path]
+    file_path: Path | None
     delete_after: bool
     success: bool
-    temp_file: Optional[Path] = None
+    temp_file: Path | None = None
 
     def __post_init__(self):
         # Track temp file separately for cleanup
@@ -47,8 +47,8 @@ class OutflankDownloadProcessor:
         db_path: Path,
         nemesis: NemesisClient,
         project: str,
-        outflank_downloads_dir_path: Optional[Path] = None,
-        outflank: Optional[OutflankC2Client] = None,
+        outflank_downloads_dir_path: Path | None = None,
+        outflank: OutflankC2Client | None = None,
     ):
         """Initialize with LevelDB path and optional components
 
@@ -89,7 +89,7 @@ class OutflankDownloadProcessor:
         return self.db.get(key) is not None
 
     def mark_processed(
-        self, download: Download, success: bool = True, response: Optional[FileWithMetadataResponse] = None
+        self, download: Download, success: bool = True, response: FileWithMetadataResponse | None = None
     ):
         """Mark download as processed"""
         key = f"download:{download.uid}".encode()
@@ -110,7 +110,7 @@ class OutflankDownloadProcessor:
         file_path: Union[Path, str],
         metadata: FileMetadata,
         delete_after: bool = False,
-    ) -> tuple[bool, Optional[str], Optional[FileWithMetadataResponse]]:
+    ) -> tuple[bool, str | None, FileWithMetadataResponse | None]:
         """Upload file with metadata to the API endpoint"""
         if not self.client:
             raise ValueError("NemesisClient is required")
@@ -237,7 +237,7 @@ class OutflankDownloadProcessor:
 
         return DownloadedFileInfo(temp_file, delete_after=True, success=True)
 
-    def _cleanup_temp_file(self, temp_file: Optional[Path]) -> None:
+    def _cleanup_temp_file(self, temp_file: Path | None) -> None:
         """Clean up temporary file if it exists and hasn't been cleaned up already.
         Silently ignores if the file doesn't exist, as it may have been cleaned up
         by the upload_file method."""
