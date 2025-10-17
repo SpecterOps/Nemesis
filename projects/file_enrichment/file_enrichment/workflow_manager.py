@@ -30,7 +30,7 @@ class WorkflowManager:
         self.max_execution_time = max_execution_time
         self.max_concurrent = max_concurrent
         self.background_tasks = set()  # Track background tasks to prevent GC
-        self.pool = ConnectionPool(get_postgres_connection_str(), min_size=max_concurrent, max_size=(3 * max_concurrent))
+        self.pool = ConnectionPool(get_postgres_connection_str(), min_size=max_concurrent, max_size=(3 * max_concurrent), open=True)
 
         # Start background cleanup task
         cleanup_task = asyncio.create_task(self._cleanup_loop())

@@ -8,7 +8,7 @@ import uuid
 import common.helpers as helpers
 from common.logger import get_logger
 from fastapi import APIRouter, Body, HTTPException, Path
-from file_enrichment.workflow import workflow_runtime
+from file_enrichment.workflow import wf_runtime
 from pydantic import BaseModel
 
 logger = get_logger(__name__)
@@ -24,7 +24,7 @@ class EnrichmentRequest(BaseModel):
 async def list_enabled_llm_enrichments():
     """List the enabled LLM enrichments based on environment variables."""
     try:
-        if not workflow_runtime or not workflow_runtime.modules:
+        if not wf_runtime or not wf_runtime.modules:
             raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
 
         llm_enrichments = []
@@ -46,10 +46,10 @@ async def list_enabled_llm_enrichments():
 async def list_enrichments():
     """List all available enrichment modules."""
     try:
-        if not workflow_runtime or not workflow_runtime.modules:
+        if not wf_runtime or not wf_runtime.modules:
             raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
 
-        modules = list(workflow_runtime.modules.keys())
+        modules = list(wf_runtime.modules.keys())
         return {"modules": modules}
 
     except Exception as e:
@@ -68,14 +68,14 @@ async def run_enrichment(
 
     try:
         # Check if module
-        if not workflow_runtime or not workflow_runtime.modules:
+        if not wf_runtime or not wf_runtime.modules:
             raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
 
-        if enrichment_name not in workflow_runtime.modules:
+        if enrichment_name not in wf_runtime.modules:
             raise HTTPException(status_code=404, detail=f"Enrichment module '{enrichment_name}' not found")
 
         # Get the module
-        module = workflow_runtime.modules[enrichment_name]
+        module = wf_runtime.modules[enrichment_name]
 
         # Check if we should process this file - run in thread since it might use sync operations
         should_process = await asyncio.to_thread(module.should_process, request.object_id)

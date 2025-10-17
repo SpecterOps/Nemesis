@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import CloudEvent, File
+from common.workflows import set_fastapi_loop
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI
@@ -20,7 +21,7 @@ from .subscriptions.bulk_enrichment_handler import process_bulk_enrichment_event
 from .subscriptions.dotnet_handler import process_dotnet_event
 from .subscriptions.file_handler import process_file_event
 from .subscriptions.noseyparker_handler import process_noseyparker_event
-from .workflow import get_workflow_client, initialize_workflow_runtime, shutdown_workflow_runtime, workflow_runtime
+from .workflow import get_workflow_client, initialize_workflow_runtime, shutdown_workflow_runtime, wf_runtime
 from .workflow_manager import WorkflowManager
 
 logger = get_logger(__name__)
@@ -36,7 +37,7 @@ logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=o
 postgres_connection_string = get_postgres_connection_str()
 
 pool = ConnectionPool(
-    postgres_connection_string, min_size=max_parallel_workflows, max_size=(3 * max_parallel_workflows)
+    postgres_connection_string, min_size=max_parallel_workflows, max_size=(3 * max_parallel_workflows), open=True
 )
 
 module_execution_order = []
@@ -58,6 +59,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing workflow runtime...", pid=os.getpid())
 
     app.state.event_loop = asyncio.get_running_loop()
+    set_fastapi_loop(asyncio.get_event_loop())
 
     # Initialize global DpapiManager for the application lifetime
     dapr_client = DaprClient()
@@ -191,4 +193,4 @@ async def process_nosey_parker_results(event: CloudEvent):
 async def process_bulk_enrichment_task(event: CloudEvent):
     """Handler for individual bulk enrichment tasks"""
     global workflow_manager
-    await process_bulk_enrichment_event(event.data, workflow_manager, workflow_runtime)
+    await process_bulk_enrichment_event(event.data, workflow_manager, wf_runtime)

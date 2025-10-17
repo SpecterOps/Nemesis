@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .logger import get_logger
 
@@ -93,13 +93,11 @@ class DotNetAssemblyAnalysis(BaseModel):
 
 
 class DotNetOutput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     object_id: str = Field(alias="objectId")
     decompilation: str | None = None
     analysis: str | None = None
-
-    class Config:
-        populate_by_name = True
-        validate_by_name = True
 
     def get_parsed_analysis(self) -> DotNetAssemblyAnalysis | None:
         """Parse the analysis JSON string into a DotNetAssemblyAnalysis object"""
@@ -166,12 +164,10 @@ class ScanResults(BaseModel):
 
 
 class NoseyParkerOutput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     object_id: str
     scan_result: ScanResults
-
-    class Config:
-        populate_by_name = True
-        extra = "ignore"  # Ignore extra fields
 
     # Add a factory method to handle flexible parsing
     @classmethod
@@ -206,24 +202,25 @@ class NoseyParkerOutput(BaseModel):
 #
 ##########################################
 class File(BaseModel):
+    model_config = ConfigDict(
+        exclude_none=True,
+        exclude_unset=True,
+        json_encoders={datetime: lambda dt: dt.isoformat()},
+    )
+
     object_id: str
     agent_id: str
     source: str | None = None
     project: str
     timestamp: datetime
     expiration: datetime
-    path: str #| None = None
+    path: str  # | None = None
     originating_object_id: str | None = None
     originating_container_id: str | None = None
     nesting_level: int | None = None
     creation_time: str | None = None
     access_time: str | None = None
     modification_time: str | None = None
-
-    class Config:
-        exclude_none = True
-        exclude_unset = True
-        json_encoders = {datetime: lambda dt: dt.isoformat()}
 
     @classmethod
     def from_file_metadata(cls, metadata: "FileMetadata", object_id: str) -> "File":
@@ -273,6 +270,8 @@ class FileHashes(BaseModel):
 
 
 class FileEnriched(File):
+    model_config = ConfigDict(json_encoders={datetime: lambda dt: dt.isoformat()})
+
     file_name: str
     extension: str | None = None
     size: int
@@ -281,9 +280,6 @@ class FileEnriched(File):
     mime_type: str
     is_plaintext: bool
     is_container: bool
-
-    class Config:
-        json_encoders = {datetime: lambda dt: dt.isoformat()}
 
 
 ##########################################

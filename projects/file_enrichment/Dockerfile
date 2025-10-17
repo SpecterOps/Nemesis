@@ -63,6 +63,8 @@ RUN mkdir -p /yara_rules/
 ENV PYTHONUNBUFFERED=1
 # No .pyc/pycache files
 ENV PYTHONDONTWRITEBYTECODE=1
+
+ENV PYTHONDEVMODE=1
 ENV PYTHONASYNCIODEBUG=1
 
 ENV LOG_LEVEL=DEBUG
@@ -114,8 +116,6 @@ ENV UVICORN_HOST=0.0.0.0 \
     UVICORN_PROXY_HEADERS=1 \
     UVICORN_ACCESS_LOG=false
 
-# Enable asyncio debug mode to detect blocking calls & common asyncio issues
-ENV PYTHONASYNCIODEBUG=1
 
 # TODO: Re-enable when we're ready for release
 # USER nemesis
