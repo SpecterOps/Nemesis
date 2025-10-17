@@ -161,7 +161,7 @@ async def store_dotnet_results(
         findings_list = []
         if analysis:
             # Store the analysis results
-            enrichment_result.results["inspect_assembly"] = sanitize_for_jsonb(analysis.dict())
+            enrichment_result.results["inspect_assembly"] = sanitize_for_jsonb(analysis.model_dump())
 
             # Check if there are any significant findings worth creating a finding for
             has_significant_findings = (
@@ -193,7 +193,7 @@ async def store_dotnet_results(
                     origin_name="dotnet_service",
                     object_id=object_id,
                     severity=9,
-                    raw_data=sanitize_for_jsonb(analysis.dict()),
+                    raw_data=sanitize_for_jsonb(analysis.model_dump()),
                     data=[display_data],
                 )
 

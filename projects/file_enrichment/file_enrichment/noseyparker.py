@@ -192,9 +192,9 @@ async def store_noseyparker_results(
         # Create an enrichment result to store
         enrichment_result = EnrichmentResult(module_name="noseyparker")
         enrichment_result.results = {
-            "matches": [sanitize_for_jsonb(match.dict() if hasattr(match, "dict") else match) for match in matches],
+            "matches": [sanitize_for_jsonb(match.model_dump() if hasattr(match, "model_dump") else match) for match in matches],
             "stats": sanitize_for_jsonb(
-                scan_stats.dict() if scan_stats and hasattr(scan_stats, "dict") else scan_stats
+                scan_stats.model_dump() if scan_stats and hasattr(scan_stats, "model_dump") else scan_stats
             ),
         }
 
@@ -218,7 +218,7 @@ async def store_noseyparker_results(
                 origin_name="noseyparker",
                 object_id=object_id,
                 severity=7,
-                raw_data=sanitize_for_jsonb({"match": match.dict() if hasattr(match, "dict") else match}),
+                raw_data=sanitize_for_jsonb({"match": match.model_dump() if hasattr(match, "model_dump") else match}),
                 data=[display_data],
             )
 

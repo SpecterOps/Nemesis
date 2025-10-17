@@ -130,7 +130,9 @@ class FileMetadata(BaseModel):
         }
     }
 
-    model_config = {"json_encoders": {datetime: lambda dt: dt.isoformat()}}
+    model_config = {
+        "json_encoders": {datetime: lambda dt: dt.isoformat()},
+    }
 
 
 class ContainerFromMountRequest(BaseModel):
