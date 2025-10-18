@@ -33,7 +33,7 @@ class JWTAgent(BaseAgent):
         """
 
         # Check if this is actually a JWT finding
-        if "np.jwt.1" not in summary or "JWT Analysis" not in summary:
+        if "JSON Web Token" not in summary:
             return None
 
         logger.debug("Analyzing JWT finding from file", file_path=file_path)
@@ -44,7 +44,8 @@ class JWTAgent(BaseAgent):
 
         # Check for sample/test data indicators
         is_sample_data = any(
-            indicator in file_path.lower() for indicator in ["test", "sample", "example", "demo", "mock", "fixture", "spec"]
+            indicator in file_path.lower()
+            for indicator in ["test", "sample", "example", "demo", "mock", "fixture", "spec"]
         )
 
         # Determine if there's conflicting information
@@ -73,7 +74,10 @@ class JWTAgent(BaseAgent):
             decision = TriageCategory.FALSE_POSITIVE
 
         result = JWTAnalysis(
-            is_expired=is_expired, has_expiry_conflict=has_expiry_conflict, is_sample_data=is_sample_data, decision=decision
+            is_expired=is_expired,
+            has_expiry_conflict=has_expiry_conflict,
+            is_sample_data=is_sample_data,
+            decision=decision,
         )
 
         logger.debug(

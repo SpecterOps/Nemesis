@@ -10,7 +10,7 @@ from typing import Any
 import psycopg
 from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
-from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
+from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, MatchInfo, ScanStats
 
 logger = get_logger(__name__)
 
@@ -142,7 +142,7 @@ def create_finding_summary(match_info):
     summary += "```\n"
 
     # Check if this is a JWT
-    if match_info.rule_type == "jwt" or "jwt" in match_info.rule_name.lower():
+    if match_info.rule_type == "secret" and "json web token" in match_info.rule_name.lower():
         jwt_token = match_info.matched_content.strip()
         is_expired, payload = is_jwt_expired(jwt_token)
 
@@ -158,7 +158,10 @@ def create_finding_summary(match_info):
 
 
 async def store_noseyparker_results(
-    object_id: str, matches: list, scan_stats=None, postgres_connection_string: str = None
+    object_id: str,
+    matches: list[MatchInfo],
+    scan_stats: ScanStats,
+    postgres_connection_string: str,
 ):
     """
     Store Nosey Parker results in the database, including creating findings.
@@ -192,7 +195,9 @@ async def store_noseyparker_results(
         # Create an enrichment result to store
         enrichment_result = EnrichmentResult(module_name="noseyparker")
         enrichment_result.results = {
-            "matches": [sanitize_for_jsonb(match.model_dump() if hasattr(match, "model_dump") else match) for match in matches],
+            "matches": [
+                sanitize_for_jsonb(match.model_dump() if hasattr(match, "model_dump") else match) for match in matches
+            ],
             "stats": sanitize_for_jsonb(
                 scan_stats.model_dump() if scan_stats and hasattr(scan_stats, "model_dump") else scan_stats
             ),

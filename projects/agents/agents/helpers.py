@@ -1,4 +1,5 @@
 """Rate limit handling for HTTP clients with Retry-After support."""
+
 import openai
 from agents.litellm_startup import litellm_startup
 from common.logger import get_logger
@@ -17,7 +18,7 @@ def create_rate_limit_client():
         """Safely validate response."""
         try:
             # Check if response has a status_code attribute
-            if hasattr(response, 'status_code'):
+            if hasattr(response, "status_code"):
                 if response.status_code >= 400:
                     response.raise_for_status()
             else:
@@ -33,15 +34,16 @@ def create_rate_limit_client():
             retry=retry_if_exception_type(HTTPStatusError),
             wait=wait_retry_after(
                 fallback_strategy=wait_exponential(multiplier=1, max=60),
-                max_wait=300  # Don't wait more than 5 minutes
+                max_wait=300,  # Don't wait more than 5 minutes
             ),
             stop=stop_after_attempt(10),
-            reraise=True
+            reraise=True,
         ),
-        validate_response=validator
+        validate_response=validator,
     )
 
     return AsyncClient(transport=transport)
+
 
 async def get_litellm_token():
     """Sets up the LiteLLM token."""
@@ -95,6 +97,8 @@ async def fetch_finding_details(session, finding_id):
                 category
                 severity
                 object_id
+                origin_type
+                origin_name
                 data
                 raw_data
                 files_enriched {
@@ -158,15 +162,10 @@ def check_triage_consensus(session, object_id, threshold=3):
         for decision, count in decision_counts.items():
             if count >= threshold:
                 logger.info(f"Found triage consensus for object {object_id}: {decision} ({count} findings)")
-                return {
-                    "has_consensus": True,
-                    "decision": decision,
-                    "count": count
-                }
+                return {"has_consensus": True, "decision": decision, "count": count}
 
         return None
 
     except Exception as e:
         logger.exception(e, message=f"Error checking triage consensus for object {object_id}")
         return None
-

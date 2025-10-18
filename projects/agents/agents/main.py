@@ -12,10 +12,9 @@ from agents.helpers import check_triage_consensus, fetch_finding_details, get_li
 from agents.model_manager import ModelManager
 from agents.phoenix_cost_sync import sync_pricing_to_phoenix
 from agents.prompt_manager import PromptManager
-from agents.schemas import TriageCategory, TriageRequest, TriageResult
+from agents.schemas import NoseyParkerData, TriageCategory, TriageRequest, TriageResult
 from agents.tasks.credential_analyzer import analyze_credentials
 from agents.tasks.dotnet_analyzer import analyze_dotnet_assembly
-from agents.tasks.jwt import validate_jwt_finding
 from agents.tasks.summarizer import summarize_text
 from agents.tasks.translate import translate_text
 from dapr.clients import DaprClient
@@ -229,27 +228,116 @@ def insert_triage_result(ctx: WorkflowActivityContext, activity_input: dict):
         raise
 
 
+def extract_summary_from_triage_request(triage_request: TriageRequest) -> str | None:
+    """
+    Extract the summary from a TriageRequest's data field.
+
+    Args:
+        triage_request: The triage request containing finding data
+
+    Returns:
+        The summary string if found, None otherwise
+    """
+    if not triage_request.data or len(triage_request.data) == 0:
+        return None
+
+    first_data = triage_request.data[0]
+    try:
+        if isinstance(first_data, str):
+            first_data = json.loads(first_data)
+        if isinstance(first_data, dict) and "metadata" in first_data:
+            return first_data["metadata"].get("summary")
+    except json.JSONDecodeError:
+        logger.error("Failed to parse finding data as JSON")
+
+    return None
+
+
+def handle_jwt_triage(ctx: DaprWorkflowContext, triage_request: TriageRequest, summary: str):
+    """
+    Handle JWT finding triage using rule-based validation.
+
+    Checks if the summary contains JWT-specific markers and processes the finding
+    with rule-based validation instead of LLM triage.
+
+    Args:
+        ctx: Dapr workflow context
+        finding_id: The finding ID being triaged
+        summary: The finding summary text
+        file_path: Path to the file containing the JWT
+
+    Returns:
+        True if this is a JWT finding that was processed, False otherwise
+
+    Yields:
+        Workflow activity calls for JWT validation and result insertion
+    """
+    # Check if it's a JWT finding
+    if triage_request.origin_name != "noseyparker":
+        return False
+
+    if not triage_request.raw_data:
+        if not ctx.is_replaying:
+            logger.warning(f"No raw_data available for noseyparker finding {triage_request.finding_id}")
+        return False
+
+    try:
+        noseyparker_data = NoseyParkerData(**triage_request.raw_data)
+    except Exception as e:
+        if not ctx.is_replaying:
+            logger.error(f"Failed to parse noseyparker data for finding {triage_request.finding_id}: {e}")
+        return False
+
+    # Check if this is specifically a JWT finding
+    if noseyparker_data.match.rule_name != "JSON Web Token (base64url-encoded)":
+        return False
+
+    if not ctx.is_replaying:
+        logger.info(f"Processing JWT finding {triage_request.finding_id} with rule-based triage")
+
+    jwt_wrapper = agent_manager.get_wrapper_function("jwt")
+    jwt_result = yield ctx.call_activity(
+        jwt_wrapper,
+        input={
+            "summary": summary,
+            "file_path": triage_request.file_path,
+        },
+    )
+
+    result = TriageResult(
+        finding_id=triage_request.finding_id,
+        decision=jwt_result["decision"],
+        explanation=jwt_result.get("explanation", "JWT validation completed"),
+        confidence=1.0,
+        true_positive_context=None,
+        success=True,
+    )
+
+    yield ctx.call_activity(
+        insert_triage_result,
+        input={
+            "finding_id": triage_request.finding_id,
+            "triage_result": result.model_dump(),
+        },
+    )
+
+    return True
+
+
 @workflow_runtime.workflow
 def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
     """Main workflow for triaging findings."""
     try:
-        finding_id = workflow_input.get("finding_id")
-        object_id = workflow_input.get("object_id")
+        # Parse workflow_input as TriageRequest
+        triage_request = TriageRequest(**workflow_input)
+        finding_id = triage_request.finding_id
+        object_id = triage_request.object_id
 
         if not ctx.is_replaying:
             logger.info(f"Starting triage workflow for finding {finding_id}")
 
         # Step 1: Extract out the finding summary
-        summary = None
-        if workflow_input.get("data") and isinstance(workflow_input["data"], list) and len(workflow_input["data"]) > 0:
-            first_data = workflow_input["data"][0]
-            try:
-                if isinstance(first_data, str):
-                    first_data = json.loads(first_data)
-                if isinstance(first_data, dict) and "metadata" in first_data:
-                    summary = first_data["metadata"].get("summary")
-            except json.JSONDecodeError:
-                logger.error("Failed to parse finding data as JSON")
+        summary = extract_summary_from_triage_request(triage_request)
 
         if not summary:
             logger.warning(f"No summary found for finding {finding_id}")
@@ -258,44 +346,35 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
                 decision=TriageCategory.NOT_TRIAGED,
                 explanation="No summary available",
                 confidence=0.0,
+                true_positive_context=None,
                 success=False,
             )
 
             yield ctx.call_activity(
-                insert_triage_result, input={"finding_id": finding_id, "triage_result": result.model_dump()}
+                insert_triage_result,
+                input={
+                    "finding_id": finding_id,
+                    "triage_result": result.model_dump(),
+                },
             )
             return
 
-        file_path = workflow_input.get("file_path", "")
+        file_path = triage_request.file_path
 
         # Step 2: Check if it's a JWT finding and handle non-LLM triage
-        if "np.jwt.1" in summary and "JWT Analysis" in summary:
-            if not ctx.is_replaying:
-                logger.info(f"Processing JWT finding {finding_id} with rule-based triage")
-
-            jwt_wrapper = agent_manager.get_wrapper_function("jwt")
-            jwt_result = yield ctx.call_activity(
-                validate_jwt_finding, input={"summary": summary, "file_path": file_path}
-            )
-
-            result = TriageResult(
-                finding_id=finding_id,
-                decision=jwt_result["decision"],
-                explanation=jwt_result.get("explanation", "JWT validation completed"),
-                confidence=1.0,
-                success=True,
-            )
-
-            yield ctx.call_activity(
-                insert_triage_result, input={"finding_id": finding_id, "triage_result": result.model_dump()}
-            )
+        jwt_handled = yield from handle_jwt_triage(ctx, triage_request, summary)
+        if jwt_handled:
             return
 
         # Step 3: Check for finding consensus:
         #         If we hit this number of the same triage values for the same file, all future findings get that value
         consensus_threshold = int(os.getenv("TRIAGE_CONSENSUS_THRESHOLD", 3))
         consensus = yield ctx.call_activity(
-            check_consensus_activity, input={"object_id": object_id, "threshold": consensus_threshold}
+            check_consensus_activity,
+            input={
+                "object_id": object_id,
+                "threshold": consensus_threshold,
+            },
         )
 
         if consensus and consensus.get("has_consensus"):
@@ -309,11 +388,16 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
                 decision=consensus["decision"],
                 explanation=f"Determined by existing {consensus['decision'].replace('_', ' ')} consensus for this file ({consensus['count']} findings)",
                 confidence=1.0,
+                true_positive_context=None,
                 success=True,
             )
 
             yield ctx.call_activity(
-                insert_triage_result, input={"finding_id": finding_id, "triage_result": result.model_dump()}
+                insert_triage_result,
+                input={
+                    "finding_id": finding_id,
+                    "triage_result": result.model_dump(),
+                },
             )
             return
 
@@ -427,6 +511,8 @@ async def handle_findings_subscription():
                                 category=finding_details["category"],
                                 severity=finding_details["severity"],
                                 object_id=object_id,
+                                origin_type=finding_details["origin_type"],
+                                origin_name=finding_details["origin_name"],
                                 data=data_strings,
                                 raw_data=finding_details["raw_data"],
                                 file_path=file_path,
