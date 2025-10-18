@@ -56,7 +56,7 @@ async def get_litellm_token():
         except RuntimeError as e:
             # Handle LiteLLM not being available gracefully
             if "LiteLLM API not available" in str(e):
-                logger.warning("LiteLLM service is not available - continuing with JWT-only tr")
+                logger.warning("LiteLLM service is not available - continuing with JWT-only")
             else:
                 logger.warning(f"LiteLLM initialization failed: {e}")
             return None

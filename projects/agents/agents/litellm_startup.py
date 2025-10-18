@@ -20,7 +20,7 @@ BUDGET_DURATION = os.getenv("BUDGET_DURATION", "30d")
 LITELLM_API_URL = os.getenv("LITELLM_API_URL", "http://litellm:4000")
 LITELLM_ADMIN_KEY = os.getenv("LITELLM_ADMIN_KEY")
 DAPR_STATE_STORE = os.getenv("DAPR_STATE_STORE", "statestore")
-MAX_RETRIES = 10
+MAX_RETRIES = 2
 RETRY_DELAY = 5
 
 # Token key for Dapr state store

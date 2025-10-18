@@ -201,7 +201,7 @@ def insert_triage_result(ctx: WorkflowActivityContext, activity_input: dict):
         ) as session:
             variable_values = {
                 "finding_id": finding_id,
-                "username": "llm_triage",
+                "username": "automatation_agent",
                 "value": triage_result["decision"],
                 "explanation": triage_result["explanation"],
                 "confidence": triage_result["confidence"],

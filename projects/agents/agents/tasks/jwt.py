@@ -55,18 +55,22 @@ class JWTAgent(BaseAgent):
         if has_expiry_conflict:
             # Conflicting expiry info - might be multiple JWTs or parsing issue
             decision = TriageCategory.TRUE_POSITIVE
+            explanation = "Conflicting expiry information found"
             is_expired = False  # Conservative assumption
         elif has_expired_true and not has_expired_false:
             # Clearly expired JWT - usually false positive
             decision = TriageCategory.FALSE_POSITIVE
+            explanation = "JWT is expired"
             is_expired = True
         elif has_expired_false and not has_expired_true:
             # Valid (non-expired) JWT - potential security issue
             decision = TriageCategory.TRUE_POSITIVE if not is_sample_data else TriageCategory.FALSE_POSITIVE
+            explanation = "JWT is not expired"
             is_expired = False
         else:
             # No clear expiry information
             decision = TriageCategory.NEEDS_REVIEW
+            explanation = "No expiry information found"
             is_expired = False
 
         # Override decision if clearly sample data
@@ -78,6 +82,7 @@ class JWTAgent(BaseAgent):
             has_expiry_conflict=has_expiry_conflict,
             is_sample_data=is_sample_data,
             decision=decision,
+            explanation=explanation,
         )
 
         logger.debug(
@@ -126,6 +131,7 @@ class JWTAgent(BaseAgent):
                 "has_expiry_conflict": result.has_expiry_conflict,
                 "is_sample_data": result.is_sample_data,
                 "decision": result.decision,
+                "explanation": result.explanation,
             }
 
         except Exception as e:

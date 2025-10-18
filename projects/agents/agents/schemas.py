@@ -84,6 +84,7 @@ class JWTAnalysis(BaseModel):
     has_expiry_conflict: bool = Field(False, description="Whether there's conflicting expiry info")
     is_sample_data: bool = Field(False, description="Whether this appears to be sample/test data")
     decision: TriageCategory = Field(..., description="Triage decision for JWT")
+    explanation: str = Field(..., description="Explanation for the triage decision")
 
 
 class ValidateRequest(BaseModel):
