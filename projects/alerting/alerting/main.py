@@ -61,7 +61,9 @@ async def lifespan(app: FastAPI):
                 logger.info(f"[alerting] adding Apprise URL: {url} (tag: {tag})")
                 apobj.add(f"{url}?footer=no", tag=tag)
         else:
-            logger.warning("No Apprise services were added during initialization")
+            # Use test endpoint as default when APPRISE_URLS is not configured
+            logger.info("No APPRISE_URLS configured, using test endpoint as default")
+            apobj.add("json://localhost:8000/test/alert?footer=no", tag="default")
 
         is_initialized = True
 
@@ -120,12 +122,13 @@ async def handle_feedback_subscription():
     while True:
         try:
             transport = WebsocketsTransport(
-                url="ws://hasura:8080/v1/graphql", headers={"x-hasura-admin-secret": hasura_admin_secret}
+                url="ws://hasura:8080/v1/graphql",
+                headers={"x-hasura-admin-secret": hasura_admin_secret}
             )
 
             async with Client(
                 transport=transport,
-                fetch_schema_from_transport=True,
+                fetch_schema_from_transport=False,  # Disable schema fetching to avoid large payload
             ) as session:
                 async for result in session.subscribe(SUBSCRIPTION):
                     if result is None:

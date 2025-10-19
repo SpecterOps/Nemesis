@@ -263,7 +263,6 @@ async def upload_file(
         logger.info(
             "Received file upload request",
             filename=file.filename,
-            has_metadata=metadata is not None,
             metadata=file_metadata.model_dump(),
         )
 
@@ -285,7 +284,7 @@ async def upload_file(
         file_model = FileModel.from_file_metadata(file_metadata, str(object_id))
         submission_id = await submit_file(file_model)
 
-        logger.info("Metadata submitted", submission_id=submission_id)
+        logger.info("Metadata submitted", submission_id=str(submission_id))
         return FileWithMetadataResponse(object_id=object_id, submission_id=submission_id)
 
     except Exception as e:

@@ -84,7 +84,12 @@ services:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?}
       - RABBITMQ_USER=${RABBITMQ_USER:?}
     depends_on:
@@ -277,7 +282,12 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
@@ -413,7 +423,7 @@ services:
       # Phoenix LLM tracing configuration
       - PHOENIX_ENABLED=${PHOENIX_ENABLED:-false}
       - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
-      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/phoenix
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
       - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
@@ -456,7 +466,12 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
@@ -514,7 +529,12 @@ services:
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
     depends_on:
       housekeeping: { condition: service_started }
       placement: { condition: service_started }
@@ -584,7 +604,12 @@ services:
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment?sslmode=disable
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     depends_on:
       document-conversion: { condition: service_started }
@@ -726,7 +751,7 @@ services:
     profiles: ["monitoring"]
     image: prometheuscommunity/postgres-exporter:latest
     environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/enrichment?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}"
     volumes:
       - ./infra/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro
     depends_on:
@@ -739,13 +764,13 @@ services:
     environment:
       HASURA_GRAPHQL_ADMIN_SECRET: "${HASURA_ADMIN_SECRET:-pass456}"
       HASURA_GRAPHQL_BASE_PATH: "/hasura"
-      HASURA_GRAPHQL_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
       HASURA_GRAPHQL_ENABLE_METADATA_SYNC: "true"
       HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
       HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
       HASURA_GRAPHQL_LOG_LEVEL: "warn"
-      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
       HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
     volumes:
@@ -845,7 +870,7 @@ services:
     environment:
       - PHOENIX_WORKING_DIR=/data
       - PHOENIX_HOST_ROOT_PATH=/phoenix
-      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/phoenix
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
       - PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=100
     volumes:
       - phoenix_data:/data
@@ -995,7 +1020,7 @@ services:
     profiles: ["llm"]
     image: ghcr.io/berriai/litellm:v1.74.0-stable
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
       - STORE_MODEL_IN_DB=True
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}

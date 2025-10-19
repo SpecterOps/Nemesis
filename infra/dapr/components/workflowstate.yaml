@@ -7,9 +7,27 @@ spec:
   version: v1
   metadata:
   - name: connectionString
+    value: "postgresql://username:password@hostname:5432/databasename?sslmode=disable"
+  - name: host
     secretKeyRef:
-      name: POSTGRES_CONNECTION_STRING
-      key: POSTGRES_CONNECTION_STRING
+      name: POSTGRES_HOST
+      key: POSTGRES_HOST
+  - name: port
+    secretKeyRef:
+      name: POSTGRES_PORT
+      key: POSTGRES_PORT
+  - name: database
+    secretKeyRef:
+      name: POSTGRES_DB
+      key: POSTGRES_DB
+  - name: user
+    secretKeyRef:
+      name: POSTGRES_USER
+      key: POSTGRES_USER
+  - name: password
+    secretKeyRef:
+      name: POSTGRES_PASSWORD
+      key: POSTGRES_PASSWORD  
   - name: actorStateStore
     value: "true"
   - name: table
