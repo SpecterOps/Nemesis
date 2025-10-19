@@ -338,12 +338,7 @@ Use the available tools systematically to analyze the assembly:
 Provide analysis in markdown format with actionable security findings."""
         self.storage = StorageMinio()
         self.dotnet_analyzer = None  # Will be set during execution
-
-        from dapr.clients import DaprClient
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_URL")
-            self.postgres_connection_url = secret.secret["POSTGRES_CONNECTION_URL"]
+        self.postgres_connection_url = get_postgres_connection_str()
 
     def decompile_module(self, ctx: RunContext) -> str:
         """Decompile the entire module and return the decompiled code as a string."""

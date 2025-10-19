@@ -55,12 +55,7 @@ Analyze the following document and extract any credentials or passwords you find
 
 Return your findings as a structured list. If no credentials are found, return an empty list."""
         self.storage = StorageMinio()
-
-        from dapr.clients import DaprClient
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_URL")
-            self.postgres_connection_url = secret.secret["POSTGRES_CONNECTION_URL"]
+        self.postgres_connection_url = get_postgres_connection_str()
 
     def _get_text_content(self, object_id: str) -> str:
         """Get text content from file or extracted_text transform."""

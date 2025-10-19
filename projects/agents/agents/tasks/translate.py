@@ -32,12 +32,7 @@ class TextTranslator(BaseAgent):
         self.llm_temperature = 0.3
         self.system_prompt = """You are a document translation assistant. Translate the provided text to the specified target language. Preserve the original formatting, structure, and meaning as much as possible. If the document contains multiple languages, translate all text to the target language. Use markdown formatting where appropriate."""
         self.storage = StorageMinio()
-
-        from dapr.clients import DaprClient
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_URL")
-            self.postgres_connection_url = secret.secret["POSTGRES_CONNECTION_URL"]
+        self.postgres_connection_url = get_postgres_connection_str()
 
     def _get_text_content(self, object_id: str) -> str:
         """Get text content from file or extracted_text transform."""

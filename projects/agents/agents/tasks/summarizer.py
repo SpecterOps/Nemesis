@@ -32,12 +32,7 @@ class TextSummarizer(BaseAgent):
         self.llm_temperature = 0.3
         self.system_prompt = """You are a document summarization assistant. Create a concise but thorough summary of the provided text. Focus on key points and main ideas. Include section headers to organize the summary. Use markdown formatting."""
         self.storage = StorageMinio()
-
-        from dapr.clients import DaprClient
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_URL")
-            self.postgres_connection_url = secret.secret["POSTGRES_CONNECTION_URL"]
+        self.postgres_connection_url = get_postgres_connection_str()
 
     def _get_text_content(self, object_id: str) -> str:
         """Get text content from file or extracted_text transform."""
