@@ -9,6 +9,7 @@ from agents.base_agent import BaseAgent
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import SummaryResponse
+from common.db import get_postgres_connection_str
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
@@ -23,7 +24,7 @@ class TextSummarizer(BaseAgent):
 
     def __init__(self):
         super().__init__()
-        self.prompt_manager = PromptManager()
+        self.prompt_manager = PromptManager(get_postgres_connection_str())
         self.name = "Text Summarizer"
         self.description = "Creates concise summaries of text content using LLM analysis"
         self.agent_type = "llm_based"
@@ -60,7 +61,7 @@ class TextSummarizer(BaseAgent):
                         WHERE object_id = %s AND type = 'extracted_text'
                         LIMIT 1
                         """,
-                        (object_id,)
+                        (object_id,),
                     )
                     result = cur.fetchone()
                     transform_object_id = result[0] if result else None
@@ -94,7 +95,9 @@ class TextSummarizer(BaseAgent):
                     logger.info("Default prompt saved to database", agent_name=self.name)
                 else:
                     # This is expected during startup when event loop is running
-                    logger.debug("Could not save default prompt to database (likely during startup)", agent_name=self.name)
+                    logger.debug(
+                        "Could not save default prompt to database (likely during startup)", agent_name=self.name
+                    )
 
                 return self.system_prompt
 
@@ -166,7 +169,7 @@ class TextSummarizer(BaseAgent):
                         INSERT INTO transforms (object_id, type, transform_object_id, metadata)
                         VALUES (%s, %s, %s, %s)
                         """,
-                        (object_id, "text_summary", summary_id, json.dumps(metadata))
+                        (object_id, "text_summary", summary_id, json.dumps(metadata)),
                     )
                 conn.commit()
 

@@ -6,6 +6,7 @@ from agents.logger import set_agent_metadata
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import TriageCategory, ValidateResponse
+from common.db import get_postgres_connection_str
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
@@ -18,7 +19,7 @@ class ValidationAgent(BaseAgent):
 
     def __init__(self):
         super().__init__()
-        self.prompt_manager = PromptManager()
+        self.prompt_manager = PromptManager(get_postgres_connection_str())
         self.name = "Finding Validator"
         self.description = (
             "Validates security findings by triaging them as true positives, false positives, or needing review"
@@ -56,7 +57,9 @@ with this information (i.e., the risk). If it's not a true_positive omit this co
                     logger.info("Default prompt saved to database", agent_name=self.name)
                 else:
                     # This is expected during startup when event loop is running
-                    logger.debug("Could not save default prompt to database (likely during startup)", agent_name=self.name)
+                    logger.debug(
+                        "Could not save default prompt to database (likely during startup)", agent_name=self.name
+                    )
 
                 return self.system_prompt
 

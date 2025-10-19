@@ -18,6 +18,7 @@ from agents.base_agent import BaseAgent
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import DotNetAnalysisResponse
+from common.db import get_postgres_connection_str
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
@@ -303,7 +304,7 @@ class DotNetAnalyzer(BaseAgent):
 
     def __init__(self):
         super().__init__()
-        self.prompt_manager = PromptManager()
+        self.prompt_manager = PromptManager(get_postgres_connection_str())
         self.name = ".NET Assembly Analyzer"
         self.description = "Adapted @dreadnode agent that analyzes .NET assemblies"
         self.agent_type = "llm_based"

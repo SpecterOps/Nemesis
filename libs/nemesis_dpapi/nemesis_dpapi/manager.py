@@ -82,7 +82,7 @@ class DpapiManager(DpapiManagerProtocol):
             self._masterkey_repo = InMemoryMasterKeyRepository()
             self._backup_key_repo = InMemoryDomainBackupKeyRepository()
             self._dpapi_system_cred_repo = InMemoryDpapiSystemCredentialRepository()
-        elif self._storage_backend.startswith("postgres://"):
+        elif self._storage_backend.startswith("postgresql://"):
             # Initialize PostgreSQL connection pool
             pool = await asyncpg.create_pool(self._storage_backend)
             if pool is None:

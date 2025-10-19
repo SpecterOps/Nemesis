@@ -40,8 +40,8 @@ nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_ur
 
 postgres_connection_string = get_postgres_connection_str()
 
-if not postgres_connection_string.startswith("postgres://"):
-    raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager")
+if not postgres_connection_string.startswith("postgresql://"):
+    raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgresql://' to be used with the DpapiManager")
 
 file_linking_engine = FileLinkingEngine(postgres_connection_string)
 asyncio_loop: asyncio.AbstractEventLoop = None

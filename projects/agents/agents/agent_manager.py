@@ -5,6 +5,7 @@ import inspect
 from pathlib import Path
 
 from agents.base_agent import BaseAgent
+from common.db import get_postgres_connection_str
 from common.logger import get_logger
 
 logger = get_logger(__name__)
@@ -130,16 +131,14 @@ class AgentManager:
         """Initialize agent prompts in the database for agents that have prompts."""
         from agents.prompt_manager import PromptManager
 
-        prompt_manager = PromptManager()
+        prompt_manager = PromptManager(get_postgres_connection_str())
 
         for agent_key in self.agents.keys():
             try:
                 agent = self.get_agent_instance(agent_key)
                 if hasattr(agent, "has_prompt") and agent.has_prompt:
                     if hasattr(agent, "system_prompt"):
-                        success = prompt_manager.save_prompt(
-                            agent.name, agent.system_prompt, agent.description
-                        )
+                        success = prompt_manager.save_prompt(agent.name, agent.system_prompt, agent.description)
                         if success:
                             logger.debug("Initialized prompt for agent", agent_key=agent_key)
                         else:

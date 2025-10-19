@@ -9,6 +9,7 @@ from agents.base_agent import BaseAgent
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import CredentialAnalysisResponse, CredentialWithContext
+from common.db import get_postgres_connection_str
 from common.models import FileObject, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
@@ -40,7 +41,7 @@ class CredentialAnalyzer(BaseAgent):
 
     def __init__(self):
         super().__init__()
-        self.prompt_manager = PromptManager()
+        self.prompt_manager = PromptManager(get_postgres_connection_str())
         self.name = "Credential Analyzer"
         self.description = "Extracts credentials and passwords from text content using LLM analysis"
         self.agent_type = "llm_based"
@@ -83,7 +84,7 @@ Return your findings as a structured list. If no credentials are found, return a
                         WHERE object_id = %s AND type = 'extracted_text'
                         LIMIT 1
                         """,
-                        (object_id,)
+                        (object_id,),
                     )
                     result = cur.fetchone()
                     transform_object_id = result[0] if result else None
@@ -196,7 +197,7 @@ Return your findings as a structured list. If no credentials are found, return a
                         INSERT INTO transforms (object_id, type, transform_object_id, metadata)
                         VALUES (%s, %s, %s, %s)
                         """,
-                        (object_id, "llm_extracted_credentials", credentials_id, json.dumps(metadata))
+                        (object_id, "llm_extracted_credentials", credentials_id, json.dumps(metadata)),
                     )
 
                     # Create finding if credentials were found
@@ -222,8 +223,8 @@ Return your findings as a structured list. If no credentials are found, return a
                                 object_id,
                                 8,
                                 json.dumps({"credentials": [cred.model_dump() for cred in credentials]}),
-                                json.dumps([display_data.model_dump()])
-                            )
+                                json.dumps([display_data.model_dump()]),
+                            ),
                         )
                 conn.commit()
 

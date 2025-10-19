@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched, get_file_enriched_async
@@ -557,17 +556,7 @@ class LsassDumpParser(EnrichmentModule):
     async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
 
-        postgres_connection_string = get_postgres_connection_str()
-
-        if not postgres_connection_string.startswith("postgres://"):
-            raise ValueError(
-                "POSTGRES_CONNECTION_STRING must start with 'postgres://' to be used with the DpapiManager"
-            )
-
-        # self.dpapi_manager = DpapiManager(storage_backend=postgres_connection_string)
-
         logger.debug("Starting async processing of LSASS dump", object_id=object_id)
-
         file_enriched = await get_file_enriched_async(object_id)
 
         # Use provided file_path if available, otherwise download

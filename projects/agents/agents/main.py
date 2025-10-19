@@ -17,6 +17,7 @@ from agents.tasks.credential_analyzer import analyze_credentials
 from agents.tasks.dotnet_analyzer import analyze_dotnet_assembly
 from agents.tasks.summarizer import summarize_text
 from agents.tasks.translate import translate_text
+from common.db import get_postgres_connection_str
 from dapr.clients import DaprClient
 
 # from dapr.ext.fastapi import DaprApp # needed if we're doing pub/sub
@@ -565,11 +566,7 @@ async def get_agents_metadata():
 async def get_llm_spend_data():
     """Get LiteLLM spend and token usage data."""
     try:
-        # Get PostgreSQL connection URL from Dapr secret store
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_URL")
-            postgres_connection_url = secret.secret["POSTGRES_CONNECTION_URL"]
-
+        postgres_connection_url = get_postgres_connection_str()
         # Modify connection URL to connect to litellm database instead of enrichment
         litellm_connection_string = postgres_connection_url.replace("/enrichment", "/litellm")
 

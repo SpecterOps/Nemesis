@@ -4,7 +4,7 @@ from typing import Any
 
 import psycopg
 import structlog
-from dapr.clients import DaprClient
+from common.db import get_postgres_connection_str
 
 logger = structlog.get_logger(__name__)
 
@@ -13,12 +13,12 @@ class PromptManager:
     """Manager for loading and saving agent prompts to/from the database."""
 
     _instance = None
-    _postgres_connection_string = None
     _initialized = False
 
-    def __new__(cls):
+    def __new__(cls, postgres_connection_string: str):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._postgres_connection_string = postgres_connection_string
         return cls._instance
 
     @classmethod
@@ -27,21 +27,8 @@ class PromptManager:
         if cls._initialized:
             return
 
-        try:
-            with DaprClient() as client:
-                secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_URL")
-                cls._postgres_connection_string = secret.secret["POSTGRES_CONNECTION_URL"]
-
-                if not cls._postgres_connection_string or cls._postgres_connection_string.strip() == "":
-                    logger.warning("Retrieved empty or whitespace-only POSTGRES_CONNECTION_URL from secret store")
-                    cls._postgres_connection_string = None
-                else:
-                    logger.debug("PromptManager initialized with PostgreSQL credentials")
-
-                cls._initialized = True
-        except Exception as e:
-            logger.warning("Failed to initialize PromptManager", error=str(e))
-            cls._postgres_connection_string = None
+        cls._postgres_connection_string = get_postgres_connection_str()
+        cls._initialized = True
 
     @classmethod
     def is_available(cls) -> bool:
