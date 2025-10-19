@@ -936,6 +936,7 @@ services:
       - GF_SERVER_DOMAIN=${EXTERNAL_HOST:-https://localhost}
       - GF_SERVER_ROOT_URL=${EXTERNAL_HOST:-https://localhost}/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana

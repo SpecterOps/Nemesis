@@ -7,13 +7,8 @@ deleteDatasources:
 datasources:
   - name: Postgres
     type: postgres
-    url: postgres:5432
-    user: ${POSTGRES_USER}
-    secureJsonData:
-      password: ${POSTGRES_PASSWORD}
+    url: ${POSTGRES_CONNECTION_STRING}
     jsonData:
-      database: enrichment
-      sslmode: disable
       maxOpenConns: 100
       maxIdleConns: 100
       maxIdleConnsAuto: true

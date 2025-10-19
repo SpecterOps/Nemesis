@@ -27,12 +27,6 @@ scrape_configs:
       - targets: ['minio:9000']
 
   - job_name: 'minio-cluster-usage-buckets'
-    metrics_path: /minio/metrics/v3/cluster/health
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-cluster-usage-buckets'
     metrics_path: /minio/metrics/v3/cluster/usage/buckets
     scheme: http
     static_configs:
@@ -50,7 +44,7 @@ scrape_configs:
     static_configs:
       - targets: ['minio:9000']
 
-  - job_name: 'node-exporter'
+  - job_name: 'loki'
     metrics_path: '/metrics'
     static_configs:
       - targets: ['loki:3100']
