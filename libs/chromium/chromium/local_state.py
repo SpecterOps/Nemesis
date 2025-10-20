@@ -493,7 +493,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     if key_bytes_dec:
                         key_is_decrypted = True
                         result["decrypted_v1"] = True
-                        logger.warning(
+                        logger.debug(
                             "Successfully decrypted v1 state key",
                             state_key_id=state_key_id,
                             masterkey_guid=dpapi_blob.masterkey_guid,
@@ -532,7 +532,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                         app_bound_key_system_dec = await dpapi_manager.decrypt_blob(system_blob)
                         if app_bound_key_system_dec:
                             result["decrypted_abe_stage1"] = True
-                            logger.warning(
+                            logger.debug(
                                 "Successfully decrypted ABE stage 1 (SYSTEM key)",
                                 state_key_id=state_key_id,
                                 system_masterkey_guid=system_blob.masterkey_guid,
@@ -584,9 +584,6 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
 
                         # Get chrome_key from database
                         chromekey = _get_chromekey_from_source(source, pg_conn)
-                        if chromekey:
-                            logger.warning(f"len(chromekey): {len(chromekey)}")
-                            logger.warning(f"chromekey: {chromekey}")
 
                         # Always attempt to parse the ABE blob (works for v2 without chromekey)
                         abe_parsed = parse_abe_blob(abe_blob_bytes, chromekey)
@@ -596,7 +593,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                             if app_bound_key_dec:
                                 app_bound_key_is_decrypted = True
                                 result["decrypted_abe_stage2"] = True
-                                logger.warning(
+                                logger.debug(
                                     "Successfully decrypted ABE stage 2 (USER key + ABE derivation)",
                                     state_key_id=state_key_id,
                                     user_masterkey_guid=user_blob.masterkey_guid,
@@ -800,7 +797,7 @@ async def retry_decrypt_state_keys_for_masterkey(
                     logger.warning("Failed to retry decrypt state key", state_key_id=state_key_id, error=str(e))
                     result["errors"].append(error_msg)
 
-            logger.warning(
+            logger.debug(
                 "Completed retroactive state_key decryption for masterkey",
                 masterkey_guid=masterkey_guid,
                 attempted=result["state_keys_attempted"],
@@ -923,7 +920,7 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes) 
                             pg_conn.commit()
                             result["state_keys_decrypted"] += 1
 
-                            logger.warning(
+                            logger.debug(
                                 "Successfully decrypted ABE v3 with chromekey",
                                 state_key_id=state_key_id,
                                 source=source,
