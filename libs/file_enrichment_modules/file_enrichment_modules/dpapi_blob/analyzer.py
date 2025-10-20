@@ -47,9 +47,8 @@ rule has_dpapi_blob
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
-        logger.info(f"Checking if file {object_id} should be processed by DPAPI blob analyzer")
         file_enriched = get_file_enriched(object_id)
-        logger.info(f"Got file {object_id} should be processed by DPAPI blob analyzer")
+        logger.debug(f"File {object_id} should be processed by DPAPI blob analyzer")
         if file_enriched.size > self.size_limit:
             logger.debug(
                 f"[dpapi_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"

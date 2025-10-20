@@ -10,16 +10,17 @@ from uuid import UUID
 
 import psycopg
 import yara_x
+
+from chromium.local_state import retry_decrypt_state_keys_for_chromekey
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched, get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.cng_file.cng_parser import (
-    BCRYPT_KEY_DATA_BLOB_MAGIC,
+    check_bcrypt_key_blob,
     extract_dpapi_blob_from_cng_property,
     extract_final_key_material,
-    parse_bcrypt_key_data_blob,
     parse_cng_stream,
 )
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -269,6 +270,26 @@ rule is_cng_file
                 f"Stored Chrome key for source {file_enriched.source}, "
                 f"masterkey {masterkey_guid}, decrypted={decrypted_bytes is not None}"
             )
+
+            # If we successfully decrypted the chromekey, try to decrypt any waiting state_keys
+            if decrypted_bytes is not None:
+                try:
+                    state_keys_result = await retry_decrypt_state_keys_for_chromekey(
+                        file_enriched.source, decrypted_bytes
+                    )
+                    logger.info(
+                        "Completed retroactive state_key decryption for newly decrypted chromekey",
+                        source=file_enriched.source,
+                        masterkey_guid=masterkey_guid,
+                        state_keys_result=state_keys_result,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Error retrying state_keys after chromekey decryption in CNG analyzer",
+                        source=file_enriched.source,
+                        error=str(e),
+                    )
+
         except Exception as e:
             logger.error(f"Failed to store Chrome key: {e}")
 
@@ -307,12 +328,11 @@ rule is_cng_file
                     logger.info(f"Successfully decrypted private key! Size: {len(decrypted_key)} bytes")
 
                     # Check for BCRYPT_KEY_DATA_BLOB_HEADER
-                    await self._check_bcrypt_key_blob(decrypted_key)
-
-                    # Extract final 32-byte key material
-                    final_key_material = extract_final_key_material(decrypted_key)
-                    if final_key_material:
-                        logger.debug("Extracted final 32-byte key material for database storage")
+                    if check_bcrypt_key_blob(decrypted_key):
+                        # Extract final 32-byte key material
+                        final_key_material = extract_final_key_material(decrypted_key)
+                        if final_key_material:
+                            logger.debug("Extracted final 32-byte key material for database storage")
 
                 except (MasterKeyNotDecryptedError, MasterKeyNotFoundError) as e:
                     logger.debug(
@@ -356,12 +376,12 @@ rule is_cng_file
                             logger.info(
                                 f"Successfully decrypted extracted private key! Size: {len(decrypted_key)} bytes"
                             )
-                            await self._check_bcrypt_key_blob(decrypted_key)
 
-                            # Extract final 32-byte key material
-                            final_key_material = extract_final_key_material(decrypted_key)
-                            if final_key_material:
-                                logger.info("Extracted final 32-byte key material for database storage")
+                            if check_bcrypt_key_blob(decrypted_key):
+                                # Extract final 32-byte key material
+                                final_key_material = extract_final_key_material(decrypted_key)
+                                if final_key_material:
+                                    logger.info("Extracted final 32-byte key material for database storage")
 
                         except Exception as decrypt_error:
                             logger.warning(f"Failed to decrypt extracted blob: {decrypt_error}")
@@ -387,43 +407,11 @@ rule is_cng_file
 
                     except Exception as e2:
                         logger.warning(f"Failed to process extracted blob: {e2}")
-                else:
-                    # Not a DPAPI blob, might be plaintext or other format
-                    logger.info("Private key is not DPAPI encrypted, checking for BCRYPT format...")
-                    await self._check_bcrypt_key_blob(private_key_data)
 
         except Exception as e:
             logger.warning(f"Error processing private key: {e}")
 
         return None
-
-    async def _check_bcrypt_key_blob(self, key_data: bytes) -> None:
-        """Check if decrypted data contains BCRYPT_KEY_DATA_BLOB.
-
-        Args:
-            key_data: Decrypted or plaintext key data
-        """
-        header = parse_bcrypt_key_data_blob(key_data)
-
-        if header:
-            logger.debug(
-                f"Found BCRYPT_KEY_DATA_BLOB_HEADER! "
-                f"Magic: 0x{header.magic:08X} (KDBM), "
-                f"Version: {header.version}, "
-                f"Key length: {header.key_data_length} bytes"
-            )
-
-            # Extract final 32 bytes
-            final_key = extract_final_key_material(key_data)
-            if final_key:
-                logger.info(f"Extracted final 32-byte key material: {final_key.hex()}")
-            else:
-                logger.warning("Failed to extract final 32-byte key material")
-        else:
-            logger.debug(
-                f"Key data does not contain BCRYPT_KEY_DATA_BLOB_HEADER "
-                f"(magic: 0x{struct.unpack('<I', key_data[:4])[0]:08X} vs expected 0x{BCRYPT_KEY_DATA_BLOB_MAGIC:08X})"
-            )
 
 
 def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:

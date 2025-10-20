@@ -169,7 +169,8 @@ async def _insert_state_keys(
 
         key_bytes_dec = b""
         key_is_decrypted = False
-        app_bound_key_dec_inter = b""
+        app_bound_key_system_dec = b""
+        app_bound_key_user_dec = b""
         app_bound_key_dec = b""
         app_bound_key_is_decrypted = False
 
@@ -247,26 +248,28 @@ async def _insert_state_keys(
                 # Parse only the DPAPI portion (after APPB header)
                 if len(app_bound_key_enc) >= 4 and app_bound_key_enc[:4] == b"APPB":
                     dpapi_portion = app_bound_key_enc[4:]
-                    app_bound_key_dec_inter = await dpapi_manager.decrypt_blob(Blob.from_bytes(dpapi_portion))
+                    # Step 1 - decrypt with a SYSTEM masterkey
+                    app_bound_key_system_dec = await dpapi_manager.decrypt_blob(Blob.from_bytes(dpapi_portion))
                 else:
                     logger.warning("App-bound key missing APPB header, cannot decrypt")
-                    app_bound_key_dec_inter = b""
+                    app_bound_key_system_dec = b""
 
-                if app_bound_key_dec_inter:
-                    user_blob = Blob.from_bytes(app_bound_key_dec_inter)
+                if app_bound_key_system_dec:
+                    user_blob = Blob.from_bytes(app_bound_key_system_dec)
                     app_bound_key_user_masterkey_guid = str(user_blob.masterkey_guid)
-                    logger.debug(f"app_bound_key_user_masterkey_guid: {app_bound_key_user_masterkey_guid}")
 
                     try:
+                        # Step 2 - decrypt with a _user_ masterkey
                         abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob)
                         if abe_blob_bytes:
-                            # Parse and derive the final ABE key
+                            # Store the intermediate value after USER key decryption
+                            app_bound_key_user_dec = abe_blob_bytes
+
+                            # Step 3 - parse and derive the final ABE key (using the Chromekey for v3)
                             abe_parsed = parse_abe_blob(abe_blob_bytes, chromekey)
-                            logger.debug(f"abe_parsed: {abe_parsed}")
 
                             if abe_parsed:
                                 app_bound_key_dec = derive_abe_key(abe_parsed)
-                                logger.debug(f"app_bound_key_dec: {app_bound_key_dec}")
 
                                 if app_bound_key_dec:
                                     app_bound_key_is_decrypted = True
@@ -316,7 +319,8 @@ async def _insert_state_keys(
             "app_bound_key_enc": app_bound_key_enc,
             "app_bound_key_system_masterkey_guid": app_bound_key_system_masterkey_guid,
             "app_bound_key_user_masterkey_guid": app_bound_key_user_masterkey_guid,
-            "app_bound_key_dec_inter": app_bound_key_dec_inter,
+            "app_bound_key_system_dec": app_bound_key_system_dec,
+            "app_bound_key_user_dec": app_bound_key_user_dec,
             "app_bound_key_dec": app_bound_key_dec,
             "app_bound_key_is_decrypted": app_bound_key_is_decrypted,
         }
@@ -334,12 +338,14 @@ async def _insert_state_keys(
                 (originating_object_id, agent_id, source, project, username, browser,
                  key_masterkey_guid, key_bytes_enc, key_bytes_dec, key_is_decrypted,
                  app_bound_key_enc, app_bound_key_system_masterkey_guid,
-                 app_bound_key_user_masterkey_guid, app_bound_key_dec_inter, app_bound_key_dec, app_bound_key_is_decrypted)
+                 app_bound_key_user_masterkey_guid, app_bound_key_system_dec, app_bound_key_user_dec,
+                 app_bound_key_dec, app_bound_key_is_decrypted)
                 VALUES (%(originating_object_id)s, %(agent_id)s, %(source)s, %(project)s,
                         %(username)s, %(browser)s, %(key_masterkey_guid)s, %(key_bytes_enc)s,
                         %(key_bytes_dec)s, %(key_is_decrypted)s, %(app_bound_key_enc)s,
                         %(app_bound_key_system_masterkey_guid)s, %(app_bound_key_user_masterkey_guid)s,
-                        %(app_bound_key_dec_inter)s, %(app_bound_key_dec)s, %(app_bound_key_is_decrypted)s)
+                        %(app_bound_key_system_dec)s, %(app_bound_key_user_dec)s,
+                        %(app_bound_key_dec)s, %(app_bound_key_is_decrypted)s)
                 ON CONFLICT (source, username, browser)
                 DO UPDATE SET
                     key_masterkey_guid = EXCLUDED.key_masterkey_guid,
@@ -349,7 +355,8 @@ async def _insert_state_keys(
                     app_bound_key_enc = EXCLUDED.app_bound_key_enc,
                     app_bound_key_system_masterkey_guid = EXCLUDED.app_bound_key_system_masterkey_guid,
                     app_bound_key_user_masterkey_guid = EXCLUDED.app_bound_key_user_masterkey_guid,
-                    app_bound_key_dec_inter = EXCLUDED.app_bound_key_dec_inter,
+                    app_bound_key_system_dec = EXCLUDED.app_bound_key_system_dec,
+                    app_bound_key_user_dec = EXCLUDED.app_bound_key_user_dec,
                     app_bound_key_dec = EXCLUDED.app_bound_key_dec,
                     app_bound_key_is_decrypted = EXCLUDED.app_bound_key_is_decrypted
             """
@@ -442,8 +449,8 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
             SELECT id, source, username, browser,
                    key_masterkey_guid, key_bytes_enc, key_bytes_dec, key_is_decrypted,
                    app_bound_key_enc, app_bound_key_system_masterkey_guid,
-                   app_bound_key_user_masterkey_guid, app_bound_key_dec_inter,
-                   app_bound_key_dec, app_bound_key_is_decrypted
+                   app_bound_key_user_masterkey_guid, app_bound_key_system_dec,
+                   app_bound_key_user_dec, app_bound_key_dec, app_bound_key_is_decrypted
             FROM chromium.state_keys
             WHERE id = %s
             """,
@@ -467,7 +474,8 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
             app_bound_key_enc,
             app_bound_key_system_masterkey_guid,
             app_bound_key_user_masterkey_guid,
-            app_bound_key_dec_inter,
+            app_bound_key_system_dec,
+            app_bound_key_user_dec,
             app_bound_key_dec,
             app_bound_key_is_decrypted,
         ) = row
@@ -515,14 +523,14 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
     # Try to decrypt post-v127 app_bound_encrypted_key
     if app_bound_key_enc and len(app_bound_key_enc) > 0:
         # Stage 1: Decrypt outer layer with SYSTEM masterkey
-        if len(app_bound_key_dec_inter) == 0:
+        if len(app_bound_key_system_dec) == 0:
             try:
                 if len(app_bound_key_enc) >= 4 and app_bound_key_enc[:4] == b"APPB":
                     dpapi_portion = app_bound_key_enc[4:]
                     system_blob = Blob.from_bytes(dpapi_portion)
                     try:
-                        app_bound_key_dec_inter = await dpapi_manager.decrypt_blob(system_blob)
-                        if app_bound_key_dec_inter:
+                        app_bound_key_system_dec = await dpapi_manager.decrypt_blob(system_blob)
+                        if app_bound_key_system_dec:
                             result["decrypted_abe_stage1"] = True
                             logger.warning(
                                 "Successfully decrypted ABE stage 1 (SYSTEM key)",
@@ -532,7 +540,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
 
                             # Parse the intermediate blob to get user masterkey GUID
                             try:
-                                user_blob = Blob.from_bytes(app_bound_key_dec_inter)
+                                user_blob = Blob.from_bytes(app_bound_key_system_dec)
                                 app_bound_key_user_masterkey_guid = str(user_blob.masterkey_guid)
                             except Exception:
                                 app_bound_key_user_masterkey_guid = None
@@ -542,13 +550,13 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                                 cur.execute(
                                     """
                                     UPDATE chromium.state_keys
-                                    SET app_bound_key_dec_inter = %s,
+                                    SET app_bound_key_system_dec = %s,
                                         app_bound_key_system_masterkey_guid = %s,
                                         app_bound_key_user_masterkey_guid = %s
                                     WHERE id = %s
                                     """,
                                     (
-                                        app_bound_key_dec_inter,
+                                        app_bound_key_system_dec,
                                         str(system_blob.masterkey_guid),
                                         app_bound_key_user_masterkey_guid,
                                         state_key_id,
@@ -565,57 +573,98 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                 logger.warning("Error processing ABE stage 1", state_key_id=state_key_id, error=str(e))
 
         # Stage 2: Decrypt inner layer with USER masterkey and derive final key
-        if len(app_bound_key_dec_inter) > 0 and not app_bound_key_is_decrypted:
+        if len(app_bound_key_system_dec) > 0 and not app_bound_key_is_decrypted:
             try:
-                user_blob = Blob.from_bytes(app_bound_key_dec_inter)
+                user_blob = Blob.from_bytes(app_bound_key_system_dec)
                 try:
                     abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob)
                     if abe_blob_bytes:
+                        # Store the intermediate value after USER key decryption
+                        app_bound_key_user_dec = abe_blob_bytes
+
                         # Get chrome_key from database
                         chromekey = _get_chromekey_from_source(source, pg_conn)
+                        if chromekey:
+                            logger.warning(f"len(chromekey): {len(chromekey)}")
+                            logger.warning(f"chromekey: {chromekey}")
 
-                        if chromekey is None:
-                            logger.warning(
-                                "Chrome key not available for ABE v3 decryption, waiting",
-                                state_key_id=state_key_id,
-                                source=source,
-                            )
-                        else:
-                            # Parse and derive the final ABE key
-                            abe_parsed = parse_abe_blob(abe_blob_bytes, chromekey)
-                            if abe_parsed:
-                                app_bound_key_dec = derive_abe_key(abe_parsed)
-                                if app_bound_key_dec:
-                                    app_bound_key_is_decrypted = True
-                                    result["decrypted_abe_stage2"] = True
-                                    logger.warning(
-                                        "Successfully decrypted ABE stage 2 (USER key + ABE derivation)",
-                                        state_key_id=state_key_id,
-                                        user_masterkey_guid=user_blob.masterkey_guid,
-                                        abe_version=abe_parsed.get("version"),
+                        # Always attempt to parse the ABE blob (works for v2 without chromekey)
+                        abe_parsed = parse_abe_blob(abe_blob_bytes, chromekey)
+
+                        if abe_parsed:
+                            app_bound_key_dec = derive_abe_key(abe_parsed)
+                            if app_bound_key_dec:
+                                app_bound_key_is_decrypted = True
+                                result["decrypted_abe_stage2"] = True
+                                logger.warning(
+                                    "Successfully decrypted ABE stage 2 (USER key + ABE derivation)",
+                                    state_key_id=state_key_id,
+                                    user_masterkey_guid=user_blob.masterkey_guid,
+                                    abe_version=abe_parsed.get("version"),
+                                )
+
+                                # Update database with final key and intermediate user_dec
+                                with pg_conn.cursor() as cur:
+                                    cur.execute(
+                                        """
+                                        UPDATE chromium.state_keys
+                                        SET app_bound_key_user_dec = %s,
+                                            app_bound_key_dec = %s,
+                                            app_bound_key_is_decrypted = %s,
+                                            app_bound_key_user_masterkey_guid = %s
+                                        WHERE id = %s
+                                        """,
+                                        (
+                                            app_bound_key_user_dec,
+                                            app_bound_key_dec,
+                                            app_bound_key_is_decrypted,
+                                            str(user_blob.masterkey_guid),
+                                            state_key_id,
+                                        ),
                                     )
-
-                                    # Update database with final key
-                                    with pg_conn.cursor() as cur:
-                                        cur.execute(
-                                            """
-                                            UPDATE chromium.state_keys
-                                            SET app_bound_key_dec = %s,
-                                                app_bound_key_is_decrypted = %s,
-                                                app_bound_key_user_masterkey_guid = %s
-                                            WHERE id = %s
-                                            """,
-                                            (
-                                                app_bound_key_dec,
-                                                app_bound_key_is_decrypted,
-                                                str(user_blob.masterkey_guid),
-                                                state_key_id,
-                                            ),
-                                        )
-                                else:
-                                    logger.warning("Failed to derive ABE key", state_key_id=state_key_id)
+                            else:
+                                logger.warning("Failed to derive ABE key", state_key_id=state_key_id)
+                                # Save the intermediate user_dec value for later retry
+                                with pg_conn.cursor() as cur:
+                                    cur.execute(
+                                        """
+                                        UPDATE chromium.state_keys
+                                        SET app_bound_key_user_dec = %s,
+                                            app_bound_key_user_masterkey_guid = %s
+                                        WHERE id = %s
+                                        """,
+                                        (
+                                            app_bound_key_user_dec,
+                                            str(user_blob.masterkey_guid),
+                                            state_key_id,
+                                        ),
+                                    )
+                        else:
+                            # Parsing failed - likely v3 waiting for chromekey
+                            if chromekey is None:
+                                logger.warning(
+                                    "ABE parsing failed, likely v3 waiting for Chrome key",
+                                    state_key_id=state_key_id,
+                                    source=source,
+                                )
                             else:
                                 logger.warning("Failed to parse ABE blob", state_key_id=state_key_id)
+
+                            # Save the intermediate user_dec value for later retry
+                            with pg_conn.cursor() as cur:
+                                cur.execute(
+                                    """
+                                    UPDATE chromium.state_keys
+                                    SET app_bound_key_user_dec = %s,
+                                        app_bound_key_user_masterkey_guid = %s
+                                    WHERE id = %s
+                                    """,
+                                    (
+                                        app_bound_key_user_dec,
+                                        str(user_blob.masterkey_guid),
+                                        state_key_id,
+                                    ),
+                                )
 
                 except (MasterKeyNotFoundError, MasterKeyNotDecryptedError):
                     # USER masterkey still not available
@@ -702,7 +751,7 @@ async def retry_decrypt_state_keys_for_masterkey(
                     query = """
                         SELECT DISTINCT id FROM chromium.state_keys
                         WHERE app_bound_key_system_masterkey_guid = %s
-                        AND length(app_bound_key_dec_inter) = 0
+                        AND length(app_bound_key_system_dec) = 0
                     """
                     cur.execute(query, (str(masterkey_guid),))
                 elif masterkey_type == "user":
@@ -718,7 +767,7 @@ async def retry_decrypt_state_keys_for_masterkey(
                     query = """
                         SELECT DISTINCT id FROM chromium.state_keys
                         WHERE (key_masterkey_guid = %s AND key_is_decrypted = FALSE)
-                        OR (app_bound_key_system_masterkey_guid = %s AND length(app_bound_key_dec_inter) = 0)
+                        OR (app_bound_key_system_masterkey_guid = %s AND length(app_bound_key_system_dec) = 0)
                         OR (app_bound_key_user_masterkey_guid = %s AND app_bound_key_is_decrypted = FALSE)
                     """
                     cur.execute(query, (str(masterkey_guid), str(masterkey_guid), str(masterkey_guid)))
@@ -762,6 +811,161 @@ async def retry_decrypt_state_keys_for_masterkey(
     except Exception as e:
         error_msg = f"Database error during retroactive decryption: {str(e)}"
         logger.exception("Error in retry_decrypt_state_keys_for_masterkey", masterkey_guid=masterkey_guid, error=str(e))
+        result["errors"].append(error_msg)
+
+    return result
+
+
+async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes) -> dict:
+    """Find all state_keys from a source waiting for chromekey and try to decrypt them.
+
+    This function handles v3 ABE decryption where the USER masterkey has already been
+    applied (app_bound_key_user_dec is populated) but the chromekey is needed to
+    complete the final derivation.
+
+    Args:
+        source: The source identifier (hostname) for the chromekey
+        chromekey: The decrypted Chrome key bytes
+
+    Returns:
+        Dict with statistics: {
+            "state_keys_attempted": int,
+            "state_keys_decrypted": int,
+            "errors": list
+        }
+    """
+    result = {"state_keys_attempted": 0, "state_keys_decrypted": 0, "errors": []}
+
+    conn_str = get_postgres_connection_str()
+
+    try:
+        with psycopg.connect(conn_str) as pg_conn:
+            # Find all state_keys from this source that have user_dec but aren't fully decrypted
+            with pg_conn.cursor() as cur:
+                query = """
+                    SELECT id, source, username, browser, app_bound_key_user_dec,
+                           app_bound_key_user_masterkey_guid
+                    FROM chromium.state_keys
+                    WHERE source = %s
+                    AND app_bound_key_is_decrypted = FALSE
+                    AND app_bound_key_user_dec IS NOT NULL
+                    AND length(app_bound_key_user_dec) > 0
+                """
+                cur.execute(query, (source,))
+                state_keys = cur.fetchall()
+
+            logger.debug(
+                "Found state keys waiting for chromekey",
+                source=source,
+                count=len(state_keys),
+            )
+
+            # Try to decrypt each state_key with the chromekey
+            for row in state_keys:
+                state_key_id, source, username, browser, app_bound_key_user_dec, user_masterkey_guid = row
+                result["state_keys_attempted"] += 1
+
+                try:
+                    # Parse and derive the final ABE key using the chromekey
+                    abe_parsed = parse_abe_blob(app_bound_key_user_dec, chromekey)
+                    logger.debug(
+                        "[retry_decrypt_state_keys_for_chromekey] Parsed ABE blob",
+                        state_key_id=state_key_id,
+                        abe_parsed=abe_parsed,
+                    )
+
+                    if abe_parsed:
+                        app_bound_key_dec = derive_abe_key(abe_parsed)
+                        logger.debug(
+                            "[retry_decrypt_state_keys_for_chromekey] Derived ABE key",
+                            state_key_id=state_key_id,
+                            success=bool(app_bound_key_dec),
+                        )
+
+                        if app_bound_key_dec:
+                            # Update database with final decrypted key
+                            with pg_conn.cursor() as cur:
+                                cur.execute(
+                                    """
+                                    UPDATE chromium.state_keys
+                                    SET app_bound_key_dec = %s,
+                                        app_bound_key_is_decrypted = TRUE
+                                    WHERE id = %s
+                                    """,
+                                    (app_bound_key_dec, state_key_id),
+                                )
+
+                                # Link to existing logins/cookies
+                                cur.execute(
+                                    """
+                                    UPDATE chromium.logins
+                                    SET state_key_id = %s
+                                    WHERE source = %s AND username = %s AND browser = %s
+                                    AND state_key_id IS NULL
+                                    AND encryption_type IN ('key', 'abe')
+                                    """,
+                                    (state_key_id, source, username, browser),
+                                )
+                                logins_updated = cur.rowcount
+
+                                cur.execute(
+                                    """
+                                    UPDATE chromium.cookies
+                                    SET state_key_id = %s
+                                    WHERE source = %s AND username = %s AND browser = %s
+                                    AND state_key_id IS NULL
+                                    AND encryption_type IN ('key', 'abe')
+                                    """,
+                                    (state_key_id, source, username, browser),
+                                )
+                                cookies_updated = cur.rowcount
+
+                            pg_conn.commit()
+                            result["state_keys_decrypted"] += 1
+
+                            logger.warning(
+                                "Successfully decrypted ABE v3 with chromekey",
+                                state_key_id=state_key_id,
+                                source=source,
+                                username=username,
+                                browser=browser,
+                                abe_version=abe_parsed.get("version"),
+                                logins_updated=logins_updated,
+                                cookies_updated=cookies_updated,
+                            )
+                        else:
+                            logger.warning(
+                                "Failed to derive ABE key with chromekey",
+                                state_key_id=state_key_id,
+                                source=source,
+                            )
+                    else:
+                        logger.warning(
+                            "Failed to parse ABE blob with chromekey",
+                            state_key_id=state_key_id,
+                            source=source,
+                        )
+
+                except Exception as e:
+                    error_msg = f"Error processing state_key {state_key_id}: {str(e)}"
+                    logger.warning(
+                        "Failed to decrypt state key with chromekey",
+                        state_key_id=state_key_id,
+                        error=str(e),
+                    )
+                    result["errors"].append(error_msg)
+
+            logger.warning(
+                "Completed retroactive state_key decryption for chromekey",
+                source=source,
+                attempted=result["state_keys_attempted"],
+                decrypted=result["state_keys_decrypted"],
+                errors=len(result["errors"]),
+            )
+
+    except Exception as e:
+        error_msg = f"Database error during retroactive chromekey decryption: {str(e)}"
+        logger.exception("Error in retry_decrypt_state_keys_for_chromekey", source=source, error=str(e))
         result["errors"].append(error_msg)
 
     return result

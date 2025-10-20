@@ -668,8 +668,9 @@ CREATE TABLE chromium.state_keys (
 
     app_bound_key_enc BYTEA,                            -- os_crypt.app_bound_encrypted_key in Chromium `Local State` file (post v127)
     app_bound_key_system_masterkey_guid UUID,           -- associated _system_ masterkey GUID for key_bytes_enc
-    app_bound_key_user_masterkey_guid UUID,             -- associated _user_ masterkey GUID for key_bytes_enc
-    app_bound_key_dec_inter BYTEA,                      -- intermediate dec value after the SYSTEM key has been used
+    app_bound_key_system_dec BYTEA,                     -- intermediate dec value after the SYSTEM key has been used
+    app_bound_key_user_masterkey_guid UUID,             -- associated _user_ masterkey GUID for app_bound_key_system_dec
+    app_bound_key_user_dec BYTEA,                       -- intermediate dec value after the USER key has been used (before chromekey for v3)
     app_bound_key_dec BYTEA,                            -- completely dec value
     app_bound_key_is_decrypted BOOLEAN,
 
@@ -697,8 +698,8 @@ CREATE TABLE chromium.chrome_keys (
 
 -- Create indexes for masterkey GUID lookups on state_keys
 CREATE INDEX IF NOT EXISTS idx_state_keys_key_masterkey_guid ON chromium.state_keys(key_masterkey_guid) WHERE key_is_decrypted = FALSE;
-CREATE INDEX IF NOT EXISTS idx_state_keys_app_bound_system_mk_guid ON chromium.state_keys(app_bound_key_system_masterkey_guid) WHERE length(app_bound_key_dec_inter) = 0;
-CREATE INDEX IF NOT EXISTS idx_state_keys_app_bound_user_mk_guid ON chromium.state_keys(app_bound_key_user_masterkey_guid) WHERE app_bound_key_is_decrypted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_state_keys_app_bound_system_mk_guid ON chromium.state_keys(app_bound_key_system_masterkey_guid) WHERE length(app_bound_key_system_dec) = 0;
+CREATE INDEX IF NOT EXISTS idx_state_keys_app_bound_user_mk_guid ON chromium.state_keys(app_bound_key_user_masterkey_guid) WHERE length(app_bound_key_user_dec) = 0;
 
 -- "logins" table in "Login Data" file
 CREATE TABLE IF NOT EXISTS chromium.logins (
