@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Source Report: {{ source }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #1f2937;
+            background: white;
+        }
+
+        .container {
+            padding: 20px 30px;
+            max-width: 100%;
+        }
+
+        .header {
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+
+        .header h1 {
+            font-size: 24pt;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .header .subtitle {
+            font-size: 11pt;
+            color: #6b7280;
+        }
+
+        .header .generated-at {
+            font-size: 9pt;
+            color: #9ca3af;
+            margin-top: 5px;
+        }
+
+        .section {
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #1f2937;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .stat-card {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .stat-label {
+            font-size: 9pt;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #2563eb;
+        }
+
+        .stat-value.danger {
+            color: #dc2626;
+        }
+
+        .stat-value.warning {
+            color: #f59e0b;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 9pt;
+        }
+
+        th {
+            background: #f3f4f6;
+            padding: 8px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #d1d5db;
+            font-size: 8pt;
+            text-transform: uppercase;
+            color: #4b5563;
+        }
+
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .risk-high {
+            color: #dc2626;
+            font-weight: 600;
+        }
+
+        .risk-medium {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
+        .risk-low {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 8pt;
+            font-weight: 600;
+        }
+
+        .badge-critical {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-high {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-medium {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-low {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .findings-breakdown {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .findings-list {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .findings-list h4 {
+            font-size: 10pt;
+            margin-bottom: 8px;
+            color: #4b5563;
+        }
+
+        .findings-list ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .findings-list li {
+            padding: 4px 0;
+            font-size: 9pt;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .finding-name {
+            color: #1f2937;
+        }
+
+        .finding-count {
+            font-weight: 600;
+            color: #2563eb;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 8pt;
+            color: #9ca3af;
+            text-align: center;
+        }
+
+        @media print {
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+
+            .section {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Source Report: {{ source }}</h1>
+            <div class="subtitle">Comprehensive Analysis and Risk Assessment</div>
+            <div class="generated-at">Generated: {{ generated_at }}</div>
+        </div>
+
+        <!-- Summary Statistics -->
+        <div class="section">
+            <h2 class="section-title">Summary Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Files</div>
+                    <div class="stat-value">{{ summary.total_files }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Findings</div>
+                    <div class="stat-value">{{ summary.total_findings }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Verified Findings</div>
+                    <div class="stat-value danger">{{ summary.verified_true_positives }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Untriaged</div>
+                    <div class="stat-value warning">{{ summary.not_triaged }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Indicators - Credentials -->
+        {% if risk_indicators.credentials %}
+        <div class="section">
+            <h2 class="section-title">Credential Exposure</h2>
+            <div class="stats-grid">
+                {% for key, value in risk_indicators.credentials.items() %}
+                <div class="stat-card">
+                    <div class="stat-label">{{ key|replace('_', ' ')|title }}</div>
+                    <div class="stat-value {% if value > 0 %}danger{% endif %}">{{ value }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Findings by Category -->
+        {% if findings_detail.by_category %}
+        <div class="section">
+            <h2 class="section-title">Findings by Category</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th style="text-align: right;">Count</th>
+                        <th style="text-align: right;">Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for category, count in findings_detail.by_category.items() %}
+                    <tr>
+                        <td>{{ category }}</td>
+                        <td style="text-align: right;">{{ count }}</td>
+                        <td style="text-align: right;">{{ "%.1f"|format((count / summary.total_findings * 100) if summary.total_findings > 0 else 0) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Findings by Severity -->
+        {% if findings_detail.by_severity %}
+        <div class="section">
+            <h2 class="section-title">Findings by Severity</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th style="text-align: right;">Count</th>
+                        <th style="text-align: right;">Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for severity, count in findings_detail.by_severity.items() %}
+                    <tr>
+                        <td>
+                            <span class="{% if severity == 'critical' %}risk-high{% elif severity == 'high' %}risk-medium{% else %}risk-low{% endif %}">
+                                {{ severity|capitalize }}
+                            </span>
+                        </td>
+                        <td style="text-align: right;">{{ count }}</td>
+                        <td style="text-align: right;">{{ "%.1f"|format((count / summary.total_findings * 100) if summary.total_findings > 0 else 0) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Top Findings -->
+        {% if top_findings %}
+        <div class="section">
+            <h2 class="section-title">Top 20 Findings</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Finding Name</th>
+                        <th>Category</th>
+                        <th>Severity</th>
+                        <th>Triage Status</th>
+                        <th>File Path</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for finding in top_findings[:20] %}
+                    <tr>
+                        <td>{{ finding.finding_name }}</td>
+                        <td>{{ finding.category }}</td>
+                        <td>
+                            {% set severity_name = 'critical' if finding.severity >= 4 else 'high' if finding.severity >= 3 else 'medium' if finding.severity >= 2 else 'low' %}
+                            <span class="badge badge-{{ severity_name }}">{{ severity_name|upper }}</span>
+                        </td>
+                        <td>
+                            {% if finding.triage_state == 'true_positive' %}
+                                <span class="risk-high">Verified</span>
+                            {% elif finding.triage_state %}
+                                <span>{{ finding.triage_state|replace('_', ' ')|title }}</span>
+                            {% else %}
+                                <span class="risk-medium">Untriaged</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size: 8pt;">{{ finding.file_path or 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Enrichment Performance -->
+        {% if enrichment_performance %}
+        <div class="section">
+            <h2 class="section-title">Workflow Performance</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Workflows</div>
+                    <div class="stat-value">{{ enrichment_performance.workflows_total }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Completed</div>
+                    <div class="stat-value">{{ enrichment_performance.workflows_completed }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Failed</div>
+                    <div class="stat-value {% if enrichment_performance.workflows_failed > 0 %}warning{% endif %}">{{ enrichment_performance.workflows_failed }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Processing Time</div>
+                    <div class="stat-value">{{ "%.1f"|format(enrichment_performance.avg_processing_time) }}s</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            Generated by Nemesis Reporting System • {{ source }} • {{ generated_at }}
+        </div>
+    </div>
+</body>
+</html>

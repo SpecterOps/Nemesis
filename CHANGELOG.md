@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - File Viewer: Added ability to delete file linkings from the FileViewer
   - File Browser: Added the collection reason and "Linked to by" fields on the "Files that need collection" option
 - CLI: add a `--folder` option to the submit command that allows you to specify the path to the root folder of uploaded files.
+- Reporting functionality
+  - SYSTEM wide and per SOURCE
+  - API endpoints for statistic and PDF generation (via Gotenberg conversion)
+  - Reporting summarization agent
 
 ### Changed
 
