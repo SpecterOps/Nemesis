@@ -342,21 +342,35 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
                             )
 
                 # If no state_key_id or decryption failed, try to find matching state key
-                if not decrypted and username and browser:
+                if not decrypted and source:
                     try:
                         with pg_conn.cursor() as cur2:
-                            # Try to find a decrypted state key for this source/username/browser
-                            cur2.execute(
-                                """
-                                SELECT id FROM chromium.state_keys
-                                WHERE source = %s AND username = %s AND browser = %s
-                                AND (
-                                    (key_is_decrypted = TRUE AND %s = 'key')
-                                    OR (app_bound_key_is_decrypted = TRUE AND %s = 'abe')
+                            if username and browser:
+                                # Try to find a decrypted state key for this source/username/browser
+                                cur2.execute(
+                                    """
+                                    SELECT id FROM chromium.state_keys
+                                    WHERE source = %s AND username = %s AND browser = %s
+                                    AND (
+                                        (key_is_decrypted = TRUE AND %s = 'key')
+                                        OR (app_bound_key_is_decrypted = TRUE AND %s = 'abe')
+                                    )
+                                    """,
+                                    (source, username, browser, encryption_type, encryption_type),
                                 )
-                                """,
-                                (source, username, browser, encryption_type, encryption_type),
-                            )
+                            else:
+                                # if no username/password, just restrict to SOURCE
+                                cur2.execute(
+                                    """
+                                    SELECT id FROM chromium.state_keys
+                                    WHERE source = %s
+                                    AND (
+                                        (key_is_decrypted = TRUE AND %s = 'key')
+                                        OR (app_bound_key_is_decrypted = TRUE AND %s = 'abe')
+                                    )
+                                    """,
+                                    (source, encryption_type, encryption_type),
+                                )
                             state_key_row = cur2.fetchone()
                             if state_key_row:
                                 new_state_key_id = state_key_row[0]

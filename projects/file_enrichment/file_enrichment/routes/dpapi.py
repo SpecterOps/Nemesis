@@ -100,19 +100,20 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
                 result=result,
             )
 
-            # Finally, try to decrypt chromium cookies and logins with newly available keys
-            chromium_data_result = await retry_decrypt_chromium_data(
-                evnt.masterkey_guid,
-                self.dpapi_manager,
-                masterkey_type,
-            )
+            if result and result["state_keys_progressed"] > 0:
+                # Finally, try to decrypt chromium cookies and logins with newly available keys
+                chromium_data_result = await retry_decrypt_chromium_data(
+                    evnt.masterkey_guid,
+                    self.dpapi_manager,
+                    masterkey_type,
+                )
 
-            logger.debug(
-                "Completed retroactive chromium data decryption",
-                masterkey_guid=evnt.masterkey_guid,
-                masterkey_type=masterkey_type,
-                result=chromium_data_result,
-            )
+                logger.debug(
+                    "Completed retroactive chromium data decryption",
+                    masterkey_guid=evnt.masterkey_guid,
+                    masterkey_type=masterkey_type,
+                    result=chromium_data_result,
+                )
 
         elif isinstance(evnt, NewEncryptedMasterKeyEvent):
             logger.warning(

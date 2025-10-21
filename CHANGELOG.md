@@ -29,7 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Findings Page: Modified the Severities filter button to use checkboxes
 - Multi-language Tika OCR support (`TIKA_OCR_LANGUAGES` ENV var, see `compose.yaml`)
 - Text translation agent
-- Retroactive decryption for Chromium Local State files when plaintext masterkeys are submitted/decrypted
+- Retroactive DPAPI decryption:
+  - Chromium Local State files when plaintext masterkeys are submitted/decrypted
+  - Google Chromekeys (CNG file based), including decrypting applicable Local State files
+  - Chromium Cookies/Login Data files
 - File linking:
   - Enchanced file linking with placeholders in the path that resolve once a matching file is collected.
   - File Viewer: Added ability to delete file linkings from the FileViewer
