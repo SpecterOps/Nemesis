@@ -31,7 +31,7 @@ from common.storage import StorageMinio
 from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import Body, FastAPI, File, Form, HTTPException, Path, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
@@ -43,8 +43,12 @@ from web_api.models.responses import (
     EnrichmentResponse,
     EnrichmentsListResponse,
     FailedWorkflowsResponse,
+    LLMSynthesisResponse,
     QueuesResponse,
     SingleQueueResponse,
+    SourceReport,
+    SourceSummary,
+    SystemReport,
     WorkflowStatusResponse,
 )
 from web_api.queue_monitor import WorkflowQueueMonitor
@@ -118,6 +122,7 @@ app = FastAPI(
         {"name": "enrichments", "description": "Enrichment management operations"},
         {"name": "dpapi", "description": "DPAPI credential and masterkey operations"},
         {"name": "queues", "description": "Internal pub/sub queue operations"},
+        {"name": "reports", "description": "Reporting and analytics operations"},
         {"name": "system", "description": "System and health check endpoints"},
     ],
 )
@@ -1554,3 +1559,349 @@ async def process_workflow_completion(event: CloudEvent):
 
     except Exception as e:
         logger.exception(e, message="Error processing workflow completion event", cloud_event=event)
+
+
+#######################################
+#
+# reporting routes
+#
+#######################################
+
+
+@app.get(
+    "/reports/sources",
+    tags=["reports"],
+    summary="List all sources",
+    description="Get a list of all sources with summary statistics",
+    response_model=list[SourceSummary],
+)
+async def list_sources(
+    project: str | None = Query(None, description="Filter by project name"),
+    start_date: datetime | None = Query(None, description="Filter by start date"),
+    end_date: datetime | None = Query(None, description="Filter by end date"),
+):
+    """Get list of all sources with summary statistics."""
+    try:
+        from web_api.reporting_routes import get_sources_list
+
+        sources = await asyncio.to_thread(get_sources_list, get_db_pool(), project, start_date, end_date)
+        return sources
+
+    except Exception as e:
+        logger.exception(e, message="Error listing sources")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/reports/source",
+    tags=["reports"],
+    summary="Get source report",
+    description="Get detailed report for a specific source. Use query parameter to support sources with special characters (e.g., URLs)",
+    response_model=SourceReport,
+)
+async def get_source_report(
+    source: str = Query(..., description="Source name (supports URLs and special characters, case-insensitive)"),
+    start_date: datetime | None = Query(None, description="Filter by start date"),
+    end_date: datetime | None = Query(None, description="Filter by end date"),
+):
+    """
+    Get detailed report for a specific source.
+
+    The source parameter is a query parameter to handle special characters like:
+    - URLs: http://www.site.com
+    - Host URIs: host://BLAH
+    - Any other source identifier with special chars
+    """
+    try:
+        from web_api.reporting_routes import get_source_report_data
+
+        report = await asyncio.to_thread(get_source_report_data, get_db_pool(), source, start_date, end_date)
+        return report
+
+    except Exception as e:
+        logger.exception(e, message="Error generating source report", source=source)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/reports/system",
+    tags=["reports"],
+    summary="Get system-wide report",
+    description="Get system-wide statistics and findings across all sources",
+    response_model=SystemReport,
+)
+async def get_system_report(
+    start_date: datetime | None = Query(None, description="Filter by start date"),
+    end_date: datetime | None = Query(None, description="Filter by end date"),
+    project: str | None = Query(None, description="Filter by project name"),
+):
+    """Get system-wide statistics and findings."""
+    try:
+        from web_api.reporting_routes import get_system_report_data
+
+        report = await asyncio.to_thread(get_system_report_data, get_db_pool(), start_date, end_date, project)
+        return report
+
+    except Exception as e:
+        logger.exception(e, message="Error generating system report")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post(
+    "/reports/source/synthesize",
+    tags=["reports"],
+    summary="Generate LLM synthesis for source report",
+    description="Generate AI-based risk assessment synthesis for a specific source. NOT CACHED - regenerated each time.",
+    response_model=LLMSynthesisResponse,
+)
+async def synthesize_source_report(
+    source: str = Query(..., description="Source name (supports URLs and special characters, case-insensitive)"),
+    include_findings_details: bool = Query(True, description="Include detailed findings in the analysis"),
+    max_tokens: int = Query(150000, description="Maximum tokens for LLM analysis"),
+):
+    """
+    Generate LLM-based risk assessment for a source.
+
+    WARNING: This endpoint regenerates the report each time (NOT CACHED).
+    Token limit: 150k tokens maximum.
+    """
+    try:
+        # First get the source report data
+        from web_api.reporting_routes import get_source_report_data
+
+        report = await asyncio.to_thread(get_source_report_data, get_db_pool(), source)
+
+        # Convert report to dict for passing to agent
+        report_data = report.model_dump()
+
+        # Call agents service via Dapr
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/report_generator"
+        request_data = {
+            "report_data": report_data,
+            "report_type": "source",
+            "source_name": source,
+            "max_tokens": max_tokens,
+        }
+
+        response = requests.post(url, json=request_data, timeout=120)
+
+        if response.status_code != 200:
+            logger.error("Error calling agents service", status_code=response.status_code, response=response.text)
+            raise HTTPException(status_code=503, detail="Agents service unavailable")
+
+        result = response.json()
+
+        if not result.get("success"):
+            error_msg = result.get("error", "Unknown error")
+            logger.error("Report synthesis failed", error=error_msg)
+            return LLMSynthesisResponse(
+                success=False,
+                error=error_msg,
+                report_markdown=None,
+                risk_level=None,
+            )
+
+        # Build full markdown report
+        full_markdown = f"""# Risk Assessment Report: {source}
+
+{result.get('full_report_markdown', '')}
+"""
+
+        return LLMSynthesisResponse(
+            success=True,
+            report_markdown=full_markdown,
+            risk_level=result.get("risk_level"),
+            key_findings=result.get("critical_findings", []),
+            recommendations=[],  # Not providing recommendations as per requirements
+            token_usage=result.get("token_usage"),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(e, message="Error generating source synthesis", source=source)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post(
+    "/reports/system/synthesize",
+    tags=["reports"],
+    summary="Generate LLM synthesis for system report",
+    description="Generate AI-based risk assessment synthesis for the entire system. NOT CACHED - regenerated each time.",
+    response_model=LLMSynthesisResponse,
+)
+async def synthesize_system_report(
+    max_tokens: int = Query(150000, description="Maximum tokens for LLM analysis"),
+    start_date: datetime | None = Query(None, description="Filter by start date"),
+    end_date: datetime | None = Query(None, description="Filter by end date"),
+    project: str | None = Query(None, description="Filter by project name"),
+):
+    """
+    Generate LLM-based system-wide risk assessment.
+
+    WARNING: This endpoint regenerates the report each time (NOT CACHED).
+    Token limit: 150k tokens maximum.
+    """
+    try:
+        # First get the system report data
+        from web_api.reporting_routes import get_system_report_data
+
+        report = await asyncio.to_thread(get_system_report_data, get_db_pool(), start_date, end_date, project)
+
+        # Convert report to dict for passing to agent
+        report_data = report.model_dump()
+
+        # Call agents service via Dapr
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/report_generator"
+        request_data = {
+            "report_data": report_data,
+            "report_type": "system",
+            "source_name": "System-Wide",
+            "max_tokens": max_tokens,
+        }
+
+        response = requests.post(url, json=request_data, timeout=120)
+
+        if response.status_code != 200:
+            logger.error("Error calling agents service", status_code=response.status_code, response=response.text)
+            raise HTTPException(status_code=503, detail="Agents service unavailable")
+
+        result = response.json()
+
+        if not result.get("success"):
+            error_msg = result.get("error", "Unknown error")
+            logger.error("Report synthesis failed", error=error_msg)
+            return LLMSynthesisResponse(
+                success=False,
+                error=error_msg,
+                report_markdown=None,
+                risk_level=None,
+            )
+
+        # Build full markdown report
+        full_markdown = f"""# System-Wide Risk Assessment Report
+
+{result.get('full_report_markdown', '')}
+"""
+
+        return LLMSynthesisResponse(
+            success=True,
+            report_markdown=full_markdown,
+            risk_level=result.get("risk_level"),
+            key_findings=result.get("critical_findings", []),
+            recommendations=[],  # Not providing recommendations as per requirements
+            token_usage=result.get("token_usage"),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(e, message="Error generating system synthesis")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/reports/source/pdf",
+    tags=["reports"],
+    summary="Download source report as PDF",
+    description="Generate and download a PDF report for a specific source",
+    response_class=Response,
+)
+async def download_source_report_pdf(
+    source: str = Query(..., description="Source name (supports URLs and special characters, case-insensitive)"),
+    start_date: datetime | None = Query(None, description="Filter by start date"),
+    end_date: datetime | None = Query(None, description="Filter by end date"),
+):
+    """
+    Generate and download a PDF report for a specific source.
+
+    Args:
+        source: Source name to generate report for
+        start_date: Optional start date filter
+        end_date: Optional end date filter
+
+    Returns:
+        PDF file download
+    """
+    try:
+        # Get the source report data
+        from web_api.reporting_routes import get_source_report_data
+
+        report = await asyncio.to_thread(get_source_report_data, get_db_pool(), source, start_date, end_date)
+
+        # Convert report to dict for PDF generation
+        report_data = report.model_dump()
+
+        # Generate PDF
+        from web_api.pdf_generator import generate_source_report_pdf
+
+        pdf_bytes = await asyncio.to_thread(generate_source_report_pdf, report_data)
+
+        # Create safe filename from source name
+        safe_source = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in source)
+        filename = f"nemesis_source_report_{safe_source}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(e, message="Error generating source PDF", source=source)
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}") from e
+
+
+@app.get(
+    "/reports/system/pdf",
+    tags=["reports"],
+    summary="Download system-wide report as PDF",
+    description="Generate and download a PDF report for the entire system",
+    response_class=Response,
+)
+async def download_system_report_pdf(
+    start_date: datetime | None = Query(None, description="Filter by start date"),
+    end_date: datetime | None = Query(None, description="Filter by end date"),
+    project: str | None = Query(None, description="Filter by project name"),
+):
+    """
+    Generate and download a PDF report for the entire system.
+
+    Args:
+        start_date: Optional start date filter
+        end_date: Optional end date filter
+        project: Optional project filter
+
+    Returns:
+        PDF file download
+    """
+    try:
+        # Get the system report data
+        from web_api.reporting_routes import get_system_report_data
+
+        report = await asyncio.to_thread(get_system_report_data, get_db_pool(), start_date, end_date, project)
+
+        # Convert report to dict for PDF generation
+        report_data = report.model_dump()
+
+        # Generate PDF
+        from web_api.pdf_generator import generate_system_report_pdf
+
+        pdf_bytes = await asyncio.to_thread(generate_system_report_pdf, report_data)
+
+        # Create filename with timestamp
+        filename = f"nemesis_system_report_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(e, message="Error generating system PDF")
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}") from e

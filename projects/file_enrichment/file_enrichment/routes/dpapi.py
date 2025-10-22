@@ -9,7 +9,11 @@ import urllib.parse
 from typing import Annotated
 from uuid import UUID
 
-from chromium import retry_decrypt_chrome_keys_for_masterkey, retry_decrypt_state_keys_for_masterkey
+from chromium import (
+    retry_decrypt_chrome_keys_for_masterkey,
+    retry_decrypt_chromium_data,
+    retry_decrypt_state_keys_for_masterkey,
+)
 from common.logger import get_logger
 from common.models2.dpapi import (
     DomainBackupKeyCredential,
@@ -95,6 +99,21 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
                 masterkey_type=masterkey_type,
                 result=result,
             )
+
+            if result and result["state_keys_progressed"] > 0:
+                # Finally, try to decrypt chromium cookies and logins with newly available keys
+                chromium_data_result = await retry_decrypt_chromium_data(
+                    evnt.masterkey_guid,
+                    self.dpapi_manager,
+                    masterkey_type,
+                )
+
+                logger.debug(
+                    "Completed retroactive chromium data decryption",
+                    masterkey_guid=evnt.masterkey_guid,
+                    masterkey_type=masterkey_type,
+                    result=chromium_data_result,
+                )
 
         elif isinstance(evnt, NewEncryptedMasterKeyEvent):
             logger.warning(

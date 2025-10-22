@@ -149,3 +149,19 @@ class TriageResult(BaseModel):
     confidence: float | None = Field(None, ge=0.0, le=1.0, description="Confidence score 0-1.0 (optional)")
     true_positive_context: str | None = Field(None, description="Context/risk for true_positive decisions")
     success: bool = Field(..., description="Whether the triage process completed successfully")
+
+
+class ReportSynthesisResponse(BaseModel):
+    """Response from reporting agent for risk assessment synthesis."""
+
+    risk_level: Literal["high", "medium", "low"] = Field(
+        ..., description="Overall risk level assessment - MUST be exactly one of: high, medium, low"
+    )
+    executive_summary: str = Field(..., description="Executive summary of the risk assessment (2-3 paragraphs)")
+    critical_findings: list[str] = Field(
+        default_factory=list, description="List of the most critical findings requiring immediate attention"
+    )
+    credential_exposure: str = Field(..., description="Analysis of credential exposure risk")
+    sensitive_data_exposure: str = Field(..., description="Analysis of sensitive data exposure")
+    attack_surface: str = Field(..., description="Analysis of attack surface based on file types and applications")
+    full_report_markdown: str = Field(..., description="Full markdown-formatted report combining all sections")

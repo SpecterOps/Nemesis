@@ -296,6 +296,40 @@ def parse_bcrypt_key_data_blob(data: bytes) -> BcryptKeyDataBlobHeader | None:
     return BcryptKeyDataBlobHeader(magic=magic, version=version, key_data_length=key_len)
 
 
+def check_bcrypt_key_blob(key_data: bytes) -> BcryptKeyDataBlobHeader | None:
+    """Check if decrypted data contains BCRYPT_KEY_DATA_BLOB and log details.
+
+    Args:
+        key_data: Decrypted or plaintext key data
+
+    Returns:
+        Parsed BCRYPT_KEY_DATA_BLOB_HEADER if found, None otherwise
+    """
+    header = parse_bcrypt_key_data_blob(key_data)
+
+    if header:
+        logger.debug(
+            f"Found BCRYPT_KEY_DATA_BLOB_HEADER! "
+            f"Magic: 0x{header.magic:08X} (KDBM), "
+            f"Version: {header.version}, "
+            f"Key length: {header.key_data_length} bytes"
+        )
+
+        # Extract final 32 bytes
+        final_key = extract_final_key_material(key_data)
+        if final_key:
+            logger.info(f"Extracted final 32-byte key material: {final_key.hex()}")
+        else:
+            logger.warning("Failed to extract final 32-byte key material")
+    else:
+        logger.debug(
+            f"Key data does not contain BCRYPT_KEY_DATA_BLOB_HEADER "
+            f"(magic: 0x{struct.unpack('<I', key_data[:4])[0]:08X} vs expected 0x{BCRYPT_KEY_DATA_BLOB_MAGIC:08X})"
+        )
+
+    return header
+
+
 def extract_final_key_material(decrypted_data: bytes) -> bytes | None:
     """Extract final 32-byte key material from BCRYPT_KEY_DATA_BLOB.
 

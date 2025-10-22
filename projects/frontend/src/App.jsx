@@ -1,6 +1,7 @@
 // src/App.jsx
 import { createClient } from 'graphql-ws';
 import {
+  BarChart2,
   Bot,
   ChevronLeft,
   ChevronRight,
@@ -43,6 +44,9 @@ import AgentsPage from './components/Agents/AgentsPage';
 import FileBrowser from './components/FileBrowser/FileBrowser';
 import Chromium from './components/Chromium/Chromium';
 import Dpapi from './components/Dpapi/Dpapi';
+import ReportingPage from './components/Reporting/ReportingPage';
+import SourceReportPage from './components/Reporting/SourceReportPage';
+import SystemReportPage from './components/Reporting/SystemReportPage';
 
 // Assets
 import logoDark from './img/nemesis_logo_dark.png';
@@ -189,7 +193,8 @@ const Sidebar = ({ onCollapse }) => {
     { id: 'dpapi', label: 'Dpapi', icon: Key, path: '/dpapi' },
     { id: 'search', label: 'Document Search', icon: Search, path: '/search' },
     { id: 'yara', label: 'Yara Rules', icon: FileSearch, path: '/yara-rules' },
-    { id: 'containers', label: 'Containers', icon: FileArchive, path: '/containers' }
+    { id: 'containers', label: 'Containers', icon: FileArchive, path: '/containers' },
+    { id: 'reporting', label: 'Reporting', icon: BarChart2, path: '/reporting' }
   ];
 
   // Add Agents tab if LiteLLM is available
@@ -365,6 +370,9 @@ const App = () => {
                       <Route path="/yara-rules" element={<YaraRulesManager />} />
                       <Route path="/containers" element={<Containers />} />
                       <Route path="/agents" element={<AgentsPage />} />
+                      <Route path="/reporting" element={<ReportingPage />} />
+                      <Route path="/reporting/source/:sourceName" element={<SourceReportPage />} />
+                      <Route path="/reporting/system" element={<SystemReportPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/help" element={<HelpPage />} />
                     </Routes>

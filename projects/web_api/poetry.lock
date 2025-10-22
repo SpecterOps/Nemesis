@@ -226,6 +226,18 @@ cffi = [
 ]
 
 [[package]]
+name = "asyncio"
+version = "4.0.0"
+description = "Deprecated backport of asyncio; use the stdlib package instead"
+optional = false
+python-versions = ">=3.4"
+groups = ["main"]
+files = [
+    {file = "asyncio-4.0.0-py3-none-any.whl", hash = "sha256:c1eddb0659231837046809e68103969b2bef8b0400d59cfa6363f6b5ed8cc88b"},
+    {file = "asyncio-4.0.0.tar.gz", hash = "sha256:570cd9e50db83bc1629152d4d0b7558d6451bb1bfd5dfc2e935d96fc2f40329b"},
+]
+
+[[package]]
 name = "asyncpg"
 version = "0.30.0"
 description = "An asyncio PostgreSQL driver"
@@ -558,9 +570,12 @@ files = []
 develop = true
 
 [package.dependencies]
+asyncpg = "^0.30.0"
 dapr = "1.16.0"
+dapr-ext-workflow = "^1.16.0"
 fastapi = "^0.115.6"
 minio = "^7.2.14"
+psycopg = {version = "^3.2.9", extras = ["pool"]}
 pydantic = "^2.10.5"
 structlog = "^25.1.0"
 
@@ -661,6 +676,22 @@ fastapi = ">=0.60.1"
 uvicorn = ">=0.11.6"
 
 [[package]]
+name = "dapr-ext-workflow"
+version = "1.16.0"
+description = "The official release of Dapr Python SDK Workflow Authoring Extension."
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "dapr-ext-workflow-1.16.0.tar.gz", hash = "sha256:7487d174394d305e668784f4bac2dcecc757a1e0a8ddf6e5e1cb32c0a887be78"},
+    {file = "dapr_ext_workflow-1.16.0-py3-none-any.whl", hash = "sha256:028f6b3a340a5a8f0b061eacdef60de1ce52de2340f9636f517f799f73437ee8"},
+]
+
+[package.dependencies]
+dapr = ">=1.16.0"
+durabletask-dapr = ">=0.2.0a8"
+
+[[package]]
 name = "dnspython"
 version = "2.8.0"
 description = "DNS toolkit"
@@ -697,6 +728,23 @@ files = [
 pyasn1 = "*"
 pycryptodome = "*"
 python-registry = "*"
+
+[[package]]
+name = "durabletask-dapr"
+version = "0.2.0a9"
+description = "A Durable Task Client SDK for Python"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "durabletask_dapr-0.2.0a9-py3-none-any.whl", hash = "sha256:48c401c30c05a6122bdd1ee245e9b65c56dabb2dde3dfe6fe1d4ee47085e4a2e"},
+    {file = "durabletask_dapr-0.2.0a9.tar.gz", hash = "sha256:ec481840a043a9d15f67628386b0694e60a04de8015f8f56883f55e490ebbb56"},
+]
+
+[package.dependencies]
+asyncio = "*"
+grpcio = "*"
+protobuf = "*"
 
 [[package]]
 name = "email-validator"
@@ -1531,6 +1579,7 @@ develop = true
 [package.dependencies]
 asyncpg = ">=0.29.0,<=0.30.0"
 cryptography = ">=42.0.0,<43.0.0"
+dapr = "1.16.0"
 dpapick3 = ">=0.7.1,<0.8.0"
 impacket = ">=0.12.0,<0.13.0"
 pycryptodome = ">=3.23.0,<4.0.0"
@@ -3398,4 +3447,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "6024f6ec7da328a006c5539e9d7cceb900258d5d8b03d6b48997964ed1b76035"
+content-hash = "8fcfc26d7d01fbcacb289edb90dce6908fb7eb4ada5adc8948899c3a98dc5715"

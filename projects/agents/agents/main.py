@@ -689,6 +689,39 @@ def run_translation(request: dict):
         return {"success": False, "error": str(e)}
 
 
+@app.post("/agents/report_generator")
+def run_report_generator(request: dict):
+    """Generate LLM-based risk assessment report."""
+    try:
+        report_data = request.get("report_data")
+        if not report_data:
+            return {"success": False, "error": "report_data is required"}
+
+        report_type = request.get("report_type", "source")
+        source_name = request.get("source_name", "Unknown")
+        max_tokens = request.get("max_tokens", 150000)
+
+        # Create a mock workflow context for compatibility
+        mock_ctx = type("MockContext", (), {})()
+
+        from agents.tasks.reporting_agent import generate_report
+
+        result = generate_report(
+            mock_ctx,
+            {
+                "report_data": report_data,
+                "report_type": report_type,
+                "source_name": source_name,
+                "max_tokens": max_tokens,
+            },
+        )
+        return result
+
+    except Exception as e:
+        logger.exception(e, message="Error running report generator")
+        return {"success": False, "error": str(e)}
+
+
 @app.api_route("/healthz", methods=["GET", "HEAD"])
 async def health_check():
     """Health check endpoint."""
