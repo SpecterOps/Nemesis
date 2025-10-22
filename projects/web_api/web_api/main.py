@@ -51,6 +51,7 @@ from web_api.models.responses import (
     SystemReport,
     WorkflowStatusResponse,
 )
+from web_api.pdf_generator import generate_source_report_pdf
 from web_api.queue_monitor import WorkflowQueueMonitor
 
 logger = get_logger(__name__)
@@ -132,9 +133,12 @@ app = FastAPI(
 @app.middleware("http")
 async def timeout_middleware(request: Request, call_next):
     try:
-        # Set timeout for file uploads (10 minutes) and other requests (60 seconds)
+        # Set timeout for file uploads (10 minutes), PDF generation (5 minutes), and other requests (60 seconds)
         if request.url.path.endswith("/files") or request.url.path.endswith("/containers"):
             timeout = 600
+        elif "/pdf" in request.url.path or "/synthesize" in request.url.path:
+            # PDF generation and AI synthesis can take longer
+            timeout = 300
         else:
             timeout = 60
         return await asyncio.wait_for(call_next(request), timeout=timeout)
@@ -1674,8 +1678,8 @@ async def synthesize_source_report(
 
         report = await asyncio.to_thread(get_source_report_data, get_db_pool(), source)
 
-        # Convert report to dict for passing to agent
-        report_data = report.model_dump()
+        # Convert report to dict for passing to agent (mode='json' handles datetime serialization)
+        report_data = report.model_dump(mode='json')
 
         # Call agents service via Dapr
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/report_generator"
@@ -1751,8 +1755,8 @@ async def synthesize_system_report(
 
         report = await asyncio.to_thread(get_system_report_data, get_db_pool(), start_date, end_date, project)
 
-        # Convert report to dict for passing to agent
-        report_data = report.model_dump()
+        # Convert report to dict for passing to agent (mode='json' handles datetime serialization)
+        report_data = report.model_dump(mode='json')
 
         # Call agents service via Dapr
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/report_generator"
@@ -1803,17 +1807,18 @@ async def synthesize_system_report(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get(
+@app.post(
     "/reports/source/pdf",
     tags=["reports"],
     summary="Download source report as PDF",
-    description="Generate and download a PDF report for a specific source",
+    description="Generate and download a PDF report for a specific source. POST allows including pre-generated AI synthesis.",
     response_class=Response,
 )
 async def download_source_report_pdf(
     source: str = Query(..., description="Source name (supports URLs and special characters, case-insensitive)"),
     start_date: datetime | None = Query(None, description="Filter by start date"),
     end_date: datetime | None = Query(None, description="Filter by end date"),
+    ai_synthesis: dict | None = Body(None, description="Optional pre-generated AI synthesis to include in PDF"),
 ):
     """
     Generate and download a PDF report for a specific source.
@@ -1822,6 +1827,7 @@ async def download_source_report_pdf(
         source: Source name to generate report for
         start_date: Optional start date filter
         end_date: Optional end date filter
+        ai_synthesis: Optional pre-generated AI synthesis to include
 
     Returns:
         PDF file download
@@ -1835,8 +1841,19 @@ async def download_source_report_pdf(
         # Convert report to dict for PDF generation
         report_data = report.model_dump()
 
-        # Generate PDF
-        from web_api.pdf_generator import generate_source_report_pdf
+        # Debug logging
+        logger.debug(f"Received ai_synthesis: {ai_synthesis}")
+
+        # Add AI synthesis to report data if provided
+        # The body comes as {"ai_synthesis": {...}}, so extract the inner dict
+        if ai_synthesis and "ai_synthesis" in ai_synthesis:
+            actual_synthesis = ai_synthesis["ai_synthesis"]
+            logger.debug(f"Adding ai_synthesis to report_data: risk_level={actual_synthesis.get('risk_level')}, markdown length={len(actual_synthesis.get('report_markdown', ''))}")
+            report_data["ai_synthesis"] = actual_synthesis
+        elif ai_synthesis:
+            # Fallback if it's already the right structure
+            logger.debug(f"Adding ai_synthesis to report_data (direct): risk_level={ai_synthesis.get('risk_level')}, markdown length={len(ai_synthesis.get('report_markdown', ''))}")
+            report_data["ai_synthesis"] = ai_synthesis
 
         pdf_bytes = await asyncio.to_thread(generate_source_report_pdf, report_data)
 

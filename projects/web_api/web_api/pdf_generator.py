@@ -5,6 +5,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+import markdown
 import requests
 from jinja2 import Environment, FileSystemLoader
 
@@ -25,6 +26,24 @@ def render_source_report_html(report_data: dict) -> str:
     if isinstance(generated_at, datetime):
         generated_at = generated_at.strftime("%Y-%m-%d %H:%M:%S UTC")
 
+    # Prepare AI synthesis with markdown converted to HTML
+    ai_synthesis = report_data.get("ai_synthesis")
+    # print(f"DEBUG pdf_generator: ai_synthesis={ai_synthesis}")
+    if ai_synthesis and ai_synthesis.get("report_markdown"):
+        # print(f"DEBUG pdf_generator: Converting markdown to HTML, length={len(ai_synthesis['report_markdown'])}")
+        # Convert markdown to HTML
+        html_content = markdown.markdown(
+            ai_synthesis["report_markdown"],
+            extensions=['extra', 'nl2br', 'sane_lists']
+        )
+        # print(f"DEBUG pdf_generator: HTML length={len(html_content)}")
+        ai_synthesis = {
+            "risk_level": ai_synthesis.get("risk_level"),
+            "report_html": html_content,
+        }
+    # else:
+    #     print(f"DEBUG pdf_generator: No markdown found in ai_synthesis")
+
     # Prepare data for template
     context = {
         "source": report_data.get("source", "Unknown"),
@@ -34,6 +53,7 @@ def render_source_report_html(report_data: dict) -> str:
         "findings_detail": report_data.get("findings_detail", {}),
         "top_findings": report_data.get("top_findings", []),
         "enrichment_performance": report_data.get("enrichment_performance", {}),
+        "ai_synthesis": ai_synthesis,  # Optional AI synthesis with HTML
     }
 
     return template.render(**context)

@@ -129,7 +129,21 @@ const SourceReportPage = () => {
 
   const handleDownloadPDF = async () => {
     try {
-      const response = await fetch(`/api/reports/source/pdf?source=${encodeURIComponent(sourceName)}`);
+      // Prepare AI synthesis data if it exists
+      const requestBody = llmReport ? {
+        ai_synthesis: {
+          risk_level: llmReport.risk_level,
+          report_markdown: llmReport.report_markdown,
+        }
+      } : null;
+
+      const response = await fetch(`/api/reports/source/pdf?source=${encodeURIComponent(sourceName)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: requestBody ? JSON.stringify(requestBody) : JSON.stringify({}),
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to generate PDF: ${response.status}`);

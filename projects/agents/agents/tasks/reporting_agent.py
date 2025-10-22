@@ -30,7 +30,7 @@ class ReportingAgent(BaseAgent):
 You will receive statistical data about files and security findings from a compromised host or system.
 
 Your task is to analyze the data and answer: "If this host/system was compromised, what could an
-attacker have had access to and what would the risk/impact be?"
+attacker have had access to and what would the risk/impact be?.
 
 Focus on:
 1. Verified findings (marked as true_positive by analysts or AI triage)
@@ -44,10 +44,15 @@ DO NOT provide:
 - Compliance assessments
 - Temporal analysis or timeline-based patterns
 
+In some caseas we may be analyzing a disk image for a host - in those cases
+DO NOT focus on results/findings that would be present on stock systems,
+such as registry hives, Windows system files, etc. - focus instead on findings
+and credentials that would allow the compromise of OTHER systems or user accounts.
+
 Provide your analysis in markdown format with these sections:
 
 ## Executive Summary
-2-3 paragraphs summarizing the overall risk exposure and key concerns.
+1 paragraph summarizing the overall risk exposure and key concerns.
 
 ## Risk Level Assessment
 Classify as High, Medium, or Low with clear justification based on the data.
@@ -55,11 +60,9 @@ Classify as High, Medium, or Low with clear justification based on the data.
 ## Critical Findings
 List the most important security findings that represent the highest risk.
 
-## Credential Exposure Analysis
-Analyze what credentials were found, which are decrypted, and the potential impact.
-
-## Sensitive Data Exposure
-Analyze PII, sensitive documents, and other data that could be exploited.
+## Credential/Sensitive Data Exposure Analysis
+Analyze what credentials were found, which are decrypted, and the potential impact
+as well as PII, sensitive documents, and other data that could be exploited.
 
 ## Attack Surface Analysis
 Based on file types and applications, what attack surface exists and what could be targeted.
