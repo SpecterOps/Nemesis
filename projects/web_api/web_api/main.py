@@ -1195,13 +1195,16 @@ def _scan_agent_metadata():
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/metadata"
 
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=5)  # Short timeout to prevent blocking
         if response.status_code == 200:
             return response.json().get("agents", [])
         else:
             logger.warning(f"Failed to get agent metadata from agents service: {response.status_code}")
             return []
 
+    except requests.Timeout:
+        logger.warning("Timeout getting agent metadata (agents service may be busy)")
+        return []
     except requests.RequestException as e:
         logger.warning(f"Could not connect to agents service for metadata: {e}")
         return []
@@ -1289,22 +1292,22 @@ async def get_agents_spend_data():
     "/agents/text_summarizer",
     tags=["system"],
     summary="Run text summarization",
-    description="Forward text summarization request to agents service",
+    description="Trigger text summarization in background (non-blocking)",
 )
 async def run_text_summarizer(request: dict = Body(..., description="Request containing object_id")):
-    """Forward text summarization request to agents service."""
+    """Trigger text summarization in agents service (returns immediately)."""
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/text_summarizer"
 
-        response = requests.post(url, json=request, timeout=120)  # 2 minute timeout for LLM operations
+        response = requests.post(url, json=request, timeout=10)  # Short timeout since it returns immediately
         if response.status_code == 200:
             return response.json()
         else:
-            logger.warning(f"Failed to run text summarizer: {response.status_code}")
+            logger.warning(f"Failed to start text summarizer: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
     except requests.Timeout as e:
-        logger.error("Timeout running text summarizer")
+        logger.error("Timeout starting text summarizer")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
@@ -1312,7 +1315,7 @@ async def run_text_summarizer(request: dict = Body(..., description="Request con
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error running text summarizer")
+        logger.exception(e, message="Error starting text summarizer")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1320,22 +1323,22 @@ async def run_text_summarizer(request: dict = Body(..., description="Request con
     "/agents/llm_credential_analysis",
     tags=["system"],
     summary="Run credential analysis",
-    description="Forward credential analysis request to agents service",
+    description="Trigger credential analysis in background (non-blocking)",
 )
 async def run_llm_credential_analysis(request: dict = Body(..., description="Request containing object_id")):
-    """Forward credential analysis request to agents service."""
+    """Trigger credential analysis in agents service (returns immediately)."""
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/llm_credential_analysis"
 
-        response = requests.post(url, json=request, timeout=120)  # 2 minute timeout for LLM operations
+        response = requests.post(url, json=request, timeout=10)  # Short timeout since it returns immediately
         if response.status_code == 200:
             return response.json()
         else:
-            logger.warning(f"Failed to run credential analysis: {response.status_code}")
+            logger.warning(f"Failed to start credential analysis: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
     except requests.Timeout as e:
-        logger.error("Timeout running credential analysis")
+        logger.error("Timeout starting credential analysis")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
@@ -1343,7 +1346,7 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error running credential analysis")
+        logger.exception(e, message="Error starting credential analysis")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1351,20 +1354,20 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
     "/agents/dotnet_analysis",
     tags=["system"],
     summary="Run .NET assembly analysis",
-    description="Forward .NET assembly analysis request to agents service",
+    description="Trigger .NET assembly analysis in background (non-blocking)",
 )
 async def run_dotnet_analysis(request: dict = Body(..., description="Request containing object_id")):
-    """Forward .NET assembly analysis request to agents service."""
+    """Trigger .NET assembly analysis in agents service (returns immediately)."""
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/dotnet_analysis"
-        response = requests.post(url, json=request, timeout=120)  # 2 minute timeout for LLM operations
+        response = requests.post(url, json=request, timeout=10)  # Short timeout since it returns immediately
         if response.status_code == 200:
             return response.json()
         else:
-            logger.warning(f"Failed to run .NET analysis: {response.status_code}")
+            logger.warning(f"Failed to start .NET analysis: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
     except requests.Timeout as e:
-        logger.error("Timeout running .NET analysis")
+        logger.error("Timeout starting .NET analysis")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
@@ -1372,7 +1375,7 @@ async def run_dotnet_analysis(request: dict = Body(..., description="Request con
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error running .NET analysis")
+        logger.exception(e, message="Error starting .NET analysis")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1380,22 +1383,22 @@ async def run_dotnet_analysis(request: dict = Body(..., description="Request con
     "/agents/translate",
     tags=["system"],
     summary="Run text translation",
-    description="Forward text translation request to agents service",
+    description="Trigger text translation in background (non-blocking)",
 )
 async def run_translation(
     request: dict = Body(..., description="Request containing object_id and optional target_language"),
 ):
-    """Forward text translation request to agents service."""
+    """Trigger text translation in agents service (returns immediately)."""
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/translate"
-        response = requests.post(url, json=request, timeout=120)  # 2 minute timeout for LLM operations
+        response = requests.post(url, json=request, timeout=10)  # Short timeout since it returns immediately
         if response.status_code == 200:
             return response.json()
         else:
-            logger.warning(f"Failed to run translation: {response.status_code}")
+            logger.warning(f"Failed to start translation: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
     except requests.Timeout as e:
-        logger.error("Timeout running translation")
+        logger.error("Timeout starting translation")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
         logger.exception(e, message="Error connecting to agents service")
@@ -1403,7 +1406,7 @@ async def run_translation(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error running translation")
+        logger.exception(e, message="Error starting translation")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

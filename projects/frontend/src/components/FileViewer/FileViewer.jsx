@@ -377,6 +377,7 @@ const FileViewer = () => {
               type
               transform_object_id
             }
+            updated_at
           }
         }
       `,
@@ -393,34 +394,71 @@ const FileViewer = () => {
             if (data?.files_enriched && data.files_enriched.length > 0) {
               const updatedFile = data.files_enriched[0];
 
-              // Update fileData with the new transforms
-              setFileData(prev => ({
-                ...prev,
-                transforms: updatedFile.transforms
-              }));
+              // When main file updates, re-fetch everything including derived transforms
+              // This is simpler than trying to maintain sync
+              const refetchData = async () => {
+                try {
+                  const response = await fetch('/hasura/v1/graphql', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+                    },
+                    body: JSON.stringify({
+                      query: `
+                        query GetDerivedFileTransforms($objectId: uuid!) {
+                          files_enriched(where: {originating_object_id: {_eq: $objectId}}) {
+                            object_id
+                            transforms(where: {type: {_in: ["text_summary", "text_translation", "llm_extracted_credentials"]}}) {
+                              metadata
+                              type
+                              transform_object_id
+                            }
+                          }
+                        }
+                      `,
+                      variables: { objectId }
+                    })
+                  });
 
-              // Fetch new transform content if needed
-              if (updatedFile.transforms) {
-                const newTransforms = updatedFile.transforms.filter(transform =>
-                  isDisplayableTransform(transform) &&
-                  !transformData[transform.transform_object_id]
-                );
-
-                newTransforms.forEach(async (transform) => {
-                  const response = await cachedFetch(`/api/files/${transform.transform_object_id}`);
                   if (response.ok) {
-                    const content = await response.arrayBuffer();
-                    setTransformData(prev => ({
+                    const result = await response.json();
+                    const derivedTransforms = result.data?.files_enriched?.flatMap(df => df.transforms || []) || [];
+                    const allTransforms = [...(updatedFile.transforms || []), ...derivedTransforms];
+
+                    // Update fileData with merged transforms
+                    setFileData(prev => ({
                       ...prev,
-                      [transform.transform_object_id]: {
-                        content,
-                        type: transform.metadata.display_type_in_dashboard,
-                        fileName: transform.metadata.file_name
-                      }
+                      transforms: allTransforms
                     }));
+
+                    // Fetch new transform content if needed
+                    const newTransforms = allTransforms.filter(transform =>
+                      isDisplayableTransform(transform) &&
+                      !transformData[transform.transform_object_id]
+                    );
+
+                    newTransforms.forEach(async (transform) => {
+                      const response = await cachedFetch(`/api/files/${transform.transform_object_id}`);
+                      if (response.ok) {
+                        const content = await response.arrayBuffer();
+                        setTransformData(prev => ({
+                          ...prev,
+                          [transform.transform_object_id]: {
+                            content,
+                            type: transform.metadata.display_type_in_dashboard,
+                            fileName: transform.metadata.file_name
+                          }
+                        }));
+                      }
+                    });
                   }
-                });
-              }
+                } catch (err) {
+                  console.error('Error fetching derived transforms:', err);
+                }
+              };
+
+              refetchData();
             }
           },
           error: (err) => {
@@ -779,6 +817,14 @@ const FileViewer = () => {
                   }
                 }
               }
+              derived_files: files_enriched(where: {originating_object_id: {_eq: $objectId}}) {
+                object_id
+                transforms(where: {type: {_in: ["text_summary", "text_translation", "llm_extracted_credentials"]}}) {
+                  metadata
+                  type
+                  transform_object_id
+                }
+              }
             }
           `,
           variables: { objectId }
@@ -808,6 +854,11 @@ const FileViewer = () => {
         if (!file) {
           throw new Error(`File not found: The file with UUID ${objectId} does not exist in the database`);
         }
+
+        // Merge transforms from derived files (like extracted_plaintext.txt)
+        const derivedFiles = result.data.derived_files || [];
+        const derivedTransforms = derivedFiles.flatMap(df => df.transforms || []);
+        file.transforms = [...(file.transforms || []), ...derivedTransforms];
 
         setFileData(file);
         setCurrentLanguage(getMonacoLanguage(file.file_name, file.mime_type));

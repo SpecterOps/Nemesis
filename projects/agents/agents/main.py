@@ -555,7 +555,8 @@ async def handle_findings_subscription():
 async def get_agents_metadata():
     """Get metadata for all available agents."""
     try:
-        agents = agent_manager.get_agent_metadata()
+        # Run in thread pool to avoid blocking event loop
+        agents = await asyncio.to_thread(agent_manager.get_agent_metadata)
         return {"agents": agents, "total_count": len(agents), "timestamp": datetime.now().isoformat()}
     except Exception as e:
         logger.exception(e, message="Error getting agent metadata")
@@ -611,28 +612,37 @@ async def get_llm_spend_data():
         }
 
 
+async def _run_summarization_task(object_id: str):
+    """Background task for text summarization."""
+    try:
+        mock_ctx = type("MockContext", (), {})()
+        result = await asyncio.to_thread(summarize_text, mock_ctx, {"object_id": object_id})
+        logger.info("Text summarization completed", object_id=object_id, success=result.get("success"))
+    except Exception as e:
+        logger.exception(e, message="Error in background text summarization", object_id=object_id)
+
+
 @app.post("/agents/text_summarizer")
-def run_text_summarizer(request: dict):
-    """Run text summarization on a file."""
+async def run_text_summarizer(request: dict):
+    """Run text summarization on a file (async, non-blocking)."""
     try:
         object_id = request.get("object_id")
         if not object_id:
             return {"success": False, "error": "object_id is required"}
 
-        # Create a mock workflow context for compatibility
-        mock_ctx = type("MockContext", (), {})()
+        # Start background task
+        asyncio.create_task(_run_summarization_task(object_id))
 
-        result = summarize_text(mock_ctx, {"object_id": object_id})
-        return result
+        return {"success": True, "message": "Text summarization started in background"}
 
     except Exception as e:
-        logger.exception(e, message="Error running text summarizer")
+        logger.exception(e, message="Error starting text summarizer")
         return {"success": False, "error": str(e)}
 
 
 @app.post("/agents/llm_credential_analysis")
-def run_credential_analysis(request: dict):
-    """Run credential analysis on a file."""
+async def run_credential_analysis(request: dict):
+    """Run credential analysis on a file (async, non-blocking)."""
     try:
         object_id = request.get("object_id")
         if not object_id:
@@ -641,17 +651,21 @@ def run_credential_analysis(request: dict):
         # Create a mock workflow context for compatibility
         mock_ctx = type("MockContext", (), {})()
 
-        result = analyze_credentials(mock_ctx, {"object_id": object_id})
-        return result
+        # Run in background task - don't wait for completion
+        asyncio.create_task(
+            asyncio.to_thread(analyze_credentials, mock_ctx, {"object_id": object_id})
+        )
+
+        return {"success": True, "message": "Credential analysis started in background"}
 
     except Exception as e:
-        logger.exception(e, message="Error running credential analysis")
+        logger.exception(e, message="Error starting credential analysis")
         return {"success": False, "error": str(e)}
 
 
 @app.post("/agents/dotnet_analysis")
-def run_dotnet_analysis(request: dict):
-    """Run .NET assembly analysis on a file."""
+async def run_dotnet_analysis(request: dict):
+    """Run .NET assembly analysis on a file (async, non-blocking)."""
     try:
         object_id = request.get("object_id")
         if not object_id:
@@ -660,17 +674,21 @@ def run_dotnet_analysis(request: dict):
         # Create a mock workflow context for compatibility
         mock_ctx = type("MockContext", (), {})()
 
-        result = analyze_dotnet_assembly(mock_ctx, {"object_id": object_id})
-        return result
+        # Run in background task - don't wait for completion
+        asyncio.create_task(
+            asyncio.to_thread(analyze_dotnet_assembly, mock_ctx, {"object_id": object_id})
+        )
+
+        return {"success": True, "message": ".NET analysis started in background"}
 
     except Exception as e:
-        logger.exception(e, message="Error running .NET analysis")
+        logger.exception(e, message="Error starting .NET analysis")
         return {"success": False, "error": str(e)}
 
 
 @app.post("/agents/translate")
-def run_translation(request: dict):
-    """Run text translation on a file."""
+async def run_translation(request: dict):
+    """Run text translation on a file (async, non-blocking)."""
     try:
         object_id = request.get("object_id")
         if not object_id:
@@ -681,11 +699,15 @@ def run_translation(request: dict):
         # Create a mock workflow context for compatibility
         mock_ctx = type("MockContext", (), {})()
 
-        result = translate_text(mock_ctx, {"object_id": object_id, "target_language": target_language})
-        return result
+        # Run in background task - don't wait for completion
+        asyncio.create_task(
+            asyncio.to_thread(translate_text, mock_ctx, {"object_id": object_id, "target_language": target_language})
+        )
+
+        return {"success": True, "message": f"Translation to {target_language} started in background"}
 
     except Exception as e:
-        logger.exception(e, message="Error running translation")
+        logger.exception(e, message="Error starting translation")
         return {"success": False, "error": str(e)}
 
 
