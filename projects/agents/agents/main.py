@@ -527,22 +527,26 @@ async def handle_findings_subscription():
                             )
 
                             try:
-                                # Run the blocking wait call in a thread pool to avoid blocking the event loop
-                                state = await asyncio.to_thread(
-                                    workflow_client.wait_for_workflow_completion,
-                                    instance_id=instance_id,
-                                    timeout_in_seconds=(3 * 60)
+                                state = await asyncio.wait_for(
+                                    asyncio.to_thread(
+                                        workflow_client.wait_for_workflow_completion,
+                                        instance_id=instance_id,
+                                        timeout_in_seconds=3 * 60,  # internal timeout in workflow client
+                                    ),
+                                    timeout=3 * 60 + 10,  # small outer buffer, in seconds
                                 )
+
                                 if not state:
                                     logger.error("Workflow not found!", instance_id=instance_id)
                                 elif state.runtime_status.name == "COMPLETED":
                                     logger.debug("Workflow completed", finding_id=finding_id, instance_id=instance_id)
                                 else:
-                                    logger.warning(
-                                        f"Workflow failed! Status: {state.runtime_status.name}"
-                                    )  # not expected
+                                    logger.warning(f"Workflow failed! Status: {state.runtime_status.name}", instance_id=instance_id)
+
                             except TimeoutError:
-                                logger.error("Workflow timed out", instance_id=instance_id)
+                                logger.error("Workflow client timed out internally", instance_id=instance_id)
+                            except Exception as e:
+                                logger.exception(e, message=f"Error waiting for workflow completion for {finding_id}")
 
                         except Exception as e:
                             logger.exception(e, message=f"Error running workflow for finding {finding_id}")

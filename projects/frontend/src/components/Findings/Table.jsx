@@ -86,7 +86,7 @@ export const TableHeaders = ({ isTriageMode, sortColumn, sortDirection, onSort }
                 currentSort={sortColumn}
                 currentDirection={sortDirection}
                 onSort={onSort}
-                className="flex-grow min-w-[300px]"
+                className="flex-shrink-0 w-96"
             >
                 File Path
             </SortableHeader>
@@ -212,7 +212,7 @@ export const TableRow = React.memo(({ index, style, data }) => {
                     </div>
                 </Tooltip>
             </div>
-            <div className="flex-grow min-w-[300px] text-sm text-gray-500 dark:text-gray-400 text-left relative truncate">
+            <div className="flex-shrink-0 w-96 text-sm text-gray-500 dark:text-gray-400 text-left relative truncate">
                 <Tooltip
                     content={finding.files_enriched?.path || 'Unknown path'}
                     side="top"
