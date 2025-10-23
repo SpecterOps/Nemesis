@@ -49,7 +49,10 @@ DO NOT focus on results/findings that would be present on stock systems,
 such as registry hives, Windows system files, etc. - focus instead on findings
 and credentials that would allow the compromise of OTHER systems or user accounts.
 
-Provide your analysis in markdown format with these sections:
+Provide your analysis in markdown format with these sections.
+
+IMPORTANT: Do NOT include a top-level title (# heading) in your response.
+Start directly with the section headings below:
 
 ## Executive Summary
 1 paragraph summarizing the overall risk exposure and key concerns.
