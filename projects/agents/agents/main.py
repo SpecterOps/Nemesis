@@ -531,7 +531,7 @@ async def handle_findings_subscription():
                                 state = await asyncio.to_thread(
                                     workflow_client.wait_for_workflow_completion,
                                     instance_id=instance_id,
-                                    timeout_in_seconds=(10 * 60)
+                                    timeout_in_seconds=(3 * 60)
                                 )
                                 if not state:
                                     logger.error("Workflow not found!", instance_id=instance_id)
