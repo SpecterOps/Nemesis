@@ -167,6 +167,11 @@
             color: #065f46;
         }
 
+        .badge-informational {
+            background: #f3f4f6;
+            color: #4b5563;
+        }
+
         .findings-breakdown {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -261,19 +266,31 @@
         </div>
 
         <!-- Risk Indicators - Credentials -->
-        {% if risk_indicators.credentials %}
         <div class="section">
             <h2 class="section-title">Credential Exposure</h2>
-            <div class="stats-grid">
-                {% for key, value in risk_indicators.credentials.items() %}
+            <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
                 <div class="stat-card">
-                    <div class="stat-label">{{ key|replace('_', ' ')|title }}</div>
-                    <div class="stat-value {% if value > 0 %}danger{% endif %}">{{ value }}</div>
+                    <div class="stat-label">NoseyParker Findings</div>
+                    <div class="stat-value {% if risk_indicators.credentials.noseyparker_findings > 0 %}danger{% endif %}">{{ risk_indicators.credentials.noseyparker_findings }}</div>
                 </div>
-                {% endfor %}
+                <div class="stat-card">
+                    <div class="stat-label">YARA Matches</div>
+                    <div class="stat-value {% if risk_indicators.sensitive_data.yara_matches > 0 %}danger{% endif %}">{{ risk_indicators.sensitive_data.yara_matches }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Chromium Logins Decrypted</div>
+                    <div class="stat-value {% if risk_indicators.credentials.chromium_logins_decrypted > 0 %}danger{% endif %}">{{ risk_indicators.credentials.chromium_logins_decrypted }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Chromium Cookies Decrypted</div>
+                    <div class="stat-value {% if risk_indicators.credentials.chromium_cookies_decrypted > 0 %}danger{% endif %}">{{ risk_indicators.credentials.chromium_cookies_decrypted }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">DPAPI Masterkeys Decrypted</div>
+                    <div class="stat-value {% if risk_indicators.credentials.dpapi_masterkeys_decrypted > 0 %}danger{% endif %}">{{ risk_indicators.credentials.dpapi_masterkeys_decrypted }}</div>
+                </div>
             </div>
         </div>
-        {% endif %}
 
         <!-- Findings by Category -->
         {% if findings_detail.by_category %}
@@ -349,7 +366,7 @@
                         <td>{{ finding.finding_name }}</td>
                         <td>{{ finding.category }}</td>
                         <td>
-                            {% set severity_name = 'critical' if finding.severity >= 4 else 'high' if finding.severity >= 3 else 'medium' if finding.severity >= 2 else 'low' %}
+                            {% set severity_name = 'critical' if finding.severity >= 9 else 'high' if finding.severity >= 7 else 'medium' if finding.severity >= 4 else 'low' if finding.severity >= 2 else 'informational' %}
                             <span class="badge badge-{{ severity_name }}">{{ severity_name|upper }}</span>
                         </td>
                         <td>
@@ -366,31 +383,6 @@
                     {% endfor %}
                 </tbody>
             </table>
-        </div>
-        {% endif %}
-
-        <!-- Enrichment Performance -->
-        {% if enrichment_performance %}
-        <div class="section">
-            <h2 class="section-title">Workflow Performance</h2>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Total Workflows</div>
-                    <div class="stat-value">{{ enrichment_performance.workflows_total }}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Completed</div>
-                    <div class="stat-value">{{ enrichment_performance.workflows_completed }}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Failed</div>
-                    <div class="stat-value {% if enrichment_performance.workflows_failed > 0 %}warning{% endif %}">{{ enrichment_performance.workflows_failed }}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Avg Processing Time</div>
-                    <div class="stat-value">{{ "%.1f"|format(enrichment_performance.avg_processing_time) }}s</div>
-                </div>
-            </div>
         </div>
         {% endif %}
 

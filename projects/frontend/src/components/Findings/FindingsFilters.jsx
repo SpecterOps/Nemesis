@@ -17,14 +17,6 @@ const FindingsFilters = ({
         return value !== null ? value : defaultValue;
     };
 
-    const convertSeverityFromUrl = (urlSeverity) => {
-        if (!urlSeverity) return ['high', 'medium', 'low'];
-
-        // Handle comma-separated multiple severities
-        const severities = urlSeverity.split(',').filter(s => ['high', 'medium', 'low'].includes(s.trim()));
-        return severities.length > 0 ? severities : ['high', 'medium', 'low'];
-    };
-
     // Initialize state from URL parameters
     const [categoryFilter, setCategoryFilter] = React.useState(() => {
         const urlCategory = getFilterFromUrl('category', '');
@@ -35,9 +27,12 @@ const FindingsFilters = ({
         return categories.length > 0 ? categories : ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'];
     });
 
-    const [severityFilter, setSeverityFilter] = React.useState(() =>
-        convertSeverityFromUrl(getFilterFromUrl('severity', ''))
-    );
+    const [severityFilter, setSeverityFilter] = React.useState(() => {
+        const urlSeverity = getFilterFromUrl('severity', '');
+        if (!urlSeverity) return ['critical', 'high', 'medium', 'low', 'informational'];
+        const severities = urlSeverity.split(',').filter(s => ['critical', 'high', 'medium', 'low', 'informational'].includes(s.trim()));
+        return severities.length > 0 ? severities : ['critical', 'high', 'medium', 'low', 'informational'];
+    });
     const [severityDropdownOpen, setSeverityDropdownOpen] = React.useState(false);
     const severityDropdownRef = useRef(null);
     const severityButtonRef = useRef(null);
@@ -69,7 +64,7 @@ const FindingsFilters = ({
     // Check if any filters are active
     const hasActiveFilters = useMemo(() => {
         return categoryFilter.length !== 8 ||
-            severityFilter.length !== 3 ||
+            severityFilter.length !== 5 ||
             searchFilter !== '' ||
             triageFilter !== 'untriaged_and_actionable' ||
             triageSourceFilter !== 'all' ||
@@ -79,7 +74,7 @@ const FindingsFilters = ({
     // Handle clearing all filters
     const handleClearFilters = () => {
         setCategoryFilter(['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational']);
-        setSeverityFilter(['high', 'medium', 'low']);
+        setSeverityFilter(['critical', 'high', 'medium', 'low', 'informational']);
         setSearchFilter('');
         setTriageFilter('untriaged_and_actionable');
         setTriageSourceFilter('all');
@@ -96,7 +91,7 @@ const FindingsFilters = ({
             newParams.set('category', categoryFilter.join(','));
         }
 
-        if (severityFilter.length < 3) {
+        if (severityFilter.length < 5) {
             // Only set URL parameter if not all severities are selected
             newParams.set('severity', severityFilter.join(','));
         }
@@ -135,18 +130,26 @@ const FindingsFilters = ({
             if (categoryFilter.length < 8 && !categoryFilter.includes(finding.category)) return false;
 
             // Severity filter
-            if (severityFilter.length < 3) {
+            if (severityFilter.length < 5) {
                 let severityMatch = false;
                 for (const selected of severityFilter) {
-                    if (selected === 'high' && finding.severity >= 7) {
+                    if (selected === 'critical' && finding.severity >= 9) {
                         severityMatch = true;
                         break;
                     }
-                    if (selected === 'medium' && finding.severity >= 4 && finding.severity < 7) {
+                    if (selected === 'high' && finding.severity >= 7 && finding.severity <= 8) {
                         severityMatch = true;
                         break;
                     }
-                    if (selected === 'low' && finding.severity < 4) {
+                    if (selected === 'medium' && finding.severity >= 4 && finding.severity <= 6) {
+                        severityMatch = true;
+                        break;
+                    }
+                    if (selected === 'low' && finding.severity >= 2 && finding.severity <= 3) {
+                        severityMatch = true;
+                        break;
+                    }
+                    if (selected === 'informational' && finding.severity <= 1) {
                         severityMatch = true;
                         break;
                     }
@@ -259,7 +262,7 @@ const FindingsFilters = ({
         setSeverityFilter(prev => {
             if (prev.includes(severity)) {
                 const newSelection = prev.filter(s => s !== severity);
-                return newSelection.length === 0 ? ['high', 'medium', 'low'] : newSelection;
+                return newSelection.length === 0 ? ['critical', 'high', 'medium', 'low', 'informational'] : newSelection;
             } else {
                 return [...prev, severity];
             }
@@ -284,9 +287,9 @@ const FindingsFilters = ({
     }, []);
 
     const getSeverityButtonText = () => {
-        if (severityFilter.length === 3) return 'All Severities';
+        if (severityFilter.length === 5) return 'All Severities';
         if (severityFilter.length === 0) return 'No Severities';
-        const labels = { high: 'High', medium: 'Medium', low: 'Low' };
+        const labels = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', informational: 'Info' };
         return severityFilter.map(s => labels[s]).join(', ');
     };
 
@@ -451,9 +454,11 @@ const FindingsFilters = ({
                     >
                         <div className="p-2">
                             {[
-                                { key: 'high', label: 'High (7-10)', color: 'text-red-600 dark:text-red-400' },
+                                { key: 'critical', label: 'Critical (9-10)', color: 'text-purple-600 dark:text-purple-400' },
+                                { key: 'high', label: 'High (7-8)', color: 'text-red-600 dark:text-red-400' },
                                 { key: 'medium', label: 'Medium (4-6)', color: 'text-orange-600 dark:text-orange-400' },
-                                { key: 'low', label: 'Low (0-3)', color: 'text-yellow-600 dark:text-yellow-400' }
+                                { key: 'low', label: 'Low (2-3)', color: 'text-yellow-600 dark:text-yellow-400' },
+                                { key: 'informational', label: 'Informational (0-1)', color: 'text-gray-600 dark:text-gray-400' }
                             ].map(({ key, label, color }) => (
                                 <label key={key} className="flex items-center space-x-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded cursor-pointer">
                                     <input

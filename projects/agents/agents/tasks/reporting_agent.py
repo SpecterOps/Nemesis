@@ -44,10 +44,16 @@ DO NOT provide:
 - Compliance assessments
 - Temporal analysis or timeline-based patterns
 
-In some caseas we may be analyzing a disk image for a host - in those cases
-DO NOT focus on results/findings that would be present on stock systems,
-such as registry hives, Windows system files, etc. - focus instead on findings
-and credentials that would allow the compromise of OTHER systems or user accounts.
+In some cases we may be analyzing a disk image for a host - in those cases:
+- Registry hives (SYSTEM, SECURITY, SAM) existing is expected and NORMAL - this is NOT a high-risk finding by itself
+- Focus on EXTRACTED CREDENTIALS that enable access to OTHER systems or accounts:
+  * Successfully cracked/decrypted user passwords (not just hashed passwords existing)
+  * Kerberos tickets that grant access to additional hosts
+  * Decrypted browser credentials for external services (high value hosts)
+  * SSH keys, API tokens, cloud service credentials
+  * Credentials in application config files or documents
+- DPAPI masterkeys being decrypted only matters if they were used to decrypt sensitive credentials
+- Focus on findings that enable lateral movement or access beyond this single host
 
 Provide your analysis in markdown format with these sections.
 

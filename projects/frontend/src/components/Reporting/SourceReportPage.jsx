@@ -309,59 +309,38 @@ const SourceReportPage = () => {
       </DashboardSection>
 
       {/* Risk Indicators */}
-      <DashboardSection title="Risk Indicators">
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-2">Credentials</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard
-                title="Chromium Logins"
-                value={report.risk_indicators.credentials.chromium_logins}
-                icon={Server}
-              />
-              <StatCard
-                title="Logins Decrypted"
-                value={report.risk_indicators.credentials.chromium_logins_decrypted}
-                icon={CheckCircle}
-                className={report.risk_indicators.credentials.chromium_logins_decrypted > 0 ? 'border-2 border-orange-500' : ''}
-              />
-              <StatCard
-                title="Chromium Cookies"
-                value={report.risk_indicators.credentials.chromium_cookies}
-                icon={Server}
-              />
-              <StatCard
-                title="Cookies Decrypted"
-                value={report.risk_indicators.credentials.chromium_cookies_decrypted}
-                icon={CheckCircle}
-                className={report.risk_indicators.credentials.chromium_cookies_decrypted > 0 ? 'border-2 border-orange-500' : ''}
-              />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-              <StatCard
-                title="DPAPI Masterkeys"
-                value={report.risk_indicators.credentials.dpapi_masterkeys}
-                icon={Server}
-              />
-              <StatCard
-                title="Masterkeys Decrypted"
-                value={report.risk_indicators.credentials.dpapi_masterkeys_decrypted}
-                icon={CheckCircle}
-                className={report.risk_indicators.credentials.dpapi_masterkeys_decrypted > 0 ? 'border-2 border-orange-500' : ''}
-              />
-              <StatCard
-                title="NoseyParker Findings"
-                value={report.risk_indicators.credentials.noseyparker_findings}
-                icon={Search}
-                className={report.risk_indicators.credentials.noseyparker_findings > 0 ? 'border-2 border-red-500' : ''}
-              />
-              <StatCard
-                title="YARA Matches"
-                value={report.risk_indicators.sensitive_data.yara_matches}
-                icon={FileText}
-              />
-            </div>
-          </div>
+      <DashboardSection title="Credential Exposure">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <StatCard
+            title="NoseyParker Findings"
+            value={report.risk_indicators.credentials.noseyparker_findings}
+            icon={Search}
+            className={report.risk_indicators.credentials.noseyparker_findings > 0 ? 'border-2 border-red-500' : ''}
+          />
+          <StatCard
+            title="YARA Matches"
+            value={report.risk_indicators.sensitive_data.yara_matches}
+            icon={FileText}
+            className={report.risk_indicators.sensitive_data.yara_matches > 0 ? 'border-2 border-red-500' : ''}
+          />
+          <StatCard
+            title="Chromium Logins Decrypted"
+            value={report.risk_indicators.credentials.chromium_logins_decrypted}
+            icon={CheckCircle}
+            className={report.risk_indicators.credentials.chromium_logins_decrypted > 0 ? 'border-2 border-orange-500' : ''}
+          />
+          <StatCard
+            title="Chromium Cookies Decrypted"
+            value={report.risk_indicators.credentials.chromium_cookies_decrypted}
+            icon={CheckCircle}
+            className={report.risk_indicators.credentials.chromium_cookies_decrypted > 0 ? 'border-2 border-orange-500' : ''}
+          />
+          <StatCard
+            title="DPAPI Masterkeys Decrypted"
+            value={report.risk_indicators.credentials.dpapi_masterkeys_decrypted}
+            icon={CheckCircle}
+            className={report.risk_indicators.credentials.dpapi_masterkeys_decrypted > 0 ? 'border-2 border-orange-500' : ''}
+          />
         </div>
       </DashboardSection>
 
@@ -450,11 +429,13 @@ const SourceReportPage = () => {
                     <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{finding.category}</td>
                     <td className="px-4 py-2 text-sm">
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        finding.severity >= 3 ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
-                        finding.severity === 2 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                        finding.severity >= 9 ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' :
+                        finding.severity >= 7 ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                        finding.severity >= 4 ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' :
+                        finding.severity >= 2 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
                         'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
                       }`}>
-                        {finding.severity >= 3 ? 'High' : finding.severity === 2 ? 'Medium' : 'Low'}
+                        {finding.severity >= 9 ? 'Critical' : finding.severity >= 7 ? 'High' : finding.severity >= 4 ? 'Medium' : finding.severity >= 2 ? 'Low' : 'Informational'}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-sm">

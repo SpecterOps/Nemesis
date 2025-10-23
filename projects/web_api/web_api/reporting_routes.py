@@ -216,9 +216,11 @@ def get_source_report_data(
                 f"""
                 SELECT
                     CASE
-                        WHEN f.severity >= 3 THEN 'high'
-                        WHEN f.severity = 2 THEN 'medium'
-                        ELSE 'low'
+                        WHEN f.severity >= 9 THEN 'critical'
+                        WHEN f.severity >= 7 THEN 'high'
+                        WHEN f.severity >= 4 THEN 'medium'
+                        WHEN f.severity >= 2 THEN 'low'
+                        ELSE 'informational'
                     END as severity_level,
                     COUNT(*) as count
                 FROM files_enriched fe
@@ -578,9 +580,11 @@ def get_system_report_data(
                 f"""
                 SELECT
                     CASE
-                        WHEN f.severity >= 3 THEN 'high'
-                        WHEN f.severity = 2 THEN 'medium'
-                        ELSE 'low'
+                        WHEN f.severity >= 9 THEN 'critical'
+                        WHEN f.severity >= 7 THEN 'high'
+                        WHEN f.severity >= 4 THEN 'medium'
+                        WHEN f.severity >= 2 THEN 'low'
+                        ELSE 'informational'
                     END as severity_level,
                     COUNT(*) as count
                 FROM files_enriched fe
