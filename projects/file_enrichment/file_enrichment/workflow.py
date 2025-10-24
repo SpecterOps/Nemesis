@@ -593,7 +593,7 @@ async def run_enrichment_modules(ctx, activity_input: dict):
 
                     # Check if the module's process method returns a coroutine (async)
                     result_or_coro = module.process(object_id, temp_file.name)
-                    if hasattr(result_or_coro, '__await__'):
+                    if hasattr(result_or_coro, "__await__"):
                         # It's a coroutine, await it
                         result: EnrichmentResult = await result_or_coro
                     else:
@@ -603,6 +603,7 @@ async def run_enrichment_modules(ctx, activity_input: dict):
                     if result:
                         # Debug: Check for coroutines in the result before serialization
                         import inspect
+
                         def check_for_coroutines(obj, path="root"):
                             """Recursively check for coroutines in nested structures."""
                             if inspect.iscoroutine(obj):
@@ -794,9 +795,9 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
                     "repr": repr(task),
                 }
                 # Try to extract activity name if available
-                if hasattr(task, '_activity_name'):
+                if hasattr(task, "_activity_name"):
                     task_info["activity_name"] = task._activity_name
-                if hasattr(task, '_input'):
+                if hasattr(task, "_input"):
                     task_info["input"] = str(task._input)[:200]  # Truncate long inputs
                 task_details.append(task_info)
 

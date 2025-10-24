@@ -41,8 +41,6 @@ from nemesis_dpapi import (
 from nemesis_dpapi.eventing import (
     DpapiEvent,
     DpapiObserver,
-    NewDpapiSystemCredentialEvent,
-    NewEncryptedMasterKeyEvent,
     NewPlaintextMasterKeyEvent,
 )
 from nemesis_dpapi.masterkey_decryptor import MasterKeyDecryptorService
@@ -62,7 +60,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
     async def update(self, evnt: DpapiEvent) -> None:
         """Called when a DPAPI event occurs."""
         if isinstance(evnt, NewPlaintextMasterKeyEvent):
-            logger.debug(
+            logger.info(
                 "New plaintext masterkey detected, checking for state_keys to decrypt",
                 event_type=type(evnt).__name__,
                 masterkey_guid=evnt.masterkey_guid,
@@ -114,25 +112,6 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
                     masterkey_type=masterkey_type,
                     result=chromium_data_result,
                 )
-
-        elif isinstance(evnt, NewEncryptedMasterKeyEvent):
-            logger.warning(
-                "!!!!!!!!!!!!!!!!!!!! Received NewEncryptedMasterKeyEvent",
-                event_type=type(evnt).__name__,
-                data=evnt,
-            )
-        elif isinstance(evnt, NewDpapiSystemCredentialEvent):
-            logger.warning(
-                "!!!!!!!!!!!!!!!!!!!! Received NewDpapiSystemCredentialEvent",
-                event_type=type(evnt).__name__,
-                data=evnt,
-            )
-        else:
-            logger.warning(
-                "Received unhandled DPAPI event",
-                event_type=type(evnt).__name__,
-                data=evnt,
-            )
 
 
 def get_event_loop(request: Request):
@@ -267,7 +246,9 @@ async def submit_dpapi_credential(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
-async def _handle_domain_backup_key_credential(dpapi_manager: DpapiManager, backup_key: DomainBackupKeyCredential) -> dict:
+async def _handle_domain_backup_key_credential(
+    dpapi_manager: DpapiManager, backup_key: DomainBackupKeyCredential
+) -> dict:
     """Handle domain backup key credential submission."""
 
     # Decode URL encoded value for string-based credentials
@@ -319,7 +300,9 @@ async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: Ma
             await dpapi_manager.upsert_masterkey(masterkey)
             processed_guids.append(str(masterkey_guid))
         else:
-            logger.warning(f"[_handle_master_key_guid_pairs] len(masterkey_data) is not 20 or 64, not handling: {len(masterkey_data)}")
+            logger.warning(
+                f"[_handle_master_key_guid_pairs] len(masterkey_data) is not 20 or 64, not handling: {len(masterkey_data)}"
+            )
 
     return {
         "status": "success",
