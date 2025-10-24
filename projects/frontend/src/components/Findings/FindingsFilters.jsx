@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, Filter, Search, ThumbsUp, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Bot, ChevronDown, Filter, Search, ThumbsUp } from 'lucide-react';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
@@ -509,6 +509,10 @@ const FindingsFilters = ({
                 >
                     Clear Filters
                 </button>
+
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {filteredFindings.length.toLocaleString()} finding{filteredFindings.length !== 1 ? 's' : ''} found
+                </span>
             </div>
         </div>
     );

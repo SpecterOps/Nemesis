@@ -1,7 +1,7 @@
 import { useTriageMode } from '@/contexts/TriageModeContext';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from 'graphql-ws';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { FixedSizeList as List } from 'react-window';
@@ -58,7 +58,7 @@ const FindingsList = () => {
     const newParams = new URLSearchParams(searchParams);
     newParams.set('sort_column', sortColumn);
     newParams.set('sort_direction', sortDirection);
-    
+
     if (newParams.toString() !== searchParams.toString()) {
       setSearchParams(newParams, { replace: true });
     }
@@ -68,7 +68,7 @@ const FindingsList = () => {
   useEffect(() => {
     const urlSortColumn = searchParams.get('sort_column');
     const urlSortDirection = searchParams.get('sort_direction');
-    
+
     if (urlSortColumn && urlSortColumn !== sortColumn) {
       setSortColumn(urlSortColumn);
     }
@@ -541,8 +541,8 @@ const FindingsList = () => {
       {/* Findings Table */}
       <div className="overflow-x-auto">
         {/* Headers - Keep these outside the virtualized area */}
-        <TableHeaders 
-          isTriageMode={isTriageMode} 
+        <TableHeaders
+          isTriageMode={isTriageMode}
           sortColumn={sortColumn}
           sortDirection={sortDirection}
           onSort={handleSort}
