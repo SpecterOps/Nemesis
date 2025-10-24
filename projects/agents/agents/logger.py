@@ -10,7 +10,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
-from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.semconv._incubating.attributes import service_attributes
 
 WORKFLOW_RUNTIME_LOG_LEVEL = os.getenv("WORKFLOW_RUNTIME_LOG_LEVEL", "WARNING")
 WORKFLOW_CLIENT_LOG_LEVEL = os.getenv("WORKFLOW_CLIENT_LOG_LEVEL", "WARNING")
@@ -101,14 +101,36 @@ def get_instance_id():
 
 
 def get_tracer(tracer_name: str, otel_exporter_enabled: bool = True):
-    """Initialize and return an OpenTelemetry tracer with the specified name."""
+    """
+    Initialize and return an OpenTelemetry tracer with the specified name.
+
+    This function creates a TracerProvider with service metadata and configures
+    trace export based on the NEMESIS_MONITORING environment variable. When monitoring
+    is enabled, spans are exported to an OTLP endpoint (e.g., Jaeger). Otherwise,
+    tracing is still active but spans are not exported.
+
+    Args:
+        tracer_name: The name to identify this tracer instance. This typically
+                    corresponds to the module or service name.
+        otel_exporter_enabled: Currently unused parameter. Export behavior is
+                             controlled by the NEMESIS_MONITORING env var instead.
+
+    Returns:
+        A configured OpenTelemetry Tracer instance that can be used to create spans.
+
+    Environment Variables:
+        NEMESIS_MONITORING: Set to "enabled" to export traces to OTLP endpoint
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE: Set to "true" for insecure
+                                                      connections (default: "true")
+        HOSTNAME: Used to construct the service instance ID
+    """
 
     resource = Resource.create(
         {
-            ResourceAttributes.SERVICE_NAME: "agents",
-            ResourceAttributes.SERVICE_NAMESPACE: "nemesis",
-            ResourceAttributes.SERVICE_VERSION: version("agents"),
-            ResourceAttributes.SERVICE_INSTANCE_ID: get_instance_id(),
+            service_attributes.SERVICE_NAME: "agents",
+            service_attributes.SERVICE_NAMESPACE: "nemesis",
+            service_attributes.SERVICE_VERSION: version("agents"),
+            service_attributes.SERVICE_INSTANCE_ID: get_instance_id(),
         }
     )
 

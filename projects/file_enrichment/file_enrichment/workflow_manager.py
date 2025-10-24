@@ -318,7 +318,7 @@ class WorkflowManager:
     async def start_workflow(self, workflow_input):
         """Start a workflow"""
         start_time = time.time()
-        tracer = get_tracer("workflow_manager", monitoring_enabled)
+        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
         client = get_workflow_client()
         if client is None:
             raise ValueError("Workflow client is None")
@@ -331,7 +331,6 @@ class WorkflowManager:
             with tracer.start_as_current_span("start_workflow") as current_span:
                 # Add workflow ID to trace for Jaeger queries
                 current_span.set_attribute("workflow.instance_id", instance_id)
-                current_span.set_attribute("workflow.start", True)
                 current_span.set_attribute("workflow.type", "enrichment_workflow")
 
                 if "file" in workflow_input and "object_id" in workflow_input["file"]:
@@ -378,7 +377,6 @@ class WorkflowManager:
                 )
 
                 # Actually schedule the workflow
-                # Use asyncio.to_thread() to prevent blocking the event loop
                 await asyncio.to_thread(
                     client.schedule_new_workflow,
                     instance_id=instance_id,
@@ -399,7 +397,7 @@ class WorkflowManager:
 
     async def _monitor_workflow(self, instance_id, workflow_start_time: float):
         """Monitor a workflow until completion or timeout"""
-        tracer = get_tracer("workflow_manager", monitoring_enabled)
+        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
 
         with tracer.start_as_current_span("monitor_workflow") as current_span:
             current_span.set_attribute("workflow.instance_id", instance_id)
@@ -486,7 +484,7 @@ class WorkflowManager:
         error_count = 0
 
         client = get_workflow_client()
-        tracer = get_tracer("workflow_manager", monitoring_enabled)
+        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
 
         # Add trace attributes for workflow status monitoring
         with tracer.start_as_current_span("wait_for_completion") as current_span:
@@ -578,7 +576,7 @@ class WorkflowManager:
 
     async def start_workflow_single_enrichment(self, workflow_input):
         """Start a single enrichment workflow"""
-        tracer = get_tracer("workflow_manager", monitoring_enabled)
+        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
 
         try:
             start_time = time.time()
@@ -661,7 +659,7 @@ class WorkflowManager:
     async def _monitor_single_enrichment_workflow(self, instance_id, workflow_start_time):
         """Monitor a single enrichment workflow until completion or timeout"""
 
-        tracer = get_tracer("workflow_manager", monitoring_enabled)
+        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
 
         with tracer.start_as_current_span("monitor_single_enrichment_workflow") as current_span:
             current_span.set_attribute("workflow.instance_id", instance_id)

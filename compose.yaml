@@ -699,7 +699,7 @@ services:
       [
         "/bin/sh",
         "-c",
-        "sleep 1; until mc alias set minio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do echo 'Minio is not online. Waiting for it to start...'; sleep 2; done && mc mb minio/loki-data --ignore-existing",
+        "sleep 1; until mc alias set minio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do echo 'Minio is not online. Waiting for it to start...'; sleep 2; done && mc mb minio/loki-data --ignore-existing && mc mb minio/files --ignore-existing",
       ]
     restart: "no"
 

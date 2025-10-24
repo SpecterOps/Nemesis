@@ -1,5 +1,4 @@
 # enrichment_modules/chromium_cookies/analyzer.py
-import asyncio
 import csv
 import sqlite3
 import tempfile
@@ -15,6 +14,8 @@ from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 if TYPE_CHECKING:
+    import asyncio
+
     from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)

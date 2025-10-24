@@ -2,8 +2,6 @@
 
 import asyncio
 import base64
-
-# Configure standard Python logger for nemesis_dpapi.eventing to DEBUG level
 import logging
 import urllib.parse
 from typing import Annotated
@@ -254,12 +252,12 @@ async def _handle_domain_backup_key_credential(
     # Decode URL encoded value for string-based credentials
     credential_value = urllib.parse.unquote(backup_key.value)
     pvk_data = base64.b64decode(credential_value, validate=True)
-    backup_key = DomainBackupKey(
+    backup_key_obj = DomainBackupKey(
         guid=UUID(backup_key.guid),  # Use the provided GUID
         key_data=pvk_data,
         domain_controller=backup_key.domain_controller,
     )
-    backup_key_id = await dpapi_manager.upsert_domain_backup_key(backup_key)
+    backup_key_id = await dpapi_manager.upsert_domain_backup_key(backup_key_obj)
     return {"status": "success", "type": "domain_backup_key", "id": backup_key_id}
 
 

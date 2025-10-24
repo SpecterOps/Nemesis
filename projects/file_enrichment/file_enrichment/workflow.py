@@ -742,7 +742,7 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
     """Main workflow that orchestrates all enrichment activities."""
 
     if not ctx.is_replaying:
-        logger.debug("Starting main enrichment workflow")
+        logger.warning("Starting main enrichment workflow", workflow_input=workflow_input)
 
     start_time = ctx.current_utc_datetime
 

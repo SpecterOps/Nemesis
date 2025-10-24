@@ -3,6 +3,9 @@ kind: Configuration
 metadata:
   name: schedulerconfig
 spec:
+  # workflow:
+  #   maxConcurrentWorkflowInvocations: 1
+  #   maxConcurrentActivityInvocations: 1
   tracing:
     expandParams: true
     samplingRate: "1"
