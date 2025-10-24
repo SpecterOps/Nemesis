@@ -112,7 +112,7 @@ RUN mkdir -p /yara_rules/
 # Uvicorn production settings
 ENV UVICORN_HOST=0.0.0.0 \
     UVICORN_PORT=8001 \
-    UVICORN_WORKERS=2 \
+    UVICORN_WORKERS=1 \
     UVICORN_PROXY_HEADERS=1 \
     UVICORN_ACCESS_LOG=false
 
