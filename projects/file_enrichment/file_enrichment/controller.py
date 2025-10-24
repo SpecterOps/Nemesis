@@ -24,6 +24,7 @@ from .subscriptions.file_handler import process_file_event
 from .subscriptions.noseyparker_handler import process_noseyparker_event
 from .workflow import get_workflow_client, initialize_workflow_runtime, shutdown_workflow_runtime, wf_runtime
 from .workflow_manager import WorkflowManager
+from .debug_utils import setup_debug_signals
 
 logger = get_logger(__name__)
 
@@ -54,6 +55,9 @@ async def lifespan(app: FastAPI):
     global module_execution_order, workflow_manager, postgres_notify_listener_task, background_dpapi_task
 
     logger.info("Initializing workflow runtime...", pid=os.getpid())
+
+    # Setup debug signal handlers for diagnosing blocking issues
+    setup_debug_signals()
 
     app.state.event_loop = asyncio.get_running_loop()
     set_fastapi_loop(asyncio.get_event_loop())
@@ -166,6 +170,77 @@ app.include_router(enrichments_router)
 async def healthcheck():
     """Health check endpoint for Docker healthcheck."""
     return {"status": "healthy"}
+
+
+@app.get("/debug/tasks")
+async def debug_tasks():
+    """Debug endpoint to check asyncio task status and identify blocking."""
+    import sys
+    import threading
+    import traceback
+
+    try:
+        loop = asyncio.get_running_loop()
+        all_tasks = asyncio.all_tasks(loop)
+
+        task_info = []
+        for task in all_tasks:
+            info = {
+                "name": task.get_name(),
+                "done": task.done(),
+                "cancelled": task.cancelled(),
+            }
+
+            # Try to get the coroutine info
+            try:
+                coro = task.get_coro()
+                if coro.cr_frame:
+                    info["coro_name"] = coro.__name__ if hasattr(coro, "__name__") else str(coro)
+                    info["file"] = coro.cr_frame.f_code.co_filename
+                    info["line"] = coro.cr_frame.f_lineno
+                    info["function"] = coro.cr_frame.f_code.co_name
+            except Exception:
+                pass
+
+            task_info.append(info)
+
+        # Get thread info
+        thread_info = []
+        for thread in threading.enumerate():
+            t_info = {
+                "name": thread.name,
+                "daemon": thread.daemon,
+                "alive": thread.is_alive(),
+            }
+
+            # Check if thread is blocking
+            if thread.ident:
+                frame = sys._current_frames().get(thread.ident)
+                if frame:
+                    code = frame.f_code
+                    t_info["current_file"] = code.co_filename
+                    t_info["current_line"] = frame.f_lineno
+                    t_info["current_function"] = code.co_name
+
+                    # Flag potentially blocking calls
+                    if any(keyword in code.co_name for keyword in ["wait", "lock", "result", "sleep"]):
+                        t_info["potentially_blocking"] = True
+
+            thread_info.append(t_info)
+
+        return {
+            "pid": os.getpid(),
+            "total_tasks": len(all_tasks),
+            "active_workflows": len(workflow_manager.active_workflows) if workflow_manager else 0,
+            "background_tasks": len(workflow_manager.background_tasks) if workflow_manager else 0,
+            "total_threads": len(threading.enumerate()),
+            "tasks": task_info,
+            "threads": thread_info,
+        }
+    except Exception as e:
+        import traceback
+
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 
 # endregion

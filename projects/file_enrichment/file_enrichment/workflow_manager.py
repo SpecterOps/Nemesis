@@ -218,7 +218,7 @@ class WorkflowManager:
                     try:
                         client = get_workflow_client()
                         if client:
-                            client.terminate_workflow(wf_id)
+                            await asyncio.to_thread(client.terminate_workflow, wf_id)
                     except Exception as e:
                         logger.warning(f"Could not terminate workflow {wf_id}: {e}", pid=os.getpid())
 
@@ -378,7 +378,9 @@ class WorkflowManager:
                 )
 
                 # Actually schedule the workflow
-                client.schedule_new_workflow(
+                # Use asyncio.to_thread() to prevent blocking the event loop
+                await asyncio.to_thread(
+                    client.schedule_new_workflow,
                     instance_id=instance_id,
                     workflow=enrichment_workflow,
                     input=workflow_input,
@@ -445,8 +447,10 @@ class WorkflowManager:
                     try:
                         client = get_workflow_client()
                         if client:
-                            client.terminate_workflow(
-                                instance_id, recursive=True
+                            await asyncio.to_thread(
+                                client.terminate_workflow,
+                                instance_id,
+                                recursive=True,
                             )  # recursive == terminate all child workflows
                             logger.info("Workflow terminated due to timeout", instance_id=instance_id, pid=os.getpid())
                     except Exception as e:
@@ -635,7 +639,9 @@ class WorkflowManager:
                 # Import here to avoid circular import
                 from .workflow import single_enrichment_workflow
 
-                client.schedule_new_workflow(
+                # Use asyncio.to_thread() to prevent blocking the event loop
+                await asyncio.to_thread(
+                    client.schedule_new_workflow,
                     instance_id=instance_id,
                     workflow=single_enrichment_workflow,
                     input=workflow_input,
@@ -695,7 +701,7 @@ class WorkflowManager:
                     try:
                         client = get_workflow_client()
                         if client:
-                            client.terminate_workflow(instance_id, recursive=True)
+                            await asyncio.to_thread(client.terminate_workflow, instance_id, recursive=True)
                             logger.info(
                                 "Single enrichment workflow terminated due to timeout",
                                 instance_id=instance_id,
