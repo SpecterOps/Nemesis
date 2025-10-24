@@ -135,10 +135,6 @@ class StorageMinio:
             logger.exception(e, "Error pulling object stats", object_name=object_name)
             raise
 
-    def check_bucket_exists(self):
-        """Returns True if the bucket exists, false if it doesn't."""
-        return self.minio_client.bucket_exists(self.bucket_name)
-
     def check_file_exists(self, object_name):
         """Check if a file exists."""
         try:
@@ -176,7 +172,7 @@ class StorageMinio:
                 file.file,  # Use file.file directly
                 length=file_size,  # Provide the calculated size
             )
-            logger.debug("Object upload compelted", file_name=file.filename)
+            logger.debug("Object upload completed", file_name=file.filename)
 
             return file_uuid
 

@@ -269,14 +269,10 @@ async def upload_file(
 
         file_metadata = FileMetadata(**metadata_dict)
 
-        logger.info(
-            "Received file upload request",
-            filename=file.filename,
-            metadata=file_metadata.model_dump(),
-        )
+        logger.debug("Received file upload request")
 
         object_id = storage.upload_uploadfile(file)
-        logger.debug("File uploaded to datalake", object_id=object_id)
+        logger.info("File uploaded to datalake", object_id=object_id)
 
         file_metadata.path = normalize_path(file_metadata.path)
 
@@ -293,7 +289,7 @@ async def upload_file(
         file_model = FileModel.from_file_metadata(file_metadata, str(object_id))
         submission_id = await submit_file(file_model)
 
-        logger.info("Metadata submitted", submission_id=str(submission_id))
+        logger.info("File metadata submitted", submission_id=str(submission_id), object_id=object_id)
         return FileWithMetadataResponse(object_id=object_id, submission_id=submission_id)
 
     except Exception as e:
@@ -1499,10 +1495,6 @@ async def submit_file(file_data: FileModel) -> uuid.UUID:
     Returns a submission ID.
     """
     try:
-        if not storage.check_bucket_exists():
-            logger.error("Bucket doesn't exist, file likely not uploaded first")
-            raise HTTPException(status_code=400, detail="Bucket doesn't exist")
-
         if not storage.check_file_exists(file_data.object_id):
             logger.error("File doesn't exist", object_id=file_data.object_id)
             raise HTTPException(status_code=400, detail=f"File {file_data.object_id} doesn't exist")
@@ -1520,7 +1512,7 @@ async def submit_file(file_data: FileModel) -> uuid.UUID:
                 data=json.dumps(data),
                 data_content_type="application/json",
             )
-            logger.info(
+            logger.debug(
                 "Published file metadata for enrichment", object_id=file_data.object_id, submission_id=submission_id
             )
 

@@ -49,6 +49,7 @@ class UploadTracker:
         self.failures = []  # (path, error) tuples
         self.successes = []  # (path, bytes) tuples
         self.lock = threading.Lock()
+        self.start_time = time.perf_counter()
 
     @property
     def total_files(self) -> int:
@@ -87,6 +88,13 @@ class UploadTracker:
         with self.lock:
             return self.successes.copy()
 
+    def format_duration(self, seconds: float) -> str:
+        """Convert seconds to HH:MM:SS format with total seconds"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:05.2f} ({seconds:.2f}s)"
+
     def display_summary(self):
         """Display a summary of the upload operation"""
         total = self.total_files
@@ -95,6 +103,8 @@ class UploadTracker:
             return
 
         success_rate = (self.successful / total) * 100 if total > 0 else 0
+        elapsed_time = time.perf_counter() - self.start_time
+        files_per_sec = total / elapsed_time if elapsed_time > 0 else 0
 
         logger.info("\nUpload Summary:")
         logger.info("─" * 40)
@@ -102,7 +112,9 @@ class UploadTracker:
         logger.info(f"Successful:      {self.successful:,}")
         logger.info(f"Failed:          {self.failed:,}")
         logger.info(f"Success Rate:    {success_rate:.1f}%")
-        logger.info(f"Total Uploaded:  {self.format_bytes()}")
+        logger.info(f"Data Uploaded:   {self.format_bytes()}")
+        logger.info(f"Duration:        {self.format_duration(elapsed_time)}")
+        logger.info(f"Speed:           {files_per_sec:.2f} files/sec")
 
         if self.failed > 0:
             logger.info("\nFailed Uploads:")
@@ -326,9 +338,6 @@ def submit_files(
     if not validate_auth(host, auth):
         return False
 
-    # Create session with retry logic and connection pooling
-    session = create_session_with_retries()
-
     # Total submissions = 1 original + repeat additional submissions
     total_submissions = 1 + repeat
 
@@ -350,6 +359,12 @@ def submit_files(
 
     # Calculate total operations for progress bar
     total_operations = total_files * total_submissions
+
+    # Determine actual number of worker threads we'll use
+    actual_workers = min(workers, total_operations)
+
+    # Create session with retry logic and connection pooling sized for our workers
+    session = create_session_with_retries(max_workers=actual_workers)
 
     # Create shared structures for concurrent submission
     overall_tracker = UploadTracker()
@@ -554,9 +569,12 @@ def create_metadata(
     return metadata
 
 
-def create_session_with_retries() -> requests.Session:
+def create_session_with_retries(max_workers: int = 20) -> requests.Session:
     """
     Create a requests session with retry logic and connection pooling.
+
+    Args:
+        max_workers: Maximum number of concurrent workers (used to size connection pool)
     """
     session = requests.Session()
 
@@ -569,11 +587,15 @@ def create_session_with_retries() -> requests.Session:
         raise_on_status=False,  # Don't raise on status codes in status_forcelist
     )
 
+    # Size the connection pool to accommodate all workers plus some buffer
+    # Each worker needs a connection, add 50% buffer for retries and overhead
+    pool_size = max(20, int(max_workers * 1.5))
+
     # Configure HTTP adapter with retry strategy
     adapter = HTTPAdapter(
         max_retries=retry_strategy,
-        pool_connections=10,  # Number of connection pools
-        pool_maxsize=20,  # Maximum number of connections in pool
+        pool_connections=10,  # Number of connection pools to cache
+        pool_maxsize=pool_size,  # Maximum number of connections in pool
         pool_block=False,  # Don't block when pool is full
     )
 
