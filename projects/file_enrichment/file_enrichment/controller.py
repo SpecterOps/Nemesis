@@ -2,6 +2,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
+import asyncpg
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import CloudEvent, File
@@ -26,19 +27,15 @@ from .workflow_manager import WorkflowManager
 
 logger = get_logger(__name__)
 
-max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 3))  # maximum workflows that can run at a time
 max_workflow_execution_time = int(
     os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300)
 )  # maximum time (in seconds) until a workflow is killed
 
-logger.info(f"max_parallel_workflows: {max_parallel_workflows}", pid=os.getpid())
 logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
 
 postgres_connection_string = get_postgres_connection_str()
 
-pool = ConnectionPool(
-    postgres_connection_string, min_size=max_parallel_workflows, max_size=(3 * max_parallel_workflows), open=True
-)
+pool = ConnectionPool(postgres_connection_string, open=True)
 
 module_execution_order = []
 workflow_manager: WorkflowManager = None
@@ -73,82 +70,87 @@ async def lifespan(app: FastAPI):
     await dpapi_manager.__aenter__()
     app.state.dpapi_manager = dpapi_manager
 
-    try:
-        # Initialize workflow runtime and modules
-        module_execution_order = await initialize_workflow_runtime(dpapi_manager)
+    # Initialize workflow runtime and modules
+    module_execution_order = await initialize_workflow_runtime(dpapi_manager)
 
-        # Wait a bit for runtime to initialize
-        await asyncio.sleep(5)
+    # Wait a bit for runtime to initialize
+    await asyncio.sleep(5)
 
-        client = get_workflow_client()
-        if client is None:
-            raise ValueError("Workflow client not available after initialization")
+    client = get_workflow_client()
+    if client is None:
+        raise ValueError("Workflow client not available after initialization")
 
-        workflow_manager = WorkflowManager(
-            max_concurrent=max_parallel_workflows, max_execution_time=max_workflow_execution_time
-        )
-
-        # Start PostgreSQL NOTIFY listener in background
-        postgres_notify_listener_task = asyncio.create_task(
-            postgres_notify_listener(postgres_connection_string, workflow_manager)
-        )
-        logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
-
-        # Start masterkey watcher in background
-        background_dpapi_task = asyncio.create_task(dpapi_background_monitor(app.state.dpapi_manager))
-        logger.info("Started masterkey watcher task", pid=os.getpid())
-
-        # Recover any interrupted workflows before starting normal processing
-        await recover_interrupted_workflows(pool)
-
-        logger.info(
-            "Workflow runtime initialized successfully",
-            module_execution_order=module_execution_order,
-            client_available=client is not None,
-            pid=os.getpid(),
-        )
-
-    except Exception as e:
-        logger.error("Failed to initialize workflow runtime", error=str(e), pid=os.getpid())
-        raise
-
-    yield
+    # Create asyncpg connection pool for WorkflowManager
+    asyncpg_pool = await asyncpg.create_pool(
+        postgres_connection_string,
+        min_size=5,
+        max_size=15,
+    )
+    logger.info("AsyncPG pool created for WorkflowManager", pid=os.getpid())
 
     try:
-        logger.info("Shutting down workflow runtime...", pid=os.getpid())
+        # Use async context manager for WorkflowManager
+        async with WorkflowManager(pool=asyncpg_pool, max_execution_time=max_workflow_execution_time) as wf_manager:
+            workflow_manager = wf_manager
 
-        # Cleanup DpapiManager
-        if hasattr(app.state, "dpapi_manager") and app.state.dpapi_manager:
-            logger.info("Closing DpapiManager...", pid=os.getpid())
-            await app.state.dpapi_manager.__aexit__(None, None, None)
-
-        # Cancel masterkey watcher task
-        if background_dpapi_task and not background_dpapi_task.done():
-            logger.info("Cancelling masterkey watcher task...", pid=os.getpid())
-            background_dpapi_task.cancel()
             try:
-                await background_dpapi_task
-            except asyncio.CancelledError:
-                logger.info("Masterkey watcher task cancelled", pid=os.getpid())
+                # Start PostgreSQL NOTIFY listener in background
+                postgres_notify_listener_task = asyncio.create_task(
+                    postgres_notify_listener(postgres_connection_string, workflow_manager)
+                )
+                logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
 
-        # Cancel PostgreSQL NOTIFY listener
-        if postgres_notify_listener_task and not postgres_notify_listener_task.done():
-            logger.info("Cancelling PostgreSQL NOTIFY listener...", pid=os.getppid())
-            postgres_notify_listener_task.cancel()
-            try:
-                await postgres_notify_listener_task
-            except asyncio.CancelledError:
-                logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
+                # Start masterkey watcher in background
+                background_dpapi_task = asyncio.create_task(dpapi_background_monitor(app.state.dpapi_manager))
+                logger.info("Started masterkey watcher task", pid=os.getpid())
 
-        # Clean up workflow manager background tasks
-        if workflow_manager:
-            await workflow_manager.cleanup()
+                # Recover any interrupted workflows before starting normal processing
+                await recover_interrupted_workflows(pool)
 
-        shutdown_workflow_runtime()
+                logger.info(
+                    "Workflow runtime initialized successfully",
+                    module_execution_order=module_execution_order,
+                    client_available=client is not None,
+                    pid=os.getpid(),
+                )
 
-        dapr_client.close()
-    except Exception as e:
-        logger.error("Error during workflow runtime shutdown", error=str(e), pid=os.getpid())
+                yield
+
+            finally:
+                logger.info("Shutting down workflow runtime...", pid=os.getpid())
+
+                # Cleanup DpapiManager
+                if hasattr(app.state, "dpapi_manager") and app.state.dpapi_manager:
+                    logger.info("Closing DpapiManager...", pid=os.getpid())
+                    await app.state.dpapi_manager.__aexit__(None, None, None)
+
+                # Cancel masterkey watcher task
+                if background_dpapi_task and not background_dpapi_task.done():
+                    logger.info("Cancelling masterkey watcher task...", pid=os.getpid())
+                    background_dpapi_task.cancel()
+                    try:
+                        await background_dpapi_task
+                    except asyncio.CancelledError:
+                        logger.info("Masterkey watcher task cancelled", pid=os.getpid())
+
+                # Cancel PostgreSQL NOTIFY listener
+                if postgres_notify_listener_task and not postgres_notify_listener_task.done():
+                    logger.info("Cancelling PostgreSQL NOTIFY listener...", pid=os.getppid())
+                    postgres_notify_listener_task.cancel()
+                    try:
+                        await postgres_notify_listener_task
+                    except asyncio.CancelledError:
+                        logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
+
+                shutdown_workflow_runtime()
+
+                dapr_client.close()
+
+    finally:
+        # Close asyncpg pool
+        if asyncpg_pool:
+            await asyncpg_pool.close()
+            logger.info("AsyncPG pool closed", pid=os.getpid())
 
 
 # Initialize FastAPI app with lifespan manager

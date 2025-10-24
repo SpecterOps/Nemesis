@@ -6,11 +6,10 @@ import time
 import uuid
 from datetime import datetime
 
-from common.db import get_postgres_connection_str
+import asyncpg
 from common.logger import get_logger
 from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
-from psycopg_pool import ConnectionPool
 
 from .tracing import get_tracer
 from .workflow import enrichment_workflow, get_workflow_client
@@ -20,34 +19,60 @@ monitoring_enabled = os.getenv("NEMESIS_MONITORING", "").lower() == "enabled"
 
 
 class WorkflowManager:
-    """WorkflowManager with Semaphore to control max concurrent workflow execution."""
+    """WorkflowManager for workflow execution."""
 
-    def __init__(self, max_concurrent=3, max_execution_time=300):
-        """Initialize the workflow manager"""
-        self.semaphore = asyncio.Semaphore(max_concurrent)  # Controls max concurrent workflows
+    def __init__(self, pool: asyncpg.Pool, max_execution_time=300):
+        """Initialize the workflow manager
+
+        Args:
+            pool: asyncpg connection pool (externally managed)
+            max_execution_time: maximum time (in seconds) until a workflow is killed
+        """
         self.active_workflows = {}  # {instance_id: workflow_info}
         self.lock = asyncio.Lock()  # For synchronizing access to active_workflows
         self.max_execution_time = max_execution_time
-        self.max_concurrent = max_concurrent
         self.background_tasks = set()  # Track background tasks to prevent GC
-        self.pool = ConnectionPool(
-            get_postgres_connection_str(),
-            min_size=max_concurrent,
-            max_size=(3 * max_concurrent),
-            open=True,
+        self.pool = pool  # Use externally provided pool
+
+        logger.info(
+            "WorkflowManager created (use 'async with' to initialize)",
+            max_execution_time=max_execution_time,
+            pid=os.getpid(),
         )
+
+    async def __aenter__(self):
+        """Async context manager entry - start background tasks"""
+        if self.pool is None:
+            raise ValueError("WorkflowManager requires an asyncpg pool to be provided")
 
         # Start background cleanup task
         cleanup_task = asyncio.create_task(self._cleanup_loop())
         self.background_tasks.add(cleanup_task)
         cleanup_task.add_done_callback(self.background_tasks.discard)
 
-        logger.info(
-            "WorkflowManager initialized",
-            max_concurrent=max_concurrent,
-            max_execution_time=max_execution_time,
-            pid=os.getpid(),
-        )
+        logger.info("WorkflowManager fully initialized", pid=os.getpid())
+
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup background tasks (pool is externally managed)"""
+        logger.info("Cleaning up WorkflowManager...", pid=os.getpid())
+
+        # Cancel all background tasks
+        for task in self.background_tasks:
+            if not task.done():
+                task.cancel()
+
+        # Wait for all tasks to complete/cancel
+        if self.background_tasks:
+            await asyncio.gather(*self.background_tasks, return_exceptions=True)
+
+        self.background_tasks.clear()
+
+        # Note: Pool is externally managed and will be closed by the caller
+
+        logger.info("WorkflowManager cleanup completed", pid=os.getpid())
+        return False  # Don't suppress exceptions
 
     async def _cleanup_loop(self):
         """Run cleanup_stale_workflows every 60 seconds"""
@@ -85,55 +110,50 @@ class WorkflowManager:
         """
 
         try:
+            async with self.pool.acquire() as conn:
+                # Get object_id from workflow
+                row = await conn.fetchrow(
+                    """
+                    SELECT object_id FROM workflows WHERE wf_id = $1
+                """,
+                    instance_id,
+                )
 
-            def get_workflow_container_info():
-                with self.pool.connection() as conn:
-                    with conn.cursor() as cur:
-                        # Get object_id from workflow
-                        cur.execute(
-                            """
-                            SELECT object_id FROM workflows WHERE wf_id = %s
-                        """,
-                            (instance_id,),
-                        )
+                if not row or not row["object_id"]:
+                    object_id, originating_container_id, file_size = None, None, 0
+                else:
+                    object_id = row["object_id"]
 
-                        row = cur.fetchone()
-                        if not row or not row[0]:
-                            return None, None, 0
+                    # Get originating_container_id and file size from files table
+                    file_row = await conn.fetchrow(
+                        """
+                        SELECT fe.originating_container_id, fe.size
+                        FROM files_enriched fe
+                        WHERE fe.object_id = $1
+                    """,
+                        object_id,
+                    )
 
-                        object_id = row[0]
-
-                        # Get originating_container_id and file size from files table
-                        cur.execute(
-                            """
-                            SELECT fe.originating_container_id, fe.size
-                            FROM files_enriched fe
-                            WHERE fe.object_id = %s
-                        """,
-                            (object_id,),
-                        )
-
-                        file_row = cur.fetchone()
-                        if file_row:
-                            return object_id, file_row[0], file_row[1] or 0
-
+                    if file_row:
+                        originating_container_id = file_row["originating_container_id"]
+                        file_size = file_row["size"] or 0
+                    else:
                         # Fallback to files table if not in files_enriched yet
-                        cur.execute(
+                        fallback_row = await conn.fetchrow(
                             """
                             SELECT f.originating_container_id, 0 as size
                             FROM files f
-                            WHERE f.object_id = %s
+                            WHERE f.object_id = $1
                         """,
-                            (object_id,),
+                            object_id,
                         )
 
-                        fallback_row = cur.fetchone()
                         if fallback_row:
-                            return object_id, fallback_row[0], fallback_row[1] or 0
-
-                        return object_id, None, 0
-
-            object_id, originating_container_id, file_size = await asyncio.to_thread(get_workflow_container_info)
+                            originating_container_id = fallback_row["originating_container_id"]
+                            file_size = fallback_row["size"] or 0
+                        else:
+                            originating_container_id = None
+                            file_size = 0
             logger.debug(
                 f"publish_workflow_completion - object_id: {object_id}, originating_container_id: {originating_container_id}, file_size: {file_size}",
                 pid=os.getpid(),
@@ -175,24 +195,18 @@ class WorkflowManager:
     async def cleanup_stale_workflows(self):
         """Clean up workflows that were left running from previous service instances"""
         try:
-
-            def get_stale_workflows():
-                with self.pool.connection() as conn:
-                    with conn.cursor() as cur:
-                        # Find workflows that have been running for longer than max execution time
-                        cur.execute(
-                            """
-                            SELECT wf_id, object_id,
-                                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - start_time)) as runtime_seconds
-                            FROM workflows
-                            WHERE status = 'RUNNING'
-                            AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - start_time)) > %s
-                        """,
-                            (self.max_execution_time,),
-                        )
-                        return cur.fetchall()
-
-            stale_workflows = await asyncio.to_thread(get_stale_workflows)
+            async with self.pool.acquire() as conn:
+                # Find workflows that have been running for longer than max execution time
+                stale_workflows = await conn.fetch(
+                    """
+                    SELECT wf_id, object_id,
+                        EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - start_time)) as runtime_seconds
+                    FROM workflows
+                    WHERE status = 'RUNNING'
+                    AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - start_time)) > $1
+                """,
+                    self.max_execution_time,
+                )
 
             if stale_workflows:
                 logger.warning(f"Found {len(stale_workflows)} stale workflows, cleaning up...", pid=os.getpid())
@@ -230,36 +244,37 @@ class WorkflowManager:
             error_message: Error message to append to enrichments_failure (optional)
         """
 
-        def _update_workflow_in_db():
-            with self.pool.connection() as conn:
-                with conn.cursor() as cur:
-                    if error_message:
-                        # Update with error message appended to enrichments_failure
-                        cur.execute(
-                            """
-                            UPDATE workflows
-                            SET status = %s,
-                                runtime_seconds = COALESCE(%s, runtime_seconds),
-                                enrichments_failure = array_append(enrichments_failure, %s)
-                            WHERE wf_id = %s
-                            """,
-                            (status, runtime_seconds, error_message[:100], instance_id),
-                        )
-                    else:
-                        # Update without modifying enrichments_failure
-                        cur.execute(
-                            """
-                            UPDATE workflows
-                            SET status = %s,
-                                runtime_seconds = COALESCE(%s, runtime_seconds)
-                            WHERE wf_id = %s
-                            """,
-                            (status, runtime_seconds, instance_id),
-                        )
-                    conn.commit()
-
         try:
-            await asyncio.to_thread(_update_workflow_in_db)
+            async with self.pool.acquire() as conn:
+                if error_message:
+                    # Update with error message appended to enrichments_failure
+                    await conn.execute(
+                        """
+                        UPDATE workflows
+                        SET status = $1,
+                            runtime_seconds = COALESCE($2, runtime_seconds),
+                            enrichments_failure = array_append(enrichments_failure, $3)
+                        WHERE wf_id = $4
+                        """,
+                        status,
+                        runtime_seconds,
+                        error_message[:100],
+                        instance_id,
+                    )
+                else:
+                    # Update without modifying enrichments_failure
+                    await conn.execute(
+                        """
+                        UPDATE workflows
+                        SET status = $1,
+                            runtime_seconds = COALESCE($2, runtime_seconds)
+                        WHERE wf_id = $3
+                        """,
+                        status,
+                        runtime_seconds,
+                        instance_id,
+                    )
+
             logger.debug(
                 "Updated workflow status",
                 instance_id=instance_id,
@@ -285,16 +300,10 @@ class WorkflowManager:
 
             # Reset workflows in database
             try:
-
-                def reset_db_workflows():
-                    with self.pool.connection() as conn:
-                        with conn.cursor() as cur:
-                            # Clear existing workflows
-                            #   TODO: should this only include running workflows?
-                            cur.execute("DELETE FROM workflows")
-                            conn.commit()
-
-                await asyncio.to_thread(reset_db_workflows)
+                async with self.pool.acquire() as conn:
+                    # Clear existing workflows
+                    #   TODO: should this only include running workflows?
+                    await conn.execute("DELETE FROM workflows")
             except Exception as e:
                 logger.exception(e, message="Error resetting workflows in database", pid=os.getpid())
 
@@ -307,16 +316,12 @@ class WorkflowManager:
             }
 
     async def start_workflow(self, workflow_input):
-        """Start a workflow using semaphore for backpressure control"""
-        # Acquire semaphore - this will block if we're at max capacity
-        #   This provides natural backpressure to the Dapr pub/sub system
+        """Start a workflow"""
         start_time = time.time()
         tracer = get_tracer("workflow_manager", monitoring_enabled)
         client = get_workflow_client()
         if client is None:
             raise ValueError("Workflow client is None")
-
-        await self.semaphore.acquire()
 
         try:
             # Generate the workflow ID first so we can schedule the workflow after
@@ -343,25 +348,18 @@ class WorkflowManager:
                         object_id = workflow_input["file"].get("object_id")
 
                 # Store workflow in database
-                def store_workflow():
-                    with self.pool.connection() as conn:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                """
-                                INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                                VALUES (%s, %s, %s, %s, %s)
-                                """,
-                                (
-                                    instance_id,
-                                    object_id,
-                                    base_filename,
-                                    "RUNNING",
-                                    datetime.fromtimestamp(start_time),
-                                ),
-                            )
-                            conn.commit()
-
-                await asyncio.to_thread(store_workflow)
+                async with self.pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
+                        VALUES ($1, $2, $3, $4, $5)
+                        """,
+                        instance_id,
+                        object_id,
+                        base_filename,
+                        "RUNNING",
+                        datetime.fromtimestamp(start_time),
+                    )
 
                 # Add to active workflows tracking
                 async with self.lock:
@@ -394,8 +392,6 @@ class WorkflowManager:
                 return instance_id
 
         except Exception as e:
-            # Release semaphore on error
-            self.semaphore.release()
             logger.exception(e, message="Error starting workflow", pid=os.getpid())
             raise
 
@@ -475,13 +471,10 @@ class WorkflowManager:
                 await self.update_workflow_status(instance_id, "ERROR", processing_time, str(e))
 
             finally:
-                # Always clean up and release semaphore
+                # Always clean up
                 async with self.lock:
                     if instance_id in self.active_workflows:
                         del self.active_workflows[instance_id]
-
-                # Release semaphore to allow next workflow
-                self.semaphore.release()
 
     async def _wait_for_completion(self, instance_id, workflow_start_time: float):
         """Wait for workflow to complete and return the final status"""
@@ -580,11 +573,8 @@ class WorkflowManager:
                     await asyncio.sleep(0.3)
 
     async def start_workflow_single_enrichment(self, workflow_input):
-        """Start a single enrichment workflow using semaphore for backpressure control"""
+        """Start a single enrichment workflow"""
         tracer = get_tracer("workflow_manager", monitoring_enabled)
-        # Acquire semaphore - this will block if we're at max capacity
-        #   This provides natural backpressure to the Dapr pub/sub system
-        await self.semaphore.acquire()
 
         try:
             start_time = time.time()
@@ -610,25 +600,18 @@ class WorkflowManager:
                 object_id = workflow_input.get("object_id")
 
                 # Store workflow in database (simplified - just for monitoring)
-                def store_workflow():
-                    with self.pool.connection() as conn:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                """
-                                INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                                VALUES (%s, %s, %s, %s, %s)
-                                """,
-                                (
-                                    instance_id,
-                                    object_id,
-                                    f"bulk:{enrichment_name} ({object_id})",  # Use enrichment name as filename
-                                    "RUNNING",
-                                    datetime.fromtimestamp(start_time),
-                                ),
-                            )
-                            conn.commit()
-
-                await asyncio.to_thread(store_workflow)
+                async with self.pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
+                        VALUES ($1, $2, $3, $4, $5)
+                        """,
+                        instance_id,
+                        object_id,
+                        f"bulk:{enrichment_name} ({object_id})",  # Use enrichment name as filename
+                        "RUNNING",
+                        datetime.fromtimestamp(start_time),
+                    )
 
                 # Add to active workflows tracking
                 async with self.lock:
@@ -666,8 +649,6 @@ class WorkflowManager:
                 return instance_id
 
         except Exception as e:
-            # Release semaphore on error
-            self.semaphore.release()
             logger.exception(e, message="Error starting single enrichment workflow", pid=os.getpid())
             raise
 
@@ -746,16 +727,13 @@ class WorkflowManager:
                 await self.update_workflow_status(instance_id, "ERROR", processing_time, str(e))
 
             finally:
-                # Always clean up and release semaphore
+                # Always clean up
                 async with self.lock:
                     if instance_id in self.active_workflows:
                         del self.active_workflows[instance_id]
 
-                # Release semaphore to allow next workflow
-                self.semaphore.release()
-
     async def cleanup(self):
-        """Clean up background tasks during shutdown"""
+        """Clean up background tasks during shutdown (pool is externally managed)"""
         logger.info("Cleaning up WorkflowManager background tasks")
 
         # Cancel all background tasks
@@ -768,4 +746,7 @@ class WorkflowManager:
             await asyncio.gather(*self.background_tasks, return_exceptions=True)
 
         self.background_tasks.clear()
+
+        # Note: Pool is externally managed and will be closed by the caller
+
         logger.info("WorkflowManager cleanup completed")
