@@ -84,11 +84,10 @@ def get_tracer(module: str, service: str, otel_exporter_enabled: bool = True):
     """
 
     # Check if tracer provider is already set
-    # current_provider = trace.get_tracer_provider()
-    # if hasattr(current_provider, "_resource") or type(current_provider).__name__ != "NoOpTracerProvider":
-    #     # Tracer provider already configured, just return the tracer
-    #     print("Using built-in provider")
-    #     return current_provider.get_tracer(module)
+    current_provider = trace.get_tracer_provider()
+    if hasattr(current_provider, "_resource") or type(current_provider).__name__ != "NoOpTracerProvider":
+        # Tracer provider already configured, just return the tracer
+        return current_provider.get_tracer(module)
 
     resource = Resource.create(
         {
@@ -105,14 +104,11 @@ def get_tracer(module: str, service: str, otel_exporter_enabled: bool = True):
             insecure=os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE", "true").lower() == "true",
         )
 
-        print("Using nemesis monitoring proivider")
-
         trace_provider = TracerProvider(resource=resource)
         span_processor = BatchSpanProcessor(otlp_exporter)
         trace_provider.add_span_processor(span_processor)
         trace.set_tracer_provider(trace_provider)
     else:
-        print("Using default provider")
         trace_provider = TracerProvider(resource=resource)
         trace.set_tracer_provider(trace_provider)
 
