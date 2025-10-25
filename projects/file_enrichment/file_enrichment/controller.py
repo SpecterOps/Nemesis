@@ -16,6 +16,7 @@ from nemesis_dpapi import DpapiManager as NemesisDpapiManager
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
 from psycopg_pool import ConnectionPool
 
+from .debug_utils import setup_debug_signals
 from .routes.dpapi import dpapi_background_monitor, dpapi_router
 from .routes.enrichments import router as enrichments_router
 from .subscriptions.bulk_enrichment_handler import process_bulk_enrichment_event
@@ -24,7 +25,6 @@ from .subscriptions.file_handler import process_file_event
 from .subscriptions.noseyparker_handler import process_noseyparker_event
 from .workflow import get_workflow_client, initialize_workflow_runtime, shutdown_workflow_runtime, wf_runtime
 from .workflow_manager import WorkflowManager
-from .debug_utils import setup_debug_signals
 
 logger = get_logger(__name__)
 
@@ -62,25 +62,25 @@ async def lifespan(app: FastAPI):
     app.state.event_loop = asyncio.get_running_loop()
     set_fastapi_loop(asyncio.get_event_loop())
 
-    # Initialize global DpapiManager for the application lifetime
+    # Create asyncpg connection pool for WorkflowManager and workflow activities
     dapr_client = DaprClient()
     postgres_connection_string = get_postgres_connection_str(dapr_client)
 
-    dpapi_manager = NemesisDpapiManager(
-        storage_backend=postgres_connection_string,
-        auto_decrypt=True,
-        publisher=DaprDpapiEventPublisher(dapr_client, loop=app.state.event_loop),
-    )
-    await dpapi_manager.__aenter__()
-    app.state.dpapi_manager = dpapi_manager
-
-    # Create asyncpg connection pool for WorkflowManager and workflow activities
     asyncpg_pool = await asyncpg.create_pool(
         postgres_connection_string,
         min_size=5,
         max_size=15,
     )
     logger.info("AsyncPG pool created", pid=os.getpid())
+
+    # Initialize global DpapiManager for the application lifetime
+    dpapi_manager = NemesisDpapiManager(
+        storage_backend=asyncpg_pool,
+        auto_decrypt=True,
+        publisher=DaprDpapiEventPublisher(dapr_client, loop=app.state.event_loop),
+    )
+    await dpapi_manager.__aenter__()
+    app.state.dpapi_manager = dpapi_manager
 
     # Initialize workflow runtime and modules
     module_execution_order = await initialize_workflow_runtime(dpapi_manager, asyncpg_pool)

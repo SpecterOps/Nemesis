@@ -46,15 +46,15 @@ class DpapiManager(DpapiManagerProtocol):
 
     def __init__(
         self,
-        storage_backend: str = "memory",
+        storage_backend: str | asyncpg.Pool = "memory",
         auto_decrypt: bool = True,
         publisher: DaprDpapiEventPublisher | None = None,
     ) -> None:
         """Initialize DPAPI manager with specified storage backend.
 
         Args:
-            storage_backend: Either "memory" for in-memory storage or a PostgreSQL
-                           connection string for database storage.
+            storage_backend: Either "memory" for in-memory storage or an asyncpg.Pool object
+                           for PostgreSQL database storage.
             auto_decrypt: Enable automatic masterkey decryption as new domain backup keys are added.
         """
         super().__init__()
@@ -82,18 +82,15 @@ class DpapiManager(DpapiManagerProtocol):
             self._masterkey_repo = InMemoryMasterKeyRepository()
             self._backup_key_repo = InMemoryDomainBackupKeyRepository()
             self._dpapi_system_cred_repo = InMemoryDpapiSystemCredentialRepository()
-        elif self._storage_backend.startswith("postgresql://"):
-            # Initialize PostgreSQL connection pool
-            pool = await asyncpg.create_pool(self._storage_backend)
-            if pool is None:
-                raise ValueError("Failed to create PostgreSQL connection pool")
-            self._pg_pool = pool
+        elif isinstance(self._storage_backend, asyncpg.Pool):
+            # Use provided PostgreSQL connection pool
+            self._pg_pool = self._storage_backend
 
             self._masterkey_repo = PostgresMasterKeyRepository(self._pg_pool)
             self._backup_key_repo = PostgresDomainBackupKeyRepository(self._pg_pool)
             self._dpapi_system_cred_repo = PostgresDpapiSystemCredentialRepository(self._pg_pool)
         else:
-            raise ValueError(f"Unsupported storage backend: {self._storage_backend}")
+            raise ValueError(f"Unsupported storage backend: {self._storage_backend}. Must be 'memory' or asyncpg.Pool")
 
         # Set up auto-decryption observer after storage is initialized
         if self._auto_decrypt and self._auto_decrypt_observer is None:
@@ -109,8 +106,7 @@ class DpapiManager(DpapiManagerProtocol):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit."""
-        if self._pg_pool:
-            await self._pg_pool.close()
+        pass
 
     async def subscribe(self, observer: DpapiObserver) -> None:
         """Subscribe an observer to DPAPI events.
