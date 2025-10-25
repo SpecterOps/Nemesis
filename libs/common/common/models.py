@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from .logger import get_logger
 
@@ -205,7 +205,6 @@ class File(BaseModel):
     model_config = ConfigDict(
         exclude_none=True,
         exclude_unset=True,
-        json_encoders={datetime: lambda dt: dt.isoformat()},
     )
 
     object_id: str
@@ -221,6 +220,10 @@ class File(BaseModel):
     creation_time: str | None = None
     access_time: str | None = None
     modification_time: str | None = None
+
+    @field_serializer('timestamp', 'expiration')
+    def serialize_datetime(self, dt: datetime, _info):
+        return dt.isoformat()
 
     @classmethod
     def from_file_metadata(cls, metadata: "FileMetadata", object_id: str) -> "File":
@@ -270,8 +273,6 @@ class FileHashes(BaseModel):
 
 
 class FileEnriched(File):
-    model_config = ConfigDict(json_encoders={datetime: lambda dt: dt.isoformat()})
-
     file_name: str
     extension: str | None = None
     size: int

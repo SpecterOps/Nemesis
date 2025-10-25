@@ -4,13 +4,11 @@ This module processes Windows CNG (Cryptography Next Generation) key files,
 parsing their structure and attempting to decrypt DPAPI-protected components.
 """
 
-import struct
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 import psycopg
 import yara_x
-
 from chromium.local_state import retry_decrypt_state_keys_for_chromekey
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
