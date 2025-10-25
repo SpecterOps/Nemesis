@@ -7,11 +7,12 @@ from common.logger import get_logger
 from common.models import DotNetOutput
 from common.state_helpers import get_file_enriched_async
 from file_enrichment.dotnet import store_dotnet_results
+from psycopg_pool import ConnectionPool
 
 logger = get_logger(__name__)
 
 
-async def process_dotnet_event(raw_data, postgres_connection_string: str):
+async def process_dotnet_event(raw_data, pool: ConnectionPool):
     """Process incoming .NET processing results from the dotnet_service"""
     try:
         logger.debug(f"Received DotNet output event: {raw_data}", pid=os.getpid())
@@ -46,7 +47,7 @@ async def process_dotnet_event(raw_data, postgres_connection_string: str):
                 object_id=object_id,
                 decompilation_object_id=decompilation_object_id,
                 analysis=analysis,
-                postgres_connection_string=postgres_connection_string,
+                pool=pool,
                 file_enriched=file_enriched,
             )
 

@@ -34,9 +34,7 @@ max_workflow_execution_time = int(
 
 logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
 
-postgres_connection_string = get_postgres_connection_str()
-
-pool = ConnectionPool(postgres_connection_string, open=True)
+pool = ConnectionPool(get_postgres_connection_str(), open=True)
 
 module_execution_order = []
 workflow_manager: WorkflowManager = None
@@ -257,13 +255,13 @@ async def process_file(event: CloudEvent[File]):
 @dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")
 async def process_dotnet_results(event: CloudEvent):
     """Handler for incoming .NET processing results from the dotnet_service."""
-    await process_dotnet_event(event.data, postgres_connection_string)
+    await process_dotnet_event(event.data, pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")
 async def process_nosey_parker_results(event: CloudEvent):
     """Handler for incoming Nosey Parker scan results"""
-    await process_noseyparker_event(event.data, postgres_connection_string)
+    await process_noseyparker_event(event.data, pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")

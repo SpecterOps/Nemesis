@@ -18,6 +18,7 @@ from common.models import (
     Transform,
 )
 from dapr.clients import DaprClient
+from psycopg_pool import ConnectionPool
 
 logger = get_logger(__name__)
 
@@ -79,7 +80,7 @@ async def store_dotnet_results(
     object_id: str,
     decompilation_object_id: str = None,
     analysis: DotNetAssemblyAnalysis = None,
-    postgres_connection_string: str = None,
+    pool: ConnectionPool = None,
     file_enriched=None,
 ):
     """
@@ -89,13 +90,13 @@ async def store_dotnet_results(
         object_id (str): The object ID of the file that was analyzed
         decompilation_object_id (str, optional): Object ID of the decompiled source ZIP
         analysis (DotNetAssemblyAnalysis, optional): Assembly analysis results
-        postgres_connection_string (str, optional): Database connection string
+        pool (ConnectionPool, optional): Database connection pool
         file_enriched: The FileEnriched object for the original file
     """
     try:
         # Update workflow success status
         try:
-            with psycopg.connect(postgres_connection_string) as conn:
+            with pool.connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -203,7 +204,7 @@ async def store_dotnet_results(
         enrichment_result.findings = findings_list
 
         def store_in_db():
-            with psycopg.connect(postgres_connection_string) as conn:
+            with pool.connection() as conn:
                 with conn.cursor() as cur:
                     # Store main enrichment result
                     results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))

@@ -11,6 +11,7 @@ import psycopg
 from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, MatchInfo, ScanStats
+from psycopg_pool import ConnectionPool
 
 logger = get_logger(__name__)
 
@@ -161,7 +162,7 @@ async def store_noseyparker_results(
     object_id: str,
     matches: list[MatchInfo],
     scan_stats: ScanStats,
-    postgres_connection_string: str,
+    pool: ConnectionPool,
 ):
     """
     Store Nosey Parker results in the database, including creating findings.
@@ -170,11 +171,11 @@ async def store_noseyparker_results(
         object_id (str): The object ID of the file that was scanned
         matches (List[MatchInfo]): List of match information from Nosey Parker
         scan_stats (dict, optional): Statistics about the scan
-        postgres_connection_string (str, optional): Database connection string
+        pool (ConnectionPool): Database connection pool
     """
     try:
         try:
-            with psycopg.connect(postgres_connection_string) as conn:
+            with pool.connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -233,7 +234,7 @@ async def store_noseyparker_results(
         enrichment_result.findings = findings_list
 
         def store_in_db():
-            with psycopg.connect(postgres_connection_string) as conn:
+            with pool.connection() as conn:
                 with conn.cursor() as cur:
                     # Store main enrichment result
                     results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))

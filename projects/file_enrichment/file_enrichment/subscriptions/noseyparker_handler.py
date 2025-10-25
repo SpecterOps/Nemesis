@@ -6,11 +6,12 @@ import os
 from common.logger import get_logger
 from common.models import NoseyParkerOutput
 from file_enrichment.noseyparker import store_noseyparker_results
+from psycopg_pool import ConnectionPool
 
 logger = get_logger(__name__)
 
 
-async def process_noseyparker_event(raw_data, postgres_connection_string: str):
+async def process_noseyparker_event(raw_data, pool: ConnectionPool):
     """Process incoming Nosey Parker scan results"""
     try:
         # Extract the raw data
@@ -41,7 +42,7 @@ async def process_noseyparker_event(raw_data, postgres_connection_string: str):
                 object_id=object_id,
                 matches=matches,
                 scan_stats=stats,
-                postgres_connection_string=postgres_connection_string,
+                pool=pool,
             )
 
         except Exception as parsing_error:
@@ -61,7 +62,7 @@ async def process_noseyparker_event(raw_data, postgres_connection_string: str):
                     object_id=f"{object_id}",
                     matches=matches,
                     scan_stats=stats,
-                    postgres_connection_string=postgres_connection_string,
+                    pool=pool,
                 )
 
     except Exception as e:
