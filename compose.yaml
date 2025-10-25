@@ -815,7 +815,7 @@ services:
 
   placement:
     image: "daprio/dapr:1.16.1"
-    command: ["./placement", "-port", "50006"]
+    command: ["./placement", "-port", "50006", "--enable-metrics"]
 
   scheduler:
     image: "daprio/dapr:1.16.1"
@@ -825,6 +825,7 @@ services:
         "--port",
         "50007",
         "--etcd-data-dir=/var/lock/dapr/scheduler",
+        "--enable-metrics",
       ]
 
   ############################
