@@ -13,6 +13,7 @@ class ParsedDpapiBlob(BaseModel):
     dpapi_data_b64: str | None = None
     dpapi_blob_raw: bytes | None = None
     success: bool = False  # true/false if parsing was successful or not
+    blob_offset: int = 0  # offset in the file where the blob was found
 
 
 async def parse_dpapi_blob(blob_bytes: bytes) -> ParsedDpapiBlob:
@@ -33,11 +34,17 @@ async def parse_dpapi_blob(blob_bytes: bytes) -> ParsedDpapiBlob:
 
 
 async def carve_dpapi_blobs_from_bytes(
-    raw_bytes: bytes, file_name: str = "", object_id: str = ""
+    raw_bytes: bytes, file_name: str = "", object_id: str = "", base_offset: int = 0
 ) -> list[ParsedDpapiBlob]:
     """
     Helper that _just_ carves raw DPAPI blobs from bytes,
     returning a list of dicts {dpapi_master_key_guid, dpapi_data_b64}
+
+    Args:
+        raw_bytes: The bytes to search for DPAPI blobs
+        file_name: Optional file name for logging
+        object_id: Optional object ID for logging
+        base_offset: The base offset in the original file (for chunked reading)
     """
     dpapi_blobs = []
     seen_blobs = set()  # Track unique blobs by their base64 data
@@ -65,6 +72,7 @@ async def carve_dpapi_blobs_from_bytes(
                     logger.warning("carve_dpapi_blobs_from_bytes: blob.rawData is None")
                 current_pos += 1
             elif blob.dpapi_data_b64:
+                blob.blob_offset = base_offset + current_pos
                 current_pos += len(base64.b64decode(blob.dpapi_data_b64))
                 if blob.dpapi_data_b64 not in seen_blobs:
                     seen_blobs.add(blob.dpapi_data_b64)
@@ -91,6 +99,7 @@ async def carve_dpapi_blobs_from_bytes(
                 try:
                     dpapi_blob_raw = base64.b64decode(raw_bytes[loc:end_loc])
                     blob = await parse_dpapi_blob(dpapi_blob_raw)
+                    blob.blob_offset = base_offset + loc
                     current_pos += end_loc - loc
                     if not blob.success:
                         logger.warning(
@@ -121,11 +130,13 @@ async def carve_dpapi_blobs_from_file(file_name: str, object_id: str = "", max_b
 
     dpapi_blobs = []
     chunk_size = 512000
+    current_offset = 0
 
     with open(file_name, "rb") as f:
         # chunking to handle large files
         while chunk := f.read(chunk_size):
-            blobs = await carve_dpapi_blobs_from_bytes(chunk, file_name, object_id)
+            blobs = await carve_dpapi_blobs_from_bytes(chunk, file_name, object_id, base_offset=current_offset)
             dpapi_blobs += [blob.model_dump() for blob in blobs[:max_blobs]]
+            current_offset += len(chunk)
 
     return dpapi_blobs

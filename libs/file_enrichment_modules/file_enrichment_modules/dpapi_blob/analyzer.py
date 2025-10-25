@@ -1,9 +1,12 @@
 # enrichment_modules/dpapi/analyzer.py
 import asyncio
+import base64
+import csv
+import tempfile
 
 import yara_x
 from common.logger import get_logger
-from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
+from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched, get_file_enriched_async
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
@@ -40,6 +43,26 @@ rule has_dpapi_blob
 }
 """)
 
+    def _format_hex_dump(self, data: bytes, offset: int = 0) -> str:
+        """Generate hexdump-style output for blob data.
+
+        Args:
+            data: The bytes to format
+            offset: Starting offset for display
+
+        Returns:
+            Formatted hex dump string
+        """
+        lines = []
+        for i in range(0, len(data), 16):
+            chunk = data[i:i+16]
+            hex_part = ' '.join(f'{b:02x}' for b in chunk)
+            # Pad hex part to align ASCII
+            hex_part = hex_part.ljust(48)
+            ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
+            lines.append(f'{offset+i:08x}  {hex_part}  {ascii_part}')
+        return '\n'.join(lines)
+
     def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed by scanning for DPAPI blobs.
 
@@ -68,7 +91,7 @@ rule has_dpapi_blob
         return should_run
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process LSASS dump file and extract credentials.
+        """Process file and perform DPAPI blob analysis.
 
         Args:
             object_id: The object ID of the file
@@ -108,13 +131,23 @@ rule has_dpapi_blob
                         temp_file.name, file_enriched.object_id, self.max_blobs
                     )
 
+            # Track decrypted blobs and their data
+            decrypted_blobs = []
+
             for carved_blob in carved_blobs:
                 try:
                     dpapi_blob_raw = carved_blob["dpapi_blob_raw"]
-                    del carved_blob["dpapi_blob_raw"]  # because of result serialization
+                    carved_blob["is_decrypted"] = False
+                    carved_blob["decrypted_data"] = None
+                    # Calculate blob length from raw data
+                    carved_blob["blob_length"] = len(dpapi_blob_raw) if dpapi_blob_raw else 0
+
                     carved_blob_dec = await self.dpapi_manager.decrypt_blob(Blob.from_bytes(dpapi_blob_raw))
 
                     if carved_blob_dec:
+                        carved_blob["is_decrypted"] = True
+                        carved_blob["decrypted_data"] = carved_blob_dec
+                        decrypted_blobs.append(carved_blob)
                         logger.info(
                             "Successfully decrypted blob",
                             masterkey_guid=carved_blob["dpapi_master_key_guid"],
@@ -139,9 +172,97 @@ rule has_dpapi_blob
                         error_type=type(e).__name__,
                     )
 
+                # Remove raw blob data to avoid serialization issues
+                del carved_blob["dpapi_blob_raw"]
+
             masterkey_guids = sorted({blob["dpapi_master_key_guid"] for blob in carved_blobs if blob["success"]})
 
             if carved_blobs:
+                transforms = []
+
+                # Create CSV transform for all blobs (up to 10000)
+                blobs_for_csv = carved_blobs[:10000]
+                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_csv:
+                    writer = csv.writer(tmp_csv)
+
+                    # Write header
+                    writer.writerow(["masterkey_guid", "blob_offset", "blob_length", "is_decrypted", "base64_content"])
+
+                    # Write blob data
+                    for blob in blobs_for_csv:
+                        base64_content = ""
+                        # Include base64 content if blob is 1000 bytes or less
+                        if blob.get("decrypted_data") and len(blob["decrypted_data"]) <= 1000:
+                            base64_content = base64.b64encode(blob["decrypted_data"]).decode("utf-8")
+
+                        writer.writerow([
+                            blob["dpapi_master_key_guid"],
+                            blob.get("blob_offset", 0),
+                            blob.get("blob_length", 0),
+                            blob.get("is_decrypted", False),
+                            base64_content,
+                        ])
+
+                    tmp_csv.flush()
+                    csv_object_id = self.storage.upload_file(tmp_csv.name)
+
+                    transforms.append(
+                        Transform(
+                            type="dpapi_blobs.csv",
+                            object_id=f"{csv_object_id}",
+                            metadata={
+                                "file_name": f"{file_enriched.file_name}_dpapi_blobs.csv",
+                                "offer_as_download": True,
+                            },
+                        )
+                    )
+
+                # Create markdown transform for decrypted blobs (up to 1000)
+                if decrypted_blobs:
+                    report_lines = []
+                    report_lines.append(f"# Decrypted DPAPI Blobs: {file_enriched.file_name}")
+                    report_lines.append(f"\nTotal decrypted blobs: {len(decrypted_blobs)}")
+
+                    blobs_for_markdown = decrypted_blobs[:1000]
+
+                    for idx, blob in enumerate(blobs_for_markdown, 1):
+                        report_lines.append(f"\n## Blob {idx}")
+                        report_lines.append(f"- **Masterkey GUID**: `{blob['dpapi_master_key_guid']}`")
+                        report_lines.append(f"- **Offset**: {blob.get('blob_offset', 0)}")
+                        report_lines.append(f"- **Length**: {blob.get('blob_length', 0)} bytes")
+
+                        if blob.get("decrypted_data"):
+                            if len(blob["decrypted_data"]) <= 1000:
+                                report_lines.append("```")
+                                report_lines.append(self._format_hex_dump(blob["decrypted_data"]))
+                                report_lines.append("```")
+                            else:
+                                report_lines.append("\n*Blob is > 1000 bytes*")
+
+                    # Add truncation notice if needed
+                    if len(decrypted_blobs) > 1000:
+                        report_lines.append("\n---")
+                        report_lines.append("\n**Note**: Over 1000 blobs carved, output truncated")
+
+                    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_md:
+                        tmp_md.write("\n".join(report_lines))
+                        tmp_md.flush()
+                        md_object_id = self.storage.upload_file(tmp_md.name)
+
+                        transforms.append(
+                            Transform(
+                                type="dpapi_decrypted_blobs",
+                                object_id=f"{md_object_id}",
+                                metadata={
+                                    "file_name": f"{file_enriched.file_name}_decrypted_blobs.md",
+                                    "display_type_in_dashboard": "markdown",
+                                    "default_display": True,
+                                },
+                            )
+                        )
+
+                enrichment_result.transforms = transforms
+
                 summary_markdown = f"""
 # DPAPI Blobs Found : {len(carved_blobs)}
 # Masterkey GUIDs
@@ -150,7 +271,15 @@ List of unique masterkey GUIDs associated with the found blobs:
 {"\n".join(masterkey_guids)}
 ```
 """
-                enrichment_result.results = {"blobs": carved_blobs}
+                # Clean up decrypted_data before storing in results to avoid serialization issues
+                results_blobs = []
+                for blob in carved_blobs:
+                    blob_copy = blob.copy()
+                    if "decrypted_data" in blob_copy:
+                        del blob_copy["decrypted_data"]
+                    results_blobs.append(blob_copy)
+
+                enrichment_result.results = {"blobs": results_blobs}
 
                 display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
 
