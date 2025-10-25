@@ -5,11 +5,12 @@ import json
 import os
 import pathlib
 import posixpath
+from datetime import datetime
 
+import asyncpg
 import common.helpers as helpers
 import dapr.ext.workflow as wf
 import magic
-import psycopg
 from common.db import get_postgres_connection_str
 from common.helpers import create_text_reader, get_file_extension, is_container
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, get_logger
@@ -51,6 +52,13 @@ asyncio_loop: asyncio.AbstractEventLoop = None
 # region Helper functions
 #
 ##########################################
+
+
+def parse_timestamp(ts):
+    """Parse a timestamp string or return the datetime object as-is."""
+    if isinstance(ts, str):
+        return datetime.fromisoformat(ts.replace('Z', '+00:00'))
+    return ts
 
 
 def build_dependency_graph(modules):
@@ -100,46 +108,46 @@ def topological_sort(graph):
 ##########################################
 
 
-def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, max_chunk_bytes: int = 800000):
+async def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, max_chunk_bytes: int = 800000):
     """Used to index plaintext content with byte-based chunking to avoid tsvector limits"""
     logger.debug(f"indexing plaintext for {object_id}")
 
-    with psycopg.connect(postgres_connection_string) as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM plaintext_content WHERE object_id = %s", (object_id,))
+    conn = await asyncpg.connect(postgres_connection_string)
+    try:
+        await conn.execute("DELETE FROM plaintext_content WHERE object_id = $1", object_id)
 
-            chunk_number = 0
-            insert_query = """
-            INSERT INTO plaintext_content (object_id, chunk_number, content)
-            VALUES (%s, %s, %s);
-            """
+        chunk_number = 0
+        insert_query = """
+        INSERT INTO plaintext_content (object_id, chunk_number, content)
+        VALUES ($1, $2, $3);
+        """
 
-            # Read file content
-            file_content = file_obj.read()
+        # Read file content
+        file_content = file_obj.read()
 
-            # Process in chunks, ensuring we don't exceed byte limits
-            i = 0
-            while i < len(file_content):
-                # Take a chunk that's guaranteed to be under the byte limit
-                chunk_end = min(i + max_chunk_bytes // 4, len(file_content))  # Div by 4 for worst-case UTF-8
-                chunk_content = file_content[i:chunk_end]
+        # Process in chunks, ensuring we don't exceed byte limits
+        i = 0
+        while i < len(file_content):
+            # Take a chunk that's guaranteed to be under the byte limit
+            chunk_end = min(i + max_chunk_bytes // 4, len(file_content))  # Div by 4 for worst-case UTF-8
+            chunk_content = file_content[i:chunk_end]
 
-                # If chunk is still too big in bytes, trim it down
-                while len(chunk_content.encode("utf-8")) > max_chunk_bytes and chunk_content:
-                    chunk_content = chunk_content[:-100]  # Remove 100 chars at a time
+            # If chunk is still too big in bytes, trim it down
+            while len(chunk_content.encode("utf-8")) > max_chunk_bytes and chunk_content:
+                chunk_content = chunk_content[:-100]  # Remove 100 chars at a time
 
-                if chunk_content:  # Only insert non-empty chunks
-                    actual_bytes = len(chunk_content.encode("utf-8"))
-                    logger.debug(f"Inserting chunk {chunk_number} with {actual_bytes} bytes")
-                    cur.execute(insert_query, (object_id, chunk_number, chunk_content))
-                    chunk_number += 1
+            if chunk_content:  # Only insert non-empty chunks
+                actual_bytes = len(chunk_content.encode("utf-8"))
+                logger.debug(f"Inserting chunk {chunk_number} with {actual_bytes} bytes")
+                await conn.execute(insert_query, object_id, chunk_number, chunk_content)
+                chunk_number += 1
 
-                # Move to next chunk
-                i = chunk_end
-
-            conn.commit()
+            # Move to next chunk
+            i = chunk_end
 
         logger.debug("Indexed chunked content", object_id=object_id, num_chunks=chunk_number)
+    finally:
+        await conn.close()
 
 
 # endregion
@@ -186,76 +194,73 @@ async def get_basic_analysis(ctx, activity_input):
         }
 
         try:
-            with psycopg.connect(postgres_connection_string) as conn:
-                with conn.cursor() as cur:
-                    # Convert field names to match database schema
-                    insert_query = """
-                        INSERT INTO files_enriched (
-                            object_id, agent_id, source, project, timestamp, expiration, path,
-                            file_name, extension, size, magic_type, mime_type,
-                            is_plaintext, is_container, originating_object_id, originating_container_id,
-                            nesting_level, file_creation_time, file_access_time,
-                            file_modification_time, security_info, hashes
-                        ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s, %s
-                        )
-                        ON CONFLICT (object_id) DO UPDATE SET
-                            agent_id = EXCLUDED.agent_id,
-                            source = EXCLUDED.source,
-                            project = EXCLUDED.project,
-                            timestamp = EXCLUDED.timestamp,
-                            expiration = EXCLUDED.expiration,
-                            path = EXCLUDED.path,
-                            file_name = EXCLUDED.file_name,
-                            extension = EXCLUDED.extension,
-                            size = EXCLUDED.size,
-                            magic_type = EXCLUDED.magic_type,
-                            mime_type = EXCLUDED.mime_type,
-                            is_plaintext = EXCLUDED.is_plaintext,
-                            is_container = EXCLUDED.is_container,
-                            originating_object_id = EXCLUDED.originating_object_id,
-                            originating_container_id = EXCLUDED.originating_container_id,
-                            nesting_level = EXCLUDED.nesting_level,
-                            file_creation_time = EXCLUDED.file_creation_time,
-                            file_access_time = EXCLUDED.file_access_time,
-                            file_modification_time = EXCLUDED.file_modification_time,
-                            security_info = EXCLUDED.security_info,
-                            hashes = EXCLUDED.hashes,
-                            updated_at = CURRENT_TIMESTAMP
-                    """
-
-                    cur.execute(
-                        insert_query,
-                        (
-                            file_enriched["object_id"],
-                            file_enriched.get("agent_id"),
-                            file_enriched.get("source"),
-                            file_enriched.get("project"),
-                            file_enriched.get("timestamp"),
-                            file_enriched.get("expiration"),
-                            file_enriched.get("path"),
-                            file_enriched.get("file_name"),
-                            file_enriched.get("extension"),
-                            file_enriched.get("size"),
-                            file_enriched.get("magic_type"),
-                            file_enriched.get("mime_type"),
-                            file_enriched.get("is_plaintext"),
-                            file_enriched.get("is_container"),
-                            file_enriched.get("originating_object_id"),
-                            file_enriched.get("originating_container_id"),
-                            file_enriched.get("nesting_level"),
-                            file_enriched.get("file_creation_time"),
-                            file_enriched.get("file_access_time"),
-                            file_enriched.get("file_modification_time"),
-                            json.dumps(file_enriched.get("security_info"))
-                            if file_enriched.get("security_info")
-                            else None,
-                            json.dumps(file_enriched.get("hashes")) if file_enriched.get("hashes") else None,
-                        ),
+            conn = await asyncpg.connect(postgres_connection_string)
+            try:
+                # Convert field names to match database schema
+                insert_query = """
+                    INSERT INTO files_enriched (
+                        object_id, agent_id, source, project, timestamp, expiration, path,
+                        file_name, extension, size, magic_type, mime_type,
+                        is_plaintext, is_container, originating_object_id, originating_container_id,
+                        nesting_level, file_creation_time, file_access_time,
+                        file_modification_time, security_info, hashes
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                        $17, $18, $19, $20, $21, $22
                     )
-                    conn.commit()
-                    logger.debug("Stored file_enriched in PostgreSQL", object_id=file_enriched["object_id"])
+                    ON CONFLICT (object_id) DO UPDATE SET
+                        agent_id = EXCLUDED.agent_id,
+                        source = EXCLUDED.source,
+                        project = EXCLUDED.project,
+                        timestamp = EXCLUDED.timestamp,
+                        expiration = EXCLUDED.expiration,
+                        path = EXCLUDED.path,
+                        file_name = EXCLUDED.file_name,
+                        extension = EXCLUDED.extension,
+                        size = EXCLUDED.size,
+                        magic_type = EXCLUDED.magic_type,
+                        mime_type = EXCLUDED.mime_type,
+                        is_plaintext = EXCLUDED.is_plaintext,
+                        is_container = EXCLUDED.is_container,
+                        originating_object_id = EXCLUDED.originating_object_id,
+                        originating_container_id = EXCLUDED.originating_container_id,
+                        nesting_level = EXCLUDED.nesting_level,
+                        file_creation_time = EXCLUDED.file_creation_time,
+                        file_access_time = EXCLUDED.file_access_time,
+                        file_modification_time = EXCLUDED.file_modification_time,
+                        security_info = EXCLUDED.security_info,
+                        hashes = EXCLUDED.hashes,
+                        updated_at = CURRENT_TIMESTAMP
+                """
+
+                await conn.execute(
+                    insert_query,
+                    file_enriched["object_id"],
+                    file_enriched.get("agent_id"),
+                    file_enriched.get("source"),
+                    file_enriched.get("project"),
+                    parse_timestamp(file_enriched.get("timestamp")),
+                    parse_timestamp(file_enriched.get("expiration")),
+                    file_enriched.get("path"),
+                    file_enriched.get("file_name"),
+                    file_enriched.get("extension"),
+                    file_enriched.get("size"),
+                    file_enriched.get("magic_type"),
+                    file_enriched.get("mime_type"),
+                    file_enriched.get("is_plaintext"),
+                    file_enriched.get("is_container"),
+                    file_enriched.get("originating_object_id"),
+                    file_enriched.get("originating_container_id"),
+                    file_enriched.get("nesting_level"),
+                    parse_timestamp(file_enriched.get("file_creation_time")),
+                    parse_timestamp(file_enriched.get("file_access_time")),
+                    parse_timestamp(file_enriched.get("file_modification_time")),
+                    json.dumps(file_enriched.get("security_info")) if file_enriched.get("security_info") else None,
+                    json.dumps(file_enriched.get("hashes")) if file_enriched.get("hashes") else None,
+                )
+                logger.debug("Stored file_enriched in PostgreSQL", object_id=file_enriched["object_id"])
+            finally:
+                await conn.close()
         except Exception as e:
             logger.exception(e, message="Error storing file_enriched in PostgreSQL", file_enriched=file_enriched)
             raise
@@ -424,56 +429,60 @@ async def publish_findings_alerts(ctx, activity_input):
     file_enriched = await get_file_enriched_async(object_id)
 
     # Fetch findings from the database for this object_id
-    with psycopg.connect(postgres_connection_string) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT finding_name, category, severity, origin_name, raw_data
-                FROM findings
-                WHERE object_id = %s
-            """,
-                (object_id,),
-            )
+    conn = await asyncpg.connect(postgres_connection_string)
+    try:
+        findings = await conn.fetch(
+            """
+            SELECT finding_name, category, severity, origin_name, raw_data
+            FROM findings
+            WHERE object_id = $1
+        """,
+            object_id,
+        )
 
-            findings = cur.fetchall()
+        if findings:
+            with DaprClient() as client:
+                if file_enriched.path:
+                    file_path = helpers.sanitize_file_path(file_enriched.path)
+                else:
+                    file_path = "UNKNOWN"
 
-            if findings:
-                with DaprClient() as client:
-                    if file_enriched.path:
-                        file_path = helpers.sanitize_file_path(file_enriched.path)
-                    else:
-                        file_path = "UNKNOWN"
+                for finding in findings:
+                    finding_name = finding["finding_name"]
+                    category = finding["category"]
+                    severity = finding["severity"]
+                    origin_name = finding["origin_name"]
+                    raw_data = finding["raw_data"]
 
-                    for finding in findings:
-                        finding_name, category, severity, origin_name, raw_data = finding
+                    finding_message = f"- *Category:* {category} / *Severity:* {severity}\n"
+                    file_message = f"- *File Path:* {file_path}\n"
+                    nemesis_finding_url = f"{nemesis_url}findings?object_id={file_enriched.object_id}"
+                    nemesis_file_url = f"{nemesis_url}files?object_id={file_enriched.object_id}"
+                    nemesis_footer_finding = f"*<{nemesis_finding_url}|View Finding in Nemesis>* / "
+                    nemesis_footer_file = f"*<{nemesis_file_url}|View File in Nemesis>*\n"
+                    separator = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
 
-                        finding_message = f"- *Category:* {category} / *Severity:* {severity}\n"
-                        file_message = f"- *File Path:* {file_path}\n"
-                        nemesis_finding_url = f"{nemesis_url}findings?object_id={file_enriched.object_id}"
-                        nemesis_file_url = f"{nemesis_url}files?object_id={file_enriched.object_id}"
-                        nemesis_footer_finding = f"*<{nemesis_finding_url}|View Finding in Nemesis>* / "
-                        nemesis_footer_file = f"*<{nemesis_file_url}|View File in Nemesis>*\n"
-                        separator = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
+                    rule_message = ""
+                    try:
+                        if finding_name == "noseyparker_match" and raw_data:
+                            if "match" in raw_data and "rule_name" in raw_data["match"]:
+                                rule_name = raw_data["match"]["rule_name"]
+                                rule_message = f"- *Rule name:* {rule_name}\n"
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning("Error processing raw_data for noseyparker_match", error=str(e))
 
-                        rule_message = ""
-                        try:
-                            if finding_name == "noseyparker_match" and raw_data:
-                                if "match" in raw_data and "rule_name" in raw_data["match"]:
-                                    rule_name = raw_data["match"]["rule_name"]
-                                    rule_message = f"- *Rule name:* {rule_name}\n"
-                        except (json.JSONDecodeError, KeyError) as e:
-                            logger.warning("Error processing raw_data for noseyparker_match", error=str(e))
+                    body = f"{finding_message}{rule_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
 
-                        body = f"{finding_message}{rule_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
-
-                        alert = Alert(title=finding_name, body=body, service=origin_name)
-                        client.publish_event(
-                            pubsub_name="pubsub",
-                            topic_name="alert",
-                            data=json.dumps(alert.model_dump(exclude_unset=True)),
-                            data_content_type="application/json",
-                        )
-                        logger.debug("Published alert", alert=alert)
+                    alert = Alert(title=finding_name, body=body, service=origin_name)
+                    client.publish_event(
+                        pubsub_name="pubsub",
+                        topic_name="alert",
+                        data=json.dumps(alert.model_dump(exclude_unset=True)),
+                        data_content_type="application/json",
+                    )
+                    logger.debug("Published alert", alert=alert)
+    finally:
+        await conn.close()
 
 
 @workflow_activity
@@ -490,7 +499,7 @@ async def handle_file_if_plaintext(ctx, activity_input):
         with storage.download(object_id) as tmp_file:
             with open(tmp_file.name, "rb") as binary_file:
                 with create_text_reader(binary_file) as text_file:
-                    index_plaintext_content(f"{object_id}", text_file)
+                    await index_plaintext_content(f"{object_id}", text_file)
 
     nosey_parker_input = NoseyParkerInput(object_id=object_id)
     with DaprClient() as client:
@@ -637,67 +646,66 @@ async def run_enrichment_modules(ctx, activity_input: dict):
                             )
 
                         # Store enrichment result directly in database (same as before)
-                        with psycopg.connect(postgres_connection_string) as conn:
-                            with conn.cursor() as cur:
-                                # Store enrichment
-                                results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
-                                cur.execute(
-                                    """
-                                    INSERT INTO enrichments (object_id, module_name, result_data)
-                                    VALUES (%s, %s, %s)
-                                """,
-                                    (object_id, module_name, results_escaped),
-                                )
+                        conn = await asyncpg.connect(postgres_connection_string)
+                        try:
+                            # Store enrichment
+                            results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
+                            await conn.execute(
+                                """
+                                INSERT INTO enrichments (object_id, module_name, result_data)
+                                VALUES ($1, $2, $3)
+                            """,
+                                object_id,
+                                module_name,
+                                results_escaped,
+                            )
 
-                                # Store any transforms
-                                if result.transforms:
-                                    for transform in result.transforms:
-                                        cur.execute(
-                                            """
-                                            INSERT INTO transforms (object_id, type, transform_object_id, metadata)
-                                            VALUES (%s, %s, %s, %s)
-                                        """,
-                                            (
-                                                object_id,
-                                                transform.type,
-                                                transform.object_id,
-                                                json.dumps(transform.metadata) if transform.metadata else None,
-                                            ),
-                                        )
-
-                                # Store any findings
-                                if result.findings:
-                                    for finding in result.findings:
-                                        cur.execute(
-                                            """
-                                            INSERT INTO findings (
-                                                finding_name, category, severity, object_id,
-                                                origin_type, origin_name, raw_data, data
-                                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                                        """,
-                                            (
-                                                finding.finding_name,
-                                                finding.category,
-                                                finding.severity,
-                                                object_id,
-                                                finding.origin_type,
-                                                finding.origin_name,
-                                                json.dumps(finding.raw_data),
-                                                json.dumps([obj.model_dump_json() for obj in finding.data]),
-                                            ),
-                                        )
-
-                                # Update workflow in database with successful module
-                                cur.execute(
-                                    """
-                                    UPDATE workflows
-                                    SET enrichments_success = array_append(enrichments_success, %s)
-                                    WHERE object_id = %s
+                            # Store any transforms
+                            if result.transforms:
+                                for transform in result.transforms:
+                                    await conn.execute(
+                                        """
+                                        INSERT INTO transforms (object_id, type, transform_object_id, metadata)
+                                        VALUES ($1, $2, $3, $4)
                                     """,
-                                    (module_name, object_id),
-                                )
+                                        object_id,
+                                        transform.type,
+                                        transform.object_id,
+                                        json.dumps(transform.metadata) if transform.metadata else None,
+                                    )
 
-                            conn.commit()
+                            # Store any findings
+                            if result.findings:
+                                for finding in result.findings:
+                                    await conn.execute(
+                                        """
+                                        INSERT INTO findings (
+                                            finding_name, category, severity, object_id,
+                                            origin_type, origin_name, raw_data, data
+                                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                                    """,
+                                        finding.finding_name,
+                                        finding.category,
+                                        finding.severity,
+                                        object_id,
+                                        finding.origin_type,
+                                        finding.origin_name,
+                                        json.dumps(finding.raw_data),
+                                        json.dumps([obj.model_dump_json() for obj in finding.data]),
+                                    )
+
+                            # Update workflow in database with successful module
+                            await conn.execute(
+                                """
+                                UPDATE workflows
+                                SET enrichments_success = array_append(enrichments_success, $1)
+                                WHERE object_id = $2
+                                """,
+                                module_name,
+                                object_id,
+                            )
+                        finally:
+                            await conn.close()
 
                         results.append((module_name, {"status": "success", "module": module_name}))
                         logger.debug("Module completed successfully", module_name=module_name)
@@ -712,17 +720,19 @@ async def run_enrichment_modules(ctx, activity_input: dict):
 
                     # Update workflow in database with failed module
                     try:
-                        with psycopg.connect(postgres_connection_string) as conn:
-                            with conn.cursor() as cur:
-                                cur.execute(
-                                    """
-                                    UPDATE workflows
-                                    SET enrichments_failure = array_append(enrichments_failure, %s)
-                                    WHERE object_id = %s
-                                    """,
-                                    (f"{module_name}:{str(e)[:100]}", object_id),
-                                )
-                                conn.commit()
+                        conn = await asyncpg.connect(postgres_connection_string)
+                        try:
+                            await conn.execute(
+                                """
+                                UPDATE workflows
+                                SET enrichments_failure = array_append(enrichments_failure, $1)
+                                WHERE object_id = $2
+                                """,
+                                f"{module_name}:{str(e)[:100]}",
+                                object_id,
+                            )
+                        finally:
+                            await conn.close()
                     except Exception as db_error:
                         logger.error(f"Failed to update workflow failure in database: {str(db_error)}")
 
