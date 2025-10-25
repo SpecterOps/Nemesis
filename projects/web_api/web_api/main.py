@@ -329,14 +329,15 @@ async def download_file(
 
         headers = {"Content-Type": "text/plain" if raw else "application/octet-stream"}
 
-        if name:
+        if raw:
+            # For raw view, display inline in browser instead of downloading
+            headers["Content-Disposition"] = "inline"
+            headers["X-Content-Type-Options"] = "nosniff"
+        elif name:
             filename = urllib.parse.quote(name)
             headers["Content-Disposition"] = f'attachment; filename="{filename}"'
         else:
             headers["Content-Disposition"] = f'attachment; filename="{object_id}"'
-
-        if raw:
-            headers["X-Content-Type-Options"] = "nosniff"
 
         return StreamingResponse(
             storage.download_stream(object_id), headers=headers, media_type=headers["Content-Type"]
