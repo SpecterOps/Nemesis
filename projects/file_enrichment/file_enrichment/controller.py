@@ -74,8 +74,16 @@ async def lifespan(app: FastAPI):
     await dpapi_manager.__aenter__()
     app.state.dpapi_manager = dpapi_manager
 
+    # Create asyncpg connection pool for WorkflowManager and workflow activities
+    asyncpg_pool = await asyncpg.create_pool(
+        postgres_connection_string,
+        min_size=5,
+        max_size=15,
+    )
+    logger.info("AsyncPG pool created", pid=os.getpid())
+
     # Initialize workflow runtime and modules
-    module_execution_order = await initialize_workflow_runtime(dpapi_manager)
+    module_execution_order = await initialize_workflow_runtime(dpapi_manager, asyncpg_pool)
 
     # Wait a bit for runtime to initialize
     await asyncio.sleep(5)
@@ -83,14 +91,6 @@ async def lifespan(app: FastAPI):
     client = get_workflow_client()
     if client is None:
         raise ValueError("Workflow client not available after initialization")
-
-    # Create asyncpg connection pool for WorkflowManager
-    asyncpg_pool = await asyncpg.create_pool(
-        postgres_connection_string,
-        min_size=5,
-        max_size=15,
-    )
-    logger.info("AsyncPG pool created for WorkflowManager", pid=os.getpid())
 
     try:
         # Use async context manager for WorkflowManager

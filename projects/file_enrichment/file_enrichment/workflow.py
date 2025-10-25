@@ -40,6 +40,7 @@ nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_ur
 
 
 postgres_connection_string = get_postgres_connection_str()
+postgres_pool: asyncpg.Pool = None  # Connection pool for database operations
 
 if not postgres_connection_string.startswith("postgresql://"):
     raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgresql://' to be used with the DpapiManager")
@@ -57,7 +58,7 @@ asyncio_loop: asyncio.AbstractEventLoop = None
 def parse_timestamp(ts):
     """Parse a timestamp string or return the datetime object as-is."""
     if isinstance(ts, str):
-        return datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     return ts
 
 
@@ -112,8 +113,7 @@ async def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, ma
     """Used to index plaintext content with byte-based chunking to avoid tsvector limits"""
     logger.debug(f"indexing plaintext for {object_id}")
 
-    conn = await asyncpg.connect(postgres_connection_string)
-    try:
+    async with postgres_pool.acquire() as conn:
         await conn.execute("DELETE FROM plaintext_content WHERE object_id = $1", object_id)
 
         chunk_number = 0
@@ -146,8 +146,6 @@ async def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, ma
             i = chunk_end
 
         logger.debug("Indexed chunked content", object_id=object_id, num_chunks=chunk_number)
-    finally:
-        await conn.close()
 
 
 # endregion
@@ -194,8 +192,7 @@ async def get_basic_analysis(ctx, activity_input):
         }
 
         try:
-            conn = await asyncpg.connect(postgres_connection_string)
-            try:
+            async with postgres_pool.acquire() as conn:
                 # Convert field names to match database schema
                 insert_query = """
                     INSERT INTO files_enriched (
@@ -259,8 +256,6 @@ async def get_basic_analysis(ctx, activity_input):
                     json.dumps(file_enriched.get("hashes")) if file_enriched.get("hashes") else None,
                 )
                 logger.debug("Stored file_enriched in PostgreSQL", object_id=file_enriched["object_id"])
-            finally:
-                await conn.close()
         except Exception as e:
             logger.exception(e, message="Error storing file_enriched in PostgreSQL", file_enriched=file_enriched)
             raise
@@ -429,8 +424,7 @@ async def publish_findings_alerts(ctx, activity_input):
     file_enriched = await get_file_enriched_async(object_id)
 
     # Fetch findings from the database for this object_id
-    conn = await asyncpg.connect(postgres_connection_string)
-    try:
+    async with postgres_pool.acquire() as conn:
         findings = await conn.fetch(
             """
             SELECT finding_name, category, severity, origin_name, raw_data
@@ -481,8 +475,6 @@ async def publish_findings_alerts(ctx, activity_input):
                         data_content_type="application/json",
                     )
                     logger.debug("Published alert", alert=alert)
-    finally:
-        await conn.close()
 
 
 @workflow_activity
@@ -646,8 +638,7 @@ async def run_enrichment_modules(ctx, activity_input: dict):
                             )
 
                         # Store enrichment result directly in database (same as before)
-                        conn = await asyncpg.connect(postgres_connection_string)
-                        try:
+                        async with postgres_pool.acquire() as conn:
                             # Store enrichment
                             results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
                             await conn.execute(
@@ -704,8 +695,6 @@ async def run_enrichment_modules(ctx, activity_input: dict):
                                 module_name,
                                 object_id,
                             )
-                        finally:
-                            await conn.close()
 
                         results.append((module_name, {"status": "success", "module": module_name}))
                         logger.debug("Module completed successfully", module_name=module_name)
@@ -720,8 +709,7 @@ async def run_enrichment_modules(ctx, activity_input: dict):
 
                     # Update workflow in database with failed module
                     try:
-                        conn = await asyncpg.connect(postgres_connection_string)
-                        try:
+                        async with postgres_pool.acquire() as conn:
                             await conn.execute(
                                 """
                                 UPDATE workflows
@@ -731,8 +719,6 @@ async def run_enrichment_modules(ctx, activity_input: dict):
                                 f"{module_name}:{str(e)[:100]}",
                                 object_id,
                             )
-                        finally:
-                            await conn.close()
                     except Exception as db_error:
                         logger.error(f"Failed to update workflow failure in database: {str(db_error)}")
 
@@ -752,7 +738,7 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
     """Main workflow that orchestrates all enrichment activities."""
 
     if not ctx.is_replaying:
-        logger.warning("Starting main enrichment workflow", workflow_input=workflow_input)
+        logger.debug("Starting main enrichment workflow", workflow_input=workflow_input)
 
     start_time = ctx.current_utc_datetime
 
@@ -913,9 +899,12 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 ##########################################
 
 
-async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
+async def initialize_workflow_runtime(dpapi_manager: DpapiManager, pool: asyncpg.Pool = None):
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-    global wf_runtime, workflow_client, asyncio_loop
+    global wf_runtime, workflow_client, asyncio_loop, postgres_pool
+
+    # Store the connection pool for use in workflow activities
+    postgres_pool = pool
 
     # Load enrichment modules
     module_loader = ModuleLoader()
