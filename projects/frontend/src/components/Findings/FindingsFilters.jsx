@@ -368,7 +368,7 @@ const FindingsFilters = ({
 
     return (
         <div className="p-2 border-b dark:border-gray-700 overflow-x-auto">
-            <div className="flex items-center space-x-4 min-w-max">
+            <div className="flex items-center flex-wrap gap-4">
                 <div className="flex items-center space-x-2">
                     <ThumbsUp className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                     <select
@@ -390,7 +390,7 @@ const FindingsFilters = ({
                     <Filter className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                     <button
                         ref={categoryButtonRef}
-                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors w-52"
+                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors w-34"
                         onClick={handleCategoryDropdownToggle}
                     >
                         <span className="truncate flex-1 text-left">{getCategoryButtonText()}</span>
@@ -436,7 +436,7 @@ const FindingsFilters = ({
                     <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                     <button
                         ref={severityButtonRef}
-                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors w-44"
+                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 flex items-center space-x-2 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors w-34"
                         onClick={handleSeverityDropdownToggle}
                     >
                         <span className="truncate flex-1 text-left">{getSeverityButtonText()}</span>
@@ -489,7 +489,7 @@ const FindingsFilters = ({
                 <div className="flex items-center space-x-2">
                     <Bot className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                     <select
-                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
+                        className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2 w-44"
                         value={triageSourceFilter}
                         onChange={handleTriageSourceChange}
                     >
@@ -502,7 +502,7 @@ const FindingsFilters = ({
                 <button
                     onClick={handleClearFilters}
                     disabled={!hasActiveFilters}
-                    className={`ml-4 px-4 py-2 rounded ${hasActiveFilters
+                    className={`px-2 py-2 rounded ${hasActiveFilters
                         ? 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
                         : 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
                         } transition-colors duration-200`}
@@ -510,7 +510,7 @@ const FindingsFilters = ({
                     Clear Filters
                 </button>
 
-                <span className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                     {filteredFindings.length.toLocaleString()} finding{filteredFindings.length !== 1 ? 's' : ''} found
                 </span>
             </div>
