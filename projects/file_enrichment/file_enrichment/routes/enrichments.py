@@ -9,7 +9,7 @@ import asyncpg
 import common.helpers as helpers
 from common.logger import get_logger
 from fastapi import APIRouter, Body, HTTPException, Path, Request
-from file_enrichment.workflow import modules
+from file_enrichment.workflow import global_module_map
 from pydantic import BaseModel
 
 logger = get_logger(__name__)
@@ -25,7 +25,7 @@ class EnrichmentRequest(BaseModel):
 async def list_enabled_llm_enrichments():
     """List the enabled LLM enrichments based on environment variables."""
     try:
-        if not modules:
+        if not global_module_map:
             raise HTTPException(status_code=503, detail="Modules not initialized")
 
         llm_enrichments = []
@@ -47,10 +47,10 @@ async def list_enabled_llm_enrichments():
 async def list_enrichments():
     """List all available enrichment modules."""
     try:
-        if not modules:
+        if not global_module_map:
             raise HTTPException(status_code=503, detail="Modules not initialized")
 
-        module_names = list(modules.keys())
+        module_names = list(global_module_map.keys())
         return {"modules": module_names}
 
     except Exception as e:
@@ -69,14 +69,14 @@ async def run_enrichment(
         # Get asyncpg pool from app state
         asyncpg_pool: asyncpg.Pool = request.app.state.asyncpg_pool
         # Check if module
-        if not modules:
+        if not global_module_map:
             raise HTTPException(status_code=503, detail="Modules not initialized")
 
-        if enrichment_name not in modules:
+        if enrichment_name not in global_module_map:
             raise HTTPException(status_code=404, detail=f"Enrichment module '{enrichment_name}' not found")
 
         # Get the module
-        module = modules[enrichment_name]
+        module = global_module_map[enrichment_name]
 
         # Check if we should process this file - run in thread since it might use sync operations
         should_process = await asyncio.to_thread(module.should_process, enrichment_request.object_id)

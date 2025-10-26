@@ -5,7 +5,7 @@ from common.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def process_bulk_enrichment_event(data: dict, workflow_manager, modules):
+async def process_bulk_enrichment_event(data: dict, workflow_manager, global_module_map):
     """Process individual bulk enrichment tasks"""
     try:
         enrichment_name = data.get("enrichment_name")
@@ -17,11 +17,11 @@ async def process_bulk_enrichment_event(data: dict, workflow_manager, modules):
         )
 
         # Check if module exists
-        if not modules:
+        if not global_module_map:
             logger.error("Modules not initialized")
             return
 
-        if enrichment_name not in modules:
+        if enrichment_name not in global_module_map:
             logger.error(f"Enrichment module '{enrichment_name}' not found")
             return
 
