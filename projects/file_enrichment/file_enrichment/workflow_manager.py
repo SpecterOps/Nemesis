@@ -421,6 +421,8 @@ class WorkflowManager:
                     logger.info(
                         "Updating workflow status",
                         processing_time=f"{processing_time:.4f}s",
+                        instance_id=instance_id,
+                        status=final_status,
                     )
                     await self.update_workflow_status(instance_id, final_status, processing_time)
 
