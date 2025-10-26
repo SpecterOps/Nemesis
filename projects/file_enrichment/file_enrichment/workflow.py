@@ -463,41 +463,6 @@ async def run_enrichment_modules(ctx, activity_input: dict):
                         result: EnrichmentResult = result_or_coro
 
                     if result:
-                        # Debug: Check for coroutines in the result before serialization
-                        import inspect
-
-                        def check_for_coroutines(obj, path="root"):
-                            """Recursively check for coroutines in nested structures."""
-                            if inspect.iscoroutine(obj):
-                                logger.error(f"FOUND COROUTINE at {path}: {obj}")
-                                return True
-                            elif isinstance(obj, dict):
-                                for key, value in obj.items():
-                                    if check_for_coroutines(value, f"{path}.{key}"):
-                                        return True
-                            elif isinstance(obj, (list, tuple)):
-                                for i, item in enumerate(obj):
-                                    if check_for_coroutines(item, f"{path}[{i}]"):
-                                        return True
-                            return False
-
-                        # Check the result object
-                        try:
-                            result_dict = result.model_dump(mode="json")
-                            if check_for_coroutines(result_dict, f"result({module_name})"):
-                                logger.error(
-                                    "Coroutine found in enrichment result before serialization",
-                                    module_name=module_name,
-                                    object_id=object_id,
-                                    result_keys=list(result_dict.keys()) if isinstance(result_dict, dict) else None,
-                                )
-                        except Exception as debug_err:
-                            logger.error(
-                                "Error during coroutine debug check",
-                                module_name=module_name,
-                                error=str(debug_err),
-                            )
-
                         # Store enrichment result directly in database (same as before)
                         async with postgres_pool.acquire() as conn:
                             # Store enrichment
