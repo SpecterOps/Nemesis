@@ -42,14 +42,9 @@ gotenberg_url = f"http://localhost:{dapr_port}/v1.0/invoke/gotenberg/method/form
 nemesis_url = os.getenv("NEMESIS_URL", "http://localhost/")
 nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_url
 
-
-postgres_connection_string = get_postgres_connection_str()
 postgres_pool: asyncpg.Pool = None  # Connection pool for database operations
 
-if not postgres_connection_string.startswith("postgresql://"):
-    raise ValueError("POSTGRES_CONNECTION_STRING must start with 'postgresql://' to be used with the DpapiManager")
-
-file_linking_engine = FileLinkingEngine(postgres_connection_string)
+file_linking_engine = FileLinkingEngine(get_postgres_connection_str())
 asyncio_loop: asyncio.AbstractEventLoop = None
 
 ##########################################
