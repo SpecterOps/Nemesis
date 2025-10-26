@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import asyncpg
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
-from common.models import CloudEvent, File
+from common.models import BulkEnrichmentTask, CloudEvent, DotNetOutput, File, NoseyParkerOutput
 from common.workflows.setup import set_fastapi_loop
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
@@ -179,19 +179,19 @@ async def process_file(event: CloudEvent[File]):
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")
-async def process_dotnet_results(event: CloudEvent):
+async def process_dotnet_results(event: CloudEvent[DotNetOutput]):
     """Handler for incoming .NET processing results from the dotnet_service."""
     await process_dotnet_event(event.data, app.state.asyncpg_pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")
-async def process_nosey_parker_results(event: CloudEvent):
+async def process_nosey_parker_results(event: CloudEvent[NoseyParkerOutput]):
     """Handler for incoming Nosey Parker scan results"""
     await process_noseyparker_event(event.data, app.state.asyncpg_pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")
-async def process_bulk_enrichment_task(event: CloudEvent):
+async def process_bulk_enrichment_task(event: CloudEvent[BulkEnrichmentTask]):
     """Handler for individual bulk enrichment tasks"""
     global workflow_manager
     from .workflow import global_module_map

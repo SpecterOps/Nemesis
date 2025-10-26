@@ -720,13 +720,11 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
     try:
         enrichment_name = workflow_input["enrichment_name"]
         object_id = workflow_input["object_id"]
-        bulk_id = workflow_input.get("bulk_id")  # For tracking bulk operation progress
 
         workflow_logger.debug(
             "Starting single enrichment workflow",
             enrichment_name=enrichment_name,
             object_id=object_id,
-            bulk_id=bulk_id,
             instance_id=ctx.instance_id,
         )
 
@@ -742,7 +740,6 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
             "Single enrichment workflow completed",
             enrichment_name=enrichment_name,
             object_id=object_id,
-            bulk_id=bulk_id,
             result=result,
             instance_id=ctx.instance_id,
         )
@@ -754,7 +751,6 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
             "Error in single enrichment workflow",
             enrichment_name=enrichment_name if "enrichment_name" in locals() else "unknown",
             object_id=object_id if "object_id" in locals() else "unknown",
-            bulk_id=bulk_id if "bulk_id" in locals() else None,
             error=str(e),
         )
         raise

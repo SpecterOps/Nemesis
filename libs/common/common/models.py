@@ -198,6 +198,18 @@ class NoseyParkerOutput(BaseModel):
 
 ##########################################
 #
+# Bulk Enrichment
+#
+##########################################
+
+
+class BulkEnrichmentTask(BaseModel):
+    enrichment_name: str
+    object_id: str
+
+
+##########################################
+#
 # Model for files submitted to the API
 #
 ##########################################
