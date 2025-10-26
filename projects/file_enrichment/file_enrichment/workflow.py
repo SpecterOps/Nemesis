@@ -262,135 +262,6 @@ async def get_basic_analysis(ctx, activity_input):
         return file_enriched
 
 
-# @workflow_runtime.activity
-# async def extract_and_store_features(ctx, activity_input):
-#     """Extract features from a file and store them in PostgreSQL."""
-#     try:
-#         logger.info("Starting feature extraction")
-#         object_id = activity_input["object_id"]
-#         file_enriched = get_file_enriched(object_id)
-
-#         # we only want to process things that were submitted and not things extracted/post-processed
-#         #   so things that don't have an originating_object_id
-#         if not file_enriched.originating_object_id:
-#             # Initialize feature extractor
-#             extractor = FileFeatureExtractor()
-
-#             # Default timestamp for missing values (Unix epoch)
-#             DEFAULT_TIMESTAMP = datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.now().astimezone().tzinfo)
-
-#             # Use file timestamps from file_enriched, using epoch if not available
-#             creation_time = file_enriched.creation_time if file_enriched.creation_time else DEFAULT_TIMESTAMP
-#             modification_time = (
-#                 file_enriched.modification_time if file_enriched.modification_time else DEFAULT_TIMESTAMP
-#             )
-#             access_time = file_enriched.access_time if file_enriched.access_time else DEFAULT_TIMESTAMP
-
-#             # Extract features
-#             features = extractor.extract_indivdiual_features(
-#                 filepath=file_enriched.path,
-#                 size=file_enriched.size,
-#                 created_time=creation_time,
-#                 modified_time=modification_time,
-#                 accessed_time=access_time,
-#             )
-
-#             # Extract version and remove from features dict
-#             features_version = features.pop("_features_version")
-
-#             # Create labels dictionary
-#             labels = {
-#                 "has_finding": False,
-#                 "has_credential": False,
-#                 "has_dotnet_vulns": False,
-#                 "has_pii": False,
-#                 "has_yara_match": False,
-#                 "viewed": False,
-#             }
-
-#             # Fetch findings from database and update labels
-#             with psycopg.connect(postgres_connection_string) as conn:
-#                 with conn.cursor() as cur:
-#                     # First get the findings
-#                     cur.execute(
-#                         """
-#                         SELECT category, finding_name
-#                         FROM findings
-#                         WHERE object_id = %s
-#                     """,
-#                         (file_enriched.object_id,),
-#                     )
-
-#                     findings = cur.fetchall()
-
-#                     if findings:
-#                         labels["has_finding"] = True
-#                         for category, finding_name in findings:
-#                             if category == "credential":
-#                                 labels["has_credential"] = True
-#                             elif category == "vulnerability" and finding_name == "dotnet_vulns":
-#                                 labels["has_dotnet_vulns"] = True
-#                             elif category == "pii":
-#                                 labels["has_pii"] = True
-#                             elif category == "yara_match":
-#                                 labels["has_yara_match"] = True
-
-#                     # Parse timestamps to datetime objects if they're strings
-#                     def parse_timestamp(ts):
-#                         if isinstance(ts, str):
-#                             return datetime.fromisoformat(ts)
-#                         return ts
-
-#                     # Now insert into files_enriched_dataset
-#                     query = """
-#                     INSERT INTO files_enriched_dataset (
-#                         object_id, agent_id, source, project, timestamp, expiration,
-#                         path, file_creation_time, file_access_time, file_modification_time,
-#                         features_version, individual_features, labels
-#                     ) VALUES (
-#                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-#                     ) ON CONFLICT (object_id) DO UPDATE SET
-#                         agent_id = EXCLUDED.agent_id,
-#                         source = EXCLUDED.source,
-#                         project = EXCLUDED.project,
-#                         timestamp = EXCLUDED.timestamp,
-#                         expiration = EXCLUDED.expiration,
-#                         path = EXCLUDED.path,
-#                         file_creation_time = EXCLUDED.file_creation_time,
-#                         file_access_time = EXCLUDED.file_access_time,
-#                         file_modification_time = EXCLUDED.file_modification_time,
-#                         features_version = EXCLUDED.features_version,
-#                         individual_features = EXCLUDED.individual_features,
-#                         labels = EXCLUDED.labels;
-#                     """
-
-#                     cur.execute(
-#                         query,
-#                         [
-#                             file_enriched.object_id,
-#                             file_enriched.agent_id,
-#                             file_enriched.source,
-#                             file_enriched.project,
-#                             parse_timestamp(file_enriched.timestamp),
-#                             parse_timestamp(file_enriched.expiration) if file_enriched.expiration else None,
-#                             file_enriched.path,
-#                             creation_time,
-#                             access_time,
-#                             modification_time,
-#                             features_version,
-#                             json.dumps(features),
-#                             json.dumps(labels),
-#                         ],
-#                     )
-#                     conn.commit()
-
-#             logger.info("Successfully stored file features in dataset", object_id=file_enriched.object_id)
-
-#     except Exception as e:
-#         logger.exception(e, message="Error extracting and storing features", activity_input=activity_input)
-#         raise
-
-
 @workflow_activity
 async def check_file_linkings(ctx, activity_input):
     """
@@ -962,3 +833,132 @@ def reload_yara_rules():
 
 
 # endregion
+
+
+# @workflow_runtime.activity
+# async def extract_and_store_features(ctx, activity_input):
+#     """Extract features from a file and store them in PostgreSQL."""
+#     try:
+#         logger.info("Starting feature extraction")
+#         object_id = activity_input["object_id"]
+#         file_enriched = get_file_enriched(object_id)
+
+#         # we only want to process things that were submitted and not things extracted/post-processed
+#         #   so things that don't have an originating_object_id
+#         if not file_enriched.originating_object_id:
+#             # Initialize feature extractor
+#             extractor = FileFeatureExtractor()
+
+#             # Default timestamp for missing values (Unix epoch)
+#             DEFAULT_TIMESTAMP = datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.now().astimezone().tzinfo)
+
+#             # Use file timestamps from file_enriched, using epoch if not available
+#             creation_time = file_enriched.creation_time if file_enriched.creation_time else DEFAULT_TIMESTAMP
+#             modification_time = (
+#                 file_enriched.modification_time if file_enriched.modification_time else DEFAULT_TIMESTAMP
+#             )
+#             access_time = file_enriched.access_time if file_enriched.access_time else DEFAULT_TIMESTAMP
+
+#             # Extract features
+#             features = extractor.extract_indivdiual_features(
+#                 filepath=file_enriched.path,
+#                 size=file_enriched.size,
+#                 created_time=creation_time,
+#                 modified_time=modification_time,
+#                 accessed_time=access_time,
+#             )
+
+#             # Extract version and remove from features dict
+#             features_version = features.pop("_features_version")
+
+#             # Create labels dictionary
+#             labels = {
+#                 "has_finding": False,
+#                 "has_credential": False,
+#                 "has_dotnet_vulns": False,
+#                 "has_pii": False,
+#                 "has_yara_match": False,
+#                 "viewed": False,
+#             }
+
+#             # Fetch findings from database and update labels
+#             with psycopg.connect(postgres_connection_string) as conn:
+#                 with conn.cursor() as cur:
+#                     # First get the findings
+#                     cur.execute(
+#                         """
+#                         SELECT category, finding_name
+#                         FROM findings
+#                         WHERE object_id = %s
+#                     """,
+#                         (file_enriched.object_id,),
+#                     )
+
+#                     findings = cur.fetchall()
+
+#                     if findings:
+#                         labels["has_finding"] = True
+#                         for category, finding_name in findings:
+#                             if category == "credential":
+#                                 labels["has_credential"] = True
+#                             elif category == "vulnerability" and finding_name == "dotnet_vulns":
+#                                 labels["has_dotnet_vulns"] = True
+#                             elif category == "pii":
+#                                 labels["has_pii"] = True
+#                             elif category == "yara_match":
+#                                 labels["has_yara_match"] = True
+
+#                     # Parse timestamps to datetime objects if they're strings
+#                     def parse_timestamp(ts):
+#                         if isinstance(ts, str):
+#                             return datetime.fromisoformat(ts)
+#                         return ts
+
+#                     # Now insert into files_enriched_dataset
+#                     query = """
+#                     INSERT INTO files_enriched_dataset (
+#                         object_id, agent_id, source, project, timestamp, expiration,
+#                         path, file_creation_time, file_access_time, file_modification_time,
+#                         features_version, individual_features, labels
+#                     ) VALUES (
+#                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+#                     ) ON CONFLICT (object_id) DO UPDATE SET
+#                         agent_id = EXCLUDED.agent_id,
+#                         source = EXCLUDED.source,
+#                         project = EXCLUDED.project,
+#                         timestamp = EXCLUDED.timestamp,
+#                         expiration = EXCLUDED.expiration,
+#                         path = EXCLUDED.path,
+#                         file_creation_time = EXCLUDED.file_creation_time,
+#                         file_access_time = EXCLUDED.file_access_time,
+#                         file_modification_time = EXCLUDED.file_modification_time,
+#                         features_version = EXCLUDED.features_version,
+#                         individual_features = EXCLUDED.individual_features,
+#                         labels = EXCLUDED.labels;
+#                     """
+
+#                     cur.execute(
+#                         query,
+#                         [
+#                             file_enriched.object_id,
+#                             file_enriched.agent_id,
+#                             file_enriched.source,
+#                             file_enriched.project,
+#                             parse_timestamp(file_enriched.timestamp),
+#                             parse_timestamp(file_enriched.expiration) if file_enriched.expiration else None,
+#                             file_enriched.path,
+#                             creation_time,
+#                             access_time,
+#                             modification_time,
+#                             features_version,
+#                             json.dumps(features),
+#                             json.dumps(labels),
+#                         ],
+#                     )
+#                     conn.commit()
+
+#             logger.info("Successfully stored file features in dataset", object_id=file_enriched.object_id)
+
+#     except Exception as e:
+#         logger.exception(e, message="Error extracting and storing features", activity_input=activity_input)
+#         raise
