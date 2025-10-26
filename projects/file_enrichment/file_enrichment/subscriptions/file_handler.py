@@ -74,7 +74,6 @@ async def save_file_message(file: File, pool: asyncpg.Pool):
 async def process_file_event(file: File, workflow_manager, module_execution_order: list, pool: asyncpg.Pool):
     """Process incoming file events"""
     try:
-        # Save the file message to database first for recovery purposes
         await save_file_message(file, pool)
 
         workflow_input = {
@@ -82,7 +81,6 @@ async def process_file_event(file: File, workflow_manager, module_execution_orde
             "execution_order": module_execution_order,
         }
 
-        # This will block if we're at max capacity, providing natural backpressure
         await workflow_manager.start_workflow(workflow_input)
 
     except Exception as e:

@@ -13,14 +13,12 @@ logger = get_logger(__name__)
 async def process_noseyparker_event(nosey_output: NoseyParkerOutput, pool: asyncpg.Pool):
     """Process incoming Nosey Parker scan results"""
     try:
-        # Now process the properly parsed output
         object_id = nosey_output.object_id
         matches = nosey_output.scan_result.matches
         stats = nosey_output.scan_result.stats
 
         logger.debug(f"Found {len(matches)} matches for object {object_id}", pid=os.getpid())
 
-        # Store the findings in the database using our helper function
         await store_noseyparker_results(
             object_id=object_id,
             matches=matches,

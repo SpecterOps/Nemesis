@@ -20,7 +20,7 @@ async def process_dotnet_event(dotnet_output: DotNetOutput, pool: asyncpg.Pool) 
 
         object_id = dotnet_output.object_id
         decompilation_object_id = dotnet_output.decompilation
-        analysis = dotnet_output.get_parsed_analysis()
+        analysis = dotnet_output.analysis
 
         file_enriched = await get_file_enriched_async(object_id)
 
