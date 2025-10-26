@@ -20,17 +20,21 @@ from common.storage import StorageMinio
 from common.workflows.setup import wf_runtime, workflow_activity
 from dapr.clients import DaprClient
 from dapr.ext.workflow.logger.options import LoggerOptions
-from file_enrichment_modules.module_loader import ModuleLoader
+from file_enrichment_modules.module_loader import EnrichmentModule, ModuleLoader
 from file_linking import FileLinkingEngine
 from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)
 
-
-workflow_client: wf.DaprWorkflowClient = None
+workflow_client = wf.DaprWorkflowClient(
+    logger_options=LoggerOptions(
+        log_level=WORKFLOW_CLIENT_LOG_LEVEL,
+    )
+)
 activity_functions = {}
 download_path = "/tmp/"
 storage = StorageMinio()
+modules: dict[str, EnrichmentModule] = {}  # Enrichment modules loaded at initialization
 
 dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
 gotenberg_url = f"http://localhost:{dapr_port}/v1.0/invoke/gotenberg/method/forms/libreoffice/convert"
@@ -568,11 +572,11 @@ async def run_enrichment_modules(ctx, activity_input: dict):
             # First pass: determine which modules should process this file
             modules_to_process = []
             for module_name in execution_order:
-                if module_name not in wf_runtime.modules:
+                if module_name not in modules:
                     logger.warning("Module not found", module_name=module_name)
                     continue
 
-                module = wf_runtime.modules[module_name]
+                module = modules[module_name]
                 try:
                     should_process = module.should_process(object_id, temp_file.name)
 
@@ -589,7 +593,7 @@ async def run_enrichment_modules(ctx, activity_input: dict):
             # Second pass: process with modules that should run
             for module_name in modules_to_process:
                 try:
-                    module = wf_runtime.modules[module_name]
+                    module = modules[module_name]
                     logger.debug("Starting module processing", module_name=module_name)
 
                     # Check if the module's process method returns a coroutine (async)
@@ -901,7 +905,7 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 
 async def initialize_workflow_runtime(dpapi_manager: DpapiManager, pool: asyncpg.Pool = None):
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-    global wf_runtime, workflow_client, asyncio_loop, postgres_pool
+    global wf_runtime, workflow_client, asyncio_loop, postgres_pool, modules
 
     # Store the connection pool for use in workflow activities
     postgres_pool = pool
@@ -909,7 +913,7 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager, pool: asyncpg
     # Load enrichment modules
     module_loader = ModuleLoader()
     await module_loader.load_modules()
-    wf_runtime.modules = module_loader.modules
+    modules = module_loader.modules
 
     asyncio_loop = asyncio.get_running_loop()
 
@@ -917,12 +921,12 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager, pool: asyncpg
     workflow_name = "default"  # This could be made configurable later
     available_modules = {
         name: module
-        for name, module in wf_runtime.modules.items()
+        for name, module in modules.items()
         if hasattr(module, "workflows") and workflow_name in module.workflows
     }
 
     # janky pass-through for any modules that have a 'dpapi_manager' property
-    for module in wf_runtime.modules.values():
+    for module in modules.values():
         if hasattr(module, "dpapi_manager") and module.dpapi_manager is None:
             logger.debug(f"Setting 'dpapi_manager' for '{module}'")
             module.dpapi_manager = dpapi_manager  # type: ignore
@@ -941,30 +945,14 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager, pool: asyncpg
         execution_order=execution_order,
         workflow=workflow_name,
         total_modules=len(available_modules),
-        filtered_from=len(wf_runtime.modules),
+        filtered_from=len(modules),
     )
 
-    # Modules are now processed within the run_enrichment_modules activity
-    #   No need to register individual activities for each module
     logger.info("Modules loaded and ready for processing", total_modules=len(available_modules))
 
-    # Start workflow runtime
     wf_runtime.start()
 
-    # Initialize workflow client
-    workflow_client = wf.DaprWorkflowClient(
-        logger_options=LoggerOptions(
-            log_level=WORKFLOW_CLIENT_LOG_LEVEL,
-        )
-    )
-
     return execution_order
-
-
-def shutdown_workflow_runtime():
-    """Shutdown the workflow runtime"""
-    if wf_runtime:
-        wf_runtime.shutdown()
 
 
 def get_workflow_client() -> wf.DaprWorkflowClient:
@@ -975,7 +963,7 @@ def get_workflow_client() -> wf.DaprWorkflowClient:
 def reload_yara_rules():
     """Reloads all disk/state yara rules."""
     logger.debug("workflow/workflow.py reloading Yara rules")
-    wf_runtime.modules["yara"].rule_manager.load_rules()
+    modules["yara"].rule_manager.load_rules()
 
 
 # endregion

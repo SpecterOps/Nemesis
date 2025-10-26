@@ -9,7 +9,7 @@ import asyncpg
 import common.helpers as helpers
 from common.logger import get_logger
 from fastapi import APIRouter, Body, HTTPException, Path, Request
-from file_enrichment.workflow import wf_runtime
+from file_enrichment.workflow import modules
 from pydantic import BaseModel
 
 logger = get_logger(__name__)
@@ -25,8 +25,8 @@ class EnrichmentRequest(BaseModel):
 async def list_enabled_llm_enrichments():
     """List the enabled LLM enrichments based on environment variables."""
     try:
-        if not wf_runtime or not wf_runtime.modules:
-            raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
+        if not modules:
+            raise HTTPException(status_code=503, detail="Modules not initialized")
 
         llm_enrichments = []
         if os.getenv("RIGGING_GENERATOR_CREDENTIALS"):
@@ -47,11 +47,11 @@ async def list_enabled_llm_enrichments():
 async def list_enrichments():
     """List all available enrichment modules."""
     try:
-        if not wf_runtime or not wf_runtime.modules:
-            raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
+        if not modules:
+            raise HTTPException(status_code=503, detail="Modules not initialized")
 
-        modules = list(wf_runtime.modules.keys())
-        return {"modules": modules}
+        module_names = list(modules.keys())
+        return {"modules": module_names}
 
     except Exception as e:
         logger.exception(e, message="Error listing enrichment modules", pid=os.getpid())
@@ -69,14 +69,14 @@ async def run_enrichment(
         # Get asyncpg pool from app state
         asyncpg_pool: asyncpg.Pool = request.app.state.asyncpg_pool
         # Check if module
-        if not wf_runtime or not wf_runtime.modules:
-            raise HTTPException(status_code=503, detail="Workflow runtime or modules not initialized")
+        if not modules:
+            raise HTTPException(status_code=503, detail="Modules not initialized")
 
-        if enrichment_name not in wf_runtime.modules:
+        if enrichment_name not in modules:
             raise HTTPException(status_code=404, detail=f"Enrichment module '{enrichment_name}' not found")
 
         # Get the module
-        module = wf_runtime.modules[enrichment_name]
+        module = modules[enrichment_name]
 
         # Check if we should process this file - run in thread since it might use sync operations
         should_process = await asyncio.to_thread(module.should_process, enrichment_request.object_id)

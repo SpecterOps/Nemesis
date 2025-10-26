@@ -22,7 +22,7 @@ from .subscriptions.bulk_enrichment_handler import process_bulk_enrichment_event
 from .subscriptions.dotnet_handler import process_dotnet_event
 from .subscriptions.file_handler import process_file_event
 from .subscriptions.noseyparker_handler import process_noseyparker_event
-from .workflow import get_workflow_client, initialize_workflow_runtime, shutdown_workflow_runtime, wf_runtime
+from .workflow import get_workflow_client, initialize_workflow_runtime, wf_runtime
 from .workflow_manager import WorkflowManager
 
 logger = get_logger(__name__)
@@ -140,7 +140,8 @@ async def lifespan(app: FastAPI):
                     except asyncio.CancelledError:
                         logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
 
-                shutdown_workflow_runtime()
+                if wf_runtime:
+                    wf_runtime.shutdown()
 
                 dapr_client.close()
 
@@ -264,4 +265,5 @@ async def process_nosey_parker_results(event: CloudEvent):
 async def process_bulk_enrichment_task(event: CloudEvent):
     """Handler for individual bulk enrichment tasks"""
     global workflow_manager
-    await process_bulk_enrichment_event(event.data, workflow_manager, wf_runtime)
+    from .workflow import modules
+    await process_bulk_enrichment_event(event.data, workflow_manager, modules)
