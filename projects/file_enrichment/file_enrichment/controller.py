@@ -14,7 +14,6 @@ from file_enrichment.postgres_notifications import postgres_notify_listener
 from file_enrichment.workflow_recovery import recover_interrupted_workflows
 from nemesis_dpapi import DpapiManager as NemesisDpapiManager
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
-from psycopg_pool import ConnectionPool
 
 from .debug_utils import setup_debug_signals
 from .routes.dpapi import dpapi_background_monitor, dpapi_router
@@ -33,8 +32,6 @@ max_workflow_execution_time = int(
 )  # maximum time (in seconds) until a workflow is killed
 
 logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
-
-pool = ConnectionPool(get_postgres_connection_str(), open=True)
 
 module_execution_order = []
 workflow_manager: WorkflowManager = None
@@ -60,7 +57,6 @@ async def lifespan(app: FastAPI):
     app.state.event_loop = asyncio.get_running_loop()
     set_fastapi_loop(asyncio.get_event_loop())
 
-    # Create asyncpg connection pool for WorkflowManager and workflow activities
     dapr_client = DaprClient()
     postgres_connection_string = get_postgres_connection_str(dapr_client)
 
@@ -69,7 +65,7 @@ async def lifespan(app: FastAPI):
         min_size=5,
         max_size=15,
     )
-    logger.info("AsyncPG pool created", pid=os.getpid())
+    app.state.asyncpg_pool = asyncpg_pool
 
     # Initialize global DpapiManager for the application lifetime
     dpapi_manager = NemesisDpapiManager(
@@ -107,7 +103,7 @@ async def lifespan(app: FastAPI):
                 logger.info("Started masterkey watcher task", pid=os.getpid())
 
                 # Recover any interrupted workflows before starting normal processing
-                await recover_interrupted_workflows(pool)
+                await recover_interrupted_workflows(asyncpg_pool)
 
                 logger.info(
                     "Workflow runtime initialized successfully",
@@ -249,19 +245,19 @@ async def debug_tasks():
 async def process_file(event: CloudEvent[File]):
     """Handler for incoming file events"""
     global workflow_manager
-    await process_file_event(event.data, workflow_manager, module_execution_order, pool)
+    await process_file_event(event.data, workflow_manager, module_execution_order, app.state.asyncpg_pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")
 async def process_dotnet_results(event: CloudEvent):
     """Handler for incoming .NET processing results from the dotnet_service."""
-    await process_dotnet_event(event.data, pool)
+    await process_dotnet_event(event.data, app.state.asyncpg_pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")
 async def process_nosey_parker_results(event: CloudEvent):
     """Handler for incoming Nosey Parker scan results"""
-    await process_noseyparker_event(event.data, pool)
+    await process_noseyparker_event(event.data, app.state.asyncpg_pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")

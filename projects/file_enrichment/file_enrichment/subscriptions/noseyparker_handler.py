@@ -3,15 +3,15 @@
 import json
 import os
 
+import asyncpg
 from common.logger import get_logger
 from common.models import NoseyParkerOutput
 from file_enrichment.noseyparker import store_noseyparker_results
-from psycopg_pool import ConnectionPool
 
 logger = get_logger(__name__)
 
 
-async def process_noseyparker_event(raw_data, pool: ConnectionPool):
+async def process_noseyparker_event(raw_data, pool: asyncpg.Pool):
     """Process incoming Nosey Parker scan results"""
     try:
         # Extract the raw data

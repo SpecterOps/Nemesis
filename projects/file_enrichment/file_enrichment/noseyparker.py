@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import json
 import re
@@ -7,11 +6,10 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-import psycopg
+import asyncpg
 from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, MatchInfo, ScanStats
-from psycopg_pool import ConnectionPool
 
 logger = get_logger(__name__)
 
@@ -162,7 +160,7 @@ async def store_noseyparker_results(
     object_id: str,
     matches: list[MatchInfo],
     scan_stats: ScanStats,
-    pool: ConnectionPool,
+    pool: asyncpg.Pool,
 ):
     """
     Store Nosey Parker results in the database, including creating findings.
@@ -171,21 +169,20 @@ async def store_noseyparker_results(
         object_id (str): The object ID of the file that was scanned
         matches (List[MatchInfo]): List of match information from Nosey Parker
         scan_stats (dict, optional): Statistics about the scan
-        pool (ConnectionPool): Database connection pool
+        pool (asyncpg.Pool): Database connection pool
     """
     try:
         try:
-            with pool.connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        UPDATE workflows
-                        SET enrichments_success = array_append(enrichments_failure, %s)
-                        WHERE object_id = %s
-                        """,
-                        ("noseyparker", object_id),
-                    )
-                    conn.commit()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE workflows
+                    SET enrichments_success = array_append(enrichments_failure, $1)
+                    WHERE object_id = $2
+                    """,
+                    "noseyparker",
+                    object_id,
+                )
         except Exception as db_error:
             logger.error(f"Failed to update noseyparker enrichment success in database: {str(db_error)}")
 
@@ -233,55 +230,49 @@ async def store_noseyparker_results(
         # Add findings to enrichment result
         enrichment_result.findings = findings_list
 
-        def store_in_db():
-            with pool.connection() as conn:
-                with conn.cursor() as cur:
-                    # Store main enrichment result
-                    results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
-                    cur.execute(
-                        """
-                        INSERT INTO enrichments (object_id, module_name, result_data)
-                        VALUES (%s, %s, %s)
-                        """,
-                        (object_id, "noseyparker", results_escaped),
-                    )
+        # Store in database
+        async with pool.acquire() as conn:
+            # Store main enrichment result
+            results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
+            await conn.execute(
+                """
+                INSERT INTO enrichments (object_id, module_name, result_data)
+                VALUES ($1, $2, $3)
+                """,
+                object_id,
+                "noseyparker",
+                results_escaped,
+            )
 
-                    # Store any findings
-                    for finding in findings_list:
-                        # Convert each FileObject to a JSON string
-                        data_as_strings = []
-                        for obj in finding.data:
-                            # Convert the model to a dict first
-                            if hasattr(obj, "model_dump"):
-                                obj_dict = obj.model_dump()
-                            else:
-                                obj_dict = obj
-                            sanitized_obj = sanitize_for_jsonb(obj_dict)
-                            data_as_strings.append(json.dumps(sanitized_obj))
+            # Store any findings
+            for finding in findings_list:
+                # Convert each FileObject to a JSON string
+                data_as_strings = []
+                for obj in finding.data:
+                    # Convert the model to a dict first
+                    if hasattr(obj, "model_dump"):
+                        obj_dict = obj.model_dump()
+                    else:
+                        obj_dict = obj
+                    sanitized_obj = sanitize_for_jsonb(obj_dict)
+                    data_as_strings.append(json.dumps(sanitized_obj))
 
-                        cur.execute(
-                            """
-                            INSERT INTO findings (
-                                finding_name, category, severity, object_id,
-                                origin_type, origin_name, raw_data, data
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                            """,
-                            (
-                                finding.finding_name,
-                                finding.category,
-                                finding.severity,
-                                object_id,
-                                finding.origin_type,
-                                finding.origin_name,
-                                json.dumps(sanitize_for_jsonb(finding.raw_data)),
-                                json.dumps(data_as_strings),  # Store as array of JSON strings
-                            ),
-                        )
-
-                conn.commit()
-
-        # Run database operations in thread
-        await asyncio.to_thread(store_in_db)
+                await conn.execute(
+                    """
+                    INSERT INTO findings (
+                        finding_name, category, severity, object_id,
+                        origin_type, origin_name, raw_data, data
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    """,
+                    finding.finding_name,
+                    finding.category,
+                    finding.severity,
+                    object_id,
+                    finding.origin_type,
+                    finding.origin_name,
+                    json.dumps(sanitize_for_jsonb(finding.raw_data)),
+                    json.dumps(data_as_strings),  # Store as array of JSON strings
+                )
 
         logger.info("Successfully stored NoseyParker results", object_id=object_id, match_count=len(matches))
 

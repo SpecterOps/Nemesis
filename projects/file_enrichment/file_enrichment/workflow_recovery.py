@@ -27,68 +27,18 @@ async def recover_interrupted_workflows(pool) -> None:
 
         logger.info("Starting workflow recovery process...", pid=os.getpid())
 
-        def get_and_delete_running_workflows():
-            with pool.connection() as conn:
-                with conn.cursor() as cur:
-                    # Atomic DELETE with RETURNING - only one worker will get the interrupted workflows
-                    cur.execute("""
-                        DELETE FROM workflows
-                        WHERE status = 'RUNNING'
-                        RETURNING object_id
-                    """)
-                    running_ids = [row[0] for row in cur.fetchall()]
-                    conn.commit()
+        # Get interrupted workflows atomically using asyncpg
+        async with pool.acquire() as conn:
+            # Atomic DELETE with RETURNING - only one worker will get the interrupted workflows
+            running_ids = await conn.fetch("""
+                DELETE FROM workflows
+                WHERE status = 'RUNNING'
+                RETURNING object_id
+            """)
+            running_object_ids = [row['object_id'] for row in running_ids]
 
-                    if running_ids:
-                        logger.info(f"Atomically claimed {len(running_ids)} interrupted workflows", pid=os.getpid())
-
-                    return running_ids
-
-        def get_file_data_and_cleanup(object_ids):
-            recovered_files = []
-            with pool.connection() as conn:
-                with conn.cursor() as cur:
-                    for object_id in object_ids:
-                        # Get file data for reconstruction
-                        cur.execute(
-                            """
-                            SELECT object_id, agent_id, source, project, timestamp, expiration,
-                                   path, originating_object_id, originating_container_id, nesting_level,
-                                   file_creation_time, file_access_time, file_modification_time
-                            FROM files WHERE object_id = %s
-                        """,
-                            (object_id,),
-                        )
-
-                        row = cur.fetchone()
-                        if row:
-                            # Convert database row to File-compatible dict
-                            file_data = {
-                                "object_id": str(row[0]),
-                                "agent_id": row[1],
-                                "source": row[2],
-                                "project": row[3],
-                                "timestamp": row[4],
-                                "expiration": row[5],
-                                "path": row[6],
-                                "originating_object_id": str(row[7]) if row[7] else None,
-                                "originating_container_id": str(row[8]) if row[8] else None,
-                                "nesting_level": row[9],
-                                "creation_time": row[10].isoformat() if row[10] else None,
-                                "access_time": row[11].isoformat() if row[11] else None,
-                                "modification_time": row[12].isoformat() if row[12] else None,
-                            }
-                            recovered_files.append(file_data)
-                            logger.debug("Recovered file data for workflow", object_id=object_id, pid=os.getpid())
-                        else:
-                            logger.warning("No file data found for workflow", object_id=object_id, pid=os.getpid())
-
-                    conn.commit()
-
-            return recovered_files
-
-        # Get interrupted workflows
-        running_object_ids = await asyncio.to_thread(get_and_delete_running_workflows)
+            if running_object_ids:
+                logger.info(f"Atomically claimed {len(running_object_ids)} interrupted workflows", pid=os.getpid())
 
         if not running_object_ids:
             logger.info("No interrupted workflows found", pid=os.getpid())
@@ -97,7 +47,41 @@ async def recover_interrupted_workflows(pool) -> None:
         logger.info(f"Found {len(running_object_ids)} interrupted workflows to recover", pid=os.getpid())
 
         # Get file data and clean up partial results
-        recovered_files = await asyncio.to_thread(get_file_data_and_cleanup, running_object_ids)
+        recovered_files = []
+        async with pool.acquire() as conn:
+            for object_id in running_object_ids:
+                # Get file data for reconstruction
+                row = await conn.fetchrow(
+                    """
+                    SELECT object_id, agent_id, source, project, timestamp, expiration,
+                           path, originating_object_id, originating_container_id, nesting_level,
+                           file_creation_time, file_access_time, file_modification_time
+                    FROM files WHERE object_id = $1
+                """,
+                    object_id,
+                )
+
+                if row:
+                    # Convert database row to File-compatible dict
+                    file_data = {
+                        "object_id": str(row['object_id']),
+                        "agent_id": row['agent_id'],
+                        "source": row['source'],
+                        "project": row['project'],
+                        "timestamp": row['timestamp'],
+                        "expiration": row['expiration'],
+                        "path": row['path'],
+                        "originating_object_id": str(row['originating_object_id']) if row['originating_object_id'] else None,
+                        "originating_container_id": str(row['originating_container_id']) if row['originating_container_id'] else None,
+                        "nesting_level": row['nesting_level'],
+                        "creation_time": row['file_creation_time'].isoformat() if row['file_creation_time'] else None,
+                        "access_time": row['file_access_time'].isoformat() if row['file_access_time'] else None,
+                        "modification_time": row['file_modification_time'].isoformat() if row['file_modification_time'] else None,
+                    }
+                    recovered_files.append(file_data)
+                    logger.debug("Recovered file data for workflow", object_id=object_id, pid=os.getpid())
+                else:
+                    logger.warning("No file data found for workflow", object_id=object_id, pid=os.getpid())
 
         if not recovered_files:
             logger.warning("No file data found for interrupted workflows", pid=os.getpid())

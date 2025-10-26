@@ -3,16 +3,16 @@
 import json
 import os
 
+import asyncpg
 from common.logger import get_logger
 from common.models import DotNetOutput
 from common.state_helpers import get_file_enriched_async
 from file_enrichment.dotnet import store_dotnet_results
-from psycopg_pool import ConnectionPool
 
 logger = get_logger(__name__)
 
 
-async def process_dotnet_event(raw_data, pool: ConnectionPool):
+async def process_dotnet_event(raw_data, pool: asyncpg.Pool):
     """Process incoming .NET processing results from the dotnet_service"""
     try:
         logger.debug(f"Received DotNet output event: {raw_data}", pid=os.getpid())
@@ -36,10 +36,10 @@ async def process_dotnet_event(raw_data, pool: ConnectionPool):
             logger.debug(f"Processing dotnet results for object {object_id}", pid=os.getpid())
 
             # Get the file enriched data for creating transforms
-            file_enriched = None
             try:
                 file_enriched = await get_file_enriched_async(object_id)
             except Exception as e:
+                file_enriched = None
                 logger.warning(f"Could not get file_enriched for {object_id}: {e}", pid=os.getpid())
 
             # Store the results in the database using our helper function
