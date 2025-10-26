@@ -96,11 +96,11 @@ async def lifespan(app: FastAPI):
                 postgres_notify_listener_task = asyncio.create_task(
                     postgres_notify_listener(asyncpg_pool, workflow_manager)
                 )
-                logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
+                logger.info("Started PostgreSQL NOTIFY listener task")
 
                 # Start masterkey watcher in background
                 background_dpapi_task = asyncio.create_task(dpapi_background_monitor(app.state.dpapi_manager))
-                logger.info("Started masterkey watcher task", pid=os.getpid())
+                logger.info("Started masterkey watcher task")
 
                 # Recover any interrupted workflows before starting normal processing
                 await recover_interrupted_workflows(asyncpg_pool)
@@ -133,12 +133,12 @@ async def lifespan(app: FastAPI):
 
                 # Cancel PostgreSQL NOTIFY listener
                 if postgres_notify_listener_task and not postgres_notify_listener_task.done():
-                    logger.info("Cancelling PostgreSQL NOTIFY listener...", pid=os.getppid())
+                    logger.info("Cancelling PostgreSQL NOTIFY listener...")
                     postgres_notify_listener_task.cancel()
                     try:
                         await postgres_notify_listener_task
                     except asyncio.CancelledError:
-                        logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
+                        logger.info("PostgreSQL NOTIFY listener cancelled")
 
                 if wf_runtime:
                     wf_runtime.shutdown()

@@ -17,7 +17,7 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
     Runs in background task to handle notifications across all workers/replicas.
     """
 
-    logger.info("Starting PostgreSQL NOTIFY listener...", pid=os.getppid())
+    logger.info("Starting PostgreSQL NOTIFY listener...")
 
     retry_delay = 1  # Start with 1 second retry delay
     max_retry_delay = 60  # Max 60 seconds between retries
@@ -27,7 +27,7 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
         try:
             # Acquire a dedicated connection from the pool for listening
             conn = await asyncpg_pool.acquire()
-            logger.info("Connected to PostgreSQL for NOTIFY listening", pid=os.getppid())
+            logger.info("Connected to PostgreSQL for NOTIFY listening")
             retry_delay = 1  # Reset retry delay on successful connection
 
             # Create a queue to receive notifications
@@ -44,10 +44,7 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
             await conn.add_listener("nemesis_yara_reload", notification_handler)
             await conn.add_listener("nemesis_workflow_reset", notification_handler)
 
-            logger.info(
-                "Listening for PostgreSQL notifications on nemesis_yara_reload and nemesis_workflow_reset",
-                pid=os.getppid(),
-            )
+            logger.info("Listening for PostgreSQL notifications on nemesis_yara_reload and nemesis_workflow_reset")
 
             # Process notifications
             try:
@@ -61,18 +58,18 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
                         )
 
                         if channel == "nemesis_yara_reload":
-                            logger.info("Processing yara reload notification", pid=os.getppid())
+                            logger.info("Processing yara reload notification")
                             reload_yara_rules()
 
                         elif channel == "nemesis_workflow_reset":
-                            logger.info("Processing workflow reset notification", pid=os.getppid())
+                            logger.info("Processing workflow reset notification")
                             if workflow_manager is not None:
                                 result = await workflow_manager.reset()
                                 logger.info("Workflow manager reset completed", result=result)
                             else:
                                 logger.warning("Workflow manager not initialized, skipping reset")
 
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         # No notification received, continue listening
                         continue
                     except Exception as e:
@@ -82,7 +79,7 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
                             pid=os.getpid(),
                         )
             except asyncio.CancelledError:
-                logger.info("PostgreSQL NOTIFY listener cancelled", pid=os.getppid())
+                logger.info("PostgreSQL NOTIFY listener cancelled")
                 # Remove listeners before breaking
                 try:
                     await conn.remove_listener("nemesis_yara_reload", notification_handler)
@@ -92,21 +89,21 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
                 break
 
         except asyncio.CancelledError:
-            logger.info("PostgreSQL NOTIFY listener cancelled during connection", pid=os.getppid())
+            logger.info("PostgreSQL NOTIFY listener cancelled during connection")
             break
         except Exception as e:
-            logger.exception("PostgreSQL NOTIFY listener connection error", error=str(e), pid=os.getppid())
+            logger.exception("PostgreSQL NOTIFY listener connection error", error=str(e))
 
             # Exponential backoff with jitter
             await asyncio.sleep(retry_delay + (retry_delay * 0.1))  # Add 10% jitter
             retry_delay = min(retry_delay * 2, max_retry_delay)
 
-            logger.info(f"Retrying PostgreSQL NOTIFY listener in {retry_delay} seconds...", pid=os.getppid())
+            logger.info(f"Retrying PostgreSQL NOTIFY listener in {retry_delay} seconds...")
         finally:
             # Always release the connection back to the pool
             if conn is not None:
                 try:
                     await asyncpg_pool.release(conn)
-                    logger.debug("Released PostgreSQL connection back to pool", pid=os.getppid())
+                    logger.debug("Released PostgreSQL connection back to pool")
                 except Exception as e:
-                    logger.error("Error releasing connection to pool", error=str(e), pid=os.getppid())
+                    logger.error("Error releasing connection to pool", error=str(e))
