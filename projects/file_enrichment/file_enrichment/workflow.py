@@ -405,15 +405,6 @@ async def publish_enriched_file(ctx, activity_input):
         return False
 
 
-# endregion
-
-##########################################
-#
-# region Dapr workflows
-#
-##########################################
-
-
 @workflow_activity
 async def run_enrichment_modules(ctx, activity_input: dict):
     """Activity that runs all enrichment modules for a file with single file download."""
@@ -601,6 +592,15 @@ async def run_enrichment_modules(ctx, activity_input: dict):
 
     logger.debug("Enrichment modules processing completed", object_id=object_id, total_modules=len(results))
     return results
+
+
+# endregion
+
+##########################################
+#
+# region Dapr workflows
+#
+##########################################
 
 
 @wf_runtime.workflow
