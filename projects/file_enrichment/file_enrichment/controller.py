@@ -94,7 +94,7 @@ async def lifespan(app: FastAPI):
             try:
                 # Start PostgreSQL NOTIFY listener in background
                 postgres_notify_listener_task = asyncio.create_task(
-                    postgres_notify_listener(postgres_connection_string, workflow_manager)
+                    postgres_notify_listener(asyncpg_pool, workflow_manager)
                 )
                 logger.info("Started PostgreSQL NOTIFY listener task", pid=os.getppid())
 
