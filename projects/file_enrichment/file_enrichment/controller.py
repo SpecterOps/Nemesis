@@ -177,13 +177,13 @@ async def process_file(event: CloudEvent[File]):
 @dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")
 async def process_dotnet_results(event: CloudEvent[DotNetOutput]):
     """Handler for incoming .NET processing results from the dotnet_service."""
-    await process_dotnet_event(event.data, global_vars.asyncpg_pool)
+    await process_dotnet_event(event.data)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")
 async def process_nosey_parker_results(event: CloudEvent[NoseyParkerOutput]):
     """Handler for incoming Nosey Parker scan results"""
-    await process_noseyparker_event(event.data, global_vars.asyncpg_pool)
+    await process_noseyparker_event(event.data)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")

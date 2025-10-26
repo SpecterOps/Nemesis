@@ -1,13 +1,15 @@
-# src/workflow/dotnet.py
+"""Handler for .NET output subscription events."""
+
 import json
 import uuid
 from typing import Any
 
-import asyncpg
+import file_enrichment.global_vars as global_vars
 from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
 from common.models import (
     DotNetAssemblyAnalysis,
+    DotNetOutput,
     EnrichmentResult,
     File,
     FileEnriched,
@@ -17,9 +19,33 @@ from common.models import (
     FindingOrigin,
     Transform,
 )
+from common.state_helpers import get_file_enriched_async
 from dapr.clients import DaprClient
 
 logger = get_logger(__name__)
+
+
+async def process_dotnet_event(dotnet_output: DotNetOutput) -> None:
+    """Process incoming .NET processing results from the dotnet_service"""
+
+    logger.debug("Received DotNet output event", data=dotnet_output.model_dump_json())
+
+    # Try to parse the event data into our DotNetOutput model
+    try:
+        logger.debug("Processing dotnet results for object", object_id=dotnet_output.object_id)
+
+        file_enriched = await get_file_enriched_async(dotnet_output.object_id)
+
+        await store_dotnet_results(
+            dotnet_output=dotnet_output,
+            file_enriched=file_enriched,
+        )
+
+    except Exception:
+        logger.error(
+            "Failed to process DotNet output for object_id",
+            object_id=dotnet_output.object_id,
+        )
 
 
 def create_dotnet_finding_summary(analysis: DotNetAssemblyAnalysis) -> str:
@@ -76,26 +102,23 @@ def create_dotnet_finding_summary(analysis: DotNetAssemblyAnalysis) -> str:
 
 
 async def store_dotnet_results(
-    object_id: str,
-    decompilation_object_id: str | None = None,
-    analysis: DotNetAssemblyAnalysis | None = None,
-    pool: asyncpg.Pool | None = None,
+    dotnet_output: DotNetOutput,
     file_enriched: FileEnriched | None = None,
 ):
     """
     Store DotNet analysis results in the database, including creating findings and transforms.
 
     Args:
-        object_id (str): The object ID of the file that was analyzed
-        decompilation_object_id (str, optional): Object ID of the decompiled source ZIP
-        analysis (DotNetAssemblyAnalysis, optional): Assembly analysis results
-        pool (asyncpg.Pool, optional): Database connection pool
+        dotnet_output (DotNetOutput): The DotNet output containing object_id, decompilation, and analysis
         file_enriched: The FileEnriched object for the original file
     """
+    object_id = dotnet_output.object_id
+    decompilation_object_id = dotnet_output.decompilation
+    analysis = dotnet_output.analysis
     try:
         # Update workflow success status
         try:
-            async with pool.acquire() as conn:
+            async with global_vars.asyncpg_pool.acquire() as conn:
                 await conn.execute(
                     """
                     UPDATE workflows
@@ -202,7 +225,7 @@ async def store_dotnet_results(
         enrichment_result.findings = findings_list
 
         # Store in database
-        async with pool.acquire() as conn:
+        async with global_vars.asyncpg_pool.acquire() as conn:
             # Store main enrichment result
             results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
             await conn.execute(

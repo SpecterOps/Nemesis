@@ -1,17 +1,49 @@
+"""Handler for Nosey Parker output subscription events."""
+
 import base64
 import json
+import os
 import re
 import time
 import uuid
 from datetime import datetime
 from typing import Any
 
-import asyncpg
+import file_enrichment.global_vars as global_vars
 from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
-from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, MatchInfo, ScanStats
+from common.models import (
+    EnrichmentResult,
+    FileObject,
+    Finding,
+    FindingCategory,
+    FindingOrigin,
+    MatchInfo,
+    NoseyParkerOutput,
+    ScanStats,
+)
 
 logger = get_logger(__name__)
+
+
+async def process_noseyparker_event(nosey_output: NoseyParkerOutput):
+    """Process incoming Nosey Parker scan results"""
+    try:
+        object_id = nosey_output.object_id
+        matches = nosey_output.scan_result.matches
+        stats = nosey_output.scan_result.stats
+
+        logger.debug(f"Found {len(matches)} matches for object {object_id}", pid=os.getpid())
+
+        await store_noseyparker_results(
+            object_id=object_id,
+            matches=matches,
+            scan_stats=stats,
+        )
+
+    except Exception as e:
+        logger.exception(e, message="Error processing Nosey Parker output event", pid=os.getpid())
+        raise
 
 
 def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
@@ -160,7 +192,6 @@ async def store_noseyparker_results(
     object_id: str,
     matches: list[MatchInfo],
     scan_stats: ScanStats,
-    pool: asyncpg.Pool,
 ):
     """
     Store Nosey Parker results in the database, including creating findings.
@@ -173,7 +204,7 @@ async def store_noseyparker_results(
     """
     try:
         try:
-            async with pool.acquire() as conn:
+            async with global_vars.asyncpg_pool.acquire() as conn:
                 await conn.execute(
                     """
                     UPDATE workflows
@@ -231,7 +262,7 @@ async def store_noseyparker_results(
         enrichment_result.findings = findings_list
 
         # Store in database
-        async with pool.acquire() as conn:
+        async with global_vars.asyncpg_pool.acquire() as conn:
             # Store main enrichment result
             results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
             await conn.execute(
