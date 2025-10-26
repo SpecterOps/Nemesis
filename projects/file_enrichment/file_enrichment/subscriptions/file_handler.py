@@ -3,14 +3,14 @@
 import os
 from datetime import datetime
 
-import asyncpg
+import file_enrichment.global_vars as global_vars
 from common.logger import get_logger
 from common.models import File
 
 logger = get_logger(__name__)
 
 
-async def save_file_message(file: File, pool: asyncpg.Pool):
+async def save_file_message(file: File):
     """Save the file message to the database for recovery purposes"""
     try:
         # Only save files that are not nested (originating files)
@@ -46,7 +46,7 @@ async def save_file_message(file: File, pool: asyncpg.Pool):
             updated_at = CURRENT_TIMESTAMP;
         """
 
-        async with pool.acquire() as conn:
+        async with global_vars.asyncpg_pool.acquire() as conn:
             await conn.execute(
                 query,
                 file.object_id,
@@ -71,10 +71,10 @@ async def save_file_message(file: File, pool: asyncpg.Pool):
         raise
 
 
-async def process_file_event(file: File, workflow_manager, module_execution_order: list, pool: asyncpg.Pool):
+async def process_file_event(file: File, workflow_manager, module_execution_order: list):
     """Process incoming file events"""
     try:
-        await save_file_message(file, pool)
+        await save_file_message(file)
 
         workflow_input = {
             "file": file.model_dump(exclude_unset=True, mode="json"),

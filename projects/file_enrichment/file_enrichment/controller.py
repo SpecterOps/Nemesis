@@ -15,6 +15,7 @@ from file_enrichment.workflow_recovery import recover_interrupted_workflows
 from nemesis_dpapi import DpapiManager as NemesisDpapiManager
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
 
+from . import global_vars
 from .debug_utils import setup_debug_signals
 from .routes.dpapi import dpapi_background_monitor, dpapi_router
 from .routes.enrichments import router as enrichments_router
@@ -22,7 +23,7 @@ from .subscriptions.bulk_enrichment_handler import process_bulk_enrichment_event
 from .subscriptions.dotnet_handler import process_dotnet_event
 from .subscriptions.file_handler import process_file_event
 from .subscriptions.noseyparker_handler import process_noseyparker_event
-from .workflow import get_workflow_client, initialize_workflow_runtime, wf_runtime
+from .workflow import initialize_workflow_runtime, wf_runtime
 from .workflow_manager import WorkflowManager
 
 logger = get_logger(__name__)
@@ -51,7 +52,6 @@ async def lifespan(app: FastAPI):
 
     logger.info("Initializing workflow runtime...", pid=os.getpid())
 
-    # Setup debug signal handlers for diagnosing blocking issues
     setup_debug_signals()
 
     app.state.event_loop = asyncio.get_running_loop()
@@ -60,16 +60,16 @@ async def lifespan(app: FastAPI):
     dapr_client = DaprClient()
     postgres_connection_string = get_postgres_connection_str(dapr_client)
 
-    asyncpg_pool = await asyncpg.create_pool(
+    global_vars.asyncpg_pool = await asyncpg.create_pool(
         postgres_connection_string,
         min_size=5,
         max_size=15,
     )
-    app.state.asyncpg_pool = asyncpg_pool
+    # global_vars.asyncpg_pool = asyncpg_pool
 
     # Initialize global DpapiManager for the application lifetime
     dpapi_manager = NemesisDpapiManager(
-        storage_backend=asyncpg_pool,
+        storage_backend=global_vars.asyncpg_pool,
         auto_decrypt=True,
         publisher=DaprDpapiEventPublisher(dapr_client, loop=app.state.event_loop),
     )
@@ -77,24 +77,22 @@ async def lifespan(app: FastAPI):
     app.state.dpapi_manager = dpapi_manager
 
     # Initialize workflow runtime and modules
-    module_execution_order = await initialize_workflow_runtime(dpapi_manager, asyncpg_pool)
+    module_execution_order = await initialize_workflow_runtime(dpapi_manager)
 
     # Wait a bit for runtime to initialize
     await asyncio.sleep(5)
 
-    client = get_workflow_client()
-    if client is None:
-        raise ValueError("Workflow client not available after initialization")
-
     try:
         # Use async context manager for WorkflowManager
-        async with WorkflowManager(pool=asyncpg_pool, max_execution_time=max_workflow_execution_time) as wf_manager:
+        async with WorkflowManager(
+            pool=global_vars.asyncpg_pool, max_execution_time=max_workflow_execution_time
+        ) as wf_manager:
             workflow_manager = wf_manager
 
             try:
                 # Start PostgreSQL NOTIFY listener in background
                 postgres_notify_listener_task = asyncio.create_task(
-                    postgres_notify_listener(asyncpg_pool, workflow_manager)
+                    postgres_notify_listener(global_vars.asyncpg_pool, workflow_manager)
                 )
                 logger.info("Started PostgreSQL NOTIFY listener task")
 
@@ -103,12 +101,11 @@ async def lifespan(app: FastAPI):
                 logger.info("Started masterkey watcher task")
 
                 # Recover any interrupted workflows before starting normal processing
-                await recover_interrupted_workflows(asyncpg_pool)
+                await recover_interrupted_workflows(global_vars.asyncpg_pool)
 
                 logger.info(
                     "Workflow runtime initialized successfully",
                     module_execution_order=module_execution_order,
-                    client_available=client is not None,
                     pid=os.getpid(),
                 )
 
@@ -146,9 +143,8 @@ async def lifespan(app: FastAPI):
                 dapr_client.close()
 
     finally:
-        # Close asyncpg pool
-        if asyncpg_pool:
-            await asyncpg_pool.close()
+        if global_vars.asyncpg_pool:
+            await global_vars.asyncpg_pool.close()
             logger.info("AsyncPG pool closed", pid=os.getpid())
 
 
@@ -175,19 +171,19 @@ async def healthcheck():
 async def process_file(event: CloudEvent[File]):
     """Handler for incoming file events"""
     global workflow_manager
-    await process_file_event(event.data, workflow_manager, module_execution_order, app.state.asyncpg_pool)
+    await process_file_event(event.data, workflow_manager, module_execution_order)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")
 async def process_dotnet_results(event: CloudEvent[DotNetOutput]):
     """Handler for incoming .NET processing results from the dotnet_service."""
-    await process_dotnet_event(event.data, app.state.asyncpg_pool)
+    await process_dotnet_event(event.data, global_vars.asyncpg_pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")
 async def process_nosey_parker_results(event: CloudEvent[NoseyParkerOutput]):
     """Handler for incoming Nosey Parker scan results"""
-    await process_noseyparker_event(event.data, app.state.asyncpg_pool)
+    await process_noseyparker_event(event.data, global_vars.asyncpg_pool)
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")

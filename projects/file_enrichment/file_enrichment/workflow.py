@@ -7,45 +7,22 @@ import pathlib
 import posixpath
 from datetime import datetime
 
-import asyncpg
 import common.helpers as helpers
 import dapr.ext.workflow as wf
 import magic
-from common.db import get_postgres_connection_str
 from common.helpers import create_text_reader, get_file_extension, is_container
-from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, get_logger
+from common.logger import get_logger
 from common.models import Alert, EnrichmentResult, NoseyParkerInput
 from common.state_helpers import get_file_enriched_async
-from common.storage import StorageMinio
 from common.workflows.setup import wf_runtime, workflow_activity
 from dapr.clients import DaprClient
-from dapr.ext.workflow.logger.options import LoggerOptions
-from file_enrichment_modules.module_loader import EnrichmentModule, ModuleLoader
-from file_linking import FileLinkingEngine
+from file_enrichment_modules.module_loader import ModuleLoader
 from nemesis_dpapi import DpapiManager
+
+from . import global_vars
 
 logger = get_logger(__name__)
 
-workflow_client = wf.DaprWorkflowClient(
-    logger_options=LoggerOptions(
-        log_level=WORKFLOW_CLIENT_LOG_LEVEL,
-    )
-)
-activity_functions = {}
-download_path = "/tmp/"
-storage = StorageMinio()
-global_module_map: dict[str, EnrichmentModule] = {}  # Enrichment modules loaded at initialization
-
-dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)
-gotenberg_url = f"http://localhost:{dapr_port}/v1.0/invoke/gotenberg/method/forms/libreoffice/convert"
-
-nemesis_url = os.getenv("NEMESIS_URL", "http://localhost/")
-nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_url
-
-postgres_pool: asyncpg.Pool = None  # Connection pool for database operations
-
-file_linking_engine = FileLinkingEngine(get_postgres_connection_str())
-asyncio_loop: asyncio.AbstractEventLoop = None
 
 ##########################################
 #
@@ -112,7 +89,7 @@ async def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, ma
     """Used to index plaintext content with byte-based chunking to avoid tsvector limits"""
     logger.debug(f"indexing plaintext for {object_id}")
 
-    async with postgres_pool.acquire() as conn:
+    async with global_vars.asyncpg_pool.acquire() as conn:
         await conn.execute("DELETE FROM plaintext_content WHERE object_id = $1", object_id)
 
         chunk_number = 0
@@ -164,7 +141,7 @@ async def get_basic_analysis(ctx, activity_input):
     path = activity_input.get("path", "")
 
     # download from Minio as a temporary file which will be cleaned up on exit
-    with storage.download(object_id) as file:
+    with global_vars.storage.download(object_id) as file:
         mime_type = magic.from_file(file.name, mime=True)
         if mime_type == "text/plain" or helpers.is_text_file(file.name):
             is_plaintext = True
@@ -191,7 +168,7 @@ async def get_basic_analysis(ctx, activity_input):
         }
 
         try:
-            async with postgres_pool.acquire() as conn:
+            async with global_vars.asyncpg_pool.acquire() as conn:
                 # Convert field names to match database schema
                 insert_query = """
                     INSERT INTO files_enriched (
@@ -272,8 +249,7 @@ async def check_file_linkings(ctx, activity_input):
     file_enriched = await get_file_enriched_async(object_id)
 
     try:
-        global file_linking_engine
-        linkings_created = await file_linking_engine.apply_linking_rules(file_enriched)
+        linkings_created = await global_vars.file_linking_engine.apply_linking_rules(file_enriched)
 
         logger.debug("File linking check complete", object_id=object_id, linkings_created=linkings_created)
 
@@ -294,7 +270,7 @@ async def publish_findings_alerts(ctx, activity_input):
     file_enriched = await get_file_enriched_async(object_id)
 
     # Fetch findings from the database for this object_id
-    async with postgres_pool.acquire() as conn:
+    async with global_vars.asyncpg_pool.acquire() as conn:
         findings = await conn.fetch(
             """
             SELECT finding_name, category, severity, origin_name, raw_data
@@ -320,8 +296,8 @@ async def publish_findings_alerts(ctx, activity_input):
 
                     finding_message = f"- *Category:* {category} / *Severity:* {severity}\n"
                     file_message = f"- *File Path:* {file_path}\n"
-                    nemesis_finding_url = f"{nemesis_url}findings?object_id={file_enriched.object_id}"
-                    nemesis_file_url = f"{nemesis_url}files?object_id={file_enriched.object_id}"
+                    nemesis_finding_url = f"{global_vars.nemesis_url}findings?object_id={file_enriched.object_id}"
+                    nemesis_file_url = f"{global_vars.nemesis_url}files?object_id={file_enriched.object_id}"
                     nemesis_footer_finding = f"*<{nemesis_finding_url}|View Finding in Nemesis>* / "
                     nemesis_footer_file = f"*<{nemesis_file_url}|View File in Nemesis>*\n"
                     separator = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
@@ -358,7 +334,7 @@ async def handle_file_if_plaintext(ctx, activity_input):
 
     # if the file is plaintext, make sure we index it
     if file_enriched.is_plaintext:
-        with storage.download(object_id) as tmp_file:
+        with global_vars.storage.download(object_id) as tmp_file:
             with open(tmp_file.name, "rb") as binary_file:
                 with create_text_reader(binary_file) as text_file:
                     await index_plaintext_content(f"{object_id}", text_file)
@@ -446,7 +422,7 @@ async def execute_enrichment_module(object_id: str, temp_file_path: str, module_
 
 async def store_enrichment_results(object_id: str, module_name: str, result: EnrichmentResult):
     """Store enrichment results, transforms, and findings in the database."""
-    async with postgres_pool.acquire() as conn:
+    async with global_vars.asyncpg_pool.acquire() as conn:
         # Store enrichment
         results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
         await conn.execute(
@@ -508,7 +484,7 @@ async def store_enrichment_results(object_id: str, module_name: str, result: Enr
 async def record_module_failure(object_id: str, module_name: str, error: Exception):
     """Record a module failure in the database."""
     try:
-        async with postgres_pool.acquire() as conn:
+        async with global_vars.asyncpg_pool.acquire() as conn:
             await conn.execute(
                 """
                 UPDATE workflows
@@ -534,7 +510,7 @@ async def run_enrichment_modules(ctx, activity_input: dict):
     results = []
 
     try:
-        with storage.download(object_id) as temp_file:
+        with global_vars.storage.download(object_id) as temp_file:
             logger.debug(
                 "Downloaded file for processing",
                 object_id=object_id,
@@ -713,11 +689,11 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 
         # Get the activity name for this enrichment
         activity_name = f"enrich_{enrichment_name}"
-        if activity_name not in activity_functions:
+        if activity_name not in global_vars.activity_functions:
             raise KeyError(f"Activity {activity_name} not registered")
 
         # Run the single enrichment activity
-        result = yield ctx.call_activity(activity_functions[activity_name], input={"object_id": object_id})
+        result = yield ctx.call_activity(global_vars.activity_functions[activity_name], input={"object_id": object_id})
 
         workflow_logger.debug(
             "Single enrichment workflow completed",
@@ -748,12 +724,9 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 ##########################################
 
 
-async def initialize_workflow_runtime(dpapi_manager: DpapiManager, pool: asyncpg.Pool = None):
+async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-    global wf_runtime, workflow_client, asyncio_loop, postgres_pool, global_module_map
-
-    # Store the connection pool for use in workflow activities
-    postgres_pool = pool
+    global wf_runtime, asyncio_loop, global_module_map
 
     # Load enrichment modules
     module_loader = ModuleLoader()
@@ -798,11 +771,6 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager, pool: asyncpg
     wf_runtime.start()
 
     return execution_order
-
-
-def get_workflow_client() -> wf.DaprWorkflowClient:
-    """Get the workflow client instance"""
-    return workflow_client
 
 
 def reload_yara_rules():

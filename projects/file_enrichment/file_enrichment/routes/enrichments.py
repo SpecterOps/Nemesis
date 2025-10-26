@@ -4,13 +4,16 @@ import asyncio
 import json
 import os
 import uuid
+from typing import TYPE_CHECKING
 
-import asyncpg
 import common.helpers as helpers
 from common.logger import get_logger
 from fastapi import APIRouter, Body, HTTPException, Path, Request
-from file_enrichment.workflow import global_module_map
+from file_enrichment.global_vars import global_module_map
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    import asyncpg
 
 logger = get_logger(__name__)
 
