@@ -151,12 +151,12 @@ jobs:
       matrix:
         service:
           - web-api
-          - dotnet-api
+          - dotnet-service
           - file-enrichment
           - frontend
           - jupyter
           - alerting
-          - triage
+          - agents
           - cli
           - housekeeping
           - document-conversion
