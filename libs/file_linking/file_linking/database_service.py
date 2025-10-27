@@ -22,8 +22,8 @@ class FileListingStatus(str, Enum):
 class FileLinkingDatabaseService:
     """Service for managing file listings and linkings in the database."""
 
-    def __init__(self, postgres_connection_string: str):
-        self.connection_string = postgres_connection_string
+    def __init__(self, connection_pool: asyncpg.Pool):
+        self.pool = connection_pool
 
     async def add_file_listing(self, source: str, path: str, status: FileListingStatus, object_id: str | None = None) -> bool:
         """
@@ -55,8 +55,7 @@ class FileLinkingDatabaseService:
                         updated_at = CURRENT_TIMESTAMP
                 """
 
-                conn = await asyncpg.connect(self.connection_string)
-                try:
+                async with self.pool.acquire() as conn:
                     await conn.execute(query, source, path, object_id, status.value)
 
                     logger.debug(
@@ -67,9 +66,6 @@ class FileLinkingDatabaseService:
                         object_id=object_id,
                     )
                     return True
-
-                finally:
-                    await conn.close()
 
             except Exception as e:
                 logger.exception(
@@ -102,8 +98,7 @@ class FileLinkingDatabaseService:
                         updated_at = CURRENT_TIMESTAMP
                 """
 
-                conn = await asyncpg.connect(self.connection_string)
-                try:
+                async with self.pool.acquire() as conn:
                     await conn.execute(query, source, file_path_1, file_path_2, link_type)
 
                     logger.debug(
@@ -114,9 +109,6 @@ class FileLinkingDatabaseService:
                         link_type=link_type,
                     )
                     return True
-
-                finally:
-                    await conn.close()
 
             except Exception as e:
                 logger.exception(
@@ -170,8 +162,7 @@ class FileLinkingDatabaseService:
             """
 
             # Use asyncpg for async operations
-            conn = await asyncpg.connect(self.connection_string)
-            try:
+            async with self.pool.acquire() as conn:
                 rows = await conn.fetch(query, source)
                 results = [{"table_name": row["table_name"], "path": row["path"]} for row in rows]
 
@@ -181,9 +172,6 @@ class FileLinkingDatabaseService:
                     count=len(results),
                 )
                 return results
-
-            finally:
-                await conn.close()
 
         except Exception as e:
             logger.exception("Error querying placeholder entries", source=source, error=str(e))
@@ -211,8 +199,7 @@ class FileLinkingDatabaseService:
                 AND object_id IS NOT NULL
             """
 
-            conn = await asyncpg.connect(self.connection_string)
-            try:
+            async with self.pool.acquire() as conn:
                 rows = await conn.fetch(query, source)
                 paths = [row["path"] for row in rows]
 
@@ -222,9 +209,6 @@ class FileLinkingDatabaseService:
                     count=len(paths),
                 )
                 return paths
-
-            finally:
-                await conn.close()
 
         except Exception as e:
             logger.exception("Error querying collected files", source=source, error=str(e))
@@ -251,8 +235,7 @@ class FileLinkingDatabaseService:
                 WHERE source = $1 AND LOWER(path) = LOWER($2)
             """
 
-            conn = await asyncpg.connect(self.connection_string)
-            try:
+            async with self.pool.acquire() as conn:
                 result = await conn.execute(query, source, old_path, new_path)
 
                 logger.info(
@@ -263,9 +246,6 @@ class FileLinkingDatabaseService:
                     result=result,
                 )
                 return True
-
-            finally:
-                await conn.close()
 
         except Exception as e:
             logger.exception(
@@ -298,8 +278,7 @@ class FileLinkingDatabaseService:
                 WHERE source = $1 AND LOWER(file_path_2) = LOWER($2)
             """
 
-            conn = await asyncpg.connect(self.connection_string)
-            try:
+            async with self.pool.acquire() as conn:
                 result = await conn.execute(query, source, old_path, new_path)
 
                 logger.info(
@@ -310,9 +289,6 @@ class FileLinkingDatabaseService:
                     result=result,
                 )
                 return True
-
-            finally:
-                await conn.close()
 
         except Exception as e:
             logger.exception(

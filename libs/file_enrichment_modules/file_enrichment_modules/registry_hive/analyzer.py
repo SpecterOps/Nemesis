@@ -332,7 +332,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 # Try to get secrets as dictionary
                 try:
                     security_dict = security_obj.to_dict()
-                    logger.warning(f"Security dict keys: {list(security_dict.keys()) if security_dict else 'None'}")
+                    logger.debug(f"Security dict keys: {list(security_dict.keys()) if security_dict else 'None'}")
 
                     # Extract LSA secrets - they're in 'cached_secrets', not 'lsa_secrets'!
                     if security_dict and "cached_secrets" in security_dict:
@@ -371,7 +371,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                                             }
                                             secret_name = secret_data.get("key_name", f"cached_secret_{i}")
 
-                                            logger.warning(
+                                            logger.debug(
                                                 f"Found DPAPI keys - machine_key: {len(machine_key)} bytes, user_key: {len(user_key)} bytes"
                                             )
 

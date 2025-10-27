@@ -797,7 +797,7 @@ async def retry_decrypt_state_keys_for_masterkey(
                     logger.warning("Failed to retry decrypt state key", state_key_id=state_key_id, error=str(e))
                     result["errors"].append(error_msg)
 
-            logger.debug(
+            logger.info(
                 "Completed retroactive state_key decryption for masterkey",
                 masterkey_guid=masterkey_guid,
                 attempted=result["state_keys_attempted"],
@@ -952,7 +952,7 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes) 
                     )
                     result["errors"].append(error_msg)
 
-            logger.warning(
+            logger.info(
                 "Completed retroactive state_key decryption for chromekey",
                 source=source,
                 attempted=result["state_keys_attempted"],

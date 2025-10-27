@@ -11,6 +11,7 @@ import os
 import posixpath
 from dataclasses import dataclass
 
+import asyncpg
 import yaml
 from common.logger import get_logger
 from common.models import FileEnriched
@@ -60,8 +61,8 @@ class FileLinkingEngine:
     Supports both YAML-based rules and programmatic calls from enrichment modules.
     """
 
-    def __init__(self, postgres_connection_string: str, rules_dir: str | None = None):
-        self.db_service = FileLinkingDatabaseService(postgres_connection_string)
+    def __init__(self, connection_pool: asyncpg.Pool, rules_dir: str | None = None):
+        self.db_service = FileLinkingDatabaseService(connection_pool)
         self.placeholder_resolver = PlaceholderResolver(self.db_service)
         self.rules: list[LinkingRule] = []
 

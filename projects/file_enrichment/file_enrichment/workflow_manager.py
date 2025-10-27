@@ -11,8 +11,9 @@ from common.logger import get_logger
 from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
+from .global_vars import workflow_client
 from .tracing import get_tracer
-from .workflow import enrichment_workflow, get_workflow_client
+from .workflow import enrichment_workflow
 
 logger = get_logger(__name__)
 monitoring_enabled = os.getenv("NEMESIS_MONITORING", "").lower() == "enabled"
@@ -32,31 +33,23 @@ class WorkflowManager:
         self.lock = asyncio.Lock()  # For synchronizing access to active_workflows
         self.max_execution_time = max_execution_time
         self.background_tasks = set()  # Track background tasks to prevent GC
-        self.pool = pool  # Use externally provided pool
-
-        logger.info(
-            "WorkflowManager created (use 'async with' to initialize)",
-            max_execution_time=max_execution_time,
-            pid=os.getpid(),
-        )
+        self.pool = pool
 
     async def __aenter__(self):
         """Async context manager entry - start background tasks"""
-        if self.pool is None:
-            raise ValueError("WorkflowManager requires an asyncpg pool to be provided")
 
         # Start background cleanup task
         cleanup_task = asyncio.create_task(self._cleanup_loop())
         self.background_tasks.add(cleanup_task)
         cleanup_task.add_done_callback(self.background_tasks.discard)
 
-        logger.info("WorkflowManager fully initialized", pid=os.getpid())
+        logger.info("WorkflowManager fully initialized")
 
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit - cleanup background tasks (pool is externally managed)"""
-        logger.info("Cleaning up WorkflowManager...", pid=os.getpid())
+        logger.info("Cleaning up WorkflowManager...")
 
         # Cancel all background tasks
         for task in self.background_tasks:
@@ -68,10 +61,8 @@ class WorkflowManager:
             await asyncio.gather(*self.background_tasks, return_exceptions=True)
 
         self.background_tasks.clear()
+        logger.info("WorkflowManager cleanup completed")
 
-        # Note: Pool is externally managed and will be closed by the caller
-
-        logger.info("WorkflowManager cleanup completed", pid=os.getpid())
         return False  # Don't suppress exceptions
 
     async def _cleanup_loop(self):
@@ -81,7 +72,7 @@ class WorkflowManager:
             try:
                 await self.cleanup_stale_workflows()
             except Exception as e:
-                logger.error(f"Background cleanup error: {e}", pid=os.getpid())
+                logger.error(f"Background cleanup error: {e}")
 
     def _get_status_string(self, state_obj):
         """Convert workflow state to string"""
@@ -188,9 +179,7 @@ class WorkflowManager:
                     )
 
         except Exception as e:
-            logger.error(
-                "Error publishing workflow completion event", workflow_id=instance_id, error=str(e), pid=os.getpid()
-            )
+            logger.error("Error publishing workflow completion event", workflow_id=instance_id, error=str(e))
 
     async def cleanup_stale_workflows(self):
         """Clean up workflows that were left running from previous service instances"""
@@ -209,18 +198,16 @@ class WorkflowManager:
                 )
 
             if stale_workflows:
-                logger.warning(f"Found {len(stale_workflows)} stale workflows, cleaning up...", pid=os.getpid())
+                logger.warning(f"Found {len(stale_workflows)} stale workflows, cleaning up...")
 
                 for wf_id, _object_id, runtime_seconds in stale_workflows:
-                    logger.info(f"Cleaning up stale workflow {wf_id}, runtime: {runtime_seconds:.2f}s", pid=os.getpid())
+                    logger.info(f"Cleaning up stale workflow {wf_id}, runtime: {runtime_seconds:.2f}s")
 
                     # Try to terminate the workflow in Dapr
                     try:
-                        client = get_workflow_client()
-                        if client:
-                            await asyncio.to_thread(client.terminate_workflow, wf_id)
+                        await asyncio.to_thread(workflow_client.terminate_workflow, wf_id)
                     except Exception as e:
-                        logger.warning(f"Could not terminate workflow {wf_id}: {e}", pid=os.getpid())
+                        logger.warning(f"Could not terminate workflow {wf_id}: {e}")
 
                     # Update database status
                     await self.update_workflow_status(
@@ -231,7 +218,7 @@ class WorkflowManager:
                     await self.publish_workflow_completion(wf_id, completed=False)
 
         except Exception as e:
-            logger.error(f"Error during stale workflow cleanup: {e}", pid=os.getpid())
+            logger.error(f"Error during stale workflow cleanup: {e}")
 
     async def update_workflow_status(self, instance_id, status, runtime_seconds=None, error_message=None):
         """
@@ -305,9 +292,9 @@ class WorkflowManager:
                     #   TODO: should this only include running workflows?
                     await conn.execute("DELETE FROM workflows")
             except Exception as e:
-                logger.exception(e, message="Error resetting workflows in database", pid=os.getpid())
+                logger.exception(e, message="Error resetting workflows in database")
 
-            logger.info("WorkflowManager reset", active_count=len(self.active_workflows), pid=os.getpid())
+            logger.info("WorkflowManager reset", active_count=len(self.active_workflows))
 
             return {
                 "status": "success",
@@ -319,9 +306,6 @@ class WorkflowManager:
         """Start a workflow"""
         start_time = time.time()
         tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
-        client = get_workflow_client()
-        if client is None:
-            raise ValueError("Workflow client is None")
 
         try:
             # Generate the workflow ID first so we can schedule the workflow after
@@ -378,7 +362,7 @@ class WorkflowManager:
 
                 # Actually schedule the workflow
                 await asyncio.to_thread(
-                    client.schedule_new_workflow,
+                    workflow_client.schedule_new_workflow,
                     instance_id=instance_id,
                     workflow=enrichment_workflow,
                     input=workflow_input,
@@ -392,7 +376,7 @@ class WorkflowManager:
                 return instance_id
 
         except Exception as e:
-            logger.exception(e, message="Error starting workflow", pid=os.getpid())
+            logger.exception(e, message="Error starting workflow")
             raise
 
     async def _monitor_workflow(self, instance_id, workflow_start_time: float):
@@ -421,6 +405,8 @@ class WorkflowManager:
                     logger.info(
                         "Updating workflow status",
                         processing_time=f"{processing_time:.4f}s",
+                        instance_id=instance_id,
+                        status=final_status,
                     )
                     await self.update_workflow_status(instance_id, final_status, processing_time)
 
@@ -442,19 +428,13 @@ class WorkflowManager:
                         pid=os.getpid(),
                     )
 
-                    try:
-                        client = get_workflow_client()
-                        if client:
-                            await asyncio.to_thread(
-                                client.terminate_workflow,
-                                instance_id,
-                                recursive=True,
-                            )  # recursive == terminate all child workflows
-                            logger.info("Workflow terminated due to timeout", instance_id=instance_id, pid=os.getpid())
-                    except Exception as e:
-                        logger.error("Failed to terminate timed-out workflow", instance_id=instance_id, error=str(e))
+                    await asyncio.to_thread(
+                        workflow_client.terminate_workflow,
+                        instance_id,
+                        recursive=True,
+                    )  # recursive == terminate all child workflows
+                    logger.info("Workflow terminated due to timeout", instance_id=instance_id)
 
-                    # Update workflow status for timeout
                     await self.update_workflow_status(instance_id, "TIMEOUT", processing_time, "timeout")
 
             except Exception as e:
@@ -482,8 +462,6 @@ class WorkflowManager:
         """Wait for workflow to complete and return the final status"""
 
         error_count = 0
-
-        client = get_workflow_client()
         tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
 
         # Add trace attributes for workflow status monitoring
@@ -493,7 +471,7 @@ class WorkflowManager:
 
             while True:
                 try:
-                    state = await asyncio.to_thread(client.get_workflow_state, instance_id)
+                    state = await asyncio.to_thread(workflow_client.get_workflow_state, instance_id)
                     status = self._get_status_string(state)
                     error_count = 0  # Reset on successful check
 
@@ -580,9 +558,6 @@ class WorkflowManager:
 
         try:
             start_time = time.time()
-            client = get_workflow_client()
-            if client is None:
-                raise ValueError("Workflow client is None")
 
             # Generate the workflow ID
             instance_id = str(uuid.uuid4()).replace("-", "")
@@ -639,7 +614,7 @@ class WorkflowManager:
 
                 # Use asyncio.to_thread() to prevent blocking the event loop
                 await asyncio.to_thread(
-                    client.schedule_new_workflow,
+                    workflow_client.schedule_new_workflow,
                     instance_id=instance_id,
                     workflow=single_enrichment_workflow,
                     input=workflow_input,
@@ -653,7 +628,7 @@ class WorkflowManager:
                 return instance_id
 
         except Exception as e:
-            logger.exception(e, message="Error starting single enrichment workflow", pid=os.getpid())
+            logger.exception(e, message="Error starting single enrichment workflow")
             raise
 
     async def _monitor_single_enrichment_workflow(self, instance_id, workflow_start_time):
@@ -697,14 +672,12 @@ class WorkflowManager:
                     )
 
                     try:
-                        client = get_workflow_client()
-                        if client:
-                            await asyncio.to_thread(client.terminate_workflow, instance_id, recursive=True)
-                            logger.info(
-                                "Single enrichment workflow terminated due to timeout",
-                                instance_id=instance_id,
-                                pid=os.getpid(),
-                            )
+                        await asyncio.to_thread(workflow_client.terminate_workflow, instance_id, recursive=True)
+                        logger.info(
+                            "Single enrichment workflow terminated due to timeout",
+                            instance_id=instance_id,
+                            pid=os.getpid(),
+                        )
                     except Exception as e:
                         logger.error(
                             "Failed to terminate timed-out single enrichment workflow",

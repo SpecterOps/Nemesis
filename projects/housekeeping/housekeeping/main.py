@@ -21,8 +21,6 @@ storage = StorageMinio()
 background_tasks = set()
 db_pool = None
 
-postgres_connection_string = get_postgres_connection_str()
-
 
 async def get_db_pool():
     """Get the global database connection pool."""
@@ -504,7 +502,7 @@ async def lifespan(app: FastAPI):
 
         # Initialize database connection pool
         db_pool = await asyncpg.create_pool(
-            postgres_connection_string,
+            get_postgres_connection_str(),
             min_size=2,
             max_size=10,
             command_timeout=60,

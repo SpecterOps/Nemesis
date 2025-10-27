@@ -497,7 +497,11 @@ def isOleFile(filename):
         header = filename[: len(MAGIC)]
     else:
         # string-like object: filename of file on disk
-        header = open(filename, "rb").read(len(MAGIC))
+        f = open(filename, "rb")
+        try:
+            header = f.read(len(MAGIC))
+        finally:
+            f.close()
     if header == MAGIC:
         return True
     else:
@@ -1168,11 +1172,14 @@ class OleFileIO:
             if entry[1:2] == "Image":
                 fin = ole.openstream(entry)
                 fout = open(entry[0:1], "wb")
-                while True:
-                    s = fin.read(8192)
-                    if not s:
-                        break
-                    fout.write(s)
+                try:
+                    while True:
+                        s = fin.read(8192)
+                        if not s:
+                            break
+                        fout.write(s)
+                finally:
+                    fout.close()
 
     You can use the viewer application provided with the Python Imaging
     Library to view the resulting files (which happens to be standard
@@ -2846,8 +2853,11 @@ def find_rc4_passinfo_ppt(filename, stream, offset, hashcat_format=True):
 def find_rc4_passinfo_ppt_bf(filename, stream, offset, hashcat_format=True):
     """We don't use stream and offset anymore! The current method is a bit slow for large files."""
     sys.stderr.write("This can take a while, please wait.\n")
-    stream = open(filename, "rb")
-    original = stream.read()
+    f = open(filename, "rb")
+    try:
+        original = f.read()
+    finally:
+        f.close()
     found = False
     for i in range(0, len(original)):
         data = original[i : i + 384]
@@ -2947,7 +2957,11 @@ def process_access_2007_older_crypto(filename, hashcat_format=True):
     """Dirty hash extractor for MS Office 2007 .accdb files which use CryptoAPI
     based encryption."""
 
-    original = open(filename, "rb").read()
+    f = open(filename, "rb")
+    try:
+        original = f.read()
+    finally:
+        f.close()
 
     for i in range(0, len(original)):
         data = original[i:40960]  # is this limit on data reasonable?
@@ -3282,126 +3296,128 @@ def process_file(filename, hashcat_format=True):
     # Open OLE file:
     ole = OleFileIO(filename)
 
-    stream = None
-
-    # find "summary" streams
-    global have_summary, summary
-    have_summary = False
-    summary = []
-
-    for streamname in ole.listdir():
-        streamname = streamname[-1]
-        if streamname[0] == "\005":
-            have_summary = True
-            props = ole.getproperties(streamname)
-            for k, v in props.items():
-                if v is None:
-                    continue
-                if not PY3:
-                    # We are only interested in strings
-                    if not isinstance(v, unicode):  # pyright: ignore[reportUndefinedVariable]
-                        continue
-                else:
-                    if not isinstance(v, str):  # We are only interested in strings
-                        continue
-                v = remove_html_tags(v)
-                v = v.replace(":", "")
-                v = remove_extra_spaces(v)
-                # words = v.split()
-                # words = filter(lambda x: len(x) < 20, words)
-                # v = " ".join(words)
-                summary.append(v)
-    summary = " ".join(summary)
-    summary = remove_extra_spaces(summary)
-
-    if ["EncryptionInfo"] in ole.listdir():
-        # process Office 2003 / 2010 / 2013 files
-        return process_new_office(filename)
-    if ["Workbook"] in ole.listdir():
-        stream = "Workbook"
-    elif ["Book"] in ole.listdir():
-        stream = "Book"
-    elif ["WordDocument"] in ole.listdir():
-        typ = 1
-        sdoc = ole.openstream("WordDocument")
-        stream = find_table(filename, sdoc)
-        if stream == "none":
-            return 5
-
-    elif ["PowerPoint Document"] in ole.listdir():
-        stream = "Current User"
-    else:
-        sys.stderr.write("%s : No supported streams found\n" % filename)
-        return 2
-
     try:
-        workbookStream = ole.openstream(stream)
-    except:
-        # Standard Libraries
-        import traceback
+        stream = None
 
-        traceback.print_exc()
-        sys.stderr.write("%s : stream %s not found!\n" % (filename, stream))
-        return 2
+        # find "summary" streams
+        global have_summary, summary
+        have_summary = False
+        summary = []
 
-    if workbookStream is None:
-        sys.stderr.write("%s : Error opening stream, %s\n" % filename)
-        (filename, stream)
-        return 3
+        for streamname in ole.listdir():
+            streamname = streamname[-1]
+            if streamname[0] == "\005":
+                have_summary = True
+                props = ole.getproperties(streamname)
+                for k, v in props.items():
+                    if v is None:
+                        continue
+                    if not PY3:
+                        # We are only interested in strings
+                        if not isinstance(v, unicode):  # pyright: ignore[reportUndefinedVariable]
+                            continue
+                    else:
+                        if not isinstance(v, str):  # We are only interested in strings
+                            continue
+                    v = remove_html_tags(v)
+                    v = v.replace(":", "")
+                    v = remove_extra_spaces(v)
+                    # words = v.split()
+                    # words = filter(lambda x: len(x) < 20, words)
+                    # v = " ".join(words)
+                    summary.append(v)
+        summary = " ".join(summary)
+        summary = remove_extra_spaces(summary)
 
-    if stream == "Workbook" or stream == "Book":
-        typ = 0
-        passinfo = find_rc4_passinfo_xls(filename, workbookStream)
-        if passinfo is None:
-            return 4
-    elif stream == "0Table" or stream == "1Table":
-        passinfo = find_rc4_passinfo_doc(filename, workbookStream)
-        if passinfo is None:
-            return 4
-    else:
-        sppt = ole.openstream("Current User")
-        offset = find_ppt_type(filename, sppt)
-        sppt = ole.openstream("PowerPoint Document")
-        ret = find_rc4_passinfo_ppt(filename, sppt, offset)
-        if not ret:
-            find_rc4_passinfo_ppt_bf(filename, sppt, offset)
+        if ["EncryptionInfo"] in ole.listdir():
+            # process Office 2003 / 2010 / 2013 files
+            return process_new_office(filename)
+        if ["Workbook"] in ole.listdir():
+            stream = "Workbook"
+        elif ["Book"] in ole.listdir():
+            stream = "Book"
+        elif ["WordDocument"] in ole.listdir():
+            typ = 1
+            sdoc = ole.openstream("WordDocument")
+            stream = find_table(filename, sdoc)
+            if stream == "none":
+                return 5
 
-        return 6
+        elif ["PowerPoint Document"] in ole.listdir():
+            stream = "Current User"
+        else:
+            sys.stderr.write("%s : No supported streams found\n" % filename)
+            return 2
 
-    (salt, verifier, verifierHash) = passinfo
+        try:
+            workbookStream = ole.openstream(stream)
+        except:
+            # Standard Libraries
+            import traceback
 
-    summary_extra = ""
-    # if have_summary:
-    #     summary_extra = ":::%s::%s" % (summary, filename)
+            traceback.print_exc()
+            sys.stderr.write("%s : stream %s not found!\n" % (filename, stream))
+            return 2
 
-    if hashcat_format:
-        sys.stdout.write(
-            "$oldoffice$%s*%s*%s*%s%s\n"
-            % (
-                typ,
-                binascii.hexlify(salt).decode("ascii"),
-                binascii.hexlify(verifier).decode("ascii"),
-                binascii.hexlify(verifierHash).decode("ascii"),
-                summary_extra,
+        if workbookStream is None:
+            sys.stderr.write("%s : Error opening stream, %s\n" % filename)
+            (filename, stream)
+            return 3
+
+        if stream == "Workbook" or stream == "Book":
+            typ = 0
+            passinfo = find_rc4_passinfo_xls(filename, workbookStream)
+            if passinfo is None:
+                return 4
+        elif stream == "0Table" or stream == "1Table":
+            passinfo = find_rc4_passinfo_doc(filename, workbookStream)
+            if passinfo is None:
+                return 4
+        else:
+            sppt = ole.openstream("Current User")
+            offset = find_ppt_type(filename, sppt)
+            sppt = ole.openstream("PowerPoint Document")
+            ret = find_rc4_passinfo_ppt(filename, sppt, offset)
+            if not ret:
+                find_rc4_passinfo_ppt_bf(filename, sppt, offset)
+
+            return 6
+
+        (salt, verifier, verifierHash) = passinfo
+
+        summary_extra = ""
+        # if have_summary:
+        #     summary_extra = ":::%s::%s" % (summary, filename)
+
+        if hashcat_format:
+            sys.stdout.write(
+                "$oldoffice$%s*%s*%s*%s%s\n"
+                % (
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(verifier).decode("ascii"),
+                    binascii.hexlify(verifierHash).decode("ascii"),
+                    summary_extra,
+                )
             )
-        )
-    else:
-        sys.stdout.write(
-            "%s:$oldoffice$%s*%s*%s*%s%s\n"
-            % (
-                os.path.basename(filename),
-                typ,
-                binascii.hexlify(salt).decode("ascii"),
-                binascii.hexlify(verifier).decode("ascii"),
-                binascii.hexlify(verifierHash).decode("ascii"),
-                summary_extra,
+        else:
+            sys.stdout.write(
+                "%s:$oldoffice$%s*%s*%s*%s%s\n"
+                % (
+                    os.path.basename(filename),
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(verifier).decode("ascii"),
+                    binascii.hexlify(verifierHash).decode("ascii"),
+                    summary_extra,
+                )
             )
-        )
 
-    workbookStream.close()
-    ole.close()
+        workbookStream.close()
 
-    return 0
+        return 0
+    finally:
+        ole.close()
 
 
 def extract_file_encryption_hash(filename, hashcat_format=True):

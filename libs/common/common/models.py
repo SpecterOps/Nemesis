@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from .logger import get_logger
 
@@ -97,20 +97,23 @@ class DotNetOutput(BaseModel):
 
     object_id: str = Field(alias="objectId")
     decompilation: str | None = None
-    analysis: str | None = None
+    analysis: DotNetAssemblyAnalysis | None = None
 
-    def get_parsed_analysis(self) -> DotNetAssemblyAnalysis | None:
-        """Parse the analysis JSON string into a DotNetAssemblyAnalysis object"""
-        if not self.analysis:
+    @field_validator("analysis", mode="before")
+    @classmethod
+    def parse_analysis_json(cls, v):
+        """Parse analysis from JSON string if needed"""
+        if v is None:
             return None
-        try:
+        if isinstance(v, str):
             import json
 
-            analysis_data = json.loads(self.analysis)
-            return DotNetAssemblyAnalysis(**analysis_data)
-        except Exception as e:
-            logger.warning(f"Failed to parse DotNet analysis: {e}")
-            return None
+            try:
+                return json.loads(v)
+            except Exception as e:
+                logger.warning(f"Failed to parse DotNet analysis JSON: {e}")
+                return None
+        return v
 
 
 ##########################################
@@ -198,6 +201,18 @@ class NoseyParkerOutput(BaseModel):
 
 ##########################################
 #
+# Bulk Enrichment
+#
+##########################################
+
+
+class BulkEnrichmentTask(BaseModel):
+    enrichment_name: str
+    object_id: str
+
+
+##########################################
+#
 # Model for files submitted to the API
 #
 ##########################################
@@ -205,7 +220,6 @@ class File(BaseModel):
     model_config = ConfigDict(
         exclude_none=True,
         exclude_unset=True,
-        json_encoders={datetime: lambda dt: dt.isoformat()},
     )
 
     object_id: str
@@ -221,6 +235,10 @@ class File(BaseModel):
     creation_time: str | None = None
     access_time: str | None = None
     modification_time: str | None = None
+
+    @field_serializer("timestamp", "expiration")
+    def serialize_datetime(self, dt: datetime, _info):
+        return dt.isoformat()
 
     @classmethod
     def from_file_metadata(cls, metadata: "FileMetadata", object_id: str) -> "File":
@@ -270,8 +288,6 @@ class FileHashes(BaseModel):
 
 
 class FileEnriched(File):
-    model_config = ConfigDict(json_encoders={datetime: lambda dt: dt.isoformat()})
-
     file_name: str
     extension: str | None = None
     size: int

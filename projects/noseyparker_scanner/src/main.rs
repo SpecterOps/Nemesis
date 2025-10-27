@@ -255,26 +255,15 @@ async fn handle_input_event(input: NoseyParkerInput) {
             let pubsub_name = std::env::var("PUBSUB_NAME").unwrap_or_else(|_| "pubsub".to_string());
             let output_topic = std::env::var("OUTPUT_TOPIC").unwrap_or_else(|_| "noseyparker-output".to_string());
 
-            // Publish the result to the output topic
-            let output_json = match serde_json::to_string(&output) {
-                Ok(json) => json,
-                Err(e) => {
-                    error!("Failed to serialize output to JSON: {}", e);
-                    return;
-                }
-            };
-
             info!("Publishing result to output topic: {}", output_topic);
 
             // Publish results through Dapr client
-            match dapr_publish_event(&pubsub_name, &output_topic, &output_json).await {
+            match dapr_publish_event(&pubsub_name, &output_topic, &output).await {
                 Ok(_) => {
                     info!("Successfully published result to Dapr output topic");
                 }
                 Err(e) => {
                     error!("Failed to publish result to Dapr: {:?}", e);
-                    // Print results to console as fallback
-                    info!("Results (not published): {}", output_json);
                 }
             }
         }
@@ -330,19 +319,22 @@ fn force_memory_cleanup() {
 }
 
 // Helper function to publish events
-async fn dapr_publish_event(pubsub_name: &str, topic: &str, data: &str) -> Result<(), anyhow::Error> {
+async fn dapr_publish_event(pubsub_name: &str, topic: &str, output: &NoseyParkerOutput) -> Result<(), anyhow::Error> {
     // Connect to Dapr sidecar - this uses DAPR_GRPC_PORT implicitly under the hood
     let dapr_addr = "http://127.0.0.1".to_string();
     let mut client = DaprClient::<TonicClient>::connect(dapr_addr.clone()).await?;
 
-    debug!("Publishing JSON: {}", data);
+    // Serialize to JSON bytes (not a string!)
+    let data_bytes = serde_json::to_vec(output)?;
 
-    // Publish the event
+    debug!("Publishing event to topic: {}", topic);
+
+    // Publish the event with proper content type
     client.publish_event(
         pubsub_name,
         topic,
-        data,
-        data.as_bytes().to_vec(),
+        "application/json",  // content type
+        data_bytes,
         None
     ).await?;
 
