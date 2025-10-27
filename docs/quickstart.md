@@ -52,10 +52,10 @@ To start Nemesis's core services, run the `./tools/nemesis-ctl.sh` script:
 ./tools/nemesis-ctl.sh start prod
 ```
 
-If you'd like to install the monitoring services and/or jupyter notebooks, use the associated optional command line arguments:
+If you'd like to install the monitoring services, jupyter notebooks, and/or LLM agents use the associated optional command line arguments:
 
 ```bash
-./tools/nemesis-ctl.sh start prod --monitoring --jupyter
+./tools/nemesis-ctl.sh start prod --monitoring --jupyter [--llm]
 ```
 `nemesis-ctl.sh` effectively is a wrapper for `docker compose` commands and is in charge of pulling and starting the appropriate published Nemesis docker images. In general, we recommend people use `nemesis-ctl.sh` instead of manually invoking `docker compose`. For more complex deployment scenarios, see Nemesis's [Docker Compose documentation](docker_compose.md) to understand what `nemesis-ctl.sh` does underneath.
 
@@ -96,17 +96,19 @@ Click on the "Help" button on the bottom left to view the additionally exposed N
 
 **NOTE:** The /jupyter/ route will only be available if you started with it enabled (`--jupyter`).
 
+**NOTE:** The /jupyter/ route will only be available if you started with it enabled (`--jupyter`).
+
 ![Nemesis services](images/nemesis-dashboard-services.png)
 
 ### Step 7: Shutting Nemesis Down
 
-To shutdown Nemesis, use the `nemesis-ctl.sh` script's `stop` or `clean` commands ***with the same arguments you used to start it***. For example, if you started it with monitoring and jupyter enabled, then run the following:
+To shutdown Nemesis, use the `nemesis-ctl.sh` script's `stop` or `clean` commands ***with the same arguments you used to start it***. For example, if you started it with monitoring, jupyter, or LLM support enabled, then run the following:
 - To stop Nemesis containers:
 ```bash
-./tools/nemesis-ctl.sh stop prod --monitoring --jupyter
+./tools/nemesis-ctl.sh stop prod --monitoring --jupyter --llm
 ```
 
 - To stop Nemesis containers and delete their associated volumes:
 ```bash
-./tools/nemesis-ctl.sh clean prod --monitoring --jupyter
+./tools/nemesis-ctl.sh clean prod --monitoring --jupyter --llm
 ```
