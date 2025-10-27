@@ -1493,7 +1493,8 @@ class OleFileIO:
         """
         close the OLE file, to release the file object
         """
-        self.fp.close()
+        if self.fp:
+            self.fp.close()
 
     def __enter__(self):
         """
