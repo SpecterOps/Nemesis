@@ -2,11 +2,12 @@
 
 from common.logger import get_logger
 from common.models import BulkEnrichmentTask
+from file_enrichment.workflow_manager import WorkflowManager
 
 logger = get_logger(__name__)
 
 
-async def process_bulk_enrichment_event(task: BulkEnrichmentTask, workflow_manager, global_module_map):
+async def process_bulk_enrichment_event(task: BulkEnrichmentTask, workflow_manager: WorkflowManager, global_module_map):
     """Process individual bulk enrichment tasks"""
     try:
         enrichment_name = task.enrichment_name
@@ -29,6 +30,6 @@ async def process_bulk_enrichment_event(task: BulkEnrichmentTask, workflow_manag
         # This will block if we're at max capacity, providing natural backpressure
         await workflow_manager.start_workflow_single_enrichment(workflow_input)
 
-    except Exception as e:
-        logger.exception("Error processing bulk enrichment task", error=str(e))
+    except Exception:
+        logger.exception("Error processing bulk enrichment task")
         raise

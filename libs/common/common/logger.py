@@ -12,17 +12,7 @@ WORKFLOW_RUNTIME_LOG_LEVEL = os.getenv("WORKFLOW_RUNTIME_LOG_LEVEL", "WARNING")
 WORKFLOW_CLIENT_LOG_LEVEL = os.getenv("WORKFLOW_CLIENT_LOG_LEVEL", "WARNING")
 
 
-def add_worker_id(logger, method_name, event_dict):
-    try:
-        import multiprocessing
-
-        event_dict["worker_id"] = multiprocessing.current_process().name
-    except (ImportError, AttributeError):
-        event_dict["worker_id"] = "unknown"
-    return event_dict
-
-
-def add_callsite_from_record(_logger, _method, event_dict):
+def add_callsite_from_record(_logger: logging.Logger, _method_name: str, event_dict: dict) -> dict:
     record = event_dict.get("_record")
     if record is not None:
         event_dict.setdefault("logger", record.name)
@@ -34,7 +24,6 @@ def add_callsite_from_record(_logger, _method, event_dict):
 
 foreign_pre_chain = [
     add_callsite_from_record,
-    add_worker_id,
     structlog.stdlib.add_log_level,
     structlog.processors.StackInfoRenderer(),
     structlog.processors.format_exc_info,
@@ -73,6 +62,6 @@ structlog.configure(
 )
 
 
-def get_logger(name=None):
+def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     logging.getLogger(name).setLevel(LOG_LEVEL)
     return structlog.get_logger(name)
