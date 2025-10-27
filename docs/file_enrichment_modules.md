@@ -33,8 +33,13 @@ The `should_process()` function determines if the module should run on a file. Y
 
 ```python
 ...
-def should_process(self, state_key: str) -> bool:
-    """Determine if this module should run based on file type."""
+def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    """Determine if this module should run based on file type
+
+    Args:
+        object_id: The object ID of the file
+        file_path: Optional path to already downloaded file
+    """
     file_enriched = get_file_enriched(state_key)
     # Check if file appears to be a VNC config file
     should_run = (
@@ -65,18 +70,31 @@ rule has_dpapi_blob
 }
     """)
 
-def should_process(self, object_id: str) -> bool:
+def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    """Check if this file should be processed by scanning for DPAPI blobs.
+
+    Args:
+        object_id: The object ID of the file
+        file_path: Optional path to already downloaded file
+    """
     file_enriched = get_file_enriched(object_id)
+    logger.debug(f"File {object_id} should be processed by DPAPI blob analyzer")
     if file_enriched.size > self.size_limit:
-        logger.warning(
+        logger.debug(
             f"[dpapi_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"
         )
 
-    num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
-    file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
+    if file_path:
+        # Use provided file path - read only the needed bytes
+        with open(file_path, "rb") as f:
+            num_bytes = min(file_enriched.size, self.size_limit)
+            file_bytes = f.read(num_bytes)
+    else:
+        # Fallback to downloading the file itself
+        num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
+        file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
 
     should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
-    logger.debug(f"[dpapi_analyzer] should_run: {should_run}")
     return should_run
 ...
 ```
