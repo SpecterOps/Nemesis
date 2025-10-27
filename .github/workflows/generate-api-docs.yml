@@ -45,7 +45,7 @@ jobs:
       - name: Commit documentation changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: 'docs: update API documentation [skip ci]'
+          commit_message: 'docs: update API documentation'
           file_pattern: 'docs/*'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
