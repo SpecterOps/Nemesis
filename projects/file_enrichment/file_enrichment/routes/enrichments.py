@@ -156,36 +156,3 @@ async def run_enrichment(
             pid=os.getpid(),
         )
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
-
-
-@router.post("/enrichments/{enrichment_name}/bulk")
-async def run_bulk_enrichment(
-    enrichment_name: str = Path(..., description="Name of the enrichment module to run"),
-):
-    """Bulk enrichment is now handled by the web API using distributed processing."""
-    raise HTTPException(
-        status_code=501,
-        detail="Bulk enrichment has been moved to the web API for distributed processing. Please use the main API endpoint.",
-    )
-
-
-@router.get("/enrichments/{enrichment_name}/bulk/status")
-async def get_bulk_enrichment_status(
-    enrichment_name: str = Path(..., description="Name of the enrichment module to check status for"),
-):
-    """Bulk enrichment status is now handled by the web API."""
-    raise HTTPException(
-        status_code=501,
-        detail="Bulk enrichment status is now handled by the web API. Please use the main API endpoint.",
-    )
-
-
-@router.post("/enrichments/{enrichment_name}/bulk/stop")
-async def stop_bulk_enrichment(
-    enrichment_name: str = Path(..., description="Name of the enrichment module to stop"),
-):
-    """Bulk enrichment stopping is now handled by the web API."""
-    raise HTTPException(
-        status_code=501,
-        detail="Bulk enrichment stopping is now handled by the web API. Please use the main API endpoint.",
-    )
