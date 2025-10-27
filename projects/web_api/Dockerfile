@@ -3,6 +3,26 @@ ARG PYTHON_BASE_DEV_IMAGE=nemesis-python-base-dev
 ARG PYTHON_BASE_PROD_IMAGE=nemesis-python-base-prod
 FROM ${PYTHON_BASE_DEV_IMAGE} AS base
 
+# Install dependencies in a single RUN command to reduce layers
+# Added build-essential and other build dependencies for pytsk3
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        libpq-dev \
+        libtsk-dev \
+        postgresql-client \
+        build-essential \
+        gcc \
+        g++ \
+        make \
+        autoconf \
+        automake \
+        libtool \
+        pkg-config \
+        python3-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # If dependencies change, re-copy all the dependencies
 # In the future we can be more efficient with this an only copy the lib folders
 # that this project uses
@@ -52,10 +72,16 @@ COPY --from=base /src /src
 WORKDIR /src/projects/web_api
 RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
 
-# FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
-COPY --from=bundle /venv /venv
 
+RUN apt-get update && \
+    apt-get install -y \
+       libpq5 \
+         && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=bundle /venv /venv
 
 # Uvicorn production settings
 ENV UVICORN_HOST=0.0.0.0 \

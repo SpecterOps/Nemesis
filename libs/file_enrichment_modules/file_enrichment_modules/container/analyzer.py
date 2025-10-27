@@ -5,15 +5,14 @@ import zipfile
 from datetime import UTC, datetime
 
 import py7zr
-import structlog
 from common.helpers import is_container
+from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class ContainerAnalyzer(EnrichmentModule):
@@ -22,8 +21,13 @@ class ContainerAnalyzer(EnrichmentModule):
         self.storage = StorageMinio()
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str) -> bool:
-        """Determine if this module should run."""
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+        """Determine if this module should run.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file (not used by container analyzer)
+        """
         file_enriched = get_file_enriched(object_id)
         return is_container(file_enriched.mime_type)
 
@@ -55,80 +59,105 @@ class ContainerAnalyzer(EnrichmentModule):
         with tarfile.open(file_path) as tf:
             return [(member.name, member.size) for member in tf.getmembers() if member.isfile()]
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process container file and list its contents without extraction."""
+    def _analyze_container(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze container file and generate enrichment result.
+
+        Args:
+            file_path: Path to the container file to analyze
+            file_enriched: File enrichment data
+
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
+        enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
+
+        try:
+            # Analyze based on file type
+            if zipfile.is_zipfile(file_path):
+                files = self._analyze_zip(file_path)
+            elif py7zr.is_7zfile(file_path):
+                files = self._analyze_7z(file_path)
+            elif tarfile.is_tarfile(file_path):
+                files = self._analyze_tar(file_path)
+            else:
+                logger.warning(f"Unsupported container format for {file_enriched.file_name}")
+                return None
+
+            # Generate the report
+            report_lines = []
+            report_lines.append(f"# Container Contents: {file_enriched.file_name}")
+            report_lines.append(f"\nAnalysis timestamp: {datetime.now(UTC).isoformat()}")
+
+            # Calculate summary
+            total_size = sum(size for _, size in files)
+            file_count = len(files)
+
+            # Add summary
+            report_lines.append("\n## Summary")
+            report_lines.append(f"- Total files: {file_count}")
+            report_lines.append(f"- Total size: {self._format_size(total_size)}")
+
+            git_repo_count = 0
+            for filepath, _size in sorted(files):
+                if filepath.endswith(".git/config") or filepath.endswith(".git\\config"):
+                    git_repo_count += 1
+            if git_repo_count > 0:
+                report_lines.append(f"- Contains {git_repo_count} .git repos")
+
+            # Add file listing
+            report_lines.append("\n## File Listing")
+            report_lines.append("\n| File Path | Size |")
+            report_lines.append("| --------- | ---- |")
+
+            # Add each file to the table
+            for filepath, size in sorted(files):
+                # Escape any pipe characters in the path
+                safe_path = filepath.replace("|", "\\|")
+                report_lines.append(f"| {safe_path} | {self._format_size(size)} |")
+
+            # Create the transform
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_report:
+                tmp_report.write("\n".join(report_lines))
+                tmp_report.flush()
+                transform_object_id = self.storage.upload_file(tmp_report.name)
+
+                enrichment_result.transforms = [
+                    Transform(
+                        type="container_contents",
+                        object_id=f"{transform_object_id}",
+                        metadata={
+                            "file_name": f"{file_enriched.file_name}_contents.md",
+                            "display_type_in_dashboard": "markdown",
+                            "default_display": True,
+                        },
+                    )
+                ]
+
+        except Exception as e:
+            logger.exception(e, message=f"Error analyzing container contents for {file_enriched.file_name}")
+            return None
+
+        return enrichment_result
+
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process container file and list its contents without extraction.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
         try:
             file_enriched = get_file_enriched(object_id)
-            enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
-            with self.storage.download(file_enriched.object_id) as temp_file:
-                # Analyze based on file type
-                try:
-                    if zipfile.is_zipfile(temp_file.name):
-                        files = self._analyze_zip(temp_file.name)
-                    elif py7zr.is_7zfile(temp_file.name):
-                        files = self._analyze_7z(temp_file.name)
-                    elif tarfile.is_tarfile(temp_file.name):
-                        files = self._analyze_tar(temp_file.name)
-                    else:
-                        logger.warning(f"Unsupported container format for {file_enriched.file_name}")
-                        return None
-
-                    # Generate the report
-                    report_lines = []
-                    report_lines.append(f"# Container Contents: {file_enriched.file_name}")
-                    report_lines.append(f"\nAnalysis timestamp: {datetime.now(UTC).isoformat()}")
-
-                    # Calculate summary
-                    total_size = sum(size for _, size in files)
-                    file_count = len(files)
-
-                    # Add summary
-                    report_lines.append("\n## Summary")
-                    report_lines.append(f"- Total files: {file_count}")
-                    report_lines.append(f"- Total size: {self._format_size(total_size)}")
-
-                    git_repo_count = 0
-                    for filepath, size in sorted(files):
-                        if filepath.endswith(".git/config") or filepath.endswith(".git\\config"):
-                            git_repo_count += 1
-                    if git_repo_count > 0:
-                        report_lines.append(f"- Contains {git_repo_count} .git repos")
-
-                    # Add file listing
-                    report_lines.append("\n## File Listing")
-                    report_lines.append("\n| File Path | Size |")
-                    report_lines.append("| --------- | ---- |")
-
-                    # Add each file to the table
-                    for filepath, size in sorted(files):
-                        # Escape any pipe characters in the path
-                        safe_path = filepath.replace("|", "\\|")
-                        report_lines.append(f"| {safe_path} | {self._format_size(size)} |")
-
-                    # Create the transform
-                    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_report:
-                        tmp_report.write("\n".join(report_lines))
-                        tmp_report.flush()
-                        transform_object_id = self.storage.upload_file(tmp_report.name)
-
-                        enrichment_result.transforms = [
-                            Transform(
-                                type="container_contents",
-                                object_id=f"{transform_object_id}",
-                                metadata={
-                                    "file_name": f"{file_enriched.file_name}_contents.md",
-                                    "display_type_in_dashboard": "markdown",
-                                    "default_display": True,
-                                },
-                            )
-                        ]
-
-                except Exception as e:
-                    logger.exception(e, message=f"Error analyzing container contents for {file_enriched.file_name}")
-                    return None
-
-                return enrichment_result
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_container(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    return self._analyze_container(temp_file.name, file_enriched)
 
         except Exception as e:
             logger.exception(e, message="Error in container analyzer")

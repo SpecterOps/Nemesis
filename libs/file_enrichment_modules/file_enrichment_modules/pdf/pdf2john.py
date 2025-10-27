@@ -40,7 +40,7 @@ class PdfParser:
         try:
             self.pdf_spec = psr.findall(self.encrypted)[0]
         except IndexError:
-            sys.stderr.write("%s is not a PDF file!\n" % file_name)
+            sys.stderr.write(f"{file_name} is not a PDF file!\n")
             self.process = False
 
     def parse(self):
@@ -51,7 +51,7 @@ class PdfParser:
             trailer = self.get_trailer()
         except RuntimeError:
             e = sys.exc_info()[1]
-            sys.stderr.write("%s : %s\n" % (self.file_name, str(e)))
+            sys.stderr.write(f"{self.file_name} : {e!s}\n")
             return
         # print >> sys.stderr, trailer
         object_id = self.get_object_id(b"Encrypt", trailer)
@@ -65,8 +65,8 @@ class PdfParser:
         rr = re.compile(rb"\/R \d")
         try:
             v = dr.findall(vr.findall(encryption_dictionary)[0])[0]
-        except IndexError:
-            raise RuntimeError("Could not find /V")
+        except IndexError as err:
+            raise RuntimeError("Could not find /V") from err
         r = dr.findall(rr.findall(encryption_dictionary)[0])[0]
         lr = re.compile(rb"\/Length \d+")
         longest = 0
@@ -80,9 +80,9 @@ class PdfParser:
         pr = re.compile(rb"\/P -?\d+")
         try:
             p = pr.findall(encryption_dictionary)[0]
-        except IndexError:
+        except IndexError as err:
             # print >> sys.stderr, "** dict:", encryption_dictionary
-            raise RuntimeError("Could not find /P")
+            raise RuntimeError("Could not find /P") from err
         pr = re.compile(rb"-?\d+")
         p = pr.findall(p)[0]
         meta = "1" if self.is_meta_data_encrypted(encryption_dictionary) else "0"
@@ -94,11 +94,10 @@ class PdfParser:
             idr = re.compile(rb"\/ID\s*\[\s*\(\w+\)\s*\(\w+\)\s*\]")
             try:
                 i_d = idr.findall(trailer)[0]  # id key word
-            except IndexError:
+            except IndexError as err:
                 # print >> sys.stderr, "** idr:", idr
                 # print >> sys.stderr, "** trailer:", trailer
-                raise RuntimeError("Could not find /ID tag")
-                return
+                raise RuntimeError("Could not find /ID tag") from err
         idr = re.compile(rb"<\w+>")
         try:
             i_d = idr.findall(trailer)[0]

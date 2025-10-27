@@ -9,10 +9,12 @@ volumes:
   jaeger_data:
   loki_data:
   minio_data:
+  phoenix_data:
   postgres_data:
   prometheus_data:
   rabbitmq_data:
   empty:
+  empty-mounted-containers:
 
 services:
   ########################################
@@ -30,6 +32,9 @@ services:
       - APP_ID=web-api
       - DAPR_GRPC_PORT=50001
       - DAPR_HTTP_PORT=3500
+      - DEFAULT_EXPIRATION_DAYS=${DEFAULT_EXPIRATION_DAYS:-100}
+    volumes:
+      - ${MOUNTED_CONTAINER_PATH:-empty-mounted-containers}:/mounted-containers
     logging: &logging-config
       driver: "json-file"
       options: { max-size: "10m", max-file: "3" }
@@ -45,14 +50,14 @@ services:
       - "traefik.http.routers.web-api.tls=true"
       - "traefik.http.routers.web-api.middlewares=auth"
   web-api-dapr:
-    image: "daprio/daprd:1.15.5"
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--app-id",
         "web-api",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-port",
         "8000",
         "--dapr-http-port",
@@ -67,6 +72,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
@@ -76,6 +84,14 @@ services:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?}
+      - RABBITMQ_USER=${RABBITMQ_USER:?}
     depends_on:
       web-api: { condition: service_started }
       placement: { condition: service_started }
@@ -96,16 +112,20 @@ services:
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
       - RUST_LOG=info
-      - SNIPPET_LENGTH=512
+      - SNIPPET_LENGTH=512        # context length around any Nosey Parker matches
+      - MAX_CONCURRENT_FILES=2    # maximum number of concurrent files to scan
+      - MAX_FILE_SIZE_MB=200      # maximum file size to scan
+      - DECOMPRESS_ZIPS=true      # whether to decompress+scan zips
+      - MAX_EXTRACT_SIZE_MB=1000  # maximum number of bytes to extract if decompressing
     volumes:
       - ./projects/noseyparker_scanner/custom_rules/:/opt/noseyparker:ro
   noseyparker-scanner-dapr:
-    image: "daprio/daprd:1.15.5"
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-id",
         "noseyparker-scanner",
         "--app-port",
@@ -124,6 +144,9 @@ services:
         "/dapr/configuration/config.yaml",
         "--app-max-concurrency",
         "1",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -134,60 +157,64 @@ services:
     depends_on: [noseyparker-scanner, placement]
     network_mode: "service:noseyparker-scanner"
 
-  dotnet-api:
-    image: ghcr.io/specterops/nemesis/dotnet-api:latest
+  dotnet-service:
+    image: ghcr.io/specterops/nemesis/dotnet-service:latest
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:1337/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    environment:
-      - APP_ID=dotnet-api
-      - DAPR_GRPC_PORT=50010
-      - DAPR_HTTP_PORT=3507
-    logging: *logging-config
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
-      postgres: { condition: service_started }
-      placement: { condition: service_started }
+      minio: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
-  dotnet-api-dapr:
-    image: "daprio/daprd:1.15.5"
+    environment:
+      - DAPR_GRPC_PORT=50014
+      - DAPR_PORT=3514
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?}
+      - MINIO_BUCKET=files
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
+      - ASPNETCORE_URLS=http://0.0.0.0:5000
+    expose:
+      - "5000"
+  dotnet-service-dapr:
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-id",
-        "dotnet-api",
+        "dotnet-service",
         "--app-port",
-        "1337",
+        "5000",
+        "--app-protocol",
+        "http",
         "--dapr-http-port",
-        "3507",
+        "3514",
         "--dapr-grpc-port",
-        "50010",
+        "50014",
         "--placement-host-address",
         "placement:50006",
-        "--scheduler-host-address",
-        "scheduler:50007",
         "--resources-path",
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--app-max-concurrency",
+        "1",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
+    environment:
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     volumes:
+      - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
-    environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-    depends_on:
-      dotnet-api: { condition: service_started }
-      placement: { condition: service_started }
-      scheduler: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-    network_mode: "service:dotnet-api"
+    depends_on: [dotnet-service, placement]
+    network_mode: "service:dotnet-service"
 
   file-enrichment:
     image: ghcr.io/specterops/nemesis/file-enrichment:latest
@@ -203,30 +230,31 @@ services:
       - APP_ID=file-enrichment
       - DAPR_GRPC_PORT=50003
       - DAPR_HTTP_PORT=3503
-      - LOG_LEVEL=INFO
-      - MAX_PARALLEL_ENRICHMENT_MODULES=${MAX_PARALLEL_ENRICHMENT_MODULES:-5}
-      - MAX_PARALLEL_WORKFLOWS=${MAX_PARALLEL_WORKFLOWS:-5}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
       - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
       - NEMESIS_URL=${NEMESIS_URL:?}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
+      - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
       - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
       - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
       - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
-      - UVICORN_WORKERS=${UVICORN_WORKERS:-2}
+      - UVICORN_WORKERS=1  # Reduce to 1 worker to avoid cross-process contention
+      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
+      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
     logging: *logging-config
     depends_on:
       postgres: { condition: service_started }
       placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   file-enrichment-dapr:
-    image: "daprio/daprd:1.15.5"
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-id",
         "file-enrichment",
         "--app-port",
@@ -243,6 +271,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
@@ -250,7 +281,12 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
@@ -296,7 +332,7 @@ services:
     volumes:
     - "./projects/jupyter/notebooks:/home/jovyan/work"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8888/jupyter/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8888/jupyter/api"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -328,12 +364,12 @@ services:
       retries: 5
       start_period: 20s
   alerting-dapr:
-    image: "daprio/daprd:1.15.5"
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-id",
         "alerting",
         "--app-port",
@@ -350,6 +386,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
@@ -365,13 +404,28 @@ services:
       rabbitmq: { condition: service_healthy }
     network_mode: "service:alerting"
 
-  triage:
-    image: ghcr.io/specterops/nemesis/triage:latest
+  agents:
+    image: ghcr.io/specterops/nemesis/agents:latest
     environment:
       - DAPR_HTTP_PORT=3509
       - DAPR_GRPC_PORT=50009
       - NEMESIS_URL=${NEMESIS_URL:?}
-      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
+      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
+      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
+      - LITELLM_ADMIN_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
+      - MAX_BUDGET=${LLM_MAX_BUDGET:-100}
+      - BUDGET_DURATION=${LLM_BUDGET_DURATION:-30d}
+      - DOTNET_ANALYSIS_RUN_REQUEST_LIMIT=${DOTNET_ANALYSIS_RUN_REQUEST_LIMIT:-25}    # max LLM calls to use per .NET program analysis run
+      - DOTNET_ANALYSIS_RUN_TOKENS_LIMIT=${DOTNET_ANALYSIS_RUN_TOKENS_LIMIT:-1000000} # max tokens to use per .NET program analysis run
+      # if we hit this number of the same triage values for the same file, all future findings get that value
+      - TRIAGE_CONSENSUS_THRESHOLD=${TRIAGE_CONSENSUS_THRESHOLD:-3}
+      # Phoenix LLM tracing configuration
+      - PHOENIX_ENABLED=${PHOENIX_ENABLED:-false}
+      - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
+      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
     logging: *logging-config
     depends_on:
       postgres: { condition: service_healthy }
@@ -379,15 +433,15 @@ services:
       rabbitmq: { condition: service_healthy }
       hasura: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
-  triage-dapr:
-    image: "daprio/daprd:1.15.5"
+  agents-dapr:
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-id",
-        "triage",
+        "agents",
         "--app-port",
         "8000",
         "--dapr-http-port",
@@ -402,19 +456,31 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
+      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
     depends_on:
-      triage: { condition: service_started }
+      agents: { condition: service_started }
       placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
-    network_mode: "service:triage"
+    network_mode: "service:agents"
 
   housekeeping:
     image: ghcr.io/specterops/nemesis/housekeeping:latest
@@ -430,12 +496,12 @@ services:
       rabbitmq: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
   housekeeping-dapr:
-    image: "daprio/daprd:1.15.5"
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-id",
         "housekeeping",
         "--app-port",
@@ -452,6 +518,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
@@ -459,7 +528,12 @@ services:
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
     depends_on:
       housekeeping: { condition: service_started }
       placement: { condition: service_started }
@@ -476,6 +550,14 @@ services:
       - DAPR_GRPC_PORT=50002
       - DAPR_HTTP_PORT=3501
       - TIKA_CONFIG=/tika-config.xml
+      # If you want to have additional language packs supported (see https://github.com/tesseract-ocr/tessdata for a full list):
+      #   $ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
+      # To change the default:
+      #   - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng chi_sim chi_tra jpn rus deu spa}
+      # Note: each package installed will increase the image size!
+      - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng}
+      - MAX_PARALLEL_WORKFLOWS=${MAX_PARALLEL_WORKFLOWS:-5}
+      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
       interval: 10s
@@ -487,12 +569,12 @@ services:
       placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   document-conversion-dapr:
-    image: "daprio/daprd:1.15.5"
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-id",
         "document-conversion",
         "--app-port",
@@ -509,6 +591,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
@@ -518,7 +603,12 @@ services:
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - POSTGRES_CONNECTION_STRING=host=postgres user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=enrichment port=5432 sslmode=disable
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     depends_on:
       document-conversion: { condition: service_started }
@@ -535,6 +625,7 @@ services:
         "--api-timeout=180s",
         "--libreoffice-restart-after=5",
         "--libreoffice-auto-start=true",
+        "--prometheus-collect-interval=10s",
       ]
     environment: { DISABLE_GOOGLE_CHROME: "1" }
     healthcheck:
@@ -543,12 +634,12 @@ services:
       timeout: 10s
       retries: 3
   gotenberg-dapr:
-    image: "daprio/daprd:1.15.5"
+    image: "daprio/daprd:1.16.1"
     command:
       [
         "./daprd",
         "--max-body-size",
-        "300Mi",
+        "1Gi",
         "--app-id",
         "gotenberg",
         "--app-port",
@@ -565,6 +656,9 @@ services:
         "/dapr/components",
         "--config",
         "/dapr/configuration/config.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
       ]
     volumes:
       - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
@@ -605,18 +699,21 @@ services:
       [
         "/bin/sh",
         "-c",
-        "sleep 1; until mc alias set minio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do echo 'Minio is not online. Waiting for it to start...'; sleep 2; done && mc mb minio/loki-data --ignore-existing",
+        "sleep 1; until mc alias set minio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do echo 'Minio is not online. Waiting for it to start...'; sleep 2; done && mc mb minio/loki-data --ignore-existing && mc mb minio/files --ignore-existing",
       ]
     restart: "no"
 
   rabbitmq:
-    image: rabbitmq:4.1.1-management
+    image: rabbitmq:4.1.2-management
+    hostname: rabbitmq-node # have to do this for persistence reasons
     environment:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?}
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:?}
       - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq_management path_prefix "/rabbitmq"
+      - RABBITMQ_NODENAME=rabbit@rabbitmq-node # have to do this for persistence reasons
     volumes:
-    - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 10s
@@ -630,7 +727,12 @@ services:
       - "traefik.http.routers.rabbitmq-ui.rule=PathPrefix(`/rabbitmq`)"
 
   postgres:
-    image: postgres:17.5-alpine
+    image: postgres:17.6-alpine
+    command: [
+      "postgres",
+      "-c", "max_connections=200",
+      "-c", "shared_buffers=256MB"
+    ]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-enrichment}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
@@ -644,20 +746,30 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-exporter:
+    profiles: ["monitoring"]
+    image: prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}"
+    volumes:
+      - ./infra/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+
   hasura:
-    image: hasura/graphql-engine:v2.45.1.cli-migrations-v2
+    image: hasura/graphql-engine:v2.48.6.cli-migrations-v2
     depends_on:
       postgres: { condition: service_healthy }
     environment:
       HASURA_GRAPHQL_ADMIN_SECRET: "${HASURA_ADMIN_SECRET:-pass456}"
       HASURA_GRAPHQL_BASE_PATH: "/hasura"
-      HASURA_GRAPHQL_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
       HASURA_GRAPHQL_ENABLE_METADATA_SYNC: "true"
       HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
       HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
       HASURA_GRAPHQL_LOG_LEVEL: "warn"
-      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/enrichment
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
       HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
     volumes:
@@ -672,7 +784,7 @@ services:
       - "traefik.http.routers.hasura.tls=true"
 
   traefik:
-    image: traefik:v3.3.2
+    image: traefik:v3.4.4
     command:
       - "--api.insecure=true"
       # - "--log.level=DEBUG"
@@ -700,18 +812,20 @@ services:
       - ./auth:/auth:ro
       - ./infra/traefik/certs:/certs:ro
       - ./infra/traefik/config:/config:ro
+
   placement:
-    image: "daprio/dapr:1.15.5"
-    command: ["./placement", "-port", "50006"]
+    image: "daprio/dapr:1.16.1"
+    command: ["./placement", "-port", "50006", "--enable-metrics"]
 
   scheduler:
-    image: "daprio/dapr:1.15.5"
+    image: "daprio/dapr:1.16.1"
     command:
       [
         "./scheduler",
         "--port",
         "50007",
         "--etcd-data-dir=/var/lock/dapr/scheduler",
+        "--enable-metrics",
       ]
 
   ############################
@@ -745,6 +859,35 @@ services:
       - "traefik.http.routers.jaeger.middlewares=auth"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:13133/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  phoenix:
+    profiles: ["monitoring"]
+    image: arizephoenix/phoenix:11.24.1
+    environment:
+      - PHOENIX_WORKING_DIR=/data
+      - PHOENIX_HOST_ROOT_PATH=/phoenix
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
+      - PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=100
+    volumes:
+      - phoenix_data:/data
+    # ports:
+    #   - "6006:6006"  # Phoenix UI port, for debugging
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.phoenix.loadbalancer.server.port=6006"
+      - "traefik.http.routers.phoenix.rule=PathPrefix(`/phoenix`)"
+      - "traefik.http.routers.phoenix.entrypoints=websecure"
+      - "traefik.http.routers.phoenix.tls=true"
+      - "traefik.http.routers.phoenix.middlewares=auth,phoenix-stripprefix"
+      - "traefik.http.middlewares.phoenix-stripprefix.stripprefix.prefixes=/phoenix"
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -793,6 +936,7 @@ services:
       - GF_SERVER_DOMAIN=${EXTERNAL_HOST:-https://localhost}
       - GF_SERVER_ROOT_URL=${EXTERNAL_HOST:-https://localhost}/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
@@ -867,3 +1011,42 @@ services:
     - /var/lib/docker/:/var/lib/docker:ro
     - /var/run:/var/run:ro
     devices: ["/dev/kmsg:/dev/kmsg"]
+
+
+  ############################
+  # LLM Services (optional profile)
+  ############################
+
+  litellm:
+    profiles: ["llm"]
+    image: ghcr.io/berriai/litellm:v1.74.0-stable
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
+      - STORE_MODEL_IN_DB=True
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION_NAME=${AWS_REGION_NAME:-us-east-1}
+      - LITELLM_MASTER_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
+      - LITELLM_SALT_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
+      - SERVER_ROOT_PATH=/llm
+      - PROXY_BASE_URL=${NEMESIS_URL:?}
+      - UI_BASE_PATH=/llm/ui
+    volumes:
+      - ./infra/litellm/config.yml:/app/config.yml:ro
+    command: ["--config", "/app/config.yml"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "--header=Authorization: Bearer sk-${LITELLM_ADMIN_PASSWORD:-admin123}", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      disable: true
+    logging: *logging-config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.litellm.rule=PathPrefix(`/llm`)"
+      - "traefik.http.services.litellm.loadbalancer.server.port=4000"
+      - "traefik.http.routers.litellm.entrypoints=websecure"
+      - "traefik.http.routers.litellm.tls=true"

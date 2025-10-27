@@ -368,7 +368,7 @@ def set_debug_mode(debug_mode):
 # === CONSTANTS ===============================================================
 
 # magic bytes that should be at the beginning of every OLE file:
-MAGIC = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
+MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 # [PL]: added constants for Sector IDs (from AAF specifications)
 MAXREGSECT = 0xFFFFFFFA  # (-6) maximum SECT
@@ -497,7 +497,11 @@ def isOleFile(filename):
         header = filename[: len(MAGIC)]
     else:
         # string-like object: filename of file on disk
-        header = open(filename, "rb").read(len(MAGIC))
+        f = open(filename, "rb")
+        try:
+            header = f.read(len(MAGIC))
+        finally:
+            f.close()
     if header == MAGIC:
         return True
     else:
@@ -552,7 +556,9 @@ def _clsid(clsid):
     # (PL: why not simply return the string with zeroes?)
     if not clsid.strip(b"\0"):
         return ""
-    return ("%08X-%04X-%04X-%02X%02X-" + "%02X" * 6) % ((i32(clsid, 0), i16(clsid, 4), i16(clsid, 6)) + tuple(map(i8, clsid[8:16])))
+    return ("%08X-%04X-%04X-%02X%02X-" + "%02X" * 6) % (
+        (i32(clsid, 0), i16(clsid, 4), i16(clsid, 6)) + tuple(map(i8, clsid[8:16]))
+    )
 
 
 def filetime2datetime(filetime):
@@ -796,7 +802,10 @@ class _OleStream(io.BytesIO):
         :returns: a BytesIO instance containing the OLE stream
         """
         debug("_OleStream.__init__:")
-        debug("  sect=%d (%X), size=%d, offset=%d, sectorsize=%d, len(fat)=%d, fp=%s" % (sect, sect, size, offset, sectorsize, len(fat), repr(fp)))
+        debug(
+            "  sect=%d (%X), size=%d, offset=%d, sectorsize=%d, len(fat)=%d, fp=%s"
+            % (sect, sect, size, offset, sectorsize, len(fat), repr(fp))
+        )
         # [PL] To detect malformed documents with FAT loops, we compute the
         # expected number of sectors in the stream:
         unknown_size = False
@@ -813,7 +822,7 @@ class _OleStream(io.BytesIO):
         # This number should (at least) be less than the total number of
         # sectors in the given FAT:
         if nb_sectors > len(fat):
-            raise IOError("malformed OLE document, stream too large")
+            raise OSError("malformed OLE document, stream too large")
         # optimization(?): data is first a list of strings, and join() is called
         # at the end to concatenate all in one string.
         # (this may not be really useful with recent Python versions)
@@ -821,7 +830,7 @@ class _OleStream(io.BytesIO):
         # if size is zero, then first sector index should be ENDOFCHAIN:
         if size == 0 and sect != ENDOFCHAIN:
             debug("size == 0 and sect != ENDOFCHAIN:")
-            raise IOError("incorrect OLE sector index for empty stream")
+            raise OSError("incorrect OLE sector index for empty stream")
         # [PL] A fixed-length for loop is used instead of an undefined while
         # loop to avoid DoS attacks:
         for i in range(nb_sectors):
@@ -832,7 +841,7 @@ class _OleStream(io.BytesIO):
                 else:
                     # else this means that the stream is smaller than declared:
                     debug("sect=ENDOFCHAIN before expected size")
-                    raise IOError("incomplete OLE stream")
+                    raise OSError("incomplete OLE stream")
             # sector index should be within FAT:
             if sect < 0 or sect >= len(fat):
                 debug("sect=%d (%X) / len(fat)=%d" % (sect, sect, len(fat)))
@@ -842,33 +851,36 @@ class _OleStream(io.BytesIO):
                 #                f.write(tmp_data)
                 #                f.close()
                 #                debug('data read so far: %d bytes' % len(tmp_data))
-                raise IOError("incorrect OLE FAT, sector index out of range")
+                raise OSError("incorrect OLE FAT, sector index out of range")
             # TODO: merge this code with OleFileIO.getsect() ?
             # TODO: check if this works with 4K sectors:
             try:
                 fp.seek(offset + sectorsize * sect)
             except:
                 debug("sect=%d, seek=%d, filesize=%d" % (sect, offset + sectorsize * sect, filesize))
-                raise IOError("OLE sector index out of range")
+                raise OSError("OLE sector index out of range")
             sector_data = fp.read(sectorsize)
             # [PL] check if there was enough data:
             # Note: if sector is the last of the file, sometimes it is not a
             # complete sector (of 512 or 4K), so we may read less than
             # sectorsize.
             if len(sector_data) != sectorsize and sect != (len(fat) - 1):
-                debug("sect=%d / len(fat)=%d, seek=%d / filesize=%d, len read=%d" % (sect, len(fat), offset + sectorsize * sect, filesize, len(sector_data)))
+                debug(
+                    "sect=%d / len(fat)=%d, seek=%d / filesize=%d, len read=%d"
+                    % (sect, len(fat), offset + sectorsize * sect, filesize, len(sector_data))
+                )
                 debug("seek+len(read)=%d" % (offset + sectorsize * sect + len(sector_data)))
-                raise IOError("incomplete OLE sector")
+                raise OSError("incomplete OLE sector")
             data.append(sector_data)
             # jump to next sector in the FAT:
             try:
                 sect = fat[sect] & 0xFFFFFFFF  # JYTHON-WORKAROUND
             except IndexError:
                 # [PL] if pointer is out of the FAT an exception is raised
-                raise IOError("incorrect OLE FAT, sector index out of range")
+                raise OSError("incorrect OLE FAT, sector index out of range")
         # [PL] Last sector should be a "end of chain" marker:
         if sect != ENDOFCHAIN:
-            raise IOError("incorrect last sector index in OLE stream")
+            raise OSError("incorrect last sector index in OLE stream")
         data = b"".join(data)
         # Data is truncated to the actual stream size:
         if len(data) >= size:
@@ -882,7 +894,7 @@ class _OleStream(io.BytesIO):
         else:
             # read data is less than expected:
             debug("len(data)=%d, size=%d" % (len(data), size))
-            raise IOError("OLE stream size is less than declared")
+            raise OSError("OLE stream size is less than declared")
         # when all data is read in memory, BytesIO constructor is called
         io.BytesIO.__init__(self, data)
         # Then the _OleStream object can be used as a read-only file object.
@@ -892,7 +904,6 @@ class _OleStream(io.BytesIO):
 
 
 class _OleDirectoryEntry:
-
     """
     OLE2 Directory Entry
     """
@@ -945,9 +956,22 @@ class _OleDirectoryEntry:
         # directory:
         self.used = False
         # decode DirEntry
-        (name, namelength, self.entry_type, self.color, self.sid_left, self.sid_right, self.sid_child, clsid, self.dwUserFlags, self.createTime, self.modifyTime, self.isectStart, sizeLow, sizeHigh) = struct.unpack(
-            _OleDirectoryEntry.STRUCT_DIRENTRY, entry
-        )
+        (
+            name,
+            namelength,
+            self.entry_type,
+            self.color,
+            self.sid_left,
+            self.sid_right,
+            self.sid_child,
+            clsid,
+            self.dwUserFlags,
+            self.createTime,
+            self.modifyTime,
+            self.isectStart,
+            sizeLow,
+            sizeHigh,
+        ) = struct.unpack(_OleDirectoryEntry.STRUCT_DIRENTRY, entry)
         if self.entry_type not in [STGTY_ROOT, STGTY_STORAGE, STGTY_STREAM, STGTY_EMPTY]:
             olefile._raise_defect(DEFECT_INCORRECT, "unhandled OLE storage type")
         # only first directory entry can (and should) be root:
@@ -994,7 +1018,9 @@ class _OleDirectoryEntry:
             olefile._raise_defect(DEFECT_POTENTIAL, "OLE storage with size>0")
         # check if stream is not already referenced elsewhere:
         if self.entry_type in (STGTY_ROOT, STGTY_STREAM) and self.size > 0:
-            if self.size < olefile.minisectorcutoff and self.entry_type == STGTY_STREAM:  # only streams can be in MiniFAT
+            if (
+                self.size < olefile.minisectorcutoff and self.entry_type == STGTY_STREAM
+            ):  # only streams can be in MiniFAT
                 # ministream object
                 minifat = True
             else:
@@ -1041,7 +1067,10 @@ class _OleDirectoryEntry:
             self.olefile._raise_defect(DEFECT_FATAL, "OLE DirEntry index out of range")
         # get child direntry:
         child = self.olefile._load_direntry(child_sid)  # direntries[child_sid]
-        debug("append_kids: child_sid=%d - %s - sid_left=%d, sid_right=%d, sid_child=%d" % (child.sid, repr(child.name), child.sid_left, child.sid_right, child.sid_child))
+        debug(
+            "append_kids: child_sid=%d - %s - sid_left=%d, sid_right=%d, sid_child=%d"
+            % (child.sid, repr(child.name), child.sid_left, child.sid_right, child.sid_child)
+        )
         # the directory entries are organized as a red-black tree.
         # (cf. Wikipedia for details)
         # First walk through left side of the tree:
@@ -1143,18 +1172,28 @@ class OleFileIO:
             if entry[1:2] == "Image":
                 fin = ole.openstream(entry)
                 fout = open(entry[0:1], "wb")
-                while True:
-                    s = fin.read(8192)
-                    if not s:
-                        break
-                    fout.write(s)
+                try:
+                    while True:
+                        s = fin.read(8192)
+                        if not s:
+                            break
+                        fout.write(s)
+                finally:
+                    fout.close()
 
     You can use the viewer application provided with the Python Imaging
     Library to view the resulting files (which happens to be standard
     TIFF files).
     """
 
-    def __init__(self, filename=None, raise_defects=DEFECT_FATAL, write_mode=False, debug=False, path_encoding=DEFAULT_PATH_ENCODING):
+    def __init__(
+        self,
+        filename=None,
+        raise_defects=DEFECT_FATAL,
+        write_mode=False,
+        debug=False,
+        path_encoding=DEFAULT_PATH_ENCODING,
+    ):
         """
         Constructor for the OleFileIO class.
 
@@ -1625,7 +1664,7 @@ class OleFileIO:
             nb_difat = (self.csectFat - 109 + nb_difat_sectors - 1) // nb_difat_sectors
             debug("nb_difat = %d" % nb_difat)
             if self.csectDif != nb_difat:
-                raise IOError("incorrect DIFAT")
+                raise OSError("incorrect DIFAT")
             isect_difat = self.sectDifStart
             for i in iterrange(nb_difat):
                 debug("DIFAT block %d, sector %X" % (i, isect_difat))
@@ -1640,7 +1679,7 @@ class OleFileIO:
             # checks:
             if isect_difat not in [ENDOFCHAIN, FREESECT]:
                 # last DIFAT pointer value must be ENDOFCHAIN or FREESECT
-                raise IOError("incorrect end of DIFAT")
+                raise OSError("incorrect end of DIFAT")
         #          if len(self.fat) != self.csectFat:
         #              # FAT should contain csectFat blocks
         #              print("FAT length: %d instead of %d" % (len(self.fat), self.csectFat))
@@ -1671,7 +1710,10 @@ class OleFileIO:
         #    32 bits indexes:
         nb_minisectors = (self.root.size + self.MiniSectorSize - 1) // self.MiniSectorSize
         used_size = nb_minisectors * 4
-        debug("loadminifat(): minifatsect=%d, nb FAT sectors=%d, used_size=%d, stream_size=%d, nb MiniSectors=%d" % (self.minifatsect, self.csectMiniFat, used_size, stream_size, nb_minisectors))
+        debug(
+            "loadminifat(): minifatsect=%d, nb FAT sectors=%d, used_size=%d, stream_size=%d, nb MiniSectors=%d"
+            % (self.minifatsect, self.csectMiniFat, used_size, stream_size, nb_minisectors)
+        )
         if used_size > stream_size:
             # This is not really a problem, but may indicate a wrong implementation:
             self._raise_defect(DEFECT_INCORRECT, "OLE MiniStream is larger than MiniFAT")
@@ -1827,10 +1869,26 @@ class OleFileIO:
                 size_ministream = self.root.size
                 debug("Opening MiniStream: sect=%d, size=%d" % (self.root.isectStart, size_ministream))
                 self.ministream = self._open(self.root.isectStart, size_ministream, force_FAT=True)
-            return _OleStream(fp=self.ministream, sect=start, size=size, offset=0, sectorsize=self.minisectorsize, fat=self.minifat, filesize=self.ministream.size)
+            return _OleStream(
+                fp=self.ministream,
+                sect=start,
+                size=size,
+                offset=0,
+                sectorsize=self.minisectorsize,
+                fat=self.minifat,
+                filesize=self.ministream.size,
+            )
         else:
             # standard stream
-            return _OleStream(fp=self.fp, sect=start, size=size, offset=self.sectorsize, sectorsize=self.sectorsize, fat=self.fat, filesize=self._filesize)
+            return _OleStream(
+                fp=self.fp,
+                sect=start,
+                size=size,
+                offset=self.sectorsize,
+                sectorsize=self.sectorsize,
+                fat=self.fat,
+                filesize=self._filesize,
+            )
 
     def _list(self, files, prefix, node, streams=True, storages=False):
         """
@@ -1858,7 +1916,9 @@ class OleFileIO:
                     # add it to the list
                     files.append(prefix[1:] + [entry.name])
             else:
-                self._raise_defect(DEFECT_INCORRECT, "The directory tree contains an entry which is not a stream nor a storage.")
+                self._raise_defect(
+                    DEFECT_INCORRECT, "The directory tree contains an entry which is not a stream nor a storage."
+                )
 
     def listdir(self, streams=True, storages=False):
         """
@@ -1900,7 +1960,7 @@ class OleFileIO:
                 if kid.name.lower() == name.lower():
                     break
             else:
-                raise IOError("file not found")
+                raise OSError("file not found")
             node = kid
         return node.sid
 
@@ -1922,7 +1982,7 @@ class OleFileIO:
         sid = self._find(filename)
         entry = self.direntries[sid]
         if entry.entry_type != STGTY_STREAM:
-            raise IOError("this file is not a stream")
+            raise OSError("this file is not a stream")
         return self._open(entry.isectStart, entry.size)
 
     def write_stream(self, stream_name, data):
@@ -1945,7 +2005,7 @@ class OleFileIO:
         sid = self._find(stream_name)
         entry = self.direntries[sid]
         if entry.entry_type != STGTY_STREAM:
-            raise IOError("this is not a stream")
+            raise OSError("this is not a stream")
         size = entry.size
         if size != len(data):
             raise ValueError("write_stream: data must be the same size as the existing stream")
@@ -1970,7 +2030,10 @@ class OleFileIO:
             else:
                 data_sector = data[i * self.sectorsize :]
                 # TODO: comment this if it works
-                debug("write_stream: size=%d sectorsize=%d data_sector=%d size%%sectorsize=%d" % (size, self.sectorsize, len(data_sector), size % self.sectorsize))
+                debug(
+                    "write_stream: size=%d sectorsize=%d data_sector=%d size%%sectorsize=%d"
+                    % (size, self.sectorsize, len(data_sector), size % self.sectorsize)
+                )
                 assert len(data_sector) % self.sectorsize == size % self.sectorsize
             self.write_sect(sect, data_sector)
             #            self.fp.write(data_sector)
@@ -1979,10 +2042,10 @@ class OleFileIO:
                 sect = self.fat[sect]
             except IndexError:
                 # [PL] if pointer is out of the FAT an exception is raised
-                raise IOError("incorrect OLE FAT, sector index out of range")
+                raise OSError("incorrect OLE FAT, sector index out of range")
         # [PL] Last sector should be a "end of chain" marker:
         if sect != ENDOFCHAIN:
-            raise IOError("incorrect last sector index in OLE stream")
+            raise OSError("incorrect last sector index in OLE stream")
 
     def get_type(self, filename):
         """
@@ -2168,7 +2231,10 @@ class OleFileIO:
                     # FILETIME is a 64-bit int: "number of 100ns periods
                     # since Jan 1,1601".
                     if convert_time and id not in no_conversion:
-                        debug("Converting property #%d to python datetime, value=%d=%fs" % (id, value, float(value) / 10000000))
+                        debug(
+                            "Converting property #%d to python datetime, value=%d=%fs"
+                            % (id, value, float(value) / 10000000)
+                        )
                         # convert FILETIME to Python datetime.datetime
                         # inspired from http://code.activestate.com/recipes/511425-filetime-to-datetime/
                         _FILETIME_null_date = datetime.datetime(1601, 1, 1, 0, 0, 0)
@@ -2236,7 +2302,6 @@ class OleFileIO:
 # storage file.
 
 if __name__ == "__main__disabled":
-
     # Standard Libraries
     import sys
 
@@ -2288,7 +2353,35 @@ For more information, see http://www.decalage.info/olefile
                             v = v[:50]
                     if isinstance(v, bytes):
                         # quick and dirty binary check:
-                        for c in (1, 2, 3, 4, 5, 6, 7, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31):
+                        for c in (
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            11,
+                            12,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19,
+                            20,
+                            21,
+                            22,
+                            23,
+                            24,
+                            25,
+                            26,
+                            27,
+                            28,
+                            29,
+                            30,
+                            31,
+                        ):
                             if c in bytearray(v):
                                 v = "(binary data)"
                                 break
@@ -2392,9 +2485,15 @@ def find_rc4_passinfo_xls(filename, stream, hashcat_format=True):
 
         if type == 0x2F:  # FILEPASS
             if length == 4:  # Excel 95 XOR obfuscation
-                sys.stderr.write("%s : Excel 95 XOR obfuscation detected, key : %s, hash : %s\n" % (filename, binascii.hexlify(data[0:2]), binascii.hexlify(data[2:4])))
+                sys.stderr.write(
+                    "%s : Excel 95 XOR obfuscation detected, key : %s, hash : %s\n"
+                    % (filename, binascii.hexlify(data[0:2]), binascii.hexlify(data[2:4]))
+                )
             elif data[0:2] == b"\x00\x00":  # XOR obfuscation
-                sys.stderr.write("%s : XOR obfuscation detected, key : %s, hash : %s\n" % (filename, binascii.hexlify(data[2:4]), binascii.hexlify(data[4:6])))
+                sys.stderr.write(
+                    "%s : XOR obfuscation detected, key : %s, hash : %s\n"
+                    % (filename, binascii.hexlify(data[2:4]), binascii.hexlify(data[4:6]))
+                )
             elif data[0:6] == b"\x01\x00\x01\x00\x01\x00":
                 # RC4 encryption header structure
                 data = data[6:]
@@ -2402,7 +2501,9 @@ def find_rc4_passinfo_xls(filename, stream, hashcat_format=True):
                 verifier = data[16:32]
                 verifierHash = data[32:48]
                 return (salt, verifier, verifierHash)
-            elif data[0:4] == b"\x01\x00\x02\x00" or data[0:4] == b"\x01\x00\x03\x00" or data[0:4] == b"\x01\x00\x04\x00":
+            elif (
+                data[0:4] == b"\x01\x00\x02\x00" or data[0:4] == b"\x01\x00\x03\x00" or data[0:4] == b"\x01\x00\x04\x00"
+            ):
                 # If RC4 CryptoAPI encryption is used, certain storages and streams are stored in Encryption Stream
                 stm = StringIO(data)
                 stm.read(2)  # unused
@@ -2455,12 +2556,26 @@ def find_rc4_passinfo_xls(filename, stream, hashcat_format=True):
 
                 if hashcat_format:
                     sys.stdout.write(
-                        "$oldoffice$%s*%s*%s*%s%s\n" % (typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra)
+                        "$oldoffice$%s*%s*%s*%s%s\n"
+                        % (
+                            typ,
+                            binascii.hexlify(salt).decode("ascii"),
+                            binascii.hexlify(encryptedVerifier).decode("ascii"),
+                            binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                            second_block_extra,
+                        )
                     )
                 else:
                     sys.stdout.write(
                         "%s:$oldoffice$%s*%s*%s*%s%s\n"
-                        % (os.path.basename(filename), typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra)
+                        % (
+                            os.path.basename(filename),
+                            typ,
+                            binascii.hexlify(salt).decode("ascii"),
+                            binascii.hexlify(encryptedVerifier).decode("ascii"),
+                            binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                            second_block_extra,
+                        )
                     )
 
     return None
@@ -2486,7 +2601,9 @@ def find_table(filename, stream):
     if F == 1 and M == 1:
         stream.read(2)  # unused
         i_key = stream.read(4)
-        sys.stderr.write("%s : XOR obfuscation detected, Password Verifier : %s\n" % (filename, binascii.hexlify(i_key)))
+        sys.stderr.write(
+            "%s : XOR obfuscation detected, Password Verifier : %s\n" % (filename, binascii.hexlify(i_key))
+        )
         return "none"
     if F == 0:
         sys.stderr.write("%s : Document is not encrypted!\n" % (filename))
@@ -2576,12 +2693,28 @@ def find_rc4_passinfo_doc(filename, stream, hashcat_format=True):
 
         if hashcat_format:
             sys.stdout.write(
-                "$oldoffice$%s*%s*%s*%s%s%s\n" % (typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra, summary_extra)
+                "$oldoffice$%s*%s*%s*%s%s%s\n"
+                % (
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                    second_block_extra,
+                    summary_extra,
+                )
             )
         else:
             sys.stdout.write(
                 "%s:$oldoffice$%s*%s*%s*%s%s%s\n"
-                % (os.path.basename(filename), typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra, summary_extra)
+                % (
+                    os.path.basename(filename),
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                    second_block_extra,
+                    summary_extra,
+                )
             )
 
     else:
@@ -2689,11 +2822,27 @@ def find_rc4_passinfo_ppt(filename, stream, offset, hashcat_format=True):
             stream.seek(offset_cur)  # to be safe, seek back to old pos (not really needed)
 
         if hashcat_format:
-            sys.stdout.write("$oldoffice$%s*%s*%s*%s%s\n" % (typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra))
+            sys.stdout.write(
+                "$oldoffice$%s*%s*%s*%s%s\n"
+                % (
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                    second_block_extra,
+                )
+            )
         else:
             sys.stdout.write(
                 "%s:$oldoffice$%s*%s*%s*%s%s\n"
-                % (os.path.basename(filename), typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra)
+                % (
+                    os.path.basename(filename),
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                    second_block_extra,
+                )
             )
         return True
     else:
@@ -2704,8 +2853,11 @@ def find_rc4_passinfo_ppt(filename, stream, offset, hashcat_format=True):
 def find_rc4_passinfo_ppt_bf(filename, stream, offset, hashcat_format=True):
     """We don't use stream and offset anymore! The current method is a bit slow for large files."""
     sys.stderr.write("This can take a while, please wait.\n")
-    stream = open(filename, "rb")
-    original = stream.read()
+    f = open(filename, "rb")
+    try:
+        original = f.read()
+    finally:
+        f.close()
     found = False
     for i in range(0, len(original)):
         data = original[i : i + 384]
@@ -2774,11 +2926,27 @@ def find_rc4_passinfo_ppt_bf(filename, stream, offset, hashcat_format=True):
 
         found = True
         if hashcat_format:
-            sys.stdout.write("$oldoffice$%s*%s*%s*%s%s\n" % (typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra))
+            sys.stdout.write(
+                "$oldoffice$%s*%s*%s*%s%s\n"
+                % (
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                    second_block_extra,
+                )
+            )
         else:
             sys.stdout.write(
                 "%s:$oldoffice$%s*%s*%s*%s%s\n"
-                % (os.path.basename(filename), typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra)
+                % (
+                    os.path.basename(filename),
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                    second_block_extra,
+                )
             )
 
     if not found:
@@ -2789,7 +2957,11 @@ def process_access_2007_older_crypto(filename, hashcat_format=True):
     """Dirty hash extractor for MS Office 2007 .accdb files which use CryptoAPI
     based encryption."""
 
-    original = open(filename, "rb").read()
+    f = open(filename, "rb")
+    try:
+        original = f.read()
+    finally:
+        f.close()
 
     for i in range(0, len(original)):
         data = original[i:40960]  # is this limit on data reasonable?
@@ -2863,11 +3035,27 @@ def process_access_2007_older_crypto(filename, hashcat_format=True):
             second_block_extra = "*%s" % binascii.hexlify(second_block_bytes).decode("ascii")
 
         if hashcat_format:
-            sys.stdout.write("$oldoffice$%s*%s*%s*%s%s\n" % (typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra))
+            sys.stdout.write(
+                "$oldoffice$%s*%s*%s*%s%s\n"
+                % (
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                    second_block_extra,
+                )
+            )
         else:
             sys.stdout.write(
                 "%s:$oldoffice$%s*%s*%s*%s%s\n"
-                % (os.path.basename(filename), typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash).decode("ascii"), second_block_extra)
+                % (
+                    os.path.basename(filename),
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash).decode("ascii"),
+                    second_block_extra,
+                )
             )
         break
 
@@ -2930,7 +3118,15 @@ def process_new_office(filename, hashcat_format=True):
         if hashcat_format:
             sys.stdout.write(
                 "$office$*%d*%d*%d*%d*%s*%s*%s\n"
-                % (2007, verifierHashSize, keySize, saltSize, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(encryptedVerifier).decode("ascii"), binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"))
+                % (
+                    2007,
+                    verifierHashSize,
+                    keySize,
+                    saltSize,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(encryptedVerifier).decode("ascii"),
+                    binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
+                )
             )
         else:
             sys.stdout.write(
@@ -2969,11 +3165,15 @@ def xml_metadata_parser(data, filename, hashcat_format=True):
         elif hashAlgorithm == "SHA512":
             version = 2013
         else:
-            sys.stderr.write("%s uses un-supported hashing algorithm %s, please file a bug! \n" % (filename, hashAlgorithm))
+            sys.stderr.write(
+                "%s uses un-supported hashing algorithm %s, please file a bug! \n" % (filename, hashAlgorithm)
+            )
             return -3
         cipherAlgorithm = node.attrib.get("cipherAlgorithm")
         if not cipherAlgorithm.find("AES") > -1:
-            sys.stderr.write("%s uses un-supported cipher algorithm %s, please file a bug! \n" % (filename, cipherAlgorithm))
+            sys.stderr.write(
+                "%s uses un-supported cipher algorithm %s, please file a bug! \n" % (filename, cipherAlgorithm)
+            )
             return -4
 
         saltValue = node.attrib.get("saltValue")
@@ -2987,15 +3187,42 @@ def xml_metadata_parser(data, filename, hashcat_format=True):
 
         if PY3:
             saltAscii = binascii.hexlify(base64.decodebytes(saltValue.encode())).decode("ascii")
-            encryptedVerifierHashAscii = binascii.hexlify(base64.decodebytes(encryptedVerifierHashInput.encode())).decode("ascii")
+            encryptedVerifierHashAscii = binascii.hexlify(
+                base64.decodebytes(encryptedVerifierHashInput.encode())
+            ).decode("ascii")
         else:
             saltAscii = binascii.hexlify(base64.decodestring(saltValue.encode())).decode("ascii")
-            encryptedVerifierHashAscii = binascii.hexlify(base64.decodestring(encryptedVerifierHashInput.encode())).decode("ascii")
+            encryptedVerifierHashAscii = binascii.hexlify(
+                base64.decodestring(encryptedVerifierHashInput.encode())
+            ).decode("ascii")
 
         if hashcat_format:
-            sys.stdout.write("$office$*%d*%d*%d*%d*%s*%s*%s\n" % (version, int(spinCount), int(keyBits), int(saltSize), saltAscii, encryptedVerifierHashAscii, encryptedVerifierHashValue[0:64].decode("ascii")))
+            sys.stdout.write(
+                "$office$*%d*%d*%d*%d*%s*%s*%s\n"
+                % (
+                    version,
+                    int(spinCount),
+                    int(keyBits),
+                    int(saltSize),
+                    saltAscii,
+                    encryptedVerifierHashAscii,
+                    encryptedVerifierHashValue[0:64].decode("ascii"),
+                )
+            )
         else:
-            sys.stdout.write("%s:$office$*%d*%d*%d*%d*%s*%s*%s\n" % (os.path.basename(filename), version, int(spinCount), int(keyBits), int(saltSize), saltAscii, encryptedVerifierHashAscii, encryptedVerifierHashValue[0:64].decode("ascii")))
+            sys.stdout.write(
+                "%s:$office$*%d*%d*%d*%d*%s*%s*%s\n"
+                % (
+                    os.path.basename(filename),
+                    version,
+                    int(spinCount),
+                    int(keyBits),
+                    int(saltSize),
+                    saltAscii,
+                    encryptedVerifierHashAscii,
+                    encryptedVerifierHashValue[0:64].decode("ascii"),
+                )
+            )
         return 0
 
 
@@ -3069,111 +3296,131 @@ def process_file(filename, hashcat_format=True):
     # Open OLE file:
     ole = OleFileIO(filename)
 
-    stream = None
-
-    # find "summary" streams
-    global have_summary, summary
-    have_summary = False
-    summary = []
-
-    for streamname in ole.listdir():
-        streamname = streamname[-1]
-        if streamname[0] == "\005":
-            have_summary = True
-            props = ole.getproperties(streamname)
-            for k, v in props.items():
-                if v is None:
-                    continue
-                if not PY3:
-                    # We are only interested in strings
-                    if not isinstance(v, unicode):  # pyright: ignore[reportUndefinedVariable]
-                        continue
-                else:
-                    if not isinstance(v, str):  # We are only interested in strings
-                        continue
-                v = remove_html_tags(v)
-                v = v.replace(":", "")
-                v = remove_extra_spaces(v)
-                # words = v.split()
-                # words = filter(lambda x: len(x) < 20, words)
-                # v = " ".join(words)
-                summary.append(v)
-    summary = " ".join(summary)
-    summary = remove_extra_spaces(summary)
-
-    if ["EncryptionInfo"] in ole.listdir():
-        # process Office 2003 / 2010 / 2013 files
-        return process_new_office(filename)
-    if ["Workbook"] in ole.listdir():
-        stream = "Workbook"
-    elif ["Book"] in ole.listdir():
-        stream = "Book"
-    elif ["WordDocument"] in ole.listdir():
-        typ = 1
-        sdoc = ole.openstream("WordDocument")
-        stream = find_table(filename, sdoc)
-        if stream == "none":
-            return 5
-
-    elif ["PowerPoint Document"] in ole.listdir():
-        stream = "Current User"
-    else:
-        sys.stderr.write("%s : No supported streams found\n" % filename)
-        return 2
-
     try:
-        workbookStream = ole.openstream(stream)
-    except:
-        # Standard Libraries
-        import traceback
+        stream = None
 
-        traceback.print_exc()
-        sys.stderr.write("%s : stream %s not found!\n" % (filename, stream))
-        return 2
+        # find "summary" streams
+        global have_summary, summary
+        have_summary = False
+        summary = []
 
-    if workbookStream is None:
-        sys.stderr.write("%s : Error opening stream, %s\n" % filename)
-        (filename, stream)
-        return 3
+        for streamname in ole.listdir():
+            streamname = streamname[-1]
+            if streamname[0] == "\005":
+                have_summary = True
+                props = ole.getproperties(streamname)
+                for k, v in props.items():
+                    if v is None:
+                        continue
+                    if not PY3:
+                        # We are only interested in strings
+                        if not isinstance(v, unicode):  # pyright: ignore[reportUndefinedVariable]
+                            continue
+                    else:
+                        if not isinstance(v, str):  # We are only interested in strings
+                            continue
+                    v = remove_html_tags(v)
+                    v = v.replace(":", "")
+                    v = remove_extra_spaces(v)
+                    # words = v.split()
+                    # words = filter(lambda x: len(x) < 20, words)
+                    # v = " ".join(words)
+                    summary.append(v)
+        summary = " ".join(summary)
+        summary = remove_extra_spaces(summary)
 
-    if stream == "Workbook" or stream == "Book":
-        typ = 0
-        passinfo = find_rc4_passinfo_xls(filename, workbookStream)
-        if passinfo is None:
-            return 4
-    elif stream == "0Table" or stream == "1Table":
-        passinfo = find_rc4_passinfo_doc(filename, workbookStream)
-        if passinfo is None:
-            return 4
-    else:
-        sppt = ole.openstream("Current User")
-        offset = find_ppt_type(filename, sppt)
-        sppt = ole.openstream("PowerPoint Document")
-        ret = find_rc4_passinfo_ppt(filename, sppt, offset)
-        if not ret:
-            find_rc4_passinfo_ppt_bf(filename, sppt, offset)
+        if ["EncryptionInfo"] in ole.listdir():
+            # process Office 2003 / 2010 / 2013 files
+            return process_new_office(filename)
+        if ["Workbook"] in ole.listdir():
+            stream = "Workbook"
+        elif ["Book"] in ole.listdir():
+            stream = "Book"
+        elif ["WordDocument"] in ole.listdir():
+            typ = 1
+            sdoc = ole.openstream("WordDocument")
+            stream = find_table(filename, sdoc)
+            if stream == "none":
+                return 5
 
-        return 6
+        elif ["PowerPoint Document"] in ole.listdir():
+            stream = "Current User"
+        else:
+            sys.stderr.write("%s : No supported streams found\n" % filename)
+            return 2
 
-    (salt, verifier, verifierHash) = passinfo
+        try:
+            workbookStream = ole.openstream(stream)
+        except:
+            # Standard Libraries
+            import traceback
 
-    summary_extra = ""
-    # if have_summary:
-    #     summary_extra = ":::%s::%s" % (summary, filename)
+            traceback.print_exc()
+            sys.stderr.write("%s : stream %s not found!\n" % (filename, stream))
+            return 2
 
-    if hashcat_format:
-        sys.stdout.write("$oldoffice$%s*%s*%s*%s%s\n" % (typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(verifier).decode("ascii"), binascii.hexlify(verifierHash).decode("ascii"), summary_extra))
-    else:
-        sys.stdout.write("%s:$oldoffice$%s*%s*%s*%s%s\n" % (os.path.basename(filename), typ, binascii.hexlify(salt).decode("ascii"), binascii.hexlify(verifier).decode("ascii"), binascii.hexlify(verifierHash).decode("ascii"), summary_extra))
+        if workbookStream is None:
+            sys.stderr.write("%s : Error opening stream, %s\n" % filename)
+            (filename, stream)
+            return 3
 
-    workbookStream.close()
-    ole.close()
+        if stream == "Workbook" or stream == "Book":
+            typ = 0
+            passinfo = find_rc4_passinfo_xls(filename, workbookStream)
+            if passinfo is None:
+                return 4
+        elif stream == "0Table" or stream == "1Table":
+            passinfo = find_rc4_passinfo_doc(filename, workbookStream)
+            if passinfo is None:
+                return 4
+        else:
+            sppt = ole.openstream("Current User")
+            offset = find_ppt_type(filename, sppt)
+            sppt = ole.openstream("PowerPoint Document")
+            ret = find_rc4_passinfo_ppt(filename, sppt, offset)
+            if not ret:
+                find_rc4_passinfo_ppt_bf(filename, sppt, offset)
 
-    return 0
+            return 6
+
+        (salt, verifier, verifierHash) = passinfo
+
+        summary_extra = ""
+        # if have_summary:
+        #     summary_extra = ":::%s::%s" % (summary, filename)
+
+        if hashcat_format:
+            sys.stdout.write(
+                "$oldoffice$%s*%s*%s*%s%s\n"
+                % (
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(verifier).decode("ascii"),
+                    binascii.hexlify(verifierHash).decode("ascii"),
+                    summary_extra,
+                )
+            )
+        else:
+            sys.stdout.write(
+                "%s:$oldoffice$%s*%s*%s*%s%s\n"
+                % (
+                    os.path.basename(filename),
+                    typ,
+                    binascii.hexlify(salt).decode("ascii"),
+                    binascii.hexlify(verifier).decode("ascii"),
+                    binascii.hexlify(verifierHash).decode("ascii"),
+                    summary_extra,
+                )
+            )
+
+        workbookStream.close()
+
+        return 0
+    finally:
+        ole.close()
 
 
 def extract_file_encryption_hash(filename, hashcat_format=True):
-
     with io.StringIO() as buf, redirect_stdout(buf):
         process_file(filename, hashcat_format)
         return buf.getvalue().strip()

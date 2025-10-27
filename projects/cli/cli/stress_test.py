@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 import aiohttp
 
@@ -15,7 +14,7 @@ import aiohttp
 class TestResult:
     success: bool
     duration: float
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class APIStressTest:

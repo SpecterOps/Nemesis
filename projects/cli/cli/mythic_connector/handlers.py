@@ -6,15 +6,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import urllib3
-from common.models2.api import FileMetadata, FileWithMetadataResponse
-from mythic import mythic, mythic_classes
-
 from cli.mythic_connector.config import Settings
 from cli.mythic_connector.db import Database
 from cli.mythic_connector.logger import get_logger
 
 # from cli.mythic_connector.nemesis import NemesisClient
 from cli.nemesis_client import NemesisClient
+from common.models2.api import FileMetadata, FileWithMetadataResponse
+from mythic import mythic, mythic_classes
 
 logger = get_logger(__name__)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -175,8 +174,12 @@ class FileHandler:
                 """Callback to upload the downloaded file to Nemesis."""
 
                 self._total_files_count += 1
+                # Use the host field as the source identifier
+                source = f"host://{file_meta.get('host', 'unknown')}"
+
                 metadata = FileMetadata(
                     agent_id="mythic",
+                    source=source,
                     project=self.cfg.project,
                     timestamp=datetime.now(UTC),
                     expiration=datetime.now(UTC).replace(year=datetime.now().year + 1),

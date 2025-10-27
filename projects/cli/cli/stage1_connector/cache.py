@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from cli.stage1_connector.outflankc2_client import Implant, OutflankC2Client
 
@@ -21,7 +20,7 @@ class ImplantCache:
             self.logger.error(f"Failed to initialize implant cache: {e}")
             raise
 
-    async def get_implant(self, uid: str) -> Optional[Implant]:
+    async def get_implant(self, uid: str) -> Implant | None:
         """Get implant from cache, fetching from API if not found"""
         if uid in self.cache:
             return self.cache[uid]

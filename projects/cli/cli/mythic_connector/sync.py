@@ -5,14 +5,13 @@ from urllib.parse import ParseResult, urlparse, urlunparse
 
 # Third-party imports
 import aiohttp
-from mythic import mythic
-
 from cli.config import NemesisConfig, PasswordCredential
 from cli.mythic_connector.config import Settings, TokenCredential
 from cli.mythic_connector.db import Database
 from cli.mythic_connector.handlers import FileHandler
 from cli.mythic_connector.logger import get_logger
 from cli.nemesis_client import NemesisClient
+from mythic import mythic
 
 logger = get_logger(__name__)
 

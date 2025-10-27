@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System-Wide Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #1f2937;
+            background: white;
+        }
+
+        .container {
+            padding: 20px 30px;
+            max-width: 100%;
+        }
+
+        .header {
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+
+        .header h1 {
+            font-size: 24pt;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .header .subtitle {
+            font-size: 11pt;
+            color: #6b7280;
+        }
+
+        .header .generated-at {
+            font-size: 9pt;
+            color: #9ca3af;
+            margin-top: 5px;
+        }
+
+        .section {
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            font-size: 14pt;
+            font-weight: 600;
+            color: #1f2937;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .stat-card {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .stat-card.highlight {
+            border: 2px solid #dc2626;
+            background: #fef2f2;
+        }
+
+        .stat-label {
+            font-size: 9pt;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 18pt;
+            font-weight: 700;
+            color: #2563eb;
+        }
+
+        .stat-value.danger {
+            color: #dc2626;
+        }
+
+        .stat-value.warning {
+            color: #f59e0b;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 9pt;
+        }
+
+        th {
+            background: #f3f4f6;
+            padding: 8px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #d1d5db;
+            font-size: 8pt;
+            text-transform: uppercase;
+            color: #4b5563;
+        }
+
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .risk-high {
+            color: #dc2626;
+            font-weight: 600;
+        }
+
+        .risk-medium {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
+        .risk-low {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 8pt;
+            color: #9ca3af;
+            text-align: center;
+        }
+
+        @media print {
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+
+            .section {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>System-Wide Report</h1>
+            <div class="subtitle">Comprehensive Analysis Across All Sources</div>
+            <div class="generated-at">Generated: {{ generated_at }}</div>
+        </div>
+
+        <!-- Summary Statistics -->
+        <div class="section">
+            <h2 class="section-title">System Summary</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Sources</div>
+                    <div class="stat-value">{{ summary.total_sources }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Files</div>
+                    <div class="stat-value">{{ summary.total_files }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Findings</div>
+                    <div class="stat-value">{{ summary.total_findings }}</div>
+                </div>
+                <div class="stat-card highlight">
+                    <div class="stat-label">Verified True Positives</div>
+                    <div class="stat-value danger">{{ summary.verified_true_positives }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Findings by Category -->
+        {% if findings_by_category %}
+        <div class="section">
+            <h2 class="section-title">Findings by Category</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th style="text-align: right;">Count</th>
+                        <th style="text-align: right;">Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for category, count in findings_by_category.items() %}
+                    <tr>
+                        <td>{{ category }}</td>
+                        <td style="text-align: right;">{{ count }}</td>
+                        <td style="text-align: right;">{{ "%.1f"|format((count / summary.total_findings * 100) if summary.total_findings > 0 else 0) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Findings by Severity -->
+        {% if findings_by_severity %}
+        <div class="section">
+            <h2 class="section-title">Findings by Severity</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th style="text-align: right;">Count</th>
+                        <th style="text-align: right;">Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for severity, count in findings_by_severity.items() %}
+                    <tr>
+                        <td>
+                            <span class="{% if severity == 'critical' %}risk-high{% elif severity == 'high' %}risk-medium{% else %}risk-low{% endif %}">
+                                {{ severity|capitalize }}
+                            </span>
+                        </td>
+                        <td style="text-align: right;">{{ count }}</td>
+                        <td style="text-align: right;">{{ "%.1f"|format((count / summary.total_findings * 100) if summary.total_findings > 0 else 0) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Top Sources by Activity -->
+        {% if sources %}
+        <div class="section">
+            <h2 class="section-title">Top Sources by Activity</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th style="text-align: right;">Files</th>
+                        <th style="text-align: right;">Findings</th>
+                        <th style="text-align: right;">Verified</th>
+                        <th>Last Activity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for source in sources[:30] %}
+                    <tr>
+                        <td style="font-weight: 600;">{{ source.source }}</td>
+                        <td style="text-align: right;">{{ source.file_count }}</td>
+                        <td style="text-align: right;">{{ source.finding_count }}</td>
+                        <td style="text-align: right;">
+                            <span class="{% if source.verified_findings > 0 %}risk-high{% endif %}">
+                                {{ source.verified_findings }}
+                            </span>
+                        </td>
+                        <td>{{ source.last_activity or 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Risk Summary -->
+        <div class="section">
+            <h2 class="section-title">Risk Summary</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Sources with Findings</div>
+                    <div class="stat-value">{{ sources|selectattr('finding_count', 'gt', 0)|list|length }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Sources with Verified Findings</div>
+                    <div class="stat-value danger">{{ sources|selectattr('verified_findings', 'gt', 0)|list|length }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Findings per Source</div>
+                    <div class="stat-value">{{ "%.1f"|format((summary.total_findings / summary.total_sources) if summary.total_sources > 0 else 0) }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Files per Source</div>
+                    <div class="stat-value">{{ "%.1f"|format((summary.total_files / summary.total_sources) if summary.total_sources > 0 else 0) }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Generated by Nemesis Reporting System • System-Wide Analysis • {{ generated_at }}
+        </div>
+    </div>
+</body>
+</html>

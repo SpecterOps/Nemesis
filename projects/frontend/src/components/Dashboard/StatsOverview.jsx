@@ -161,6 +161,9 @@ const StatsOverview = () => {
   const [enrichmentError, setEnrichmentError] = useState(null);
   const [failedWorkflowsError, setFailedWorkflowsError] = useState(null);
   const [timeSeriesError, setTimeSeriesError] = useState(null);
+  const [queueStats, setQueueStats] = useState(null);
+  const [isQueueLoading, setIsQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
 
@@ -176,7 +179,7 @@ const StatsOverview = () => {
                 count
               }
             }
-            submitted_files: files_enriched_aggregate(
+            processed_files: files_enriched_aggregate(
               where: { originating_object_id: { _is_null: true } }
             ) {
               aggregate {
@@ -297,7 +300,7 @@ const StatsOverview = () => {
 
       setStats({
         totalFiles: result.data.files_enriched_aggregate.aggregate.count,
-        submittedFiles: result.data.submitted_files.aggregate.count,
+        processedFiles: result.data.processed_files.aggregate.count,
         containersProcessed: result.data.containers_processed.aggregate.count,
         unviewedFiles: result.data.unviewed_files.aggregate.count,
         totalFindings: result.data.findings_aggregate.aggregate.count,
@@ -485,18 +488,39 @@ const StatsOverview = () => {
     }
   }, []);
 
+  const fetchQueueStats = useCallback(async () => {
+    try {
+      const response = await fetch('/api/queues/file');
+
+      if (!response.ok) {
+        throw new Error(`Network response error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setQueueStats(data);
+      setQueueError(null);
+    } catch (err) {
+      console.error('Error fetching queue stats:', err);
+      setQueueError(err.message);
+    } finally {
+      setIsQueueLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     // Initial fetch for all data sources
     fetchStats();
     fetchEnrichmentStatus();
     fetchFailedWorkflows();
     fetchTimeSeriesData();
+    fetchQueueStats();
 
     // Set up polling interval for all
     const statsIntervalId = setInterval(fetchStats, POLL_INTERVAL);
     const enrichmentIntervalId = setInterval(fetchEnrichmentStatus, POLL_INTERVAL);
     const failedWorkflowsIntervalId = setInterval(fetchFailedWorkflows, POLL_INTERVAL);
     const timeSeriesIntervalId = setInterval(fetchTimeSeriesData, POLL_INTERVAL);
+    const queueStatsIntervalId = setInterval(fetchQueueStats, POLL_INTERVAL);
 
     // Cleanup intervals on component unmount
     return () => {
@@ -504,8 +528,9 @@ const StatsOverview = () => {
       clearInterval(enrichmentIntervalId);
       clearInterval(failedWorkflowsIntervalId);
       clearInterval(timeSeriesIntervalId);
+      clearInterval(queueStatsIntervalId);
     };
-  }, [fetchStats, fetchEnrichmentStatus, fetchFailedWorkflows, fetchTimeSeriesData]);
+  }, [fetchStats, fetchEnrichmentStatus, fetchFailedWorkflows, fetchTimeSeriesData, fetchQueueStats]);
 
   // Add visibility change handler to pause/resume polling when tab is hidden
   useEffect(() => {
@@ -516,12 +541,13 @@ const StatsOverview = () => {
         fetchEnrichmentStatus();
         fetchFailedWorkflows();
         fetchTimeSeriesData();
+        fetchQueueStats();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [fetchStats, fetchEnrichmentStatus, fetchFailedWorkflows, fetchTimeSeriesData]);
+  }, [fetchStats, fetchEnrichmentStatus, fetchFailedWorkflows, fetchTimeSeriesData, fetchQueueStats]);
 
 
 
@@ -576,19 +602,18 @@ const StatsOverview = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <StatCard
               title="Total Submitted Files"
-              value={stats?.submittedFiles ?? 0}
+              value={stats?.processedFiles ?? 0}
               icon={FileText}
               isLoading={isLoading}
               onClick={() => handleNavigation('/files')}
               tooltip="Total files submitted to Nemesis"
             />
             <StatCard
-              title="Total Processed Files"
-              value={stats?.totalFiles ?? 0}
+              title="Total Derived Files"
+              value={stats ? (stats.totalFiles - stats.processedFiles) : 0}
               icon={Layers}
               isLoading={isLoading}
-              onClick={() => handleNavigation('/files')}
-              tooltip="Total files processed by Nemesis, including derived files"
+              tooltip="Files derived from processing submitted files (Total Processed - Total Submitted)"
             />
             <StatCard
               title="Unviewed Files"
@@ -730,13 +755,13 @@ const StatsOverview = () => {
             />
             <StatCard
               title="Queued Files"
-              value={enrichmentStats?.queued_files ?? 0}
+              value={queueStats?.metrics?.ready_messages ?? 0}
               icon={Clock}
-              isLoading={isEnrichmentLoading}
-              tooltip="Files internally queued by the File Enrichment service"
+              isLoading={isQueueLoading}
+              tooltip="Files ready to be processed in the pub/sub queue"
             />
             <StatCard
-              title="Completed Files"
+              title="Completed Workflows"
               value={enrichmentStats?.metrics?.completed_count ?? 0}
               icon={FileText}
               isLoading={isEnrichmentLoading}
@@ -869,6 +894,17 @@ const StatsOverview = () => {
           <div className="flex flex-col">
             <span className="text-yellow-600 dark:text-yellow-400">
               Warning: Time series data unavailable: {timeSeriesError}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {queueError && (
+        <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg flex items-center space-x-2 transition-colors mt-4">
+          <AlertTriangle className="w-5 h-5 text-yellow-500 dark:text-yellow-400" />
+          <div className="flex flex-col">
+            <span className="text-yellow-600 dark:text-yellow-400">
+              Warning: Queue metrics unavailable: {queueError}
             </span>
           </div>
         </div>

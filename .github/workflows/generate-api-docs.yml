@@ -1,0 +1,46 @@
+name: Generate API Documentation
+
+on:
+  push:
+    branches: [main]
+    paths: 
+      - 'projects/web_api/**'
+      - '.github/workflows/generate-api-docs.yml'
+      - '.github/scripts/generate_api_docs.py'
+  workflow_dispatch: # For manual triggering
+
+jobs:
+  generate-docs:
+    runs-on: ubuntu-22.04
+    
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python virtualenv
+        run: |
+          pip install --upgrade pip
+          python -m venv env
+          source env/bin/activate
+          cd projects/web_api
+          pip install poetry
+          poetry install --only main
+
+      - name: Generate API documentation
+        run: |
+          source env/bin/activate
+          cd projects/web_api
+          poetry run python ../../.github/scripts/generate_api_docs.py
+
+      - name: Commit documentation changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'docs: update API documentation [skip ci]'
+          file_pattern: 'docs/api/*'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

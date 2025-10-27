@@ -4,15 +4,14 @@ import tempfile
 import uuid
 from typing import Any
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-
 from file_enrichment_modules.kdbx.keepass2john import process_database
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def get_encryption_algorithm_name(uuid_str: str) -> str:
@@ -78,9 +77,22 @@ def parse_kdbx_file(file_path: str) -> dict[str, Any]:
             # Parse header fields
             header_data = {}
             while True:
-                field_id = struct.unpack("<B", f.read(1))[0]
-                field_size = struct.unpack("<I", f.read(4))[0]
+                # Read field ID (1 byte)
+                field_id_bytes = f.read(1)
+                if not field_id_bytes:  # EOF reached
+                    break
+                field_id = struct.unpack("<B", field_id_bytes)[0]
+
+                # Read field size (4 bytes)
+                field_size_bytes = f.read(4)
+                if len(field_size_bytes) < 4:  # Not enough data
+                    break
+                field_size = struct.unpack("<I", field_size_bytes)[0]
+
+                # Read field data
                 field_data = f.read(field_size)
+                if len(field_data) < field_size:  # Not enough data
+                    break
 
                 if field_id == 0:  # End of header
                     break
@@ -152,6 +164,7 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
         # Read version
         if len(data) < 2:
             return result
+
         version = struct.unpack("<H", data[offset : offset + 2])[0]
         offset += 2
 
@@ -220,87 +233,113 @@ class KDBXAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
         file_enriched = get_file_enriched(object_id)
 
         if file_enriched.magic_type:
-            should_run = "keepass" in file_enriched.magic_type.lower() and "kdbx" in file_enriched.magic_type.lower()
+            return "keepass" in file_enriched.magic_type.lower() and "kdbx" in file_enriched.magic_type.lower()
         else:
-            should_run = False
+            return False
 
-        logger.debug(f"KDBXAnalyzer should_run: {should_run}")
-        return should_run
+    def _analyze_kdbx(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze KDBX file and generate enrichment result.
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        # get the current `file_enriched` from the database backend
-        file_enriched = get_file_enriched(object_id)
+        Args:
+            file_path: Path to the KDBX file to analyze
+            file_enriched: File enrichment data
 
-        with self.storage.download(file_enriched.object_id) as file:
-            analysis = parse_kdbx_file(file.name)
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
 
-            enrichment_result = EnrichmentResult(module_name=self.name)
-            enrichment_result.results = analysis
+        analysis = parse_kdbx_file(file_path)
 
-            if "encryption_hash" in enrichment_result.results and enrichment_result.results["encryption_hash"]:
-                encryption_hash = enrichment_result.results["encryption_hash"]
+        enrichment_result = EnrichmentResult(module_name=self.name)
+        enrichment_result.results = analysis
 
-                # Create summary with additional metadata
-                summary_parts = ["# Encrypted KeePass Database\n"]
-                summary_parts.append("The database is encrypted. Attempt to crack it using the following hash:\n")
-                summary_parts.append(f"```\n{encryption_hash}\n```\n")
+        if "encryption_hash" in enrichment_result.results and enrichment_result.results["encryption_hash"]:
+            encryption_hash = enrichment_result.results["encryption_hash"]
 
-                # Add metadata if available
-                if analysis.get("format_version"):
-                    summary_parts.append(
-                        f"**Format Version:** {analysis['major_version']}.{analysis['minor_version']}  \n"
-                    )
-                if analysis.get("encryption_algorithm"):
-                    summary_parts.append(f"**Encryption Algorithm:** {analysis['encryption_algorithm']}  \n")
-                if analysis.get("kdf_algorithm"):
-                    summary_parts.append(f"**KDF Algorithm:** {analysis['kdf_algorithm']}  \n")
-                if analysis.get("kdf_rounds"):
-                    summary_parts.append(f"**KDF Rounds:** {analysis['kdf_rounds']:,}  \n")
-                if analysis.get("kdf_memory"):
-                    summary_parts.append(f"**KDF Memory:** {analysis['kdf_memory']:,} bytes  \n")
-                if analysis.get("compression_algorithm"):
-                    summary_parts.append(f"**Compression:** {analysis['compression_algorithm']}  \n")
+            # Create summary with additional metadata
+            summary_parts = ["# Encrypted KeePass Database\n"]
+            summary_parts.append("The database is encrypted. Attempt to crack it using the following hash:\n")
+            summary_parts.append(f"```\n{encryption_hash}\n```\n")
 
-                summary_markdown = "".join(summary_parts)
+            # Add metadata if available
+            if analysis.get("format_version"):
+                summary_parts.append(f"**Format Version:** {analysis['major_version']}.{analysis['minor_version']}  \n")
+            if analysis.get("encryption_algorithm"):
+                summary_parts.append(f"**Encryption Algorithm:** {analysis['encryption_algorithm']}  \n")
+            if analysis.get("kdf_algorithm"):
+                summary_parts.append(f"**KDF Algorithm:** {analysis['kdf_algorithm']}  \n")
+            if analysis.get("kdf_rounds"):
+                summary_parts.append(f"**KDF Rounds:** {analysis['kdf_rounds']:,}  \n")
+            if analysis.get("kdf_memory"):
+                summary_parts.append(f"**KDF Memory:** {analysis['kdf_memory']:,} bytes  \n")
+            if analysis.get("compression_algorithm"):
+                summary_parts.append(f"**Compression:** {analysis['compression_algorithm']}  \n")
 
-                display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
+            summary_markdown = "".join(summary_parts)
 
-                finding = Finding(
-                    category=FindingCategory.EXTRACTED_HASH,
-                    finding_name="encrypted_kdbx",
-                    origin_type=FindingOrigin.ENRICHMENT_MODULE,
-                    origin_name=self.name,
-                    object_id=file_enriched.object_id,
-                    severity=5,
-                    raw_data={"encryption_hash": encryption_hash},
-                    data=[display_data],
+            display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
+
+            finding = Finding(
+                category=FindingCategory.EXTRACTED_HASH,
+                finding_name="encrypted_kdbx",
+                origin_type=FindingOrigin.ENRICHMENT_MODULE,
+                origin_name=self.name,
+                object_id=file_enriched.object_id,
+                severity=5,
+                raw_data={"encryption_hash": encryption_hash},
+                data=[display_data],
+            )
+
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
+                tmp_display_file.write(summary_markdown)
+                tmp_display_file.flush()
+
+                object_id = self.storage.upload_file(tmp_display_file.name)
+
+                displayable_parsed = Transform(
+                    type="displayable_parsed",
+                    object_id=f"{object_id}",
+                    metadata={
+                        "file_name": f"{file_enriched.file_name}.md",
+                        "display_type_in_dashboard": "markdown",
+                        "default_display": True,
+                    },
                 )
 
-                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
-                    tmp_display_file.write(summary_markdown)
-                    tmp_display_file.flush()
+            enrichment_result.transforms = [displayable_parsed]
+            enrichment_result.findings = [finding]
 
-                    object_id = self.storage.upload_file(tmp_display_file.name)
+        return enrichment_result
 
-                    displayable_parsed = Transform(
-                        type="displayable_parsed",
-                        object_id=f"{object_id}",
-                        metadata={
-                            "file_name": f"{file_enriched.file_name}.md",
-                            "display_type_in_dashboard": "markdown",
-                            "default_display": True,
-                        },
-                    )
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process KDBX file and extract encryption information.
 
-                enrichment_result.transforms = [displayable_parsed]
-                enrichment_result.findings = [finding]
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
 
-            return enrichment_result
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+        try:
+            # get the current `file_enriched` from the database backend
+            file_enriched = get_file_enriched(object_id)
+
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_kdbx(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as file:
+                    return self._analyze_kdbx(file.name, file_enriched)
+
+        except Exception as e:
+            logger.exception(e, message="Error processing KDBX file")
+            return None
 
 
 def create_enrichment_module() -> EnrichmentModule:

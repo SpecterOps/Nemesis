@@ -2,12 +2,11 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Optional
 
-import structlog
+from common.logger import get_logger
 from common.models import EnrichmentResult
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class EnrichmentModule:
@@ -15,17 +14,17 @@ class EnrichmentModule:
         self.name = name
         self.dependencies = dependencies or []
 
-    async def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should process the given file."""
         raise NotImplementedError
 
-    async def process(self, object_id: str) -> EnrichmentResult | None:
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process the file and return enrichment results."""
         raise NotImplementedError
 
 
 class ModuleLoader:
-    def __init__(self, modules_dir: Optional[str] = None):
+    def __init__(self, modules_dir: str | None = None):
         if modules_dir is None:
             self.modules_dir = Path(__file__).parent
         else:

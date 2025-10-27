@@ -5,23 +5,34 @@ import time
 from pathlib import Path
 
 import click
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
-
 from cli.log import setup_logging
 from cli.submit import submit_files
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 
 class NewFileHandler(FileSystemEventHandler):
     """Handler for new file events in the monitored directory"""
 
-    def __init__(self, host: str, username: str, password: str, project: str, agent_id: str, logger: logging.Logger):
+    def __init__(
+        self,
+        host: str,
+        username: str,
+        password: str,
+        project: str,
+        agent_id: str,
+        logger: logging.Logger,
+        container: bool = False,
+        source: str = None,
+    ):
         self.host = host
         self.username = username
         self.password = password
         self.project = project
         self.agent_id = agent_id
         self.logger = logger
+        self.container = container
+        self.source = source
 
     def on_created(self, event):
         """Called when a file or directory is created"""
@@ -43,6 +54,8 @@ class NewFileHandler(FileSystemEventHandler):
                     password=self.password,
                     project=self.project,
                     agent_id=self.agent_id,
+                    container=self.container,
+                    source=self.source,
                 )
             except Exception as e:
                 self.logger.error(f"Failed to submit new file {file_path}: {e}")
@@ -64,6 +77,8 @@ class NewFileHandler(FileSystemEventHandler):
                     password=self.password,
                     project=self.project,
                     agent_id=self.agent_id,
+                    container=self.container,
+                    source=self.source,
                 )
             except Exception as e:
                 self.logger.error(f"Failed to submit moved file {file_path}: {e}")
@@ -79,6 +94,8 @@ def monitor_main(
     agent_id: str,
     only_monitor: bool,
     workers: int,
+    container: bool,
+    source: str | None = None,
 ):
     """Monitor a folder for new files and submit them to Nemesis"""
     try:
@@ -108,6 +125,8 @@ def monitor_main(
                 password=password,
                 project=project,
                 agent_id=agent_id,
+                container=container,
+                source=source,
             )
 
             if not success:
@@ -118,7 +137,7 @@ def monitor_main(
             logger.info("Skipping existing files (--only-monitor enabled)")
 
         # Set up file system watcher
-        event_handler = NewFileHandler(host, username, password, project, agent_id, logger)
+        event_handler = NewFileHandler(host, username, password, project, agent_id, logger, container, source)
         observer = Observer()
         observer.schedule(event_handler, str(folder_path), recursive=True)
 

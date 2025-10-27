@@ -1,19 +1,20 @@
+import asyncio
 import json
 import os
 import tempfile
 import zipfile
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Optional
 
 import jpype
-import jpype.imports
+import jpype.imports  # noqa: F401
 import msoffcrypto
 import olefile
-import psycopg
+import psycopg  # noqa: F401
 import requests
-import structlog
+from common.db import get_postgres_connection_str
 from common.helpers import can_convert_to_pdf, can_extract_plaintext, extract_all_strings
+from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, WORKFLOW_RUNTIME_LOG_LEVEL, get_logger
 from common.models import CloudEvent, File, FileEnriched, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
@@ -23,35 +24,85 @@ from dapr.ext.workflow import DaprWorkflowClient, DaprWorkflowContext, RetryPoli
 from dapr.ext.workflow.logger.options import LoggerOptions
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from fastapi import FastAPI
+from psycopg_pool import ConnectionPool
 from PyPDF2 import PdfReader
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 storage = StorageMinio()
 db_pool = None
 workflow_client: DaprWorkflowClient = None
 
-workflow_runtime = WorkflowRuntime(
-    logger_options=LoggerOptions(
-        log_level="INFO",
-        log_handler=None,
-        log_formatter=None,
-    )
-)
+max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 3))  # maximum workflows that can run at a time
+max_workflow_execution_time = int(
+    os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300)
+)  # maximum time (in seconds) until a workflow is killed
 
-with DaprClient() as client:
-    secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-    postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
+logger.info(f"max_parallel_workflows: {max_parallel_workflows}", pid=os.getpid())
+logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
+
+# Semaphore for controlling concurrent workflow execution
+workflow_semaphore = asyncio.Semaphore(max_parallel_workflows)
+active_workflows = {}  # Track active workflows
+workflow_lock = asyncio.Lock()  # For synchronizing access to active_workflows
+
+workflow_runtime = WorkflowRuntime(logger_options=LoggerOptions(log_level=WORKFLOW_RUNTIME_LOG_LEVEL))
+
+postgres_connection_string = get_postgres_connection_str()
 
 
 # Initialize Java Runtime and Tika
 def init_tika():
     if not jpype.isJVMStarted():
         jpype.startJVM(classpath=["/tika-server-standard.jar"])
-        # Create Tika instance using Java class directly
+
+        # Import Java classes
+        TikaConfig = jpype.JClass("org.apache.tika.config.TikaConfig")
         Tika = jpype.JClass("org.apache.tika.Tika")
         File = jpype.JClass("java.io.File")
-        return Tika(), File
+
+        # Get OCR language from environment variable
+        #   Note: Use underscores for language types, not hyphens (chi_sim not chi-sim)
+        ocr_languages = os.getenv("TIKA_OCR_LANGUAGES", "eng").replace("-", "_").replace(" ", "+")
+        logger.info(f"Configuring Tika with OCR languages: {ocr_languages}")
+
+        # Read the static XML config and substitute the language parameter
+        with open("/tika-config.xml") as f:
+            config_xml = f.read()
+
+        # Replace the hardcoded language with the environment variable value
+        config_xml = config_xml.replace(">eng<", f">{ocr_languages}<")
+
+        # Write the modified config to a temporary file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as temp_config:
+            temp_config.write(config_xml)
+            temp_config_path = temp_config.name
+
+        try:
+            # Load Tika with the modified configuration
+            config = TikaConfig(File(temp_config_path))
+            tika_instance = Tika(config)
+            logger.info(f"Tika initialized successfully with OCR languages: {ocr_languages}")
+        except Exception as e:
+            logger.warning(f"Failed to load custom Tika config: {e}, falling back to original config")
+            # Fall back to loading the original unmodified config file
+            try:
+                config = TikaConfig(File("/tika-config.xml"))
+                tika_instance = Tika(config)
+                logger.info("Tika initialized with original config file")
+            except Exception as e2:
+                logger.error(f"Failed to load original Tika config: {e2}")
+                # Last resort - use default Tika without any config file
+                tika_instance = Tika()
+                logger.info("Tika initialized with default configuration")
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(temp_config_path)
+            except:
+                pass
+
+        return tika_instance, File
 
 
 tika, JavaFile = init_tika()
@@ -68,11 +119,21 @@ async def lifespan(app: FastAPI):
     """Lifespan manager for FastAPI - handles startup and shutdown events"""
     global db_pool, workflow_runtime, workflow_client
     try:
-        # start the workflow runtime
+        # Initialize database pool
+        db_pool = ConnectionPool(
+            postgres_connection_string, min_size=max_parallel_workflows, max_size=(3 * max_parallel_workflows)
+        )
+        logger.info(
+            "Database pool initialized",
+            min_size=max_parallel_workflows,
+            max_size=(3 * max_parallel_workflows),
+        )
+
         workflow_runtime.start()
 
-        # Initialize workflow client
-        workflow_client = DaprWorkflowClient()
+        workflow_client = DaprWorkflowClient(
+            logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
+        )
 
     except Exception as e:
         logger.exception(e, message="Error initializing service")
@@ -81,6 +142,9 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
+    if db_pool:
+        db_pool.close()
+        logger.info("Database pool closed")
     if workflow_runtime:
         workflow_runtime.shutdown()
     if jpype.isJVMStarted():
@@ -116,7 +180,7 @@ def is_pdf_encrypted(pdf_path):
         return reader.is_encrypted
 
     except Exception as e:
-        print(f"Error checking PDF: {e}")
+        logger.exception(e, "Error checking PDF")
         return None
 
 
@@ -185,7 +249,7 @@ def store_transform(ctx, activity_input):
         transform = activity_input["transform"]
         transform_type = transform["type"]
 
-        with psycopg.connect(postgres_connection_string) as conn:
+        with db_pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -217,6 +281,7 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
             object_id=transform.object_id,
             originating_object_id=file_enriched.object_id,
             agent_id=file_enriched.agent_id,
+            source=file_enriched.source,
             project=file_enriched.project,
             timestamp=file_enriched.timestamp,
             expiration=file_enriched.expiration,
@@ -232,7 +297,7 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
             )
 
         logger.info(
-            f"Published new file message for transform",
+            "Published new file message for transform",
             new_object_id=transform.object_id,
             originating_object_id=file_enriched.object_id,
         )
@@ -242,7 +307,7 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
 
 
 @workflow_runtime.activity
-def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> Optional[dict]:
+def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> dict | None:
     """Extract text using Tika."""
     object_id = file_input.get("object_id")
     result = None
@@ -254,10 +319,29 @@ def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> Optiona
             return None
 
         with storage.download(file_enriched.object_id) as temp_file:
-            # Extract text using Tika
-            java_file = JavaFile(temp_file.name)
-            java_text = tika.parseToString(java_file)
-            extracted_text = str(java_text)
+            # Extract text using Tika + retries
+            max_retries = 2
+            last_exception = None
+
+            for attempt in range(max_retries + 1):  # 0, 1, 2 (3 total attempts)
+                try:
+                    java_file = JavaFile(temp_file.name)
+                    java_text = tika.parseToString(java_file)
+                    extracted_text = str(java_text)
+                    break
+
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        logger.warning(
+                            f"Tika extraction attempt {attempt + 1} failed, retrying...",
+                            object_id=file_enriched.object_id,
+                            error=str(e),
+                        )
+                        continue
+                    else:
+                        # Final attempt failed, re-raise the last exception
+                        raise last_exception from e
 
             if not extracted_text:
                 return None
@@ -276,7 +360,7 @@ def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> Optiona
             )
 
             # Record success in database
-            with psycopg.connect(postgres_connection_string) as conn:
+            with db_pool.connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -298,7 +382,7 @@ def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> Optiona
 
         # Record failure in database
         try:
-            with psycopg.connect(postgres_connection_string) as conn:
+            with db_pool.connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -316,7 +400,7 @@ def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> Optiona
 
 
 @workflow_runtime.activity
-def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> Optional[dict]:
+def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dict | None:
     """Extract strings from binary files."""
     object_id = file_input.get("object_id")
     result = None
@@ -355,7 +439,7 @@ def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> Optional[
                 )
 
                 # Record success in database
-                with psycopg.connect(postgres_connection_string) as conn:
+                with db_pool.connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
                             """
@@ -377,7 +461,7 @@ def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> Optional[
 
         # Record failure in database
         try:
-            with psycopg.connect(postgres_connection_string) as conn:
+            with db_pool.connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -395,7 +479,7 @@ def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> Optional[
 
 
 @workflow_runtime.activity
-def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> Optional[dict]:
+def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict | None:
     """Convert file to PDF using Gotenberg."""
     object_id = file_input.get("object_id")
     result = None
@@ -446,7 +530,7 @@ def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> Optional[d
                         )
 
                         # Record success in database
-                        with psycopg.connect(postgres_connection_string) as conn:
+                        with db_pool.connection() as conn:
                             with conn.cursor() as cur:
                                 cur.execute(
                                     """
@@ -472,7 +556,7 @@ def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> Optional[d
                         )
 
                         # Record failure in database due to Gotenberg error
-                        with psycopg.connect(postgres_connection_string) as conn:
+                        with db_pool.connection() as conn:
                             with conn.cursor() as cur:
                                 cur.execute(
                                     """
@@ -497,7 +581,7 @@ def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> Optional[d
 
         # Record failure in database
         try:
-            with psycopg.connect(postgres_connection_string) as conn:
+            with db_pool.connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -586,12 +670,111 @@ def document_conversion_workflow(ctx: DaprWorkflowContext, workflow_input: dict)
         raise
 
 
+# Workflow concurrency management
+
+
+async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
+    """Start a workflow using semaphore for backpressure control."""
+    # Acquire semaphore - this will block if we're at max capacity
+    # This provides natural backpressure to the Dapr pub/sub system
+    await workflow_semaphore.acquire()
+
+    try:
+        instance_id = f"text-extraction-{file_enriched.object_id}"
+
+        # Add to active workflows tracking
+        async with workflow_lock:
+            active_workflows[instance_id] = {
+                "object_id": file_enriched.object_id,
+                "start_time": asyncio.get_event_loop().time(),
+                "filename": file_enriched.file_name,
+            }
+
+        logger.info(
+            "Starting document conversion workflow",
+            instance_id=instance_id,
+            object_id=file_enriched.object_id,
+            active_count=len(active_workflows),
+        )
+
+        # Schedule the workflow
+        workflow_client.schedule_new_workflow(
+            workflow=document_conversion_workflow, instance_id=instance_id, input={"object_id": file_enriched.object_id}
+        )
+
+        # Start monitoring task for this workflow
+        asyncio.create_task(monitor_workflow_completion(instance_id))
+
+    except Exception as e:
+        # Release semaphore on error
+        workflow_semaphore.release()
+        logger.exception(e, message="Error starting document conversion workflow")
+        raise
+
+
+async def monitor_workflow_completion(instance_id: str):
+    """Monitor a workflow until completion and release semaphore."""
+    try:
+        # Poll for workflow completion
+        start_time = asyncio.get_event_loop().time()
+
+        while True:
+            try:
+                # Check if workflow is still running
+                state = workflow_client.get_workflow_state(instance_id)
+
+                if state and hasattr(state, "runtime_status"):
+                    status = state.runtime_status.name
+
+                    if status in ["COMPLETED", "FAILED", "TERMINATED", "ERROR"]:
+                        elapsed_time = asyncio.get_event_loop().time() - start_time
+                        logger.info(
+                            "Document conversion workflow finished",
+                            instance_id=instance_id,
+                            status=status,
+                            elapsed_time=f"{elapsed_time:.2f}s",
+                        )
+                        break
+
+                # Check for timeout
+                if (asyncio.get_event_loop().time() - start_time) > max_workflow_execution_time:
+                    logger.warning(
+                        "Document conversion workflow timed out",
+                        instance_id=instance_id,
+                        max_execution_time=max_workflow_execution_time,
+                    )
+                    # Try to terminate the workflow
+                    try:
+                        workflow_client.terminate_workflow(instance_id)
+                    except Exception as term_error:
+                        logger.error(f"Failed to terminate workflow {instance_id}: {term_error}")
+                    break
+
+                await asyncio.sleep(0.3)
+
+            except Exception as check_error:
+                logger.warning(f"Error checking workflow status for {instance_id}: {check_error}")
+                await asyncio.sleep(2)  # Wait longer on error
+
+    except Exception as e:
+        logger.exception(e, message=f"Error monitoring workflow {instance_id}")
+
+    finally:
+        # Always clean up and release semaphore
+        async with workflow_lock:
+            if instance_id in active_workflows:
+                del active_workflows[instance_id]
+
+        workflow_semaphore.release()
+        logger.debug(f"Released semaphore for workflow {instance_id}", active_count=len(active_workflows))
+
+
 # Main handling code
 
 
 @dapr_app.subscribe(pubsub="pubsub", topic="file_enriched")
 async def handle_file_enriched(event: CloudEvent[FileEnriched]):
-    """Handler for file_enriched events."""
+    """Handler for file_enriched events with semaphore-based concurrency control."""
     try:
         file_enriched = event.data
         logger.debug("Received file_enriched event", object_id=file_enriched.object_id)
@@ -623,12 +806,8 @@ async def handle_file_enriched(event: CloudEvent[FileEnriched]):
             )
             return
 
-        instance_id = f"text-extraction-{file_enriched.object_id}"
-        workflow_client.schedule_new_workflow(
-            workflow=document_conversion_workflow, instance_id=instance_id, input={"object_id": file_enriched.object_id}
-        )
-
-        logger.info("Started text extraction workflow", instance_id=instance_id)
+        # Start workflow with semaphore control for backpressure
+        await start_workflow_with_concurrency_control(file_enriched)
 
     except Exception as e:
         logger.exception(e, message="Error handling file_enriched event")
@@ -642,8 +821,9 @@ async def health_check():
         if not db_pool:
             return {"status": "unhealthy", "error": "Database pool not initialized"}
 
-        async with db_pool.acquire() as connection:
-            await connection.execute("SELECT 1")
+        with db_pool.connection() as connection:
+            with connection.cursor() as cur:
+                cur.execute("SELECT 1")
 
         if not jpype.isJVMStarted():
             return {"status": "unhealthy", "error": "JVM not started"}

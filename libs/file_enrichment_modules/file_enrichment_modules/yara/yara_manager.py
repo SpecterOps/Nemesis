@@ -2,18 +2,17 @@ import glob
 import os
 import threading
 from datetime import UTC, datetime
-from typing import Optional
 
 import plyara
 import psycopg
-import structlog
 import yara_x
+from common.db import get_postgres_connection_str
 from common.dependency_checks import check_directory_exists
-from dapr.clients import DaprClient
+from common.logger import get_logger
 from plyara import utils as plyara_utils
 from psycopg.rows import dict_row
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 YARA_RULES_FOLDER_PATH = os.getenv("YARA_RULES_FOLDER_PATH", "/yara_rules/")
 check_directory_exists(YARA_RULES_FOLDER_PATH)
@@ -25,13 +24,8 @@ class YaraRuleManager:
     def __init__(self):
         self.parser = plyara.Plyara()
         self._compiler = yara_x.Compiler()
-        self._compiled_rules: Optional[yara_x.Rules] = None
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="POSTGRES_CONNECTION_STRING")
-            postgres_connection_string = secret.secret["POSTGRES_CONNECTION_STRING"]
-
-        self._conninfo = postgres_connection_string
+        self._compiled_rules: yara_x.Rules | None = None
+        self._conninfo = get_postgres_connection_str()
 
         # Load and compile rules from disk first
         self._process_disk_rules()
@@ -39,7 +33,7 @@ class YaraRuleManager:
         # Then load enabled rules from database
         self.load_rules()
 
-    def _get_scanner(self) -> Optional[yara_x.Scanner]:
+    def _get_scanner(self) -> yara_x.Scanner | None:
         """Get or create thread-local scanner instance."""
         if not hasattr(self._thread_local, "scanner"):
             if self._compiled_rules:
@@ -132,7 +126,7 @@ class YaraRuleManager:
             logger.exception(e, message="Error processing disk rules")
             raise
 
-    def get_rule_content(self, rule_name: str) -> Optional[str]:
+    def get_rule_content(self, rule_name: str) -> str | None:
         """
         Retrieve the content of a Yara rule by name.
 
@@ -223,7 +217,7 @@ class YaraRuleManager:
         """
         scanner = self._get_scanner()
         if not scanner:
-            logger.warning("No Yara rules compiled")
+            logger.debug("No Yara rules compiled")
             return []
         try:
             # Check if target is a string that could be a file path

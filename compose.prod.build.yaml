@@ -17,11 +17,11 @@ services:
       dockerfile: ./projects/noseyparker_scanner/Dockerfile
       target: prod
 
-  dotnet-api:
+  dotnet-service:
     image: !reset null
     build:
       context: .
-      dockerfile: ./projects/dotnet_api/Dockerfile
+      dockerfile: ./projects/dotnet_service/Dockerfile
       target: prod
 
   file-enrichment:
@@ -59,11 +59,11 @@ services:
       dockerfile: ./projects/alerting/Dockerfile
       target: prod
 
-  triage:
+  agents:
     image: !reset null
     build:
       context: .
-      dockerfile: ./projects/triage/Dockerfile
+      dockerfile: ./projects/agents/Dockerfile
       target: prod
 
   housekeeping:

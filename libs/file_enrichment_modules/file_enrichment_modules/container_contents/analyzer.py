@@ -2,17 +2,16 @@
 import os
 import tempfile
 
-import structlog
 from common.helpers import is_container
+from common.logger import get_logger
 from common.models import EnrichmentResult, File, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
-
 from file_enrichment_modules.container_contents.containers import ContainerExtractor
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class ContainerContentsAnalyzer(EnrichmentModule):
@@ -23,7 +22,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
         # Configuration for container extraction
         self.extracted_archive_size_limit = 1_073_741_824  # 1GB default
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = get_file_enriched(object_id)
 
@@ -67,7 +66,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
 
         return "\n".join(summary_lines)
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process container file and extract its contents."""
         try:
             file_enriched = get_file_enriched(object_id)
@@ -77,12 +76,6 @@ class ContainerContentsAnalyzer(EnrichmentModule):
 
             # Initialize DaprClient and ContainerExtractor
             with DaprClient() as dapr_client:
-                container_extractor = ContainerExtractor(
-                    self.storage,
-                    dapr_client,
-                    self.extracted_archive_size_limit,
-                )
-
                 # Create a subclass to capture extracted files
                 class TrackingContainerExtractor(ContainerExtractor):
                     def publish_file_message(self, file_message: File):

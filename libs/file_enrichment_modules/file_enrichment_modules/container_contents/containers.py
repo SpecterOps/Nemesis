@@ -11,11 +11,11 @@ import zlib
 from io import SEEK_END
 
 import py7zr
-import structlog
+from common.logger import get_logger
 from common.models import File, FileEnriched
 from dapr.clients import DaprClient
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class FileNotSupportedException(Exception):
@@ -437,6 +437,7 @@ class ContainerExtractor:
             file_message = File(
                 object_id=str(object_id),
                 agent_id=file_enriched.agent_id,
+                source=file_enriched.source,
                 project=file_enriched.project,
                 timestamp=file_enriched.timestamp,
                 expiration=file_enriched.expiration,

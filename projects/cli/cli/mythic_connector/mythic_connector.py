@@ -3,7 +3,6 @@ import logging
 
 import click
 import urllib3
-
 from cli.mythic_connector.config import get_settings
 
 

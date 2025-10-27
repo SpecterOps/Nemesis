@@ -3,7 +3,6 @@ import asyncio
 import sys
 
 import click
-
 from cli.config import load_config
 from cli.log import setup_logging
 from cli.monitor import monitor_main
@@ -121,16 +120,56 @@ def get_os_user_and_host_string() -> str:
 @click.option("-w", "--workers", default=10, help="Number of worker threads", show_default=True)
 @click.option("-u", "--username", default="n", help="Basic auth username", show_default=True)
 @click.option("-p", "--password", default="n", help="Basic auth password", show_default=True)
-@click.option("--project", default="assess-test", help="Project name for metadata", show_default=True)
+@click.option("-s", "--source", default=None, help="Source name for metadata (e.g., 'host://HOST1')", show_default=True)
+@click.option("-j", "--project", default="assess-test", help="Project name for metadata", show_default=True)
 @click.option(
-    "--agent-id", default=("submit" + get_os_user_and_host_string()), help="Agent ID for metadata", show_default=True
+    "-a",
+    "--agent-id",
+    default=("submit" + get_os_user_and_host_string()),
+    help="Agent ID for metadata",
+    show_default=True,
 )
 @click.option(
     "-f",
     "--file",
     "file_path",
     type=click.Path(exists=True, dir_okay=False, path_type=str),
-    help="Path to single file to submit (alternative to PATHS for backwards compatibility)",
+    help="Path to single file to submit",
+    default=None,
+)
+@click.option(
+    "--container",
+    is_flag=True,
+    help="Submit files as containers to the /containers endpoint",
+)
+@click.option(
+    "--filters",
+    type=click.Path(exists=True, dir_okay=False, path_type=str),
+    help="Path to JSON file containing file filters (only used with --container)",
+)
+@click.option(
+    "--include-pattern",
+    multiple=True,
+    help="Include glob pattern for container filtering (can be used multiple times). Only used with --container.",
+)
+@click.option(
+    "--exclude-pattern",
+    multiple=True,
+    help="Exclude glob pattern for container filtering (can be used multiple times). Only used with --container.",
+)
+@click.option(
+    "--repeat",
+    type=int,
+    default=0,
+    help="Number of additional times to repeat the submission (default: 0 - no repeat)",
+    show_default=True,
+)
+@click.option(
+    "--folder",
+    type=str,
+    default=None,
+    help="Parent folder path to prepend to all uploaded file paths (e.g., 'C:\\Users\\Admin')",
+    show_default=False,
 )
 def submit(
     debug: bool,
@@ -143,8 +182,16 @@ def submit(
     project: str,
     agent_id: str,
     file_path: str,
+    container: bool,
+    source: str | None = None,
+    filters: str | None = None,
+    include_pattern: tuple[str, ...] = (),
+    exclude_pattern: tuple[str, ...] = (),
+    repeat: int = 0,
+    folder: str | None = None,
 ):
     """Submit files to Nemesis for processing"""
+    pattern_type: str = "glob"  # only handle glob formats if passed manually, for now
     submit_main(
         debug,
         paths,
@@ -156,6 +203,14 @@ def submit(
         project,
         agent_id,
         file_path,
+        container,
+        source,
+        filters,
+        include_pattern,
+        exclude_pattern,
+        pattern_type,
+        repeat,
+        folder,
     )
 
 
@@ -166,11 +221,13 @@ def submit(
 @click.option("-u", "--username", default="n", help="Basic auth username", show_default=True)
 @click.option("-p", "--password", default="n", help="Basic auth password", show_default=True)
 @click.option("--project", default="assess-test", help="Project name for metadata", show_default=True)
+@click.option("--source", help="Source name for metadata")
 @click.option(
     "--agent-id", default=("monitor" + get_os_user_and_host_string()), help="Agent ID for metadata", show_default=True
 )
 @click.option("-w", "--workers", default=10, help="Number of worker threads for initial submission", show_default=True)
 @click.option("--only-monitor", is_flag=True, help="Only monitor for new files, don't submit existing files")
+@click.option("--container", is_flag=True, help="Submit files as containers to the /containers endpoint")
 def monitor(
     path: str,
     debug: bool,
@@ -181,6 +238,8 @@ def monitor(
     agent_id: str,
     workers: int,
     only_monitor: bool,
+    container: bool,
+    source: str | None = None,
 ):
     """Monitor a folder for new files and submit them to Nemesis"""
     monitor_main(
@@ -193,6 +252,8 @@ def monitor(
         agent_id,
         only_monitor,
         workers,
+        container,
+        source,
     )
 
 

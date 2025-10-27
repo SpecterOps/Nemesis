@@ -1,0 +1,65 @@
+{
+    "[javascript]": {
+        "editor.formatOnSave": false
+    },
+    "[html]": {
+        "editor.formatOnSave": false
+    },
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        },
+        "editor.defaultFormatter": "charliermarsh.ruff",
+    },
+    "autoDocstring.docstringFormat": "google",
+    "files.exclude": {
+        "**/.DS_Store": true,
+        "**/.git": true,
+        "**/.hg": true,
+        "**/.mypy_cache": true,
+        "**/.pytest_cache": true,
+        "**/.svn": true,
+        "**/.venv": true,
+        "**/__pycache__": true,
+        "**/Thumbs.db": true
+    },
+    "files.trimTrailingWhitespace": true,
+    "files.watcherExclude": {
+        "**/__pycache__/**": true,
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/.hg/store/**": true,
+        "**/.ipynb_checkpoints/**": true,
+        "**/.mypy_cache/**": true,
+        "**/.pytest_cache/**": true,
+        "**/.venv/**": true,
+        "**/*.egg-info/**": true,
+        "**/build/**": true,
+        "**/dist/**": true,
+        "**/node_modules/*/**": true,
+    },
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingImports": "none",
+        "reportMissingModuleSource": "none",
+    },
+    "python.analysis.useLibraryCodeForTypes": true, // Pyright
+    // "python.formatting.provider": "none",
+    "python.languageServer": "Pylance",
+    "python.linting.enabled": true,
+    "python.linting.flake8Args": [
+        "--max-line-length=240",
+        "--ignore=E203,E722,W503",
+    ],
+    "python.linting.flake8Enabled": true,
+    "python.linting.lintOnSave": true,
+    "python.linting.pylintEnabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.analysis.typeCheckingMode": "basic",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+}

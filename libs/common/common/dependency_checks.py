@@ -3,7 +3,6 @@ import os
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -22,7 +21,7 @@ def find_missing_path_dependencies(
     commands: Sequence[str],
     *,
     raise_error: bool = True,
-    search_paths: Optional[Sequence[Path]] = None,
+    search_paths: Sequence[Path] | None = None,
 ) -> list[str]:
     """Checks if specified commands are available in system PATH.
 

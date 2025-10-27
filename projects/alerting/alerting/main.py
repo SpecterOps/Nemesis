@@ -2,10 +2,9 @@ import asyncio
 import os
 import re
 from contextlib import asynccontextmanager
-from typing import Optional
 
 import apprise
-import structlog
+from common.logger import get_logger
 from common.models import Alert, CloudEvent
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
@@ -14,7 +13,7 @@ from gql import Client, gql
 from gql.transport.websockets import WebsocketsTransport
 from pydantic import BaseModel
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 apobj = apprise.Apprise()
 is_initialized = False
 
@@ -62,7 +61,9 @@ async def lifespan(app: FastAPI):
                 logger.info(f"[alerting] adding Apprise URL: {url} (tag: {tag})")
                 apobj.add(f"{url}?footer=no", tag=tag)
         else:
-            logger.warning("No Apprise services were added during initialization")
+            # Use test endpoint as default when APPRISE_URLS is not configured
+            logger.info("No APPRISE_URLS configured, using test endpoint as default")
+            apobj.add("json://localhost:8000/test/alert?footer=no", tag="default")
 
         is_initialized = True
 
@@ -85,10 +86,10 @@ dapr_app = DaprApp(app)
 
 
 class TestAlert(BaseModel):
-    title: Optional[str] = "Nemesis Alert"
+    title: str | None = "Nemesis Alert"
     body: str
-    service: Optional[str] = None
-    tag: Optional[str] = None
+    service: str | None = None
+    tag: str | None = None
 
 
 async def handle_feedback_subscription():
@@ -121,12 +122,13 @@ async def handle_feedback_subscription():
     while True:
         try:
             transport = WebsocketsTransport(
-                url="ws://hasura:8080/v1/graphql", headers={"x-hasura-admin-secret": hasura_admin_secret}
+                url="ws://hasura:8080/v1/graphql",
+                headers={"x-hasura-admin-secret": hasura_admin_secret}
             )
 
             async with Client(
                 transport=transport,
-                fetch_schema_from_transport=True,
+                fetch_schema_from_transport=False,  # Disable schema fetching to avoid large payload
             ) as session:
                 async for result in session.subscribe(SUBSCRIPTION):
                     if result is None:
@@ -286,6 +288,42 @@ async def handle_alert(event: CloudEvent[Alert]):
     except Exception as e:
         logger.exception(e, message="Error processing alert event")
         raise
+
+
+@app.get("/apprise-info")
+async def get_apprise_info():
+    """Get information about configured Apprise URLs, specifically Slack channels."""
+    apprise_urls = os.getenv("APPRISE_URLS", "")
+
+    if not apprise_urls:
+        return {"channels": []}
+
+    channels = []
+
+    for apprise_url in apprise_urls.split(","):
+        url, tag = process_apprise_url(apprise_url)
+
+        # Only process Slack URLs
+        if url.startswith("slack://"):
+            # Extract channel name from Slack URL format: slack://TOKEN@WORKSPACE/#channel
+            import re
+            channel_match = re.search(r'#([^?]+)', url)
+            if channel_match:
+                channel_name = channel_match.group(1)
+
+                if tag and tag != "default":
+                    channels.append({
+                        "name": channel_name,
+                        "type": "tagged",
+                        "tag": tag
+                    })
+                else:
+                    channels.append({
+                        "name": channel_name,
+                        "type": "main"
+                    })
+
+    return {"channels": channels}
 
 
 @app.api_route("/healthz", methods=["GET", "HEAD"])

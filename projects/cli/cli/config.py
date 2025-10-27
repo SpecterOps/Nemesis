@@ -1,14 +1,13 @@
 from pathlib import Path
-from typing import Annotated, Optional, Union
+from typing import Annotated, Union
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BaseConfig(BaseModel):
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class StrictHttpUrl(str):
@@ -79,7 +78,7 @@ class MythicConfig(BaseConfig):
 class OutflankConfig(BaseConfig):
     url: StrictHttpUrl
     credential: PasswordCredential
-    downloads_dir_path: Optional[Path] = Field(
+    downloads_dir_path: Path | None = Field(
         None,
         description="Optional: Path to Outflank C2's upload directory where files will be pulled from instead of the Outflank API",
     )
@@ -99,8 +98,8 @@ class Config(BaseConfig):
     validate_https_certs: bool = Field(True, description="Whether to validate HTTPS certificates")
 
     nemesis: NemesisConfig
-    mythic: Optional[list[MythicConfig]] = Field(default_factory=list)
-    outflank: Optional[list[OutflankConfig]] = Field(default_factory=list)
+    mythic: list[MythicConfig] | None = Field(default_factory=list)
+    outflank: list[OutflankConfig] | None = Field(default_factory=list)
 
     @field_validator("mythic", "outflank", mode="before")
     @classmethod

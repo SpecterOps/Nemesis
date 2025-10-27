@@ -5,16 +5,15 @@ import re
 import tempfile
 from typing import Any
 
-import structlog
 from common.helpers import is_plaintext
+from common.logger import get_logger
 from common.models import EnrichmentResult, File, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class Base64DecoderAnalyzer(EnrichmentModule):
@@ -35,8 +34,13 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         # Allow whitespace/newlines within long sequences
         self.long_base64_pattern = re.compile(r"([A-Za-z0-9+/\s]{200,}={0,2})")
 
-    def should_process(self, object_id: str) -> bool:
-        """Determine if this module should run on plaintext files."""
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+        """Determine if this module should run on plaintext files.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+        """
 
         # there are some performance issues, so we're disabling this one for now
         return False
@@ -56,7 +60,15 @@ class Base64DecoderAnalyzer(EnrichmentModule):
 
         try:
             num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
-            file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
+
+            if file_path:
+                # Use provided file path
+                with open(file_path, "rb") as f:
+                    file_bytes = f.read(num_bytes)
+            else:
+                # Fallback to original method
+                file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
+
             file_content = file_bytes.decode("utf-8", errors="ignore")
 
             # Quick check using efficient patterns
@@ -214,15 +226,28 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         )
         return candidates
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process file to find and decode base64 content."""
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process file to find and decode base64 content.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+        """
         try:
             file_enriched = get_file_enriched(object_id)
             enrichment_result = EnrichmentResult(module_name=self.name)
 
             # Download and read the file content (respect size limit)
             num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
-            file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
+
+            if file_path:
+                # Use provided file path
+                with open(file_path, "rb") as f:
+                    file_bytes = f.read(num_bytes)
+            else:
+                # Fallback to original method
+                file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
+
             file_content = file_bytes.decode("utf-8", errors="ignore")
 
             # Extract potential base64 candidates with efficient filtering
@@ -296,6 +321,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
                         file_message = File(
                             object_id=decoded_object_id,
                             agent_id=file_enriched.agent_id,
+                            source=file_enriched.source,
                             project=file_enriched.project,
                             timestamp=file_enriched.timestamp,
                             expiration=file_enriched.expiration,

@@ -1,12 +1,16 @@
 # src/common/models.py
 from datetime import datetime
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any
 
-import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
-logger = structlog.get_logger(module=__name__)
+from .logger import get_logger
+
+if TYPE_CHECKING:
+    from .models2.api import FileMetadata
+
+logger = get_logger(__name__)
 
 
 ##########################################
@@ -28,6 +32,7 @@ class FindingCategory(str, Enum):
     YARA_MATCH = "yara_match"
     PII = "pii"
     MISC = "misc"
+    INFORMATIONAL = "informational"
 
 
 class FindingOrigin(str, Enum):
@@ -61,6 +66,59 @@ class Alert(BaseModel):
 
 ##########################################
 #
+# .NET
+#
+##########################################
+
+
+class DotNetInput(BaseModel):
+    object_id: str
+
+
+class DotNetMethodInfo(BaseModel):
+    MethodName: str
+    FilterLevel: str | None = None
+
+
+class DotNetAssemblyAnalysis(BaseModel):
+    AssemblyName: str
+    Error: str | None = None
+    RemotingChannels: list[str] = []
+    IsWCFServer: bool = False
+    IsWCFClient: bool = False
+    SerializationGadgetCalls: dict[str, list[DotNetMethodInfo]] = {}
+    WcfServerCalls: dict[str, list[DotNetMethodInfo]] = {}
+    ClientCalls: dict[str, list[DotNetMethodInfo]] = {}
+    RemotingCalls: dict[str, list[DotNetMethodInfo]] = {}
+    ExecutionCalls: dict[str, list[DotNetMethodInfo]] = {}
+
+
+class DotNetOutput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    object_id: str = Field(alias="objectId")
+    decompilation: str | None = None
+    analysis: DotNetAssemblyAnalysis | None = None
+
+    @field_validator("analysis", mode="before")
+    @classmethod
+    def parse_analysis_json(cls, v):
+        """Parse analysis from JSON string if needed"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            import json
+
+            try:
+                return json.loads(v)
+            except Exception as e:
+                logger.warning(f"Failed to parse DotNet analysis JSON: {e}")
+                return None
+        return v
+
+
+##########################################
+#
 # Special case for NoseyParker
 #
 ##########################################
@@ -68,6 +126,14 @@ class Alert(BaseModel):
 
 class NoseyParkerInput(BaseModel):
     object_id: str
+
+
+class GitCommitInfo(BaseModel):
+    commit_id: str
+    author: str
+    author_email: str
+    commit_date: str
+    message: str
 
 
 class MatchLocation(BaseModel):
@@ -81,6 +147,8 @@ class MatchInfo(BaseModel):
     matched_content: str
     location: MatchLocation
     snippet: str
+    file_path: str | None = None
+    git_commit: GitCommitInfo | None = None
 
 
 class ScanStats(BaseModel):
@@ -90,30 +158,20 @@ class ScanStats(BaseModel):
     bytes_scanned: int
     matches_found: int
 
-    # Allow aliases for field names
-    class Config:
-        populate_by_name = True
-        extra = "ignore"  # Ignore extra fields
-
 
 class ScanResults(BaseModel):
     scan_duration_ms: int
     bytes_scanned: int
-    matches: list[MatchInfo] = []  # Default to empty list
+    matches: list[MatchInfo]
     stats: ScanStats
-
-    class Config:
-        populate_by_name = True
-        extra = "ignore"  # Ignore extra fields
+    scan_type: str = "regular"  # "regular", "zip", "git_repo"
 
 
 class NoseyParkerOutput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
     object_id: str
     scan_result: ScanResults
-
-    class Config:
-        populate_by_name = True
-        extra = "ignore"  # Ignore extra fields
 
     # Add a factory method to handle flexible parsing
     @classmethod
@@ -137,8 +195,28 @@ class NoseyParkerOutput(BaseModel):
                         bytes_scanned=data.get("scan_result", {}).get("stats", {}).get("bytes_scanned", 0),
                         matches_found=data.get("scan_result", {}).get("stats", {}).get("matches_found", 0),
                     ),
+                    scan_type=data.get("scan_result", {}).get("scan_type", "regular"),
                 ),
             )
+
+
+##########################################
+#
+# Bulk Enrichment
+#
+##########################################
+
+
+class BulkEnrichmentEvent(BaseModel):
+    enrichment_name: str
+    object_id: str
+
+
+class SingleEnrichmentWorkflowInput(BaseModel):
+    """Input model for single enrichment workflows (bulk operations)."""
+
+    enrichment_name: str
+    object_id: str
 
 
 ##########################################
@@ -147,22 +225,50 @@ class NoseyParkerOutput(BaseModel):
 #
 ##########################################
 class File(BaseModel):
+    model_config = ConfigDict(
+        exclude_none=True,
+        exclude_unset=True,
+    )
+
     object_id: str
     agent_id: str
+    source: str | None = None
     project: str
     timestamp: datetime
     expiration: datetime
-    path: str | None = None
+    path: str  # | None = None
     originating_object_id: str | None = None
+    originating_container_id: str | None = None
     nesting_level: int | None = None
     creation_time: str | None = None
     access_time: str | None = None
     modification_time: str | None = None
 
-    class Config:
-        exclude_none = True
-        exclude_unset = True
-        json_encoders = {datetime: lambda dt: dt.isoformat()}
+    @field_serializer("timestamp", "expiration")
+    def serialize_datetime(self, dt: datetime, _info):
+        return dt.isoformat()
+
+    @classmethod
+    def from_file_metadata(cls, metadata: "FileMetadata", object_id: str) -> "File":
+        """
+        Create a File instance from FileMetadata and object_id.
+
+        Args:
+            metadata: FileMetadata object containing upload metadata
+            object_id: The object ID of the uploaded file
+
+        Returns:
+            File instance ready for submission
+        """
+        return cls(
+            object_id=object_id,
+            agent_id=metadata.agent_id,
+            source=metadata.source,
+            project=metadata.project,
+            timestamp=metadata.timestamp,
+            expiration=metadata.expiration,
+            path=metadata.path,
+        )
 
 
 ##########################################
@@ -199,9 +305,6 @@ class FileEnriched(File):
     is_plaintext: bool
     is_container: bool
 
-    class Config:
-        json_encoders = {datetime: lambda dt: dt.isoformat()}
-
 
 ##########################################
 #
@@ -218,10 +321,7 @@ class WorkflowStatus(BaseModel):
     result: dict | None = None
 
 
-T = TypeVar("T")
-
-
-class CloudEvent(BaseModel, Generic[T]):
+class CloudEvent[T](BaseModel):
     """Cloud event schema used in Dapr pub/sub"""
 
     data: T

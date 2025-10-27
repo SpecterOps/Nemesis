@@ -7,9 +7,9 @@ import { useFileNavigation } from './navigation';
 const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
   const isActive = currentSort === column;
   const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
-  
+
   return (
-    <div 
+    <div
       className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
       onClick={() => onSort(column, nextDirection)}
     >
@@ -86,7 +86,7 @@ export const TableHeaders = ({ isTriageMode, sortColumn, sortDirection, onSort }
                 currentSort={sortColumn}
                 currentDirection={sortDirection}
                 onSort={onSort}
-                className="flex-grow min-w-[300px]"
+                className="flex-shrink-0 w-96"
             >
                 File Path
             </SortableHeader>
@@ -121,12 +121,16 @@ export const TableRow = React.memo(({ index, style, data }) => {
 
     const renderSeverityBadge = (severity) => {
         let classes = 'px-2.5 py-0.5 rounded-full text-xs font-medium ';
-        if (severity >= 7) {
+        if (severity >= 9) {
+            classes += 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400';
+        } else if (severity >= 7) {
             classes += 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
         } else if (severity >= 4) {
+            classes += 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400';
+        } else if (severity >= 2) {
             classes += 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
         } else {
-            classes += 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+            classes += 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
         }
         return <span className={classes}>{severity}</span>;
     };
@@ -165,15 +169,54 @@ export const TableRow = React.memo(({ index, style, data }) => {
                 {new Date(finding.created_at).toLocaleString()}
             </div>
             <div className="flex-shrink-0 w-48 text-sm text-gray-500 dark:text-gray-400 text-left">
-                {finding.finding_name}
+                <Tooltip
+                    content={finding.finding_name}
+                    side="top"
+                    sideOffset={10}
+                    align="left"
+                    alignOffset={-35}
+                    avoidCollisions={true}
+                    maxWidth="full"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                        {finding.finding_name}
+                    </div>
+                </Tooltip>
             </div>
             <div className="flex-shrink-0 w-40 text-sm text-gray-500 dark:text-gray-400 text-left">
-                {finding.category}
+                <Tooltip
+                    content={finding.category}
+                    side="top"
+                    sideOffset={10}
+                    align="left"
+                    alignOffset={-35}
+                    avoidCollisions={true}
+                    maxWidth="full"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                        {finding.category}
+                    </div>
+                </Tooltip>
             </div>
             <div className="flex-shrink-0 w-40 text-sm text-gray-500 dark:text-gray-400 text-left">
-                {finding.origin_name}
+                <Tooltip
+                    content={finding.origin_name}
+                    side="top"
+                    sideOffset={10}
+                    align="left"
+                    alignOffset={-35}
+                    avoidCollisions={true}
+                    maxWidth="full"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                        {finding.origin_name}
+                    </div>
+                </Tooltip>
             </div>
-            <div className="flex-grow min-w-[300px] text-sm text-gray-500 dark:text-gray-400 text-left relative truncate">
+            <div className="flex-shrink-0 w-96 text-sm text-gray-500 dark:text-gray-400 text-left relative truncate">
                 <Tooltip
                     content={finding.files_enriched?.path || 'Unknown path'}
                     side="top"
@@ -256,7 +299,17 @@ const TriageActions = ({ finding, handleTriage, triageStates }) => (
             <div className="flex items-center justify-center">
                 {finding.finding_triage_histories.length > 0 &&
                     finding.finding_triage_histories[0].automated ? (
-                    <Tooltip content="Automated triage" side="top">
+                    <Tooltip
+                        content={
+                            <>
+                                {finding.finding_triage_histories[0].explanation || "No explanation provided"}
+                                {finding.finding_triage_histories[0].confidence && finding.finding_triage_histories[0].confidence > 0 && (
+                                    <span> (confidence: <strong>{finding.finding_triage_histories[0].confidence}</strong>)</span>
+                                )}
+                            </>
+                        }
+                        side="top"
+                    >
                         <span>
                             <Bot className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                         </span>

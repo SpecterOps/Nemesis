@@ -20,13 +20,13 @@ The [document_conversion](https://github.com/SpecterOps/Nemesis/tree/main/projec
 
 ## Secrets
 
-Nemesis uses the [Dapr Secrets management](https://docs.dapr.io/developing-applications/building-blocks/secrets/secrets-overview/) building block to protect secrets internally (like Postgres connection strings). Currently the [Local environment variables](https://docs.dapr.io/reference/components-reference/supported-secret-stores/envvar-secret-store/) component is used. These secrets are also refereced within some Dapr files such as [pubsub.yaml](https://github.com/SpecterOps/Nemesis/tree/main/infra/dapr/components/pubsub.yaml).
+Nemesis uses the [Dapr Secrets management](https://docs.dapr.io/developing-applications/building-blocks/secrets/secrets-overview/) building block to protect secrets internally (like PostgreSQL connection parameters). Currently the [Local environment variables](https://docs.dapr.io/reference/components-reference/supported-secret-stores/envvar-secret-store/) component is used. These secrets are also referenced within some Dapr files such as [pubsub.yaml](https://github.com/SpecterOps/Nemesis/tree/main/infra/dapr/components/pubsub.yaml).
 
 This reason for using this abstraction is so alternative secret management systems like [Vault or Kubernetes secrets](https://docs.dapr.io/reference/components-reference/supported-secret-stores/) can be used in the future:
 
 ![Dapr Secrets](images/dapr-secrets-overview-cloud-stores.png)
 
-An example of retrieving a secret is at the top of the the [housekeeping code](https://github.com/SpecterOps/Nemesis/blob/main/projects/housekeeping/housekeeping/main.py) to retrieve the `POSTGRES_CONNECTION_STRING` string.
+An example of retrieving secrets is in [libs/common/common/db.py](https://github.com/SpecterOps/Nemesis/blob/main/libs/common/common/db.py) which retrieves individual PostgreSQL connection parameters (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_PARAMETERS`) and constructs the connection string.
 
 ## Service Invocation
 

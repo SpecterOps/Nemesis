@@ -73,7 +73,7 @@ Development images are not published and must be built locally. If you make any 
 
 The easiest method to build + run dev images is to just use the `dev` target instead of `prod` with `./tools/nemesis-ctl.sh` :
 ```bash
-./tools/nemesis-ctl.sh start dev [--monitoring] [--jupyter]
+./tools/nemesis-ctl.sh start dev [--monitoring] [--jupyter] [--llm]
 ```
 
 ### Step 1 - Configure environment variables

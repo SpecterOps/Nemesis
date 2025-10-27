@@ -1,7 +1,7 @@
 import { useTriageMode } from '@/contexts/TriageModeContext';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from 'graphql-ws';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { FixedSizeList as List } from 'react-window';
@@ -58,7 +58,7 @@ const FindingsList = () => {
     const newParams = new URLSearchParams(searchParams);
     newParams.set('sort_column', sortColumn);
     newParams.set('sort_direction', sortDirection);
-    
+
     if (newParams.toString() !== searchParams.toString()) {
       setSearchParams(newParams, { replace: true });
     }
@@ -68,7 +68,7 @@ const FindingsList = () => {
   useEffect(() => {
     const urlSortColumn = searchParams.get('sort_column');
     const urlSortDirection = searchParams.get('sort_direction');
-    
+
     if (urlSortColumn && urlSortColumn !== sortColumn) {
       setSortColumn(urlSortColumn);
     }
@@ -194,6 +194,9 @@ const FindingsList = () => {
                 automated
                 username
                 value
+                explanation
+                confidence
+                true_positive_context
                 timestamp
               }
             }
@@ -266,6 +269,9 @@ const FindingsList = () => {
               automated
               username
               value
+              explanation
+              confidence
+              true_positive_context
               timestamp
             }
           }
@@ -535,8 +541,8 @@ const FindingsList = () => {
       {/* Findings Table */}
       <div className="overflow-x-auto">
         {/* Headers - Keep these outside the virtualized area */}
-        <TableHeaders 
-          isTriageMode={isTriageMode} 
+        <TableHeaders
+          isTriageMode={isTriageMode}
           sortColumn={sortColumn}
           sortDirection={sortDirection}
           onSort={handleSort}
@@ -616,8 +622,8 @@ const NoFilteredFindings = () => {
     // Get the current search params
     const newParams = new URLSearchParams(searchParams);
 
-    // Explicitly set triage_state to "all"
-    newParams.set('triage_state', 'all');
+    // Explicitly set triage_state to "untriaged_and_actionable" (the new default)
+    newParams.set('triage_state', 'untriaged_and_actionable');
 
     // Clear other filter parameters that might be causing the filtering
     newParams.delete('category');
@@ -641,13 +647,13 @@ const NoFilteredFindings = () => {
           No findings match your current filters
         </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Adjust the filters or click below to view all findings.
+          Adjust the filters or click below to view default findings.
         </p>
         <button
           onClick={handleViewAllFindings}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors inline-flex items-center"
         >
-          View All Findings
+          View Default Findings
         </button>
       </div>
     </div>

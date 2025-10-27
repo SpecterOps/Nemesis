@@ -2,9 +2,10 @@ import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO, Optional, Union
+from typing import BinaryIO, Union
 
 import requests
+from cli.config import NemesisConfig
 from common.models2.api import (
     APIInfo,
     ErrorResponse,
@@ -15,8 +16,6 @@ from common.models2.api import (
 )
 from requests.auth import HTTPBasicAuth
 from requests_toolbelt import MultipartEncoder
-
-from cli.config import NemesisConfig
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +33,14 @@ class NemesisClient:
             cfg.credential.password,
         )
 
-    def create_file_metadata(self, path: str, agent_id: str, project: str) -> FileMetadata:
+    def create_file_metadata(self, path: str, agent_id: str, project: str, source: str | None = None) -> FileMetadata:
         """Create standardized file metadata.
 
         Args:
             path: File path
             agent_id: Identifier for the agent
             project: Project name
+            source: Optional source identifier (e.g., "host://192.168.1.1", "https://site.domain.com")
 
         Returns:
             FileMetadata object with standard fields
@@ -48,6 +48,7 @@ class NemesisClient:
         now = datetime.now(UTC)
         return FileMetadata(
             agent_id=agent_id,
+            source=source,
             project=project,
             timestamp=now,
             expiration=now.replace(year=now.year + 1),
@@ -131,7 +132,7 @@ class NemesisClient:
             if need_cleanup and file_stream is not None:
                 file_stream.close()
 
-    def get_health(self) -> Optional[Union[HealthResponse, ErrorResponse]]:
+    def get_health(self) -> Union[HealthResponse, ErrorResponse] | None:
         """Get API health status.
 
         Returns:
@@ -149,7 +150,7 @@ class NemesisClient:
             logger.error(f"Error getting health status: {e}")
             return None
 
-    def get_api_info(self) -> Optional[Union[APIInfo, ErrorResponse]]:
+    def get_api_info(self) -> Union[APIInfo, ErrorResponse] | None:
         """Get API information.
 
         Returns:
@@ -167,7 +168,7 @@ class NemesisClient:
             logger.error(f"Error getting API info: {e}")
             return None
 
-    def reload_yara_rules(self) -> Optional[Union[YaraReloadResponse, ErrorResponse]]:
+    def reload_yara_rules(self) -> Union[YaraReloadResponse, ErrorResponse] | None:
         """Reload Yara rules.
 
         Returns:

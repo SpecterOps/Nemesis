@@ -2,17 +2,15 @@
 from datetime import datetime
 from typing import Any
 
-import structlog
-from common.helpers import escape_markdown
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-from pypdf import PdfReader
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.pdf.pdf2john import PdfParser
+from pypdf import PdfReader
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 def parse_pdf_file(file_path: str) -> dict[str, Any]:
@@ -97,24 +95,23 @@ class PDFAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
         file_enriched = get_file_enriched(object_id)
+        return "pdf document" in file_enriched.magic_type.lower()
 
-        if file_enriched.magic_type:
-            should_run = "pdf document" in file_enriched.magic_type.lower()
-        else:
-            should_run = False
+    def _analyze_pdf(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze PDF file and generate enrichment result.
 
-        logger.debug(f"PDFAnalyzer should_run: {should_run}")
-        return should_run
+        Args:
+            file_path: Path to the PDF file to analyze
+            file_enriched: File enrichment data
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        # get the current `file_enriched` from the database backend
-        file_enriched = get_file_enriched(object_id)
-
-        with self.storage.download(file_enriched.object_id) as file:
-            analysis = parse_pdf_file(file.name)
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
+        try:
+            analysis = parse_pdf_file(file_path)
 
             enrichment_result = EnrichmentResult(module_name=self.name)
             enrichment_result.results = analysis
@@ -125,7 +122,7 @@ class PDFAnalyzer(EnrichmentModule):
 # Encrypted PDF
 The document is encrypted. Attempt to crack it using the following hash:
 ```
-{escape_markdown(encryption_hash)}
+{encryption_hash}
 ```
 """
                 display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
@@ -147,6 +144,35 @@ The document is encrypted. Attempt to crack it using the following hash:
                 enrichment_result.findings.append(finding)
 
             return enrichment_result
+
+        except Exception as e:
+            logger.exception(e, message=f"Error analyzing PDF file for {file_enriched.file_name}")
+            return None
+
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process PDF file.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
+        try:
+            # get the current `file_enriched` from the database backend
+            file_enriched = get_file_enriched(object_id)
+
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_pdf(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as file:
+                    return self._analyze_pdf(file.name, file_enriched)
+
+        except Exception as e:
+            logger.exception(e, message="Error processing PDF file")
+            return None
 
 
 def create_enrichment_module() -> EnrichmentModule:

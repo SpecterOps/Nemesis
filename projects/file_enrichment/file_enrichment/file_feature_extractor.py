@@ -7,12 +7,10 @@ import re
 import statistics
 from collections import Counter
 from datetime import datetime
-from typing import Optional
 
-import structlog
+from common.logger import get_logger
 
-logger = structlog.get_logger(module=__name__)
-
+logger = get_logger(__name__)
 # unix epoch for a default
 DEFAULT_TIMESTAMP = datetime(1970, 1, 1, 0, 0, 0, tzinfo=datetime.now().astimezone().tzinfo)
 
@@ -593,9 +591,9 @@ class FileFeatureExtractor:
         filepath: str,
         size: int,
         sibling_data: dict,
-        created_time: Optional[str] = None,
-        modified_time: Optional[str] = None,
-        accessed_time: Optional[str] = None,
+        created_time: str | None = None,
+        modified_time: str | None = None,
+        accessed_time: str | None = None,
     ) -> dict[str, float]:
         features = {}
 
@@ -692,16 +690,16 @@ class FileFeatureExtractor:
         filepath: str,
         size: int,
         population_stats: dict,
-        created_time: Optional[str] = None,
-        modified_time: Optional[str] = None,
-        accessed_time: Optional[str] = None,
+        created_time: str | None = None,
+        modified_time: str | None = None,
+        accessed_time: str | None = None,
     ) -> dict[str, float]:
         """
         Extract population-based features including time patterns
         """
         features = {}
 
-        file_name = ntpath.basename(filepath)
+        # file_name = ntpath.basename(filepath)
         dir_path = ntpath.dirname(filepath)
         dir_path_lower = dir_path.lower()
 
@@ -854,9 +852,9 @@ class FileFeatureExtractor:
         self,
         filepath: str,
         size: int,
-        created_time: Optional[str] = None,
-        modified_time: Optional[str] = None,
-        accessed_time: Optional[str] = None,
+        created_time: str | None = None,
+        modified_time: str | None = None,
+        accessed_time: str | None = None,
     ) -> dict[str, float]:
         """
         Extract features for an individual file from file metadata.
@@ -923,7 +921,7 @@ class FileFeatureExtractor:
                 "numbers_in_file_name": len(re.findall(r"\d", file_name)),
                 "numbers_in_dir_path": len(re.findall(r"\d", dir_path)),
                 "file_name_naming_convention": self._get_naming_convention(file_name),
-                "file_name_naming_convention": self._get_naming_convention(dir_path),
+                "dir_name_naming_convention": self._get_naming_convention(dir_path),
                 "file_name_has_date_pattern": int(self._has_date_pattern(file_name)),
                 "dir_path_has_date_pattern": int(self._has_date_pattern(dir_path)),
             }
@@ -1225,7 +1223,7 @@ class FileFeatureExtractor:
 
     @staticmethod
     def compute_sibling_data(
-        target_file: dict, sibling_files: list[dict], known_sensitive: Optional[set[str]] = None
+        target_file: dict, sibling_files: list[dict], known_sensitive: set[str] | None = None
     ) -> dict:
         """
         Compute statistics about sibling files in the same directory.

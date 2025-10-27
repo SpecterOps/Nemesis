@@ -3,15 +3,14 @@ from pathlib import Path
 from typing import Any
 
 import lief
-import structlog
 import yara_x
+from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 # # simpler but may have additional information we often don't care about
@@ -49,7 +48,7 @@ def parse_pe_file(file_path: str) -> dict[str, Any]:
         binary = lief.parse(file_path)
 
         if binary is None:
-            lief.lief_errors.parsing_error
+            raise lief.lief_errors.parsing_error("Failed to parse PE file")
 
         # Initialize the result dictionary
         result = {
@@ -69,7 +68,7 @@ def parse_pe_file(file_path: str) -> dict[str, Any]:
             is_dotnet = binary.has_configuration and bool(
                 binary.data_directories.get(lief.PE.DATA_DIRECTORY.CLR_RUNTIME_HEADER, None)
             )
-        except:
+        except Exception:
             is_dotnet = False
 
         # General Information
@@ -226,8 +225,11 @@ def parse_pe_file(file_path: str) -> dict[str, Any]:
             try:
                 tls = binary.tls
                 result["tls"] = {
-                    "callbacks": [callback for callback in tls.callbacks],
-                    "addressof_raw_data": {"start": tls.addressof_raw_data.start, "end": tls.addressof_raw_data.end},
+                    "callbacks": list(tls.callbacks),
+                    "addressof_raw_data": {
+                        "start": tls.addressof_raw_data.start if tls.addressof_raw_data else None,
+                        "end": tls.addressof_raw_data.end if tls.addressof_raw_data else None,
+                    },
                     "addressof_index": tls.addressof_index,
                     "addressof_callbacks": tls.addressof_callbacks,
                     "sizeof_zero_fill": tls.sizeof_zero_fill,
@@ -349,32 +351,67 @@ rule is_pe
 }
         """)
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Uses a Yara run to determine if this module should run."""
         # Get the current file_enriched from the database backend
         file_enriched = get_file_enriched(object_id)
 
         # download a max of 1000 bytes
         num_bytes = file_enriched.size if file_enriched.size < 1000 else 1000
-        file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
-        logger.debug(f"pe_analyzer downloaded {len(file_bytes)} bytes")
+
+        if file_path:
+            # Use provided file path - read only the needed bytes
+            with open(file_path, "rb") as f:
+                file_bytes = f.read(num_bytes)
+        else:
+            # Fallback to downloading the file itself
+            file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
 
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
-        logger.debug(f"pe_analyzer should_run: {should_run}")
         return should_run
 
-    def process(self, object_id: str) -> EnrichmentResult | None:
-        """Process file using."""
+    def _analyze_pe(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze PE file and generate enrichment result.
+
+        Args:
+            file_path: Path to the PE file to analyze
+            file_enriched: File enrichment data
+
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
+        try:
+            enrichment_result = EnrichmentResult(module_name=self.name)
+            enrichment_result.results = parse_pe_file(file_path)
+            return enrichment_result
+        except Exception as e:
+            logger.exception(e, message=f"Error analyzing PE file for {file_enriched.file_name}")
+            return None
+
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process file using.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
         try:
             # Get the current file_enriched from the database backend
             file_enriched = get_file_enriched(object_id)
 
-            with self.storage.download(file_enriched.object_id) as file:
-                enrichment_result = EnrichmentResult(module_name=self.name)
-                enrichment_result.results = parse_pe_file(file.name)
-                return enrichment_result
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_pe(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as file:
+                    return self._analyze_pe(file.name, file_enriched)
+
         except Exception as e:
             logger.exception(e, message="Error in PE file analysis", file_object_id=object_id)
+            return None
 
 
 def create_enrichment_module() -> EnrichmentModule:

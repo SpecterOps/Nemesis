@@ -1,16 +1,22 @@
 // src/App.jsx
 import { createClient } from 'graphql-ws';
 import {
+  BarChart2,
+  Bot,
   ChevronLeft,
   ChevronRight,
+  FileArchive,
   FileSearch,
   FileText,
+  FolderTree,
   HelpCircle,
+  Key,
   LayoutDashboard,
   Search,
   Settings,
   Siren,
-  Upload
+  Upload,
+  Globe
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { Route, BrowserRouter as Router, Routes, useLocation, useNavigate } from 'react-router-dom';
@@ -33,6 +39,14 @@ import DocumentSearch from './components/Search/DocumentSearch';
 import SettingsPage from './components/Settings/SettingsPage';
 import ThemeToggle from './components/ThemeToggle';
 import YaraRulesManager from './components/Yara/YaraManager';
+import Containers from './components/Containers/Containers';
+import AgentsPage from './components/Agents/AgentsPage';
+import FileBrowser from './components/FileBrowser/FileBrowser';
+import Chromium from './components/Chromium/Chromium';
+import Dpapi from './components/Dpapi/Dpapi';
+import ReportingPage from './components/Reporting/ReportingPage';
+import SourceReportPage from './components/Reporting/SourceReportPage';
+import SystemReportPage from './components/Reporting/SystemReportPage';
 
 // Assets
 import logoDark from './img/nemesis_logo_dark.png';
@@ -44,6 +58,7 @@ const Sidebar = ({ onCollapse }) => {
     return savedState ? JSON.parse(savedState) : false;
   });
   const [findingsCount, setFindingsCount] = useState(0);
+  const [litellmAvailable, setLitellmAvailable] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -53,6 +68,22 @@ const Sidebar = ({ onCollapse }) => {
   }, [isCollapsed]);
 
   useEffect(() => {
+    // Check LiteLLM availability
+    const checkLitellmAvailability = async () => {
+      try {
+        const response = await fetch('/api/system/available-services');
+        if (response.ok) {
+          const data = await response.json();
+          const availableServices = data.services || [];
+          setLitellmAvailable(availableServices.includes('/llm'));
+        }
+      } catch (err) {
+        console.error('Error checking LiteLLM availability:', err);
+      }
+    };
+
+    checkLitellmAvailability();
+
     // Initial count fetch
     const fetchFindingsCount = async () => {
       const query = {
@@ -152,14 +183,24 @@ const Sidebar = ({ onCollapse }) => {
     onCollapse?.(newState);
   };
 
-  const navigationItems = [
+  const baseNavigationItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-    { id: 'files', label: 'Files', icon: FileText, path: '/files' },
     { id: 'upload', label: 'File Upload', icon: Upload, path: '/upload' },
-    { id: 'findings', label: `Findings - ${findingsCount} Untriaged`, icon: Siren, path: '/findings?triage_state=untriaged', count: findingsCount },
+    { id: 'files', label: 'Files', icon: FileText, path: '/files' },
+    { id: 'findings', label: `Findings - ${findingsCount} Untriaged`, icon: Siren, path: '/findings', count: findingsCount },
+    { id: 'file-browser', label: 'File Browser', icon: FolderTree, path: '/file-browser' },
+    { id: 'chromium', label: 'Chromium', icon: Globe, path: '/chromium' },
+    { id: 'dpapi', label: 'Dpapi', icon: Key, path: '/dpapi' },
     { id: 'search', label: 'Document Search', icon: Search, path: '/search' },
-    { id: 'yara', label: 'Yara Rules', icon: FileSearch, path: '/yara-rules' }
+    { id: 'yara', label: 'Yara Rules', icon: FileSearch, path: '/yara-rules' },
+    { id: 'containers', label: 'Containers', icon: FileArchive, path: '/containers' },
+    { id: 'reporting', label: 'Reporting', icon: BarChart2, path: '/reporting' }
   ];
+
+  // Add Agents tab if LiteLLM is available
+  const navigationItems = litellmAvailable
+    ? [...baseNavigationItems, { id: 'agents', label: 'Agents', icon: Bot, path: '/agents' }]
+    : baseNavigationItems;
 
   const utilityItems = [
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
@@ -320,10 +361,18 @@ const App = () => {
                       <Route path="/" element={<StatsOverview />} />
                       <Route path="/files" element={<FileList />} />
                       <Route path="/files/:objectId" element={<FileViewer />} />
+                      <Route path="/file-browser" element={<FileBrowser />} />
                       <Route path="/upload" element={<FileUpload />} />
                       <Route path="/search" element={<DocumentSearch />} />
                       <Route path="/findings" element={<FindingsListContainer />} />
+                      <Route path="/chromium" element={<Chromium />} />
+                      <Route path="/dpapi" element={<Dpapi />} />
                       <Route path="/yara-rules" element={<YaraRulesManager />} />
+                      <Route path="/containers" element={<Containers />} />
+                      <Route path="/agents" element={<AgentsPage />} />
+                      <Route path="/reporting" element={<ReportingPage />} />
+                      <Route path="/reporting/source/:sourceName" element={<SourceReportPage />} />
+                      <Route path="/reporting/system" element={<SystemReportPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/help" element={<HelpPage />} />
                     </Routes>

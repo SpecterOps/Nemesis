@@ -8,8 +8,8 @@ FROM ${PYTHON_BASE_DEV_IMAGE} AS base
 # that this project uses
 
 RUN apt-get update && \
-    apt-get install -y libmagic1 libpq5 \
-    gcc libc6-dev curl && \
+    apt-get install -y libmagic1 libpq5 binutils \
+    gcc g++ libc6-dev curl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -64,6 +64,9 @@ ENV PYTHONUNBUFFERED=1
 # No .pyc/pycache files
 ENV PYTHONDONTWRITEBYTECODE=1
 
+ENV PYTHONDEVMODE=1
+ENV PYTHONASYNCIODEBUG=1
+
 ENV LOG_LEVEL=DEBUG
 
 ENV UVICORN_HOST="0.0.0.0"
@@ -79,7 +82,7 @@ ENTRYPOINT ["/bin/sh", "-c", " \
     --workers ${UVICORN_WORKERS} \
     --reload \
     --reload-dir ${UVICORN_RELOAD_DIR} \
-"]
+    "]
 ########################
 # Production
 ########################
@@ -94,9 +97,9 @@ FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
 RUN apt-get update && \
     apt-get install -y \
-       libmagic1 libpq5 \
-       binutils \
-         && \
+    libmagic1 libpq5 \
+    binutils \
+    && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -109,9 +112,10 @@ RUN mkdir -p /yara_rules/
 # Uvicorn production settings
 ENV UVICORN_HOST=0.0.0.0 \
     UVICORN_PORT=8001 \
-    UVICORN_WORKERS=2 \
+    UVICORN_WORKERS=1 \
     UVICORN_PROXY_HEADERS=1 \
     UVICORN_ACCESS_LOG=false
+
 
 # TODO: Re-enable when we're ready for release
 # USER nemesis
@@ -123,4 +127,4 @@ ENTRYPOINT ["/bin/sh", "-c", "\
     --workers ${UVICORN_WORKERS} \
     --proxy-headers \
     --no-access-log \
-"]
+    "]

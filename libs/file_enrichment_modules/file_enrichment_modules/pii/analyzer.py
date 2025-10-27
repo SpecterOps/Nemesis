@@ -2,17 +2,15 @@
 import tempfile
 import threading
 from pathlib import Path
-from typing import Optional
 
-import structlog
 import yara_x
+from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
-
 from file_enrichment_modules.module_loader import EnrichmentModule
 
-logger = structlog.get_logger(module=__name__)
+logger = get_logger(__name__)
 
 
 class PIIAnalyzer(EnrichmentModule):
@@ -70,7 +68,7 @@ rule detect_pii
         """)
         self._compiled_rules = self._compiler.build()
 
-    def _get_scanner(self) -> Optional[yara_x.Scanner]:
+    def _get_scanner(self) -> yara_x.Scanner | None:
         """Get or create thread-local scanner instance."""
         if not hasattr(self._thread_local, "scanner"):
             if self._compiled_rules:
@@ -85,16 +83,26 @@ rule detect_pii
         if hasattr(self._thread_local, "scanner"):
             delattr(self._thread_local, "scanner")
 
-    def should_process(self, object_id: str) -> bool:
+    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if file should be processed based on size and content."""
         file_enriched = get_file_enriched(object_id)
 
         if file_enriched.is_plaintext:
             if file_enriched.size > self.size_limit:
-                logger.warning(f"File {file_enriched.path} ({file_enriched.size} bytes) exceeds size limit")
-                return False
+                logger.warning(
+                    f"[pii_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"
+                )
 
-            file_bytes = self.storage.download_bytes(file_enriched.object_id)
+            if file_path:
+                # Use provided file path - read only the needed bytes
+                with open(file_path, "rb") as f:
+                    num_bytes = min(file_enriched.size, self.size_limit)
+                    file_bytes = f.read(num_bytes)
+            else:
+                # Fallback to downloading the file itself
+                num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
+                file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
+
             scanner = self._get_scanner()
             if not scanner:
                 logger.warning("No Yara rules compiled")
@@ -103,7 +111,6 @@ rule detect_pii
             matches = scanner.scan(file_bytes)
             should_run = len(list(matches.matching_rules)) > 0
 
-            logger.debug(f"PIIAnalyzer should_run: {should_run}")
             return should_run
         else:
             return False
@@ -168,100 +175,130 @@ rule detect_pii
 
         return summary
 
-    def process(self, object_id: str) -> Optional[EnrichmentResult]:
-        """Process file to detect PII using Yara rules."""
+    def _analyze_pii(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+        """Analyze file for PII and generate enrichment result.
+
+        Args:
+            file_path: Path to the file to analyze for PII
+            file_enriched: File enrichment data
+
+        Returns:
+            EnrichmentResult or None if analysis fails
+        """
+        enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
+
+        scanner = self._get_scanner()
+        if not scanner:
+            logger.warning("No Yara rules compiled")
+            return None
+
+        try:
+            content = Path(file_path).read_text(encoding="utf-8")
+            file_bytes = content.encode("utf-8")
+
+            scan_results = scanner.scan(file_bytes)
+            findings_by_type = {}
+
+            for rule in scan_results.matching_rules:
+                for pattern in rule.patterns:
+                    if pattern.matches:
+                        # Get the pattern name directly from the identifier
+                        # Remove the $ prefix that Yara adds to pattern names
+                        pattern_name = pattern.identifier.lstrip("$")
+                        pii_type = self._categorize_match(pattern_name)
+
+                        if pii_type not in findings_by_type:
+                            findings_by_type[pii_type] = []
+
+                        for match in pattern.matches:
+                            if match.length < 1000:
+                                value = content[match.offset : match.offset + match.length]
+                                context = self._get_match_context(content, match.offset, match.length)
+
+                                findings_by_type[pii_type].append(
+                                    {
+                                        "value": value,
+                                        "context": context,
+                                        "offset": match.offset,
+                                        "length": match.length,
+                                        "pattern_id": pattern_name,  # Store the clean pattern name
+                                    }
+                                )
+
+            if findings_by_type:
+                # Create finding summary
+                summary_markdown = self._create_finding_summary(findings_by_type)
+
+                # Create display data
+                display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
+
+                # Create finding
+                finding = Finding(
+                    category=FindingCategory.PII,
+                    finding_name="pii_detected",
+                    origin_type=FindingOrigin.ENRICHMENT_MODULE,
+                    origin_name=self.name,
+                    object_id=file_enriched.object_id,
+                    severity=8,
+                    raw_data={"findings": findings_by_type},
+                    data=[display_data],
+                )
+
+                enrichment_result.findings = [finding]
+                enrichment_result.results = {"pii_detected": findings_by_type}
+
+                # Create a displayable version of the results
+                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
+                    display = "PII Analysis Results\n==================\n\n"
+                    for pii_type, matches in findings_by_type.items():
+                        display += f"{pii_type}:\n"
+                        display += f"  Total instances: {len(matches)}\n"
+                        display += "  Found Values:\n"
+                        for match in matches:
+                            display += f"    - Offset {match['offset']}: {match['value']}\n"
+                        display += "\n"
+
+                    tmp_display_file.write(display)
+                    tmp_display_file.flush()
+
+                    object_id = self.storage.upload_file(tmp_display_file.name)
+
+                    displayable_parsed = Transform(
+                        type="displayable_parsed",
+                        object_id=f"{object_id}",
+                        metadata={
+                            "file_name": f"{file_enriched.file_name}_pii_analysis.txt",
+                            "display_type_in_dashboard": "monaco",
+                            "default_display": True,
+                        },
+                    )
+                    enrichment_result.transforms = [displayable_parsed]
+
+            return enrichment_result
+
+        except Exception as e:
+            logger.exception(e, message=f"Error analyzing PII for {file_enriched.file_name}")
+            return None
+
+    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process file to detect PII using Yara rules.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails
+        """
         try:
             file_enriched = get_file_enriched(object_id)
-            enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
-            scanner = self._get_scanner()
-            if not scanner:
-                logger.warning("No Yara rules compiled")
-                return None
-
-            with self.storage.download(file_enriched.object_id) as temp_file:
-                content = Path(temp_file.name).read_text(encoding="utf-8")
-                file_bytes = content.encode("utf-8")
-
-                scan_results = scanner.scan(file_bytes)
-                findings_by_type = {}
-
-                for rule in scan_results.matching_rules:
-                    for pattern in rule.patterns:
-                        if pattern.matches:
-                            # Get the pattern name directly from the identifier
-                            # Remove the $ prefix that Yara adds to pattern names
-                            pattern_name = pattern.identifier.lstrip("$")
-                            pii_type = self._categorize_match(pattern_name)
-
-                            if pii_type not in findings_by_type:
-                                findings_by_type[pii_type] = []
-
-                            for match in pattern.matches:
-                                if match.length < 1000:
-                                    value = content[match.offset : match.offset + match.length]
-                                    context = self._get_match_context(content, match.offset, match.length)
-
-                                    findings_by_type[pii_type].append(
-                                        {
-                                            "value": value,
-                                            "context": context,
-                                            "offset": match.offset,
-                                            "length": match.length,
-                                            "pattern_id": pattern_name,  # Store the clean pattern name
-                                        }
-                                    )
-
-                if findings_by_type:
-                    # Create finding summary
-                    summary_markdown = self._create_finding_summary(findings_by_type)
-
-                    # Create display data
-                    display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
-
-                    # Create finding
-                    finding = Finding(
-                        category=FindingCategory.PII,
-                        finding_name="pii_detected",
-                        origin_type=FindingOrigin.ENRICHMENT_MODULE,
-                        origin_name=self.name,
-                        object_id=file_enriched.object_id,
-                        severity=8,
-                        raw_data={"findings": findings_by_type},
-                        data=[display_data],
-                    )
-
-                    enrichment_result.findings = [finding]
-                    enrichment_result.results = {"pii_detected": findings_by_type}
-
-                    # Create a displayable version of the results
-                    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
-                        display = "PII Analysis Results\n==================\n\n"
-                        for pii_type, matches in findings_by_type.items():
-                            display += f"{pii_type}:\n"
-                            display += f"  Total instances: {len(matches)}\n"
-                            display += "  Found Values:\n"
-                            for match in matches:
-                                display += f"    - Offset {match['offset']}: {match['value']}\n"
-                            display += "\n"
-
-                        tmp_display_file.write(display)
-                        tmp_display_file.flush()
-
-                        object_id = self.storage.upload_file(tmp_display_file.name)
-
-                        displayable_parsed = Transform(
-                            type="displayable_parsed",
-                            object_id=f"{object_id}",
-                            metadata={
-                                "file_name": f"{file_enriched.file_name}_pii_analysis.txt",
-                                "display_type_in_dashboard": "monaco",
-                                "default_display": True,
-                            },
-                        )
-                        enrichment_result.transforms = [displayable_parsed]
-
-                    return enrichment_result
+            # Use provided file_path if available, otherwise download
+            if file_path:
+                return self._analyze_pii(file_path, file_enriched)
+            else:
+                with self.storage.download(file_enriched.object_id) as temp_file:
+                    return self._analyze_pii(temp_file.name, file_enriched)
 
         except Exception as e:
             logger.exception(e, message="Error processing file for PII detection")

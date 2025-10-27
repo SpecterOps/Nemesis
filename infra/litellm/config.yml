@@ -1,0 +1,19 @@
+model_list:
+  # used if other task models are not defined
+  - model_name: default
+    litellm_params:
+      model: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0
+      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
+      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
+      aws_region_name: "us-east-1"
+  # # used to triage findings and determine their validity
+  # - model_name: triage
+  #   litellm_params:
+  #     model: bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0
+  #     aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
+  #     aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
+  #     aws_region_name: "us-east-1"
+
+general_settings:
+  database_connection_pool_limit: 30
+  database_connection_timeout: 60

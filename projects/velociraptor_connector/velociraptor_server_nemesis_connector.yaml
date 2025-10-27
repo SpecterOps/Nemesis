@@ -1,0 +1,89 @@
+name: Server.Monitor.NemesisUploadForwarder
+description: |
+  This monitoring artifact watches for completed file uploads from clients
+  and automatically forwards them to a Nemesis server using HTTP POST.
+  
+type: SERVER_EVENT
+
+sources:
+  - query: |
+      -- Configuration - MUST BE CONFIGURED BEFORE USE
+      LET NemesisURL = "CONFIGURE_ME_NEMESIS_URL"  -- Replace with your Nemesis URL, i.e., "https://nemesis:7443"
+      LET NemesisUsername = "CONFIGURE_ME_USERNAME"  -- Replace with your Nemesis username
+      LET NemesisPassword = "CONFIGURE_ME_PASSWORD"  -- Replace with your Nemesis password
+      LET Project = "CONFIGURE_ME_PROJECT"  -- Replace with your project name, i.e., "INVESTIGATION-123"
+      LET AgentID = "velociraptor_server"
+      LET MaxSize = 100000000  -- Maximum file size in bytes (default: 100 MB)
+      
+      -- Check if configuration is complete
+      LET IsConfigured = NOT (NemesisURL =~ "CONFIGURE_ME" OR NemesisUsername =~ "CONFIGURE_ME" OR NemesisPassword =~ "CONFIGURE_ME" OR Project =~ "CONFIGURE_ME")
+      
+      LET AuthHeader = "Basic " + base64encode(string=NemesisUsername + ":" + NemesisPassword)
+      
+      -- Main query that watches for uploads and forwards them
+      SELECT * FROM if(
+        condition=IsConfigured,
+        then={
+          SELECT * FROM foreach(
+            row={
+              SELECT 
+                ClientId,
+                VFSPath,  
+                file_store(path=VFSPath) as HostFilePath,
+                UploadName,
+                Size,
+                timestamp(epoch=now()) as Timestamp
+              FROM watch_monitoring(artifact="System.Upload.Completion")
+              WHERE Size <= MaxSize
+            },
+            query={
+              SELECT 
+                ClientId,
+                UploadName,
+                Size,
+                Response as HTTPStatus,
+                Content as HTTPResponse,
+                if(condition=Response=~"^20[0-9]$", 
+                   then="✅ Successfully forwarded to Nemesis",
+                   else="❌ Failed to forward to Nemesis") as Status
+              FROM http_client(
+                url=NemesisURL + "/api/files",
+                method="POST",
+                skip_verify=TRUE,
+                headers=dict(Authorization=AuthHeader),
+                files=[
+                  dict(
+                    file=split(string=file_store(path=VFSPath), sep="/")[-1] || "unknown_file",
+                    key="file",
+                    path=file_store(path=VFSPath),
+                    accessor="file"
+                  )
+                ],
+                params=dict(
+                  metadata=serialize(
+                    format="json", 
+                    item=dict(
+                      agent_id=AgentID,
+                      source=ClientId,
+                      path=UploadName,
+                      project=Project,
+                      timestamp=timestamp(epoch=now()),
+                      expiration=timestamp(epoch=now() + 365 * 86400)
+                    )
+                  )
+                )
+              )
+            }
+          )
+        },
+        else={
+          SELECT 
+            "ERROR" as Status,
+            "CONFIGURATION REQUIRED" as ClientId,
+            "Please configure NemesisURL, NemesisUsername, NemesisPassword, and Project before using this artifact" as UploadName,
+            NemesisURL as HTTPStatus,
+            format(format="Current values: URL=%s, Username=%s, Password=%s, Project=%s", 
+                   args=[NemesisURL, NemesisUsername, NemesisPassword, Project]) as HTTPResponse
+          FROM scope()
+        }
+      )

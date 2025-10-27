@@ -7,21 +7,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import Dialog from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from '@/contexts/UserContext';
+import { cachedFetch } from '@/utils/fileCache';
 import { createClient } from 'graphql-ws';
 import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileText, Image } from 'lucide-react';
-import { default as React, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import FileDetailsSection from './FileDetailsSection';
-import EnrichmentStatusSection from './EnrichmentStatusSection';
-import { getMonacoLanguage } from './languageMap';
-import JsonViewer from './JsonViewer';
 import CsvViewer from './CsvViewer';
+import EnrichmentStatusSection from './EnrichmentStatusSection';
+import FileDetailsSection from './FileDetailsSection';
+import { getMonacoLanguage } from './languageMap';
+import LinkedFilesSection from './LinkedFilesSection';
 import MonacoContentViewer from './MonacoViewer';
+import SCCMLogViewer from './SCCMLogViewer';
 import SQLiteViewer from './SQLiteViewer';
 import ZipFileViewer from './ZipFileViewer';
-import SCCMLogViewer from './SCCMLogViewer';
 
 
 const MAX_VIEW_SIZE = 1024 * 1024; // 1MB text display limit
@@ -258,7 +260,13 @@ const FileViewer = () => {
   const [containerAnalysisStarted, setContainerAnalysisStarted] = useState(false);
   const [summarizationStarted, setSummarizationStarted] = useState(false);
   const [credentialAnalysisStarted, setCredentialAnalysisStarted] = useState(false);
-  const [availableLLMEnrichments, setAvailableLLMEnrichments] = useState([]);
+  const [dotnetAnalysisStarted, setDotnetAnalysisStarted] = useState(false);
+  const [translationStarted, setTranslationStarted] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showTranslateDialog, setShowTranslateDialog] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState('English');
+  const [isLiteLLMAvailable, setIsLiteLLMAvailable] = useState(false);
 
   // Determine where we came from
   const isFromSearch = location.state?.from === 'search';
@@ -309,30 +317,44 @@ const FileViewer = () => {
       if (!response.ok) throw new Error('Network response was not ok');
 
       const result = await response.json();
-      if (result.errors) throw new Error(result.errors[0].message);
+      if (result.errors) {
+        const errorMessage = result.errors[0].message;
+
+        // Silently handle foreign key violations (file doesn't exist)
+        if (errorMessage.includes('foreign key constraint') && errorMessage.includes('fk_files_view_history_object_id')) {
+          return;
+        }
+
+        throw new Error(errorMessage);
+      }
 
     } catch (err) {
       // If there's an error, remove the flag so it can be retried
       recordedViews.delete(objectId);
-      console.error('Failed to record file view:', err);
+
+      // Only log non-foreign-key errors
+      const errorMessage = err.message || '';
+      if (!errorMessage.includes('foreign key constraint')) {
+        console.error('Failed to record file view:', err);
+      }
     }
   };
 
-  // check which LLM enrichments are available
+  // check if LiteLLM service is available
   useEffect(() => {
-    const fetchAvailableLLMEnrichments = async () => {
+    const checkLiteLLMAvailability = async () => {
       try {
-        const response = await fetch('/api/enrichments/llm');
+        const response = await fetch('/api/system/available-services');
         if (response.ok) {
           const data = await response.json();
-          setAvailableLLMEnrichments(data.modules || []);
+          setIsLiteLLMAvailable(data.services?.includes('/llm') || false);
         }
       } catch (error) {
-        console.error('Error fetching available LLM enrichments:', error);
+        console.error('Error checking LiteLLM availability:', error);
       }
     };
 
-    fetchAvailableLLMEnrichments();
+    checkLiteLLMAvailability();
   }, []);
 
   // record that a user viewed this file
@@ -355,6 +377,7 @@ const FileViewer = () => {
               type
               transform_object_id
             }
+            updated_at
           }
         }
       `,
@@ -371,34 +394,71 @@ const FileViewer = () => {
             if (data?.files_enriched && data.files_enriched.length > 0) {
               const updatedFile = data.files_enriched[0];
 
-              // Update fileData with the new transforms
-              setFileData(prev => ({
-                ...prev,
-                transforms: updatedFile.transforms
-              }));
+              // When main file updates, re-fetch everything including derived transforms
+              // This is simpler than trying to maintain sync
+              const refetchData = async () => {
+                try {
+                  const response = await fetch('/hasura/v1/graphql', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+                    },
+                    body: JSON.stringify({
+                      query: `
+                        query GetDerivedFileTransforms($objectId: uuid!) {
+                          files_enriched(where: {originating_object_id: {_eq: $objectId}}) {
+                            object_id
+                            transforms(where: {type: {_in: ["text_summary", "text_translation", "llm_extracted_credentials"]}}) {
+                              metadata
+                              type
+                              transform_object_id
+                            }
+                          }
+                        }
+                      `,
+                      variables: { objectId }
+                    })
+                  });
 
-              // Fetch new transform content if needed
-              if (updatedFile.transforms) {
-                const newTransforms = updatedFile.transforms.filter(transform =>
-                  isDisplayableTransform(transform) &&
-                  !transformData[transform.transform_object_id]
-                );
-
-                newTransforms.forEach(async (transform) => {
-                  const response = await fetch(`/api/files/${transform.transform_object_id}`);
                   if (response.ok) {
-                    const content = await response.arrayBuffer();
-                    setTransformData(prev => ({
+                    const result = await response.json();
+                    const derivedTransforms = result.data?.files_enriched?.flatMap(df => df.transforms || []) || [];
+                    const allTransforms = [...(updatedFile.transforms || []), ...derivedTransforms];
+
+                    // Update fileData with merged transforms
+                    setFileData(prev => ({
                       ...prev,
-                      [transform.transform_object_id]: {
-                        content,
-                        type: transform.metadata.display_type_in_dashboard,
-                        fileName: transform.metadata.file_name
-                      }
+                      transforms: allTransforms
                     }));
+
+                    // Fetch new transform content if needed
+                    const newTransforms = allTransforms.filter(transform =>
+                      isDisplayableTransform(transform) &&
+                      !transformData[transform.transform_object_id]
+                    );
+
+                    newTransforms.forEach(async (transform) => {
+                      const response = await cachedFetch(`/api/files/${transform.transform_object_id}`);
+                      if (response.ok) {
+                        const content = await response.arrayBuffer();
+                        setTransformData(prev => ({
+                          ...prev,
+                          [transform.transform_object_id]: {
+                            content,
+                            type: transform.metadata.display_type_in_dashboard,
+                            fileName: transform.metadata.file_name
+                          }
+                        }));
+                      }
+                    });
                   }
-                });
-              }
+                } catch (err) {
+                  console.error('Error fetching derived transforms:', err);
+                }
+              };
+
+              refetchData();
             }
           },
           error: (err) => {
@@ -535,6 +595,21 @@ const FileViewer = () => {
       });
     }
 
+    // Add enrichment tabs
+    if (fileData?.enrichments) {
+      fileData.enrichments.forEach(enrichment => {
+        if (enrichment.result_data) {
+          tabs.push({
+            id: `enrichment-${enrichment.module_name}`,
+            type: 'enrichment',
+            label: `Enrichment - ${enrichment.module_name}`,
+            enrichmentData: enrichment,
+            icon: FileText
+          });
+        }
+      });
+    }
+
     // Always add hex view
     tabs.push({ id: 'hex', type: 'hex', label: 'Hex', icon: File });
 
@@ -556,19 +631,14 @@ const FileViewer = () => {
   };
 
   const shouldShowSummarizationButton = () => {
-    if (!availableLLMEnrichments.includes('text_summarizer') || summarizationStarted) return false;
-
-    // Check if text_summarizer enrichment already exists
-    const hasSummarizerEnrichment = fileData?.enrichments?.some(enrichment =>
-      enrichment.module_name === 'text_summarizer'
-    );
+    if (!isLiteLLMAvailable || summarizationStarted) return false;
 
     // Check if a text_summary transform already exists
     const hasTextSummaryTransform = fileData?.transforms?.some(transform =>
       transform.type === 'text_summary'
     );
 
-    if (hasSummarizerEnrichment || hasTextSummaryTransform) return false;
+    if (hasTextSummaryTransform) return false;
 
     // Check if file is plaintext OR has an extracted_text transform
     const hasExtractedTextTransform = fileData?.transforms?.some(transform =>
@@ -579,19 +649,46 @@ const FileViewer = () => {
   };
 
   const shouldShowCredentialAnalysisButton = () => {
-    if (!availableLLMEnrichments.includes('llm_credential_analysis') || credentialAnalysisStarted) return false;
-
-    // Check if llm_credential_analysis enrichment result already exists
-    const hasCredentialAnalysisEnrichment = fileData?.enrichments?.some(enrichment =>
-      enrichment.module_name === 'llm_credential_analysis'
-    );
+    if (!isLiteLLMAvailable || credentialAnalysisStarted) return false;
 
     // Check if a llm_extracted_credentials transform already exists
     const hasExtractedCredentialTransform = fileData?.transforms?.some(transform =>
       transform.type === 'llm_extracted_credentials'
     );
 
-    if (hasCredentialAnalysisEnrichment || hasExtractedCredentialTransform) return false;
+    if (hasExtractedCredentialTransform) return false;
+
+    // Check if file is plaintext OR has an extracted_text transform
+    const hasExtractedTextTransform = fileData?.transforms?.some(transform =>
+      transform.type === 'extracted_text'
+    );
+
+    return fileData?.is_plaintext || hasExtractedTextTransform;
+  };
+
+  const shouldShowDotNetAnalysisButton = () => {
+    if (!isLiteLLMAvailable || dotnetAnalysisStarted) return false;
+
+    // Check if a dotnet_analysis transform already exists
+    const hasDotNetAnalysisTransform = fileData?.transforms?.some(transform =>
+      transform.type === 'dotnet_analysis'
+    );
+
+    if (hasDotNetAnalysisTransform) return false;
+
+    // Check if file is a .NET assembly based on magic_type
+    return fileData?.magic_type && fileData.magic_type.toLowerCase().includes('mono/.net assembly');
+  };
+
+  const shouldShowTranslationButton = () => {
+    if (!isLiteLLMAvailable || translationStarted) return false;
+
+    // Check if a text_translation transform already exists
+    const hasTranslationTransform = fileData?.transforms?.some(transform =>
+      transform.type === 'text_translation'
+    );
+
+    if (hasTranslationTransform) return false;
 
     // Check if file is plaintext OR has an extracted_text transform
     const hasExtractedTextTransform = fileData?.transforms?.some(transform =>
@@ -604,59 +701,59 @@ const FileViewer = () => {
   // Start with hex as fallback
   const [activeTab, setActiveTab] = useState('hex');
 
-// Update this useEffect in your FileViewer.jsx component
+  // Update this useEffect in your FileViewer.jsx component
 
-// Set the initial tab based on transform metadata and fallback order
-useEffect(() => {
-  if (fileData || pdfContent) {
-    const tabs = getAvailableTabs();
+  // Set the initial tab based on transform metadata and fallback order
+  useEffect(() => {
+    if (fileData || pdfContent) {
+      const tabs = getAvailableTabs();
 
-    // First check if the file is a ZIP file and we have content for it
-    if (fileData && isZipFile(fileData.file_name, fileData.mime_type) && fileContent) {
-      setActiveTab('zip-explorer');
-      return;
-    }
-
-    // Then check for .zip transforms
-    if (fileData?.transforms) {
-      const zipTransform = fileData.transforms.find(transform =>
-        transform.metadata?.file_name && transform.metadata.file_name.endsWith('.zip')
-      );
-      if (zipTransform) {
-        setActiveTab(zipTransform.transform_object_id);
-        return;
-      }
-    }
-
-    // Then check for PDF transforms
-    if (fileData?.transforms) {
-      const pdfTransform = fileData.transforms.find(transform =>
-        isDisplayableTransform(transform) && transform.type === 'converted_pdf'
-      );
-      if (pdfTransform) {
-        setActiveTab(pdfTransform.transform_object_id);
+      // First check if the file is a ZIP file and we have content for it
+      if (fileData && isZipFile(fileData.file_name, fileData.mime_type) && fileContent) {
+        setActiveTab('zip-explorer');
         return;
       }
 
-      // Then check for transforms with default_display=true
-      const defaultTransform = fileData.transforms.find(transform =>
-        isDisplayableTransform(transform) && transform.metadata?.default_display === true
-      );
-      if (defaultTransform) {
-        setActiveTab(defaultTransform.transform_object_id);
-        return;
+      // Then check for .zip transforms
+      if (fileData?.transforms) {
+        const zipTransform = fileData.transforms.find(transform =>
+          transform.metadata?.file_name && transform.metadata.file_name.endsWith('.zip')
+        );
+        if (zipTransform) {
+          setActiveTab(zipTransform.transform_object_id);
+          return;
+        }
       }
-    }
 
-    // Then follow fallback order: Preview -> Text -> Hex
-    if (hasPreviewableContent) {
-      setActiveTab('preview');
-    } else if (tabs.find(tab => tab.id === 'text')) {
-      setActiveTab('text');
+      // Then check for PDF transforms
+      if (fileData?.transforms) {
+        const pdfTransform = fileData.transforms.find(transform =>
+          isDisplayableTransform(transform) && transform.type === 'converted_pdf'
+        );
+        if (pdfTransform) {
+          setActiveTab(pdfTransform.transform_object_id);
+          return;
+        }
+
+        // Then check for transforms with default_display=true
+        const defaultTransform = fileData.transforms.find(transform =>
+          isDisplayableTransform(transform) && transform.metadata?.default_display === true
+        );
+        if (defaultTransform) {
+          setActiveTab(defaultTransform.transform_object_id);
+          return;
+        }
+      }
+
+      // Then follow fallback order: Preview -> Text -> Hex
+      if (hasPreviewableContent) {
+        setActiveTab('preview');
+      } else if (tabs.find(tab => tab.id === 'text')) {
+        setActiveTab('text');
+      }
+      // If no other conditions met, it will stay as 'hex'
     }
-    // If no other conditions met, it will stay as 'hex'
-  }
-}, [fileData, pdfContent, hasPreviewableContent, fileContent]);
+  }, [fileData, pdfContent, hasPreviewableContent, fileContent]);
 
   // left arrow to go back
   useEffect(() => {
@@ -681,6 +778,7 @@ useEffect(() => {
               files_enriched(where: {object_id: {_eq: $objectId}}) {
                 object_id
                 agent_id
+                source
                 project
                 timestamp
                 expiration
@@ -692,6 +790,7 @@ useEffect(() => {
                 is_plaintext
                 is_container
                 originating_object_id
+                originating_container_id
                 nesting_level
                 hashes
                 file_tags
@@ -699,6 +798,7 @@ useEffect(() => {
                 updated_at
                 enrichments {
                   module_name
+                  result_data
                   created_at
                   updated_at
                 }
@@ -715,6 +815,14 @@ useEffect(() => {
                   aggregate {
                     count
                   }
+                }
+              }
+              derived_files: files_enriched(where: {originating_object_id: {_eq: $objectId}}) {
+                object_id
+                transforms(where: {type: {_in: ["text_summary", "text_translation", "llm_extracted_credentials"]}}) {
+                  metadata
+                  type
+                  transform_object_id
                 }
               }
             }
@@ -741,13 +849,24 @@ useEffect(() => {
         }
 
         const file = result.data.files_enriched[0];
+
+        // Check if file exists
+        if (!file) {
+          throw new Error(`File not found: The file with UUID ${objectId} does not exist in the database`);
+        }
+
+        // Merge transforms from derived files (like extracted_plaintext.txt)
+        const derivedFiles = result.data.derived_files || [];
+        const derivedTransforms = derivedFiles.flatMap(df => df.transforms || []);
+        file.transforms = [...(file.transforms || []), ...derivedTransforms];
+
         setFileData(file);
         setCurrentLanguage(getMonacoLanguage(file.file_name, file.mime_type));
 
         // If file is under size limit, fetch the file content content
 
         if (file.size <= MAX_RENDERABLE_VIEW_SIZE) {
-          const contentResponse = await fetch(`/api/files/${file.object_id}`);
+          const contentResponse = await cachedFetch(`/api/files/${file.object_id}`);
           if (contentResponse.ok) {
             const buffer = await contentResponse.arrayBuffer();
 
@@ -768,24 +887,39 @@ useEffect(() => {
           }
         }
 
-        // Handle transforms
+        // Handle transforms - fetch in parallel
         if (file.transforms) {
-          for (const transform of file.transforms) {
-            if (isDisplayableTransform(transform)) {
-              const response = await fetch(`/api/files/${transform.transform_object_id}`);
+          const transformPromises = file.transforms
+            .filter(isDisplayableTransform)
+            .map(async (transform) => {
+              const response = await cachedFetch(`/api/files/${transform.transform_object_id}`);
               if (response.ok) {
                 const content = await response.arrayBuffer();
-                setTransformData(prev => ({
-                  ...prev,
-                  [transform.transform_object_id]: {
-                    content,
-                    type: transform.metadata.display_type_in_dashboard,
-                    fileName: transform.metadata.file_name
-                  }
-                }));
+                return {
+                  id: transform.transform_object_id,
+                  content,
+                  type: transform.metadata.display_type_in_dashboard,
+                  fileName: transform.metadata.file_name
+                };
               }
+              return null;
+            });
+
+          const transformResults = await Promise.all(transformPromises);
+
+          // Update state with all transforms at once
+          const newTransformData = {};
+          transformResults.forEach(result => {
+            if (result) {
+              newTransformData[result.id] = {
+                content: result.content,
+                type: result.type,
+                fileName: result.fileName
+              };
             }
-          }
+          });
+
+          setTransformData(newTransformData);
         }
       } catch (err) {
         setError(err.message);
@@ -850,9 +984,12 @@ useEffect(() => {
     if (transform.type === 'json') {
       const content = new TextDecoder().decode(transform.content);
       return (
-        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg">
-          <JsonViewer content={content} />
-        </div>
+        <MonacoContentViewer
+          content={JSON.stringify(JSON.parse(content), null, 2)}
+          language="json"
+          onLanguageChange={() => { }}
+          showLanguageSelect={false}
+        />
       );
     }
 
@@ -866,6 +1003,23 @@ useEffect(() => {
     }
 
     return null;
+  };
+
+  // Render enrichment content as JSON
+  const renderEnrichmentContent = (tabId) => {
+    const enrichmentKey = tabId.replace('enrichment-', '');
+    const enrichment = fileData?.enrichments?.find(e => e.module_name === enrichmentKey);
+    if (!enrichment || !enrichment.result_data) return null;
+
+    const jsonContent = JSON.stringify(enrichment.result_data, null, 2);
+    return (
+      <MonacoContentViewer
+        content={jsonContent}
+        language="json"
+        onLanguageChange={() => { }}
+        showLanguageSelect={false}
+      />
+    );
   };
 
   // "p"" to swap preview tabs, <- to go back, tab to scroll to file data area
@@ -965,7 +1119,8 @@ useEffect(() => {
         objectIdToSummarize = fileData.object_id;
       }
 
-      const response = await fetch(`/api/enrichments/text_summarizer`, {
+      // Fire-and-forget: don't await the response since analysis runs in background
+      fetch(`/api/agents/text_summarizer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -973,11 +1128,15 @@ useEffect(() => {
         body: JSON.stringify({
           object_id: objectIdToSummarize
         })
+      }).then(response => {
+        if (!response.ok) {
+          console.error('Text summarization request failed:', response.status);
+        } else {
+          console.log('Text summarization started successfully');
+        }
+      }).catch(error => {
+        console.error('Error triggering text summarization:', error);
       });
-
-      if (!response.ok) {
-        throw new Error('Summarization request failed');
-      }
     } catch (error) {
       console.error('Error triggering text summarization:', error);
       // Still keeping the button hidden as the request was made
@@ -1003,7 +1162,9 @@ useEffect(() => {
         objectIdToAnalyze = fileData.object_id;
       }
       console.error("objectIdToAnalyze", objectIdToAnalyze);
-      const response = await fetch(`/api/enrichments/llm_credential_analysis`, {
+
+      // Fire-and-forget: don't await the response since analysis runs in background
+      fetch(`/api/agents/llm_credential_analysis`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1011,15 +1172,106 @@ useEffect(() => {
         body: JSON.stringify({
           object_id: objectIdToAnalyze
         })
+      }).then(response => {
+        if (!response.ok) {
+          console.error('LLM credential analysis request failed:', response.status);
+        } else {
+          console.log('LLM credential analysis started successfully');
+        }
+      }).catch(error => {
+        console.error('Error triggering LLM credential analysis:', error);
       });
-
-      if (!response.ok) {
-        throw new Error('LLM credential analysis failed');
-      }
     } catch (error) {
       console.error('Error triggering LLM credential analysis:', error);
       // Still keeping the button hidden as the request was made
     }
+  };
+
+  const handleDotNetAnalysis = () => {
+    // Show confirmation dialog
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmAnalysis = async () => {
+    setShowConfirmDialog(false);
+
+    try {
+      setDotnetAnalysisStarted(true);
+
+      // Show success message immediately
+      setShowSuccessDialog(true);
+
+      // Fire-and-forget: don't await the response since analysis runs in background
+      fetch(`/api/agents/dotnet_analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          object_id: fileData.object_id
+        })
+      }).then(response => {
+        if (!response.ok) {
+          console.error('.NET analysis request failed:', response.status);
+        } else {
+          console.log('.NET analysis started successfully');
+        }
+      }).catch(error => {
+        console.error('Error triggering .NET analysis:', error);
+      });
+
+    } catch (error) {
+      console.error('Error triggering .NET analysis:', error);
+    }
+  };
+
+  const handleCancelAnalysis = () => {
+    setShowConfirmDialog(false);
+  };
+
+  const handleTranslation = () => {
+    // Show translation dialog
+    setShowTranslateDialog(true);
+  };
+
+  const handleConfirmTranslation = async () => {
+    setShowTranslateDialog(false);
+
+    try {
+      setTranslationStarted(true);
+
+      // Always use the original file's object_id
+      // The backend will figure out where to read the text from
+      const objectIdToTranslate = fileData.object_id;
+
+      // Fire-and-forget: don't await the response since translation runs in background
+      fetch(`/api/agents/translate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          object_id: objectIdToTranslate,
+          target_language: targetLanguage
+        })
+      }).then(response => {
+        if (!response.ok) {
+          console.error('Translation request failed:', response.status);
+        } else {
+          console.log('Translation started successfully');
+        }
+      }).catch(error => {
+        console.error('Error triggering translation:', error);
+      });
+
+    } catch (error) {
+      console.error('Error triggering translation:', error);
+    }
+  };
+
+  const handleCancelTranslation = () => {
+    setShowTranslateDialog(false);
+    setTargetLanguage('English'); // Reset to default
   };
 
   const renderContentTruncationAlert = () => {
@@ -1141,7 +1393,7 @@ useEffect(() => {
                   onClick={handleSummarization}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
                 >
-                  LLM-Summarize Document Text
+                  Summarize Document Text (via LLM)
                 </button>
               )}
               {shouldShowCredentialAnalysisButton() && (
@@ -1149,7 +1401,23 @@ useEffect(() => {
                   onClick={handleCredentialAnalysis}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
                 >
-                  Use LLM to Extract Credentials
+                  Extract Credentials (via LLM)
+                </button>
+              )}
+              {shouldShowDotNetAnalysisButton() && (
+                <button
+                  onClick={handleDotNetAnalysis}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
+                >
+                  Analyze .NET Assembly (via LLM)
+                </button>
+              )}
+              {shouldShowTranslationButton() && (
+                <button
+                  onClick={handleTranslation}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg transition-colors text-sm font-medium"
+                >
+                  Translate Document (via LLM)
                 </button>
               )}
             </div>
@@ -1265,10 +1533,22 @@ useEffect(() => {
                     />
                   ) : tab.id === 'text' ? (
                     fileData?.mime_type === 'application/json' ? (
-                      <JsonViewer
-                        content={textContent || (fileData?.is_plaintext && fileContent ?
-                          new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
-                          'No text content available')}
+                      <MonacoContentViewer
+                        content={(() => {
+                          try {
+                            const jsonContent = textContent || (fileData?.is_plaintext && fileContent ?
+                              new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
+                              '{}');
+                            return JSON.stringify(JSON.parse(jsonContent || '{}'), null, 2);
+                          } catch (e) {
+                            return textContent || (fileData?.is_plaintext && fileContent ?
+                              new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
+                              'Invalid JSON');
+                          }
+                        })()}
+                        language="json"
+                        onLanguageChange={() => { }}
+                        showLanguageSelect={false}
                       />
                     ) : fileData?.mime_type === 'text/csv' || fileData?.file_name.endsWith('.csv') ? (
                       <CsvViewer
@@ -1292,6 +1572,8 @@ useEffect(() => {
                       onLanguageChange={() => { }}
                       showLanguageSelect={false}
                     />
+                  ) : tab.type === 'enrichment' ? (
+                    renderEnrichmentContent(tab.id)
                   ) : (
                     renderTransformContent(tab.id)
                   )}
@@ -1302,7 +1584,89 @@ useEffect(() => {
         </Card>
       </div>
 
+      <LinkedFilesSection
+        filePath={fileData?.path}
+        source={fileData?.source}
+      />
+
       <EnrichmentStatusSection objectId={objectId} />
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Confirm .NET Analysis
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            This could take a bit of time and tokens, continue?
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={handleCancelAnalysis}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg transition-colors"
+            >
+              No
+            </button>
+            <button
+              onClick={handleConfirmAnalysis}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              Yes
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Success Dialog */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Analysis Started
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            Analysis started, results will appear here when completed
+          </p>
+          <button
+            onClick={() => setShowSuccessDialog(false)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            OK
+          </button>
+        </div>
+      </Dialog>
+
+      {/* Translation Dialog */}
+      <Dialog open={showTranslateDialog} onOpenChange={setShowTranslateDialog}>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Translate Document
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
+            Enter the target language for translation:
+          </p>
+          <input
+            type="text"
+            value={targetLanguage}
+            onChange={(e) => setTargetLanguage(e.target.value)}
+            className="w-full px-4 py-2 mb-6 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="English"
+          />
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={handleCancelTranslation}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmTranslation}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              Translate
+            </button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };

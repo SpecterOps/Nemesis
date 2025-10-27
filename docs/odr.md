@@ -22,6 +22,7 @@ Schema definition for the public `file` message POSTed to the API frontend.
 | Field                   | Type     | Description                                                                                                      |
 | ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
 | `path`                  | string   | File system path to the relevant resource. Can use either forward (/) or backward (\\) slashes                   |
+| `source`                | string   | String representing a `host://IP`, `host://HOSTNAME`, or traditional URI (i.e., `https://domain.com)             |
 | `originating_object_id` | string   | UUID v4 format identifier referencing a parent or source object                                                  |
 | `nesting_level`         | number   | The level of nesting for the file within an originating container. Used to prevent indefinite container nesting. |
 | `creation_time`         | datetime | ISO 8601 formatted timestamp for when the file was created                                                       |

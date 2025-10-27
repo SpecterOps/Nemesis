@@ -6,12 +6,12 @@
         "editor.formatOnSave": false
     },
     "[python]": {
-        "editor.formatOnSave": true,
+        // "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
-            "source.fixAll": "explicit",
-            "source.organizeImports": "explicit"
+            // "source.fixAll": "explicit",
+            // "source.organizeImports": "explicit"
         },
-        "editor.defaultFormatter": "charliermarsh.ruff"
+        // "editor.defaultFormatter": "charliermarsh.ruff"
     },
     "autoDocstring.docstringFormat": "google",
     "editor.formatOnSave": false,

@@ -55,9 +55,7 @@ The service includes specialized modules for:
 
 Environment variables for tuning performance:
 
-- `MAX_PARALLEL_WORKFLOWS`: Maximum concurrent file processing workflows (default: 3)
 - `MAX_WORKFLOW_EXECUTION_TIME`: Workflow timeout in seconds (default: 300)
-- `MAX_PARALLEL_ENRICHMENT_MODULES`: Concurrent modules per workflow (default: 5)
 - `WORKFLOW_RUNTIME_LOG_LEVEL`: Workflow engine logging level (default: WARNING)
 
 ## Workflow Process

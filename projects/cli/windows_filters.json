@@ -1,0 +1,12 @@
+
+{
+  "pattern_type": "regex",
+  "include": [
+    "^(?:[A-Za-z]://|/)?[Ww]indows/[Ss]ystem32/config/"
+  ],
+  "exclude": [
+    "^(?:[A-Za-z]://|/)?[Ww]indows/",
+    "^(?:[A-Za-z]://|/)?[Pp]rogram [Ff]iles/",
+    "^(?:[A-Za-z]://|/)?[Pp]rogram [Ff]iles \\(x86\\)/"
+  ]
+}
