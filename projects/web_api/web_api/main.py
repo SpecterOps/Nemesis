@@ -16,7 +16,7 @@ import requests
 from common.db import get_postgres_connection_str
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
-from common.models import CloudEvent
+from common.models import BulkEnrichmentTask, CloudEvent
 from common.models import File as FileModel
 from common.models2.api import (
     APIInfo,
@@ -32,6 +32,8 @@ from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import Body, FastAPI, File, Form, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
+from psycopg import Connection
+from psycopg.rows import TupleRow
 from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
@@ -157,10 +159,10 @@ container_processor = LargeContainerProcessor()
 dapr_app = DaprApp(app)
 
 # Initialize database connection pool for workflow status queries
-_db_pool = None
+_db_pool: ConnectionPool[Connection[TupleRow]] | None = None
 
 
-def get_db_pool():
+def get_db_pool() -> ConnectionPool[Connection[TupleRow]]:
     global _db_pool
     if _db_pool is None:
         _db_pool = ConnectionPool(get_postgres_connection_str(), min_size=1, max_size=5)
@@ -293,7 +295,7 @@ async def upload_file(
         return FileWithMetadataResponse(object_id=object_id, submission_id=submission_id)
 
     except Exception as e:
-        logger.exception(e, message="Error processing file upload")
+        logger.exception(message="Error processing file upload")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -344,7 +346,7 @@ async def download_file(
         )
 
     except Exception as e:
-        logger.exception(e, message="Error downloading file")
+        logger.exception(message="Error downloading file")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -447,7 +449,7 @@ async def submit_container(
         logger.error("Validation error in container metadata", errors=e.errors())
         raise HTTPException(status_code=400, detail=e.errors()) from e
     except Exception as e:
-        logger.exception(e, message="Error processing container submission")
+        logger.exception(message="Error processing container submission")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -504,7 +506,7 @@ async def get_container_status(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error getting container status")
+        logger.exception(message="Error getting container status")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -652,7 +654,7 @@ async def get_status():
         }
 
     except Exception as e:
-        logger.exception(e, message="Error getting workflow status")
+        logger.exception(message="Error getting workflow status")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -717,7 +719,7 @@ async def get_failed():
             "timestamp": datetime.now(UTC).isoformat(),
         }
     except Exception as e:
-        logger.exception(e, message="Error getting failed workflow information")
+        logger.exception(message="Error getting failed workflow information")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -748,10 +750,10 @@ async def list_enrichments():
         return response.json()
 
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to enrichment service")
+        logger.exception(message="Error connecting to enrichment service")
         raise HTTPException(status_code=503, detail="Enrichment service unavailable") from e
     except Exception as e:
-        logger.exception(e, message="Error listing enrichment modules")
+        logger.exception(message="Error listing enrichment modules")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -800,7 +802,7 @@ async def run_enrichment(
         logger.error("Timeout connecting to enrichment service", enrichment_name=enrichment_name)
         raise HTTPException(status_code=504, detail="Request to enrichment service timed out") from e
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to enrichment service")
+        logger.exception(message="Error connecting to enrichment service")
         raise HTTPException(status_code=503, detail="Enrichment service unavailable") from e
     except HTTPException:
         raise
@@ -855,12 +857,13 @@ async def run_bulk_enrichment(
         # Publish individual enrichment tasks to pub/sub
         async with DaprClient() as client:
             for object_id in object_ids:
-                task_data = {"enrichment_name": enrichment_name, "object_id": str(object_id)}
+                # Create strongly-typed task model
+                task = BulkEnrichmentTask(enrichment_name=enrichment_name, object_id=str(object_id))
 
                 await client.publish_event(
                     pubsub_name="pubsub",
                     topic_name="bulk-enrichment-task",
-                    data=json.dumps(task_data),
+                    data=json.dumps(task.model_dump()),
                     data_content_type="application/json",
                 )
 
@@ -877,7 +880,7 @@ async def run_bulk_enrichment(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error starting bulk enrichment", enrichment_name=enrichment_name)
+        logger.exception(message="Error starting bulk enrichment", enrichment_name=enrichment_name)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -962,12 +965,12 @@ async def submit_dpapi_credential(
         logger.error("Timeout connecting to file enrichment service for DPAPI credential")
         raise HTTPException(status_code=504, detail="Request to file enrichment service timed out") from e
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to file enrichment service")
+        logger.exception(message="Error connecting to file enrichment service")
         raise HTTPException(status_code=503, detail="File enrichment service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error submitting DPAPI credential", credential_type=request.type)
+        logger.exception(message="Error submitting DPAPI credential", credential_type=request.type)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -993,7 +996,7 @@ async def get_queue_metrics():
             metrics = await monitor.get_workflow_queue_metrics()
             return metrics
     except Exception as e:
-        logger.exception(e, message="Error getting queue metrics")
+        logger.exception(message="Error getting queue metrics")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1012,7 +1015,7 @@ async def get_single_queue_metrics(queue_name: str = Path(..., description="Name
             metrics = await monitor.get_single_queue_metrics(queue_name)
             return metrics
     except Exception as e:
-        logger.exception(e, message="Error getting single queue metrics", queue_name=queue_name)
+        logger.exception(message="Error getting single queue metrics", queue_name=queue_name)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1038,7 +1041,7 @@ async def reload_yara_rules():
         logger.info("Sent PostgreSQL NOTIFY for Yara rules reload")
         return {"message": "Yara rules reload triggered across all workers"}
     except Exception as e:
-        logger.exception(e, message="Error triggering Yara rules reload")
+        logger.exception(message="Error triggering Yara rules reload")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1120,12 +1123,12 @@ async def trigger_cleanup(request: CleanupRequest = Body(default=None, descripti
             logger.error("Timeout connecting to services")
             raise HTTPException(status_code=504, detail="Request to services timed out") from e
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to services")
+        logger.exception(message="Error connecting to services")
         raise HTTPException(status_code=503, detail="One or more services unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error triggering cleanup")
+        logger.exception(message="Error triggering cleanup")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1179,12 +1182,12 @@ async def get_apprise_info():
         logger.error("Timeout connecting to alerting service")
         raise HTTPException(status_code=504, detail="Request to alerting service timed out") from e
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to alerting service")
+        logger.exception(message="Error connecting to alerting service")
         raise HTTPException(status_code=503, detail="Alerting service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error getting apprise info")
+        logger.exception(message="Error getting apprise info")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1238,7 +1241,7 @@ async def get_available_agents():
         return {"agents": agents, "total_count": len(agents), "timestamp": datetime.now(UTC).isoformat()}
 
     except Exception as e:
-        logger.exception(e, message="Error getting available agents")
+        logger.exception(message="Error getting available agents")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1285,7 +1288,7 @@ async def get_agents_spend_data():
             "timestamp": datetime.now(UTC).isoformat(),
         }
     except Exception as e:
-        logger.exception(e, message="Error getting agents spend data")
+        logger.exception(message="Error getting agents spend data")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1311,12 +1314,12 @@ async def run_text_summarizer(request: dict = Body(..., description="Request con
         logger.error("Timeout starting text summarizer")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to agents service")
+        logger.exception(message="Error connecting to agents service")
         raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error starting text summarizer")
+        logger.exception(message="Error starting text summarizer")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1342,12 +1345,12 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
         logger.error("Timeout starting credential analysis")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to agents service")
+        logger.exception(message="Error connecting to agents service")
         raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error starting credential analysis")
+        logger.exception(message="Error starting credential analysis")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1371,12 +1374,12 @@ async def run_dotnet_analysis(request: dict = Body(..., description="Request con
         logger.error("Timeout starting .NET analysis")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to agents service")
+        logger.exception(message="Error connecting to agents service")
         raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error starting .NET analysis")
+        logger.exception(message="Error starting .NET analysis")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1402,12 +1405,12 @@ async def run_translation(
         logger.error("Timeout starting translation")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
     except requests.RequestException as e:
-        logger.exception(e, message="Error connecting to agents service")
+        logger.exception(message="Error connecting to agents service")
         raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error starting translation")
+        logger.exception(message="Error starting translation")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1522,7 +1525,7 @@ async def submit_file(file_data: FileModel) -> uuid.UUID:
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error submitting file metadata")
+        logger.exception(message="Error submitting file metadata")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1557,8 +1560,8 @@ async def process_workflow_completion(event: CloudEvent):
                 "Container processing completed", container_id=originating_container_id, final_object_id=object_id
             )
 
-    except Exception as e:
-        logger.exception(e, message="Error processing workflow completion event", cloud_event=event)
+    except Exception:
+        logger.exception(message="Error processing workflow completion event", cloud_event=event)
 
 
 #######################################
@@ -1588,7 +1591,7 @@ async def list_sources(
         return sources
 
     except Exception as e:
-        logger.exception(e, message="Error listing sources")
+        logger.exception(message="Error listing sources")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1619,7 +1622,7 @@ async def get_source_report(
         return report
 
     except Exception as e:
-        logger.exception(e, message="Error generating source report", source=source)
+        logger.exception(message="Error generating source report", source=source)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1643,7 +1646,7 @@ async def get_system_report(
         return report
 
     except Exception as e:
-        logger.exception(e, message="Error generating system report")
+        logger.exception(message="Error generating system report")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1719,7 +1722,7 @@ async def synthesize_source_report(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error generating source synthesis", source=source)
+        logger.exception(message="Error generating source synthesis", source=source)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1796,7 +1799,7 @@ async def synthesize_system_report(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error generating system synthesis")
+        logger.exception(message="Error generating system synthesis")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1863,7 +1866,7 @@ async def download_source_report_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error generating source PDF", source=source)
+        logger.exception(message="Error generating source PDF", source=source)
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}") from e
 
 
@@ -1916,5 +1919,5 @@ async def download_system_report_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(e, message="Error generating system PDF")
+        logger.exception(message="Error generating system PDF")
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}") from e

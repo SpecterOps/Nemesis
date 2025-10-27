@@ -4,11 +4,11 @@ Reporting routes for Nemesis web API.
 These routes provide comprehensive reporting and analytics for files, findings, and sources.
 """
 
-import asyncio
 from datetime import UTC, datetime
 
 from common.logger import get_logger
-from fastapi import HTTPException, Query
+from psycopg import Connection
+from psycopg.rows import TupleRow
 from psycopg_pool import ConnectionPool
 from web_api.models.responses import (
     RiskIndicators,
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 
 def get_sources_list(
-    pool: ConnectionPool,
+    pool: ConnectionPool[Connection[TupleRow]],
     project: str | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
@@ -94,7 +94,7 @@ def get_sources_list(
 
 
 def get_source_report_data(
-    pool: ConnectionPool,
+    pool: ConnectionPool[Connection[TupleRow]],
     source_name: str,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
@@ -340,7 +340,7 @@ def get_source_report_data(
 
             # Timeline data (last 14 days)
             cur.execute(
-                f"""
+                """
                 WITH date_series AS (
                     SELECT generate_series(
                         CURRENT_DATE - INTERVAL '13 days',
@@ -364,7 +364,7 @@ def get_source_report_data(
 
             # Enrichment performance
             cur.execute(
-                f"""
+                """
                 SELECT
                     COUNT(*) as total_workflows,
                     COUNT(CASE WHEN status IN ('COMPLETED', 'completed') THEN 1 END) as completed,
@@ -453,7 +453,7 @@ def get_source_report_data(
 
 
 def get_system_report_data(
-    pool: ConnectionPool,
+    pool: ConnectionPool[Connection[TupleRow]],
     start_date: datetime | None = None,
     end_date: datetime | None = None,
     project: str | None = None,

@@ -8,6 +8,7 @@ from datetime import datetime
 
 import asyncpg
 from common.logger import get_logger
+from common.models import SingleEnrichmentWorkflowInput
 from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
@@ -551,8 +552,21 @@ class WorkflowManager:
 
                     await asyncio.sleep(0.3)
 
-    async def start_workflow_single_enrichment(self, workflow_input):
-        """Start a single enrichment workflow"""
+    async def start_workflow_single_enrichment(
+        self, workflow_input: SingleEnrichmentWorkflowInput | dict[str, str]
+    ) -> str:
+        """Start a single enrichment workflow
+
+        Args:
+            workflow_input: Input for the single enrichment workflow containing
+                enrichment_name and object_id
+
+        Returns:
+            The workflow instance ID (UUID string without hyphens)
+
+        Raises:
+            Exception: If workflow scheduling fails
+        """
         tracer = get_tracer()
 
         try:
@@ -561,19 +575,21 @@ class WorkflowManager:
             # Generate the workflow ID
             instance_id = str(uuid.uuid4()).replace("-", "")
 
+            # Normalize input to SingleEnrichmentWorkflowInput if dict
+            if isinstance(workflow_input, dict):
+                workflow_input = SingleEnrichmentWorkflowInput(**workflow_input)
+
             with tracer.start_as_current_span("start_single_enrichment_workflow") as span:
                 # Add workflow ID to trace for Jaeger queries
                 span.set_attribute("workflow.instance_id", instance_id)
                 span.set_attribute("workflow.start", True)
                 span.set_attribute("workflow.type", "single_enrichment_workflow")
-                span.set_attribute("workflow.enrichment_name", workflow_input.get("enrichment_name"))
-
-                if "object_id" in workflow_input:
-                    span.set_attribute("workflow.object_id", workflow_input["object_id"])
+                span.set_attribute("workflow.enrichment_name", workflow_input.enrichment_name)
+                span.set_attribute("workflow.object_id", workflow_input.object_id)
 
                 # Extract metadata for tracking
-                enrichment_name = workflow_input.get("enrichment_name")
-                object_id = workflow_input.get("object_id")
+                enrichment_name = workflow_input.enrichment_name
+                object_id = workflow_input.object_id
 
                 # Store workflow in database (simplified - just for monitoring)
                 async with self.pool.acquire() as conn:
@@ -611,12 +627,17 @@ class WorkflowManager:
                 # Import here to avoid circular import
                 from .workflow import single_enrichment_workflow
 
+                # Convert Pydantic model to dict for Dapr workflow
+                workflow_input_dict = (
+                    workflow_input.model_dump() if isinstance(workflow_input, SingleEnrichmentWorkflowInput) else workflow_input
+                )
+
                 # Use asyncio.to_thread() to prevent blocking the event loop
                 await asyncio.to_thread(
                     workflow_client.schedule_new_workflow,
                     instance_id=instance_id,
                     workflow=single_enrichment_workflow,
-                    input=workflow_input,
+                    input=workflow_input_dict,
                 )
 
                 # Start a task to monitor this workflow for completion/failure/timeout
@@ -630,9 +651,13 @@ class WorkflowManager:
             logger.exception(e, message="Error starting single enrichment workflow")
             raise
 
-    async def _monitor_single_enrichment_workflow(self, instance_id, workflow_start_time):
-        """Monitor a single enrichment workflow until completion or timeout"""
+    async def _monitor_single_enrichment_workflow(self, instance_id: str, workflow_start_time: float) -> None:
+        """Monitor a single enrichment workflow until completion or timeout
 
+        Args:
+            instance_id: The workflow instance ID (UUID string without hyphens)
+            workflow_start_time: Timestamp when the workflow was started (from time.time())
+        """
         tracer = get_tracer()
 
         with tracer.start_as_current_span("monitor_single_enrichment_workflow") as current_span:

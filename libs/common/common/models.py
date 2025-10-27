@@ -207,7 +207,14 @@ class NoseyParkerOutput(BaseModel):
 ##########################################
 
 
-class BulkEnrichmentTask(BaseModel):
+class BulkEnrichmentEvent(BaseModel):
+    enrichment_name: str
+    object_id: str
+
+
+class SingleEnrichmentWorkflowInput(BaseModel):
+    """Input model for single enrichment workflows (bulk operations)."""
+
     enrichment_name: str
     object_id: str
 
