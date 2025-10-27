@@ -593,6 +593,77 @@
         }
       }
     },
+    "/dpapi/credentials": {
+      "post": {
+        "tags": [
+          "dpapi"
+        ],
+        "summary": "Submit DPAPI credential for masterkey decryption",
+        "description": "Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, and decrypted master keys.",
+        "operationId": "submit_dpapi_credential_dpapi_credentials_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DpapiCredentialRequest",
+                "description": "The DPAPI credential data"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/queues": {
       "get": {
         "tags": [
@@ -882,7 +953,7 @@
           "system"
         ],
         "summary": "Run text summarization",
-        "description": "Forward text summarization request to agents service",
+        "description": "Trigger text summarization in background (non-blocking)",
         "operationId": "run_text_summarizer_agents_text_summarizer_post",
         "requestBody": {
           "content": {
@@ -925,7 +996,7 @@
           "system"
         ],
         "summary": "Run credential analysis",
-        "description": "Forward credential analysis request to agents service",
+        "description": "Trigger credential analysis in background (non-blocking)",
         "operationId": "run_llm_credential_analysis_agents_llm_credential_analysis_post",
         "requestBody": {
           "content": {
@@ -968,7 +1039,7 @@
           "system"
         ],
         "summary": "Run .NET assembly analysis",
-        "description": "Forward .NET assembly analysis request to agents service",
+        "description": "Trigger .NET assembly analysis in background (non-blocking)",
         "operationId": "run_dotnet_analysis_agents_dotnet_analysis_post",
         "requestBody": {
           "content": {
@@ -978,6 +1049,49 @@
                 "type": "object",
                 "title": "Request",
                 "description": "Request containing object_id"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agents/translate": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Run text translation",
+        "description": "Trigger text translation in background (non-blocking)",
+        "operationId": "run_translation_agents_translate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Request",
+                "description": "Request containing object_id and optional target_language"
               }
             }
           },
@@ -1039,6 +1153,622 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/sources": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "List all sources",
+        "description": "Get a list of all sources with summary statistics",
+        "operationId": "list_sources_reports_sources_get",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by project name",
+              "title": "Project"
+            },
+            "description": "Filter by project name"
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by start date",
+              "title": "Start Date"
+            },
+            "description": "Filter by start date"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by end date",
+              "title": "End Date"
+            },
+            "description": "Filter by end date"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceSummary"
+                  },
+                  "title": "Response List Sources Reports Sources Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/source": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get source report",
+        "description": "Get detailed report for a specific source. Use query parameter to support sources with special characters (e.g., URLs)",
+        "operationId": "get_source_report_reports_source_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Source name (supports URLs and special characters, case-insensitive)",
+              "title": "Source"
+            },
+            "description": "Source name (supports URLs and special characters, case-insensitive)"
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by start date",
+              "title": "Start Date"
+            },
+            "description": "Filter by start date"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by end date",
+              "title": "End Date"
+            },
+            "description": "Filter by end date"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/system": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get system-wide report",
+        "description": "Get system-wide statistics and findings across all sources",
+        "operationId": "get_system_report_reports_system_get",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by start date",
+              "title": "Start Date"
+            },
+            "description": "Filter by start date"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by end date",
+              "title": "End Date"
+            },
+            "description": "Filter by end date"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by project name",
+              "title": "Project"
+            },
+            "description": "Filter by project name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/source/synthesize": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Generate LLM synthesis for source report",
+        "description": "Generate AI-based risk assessment synthesis for a specific source. NOT CACHED - regenerated each time.",
+        "operationId": "synthesize_source_report_reports_source_synthesize_post",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Source name (supports URLs and special characters, case-insensitive)",
+              "title": "Source"
+            },
+            "description": "Source name (supports URLs and special characters, case-insensitive)"
+          },
+          {
+            "name": "include_findings_details",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include detailed findings in the analysis",
+              "default": true,
+              "title": "Include Findings Details"
+            },
+            "description": "Include detailed findings in the analysis"
+          },
+          {
+            "name": "max_tokens",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Maximum tokens for LLM analysis",
+              "default": 150000,
+              "title": "Max Tokens"
+            },
+            "description": "Maximum tokens for LLM analysis"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMSynthesisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/system/synthesize": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Generate LLM synthesis for system report",
+        "description": "Generate AI-based risk assessment synthesis for the entire system. NOT CACHED - regenerated each time.",
+        "operationId": "synthesize_system_report_reports_system_synthesize_post",
+        "parameters": [
+          {
+            "name": "max_tokens",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Maximum tokens for LLM analysis",
+              "default": 150000,
+              "title": "Max Tokens"
+            },
+            "description": "Maximum tokens for LLM analysis"
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by start date",
+              "title": "Start Date"
+            },
+            "description": "Filter by start date"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by end date",
+              "title": "End Date"
+            },
+            "description": "Filter by end date"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by project name",
+              "title": "Project"
+            },
+            "description": "Filter by project name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMSynthesisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/source/pdf": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Download source report as PDF",
+        "description": "Generate and download a PDF report for a specific source. POST allows including pre-generated AI synthesis.",
+        "operationId": "download_source_report_pdf_reports_source_pdf_post",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Source name (supports URLs and special characters, case-insensitive)",
+              "title": "Source"
+            },
+            "description": "Source name (supports URLs and special characters, case-insensitive)"
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by start date",
+              "title": "Start Date"
+            },
+            "description": "Filter by start date"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by end date",
+              "title": "End Date"
+            },
+            "description": "Filter by end date"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional pre-generated AI synthesis to include in PDF",
+                "title": "Ai Synthesis"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/system/pdf": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Download system-wide report as PDF",
+        "description": "Generate and download a PDF report for the entire system",
+        "operationId": "download_system_report_pdf_reports_system_pdf_get",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by start date",
+              "title": "Start Date"
+            },
+            "description": "Filter by start date"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by end date",
+              "title": "End Date"
+            },
+            "description": "Filter by end date"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by project name",
+              "title": "Project"
+            },
+            "description": "Filter by project name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -1347,6 +2077,91 @@
         ],
         "title": "ContainerSubmissionResponse"
       },
+      "DomainBackupKeyCredential": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "domain_backup_key",
+            "title": "Type"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "guid": {
+            "type": "string",
+            "title": "Guid"
+          },
+          "domain_controller": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Controller"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "value",
+          "guid"
+        ],
+        "title": "DomainBackupKeyCredential",
+        "description": "Domain backup key credential (PVK format)."
+      },
+      "DpapiCredentialRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PasswordCredentialKey"
+          },
+          {
+            "$ref": "#/components/schemas/NtlmHashCredentialKey"
+          },
+          {
+            "$ref": "#/components/schemas/Sha1CredentialKey"
+          },
+          {
+            "$ref": "#/components/schemas/Pbkdf2StrongCredentialKey"
+          },
+          {
+            "$ref": "#/components/schemas/DomainBackupKeyCredential"
+          },
+          {
+            "$ref": "#/components/schemas/MasterKeyGuidPairList"
+          },
+          {
+            "$ref": "#/components/schemas/DpapiSystemCredentialRequest"
+          }
+        ]
+      },
+      "DpapiSystemCredentialRequest": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "dpapi_system",
+            "title": "Type"
+          },
+          "value": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{80}$",
+            "title": "Value",
+            "description": "Hex-encoded DPAPI_SYSTEM LSA secret (40 bytes)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "value"
+        ],
+        "title": "DpapiSystemCredentialRequest",
+        "description": "DPAPI_SYSTEM LSA Secret credential sent in an API request."
+      },
       "EnrichmentRequest": {
         "properties": {
           "object_id": {
@@ -1495,6 +2310,205 @@
         "title": "HealthResponse",
         "description": "Model representing health check response"
       },
+      "LLMSynthesisResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "report_markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Markdown"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level"
+          },
+          "key_findings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Key Findings",
+            "default": []
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommendations",
+            "default": []
+          },
+          "token_usage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Usage"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "LLMSynthesisResponse"
+      },
+      "MasterKeyGuidPair": {
+        "properties": {
+          "guid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Guid",
+            "description": "Master key GUID"
+          },
+          "key_hex": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]+$",
+            "title": "Key Hex",
+            "description": "Hex-encoded master key bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "guid",
+          "key_hex"
+        ],
+        "title": "MasterKeyGuidPair",
+        "description": "Strongly typed master key data."
+      },
+      "MasterKeyGuidPairList": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "master_key_guid_pair",
+            "title": "Type"
+          },
+          "value": {
+            "items": {
+              "$ref": "#/components/schemas/MasterKeyGuidPair"
+            },
+            "type": "array",
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "value"
+        ],
+        "title": "MasterKeyGuidPairList",
+        "description": "Decrypted master key/GUID pairs."
+      },
+      "NtlmHashCredentialKey": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "cred_key_ntlm",
+            "title": "Type"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "user_sid": {
+            "type": "string",
+            "title": "User Sid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "value",
+          "user_sid"
+        ],
+        "title": "NtlmHashCredentialKey",
+        "description": "Use an NTLM hash to derive a DPAPI credential key."
+      },
+      "PasswordCredentialKey": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "password",
+            "title": "Type"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "user_sid": {
+            "type": "string",
+            "title": "User Sid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "value",
+          "user_sid"
+        ],
+        "title": "PasswordCredentialKey",
+        "description": "Use a plaintext password to derive a DPAPI credential key."
+      },
+      "Pbkdf2StrongCredentialKey": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "cred_key_pbkdf2",
+            "title": "Type"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "user_sid": {
+            "type": "string",
+            "title": "User Sid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "value",
+          "user_sid"
+        ],
+        "title": "Pbkdf2StrongCredentialKey",
+        "description": "Credential key object."
+      },
       "QueueMetrics": {
         "properties": {
           "total_messages": {
@@ -1634,6 +2648,56 @@
         ],
         "title": "QueuesResponse"
       },
+      "RiskIndicators": {
+        "properties": {
+          "credentials": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Credentials"
+          },
+          "sensitive_data": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Sensitive Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "credentials",
+          "sensitive_data"
+        ],
+        "title": "RiskIndicators"
+      },
+      "Sha1CredentialKey": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "cred_key_sha1",
+            "title": "Type"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "user_sid": {
+            "type": "string",
+            "title": "User Sid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "value",
+          "user_sid"
+        ],
+        "title": "Sha1CredentialKey",
+        "description": "Use a SHA1 hash to derive a DPAPI credential key."
+      },
       "SingleQueueResponse": {
         "properties": {
           "topic": {
@@ -1655,6 +2719,229 @@
           "timestamp"
         ],
         "title": "SingleQueueResponse"
+      },
+      "SourceReport": {
+        "properties": {
+          "report_type": {
+            "type": "string",
+            "title": "Report Type"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          },
+          "risk_indicators": {
+            "$ref": "#/components/schemas/RiskIndicators"
+          },
+          "findings_detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Findings Detail"
+          },
+          "timeline": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Timeline"
+          },
+          "enrichment_performance": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Enrichment Performance"
+          },
+          "top_findings": {
+            "items": {
+              "$ref": "#/components/schemas/TopFinding"
+            },
+            "type": "array",
+            "title": "Top Findings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_type",
+          "source",
+          "generated_at",
+          "summary",
+          "risk_indicators",
+          "findings_detail",
+          "timeline",
+          "enrichment_performance",
+          "top_findings"
+        ],
+        "title": "SourceReport"
+      },
+      "SourceSummary": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "file_count": {
+            "type": "integer",
+            "title": "File Count"
+          },
+          "finding_count": {
+            "type": "integer",
+            "title": "Finding Count"
+          },
+          "verified_findings": {
+            "type": "integer",
+            "title": "Verified Findings"
+          },
+          "last_activity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "file_count",
+          "finding_count",
+          "verified_findings"
+        ],
+        "title": "SourceSummary"
+      },
+      "SystemReport": {
+        "properties": {
+          "report_type": {
+            "type": "string",
+            "title": "Report Type"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "time_range": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Time Range"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceSummary"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "findings_by_category": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Findings By Category"
+          },
+          "findings_by_severity": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Findings By Severity"
+          },
+          "timeline": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Timeline"
+          },
+          "enrichment_stats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Enrichment Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_type",
+          "generated_at",
+          "time_range",
+          "summary",
+          "sources",
+          "findings_by_category",
+          "findings_by_severity",
+          "timeline",
+          "enrichment_stats"
+        ],
+        "title": "SystemReport"
+      },
+      "TopFinding": {
+        "properties": {
+          "finding_id": {
+            "type": "integer",
+            "title": "Finding Id"
+          },
+          "finding_name": {
+            "type": "string",
+            "title": "Finding Name"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "severity": {
+            "type": "integer",
+            "title": "Severity"
+          },
+          "triage_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Triage State"
+          },
+          "file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Path"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "finding_id",
+          "finding_name",
+          "category",
+          "severity",
+          "created_at"
+        ],
+        "title": "TopFinding"
       },
       "ValidationError": {
         "properties": {
@@ -1913,8 +3200,16 @@
       "description": "Enrichment management operations"
     },
     {
+      "name": "dpapi",
+      "description": "DPAPI credential and masterkey operations"
+    },
+    {
       "name": "queues",
       "description": "Internal pub/sub queue operations"
+    },
+    {
+      "name": "reports",
+      "description": "Reporting and analytics operations"
     },
     {
       "name": "system",
