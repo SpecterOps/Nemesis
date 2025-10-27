@@ -34,7 +34,7 @@ jobs:
           source env/bin/activate
           cd projects/web_api
           pip install poetry
-          poetry install --only main
+          poetry install
 
       - name: Generate API documentation
         run: |
