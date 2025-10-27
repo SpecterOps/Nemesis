@@ -1495,6 +1495,19 @@ class OleFileIO:
         """
         self.fp.close()
 
+    def __enter__(self):
+        """
+        Context manager entry point - returns self for 'with' statement
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Context manager exit point - ensures file is closed
+        """
+        self.close()
+        return False
+
     def _check_duplicate_stream(self, first_sect, minifat=False):
         """
         Checks if a stream has not been already referenced elsewhere.
@@ -3067,81 +3080,81 @@ from xml.etree.ElementTree import ElementTree
 
 def process_new_office(filename, hashcat_format=True):
     # detect version of new Office used by reading "EncryptionInfo" stream
-    ole = OleFileIO(filename)
-    stream = ole.openstream("EncryptionInfo")
-    major_version = unpack("<h", stream.read(2))[0]
-    minor_version = unpack("<h", stream.read(2))[0]
-    encryptionFlags = unpack("<I", stream.read(4))[0]  # encryptionFlags
-    if encryptionFlags == 16:  # fExternal
-        sys.stderr.write("%s : An external cryptographic provider is not supported!\n" % filename)
-        return -1
+    with OleFileIO(filename) as ole:
+        stream = ole.openstream("EncryptionInfo")
+        major_version = unpack("<h", stream.read(2))[0]
+        minor_version = unpack("<h", stream.read(2))[0]
+        encryptionFlags = unpack("<I", stream.read(4))[0]  # encryptionFlags
+        if encryptionFlags == 16:  # fExternal
+            sys.stderr.write("%s : An external cryptographic provider is not supported!\n" % filename)
+            return -1
 
-    if major_version == 0x04 and minor_version == 0x04:
-        # Office 2010 and 2013 file detected
-        if encryptionFlags != 0x40:  # fAgile
-            sys.stderr.write("%s : The encryption flags are not consistent with the encryption type\n" % filename)
-            return -2
+        if major_version == 0x04 and minor_version == 0x04:
+            # Office 2010 and 2013 file detected
+            if encryptionFlags != 0x40:  # fAgile
+                sys.stderr.write("%s : The encryption flags are not consistent with the encryption type\n" % filename)
+                return -2
 
-        # rest of the data is in XML format
-        data = stream.read()
-        xml_metadata_parser(data, filename)
-    else:
-        # Office 2007 file detected, process CryptoAPI Encryption Header
-        stm = stream
-        headerLength = unpack("<I", stm.read(4))[0]
-        unpack("<I", stm.read(4))[0]  # skipFlags
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # sizeExtra
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # algId
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # algHashId
-        headerLength -= 4
-        keySize = unpack("<I", stm.read(4))[0]
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # providerType
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # unused
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # unused
-        headerLength -= 4
-        CSPName = stm.read(headerLength)
-        provider = CSPName.decode("utf-16").lower()
-        # Encryption verifier
-        saltSize = unpack("<I", stm.read(4))[0]
-        assert saltSize == 16
-        salt = stm.read(saltSize)
-        encryptedVerifier = stm.read(16)
-        verifierHashSize = unpack("<I", stm.read(4))[0]
-        encryptedVerifierHash = stm.read(verifierHashSize)
-
-        if hashcat_format:
-            sys.stdout.write(
-                "$office$*%d*%d*%d*%d*%s*%s*%s\n"
-                % (
-                    2007,
-                    verifierHashSize,
-                    keySize,
-                    saltSize,
-                    binascii.hexlify(salt).decode("ascii"),
-                    binascii.hexlify(encryptedVerifier).decode("ascii"),
-                    binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
-                )
-            )
+            # rest of the data is in XML format
+            data = stream.read()
+            xml_metadata_parser(data, filename)
         else:
-            sys.stdout.write(
-                "%s:$office$*%d*%d*%d*%d*%s*%s*%s\n"
-                % (
-                    os.path.basename(filename),
-                    2007,
-                    verifierHashSize,
-                    keySize,
-                    saltSize,
-                    binascii.hexlify(salt).decode("ascii"),
-                    binascii.hexlify(encryptedVerifier).decode("ascii"),
-                    binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
+            # Office 2007 file detected, process CryptoAPI Encryption Header
+            stm = stream
+            headerLength = unpack("<I", stm.read(4))[0]
+            unpack("<I", stm.read(4))[0]  # skipFlags
+            headerLength -= 4
+            unpack("<I", stm.read(4))[0]  # sizeExtra
+            headerLength -= 4
+            unpack("<I", stm.read(4))[0]  # algId
+            headerLength -= 4
+            unpack("<I", stm.read(4))[0]  # algHashId
+            headerLength -= 4
+            keySize = unpack("<I", stm.read(4))[0]
+            headerLength -= 4
+            unpack("<I", stm.read(4))[0]  # providerType
+            headerLength -= 4
+            unpack("<I", stm.read(4))[0]  # unused
+            headerLength -= 4
+            unpack("<I", stm.read(4))[0]  # unused
+            headerLength -= 4
+            CSPName = stm.read(headerLength)
+            provider = CSPName.decode("utf-16").lower()
+            # Encryption verifier
+            saltSize = unpack("<I", stm.read(4))[0]
+            assert saltSize == 16
+            salt = stm.read(saltSize)
+            encryptedVerifier = stm.read(16)
+            verifierHashSize = unpack("<I", stm.read(4))[0]
+            encryptedVerifierHash = stm.read(verifierHashSize)
+
+            if hashcat_format:
+                sys.stdout.write(
+                    "$office$*%d*%d*%d*%d*%s*%s*%s\n"
+                    % (
+                        2007,
+                        verifierHashSize,
+                        keySize,
+                        saltSize,
+                        binascii.hexlify(salt).decode("ascii"),
+                        binascii.hexlify(encryptedVerifier).decode("ascii"),
+                        binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
+                    )
                 )
-            )
+            else:
+                sys.stdout.write(
+                    "%s:$office$*%d*%d*%d*%d*%s*%s*%s\n"
+                    % (
+                        os.path.basename(filename),
+                        2007,
+                        verifierHashSize,
+                        keySize,
+                        saltSize,
+                        binascii.hexlify(salt).decode("ascii"),
+                        binascii.hexlify(encryptedVerifier).decode("ascii"),
+                        binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
+                    )
+                )
 
 
 def xml_metadata_parser(data, filename, hashcat_format=True):
@@ -3247,14 +3260,12 @@ def remove_extra_spaces(data):
 def process_file(filename, hashcat_format=True):
     # Test if a file is an OLE container
     try:
-        f = open(filename, "rb")
-        data = f.read(81920)  # is this enough?
-        if data[0:2] == b"PK":
-            # sys.stderr.write("%s : zip container found, file is " \
-            #             "unencrypted?, invalid OLE file!\n" % filename)
-            f.close()
-            return 1
-        f.close()
+        with open(filename, "rb") as f:
+            data = f.read(81920)  # is this enough?
+            if data[0:2] == b"PK":
+                # sys.stderr.write("%s : zip container found, file is " \
+                #             "unencrypted?, invalid OLE file!\n" % filename)
+                return 1
 
         # ACCDB handling hack for MS Access >= 2007 (Office 12)
         accdb_magic = b"Standard ACE DB"

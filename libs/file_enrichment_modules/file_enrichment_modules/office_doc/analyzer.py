@@ -122,10 +122,9 @@ def check_rms_protected(file_path):
     # Try OLE approach if ZIP check failed or returned False
     try:
         if olefile.isOleFile(file_path):
-            ole = olefile.OleFileIO(file_path)
-            if ole.exists("\x06DataSpaces/TransformInfo/DRMEncryptedTransform"):
-                return True
-            ole.close()
+            with olefile.OleFileIO(file_path) as ole:
+                if ole.exists("\x06DataSpaces/TransformInfo/DRMEncryptedTransform"):
+                    return True
     except:
         pass
 

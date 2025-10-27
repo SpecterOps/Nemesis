@@ -10,7 +10,6 @@ from common.models import EnrichmentResult
 from common.workflows.setup import workflow_activity
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
-from .. import global_vars
 from ..tracing import get_tracer
 
 logger = get_logger(__name__)
