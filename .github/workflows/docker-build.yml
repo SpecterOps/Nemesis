@@ -150,16 +150,16 @@ jobs:
     strategy:
       matrix:
         service:
-          - web-api
-          - dotnet-service
-          - file-enrichment
-          - frontend
-          - jupyter
-          - alerting
-          # - agents
-          - cli
-          - housekeeping
-          - document-conversion
+          # - web-api
+          # - dotnet-service
+          # - file-enrichment
+          # - frontend
+          # - jupyter
+          # - alerting
+          - agents
+          # - cli
+          # - housekeeping
+          # - document-conversion
 
     steps:
       - name: Log in to the Container registry
