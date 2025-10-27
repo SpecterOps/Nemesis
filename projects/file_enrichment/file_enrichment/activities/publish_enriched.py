@@ -8,6 +8,8 @@ from common.workflows.setup import workflow_activity
 from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
+from ..tracing import get_trace_injector
+
 logger = get_logger(__name__)
 
 
@@ -20,7 +22,7 @@ async def publish_enriched_file(ctx: WorkflowActivityContext, activity_input):
     file_enriched = await get_file_enriched_async(object_id)
 
     try:
-        with DaprClient() as client:
+        with DaprClient(headers_callback=get_trace_injector()) as client:
             data = file_enriched.model_dump(
                 exclude_unset=True,
                 mode="json",

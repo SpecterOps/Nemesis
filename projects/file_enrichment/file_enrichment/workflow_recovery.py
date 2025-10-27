@@ -7,6 +7,8 @@ from common.logger import get_logger
 from common.models import File
 from dapr.clients import DaprClient
 
+from .tracing import get_trace_injector
+
 logger = get_logger(__name__)
 
 
@@ -88,7 +90,7 @@ async def recover_interrupted_workflows(pool) -> None:
             return
 
         # Republish recovered files with priority
-        with DaprClient() as client:
+        with DaprClient(headers_callback=get_trace_injector()) as client:
             for file_data in recovered_files:
                 try:
                     # Filter out None values for File object creation

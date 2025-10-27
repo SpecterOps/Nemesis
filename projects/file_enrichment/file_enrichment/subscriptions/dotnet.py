@@ -21,6 +21,7 @@ from common.models import (
 )
 from common.state_helpers import get_file_enriched_async
 from dapr.clients import DaprClient
+from file_enrichment.tracing import get_trace_injector
 
 logger = get_logger(__name__)
 
@@ -164,7 +165,7 @@ async def store_dotnet_results(
                     nesting_level=(file_enriched.nesting_level or 0) + 1,
                 )
 
-                with DaprClient() as dapr_client:
+                with DaprClient(headers_callback=get_trace_injector()) as dapr_client:
                     data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
                     dapr_client.publish_event(
                         pubsub_name="pubsub",

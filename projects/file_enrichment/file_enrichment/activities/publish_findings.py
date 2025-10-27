@@ -11,6 +11,7 @@ from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from .. import global_vars
+from ..tracing import get_trace_injector
 
 logger = get_logger(__name__)
 
@@ -35,7 +36,7 @@ async def publish_findings_alerts(ctx: WorkflowActivityContext, activity_input):
         )
 
         if findings:
-            with DaprClient() as client:
+            with DaprClient(headers_callback=get_trace_injector()) as client:
                 if file_enriched.path:
                     file_path = helpers.sanitize_file_path(file_enriched.path)
                 else:

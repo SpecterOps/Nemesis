@@ -12,6 +12,7 @@ from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from .. import global_vars
+from ..tracing import get_trace_injector
 
 logger = get_logger(__name__)
 
@@ -33,7 +34,7 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
                     await index_plaintext_content(f"{object_id}", text_file)
 
     nosey_parker_input = NoseyParkerInput(object_id=object_id)
-    with DaprClient() as client:
+    with DaprClient(headers_callback=get_trace_injector()) as client:
         client.publish_event(
             pubsub_name="pubsub",
             topic_name="noseyparker-input",

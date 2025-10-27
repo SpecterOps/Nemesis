@@ -10,6 +10,7 @@ from common.workflows.setup import workflow_activity
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from .. import global_vars
+from ..tracing import get_tracer
 
 logger = get_logger(__name__)
 
@@ -24,53 +25,71 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
     object_id = activity_input["object_id"]
     execution_order = activity_input["execution_order"]
 
-    logger.info("Starting enrichment modules processing", object_id=object_id, execution_order=execution_order)
-    logger.info("ctx type: ", ctx=type(ctx))
+    tracer = get_tracer()
 
-    results = []
+    with tracer.start_as_current_span("run_enrichment_modules") as span:
+        span.set_attribute("object_id", object_id)
+        span.set_attribute("module_count", len(execution_order))
 
-    try:
-        with global_vars.storage.download(object_id) as temp_file:
-            logger.debug(
-                "Downloaded file for processing",
-                object_id=object_id,
-                temp_file=temp_file.name,
-                size=os.path.getsize(temp_file.name),
-            )
+        logger.info("Starting enrichment modules processing", object_id=object_id, execution_order=execution_order)
 
-            modules_to_process = determine_modules_to_process(object_id, temp_file.name, execution_order)
+        results = []
 
-            for module_name in modules_to_process:
-                try:
-                    result = await execute_enrichment_module(object_id, temp_file.name, module_name)
+        try:
+            with global_vars.storage.download(object_id) as temp_file:
+                logger.debug(
+                    "Downloaded file for processing",
+                    object_id=object_id,
+                    temp_file=temp_file.name,
+                    size=os.path.getsize(temp_file.name),
+                )
 
-                    if result:
-                        # Store enrichment result directly in database
-                        await store_enrichment_results(object_id, module_name, result)
+                modules_to_process = determine_modules_to_process(object_id, temp_file.name, execution_order)
+                span.set_attribute("modules_to_process_count", len(modules_to_process))
 
-                        results.append((module_name, {"status": "success", "module": module_name}))
-                        logger.debug("Module completed successfully", module_name=module_name)
-                    else:
-                        results.append((module_name, None))
-                        logger.debug("Module returned no result", module_name=module_name)
+                for module_name in modules_to_process:
+                    # Create a span for each module execution
+                    with tracer.start_as_current_span(f"enrichment.{module_name}") as module_span:
+                        module_span.set_attribute("module.name", module_name)
+                        module_span.set_attribute("object_id", object_id)
 
-                except Exception as e:
-                    logger.exception(
-                        "Error in enrichment module", module_name=module_name, object_id=object_id, error=str(e)
-                    )
+                        try:
+                            result = await execute_enrichment_module(object_id, temp_file.name, module_name)
 
-                    # Update workflow in database with failed module
-                    await record_module_failure(object_id, module_name, e)
+                            if result:
+                                # Store enrichment result directly in database
+                                await store_enrichment_results(object_id, module_name, result)
 
-                    results.append((module_name, None))
-                    # Continue with other modules instead of raising
+                                results.append((module_name, {"status": "success", "module": module_name}))
+                                logger.debug("Module completed successfully", module_name=module_name)
+                                module_span.set_attribute("module.status", "success")
+                            else:
+                                results.append((module_name, None))
+                                logger.debug("Module returned no result", module_name=module_name)
+                                module_span.set_attribute("module.status", "no_result")
 
-    except Exception as e:
-        logger.exception("Error in run_enrichment_modules", object_id=object_id, error=str(e))
-        raise
+                        except Exception as e:
+                            logger.exception(
+                                "Error in enrichment module", module_name=module_name, object_id=object_id, error=str(e)
+                            )
 
-    logger.debug("Enrichment modules processing completed", object_id=object_id, total_modules=len(results))
-    return results
+                            # Update workflow in database with failed module
+                            await record_module_failure(object_id, module_name, e)
+
+                            results.append((module_name, None))
+                            module_span.set_attribute("module.status", "error")
+                            module_span.set_attribute("module.error", str(e)[:200])
+                            # Continue with other modules instead of raising
+
+        except Exception as e:
+            logger.exception("Error in run_enrichment_modules", object_id=object_id, error=str(e))
+            span.set_attribute("error", True)
+            span.set_attribute("error.message", str(e)[:200])
+            raise
+
+        logger.debug("Enrichment modules processing completed", object_id=object_id, total_modules=len(results))
+        span.set_attribute("total_results", len(results))
+        return results
 
 
 def determine_modules_to_process(object_id: str, temp_file_path: str, execution_order: list[str]) -> list[str]:

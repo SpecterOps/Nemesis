@@ -1,7 +1,5 @@
 import os
-from contextlib import contextmanager
 from importlib.metadata import version
-from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -9,39 +7,10 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.semconv._incubating.attributes import service_attributes
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
-
-class NoOpSpan:
-    """No-op span for when tracing is disabled."""
-
-    def set_attribute(self, key: str, value: Any) -> None:
-        pass
-
-    def set_attributes(self, attributes: dict) -> None:
-        pass
-
-    def add_event(self, name: str, attributes: dict | None = None) -> None:
-        pass
-
-    def set_status(self, status: Any) -> None:
-        pass
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-
-class NoOpTracer:
-    """No-op tracer for when tracing is disabled."""
-
-    @contextmanager
-    def start_as_current_span(self, name: str, **kwargs):
-        yield NoOpSpan()
-
-    def start_span(self, name: str, **kwargs):
-        return NoOpSpan()
+# Module-level tracer singleton
+_tracer = None
 
 
 def get_instance_id():
@@ -50,24 +19,57 @@ def get_instance_id():
     return f"{hostname}-{pid}"
 
 
-def get_tracer(module: str, service: str, otel_exporter_enabled: bool = True):
+def get_trace_injector():
     """
-    Initialize and return an OpenTelemetry tracer with the specified module and service name.
+    Returns a callback that injects W3C trace context into Dapr headers.
 
-    This function creates or reuses a TracerProvider with service metadata and configures
-    trace export based on the NEMESIS_MONITORING environment variable. When monitoring
-    is enabled, spans are exported to an OTLP endpoint (e.g., Jaeger). Otherwise,
-    tracing is still active but spans are not exported.
+    This enables distributed tracing across Dapr service boundaries by propagating
+    traceparent and tracestate headers per W3C Trace Context specification.
 
-    If a TracerProvider is already configured, this function reuses it rather than
-    creating a new one, allowing multiple modules to share the same tracing configuration.
+    The returned callback should be passed to DaprClient's headers_callback parameter
+    to automatically include trace context in all Dapr operations (pub/sub, service
+    invocation, state operations, etc.).
+
+    Returns:
+        Callable that returns dict of trace headers with current trace context
+
+    Example:
+        >>> from dapr.clients import DaprClient
+        >>> with DaprClient(headers_callback=get_trace_injector()) as client:
+        ...     client.publish_event(
+        ...         pubsub_name="pubsub",
+        ...         topic_name="my-topic",
+        ...         data=json.dumps({"key": "value"})
+        ...     )
+
+    Note:
+        This function must be called within an active OpenTelemetry span context
+        for trace propagation to work. If called outside a span, it returns empty
+        headers which is safe but provides no trace context.
+    """
+
+    def inject_trace_context():
+        headers = {}
+        TraceContextTextMapPropagator().inject(carrier=headers)
+        return headers
+
+    return inject_trace_context
+
+
+def get_tracer(module_name: str = "file_enrichment"):
+    """
+    Initialize and return an OpenTelemetry tracer for the file_enrichment service.
+
+    This function uses a module-level singleton pattern to ensure the tracer is
+    initialized only once. Subsequent calls return the same tracer instance.
+
+    Tracing behavior is controlled by the NEMESIS_MONITORING environment variable:
+    - When enabled: Spans are exported to an OTLP endpoint (e.g., Jaeger)
+    - When disabled: Spans are created but not exported (in-memory only)
 
     Args:
-        module: The module name used to identify this tracer instance and determine
-                the service version from package metadata.
-        service: The service name to identify this service in the tracing backend.
-        otel_exporter_enabled: Currently unused parameter. Export behavior is
-                             controlled by the NEMESIS_MONITORING env var instead.
+        module_name: The module name used to identify the tracer and determine
+                    the service version from package metadata (default: "file_enrichment")
 
     Returns:
         A configured OpenTelemetry Tracer instance that can be used to create spans.
@@ -78,38 +80,43 @@ def get_tracer(module: str, service: str, otel_exporter_enabled: bool = True):
                                                       connections (default: "true")
         HOSTNAME: Used to construct the service instance ID
 
-    Note:
-        There is a commented-out line that previously returned a NoOpTracer when
-        OpenTelemetry was disabled to avoid dependency conflicts. This is no longer used.
+    Example:
+        >>> tracer = get_tracer()
+        >>> with tracer.start_as_current_span("my_operation") as span:
+        ...     span.set_attribute("key", "value")
+        ...     # ... do work ...
     """
+    global _tracer
 
-    # Check if tracer provider is already set
-    current_provider = trace.get_tracer_provider()
-    if hasattr(current_provider, "_resource") or type(current_provider).__name__ != "NoOpTracerProvider":
-        # Tracer provider already configured, just return the tracer
-        return current_provider.get_tracer(module)
+    # Return existing tracer if already initialized
+    if _tracer is not None:
+        return _tracer
 
+    # Create resource with service metadata
     resource = Resource.create(
         {
-            service_attributes.SERVICE_NAME: service,
+            service_attributes.SERVICE_NAME: "file_enrichment",
             service_attributes.SERVICE_NAMESPACE: "nemesis",
-            service_attributes.SERVICE_VERSION: version(module),
+            service_attributes.SERVICE_VERSION: version(module_name),
             service_attributes.SERVICE_INSTANCE_ID: get_instance_id(),
         }
     )
 
+    # Create TracerProvider and configure export based on monitoring setting
+    trace_provider = TracerProvider(resource=resource)
+
     # Only setup OTLP exporter if monitoring is enabled
-    if os.getenv("NEMESIS_MONITORING", "").lower() == "enabled":
+    monitoring_enabled = os.getenv("NEMESIS_MONITORING", "").lower() == "enabled"
+    if monitoring_enabled:
         otlp_exporter = OTLPSpanExporter(
             insecure=os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE", "true").lower() == "true",
         )
-
-        trace_provider = TracerProvider(resource=resource)
         span_processor = BatchSpanProcessor(otlp_exporter)
         trace_provider.add_span_processor(span_processor)
-        trace.set_tracer_provider(trace_provider)
-    else:
-        trace_provider = TracerProvider(resource=resource)
-        trace.set_tracer_provider(trace_provider)
 
-    return trace_provider.get_tracer(module)
+    # Set as global tracer provider
+    trace.set_tracer_provider(trace_provider)
+
+    # Cache and return tracer
+    _tracer = trace_provider.get_tracer(module_name)
+    return _tracer

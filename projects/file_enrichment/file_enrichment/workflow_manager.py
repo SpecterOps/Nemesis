@@ -12,11 +12,10 @@ from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
 from .global_vars import workflow_client
-from .tracing import get_tracer
+from .tracing import get_trace_injector, get_tracer
 from .workflow import enrichment_workflow
 
 logger = get_logger(__name__)
-monitoring_enabled = os.getenv("NEMESIS_MONITORING", "").lower() == "enabled"
 
 
 class WorkflowManager:
@@ -152,7 +151,7 @@ class WorkflowManager:
 
             # Only publish if we have a container ID to track
             if object_id and originating_container_id:
-                with DaprClient() as client:
+                with DaprClient(headers_callback=get_trace_injector()) as client:
                     completion_data = {
                         "object_id": str(object_id),
                         "originating_container_id": str(originating_container_id),
@@ -305,7 +304,7 @@ class WorkflowManager:
     async def start_workflow(self, workflow_input):
         """Start a workflow"""
         start_time = time.time()
-        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
+        tracer = get_tracer()
 
         try:
             # Generate the workflow ID first so we can schedule the workflow after
@@ -381,7 +380,7 @@ class WorkflowManager:
 
     async def _monitor_workflow(self, instance_id, workflow_start_time: float):
         """Monitor a workflow until completion or timeout"""
-        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
+        tracer = get_tracer()
 
         with tracer.start_as_current_span("monitor_workflow") as current_span:
             current_span.set_attribute("workflow.instance_id", instance_id)
@@ -462,7 +461,7 @@ class WorkflowManager:
         """Wait for workflow to complete and return the final status"""
 
         error_count = 0
-        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
+        tracer = get_tracer()
 
         # Add trace attributes for workflow status monitoring
         with tracer.start_as_current_span("wait_for_completion") as current_span:
@@ -554,7 +553,7 @@ class WorkflowManager:
 
     async def start_workflow_single_enrichment(self, workflow_input):
         """Start a single enrichment workflow"""
-        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
+        tracer = get_tracer()
 
         try:
             start_time = time.time()
@@ -634,7 +633,7 @@ class WorkflowManager:
     async def _monitor_single_enrichment_workflow(self, instance_id, workflow_start_time):
         """Monitor a single enrichment workflow until completion or timeout"""
 
-        tracer = get_tracer("file_enrichment", "file_enrichment", monitoring_enabled)
+        tracer = get_tracer()
 
         with tracer.start_as_current_span("monitor_single_enrichment_workflow") as current_span:
             current_span.set_attribute("workflow.instance_id", instance_id)
