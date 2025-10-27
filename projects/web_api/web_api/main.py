@@ -16,7 +16,7 @@ import requests
 from common.db import get_postgres_connection_str
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
-from common.models import BulkEnrichmentTask, CloudEvent
+from common.models import BulkEnrichmentEvent, CloudEvent
 from common.models import File as FileModel
 from common.models2.api import (
     APIInfo,
@@ -824,6 +824,8 @@ async def run_bulk_enrichment(
     enrichment_name: str = Path(..., description="Name of the enrichment module to run"),
 ):
     """Start bulk enrichment for a specific module by publishing individual tasks to pub/sub."""
+    raise HTTPException(status_code=500, detail="Currently disabled")
+
     try:
         # First verify enrichment module exists
         enrichments_url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/file-enrichment/method/enrichments"
@@ -858,7 +860,7 @@ async def run_bulk_enrichment(
         async with DaprClient() as client:
             for object_id in object_ids:
                 # Create strongly-typed task model
-                task = BulkEnrichmentTask(enrichment_name=enrichment_name, object_id=str(object_id))
+                task = BulkEnrichmentEvent(enrichment_name=enrichment_name, object_id=str(object_id))
 
                 await client.publish_event(
                     pubsub_name="pubsub",

@@ -12,7 +12,7 @@ import {
   Search,
   X
 } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const Tooltip = ({ children, content, position = 'top' }) => {
   const [isVisible, setIsVisible] = useState(false);
@@ -22,13 +22,11 @@ const Tooltip = ({ children, content, position = 'top' }) => {
       onMouseLeave={() => setIsVisible(false)}>
       {children}
       {isVisible && (
-        <div className={`absolute z-10 px-2 py-1 text-sm text-white bg-gray-900 rounded-md whitespace-nowrap left-1/2 transform -translate-x-1/2 ${
-          position === 'bottom' ? 'top-full mt-2' : '-top-8'
-        }`}>
+        <div className={`absolute z-10 px-2 py-1 text-sm text-white bg-gray-900 rounded-md whitespace-nowrap left-1/2 transform -translate-x-1/2 ${position === 'bottom' ? 'top-full mt-2' : '-top-8'
+          }`}>
           {content}
-          <div className={`absolute left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 ${
-            position === 'bottom' ? '-top-1' : '-bottom-1'
-          }`}></div>
+          <div className={`absolute left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 ${position === 'bottom' ? '-top-1' : '-bottom-1'
+            }`}></div>
         </div>
       )}
     </div>
@@ -56,6 +54,7 @@ const YaraRulesManager = () => {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [operationError, setOperationError] = useState(null);
 
   // Filter states
   const [nameFilter, setNameFilter] = useState('');
@@ -196,7 +195,7 @@ const YaraRulesManager = () => {
       setShowReloadAlert(true);
       setIsEditorOpen(false);
     } catch (err) {
-      setError(`Failed to update rule: ${err.message}`);
+      setOperationError(`Failed to update rule: ${err.message}`);
     }
   };
 
@@ -262,7 +261,7 @@ const YaraRulesManager = () => {
       setNewRuleSource('');
       setEditedContent('');
     } catch (err) {
-      setError(`Failed to create rule: ${err.message}`);
+      setOperationError(`Failed to create rule: ${err.message}`);
     }
   };
 
@@ -307,7 +306,7 @@ const YaraRulesManager = () => {
       setNeedsReload(true);
       setShowReloadAlert(true);
     } catch (err) {
-      setError(`Failed to toggle rule: ${err.message}`);
+      setOperationError(`Failed to toggle rule: ${err.message}`);
     }
   };
 
@@ -324,7 +323,7 @@ const YaraRulesManager = () => {
         setIsReloading(false);
       }, 20000);
     } catch (err) {
-      setError(`Failed to reload Yara engine: ${err.message}`);
+      setOperationError(`Failed to reload Yara engine: ${err.message}`);
       setIsReloading(false);
     }
   };
@@ -333,14 +332,19 @@ const YaraRulesManager = () => {
   const handleBulkRerun = async () => {
     try {
       setIsBulkRunning(true);
-      await fetch('/api/enrichments/yara/bulk', { method: 'POST' });
+      const response = await fetch('/api/enrichments/yara/bulk', { method: 'POST' });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server returned ${response.status}: ${errorText || response.statusText}`);
+      }
 
       // Show bulk re-run notification for 20 seconds
       setTimeout(() => {
         setIsBulkRunning(false);
       }, 20000);
     } catch (err) {
-      setError(`Failed to trigger bulk Yara re-run: ${err.message}`);
+      setOperationError(`Failed to trigger bulk Yara re-run: ${err.message}`);
       setIsBulkRunning(false);
     }
   };
@@ -364,47 +368,64 @@ const YaraRulesManager = () => {
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Yara Rules</h2>
             <div className="flex space-x-2">
-            <button
-              onClick={() => {
-                setIsNewRule(true);
-                setIsEditorOpen(true);
-                setEditedContent('');
-              }}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>New Rule</span>
-            </button>
-            <Tooltip content="Signal the Nemesis Yara engine to reload the modified rule set" position="bottom">
               <button
-                onClick={handleReload}
-                disabled={!needsReload || isReloading}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${needsReload
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
-                  }`}
+                onClick={() => {
+                  setIsNewRule(true);
+                  setIsEditorOpen(true);
+                  setEditedContent('');
+                }}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                <Clock className="w-4 h-4" />
-                <span>Reload Yara Engine</span>
+                <PlusCircle className="w-4 h-4" />
+                <span>New Rule</span>
               </button>
-            </Tooltip>
-            <Tooltip content="Trigger a bulk re-run of all Yara rules against all files in the system" position="bottom">
-              <button
-                onClick={handleBulkRerun}
-                disabled={isBulkRunning}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${isBulkRunning
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
-                  : 'bg-orange-600 text-white hover:bg-orange-700'
-                  }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span>Re-run Yara Rules</span>
-              </button>
-            </Tooltip>
+              <Tooltip content="Signal the Nemesis Yara engine to reload the modified rule set" position="bottom">
+                <button
+                  onClick={handleReload}
+                  disabled={!needsReload || isReloading}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${needsReload
+                    ? 'bg-green-600 text-white hover:bg-green-700'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
+                    }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Reload Yara Engine</span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Trigger a bulk re-run of all Yara rules against all files in the system" position="bottom">
+                <button
+                  onClick={handleBulkRerun}
+                  disabled={isBulkRunning}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${isBulkRunning
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
+                    : 'bg-orange-600 text-white hover:bg-orange-700'
+                    }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Re-run Yara Rules</span>
+                </button>
+              </Tooltip>
             </div>
           </div>
 
           {/* Alert Messages */}
+          {operationError && (
+            <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                <span className="text-red-800 dark:text-red-300 font-medium">
+                  {operationError}
+                </span>
+              </div>
+              <button
+                onClick={() => setOperationError(null)}
+                className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
           {showReloadAlert && needsReload && !isReloading && (
             <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center space-x-2">
               <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
