@@ -3,7 +3,7 @@ name: Generate API Documentation
 on:
   push:
     branches: [main]
-    paths: 
+    paths:
       - 'projects/web_api/**'
       - '.github/workflows/generate-api-docs.yml'
       - '.github/scripts/generate_api_docs.py'
@@ -12,15 +12,20 @@ on:
 jobs:
   generate-docs:
     runs-on: ubuntu-22.04
-    
+
     permissions:
       contents: write
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Setup Python virtualenv
         run: |
