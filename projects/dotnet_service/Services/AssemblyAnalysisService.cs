@@ -41,7 +41,7 @@ namespace ILSpyDecompilerService.Services
             try
             {
                 _logger.LogInformation($"Starting analysis of assembly: {assemblyPath}");
-                
+
                 // Validate that the file is actually an assembly
                 try
                 {
@@ -49,20 +49,28 @@ namespace ILSpyDecompilerService.Services
                 }
                 catch
                 {
-                    var errorResult = new { error = $"file path {assemblyPath} is not an assembly" };
+                    var errorResult = new AssemblyAnalysis
+                    {
+                        AssemblyName = Path.GetFileName(assemblyPath),
+                        Error = $"file path {assemblyPath} is not an assembly"
+                    };
                     return JsonConvert.SerializeObject(errorResult);
                 }
 
                 var result = AnalyzeAssemblyInternal(assemblyPath);
                 var json = JsonConvert.SerializeObject(result);
-                
+
                 _logger.LogInformation($"Analysis completed for assembly: {assemblyPath}");
                 return json;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Failed to analyze assembly: {assemblyPath}");
-                var errorResult = new { error = ex.Message };
+                var errorResult = new AssemblyAnalysis
+                {
+                    AssemblyName = Path.GetFileName(assemblyPath),
+                    Error = ex.Message
+                };
                 return JsonConvert.SerializeObject(errorResult);
             }
         }

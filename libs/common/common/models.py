@@ -82,6 +82,7 @@ class DotNetMethodInfo(BaseModel):
 
 class DotNetAssemblyAnalysis(BaseModel):
     AssemblyName: str
+    Error: str | None = None
     RemotingChannels: list[str] = []
     IsWCFServer: bool = False
     IsWCFClient: bool = False

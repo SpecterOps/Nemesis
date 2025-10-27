@@ -24,6 +24,7 @@ namespace ILSpyDecompilerService.Models
     public class AssemblyAnalysis
     {
         public string AssemblyName { get; set; }
+        public string Error { get; set; }
         public string[] RemotingChannels { get; set; }
         public bool IsWCFServer { get; set; }
         public bool IsWCFClient { get; set; }

@@ -186,6 +186,38 @@ async def store_dotnet_results(
             # Store the analysis results
             enrichment_result.results["inspect_assembly"] = sanitize_for_jsonb(analysis.model_dump())
 
+            # Check if there was an error during analysis
+            if analysis.Error:
+                logger.error(
+                    "DotNet assembly finished, but analysis failed",
+                    object_id=object_id,
+                    assembly_name=analysis.AssemblyName,
+                    error=analysis.Error,
+                )
+
+                # Create a finding for the error
+                error_summary = f"# .NET Assembly Analysis Error: {analysis.AssemblyName}\n\n"
+                error_summary += f"**Error**: {analysis.Error}\n\n"
+                error_summary += "The assembly could not be analyzed.\n"
+
+                display_data = FileObject(
+                    type="finding_summary",
+                    metadata={"summary": sanitize_for_jsonb(error_summary)},
+                )
+
+                finding = Finding(
+                    category=FindingCategory.INFORMATIONAL,
+                    finding_name="dotnet_analysis_error",
+                    origin_type=FindingOrigin.ENRICHMENT_MODULE,
+                    origin_name="dotnet_service",
+                    object_id=object_id,
+                    severity=2,
+                    raw_data=sanitize_for_jsonb(analysis.model_dump()),
+                    data=[display_data],
+                )
+
+                findings_list.append(finding)
+
             # Check if there are any significant findings worth creating a finding for
             has_significant_findings = (
                 analysis.IsWCFServer
@@ -198,7 +230,7 @@ async def store_dotnet_results(
                 or analysis.ExecutionCalls
             )
 
-            if has_significant_findings:
+            if has_significant_findings and not analysis.Error:
                 # Generate summary for the finding
                 summary_markdown = create_dotnet_finding_summary(analysis)
 
