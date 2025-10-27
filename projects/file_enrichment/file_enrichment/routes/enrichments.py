@@ -7,13 +7,14 @@ import uuid
 from typing import TYPE_CHECKING
 
 import common.helpers as helpers
+import file_enrichment.global_vars as global_vars
 from common.logger import get_logger
 from fastapi import APIRouter, Body, HTTPException, Path, Request
 from file_enrichment.global_vars import global_module_map
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    import asyncpg
+    pass
 
 logger = get_logger(__name__)
 
@@ -69,12 +70,6 @@ async def run_enrichment(
 ):
     """Run a specific enrichment module directly."""
     try:
-        # Get asyncpg pool from app state
-        asyncpg_pool: asyncpg.Pool = request.app.state.asyncpg_pool
-        # Check if module
-        if not global_module_map:
-            raise HTTPException(status_code=503, detail="Modules not initialized")
-
         if enrichment_name not in global_module_map:
             raise HTTPException(status_code=404, detail=f"Enrichment module '{enrichment_name}' not found")
 
@@ -96,7 +91,7 @@ async def run_enrichment(
 
         if result:
             # Store enrichment result in database
-            async with asyncpg_pool.acquire() as conn:
+            async with global_vars.asyncpg_pool.acquire() as conn:
                 # Store main enrichment result
                 results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
                 await conn.execute(
