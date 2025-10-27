@@ -156,7 +156,7 @@ jobs:
           - frontend
           - jupyter
           - alerting
-          - agents
+          # - agents
           - cli
           - housekeeping
           - document-conversion
