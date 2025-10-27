@@ -8,6 +8,21 @@ This documentation is automatically generated from the OpenAPI specification.
 
 ---
 
+## Dpapi
+
+### `POST /dpapi/credentials`
+
+Submit DPAPI credential for masterkey decryption
+
+Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, and decrypted master keys.
+
+**Request Body:** `DpapiCredentialRequest` (JSON)
+
+**Returns:** 200 on success
+
+---
+
+
 ## Enrichments
 
 ### `GET /enrichments`
@@ -174,6 +189,124 @@ Get metrics for a specific queue topic
 ---
 
 
+## Reports
+
+### `GET /reports/source`
+
+Get source report
+
+Get detailed report for a specific source. Use query parameter to support sources with special characters (e.g., URLs)
+
+**Parameters:**
+
+- `source` (string, **required**): Source name (supports URLs and special characters, case-insensitive)
+- `start_date` (unknown, optional): Filter by start date
+- `end_date` (unknown, optional): Filter by end date
+
+**Returns:** 200 on success
+
+---
+
+### `POST /reports/source/pdf`
+
+Download source report as PDF
+
+Generate and download a PDF report for a specific source. POST allows including pre-generated AI synthesis.
+
+**Parameters:**
+
+- `source` (string, **required**): Source name (supports URLs and special characters, case-insensitive)
+- `start_date` (unknown, optional): Filter by start date
+- `end_date` (unknown, optional): Filter by end date
+
+**Request Body:** See OpenAPI spec for details
+
+**Returns:** 200 on success
+
+---
+
+### `POST /reports/source/synthesize`
+
+Generate LLM synthesis for source report
+
+Generate AI-based risk assessment synthesis for a specific source. NOT CACHED - regenerated each time.
+
+**Parameters:**
+
+- `source` (string, **required**): Source name (supports URLs and special characters, case-insensitive)
+- `include_findings_details` (boolean, optional): Include detailed findings in the analysis
+- `max_tokens` (integer, optional): Maximum tokens for LLM analysis
+
+**Returns:** 200 on success
+
+---
+
+### `GET /reports/sources`
+
+List all sources
+
+Get a list of all sources with summary statistics
+
+**Parameters:**
+
+- `project` (unknown, optional): Filter by project name
+- `start_date` (unknown, optional): Filter by start date
+- `end_date` (unknown, optional): Filter by end date
+
+**Returns:** 200 on success
+
+---
+
+### `GET /reports/system`
+
+Get system-wide report
+
+Get system-wide statistics and findings across all sources
+
+**Parameters:**
+
+- `start_date` (unknown, optional): Filter by start date
+- `end_date` (unknown, optional): Filter by end date
+- `project` (unknown, optional): Filter by project name
+
+**Returns:** 200 on success
+
+---
+
+### `GET /reports/system/pdf`
+
+Download system-wide report as PDF
+
+Generate and download a PDF report for the entire system
+
+**Parameters:**
+
+- `start_date` (unknown, optional): Filter by start date
+- `end_date` (unknown, optional): Filter by end date
+- `project` (unknown, optional): Filter by project name
+
+**Returns:** 200 on success
+
+---
+
+### `POST /reports/system/synthesize`
+
+Generate LLM synthesis for system report
+
+Generate AI-based risk assessment synthesis for the entire system. NOT CACHED - regenerated each time.
+
+**Parameters:**
+
+- `max_tokens` (integer, optional): Maximum tokens for LLM analysis
+- `start_date` (unknown, optional): Filter by start date
+- `end_date` (unknown, optional): Filter by end date
+- `project` (unknown, optional): Filter by project name
+
+**Returns:** 200 on success
+
+---
+
+
 ## System
 
 ### `GET /agents`
@@ -190,7 +323,7 @@ Get a list of available AI agents with their metadata and capabilities
 
 Run .NET assembly analysis
 
-Forward .NET assembly analysis request to agents service
+Trigger .NET assembly analysis in background (non-blocking)
 
 **Request Body:** JSON object
 
@@ -202,7 +335,7 @@ Forward .NET assembly analysis request to agents service
 
 Run credential analysis
 
-Forward credential analysis request to agents service
+Trigger credential analysis in background (non-blocking)
 
 **Request Body:** JSON object
 
@@ -224,7 +357,19 @@ Get total spend and token usage statistics from LiteLLM logs
 
 Run text summarization
 
-Forward text summarization request to agents service
+Trigger text summarization in background (non-blocking)
+
+**Request Body:** JSON object
+
+**Returns:** 200 on success
+
+---
+
+### `POST /agents/translate`
+
+Run text translation
+
+Trigger text translation in background (non-blocking)
 
 **Request Body:** JSON object
 
