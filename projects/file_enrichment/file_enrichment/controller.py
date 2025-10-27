@@ -19,10 +19,10 @@ from . import global_vars
 from .debug_utils import setup_debug_signals
 from .routes.dpapi import dpapi_background_monitor, dpapi_router
 from .routes.enrichments import router as enrichments_router
-from .subscriptions.bulk_enrichment_handler import process_bulk_enrichment_event
-from .subscriptions.dotnet_handler import process_dotnet_event
-from .subscriptions.file_handler import process_file_event
-from .subscriptions.noseyparker_handler import process_noseyparker_event
+from .subscriptions.bulk_enrichment import process_bulk_enrichment_event
+from .subscriptions.dotnet import process_dotnet_event
+from .subscriptions.file import process_file_event
+from .subscriptions.noseyparker import process_noseyparker_event
 from .workflow import initialize_workflow_runtime, wf_runtime
 from .workflow_manager import WorkflowManager
 
@@ -65,9 +65,7 @@ async def lifespan(app: FastAPI):
         min_size=5,
         max_size=15,
     )
-    # global_vars.asyncpg_pool = asyncpg_pool
 
-    # Initialize global DpapiManager for the application lifetime
     dpapi_manager = NemesisDpapiManager(
         storage_backend=global_vars.asyncpg_pool,
         auto_decrypt=True,

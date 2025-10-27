@@ -119,13 +119,13 @@ def get_file_enriched(object_id: str) -> FileEnriched:
         raise
 
 
-async def get_file_enriched_async(object_id: str, connection_string: str | None = None) -> FileEnriched:
+async def get_file_enriched_async(object_id: str, connection: str | asyncpg.Pool | None = None) -> FileEnriched:
     """
     Retrieve a file_enriched record from PostgreSQL (asynchronous using asyncpg).
 
     Args:
         object_id: The object_id to query
-        connection_string: Optional connection string. If not provided, uses get_postgres_connection_str()
+        connection: Optional connection string or asyncpg.Pool. If not provided, uses get_postgres_connection_str()
 
     Returns:
         FileEnriched model instance
@@ -134,27 +134,30 @@ async def get_file_enriched_async(object_id: str, connection_string: str | None 
         ValueError: If no record found for object_id
         Exception: For database or parsing errors
     """
-    if connection_string is None:
-        connection_string = get_postgres_connection_str()
-
     try:
-        conn = await asyncpg.connect(connection_string)
-        try:
-            row = await conn.fetchrow(_FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)
+        # Determine if we're using a pool or creating a new connection
+        if isinstance(connection, asyncpg.Pool):
+            # Use the provided pool
+            row = await connection.fetchrow(_FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)
+        else:
+            # Use connection string (provided or default)
+            connection_string = connection if connection is not None else get_postgres_connection_str()
+            conn = await asyncpg.connect(connection_string)
+            try:
+                row = await conn.fetchrow(_FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)
+            finally:
+                await conn.close()
 
-            if not row:
-                raise ValueError(f"No file_enriched record found for object_id {object_id}")
+        if not row:
+            raise ValueError(f"No file_enriched record found for object_id {object_id}")
 
-            # Convert asyncpg.Record to dict
-            file_data = dict(row)
+        # Convert asyncpg.Record to dict
+        file_data = dict(row)
 
-            # Transform data using shared helper
-            file_data = _transform_file_enriched_data(file_data)
+        # Transform data using shared helper
+        file_data = _transform_file_enriched_data(file_data)
 
-            return FileEnriched.model_validate(file_data)
-
-        finally:
-            await conn.close()
+        return FileEnriched.model_validate(file_data)
 
     except ValueError as e:
         logger.error(f"File not found: {str(e)}")

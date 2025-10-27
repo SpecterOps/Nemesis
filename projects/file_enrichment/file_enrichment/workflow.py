@@ -246,7 +246,7 @@ async def check_file_linkings(ctx, activity_input):
     """
 
     object_id = activity_input["object_id"]
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
     try:
         linkings_created = await global_vars.file_linking_engine.apply_linking_rules(file_enriched)
@@ -330,7 +330,7 @@ async def handle_file_if_plaintext(ctx, activity_input):
     send a pub/sub message to NoseyParker
     """
     object_id = activity_input["object_id"]
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
     # if the file is plaintext, make sure we index it
     if file_enriched.is_plaintext:
