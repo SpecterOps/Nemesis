@@ -4,7 +4,6 @@ import os
 
 import asyncpg
 import dapr.ext.workflow as wf
-from common.db import get_postgres_connection_str
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL
 from common.storage import StorageMinio
 from dapr.ext.workflow.logger.options import LoggerOptions
@@ -27,6 +26,8 @@ nemesis_url = os.getenv("NEMESIS_URL", "http://localhost/")
 nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_url
 
 asyncpg_pool: asyncpg.Pool = None  # Connection pool for database operations
-
-file_linking_engine = FileLinkingEngine(get_postgres_connection_str())
 asyncio_loop: asyncio.AbstractEventLoop = None
+
+# Note: file_linking_engine is initialized after asyncpg_pool is created
+# See initialization code that sets this up with the pool
+file_linking_engine: FileLinkingEngine = None

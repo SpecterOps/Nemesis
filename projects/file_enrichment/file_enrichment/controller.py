@@ -12,6 +12,7 @@ from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI
 from file_enrichment.postgres_notifications import postgres_notify_listener
 from file_enrichment.workflow_recovery import recover_interrupted_workflows
+from file_linking import FileLinkingEngine
 from nemesis_dpapi import DpapiManager as NemesisDpapiManager
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
 
@@ -65,6 +66,8 @@ async def lifespan(app: FastAPI):
         min_size=5,
         max_size=15,
     )
+
+    global_vars.file_linking_engine = FileLinkingEngine(global_vars.asyncpg_pool)
 
     dpapi_manager = NemesisDpapiManager(
         storage_backend=global_vars.asyncpg_pool,

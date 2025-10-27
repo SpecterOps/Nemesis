@@ -1,10 +1,21 @@
 """Tests for the file linking rules engine."""
 
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from common.models import FileEnriched, FileHashes
 from file_linking.rules_engine import FileLinkingEngine, Trigger
+
+
+@pytest.fixture
+def mock_asyncpg_pool():
+    """Create a mock asyncpg.Pool for testing."""
+    pool = MagicMock()
+    pool.acquire = MagicMock()
+    pool.acquire.return_value.__aenter__ = AsyncMock()
+    pool.acquire.return_value.__aexit__ = AsyncMock()
+    return pool
 
 
 def create_file_enriched(object_id: str, path: str, mime_type: str, magic_type: str) -> FileEnriched:
@@ -34,12 +45,12 @@ class TestMatchesTrigger:
     """Tests for the _matches_trigger method."""
 
     @pytest.fixture
-    def engine(self, tmp_path):
+    def engine(self, tmp_path, mock_asyncpg_pool):
         """Create a FileLinkingEngine instance with a temporary rules directory."""
         rules_dir = tmp_path / "rules"
         rules_dir.mkdir()
-        # Using a dummy postgres connection string since we're only testing _matches_trigger
-        return FileLinkingEngine(postgres_connection_string="postgresql://dummy", rules_dir=str(rules_dir))
+        # Using a mock asyncpg pool since we're only testing _matches_trigger
+        return FileLinkingEngine(connection_pool=mock_asyncpg_pool, rules_dir=str(rules_dir))
 
     def test_matches_trigger_chromium_cookies(self, engine):
         """Test matching Chromium cookies with various trigger conditions."""
@@ -230,13 +241,13 @@ class TestChromiumCookiesLinking:
     """Tests for Chromium cookies linking to Local State file."""
 
     @pytest.fixture
-    def engine(self, tmp_path):
+    def engine(self, tmp_path, mock_asyncpg_pool):
         """Create a FileLinkingEngine with the actual chromium cookies rule."""
         # Use the real rules directory to load the cookies.yaml rule
         import os
 
         rules_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "file_linking", "rules")
-        return FileLinkingEngine(postgres_connection_string="postgresql://dummy", rules_dir=rules_dir)
+        return FileLinkingEngine(connection_pool=mock_asyncpg_pool, rules_dir=rules_dir)
 
     def test_chromium_cookies_links_to_local_state_windows(self, engine):
         """Test that Chromium Cookies file creates a link to Local State on Windows paths."""
@@ -327,12 +338,12 @@ class TestChromiumLocalStateLinking:
     """Tests for Chromium Local State linking to Login Data and Cookies files."""
 
     @pytest.fixture
-    def engine(self, tmp_path):
+    def engine(self, tmp_path, mock_asyncpg_pool):
         """Create a FileLinkingEngine with the actual chromium local_state rule."""
         import os
 
         rules_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "file_linking", "rules")
-        return FileLinkingEngine(postgres_connection_string="postgresql://dummy", rules_dir=rules_dir)
+        return FileLinkingEngine(connection_pool=mock_asyncpg_pool, rules_dir=rules_dir)
 
     def test_chromium_local_state_links_to_login_data_and_cookies_windows(self, engine):
         """Test that Chromium Local State file creates links to Login Data and Cookies on Windows paths."""
@@ -509,15 +520,13 @@ class TestPlaceholderResolutionIntegration:
     """Integration tests for placeholder resolution in file linking."""
 
     @pytest.fixture
-    def engine(self, tmp_path):
+    def engine(self, tmp_path, mock_asyncpg_pool):
         """Create a FileLinkingEngine with test database."""
-        from unittest.mock import AsyncMock
-
         rules_dir = tmp_path / "rules"
         rules_dir.mkdir()
 
-        # Using a mock connection since we're testing logic, not actual DB
-        engine = FileLinkingEngine(postgres_connection_string="postgresql://test", rules_dir=str(rules_dir))
+        # Using a mock pool since we're testing logic, not actual DB
+        engine = FileLinkingEngine(connection_pool=mock_asyncpg_pool, rules_dir=str(rules_dir))
 
         # Mock the database service methods (now async)
         engine.db_service.add_file_listing = AsyncMock(return_value=True)
