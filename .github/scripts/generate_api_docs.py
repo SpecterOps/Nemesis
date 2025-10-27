@@ -28,16 +28,79 @@ def extract_openapi_spec() -> dict[str, Any]:
         # Mock Dapr dependencies to avoid connection issues
         import sys
         from unittest.mock import MagicMock
+        from types import ModuleType
 
-        # Mock dapr modules before importing web_api.main
-        mock_dapr_clients = MagicMock()
-        mock_dapr_ext_fastapi = MagicMock()
-        sys.modules["dapr.clients"] = mock_dapr_clients
-        sys.modules["dapr.ext.fastapi"] = mock_dapr_ext_fastapi
+        # Create a mock module factory that returns modules, not MagicMocks
+        def create_mock_module(name):
+            """Create a proper mock module that can act as a package."""
+            module = ModuleType(name)
+            module.__path__ = []  # Makes it a package
+            module.__package__ = name
+            # Add a __getattr__ that returns more mock modules for any submodule access
+            def mock_getattr(attr_name):
+                if attr_name.startswith('_'):
+                    raise AttributeError(f"module '{name}' has no attribute '{attr_name}'")
+                submodule_name = f"{name}.{attr_name}"
+                if submodule_name not in sys.modules:
+                    sys.modules[submodule_name] = create_mock_module(submodule_name)
+                return sys.modules[submodule_name]
+            module.__getattr__ = mock_getattr
+            return module
 
-        # Mock the specific classes that are imported
-        mock_dapr_clients.DaprClient = MagicMock()
-        mock_dapr_ext_fastapi.DaprApp = MagicMock()
+        # Create base dapr module
+        dapr_module = create_mock_module("dapr")
+        sys.modules["dapr"] = dapr_module
+
+        # Pre-create all nested submodules that we'll need
+        # This needs to be comprehensive to handle all possible imports
+        nested_modules = [
+            "dapr.aio",
+            "dapr.aio.clients",
+            "dapr.aio.clients.grpc",
+            "dapr.aio.clients.grpc.client",
+            "dapr.aio.clients.grpc._response",
+            "dapr.aio.clients.grpc._request",
+            "dapr.aio.clients.grpc.subscription",
+            "dapr.clients",
+            "dapr.clients.grpc",
+            "dapr.clients.grpc.client",
+            "dapr.clients.grpc._response",
+            "dapr.clients.grpc._request",
+            "dapr.clients.grpc.subscription",
+            "dapr.ext",
+            "dapr.ext.fastapi",
+        ]
+
+        for module_name in nested_modules:
+            sys.modules[module_name] = create_mock_module(module_name)
+
+        # Create mock DaprClient that returns proper secret values
+        # Need to handle multiple secret keys that might be requested
+        def mock_get_secret(store_name, key):
+            mock_response = MagicMock()
+            secrets_map = {
+                "POSTGRES_USER": "test",
+                "POSTGRES_PASSWORD": "test",
+                "POSTGRES_HOST": "localhost",
+                "POSTGRES_PORT": "5432",
+                "POSTGRES_DB": "test",
+                "POSTGRES_PARAMETERS": "sslmode=disable",
+                "MINIO_ROOT_USER": "test",
+                "MINIO_ROOT_PASSWORD": "test",
+                "MINIO_SERVER": "localhost:9000",
+                "BUCKET_NAME": "test",
+            }
+            mock_response.secret = {key: secrets_map.get(key, "test")}
+            return mock_response
+
+        mock_dapr_client = MagicMock()
+        mock_dapr_client.return_value.__enter__.return_value.get_secret.side_effect = mock_get_secret
+        mock_dapr_client.return_value.__exit__.return_value = None
+
+        # Add specific mocked classes
+        sys.modules["dapr.aio.clients"].DaprClient = MagicMock()
+        sys.modules["dapr.clients"].DaprClient = mock_dapr_client
+        sys.modules["dapr.ext.fastapi"].DaprApp = MagicMock()
 
         from web_api.main import app
 
@@ -47,7 +110,10 @@ def extract_openapi_spec() -> dict[str, Any]:
         print("Make sure to run: cd projects/web_api && poetry install")
         sys.exit(1)
     except Exception as e:
+        import traceback
         print(f"Error generating OpenAPI spec: {e}")
+        print("\nFull traceback:")
+        traceback.print_exc()
         sys.exit(1)
 
 
