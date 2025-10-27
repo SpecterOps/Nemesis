@@ -12,9 +12,7 @@ async def process_bulk_enrichment_event(task: BulkEnrichmentTask, workflow_manag
         enrichment_name = task.enrichment_name
         object_id = task.object_id
 
-        logger.debug(
-            "Received bulk enrichment task", enrichment_name=enrichment_name, object_id=object_id
-        )
+        logger.debug("Received bulk enrichment task", enrichment_name=enrichment_name, object_id=object_id)
 
         # Check if module exists
         if not global_module_map:

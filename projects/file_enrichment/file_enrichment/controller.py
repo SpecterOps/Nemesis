@@ -191,6 +191,6 @@ async def process_nosey_parker_results(event: CloudEvent[NoseyParkerOutput]):
 async def process_bulk_enrichment_task(event: CloudEvent[BulkEnrichmentTask]):
     """Handler for individual bulk enrichment tasks"""
     global workflow_manager
-    from .workflow import global_module_map
+    import file_enrichment.global_vars as global_vars
 
-    await process_bulk_enrichment_event(event.data, workflow_manager, global_module_map)
+    await process_bulk_enrichment_event(event.data, workflow_manager, global_vars.global_module_map)

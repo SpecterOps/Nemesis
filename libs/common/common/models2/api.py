@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, BeforeValidator, Field, field_validator, field_serializer
+from pydantic import BaseModel, BeforeValidator, Field, field_serializer, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class FileMetadata(BaseModel):
         }
     }
 
-    @field_serializer('timestamp', 'expiration', when_used='unless-none')
+    @field_serializer("timestamp", "expiration", when_used="unless-none")
     def serialize_datetime(self, dt: datetime, _info):
         return dt.isoformat()
 

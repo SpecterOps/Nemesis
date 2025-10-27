@@ -16,7 +16,6 @@ from .activities import (
     publish_findings_alerts,
     run_enrichment_modules,
 )
-from .activities.enrichment_modules import global_module_map
 
 logger = get_logger(__name__)
 
@@ -240,9 +239,8 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
     module_loader = ModuleLoader()
     await module_loader.load_modules()
     # Update the global_module_map in the enrichment_modules activity
-    from .activities import enrichment_modules
 
-    enrichment_modules.global_module_map = module_loader.modules
+    global_vars.global_module_map = module_loader.modules
 
     asyncio_loop = asyncio.get_running_loop()
 
@@ -288,7 +286,7 @@ def reload_yara_rules():
     """Reloads all disk/state yara rules."""
 
     logger.debug("workflow/workflow.py reloading Yara rules")
-    global_module_map["yara"].rule_manager.load_rules()
+    global_vars.global_module_map["yara"].rule_manager.load_rules()
 
 
 # endregion

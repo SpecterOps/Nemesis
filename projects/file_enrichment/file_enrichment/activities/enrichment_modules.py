@@ -4,6 +4,7 @@ import json
 import os
 
 import common.helpers as helpers
+import file_enrichment.global_vars as global_vars
 from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.workflows.setup import workflow_activity
@@ -15,7 +16,6 @@ from ..tracing import get_tracer
 logger = get_logger(__name__)
 
 # Global module map - will be set during initialization
-global_module_map = {}
 
 
 @workflow_activity
@@ -97,11 +97,11 @@ def determine_modules_to_process(object_id: str, temp_file_path: str, execution_
     modules_to_process = []
 
     for module_name in execution_order:
-        if module_name not in global_module_map:
+        if module_name not in global_vars.global_module_map:
             logger.warning("Module not found", module_name=module_name)
             continue
 
-        module = global_module_map[module_name]
+        module = global_vars.global_module_map[module_name]
         try:
             should_process = module.should_process(object_id, temp_file_path)
 
@@ -116,7 +116,7 @@ def determine_modules_to_process(object_id: str, temp_file_path: str, execution_
 
 async def execute_enrichment_module(object_id: str, temp_file_path: str, module_name: str) -> EnrichmentResult | None:
     """Second pass: process a single module and return its result."""
-    module = global_module_map[module_name]
+    module = global_vars.global_module_map[module_name]
     logger.debug("Starting module processing", module_name=module_name)
 
     # Check if the module's process method returns a coroutine (async)
