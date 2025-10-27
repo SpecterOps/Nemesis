@@ -5,6 +5,7 @@ import dapr.ext.workflow as wf
 from common.logger import get_logger
 from common.workflows.setup import wf_runtime
 from file_enrichment_modules.module_loader import ModuleLoader
+from file_enrichment_modules.yara.yara_manager import YaraRuleManager
 from nemesis_dpapi import DpapiManager
 
 from . import global_vars
@@ -286,7 +287,12 @@ def reload_yara_rules():
     """Reloads all disk/state yara rules."""
 
     logger.debug("workflow/workflow.py reloading Yara rules")
-    global_vars.global_module_map["yara"].rule_manager.load_rules()
+    rule_manager = global_vars.global_module_map["yara"]
+
+    if not isinstance(rule_manager, YaraRuleManager):
+        raise ValueError(f"Yara rule manager is incorrect type. Type: {type(rule_manager)}")
+
+    rule_manager.load_rules()
 
 
 # endregion
