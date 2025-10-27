@@ -15,8 +15,9 @@ logger = get_logger(__name__)
 
 
 class ChromeHistoryParser(EnrichmentModule):
+    name: str = "chrome_history_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("chrome_history_parser")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
@@ -38,7 +39,7 @@ rule Chrome_Downloads_Tables
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -68,7 +69,7 @@ rule Chrome_Downloads_Tables
 
         return should_run
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome History database.
 
         Args:

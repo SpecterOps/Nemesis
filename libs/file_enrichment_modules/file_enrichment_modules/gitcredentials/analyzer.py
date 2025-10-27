@@ -18,13 +18,14 @@ logger = get_logger(__name__)
 
 
 class GitCredentialsParser(EnrichmentModule):
+    name: str = "git_credentials_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("git_credentials_parser")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
 
         file_enriched = get_file_enriched(object_id)
@@ -150,7 +151,7 @@ class GitCredentialsParser(EnrichmentModule):
             logger.exception(e, message=f"Error analyzing Git credentials for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Git credentials file and extract credentials.
 
         Args:

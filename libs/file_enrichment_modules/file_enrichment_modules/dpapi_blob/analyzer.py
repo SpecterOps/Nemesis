@@ -18,8 +18,9 @@ logger = get_logger(__name__)
 
 
 class DpapiBlobAnalyzer(EnrichmentModule):
+    name: str = "dpapi_analyzer"
+    dependencies: list[str] = []
     def __init__(self, standalone: bool = False):
-        super().__init__("dpapi_analyzer")
         self.storage = StorageMinio()
         self.dapr_client = DaprClient()
         self.size_limit = 50000000  # only check the first 50 megs for DPAPI blobs, for performance
@@ -63,7 +64,7 @@ rule has_dpapi_blob
             lines.append(f'{offset+i:08x}  {hex_part}  {ascii_part}')
         return '\n'.join(lines)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed by scanning for DPAPI blobs.
 
         Args:
@@ -91,19 +92,6 @@ rule has_dpapi_blob
         return should_run
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process file and perform DPAPI blob analysis.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-
-        Returns:
-            EnrichmentResult or None if processing fails
-        """
-        logger.info(f"Starting async for DPAPI blob analysis for object_id {object_id}")
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file in either workflow or standalone mode.
 
         Args:

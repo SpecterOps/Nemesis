@@ -17,8 +17,9 @@ logger = get_logger(__name__)
 
 
 class Base64DecoderAnalyzer(EnrichmentModule):
+    name: str = "base64_decoder"
+    dependencies: list[str] = []
     def __init__(self, max_extractions: int = 30):
-        super().__init__("base64_decoder")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -34,7 +35,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         # Allow whitespace/newlines within long sequences
         self.long_base64_pattern = re.compile(r"([A-Za-z0-9+/\s]{200,}={0,2})")
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run on plaintext files.
 
         Args:
@@ -226,7 +227,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         )
         return candidates
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file to find and decode base64 content.
 
         Args:

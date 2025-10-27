@@ -16,12 +16,13 @@ logger = get_logger(__name__)
 
 
 class ContainerAnalyzer(EnrichmentModule):
+    name: str = "container_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("container_analyzer")
         self.storage = StorageMinio()
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -139,7 +140,7 @@ class ContainerAnalyzer(EnrichmentModule):
 
         return enrichment_result
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process container file and list its contents without extraction.
 
         Args:

@@ -335,8 +335,9 @@ def parse_pe_file(file_path: str) -> dict[str, Any]:
 
 
 class PEAnalyzer(EnrichmentModule):
+    name: str = "pe_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("pe_analyzer")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -351,7 +352,7 @@ rule is_pe
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Uses a Yara run to determine if this module should run."""
         # Get the current file_enriched from the database backend
         file_enriched = get_file_enriched(object_id)
@@ -388,7 +389,7 @@ rule is_pe
             logger.exception(e, message=f"Error analyzing PE file for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file using.
 
         Args:

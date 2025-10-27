@@ -18,8 +18,9 @@ logger = get_logger(__name__)
 
 
 class VncParser(EnrichmentModule):
+    name: str = "vnc_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("vnc_parser")
         self.storage = StorageMinio()
 
         # Define the fixed DES key used by VNC
@@ -28,7 +29,7 @@ class VncParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
         file_enriched = get_file_enriched(object_id)
         should_run = (
@@ -190,7 +191,7 @@ class VncParser(EnrichmentModule):
             logger.exception(e, message=f"Error analyzing VNC config for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process VNC config file and decrypt password if present.
 
         Args:

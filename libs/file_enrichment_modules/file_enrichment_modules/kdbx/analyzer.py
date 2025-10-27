@@ -227,13 +227,14 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
 
 
 class KDBXAnalyzer(EnrichmentModule):
+    name: str = "kdbx_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("kdbx_analyzer")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
         file_enriched = get_file_enriched(object_id)
 
@@ -316,7 +317,7 @@ class KDBXAnalyzer(EnrichmentModule):
 
         return enrichment_result
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process KDBX file and extract encryption information.
 
         Args:

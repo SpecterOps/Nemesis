@@ -52,14 +52,15 @@ def format_hex_like_xxd(data):
 
 
 class YaraScanner(EnrichmentModule):
+    name: str = "yara_scanner"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("yara_scanner")
         self.storage = StorageMinio()
         self.rule_manager = YaraRuleManager()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Always returns True as Yara scanning should run on all files."""
         return True
 
@@ -170,7 +171,7 @@ class YaraScanner(EnrichmentModule):
             return enrichment_result
         return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file using Yara scanning.
 
         Args:

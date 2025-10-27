@@ -15,8 +15,9 @@ logger = get_logger(__name__)
 
 
 class KeytabAnalyzer(EnrichmentModule):
+    name: str = "keytab_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("keytab_analyzer")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
@@ -56,7 +57,7 @@ rule Keytab_File
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = get_file_enriched(object_id)
 
@@ -396,7 +397,7 @@ rule Keytab_File
                 enrichment_result.transforms = transforms
                 return enrichment_result
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process keytab file.
 
         Args:

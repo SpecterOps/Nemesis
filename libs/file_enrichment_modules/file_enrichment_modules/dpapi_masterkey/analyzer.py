@@ -25,8 +25,9 @@ logger = get_logger(__name__)
 
 
 class DPAPIMasterkeyAnalyzer(EnrichmentModule):
+    name: str = "dpapi_masterkey"
+    dependencies: list[str] = []
     def __init__(self, standalone: bool = False):
-        super().__init__("dpapi_masterkey")
         self.storage = StorageMinio()
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
@@ -41,7 +42,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         )
         self._conninfo = get_postgres_connection_str()
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed as a DPAPI masterkey file.
 
         Args:
@@ -179,18 +180,6 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             logger.error(f"Failed to create proactive file linkings: {e}")
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process masterkey file and add to DPAPI manager.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-
-        Returns:
-            EnrichmentResult or None if processing fails
-        """
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
 
         Args:

@@ -29,15 +29,16 @@ logger = get_logger(__name__)
 
 
 class RegistryHiveAnalyzer(EnrichmentModule):
+    name: str = "registry_hive"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("registry_hive")
         self.storage = StorageMinio()
         self.workflows = ["default"]
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self._conninfo = get_postgres_connection_str()
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
         file_enriched = get_file_enriched(object_id)
         magic_type = file_enriched.magic_type.lower()
@@ -685,18 +686,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         return summary
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Do the file enrichment.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-
-        Returns:
-            EnrichmentResult or None if processing fails
-        """
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process registry hive file and extract relevant information."""
         try:
             file_enriched = await get_file_enriched_async(object_id)

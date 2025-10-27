@@ -89,13 +89,14 @@ def parse_pdf_file(file_path: str) -> dict[str, Any]:
 
 
 class PDFAnalyzer(EnrichmentModule):
+    name: str = "pdf_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("pdf_analyzer")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
         file_enriched = get_file_enriched(object_id)
         return "pdf document" in file_enriched.magic_type.lower()
@@ -149,7 +150,7 @@ The document is encrypted. Attempt to crack it using the following hash:
             logger.exception(e, message=f"Error analyzing PDF file for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process PDF file.
 
         Args:

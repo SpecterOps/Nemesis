@@ -324,13 +324,14 @@ def parse_office_new_file(file_path: str) -> dict[str, Any]:
 
 
 class OfficeAnalyzer(EnrichmentModule):
+    name: str = "office_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("office_analyzer")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file extension and type."""
         file_enriched = get_file_enriched(object_id)
 
@@ -416,7 +417,7 @@ class OfficeAnalyzer(EnrichmentModule):
             logger.exception(e, message=f"Error analyzing Office document for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Office file using the storage system.
 
         Args:

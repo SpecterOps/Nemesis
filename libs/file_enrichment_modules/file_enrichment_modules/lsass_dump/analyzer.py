@@ -50,8 +50,9 @@ class Credential:
 
 # adapted from/inspired by https://github.com/login-securite/lsassy/blob/9682127364f6f64ce190e8b7f03cdfa1dd457066/lsassy/parser.py (MIT License)
 class LsassDumpParser(EnrichmentModule):
+    name: str = "lsass_dump"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("lsass_dump")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -59,7 +60,7 @@ class LsassDumpParser(EnrichmentModule):
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.size_limit = 1024 * 1024 * 100  # 100 MB size limit for LSASS dumps
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
         file_enriched = get_file_enriched(object_id)
         return "mini dump crash report" in file_enriched.magic_type.lower()
@@ -542,18 +543,6 @@ class LsassDumpParser(EnrichmentModule):
         return enrichment_result
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process LSASS dump file and extract credentials.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-
-        Returns:
-            EnrichmentResult or None if processing fails
-        """
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
 
         logger.debug("Starting async processing of LSASS dump", object_id=object_id)

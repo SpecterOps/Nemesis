@@ -14,10 +14,11 @@ logger = get_logger(__name__)
 
 
 class PIIAnalyzer(EnrichmentModule):
+    name: str = "pii_analyzer"
+    dependencies: list[str] = []
     _thread_local = threading.local()
 
     def __init__(self):
-        super().__init__("pii_analyzer")
         self.storage = StorageMinio()
         self.size_limit = 50_000_000  # 50MB size limit
         # the workflows this module should automatically run in
@@ -83,7 +84,7 @@ rule detect_pii
         if hasattr(self._thread_local, "scanner"):
             delattr(self._thread_local, "scanner")
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if file should be processed based on size and content."""
         file_enriched = get_file_enriched(object_id)
 
@@ -280,7 +281,7 @@ rule detect_pii
             logger.exception(e, message=f"Error analyzing PII for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file to detect PII using Yara rules.
 
         Args:

@@ -19,8 +19,9 @@ logger = get_logger(__name__)
 
 
 class UnattendParser(EnrichmentModule):
+    name: str = "unattend_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("unattend_parser")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
@@ -64,7 +65,7 @@ rule Detect_Windows_Unattend_XML {
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
         file_enriched = get_file_enriched(object_id)
 
@@ -267,7 +268,7 @@ rule Detect_Windows_Unattend_XML {
             logger.exception(e, message=f"Error analyzing unattend.xml for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process unattend.xml file and extract credentials.
 
         Args:

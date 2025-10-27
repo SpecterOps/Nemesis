@@ -19,8 +19,9 @@ logger = get_logger(__name__)
 
 
 class PuttyParser(EnrichmentModule):
+    name: str = "putty_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("putty_parser")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -38,7 +39,7 @@ rule has_putty_reg
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
         file_enriched = get_file_enriched(object_id)
 
@@ -199,7 +200,7 @@ rule has_putty_reg
             logger.exception(e, message=f"Error analyzing Putty registry for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Putty registry file.
 
         Args:

@@ -20,8 +20,9 @@ logger = get_logger(__name__)
 
 
 class ChromeLoginsParser(EnrichmentModule):
+    name: str = "chrome_logins_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("chrome_logins_parser")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
@@ -46,7 +47,7 @@ rule Chrome_Logins_Tables
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -76,18 +77,6 @@ rule Chrome_Logins_Tables
         return should_run
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Do the file enrichment.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-
-        Returns:
-            EnrichmentResult or None if processing fails
-        """
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome Login Data database.
 
         Args:

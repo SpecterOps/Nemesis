@@ -19,8 +19,9 @@ logger = get_logger(__name__)
 
 
 class ChromeLocalStateParser(EnrichmentModule):
+    name: str = "chrome_local_state_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("chrome_local_state_parser")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
@@ -46,7 +47,7 @@ rule Chrome_Local_State
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -74,15 +75,6 @@ rule Chrome_Local_State
         return should_run
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process Chrome Local State files.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-        """
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
 
         try:

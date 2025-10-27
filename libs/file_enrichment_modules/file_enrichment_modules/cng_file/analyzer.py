@@ -32,8 +32,9 @@ logger = get_logger(__name__)
 
 
 class CngFileAnalyzer(EnrichmentModule):
+    name: str = "cng_analyzer"
+    dependencies: list[str] = []
     def __init__(self, standalone: bool = False):
-        super().__init__("cng_analyzer")
         self.storage = StorageMinio()
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
@@ -66,7 +67,7 @@ rule is_cng_file
 }
 """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed as a CNG file.
 
         Args:
@@ -89,18 +90,6 @@ rule is_cng_file
         return should_run
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process CNG file and extract/decrypt contents.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-
-        Returns:
-            EnrichmentResult or None if processing fails
-        """
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process CNG file asynchronously.
 
         Args:

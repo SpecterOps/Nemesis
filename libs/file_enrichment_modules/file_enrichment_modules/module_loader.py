@@ -2,6 +2,7 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 from common.logger import get_logger
 from common.models import EnrichmentResult
@@ -9,18 +10,39 @@ from common.models import EnrichmentResult
 logger = get_logger(__name__)
 
 
-class EnrichmentModule:
-    def __init__(self, name: str, dependencies: list[str] = None):
-        self.name = name
-        self.dependencies = dependencies or []
+@runtime_checkable
+class EnrichmentModule(Protocol):
+    """Protocol defining the interface for enrichment modules.
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
-        """Determine if this module should process the given file."""
-        raise NotImplementedError
+    All enrichment modules must implement this protocol with async methods.
+    """
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process the file and return enrichment results."""
-        raise NotImplementedError
+    name: str
+    dependencies: list[str]
+
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+        """Determine if this module should process the given file.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            True if the module should process this file, False otherwise
+        """
+        ...
+
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+        """Process the file and return enrichment results.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file
+
+        Returns:
+            EnrichmentResult or None if processing fails or is not applicable
+        """
+        ...
 
 
 class ModuleLoader:

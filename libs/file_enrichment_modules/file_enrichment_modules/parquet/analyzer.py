@@ -13,14 +13,15 @@ logger = get_logger(__name__)
 
 
 class ParquetFileParser(EnrichmentModule):
+    name: str = "parquet_file_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("parquet_file_parser")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = get_file_enriched(object_id)
 
@@ -171,7 +172,7 @@ class ParquetFileParser(EnrichmentModule):
             logger.exception(e, message=f"Error analyzing Parquet file for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Parquet file.
 
         Args:

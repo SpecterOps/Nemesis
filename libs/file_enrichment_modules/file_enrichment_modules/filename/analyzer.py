@@ -7,8 +7,9 @@ logger = get_logger(__name__)
 
 
 class FilenameScanner(EnrichmentModule):
+    name: str = "filename_scanner"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("filename_scanner")
         self.workflows = ["default"]
 
         # List of sensitive terms to check for in filenames
@@ -45,7 +46,7 @@ class FilenameScanner(EnrichmentModule):
             "phpinfo",
         ]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Always returns True as filename scanning should run on all files.
 
         Args:
@@ -54,7 +55,7 @@ class FilenameScanner(EnrichmentModule):
         """
         return True
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file by checking its filename for sensitive terms.
 
         Args:
