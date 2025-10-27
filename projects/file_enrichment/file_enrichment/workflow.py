@@ -180,18 +180,17 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
 def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
     """Lightweight workflow that runs a single enrichment module for bulk operations."""
 
-    workflow_logger = logger.bind(instance_id=ctx.instance_id, workflow_is_replaying=ctx.is_replaying)
-
     try:
         enrichment_name = workflow_input["enrichment_name"]
         object_id = workflow_input["object_id"]
 
-        workflow_logger.debug(
-            "Starting single enrichment workflow",
-            enrichment_name=enrichment_name,
-            object_id=object_id,
-            instance_id=ctx.instance_id,
-        )
+        if not ctx.is_replaying:
+            logger.debug(
+                "Starting single enrichment workflow",
+                enrichment_name=enrichment_name,
+                object_id=object_id,
+                instance_id=ctx.instance_id,
+            )
 
         # Get the activity name for this enrichment
         activity_name = f"enrich_{enrichment_name}"
@@ -201,18 +200,19 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
         # Run the single enrichment activity
         result = yield ctx.call_activity(global_vars.activity_functions[activity_name], input={"object_id": object_id})
 
-        workflow_logger.debug(
-            "Single enrichment workflow completed",
-            enrichment_name=enrichment_name,
-            object_id=object_id,
-            result=result,
-            instance_id=ctx.instance_id,
-        )
+        if not ctx.is_replaying:
+            logger.debug(
+                "Single enrichment workflow completed",
+                enrichment_name=enrichment_name,
+                object_id=object_id,
+                result=result,
+                instance_id=ctx.instance_id,
+            )
 
         return result
 
     except Exception as e:
-        workflow_logger.exception(
+        logger.exception(
             "Error in single enrichment workflow",
             enrichment_name=enrichment_name if "enrichment_name" in locals() else "unknown",
             object_id=object_id if "object_id" in locals() else "unknown",
