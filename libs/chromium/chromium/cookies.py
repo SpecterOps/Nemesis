@@ -1,11 +1,10 @@
 """Chromium Cookies file parsing and database operations."""
 
-import asyncio
 import sqlite3
 
-import psycopg
+import asyncpg
 from common.logger import get_logger
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from nemesis_dpapi import Blob, DpapiManager
 
@@ -13,7 +12,6 @@ from .helpers import (
     convert_chromium_timestamp,
     decrypt_chrome_string,
     detect_encryption_type,
-    get_postgres_connection_str,
     get_state_key_bytes,
     get_state_key_id,
     is_sqlite3,
@@ -24,18 +22,20 @@ from .helpers import (
 logger = get_logger(__name__)
 
 
-def process_chromium_cookies(
-    object_id: str, file_path: str | None = None, dpapi_manager: DpapiManager | None = None
+async def process_chromium_cookies(
+    object_id: str, file_path: str | None = None, dpapi_manager: DpapiManager | None = None, asyncpg_pool: asyncpg.Pool | None = None
 ) -> None:
     """Process Chromium Cookies file and insert cookies into database.
 
     Args:
         object_id: The object ID of the Cookies file
         file_path: Optional path to already downloaded file
+        dpapi_manager: DPAPI manager for decryption
+        asyncpg_pool: Async Postgres connection pool
     """
     logger.info("Processing Chromium Cookies file", object_id=object_id)
 
-    file_enriched = get_file_enriched(object_id)
+    file_enriched = await get_file_enriched_async(object_id)
 
     # Extract username and browser from file path
     username, browser = parse_chromium_file_path(file_enriched.path or "")
@@ -53,9 +53,7 @@ def process_chromium_cookies(
         logger.warning("File is not a valid SQLite3 database", object_id=object_id, file_path=file_enriched.path)
         return
 
-    conn_str = get_postgres_connection_str()
-    with psycopg.connect(conn_str) as pg_conn:
-        _insert_cookies(file_enriched, username, browser, db_path, pg_conn, dpapi_manager)
+    await _insert_cookies(file_enriched, username, browser, db_path, dpapi_manager, asyncpg_pool)
 
     logger.debug("Completed processing Chromium Cookies", object_id=object_id)
 
@@ -73,8 +71,8 @@ def _translate_samesite(samesite_int: int) -> str:
     return samesite_map.get(samesite_int, "Unknown")
 
 
-def _insert_cookies(
-    file_enriched, username: str | None, browser: str, db_path: str, pg_conn, dpapi_manager: DpapiManager | None = None
+async def _insert_cookies(
+    file_enriched, username: str | None, browser: str, db_path: str, dpapi_manager: DpapiManager | None = None, asyncpg_pool: asyncpg.Pool | None = None
 ) -> None:
     """Extract cookies from Cookies database and insert into chromium.cookies table."""
     try:
@@ -130,7 +128,7 @@ def _insert_cookies(
             value_dec = None
             if masterkey_guid and dpapi_manager:
                 try:
-                    value_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.from_bytes(encrypted_value)))
+                    value_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(encrypted_value))
                     if value_dec_bytes:
                         value_dec = value_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
@@ -142,10 +140,10 @@ def _insert_cookies(
             if encryption_type in ["key", "abe"]:
                 # Try primary approach: get state key based on username/browser
                 if username:  # Only try primary approach if username was extracted
-                    state_key_id = get_state_key_id(file_enriched.source, username, browser, pg_conn)
+                    state_key_id = await get_state_key_id(file_enriched.source, username, browser, asyncpg_pool)
                     if state_key_id:
                         # Retrieve the pre-processed state key for decryption
-                        state_key_bytes = get_state_key_bytes(state_key_id, encryption_type, pg_conn)
+                        state_key_bytes = await get_state_key_bytes(state_key_id, encryption_type, asyncpg_pool)
                         if state_key_bytes:
                             try:
                                 value_dec_bytes = decrypt_chrome_string(
@@ -180,8 +178,8 @@ def _insert_cookies(
                         source=file_enriched.source,
                         encryption_type=encryption_type,
                     )
-                    backup_decrypted_bytes, backup_state_key_id = try_decrypt_with_all_keys(
-                        encrypted_value, file_enriched.source, encryption_type, pg_conn
+                    backup_decrypted_bytes, backup_state_key_id = await try_decrypt_with_all_keys(
+                        encrypted_value, file_enriched.source, encryption_type, asyncpg_pool
                     )
                     if backup_decrypted_bytes and backup_state_key_id:
                         # Apply the same offset handling as above
@@ -202,49 +200,44 @@ def _insert_cookies(
                             "Successfully decrypted cookie using backup approach", state_key_id=backup_state_key_id
                         )
 
-            cookie_data = {
-                "originating_object_id": file_enriched.object_id,
-                "agent_id": file_enriched.agent_id,
-                "source": file_enriched.source,
-                "project": file_enriched.project,
-                "username": username,
-                "browser": browser,
-                "host_key": host_key,
-                "name": name,
-                "path": path,
-                "creation_utc": convert_chromium_timestamp(creation_utc),
-                "expires_utc": convert_chromium_timestamp(expires_utc),
-                "last_access_utc": convert_chromium_timestamp(last_access_utc),
-                "last_update_utc": convert_chromium_timestamp(last_update_utc),
-                "is_secure": bool(is_secure),
-                "is_httponly": bool(is_httponly),
-                "is_persistent": bool(is_persistent),
-                "samesite": _translate_samesite(samesite) if samesite is not None else "Unknown",
-                "source_port": source_port,
-                "encryption_type": encryption_type,
-                "masterkey_guid": masterkey_guid,
-                "state_key_id": state_key_id,
-                "is_decrypted": is_decrypted,
-                "value_enc": encrypted_value,
-                "value_dec": value_dec,
-            }
-            cookies_data.append(cookie_data)
+            cookie_data_tuple = (
+                file_enriched.object_id,
+                file_enriched.agent_id,
+                file_enriched.source,
+                file_enriched.project,
+                username,
+                browser,
+                host_key,
+                name,
+                path,
+                convert_chromium_timestamp(creation_utc),
+                convert_chromium_timestamp(expires_utc),
+                convert_chromium_timestamp(last_access_utc),
+                convert_chromium_timestamp(last_update_utc),
+                bool(is_secure),
+                bool(is_httponly),
+                bool(is_persistent),
+                _translate_samesite(samesite) if samesite is not None else "Unknown",
+                source_port,
+                encryption_type,
+                masterkey_guid,
+                state_key_id,
+                is_decrypted,
+                encrypted_value,
+                value_dec,
+            )
+            cookies_data.append(cookie_data_tuple)
 
-        # Insert into PostgreSQL
-        with pg_conn.cursor() as cur:
+        # Insert into PostgreSQL using asyncpg
+        async with asyncpg_pool.acquire() as conn:
             insert_sql = """
                 INSERT INTO chromium.cookies
                 (originating_object_id, agent_id, source, project, username, browser,
-                    host_key, name, path, creation_utc, expires_utc, last_access_utc,
-                    last_update_utc, is_secure, is_httponly, is_persistent, samesite,
-                    source_port, encryption_type, masterkey_guid, state_key_id,
-                    is_decrypted, value_enc, value_dec)
-                VALUES (%(originating_object_id)s, %(agent_id)s, %(source)s, %(project)s,
-                        %(username)s, %(browser)s, %(host_key)s, %(name)s, %(path)s,
-                        %(creation_utc)s, %(expires_utc)s, %(last_access_utc)s,
-                        %(last_update_utc)s, %(is_secure)s, %(is_httponly)s, %(is_persistent)s,
-                        %(samesite)s, %(source_port)s, %(encryption_type)s, %(masterkey_guid)s,
-                        %(state_key_id)s, %(is_decrypted)s, %(value_enc)s, %(value_dec)s)
+                 host_key, name, path, creation_utc, expires_utc, last_access_utc,
+                 last_update_utc, is_secure, is_httponly, is_persistent, samesite,
+                 source_port, encryption_type, masterkey_guid, state_key_id,
+                 is_decrypted, value_enc, value_dec)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
                 ON CONFLICT (source, username, browser, host_key, name, path)
                 DO UPDATE SET
                     host_key = EXCLUDED.host_key,
@@ -267,8 +260,7 @@ def _insert_cookies(
                     value_dec = EXCLUDED.value_dec
             """
 
-            cur.executemany(insert_sql, cookies_data)
-            pg_conn.commit()
+            await conn.executemany(insert_sql, cookies_data)
 
         logger.info("Inserted cookies into database", count=len(cookies_data))
 

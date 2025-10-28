@@ -9,7 +9,7 @@ import yara_x
 from chromium import convert_chromium_timestamp, process_chromium_logins
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -20,8 +20,9 @@ logger = get_logger(__name__)
 
 
 class ChromeLoginsParser(EnrichmentModule):
+    name: str = "chrome_logins_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("chrome_logins_parser")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
@@ -29,6 +30,7 @@ class ChromeLoginsParser(EnrichmentModule):
 
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
+        self.asyncpg_pool = None  # type: ignore
 
         # Yara rule to check for Chrome Login Data tables
         self.yara_rule = yara_x.compile("""
@@ -46,7 +48,7 @@ rule Chrome_Logins_Tables
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -54,7 +56,7 @@ rule Chrome_Logins_Tables
             file_path: Optional path to already downloaded file
         """
 
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         if "sqlite 3.x database" not in file_enriched.magic_type.lower():
             return False
@@ -76,18 +78,6 @@ rule Chrome_Logins_Tables
         return should_run
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Do the file enrichment.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-
-        Returns:
-            EnrichmentResult or None if processing fails
-        """
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome Login Data database.
 
         Args:
@@ -100,7 +90,7 @@ rule Chrome_Logins_Tables
             transforms = []
 
             # Use the chromium library to process and insert into database
-            process_chromium_logins(object_id, file_path)
+            await process_chromium_logins(object_id, file_path, self.dpapi_manager, self.asyncpg_pool)
 
             # Configure SQLite to handle non-UTF8 data for report generation
             def adapt_bytes(b):

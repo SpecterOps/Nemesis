@@ -8,7 +8,7 @@ import py7zr
 from common.helpers import is_container
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -16,19 +16,20 @@ logger = get_logger(__name__)
 
 
 class ContainerAnalyzer(EnrichmentModule):
+    name: str = "container_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("container_analyzer")
         self.storage = StorageMinio()
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file (not used by container analyzer)
         """
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         return is_container(file_enriched.mime_type)
 
     def _format_size(self, size_in_bytes: int) -> str:
@@ -139,7 +140,7 @@ class ContainerAnalyzer(EnrichmentModule):
 
         return enrichment_result
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process container file and list its contents without extraction.
 
         Args:
@@ -150,7 +151,7 @@ class ContainerAnalyzer(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

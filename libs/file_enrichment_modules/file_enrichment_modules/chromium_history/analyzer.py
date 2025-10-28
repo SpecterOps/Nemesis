@@ -7,7 +7,7 @@ import yara_x
 from chromium import convert_chromium_timestamp, process_chromium_history
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -15,12 +15,15 @@ logger = get_logger(__name__)
 
 
 class ChromeHistoryParser(EnrichmentModule):
+    name: str = "chrome_history_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("chrome_history_parser")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
         self.workflows = ["default"]
+
+        self.asyncpg_pool = None  # type: ignore
 
         # Yara rule to check for Chrome History tables
         self.yara_rule = yara_x.compile("""
@@ -38,7 +41,7 @@ rule Chrome_Downloads_Tables
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -46,7 +49,7 @@ rule Chrome_Downloads_Tables
             file_path: Optional path to already downloaded file
         """
 
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Check if filename is exactly "History" and SQLite magic type
         if not (file_enriched.file_name == "History" and "sqlite 3.x database" in file_enriched.magic_type.lower()):
@@ -68,7 +71,7 @@ rule Chrome_Downloads_Tables
 
         return should_run
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome History database.
 
         Args:
@@ -76,12 +79,12 @@ rule Chrome_Downloads_Tables
             file_path: Optional path to already downloaded file
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
             enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
             transforms = []
 
             # Use the chromium library to process and insert into the database
-            process_chromium_history(object_id, file_path)
+            await process_chromium_history(object_id, file_path, self.asyncpg_pool)
 
             # Configure SQLite to handle non-UTF8 data for report generation
             def adapt_bytes(b):

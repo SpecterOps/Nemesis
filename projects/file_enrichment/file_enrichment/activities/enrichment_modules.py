@@ -10,7 +10,6 @@ from common.models import EnrichmentResult
 from common.workflows.setup import workflow_activity
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
-from .. import global_vars
 from ..tracing import get_tracer
 
 logger = get_logger(__name__)
@@ -44,7 +43,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                     size=os.path.getsize(temp_file.name),
                 )
 
-                modules_to_process = determine_modules_to_process(object_id, temp_file.name, execution_order)
+                modules_to_process = await determine_modules_to_process(object_id, temp_file.name, execution_order)
                 span.set_attribute("modules_to_process_count", len(modules_to_process))
 
                 for module_name in modules_to_process:
@@ -92,7 +91,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
         return results
 
 
-def determine_modules_to_process(object_id: str, temp_file_path: str, execution_order: list[str]) -> list[str]:
+async def determine_modules_to_process(object_id: str, temp_file_path: str, execution_order: list[str]) -> list[str]:
     """First pass: determine which modules should process this file."""
     modules_to_process = []
 
@@ -103,7 +102,7 @@ def determine_modules_to_process(object_id: str, temp_file_path: str, execution_
 
         module = global_vars.global_module_map[module_name]
         try:
-            should_process = module.should_process(object_id, temp_file_path)
+            should_process = await module.should_process(object_id, temp_file_path)
 
             if should_process:
                 modules_to_process.append(module_name)
@@ -116,17 +115,11 @@ def determine_modules_to_process(object_id: str, temp_file_path: str, execution_
 
 async def execute_enrichment_module(object_id: str, temp_file_path: str, module_name: str) -> EnrichmentResult | None:
     """Second pass: process a single module and return its result."""
-    module = global_vars.global_module_map[module_name]
+
     logger.debug("Starting module processing", module_name=module_name)
 
-    # Check if the module's process method returns a coroutine (async)
-    result_or_coro = module.process(object_id, temp_file_path)
-    if hasattr(result_or_coro, "__await__"):
-        # It's a coroutine, await it
-        result: EnrichmentResult = await result_or_coro
-    else:
-        # It's a synchronous result
-        result: EnrichmentResult = result_or_coro
+    module = global_vars.global_module_map[module_name]
+    result = await module.process(object_id, temp_file_path)
 
     return result
 

@@ -1,33 +1,29 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
+  Activity,
+  AlertCircle,
   AlertTriangle,
-  CheckCircle,
   ArrowUpRight,
+  CheckCircle,
+  Clock,
   Eye,
   FileArchive,
   FileText,
   Layers,
   Search,
   Server,
-  Clock,
-  BarChart2,
-  Activity,
-  X,
-  AlertCircle
+  X
 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  LineChart,
-  Line,
-  BarChart,
   Bar,
-  XAxis,
-  YAxis,
+  BarChart,
   CartesianGrid,
+  Line,
+  LineChart,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
+  XAxis,
+  YAxis
 } from 'recharts';
 
 // Custom tooltip component that can be reused
@@ -76,11 +72,10 @@ const CustomTooltip = ({ children, content }) => {
       {isVisible && (
         <div
           ref={tooltipRef}
-          className={`absolute z-10 p-2 text-sm bg-gray-800 text-white rounded shadow-lg max-w-xs -mt-2 ${
-            position === 'right'
-              ? 'left-full ml-2'
-              : 'right-full mr-2'
-          }`}
+          className={`absolute z-10 p-2 text-sm bg-gray-800 text-white rounded shadow-lg max-w-xs -mt-2 ${position === 'right'
+            ? 'left-full ml-2'
+            : 'right-full mr-2'
+            }`}
         >
           {content}
         </div>
@@ -460,7 +455,7 @@ const StatsOverview = () => {
       const findingsData = [];
 
       dates.forEach((date, index) => {
-        const formattedDate = date.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+        const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
         // Get file count for this day
         const fileCount = result.data[`files_day_${index}`]?.aggregate?.count || 0;
@@ -814,7 +809,7 @@ const StatsOverview = () => {
             {/* Show a message when there are no current workflows activities */}
             {(!enrichmentStats?.active_details || enrichmentStats.active_details.length === 0) && (
               <div className="text-center py-10 text-gray-500 dark:text-gray-400">
-                No current enrichment workflows running
+                No current enrichment workflows running (this feature is currently disabled)
               </div>
             )}
           </div>
@@ -860,7 +855,7 @@ const StatsOverview = () => {
           {/* Show a message when there are no failed workflows */}
           {(!failedWorkflows?.workflows || failedWorkflows.workflows.length === 0) && (
             <div className="text-center py-10 text-gray-500 dark:text-gray-400">
-              No failed workflows
+              No failed workflows (this feature is currently disabled)
             </div>
           )}
         </div>

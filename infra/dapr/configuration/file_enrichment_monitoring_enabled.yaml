@@ -1,0 +1,17 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: fileenrichmentconfig
+spec:
+  workflow:
+    maxConcurrentWorkflowInvocations: 1
+    maxConcurrentActivityInvocations: 1
+  tracing:
+    expandParams: true
+    samplingRate: "1"
+    otel:
+      protocol: grpc
+      endpointAddress: "otel-collector:4317"
+      isSecure: false
+  metric:
+    enabled: true

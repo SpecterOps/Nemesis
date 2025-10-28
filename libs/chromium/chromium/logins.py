@@ -1,11 +1,10 @@
 """Chromium Login Data file parsing and database operations."""
 
-import asyncio
 import sqlite3
 
-import psycopg
+import asyncpg
 from common.logger import get_logger
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from nemesis_dpapi import Blob, DpapiManager
 
@@ -13,7 +12,6 @@ from .helpers import (
     convert_chromium_timestamp,
     decrypt_chrome_string,
     detect_encryption_type,
-    get_postgres_connection_str,
     get_state_key_bytes,
     get_state_key_id,
     is_sqlite3,
@@ -24,19 +22,20 @@ from .helpers import (
 logger = get_logger(__name__)
 
 
-def process_chromium_logins(
-    object_id: str, file_path: str | None = None, dpapi_manager: DpapiManager | None = None
+async def process_chromium_logins(
+    object_id: str, file_path: str | None = None, dpapi_manager: DpapiManager | None = None, asyncpg_pool: asyncpg.Pool | None = None
 ) -> None:
-    """Process Chromium Login Data file and insert logins into database.
+    """Process Chromium Login Data file and insert logins into database using asyncpg.
 
     Args:
         object_id: The object ID of the Login Data file
         file_path: Optional path to already downloaded file
         dpapi_manager: DPAPI manager for decryption
+        asyncpg_pool: Async Postgres connection pool
     """
     logger.info("Processing Chromium Login Data file", object_id=object_id)
 
-    file_enriched = get_file_enriched(object_id)
+    file_enriched = await get_file_enriched_async(object_id)
 
     # Extract username and browser from file path
     username, browser = parse_chromium_file_path(file_enriched.path or "")
@@ -56,17 +55,15 @@ def process_chromium_logins(
         )
         return
 
-    conn_str = get_postgres_connection_str()
-    with psycopg.connect(conn_str) as pg_conn:
-        _insert_logins(file_enriched, username, browser, db_path, pg_conn, dpapi_manager)
+    await _insert_logins(file_enriched, username, browser, db_path, dpapi_manager, asyncpg_pool)
 
     logger.debug("Completed processing Chromium Login Data", object_id=object_id)
 
 
-def _insert_logins(
-    file_enriched, username: str | None, browser: str, db_path: str, pg_conn, dpapi_manager: DpapiManager | None = None
+async def _insert_logins(
+    file_enriched, username: str | None, browser: str, db_path: str, dpapi_manager: DpapiManager | None = None, asyncpg_pool: asyncpg.Pool | None = None
 ) -> None:
-    """Extract logins from Login Data database and insert into chromium.logins table."""
+    """Extract logins from Login Data database and insert into chromium.logins table using asyncpg."""
     try:
         # Read from SQLite
         with sqlite3.connect(db_path) as conn:
@@ -115,7 +112,7 @@ def _insert_logins(
             # Try DPAPI decryption first
             if masterkey_guid and dpapi_manager:
                 try:
-                    password_dec_bytes = asyncio.run(dpapi_manager.decrypt_blob(Blob.from_bytes(password_value)))
+                    password_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(password_value))
                     if password_dec_bytes:
                         password_value_dec = password_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
@@ -127,10 +124,10 @@ def _insert_logins(
             if encryption_type in ["key", "abe"]:
                 # Try primary approach: get state key based on username/browser
                 if username:  # Only try primary approach if username was extracted
-                    state_key_id = get_state_key_id(file_enriched.source, username, browser, pg_conn)
+                    state_key_id = await get_state_key_id(file_enriched.source, username, browser, asyncpg_pool)
                     if state_key_id:
                         # Retrieve the pre-processed state key for decryption
-                        state_key_bytes = get_state_key_bytes(state_key_id, encryption_type, pg_conn)
+                        state_key_bytes = await get_state_key_bytes(state_key_id, encryption_type, asyncpg_pool)
                         if state_key_bytes:
                             try:
                                 password_dec_bytes = decrypt_chrome_string(
@@ -163,8 +160,8 @@ def _insert_logins(
                         source=file_enriched.source,
                         encryption_type=encryption_type,
                     )
-                    backup_decrypted_bytes, backup_state_key_id = try_decrypt_with_all_keys(
-                        password_value, file_enriched.source, encryption_type, pg_conn
+                    backup_decrypted_bytes, backup_state_key_id = await try_decrypt_with_all_keys(
+                        password_value, file_enriched.source, encryption_type, asyncpg_pool
                     )
                     if backup_decrypted_bytes and backup_state_key_id:
                         # Apply the same offset handling as above
@@ -182,46 +179,41 @@ def _insert_logins(
                         is_decrypted = True
                         state_key_id = backup_state_key_id
                         logger.debug(
-                            "Successfully decrypted cookie using backup approach", state_key_id=backup_state_key_id
+                            "Successfully decrypted password using backup approach", state_key_id=backup_state_key_id
                         )
 
-            login_data = {
-                "originating_object_id": file_enriched.object_id,
-                "agent_id": file_enriched.agent_id,
-                "source": file_enriched.source,
-                "project": file_enriched.project,
-                "username": username,
-                "browser": browser,
-                "origin_url": origin_url,
-                "username_value": username_value,
-                "signon_realm": signon_realm,
-                "date_created": convert_chromium_timestamp(date_created),
-                "date_last_used": convert_chromium_timestamp(date_last_used),
-                "date_password_modified": convert_chromium_timestamp(date_password_modified),
-                "times_used": times_used,
-                "encryption_type": encryption_type,
-                "masterkey_guid": masterkey_guid,
-                "state_key_id": state_key_id,
-                "is_decrypted": is_decrypted,
-                "password_value_enc": password_value,
-                "password_value_dec": password_value_dec,
-            }
+            login_data = (
+                file_enriched.object_id,  # originating_object_id
+                file_enriched.agent_id,  # agent_id
+                file_enriched.source,  # source
+                file_enriched.project,  # project
+                username,  # username
+                browser,  # browser
+                origin_url,  # origin_url
+                username_value,  # username_value
+                signon_realm,  # signon_realm
+                convert_chromium_timestamp(date_created),  # date_created
+                convert_chromium_timestamp(date_last_used),  # date_last_used
+                convert_chromium_timestamp(date_password_modified),  # date_password_modified
+                times_used,  # times_used
+                encryption_type,  # encryption_type
+                masterkey_guid,  # masterkey_guid
+                state_key_id,  # state_key_id
+                is_decrypted,  # is_decrypted
+                password_value,  # password_value_enc
+                password_value_dec,  # password_value_dec
+            )
             logins_data.append(login_data)
 
-        # Insert into PostgreSQL
-        with pg_conn.cursor() as cur:
+        # Insert into PostgreSQL using asyncpg
+        async with asyncpg_pool.acquire() as conn:
             insert_sql = """
                 INSERT INTO chromium.logins
                 (originating_object_id, agent_id, source, project, username, browser,
                  origin_url, username_value, signon_realm, date_created, date_last_used,
                  date_password_modified, times_used, encryption_type, masterkey_guid,
                  state_key_id, is_decrypted, password_value_enc, password_value_dec)
-                VALUES (%(originating_object_id)s, %(agent_id)s, %(source)s, %(project)s,
-                        %(username)s, %(browser)s, %(origin_url)s, %(username_value)s,
-                        %(signon_realm)s, %(date_created)s, %(date_last_used)s,
-                        %(date_password_modified)s, %(times_used)s, %(encryption_type)s,
-                        %(masterkey_guid)s, %(state_key_id)s, %(is_decrypted)s,
-                        %(password_value_enc)s, %(password_value_dec)s)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
                 ON CONFLICT (source, username, browser, origin_url, username_value)
                 DO UPDATE SET
                     origin_url = EXCLUDED.origin_url,
@@ -239,8 +231,7 @@ def _insert_logins(
                     password_value_dec = EXCLUDED.password_value_dec
             """
 
-            cur.executemany(insert_sql, logins_data)
-            pg_conn.commit()
+            await conn.executemany(insert_sql, logins_data)
 
         logger.info("Inserted logins into database", count=len(logins_data))
 

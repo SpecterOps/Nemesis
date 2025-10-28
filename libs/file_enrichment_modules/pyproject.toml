@@ -14,7 +14,6 @@ dnfile = "^0.15.1"
 yara-x = "^1.0.1"
 plyara = "^2.2.7"
 asyncpg = "^0.30.0"
-psycopg = "^3.2.4"
 common = { path = "../common", develop = true }
 nemesis_dpapi = { path = "../nemesis_dpapi", develop = true }
 file_linking = { path = "../file_linking", develop = true }
@@ -26,6 +25,9 @@ dapr = "1.16.0"
 ruff = "^0.9.2"
 pytest = "^8.4.2"
 pytest-asyncio = "^1.2.0"
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

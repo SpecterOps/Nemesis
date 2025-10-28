@@ -291,8 +291,8 @@ class WorkflowManager:
                     # Clear existing workflows
                     #   TODO: should this only include running workflows?
                     await conn.execute("DELETE FROM workflows")
-            except Exception as e:
-                logger.exception(e, message="Error resetting workflows in database")
+            except Exception:
+                logger.exception(message="Error resetting workflows in database")
 
             logger.info("WorkflowManager reset", active_count=len(self.active_workflows))
 
@@ -309,7 +309,7 @@ class WorkflowManager:
 
         try:
             # Generate the workflow ID first so we can schedule the workflow after
-            #   initializing it in the database
+            # initializing it in the database
             instance_id = str(uuid.uuid4()).replace("-", "")
 
             with tracer.start_as_current_span("start_workflow") as current_span:
@@ -331,18 +331,18 @@ class WorkflowManager:
                         object_id = workflow_input["file"].get("object_id")
 
                 # Store workflow in database
-                async with self.pool.acquire() as conn:
-                    await conn.execute(
-                        """
-                        INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                        VALUES ($1, $2, $3, $4, $5)
-                        """,
-                        instance_id,
-                        object_id,
-                        base_filename,
-                        "RUNNING",
-                        datetime.fromtimestamp(start_time),
-                    )
+                # async with self.pool.acquire() as conn:
+                #     await conn.execute(
+                #         """
+                #         INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
+                #         VALUES ($1, $2, $3, $4, $5)
+                #         """,
+                #         instance_id,
+                #         object_id,
+                #         base_filename,
+                #         "RUNNING",
+                #         datetime.fromtimestamp(start_time),
+                #     )
 
                 # Add to active workflows tracking
                 async with self.lock:
@@ -368,189 +368,13 @@ class WorkflowManager:
                     input=workflow_input,
                 )
 
-                # Start a task to monitor this workflow for completion/failure/timeout
-                monitor_task = asyncio.create_task(self._monitor_workflow(instance_id, start_time))
-                self.background_tasks.add(monitor_task)
-                monitor_task.add_done_callback(self.background_tasks.discard)
+                # TODO: Mnitor this workflow for completion/failure/timeout
 
                 return instance_id
 
-        except Exception as e:
-            logger.exception(e, message="Error starting workflow")
+        except Exception:
+            logger.exception(message="Error starting workflow")
             raise
-
-    async def _monitor_workflow(self, instance_id, workflow_start_time: float):
-        """Monitor a workflow until completion or timeout"""
-        tracer = get_tracer()
-
-        with tracer.start_as_current_span("monitor_workflow") as current_span:
-            current_span.set_attribute("workflow.instance_id", instance_id)
-            current_span.set_attribute("workflow.monitor", True)
-
-            try:
-                try:
-                    # Use wait_for to implement a timeout
-                    processing_time = time.time() - workflow_start_time
-                    logger.debug(
-                        "Monitoring for workflow completion",
-                        processing_time=f"{processing_time:.4f}s",
-                    )
-
-                    final_status = await asyncio.wait_for(
-                        self._wait_for_completion(instance_id, workflow_start_time),
-                        timeout=self.max_execution_time,
-                    )
-
-                    processing_time = time.time() - workflow_start_time
-                    logger.info(
-                        "Updating workflow status",
-                        processing_time=f"{processing_time:.4f}s",
-                        instance_id=instance_id,
-                        status=final_status,
-                    )
-                    await self.update_workflow_status(instance_id, final_status, processing_time)
-
-                    logger.info(
-                        f"Workflow finished: {'completed successfully' if final_status == 'COMPLETED' else 'completed with failure'}",
-                        instance_id=instance_id,
-                        processing_time=f"{processing_time:.4f}s",
-                        final_status=final_status,
-                        pid=os.getpid(),
-                    )
-
-                except TimeoutError:
-                    processing_time = time.time() - workflow_start_time
-                    logger.warning(
-                        "Workflow timed out after exceeding maximum execution time",
-                        instance_id=instance_id,
-                        max_execution_time=f"{self.max_execution_time}s",
-                        actual_time=f"{processing_time:.4f}s",
-                        pid=os.getpid(),
-                    )
-
-                    await asyncio.to_thread(
-                        workflow_client.terminate_workflow,
-                        instance_id,
-                        recursive=True,
-                    )  # recursive == terminate all child workflows
-                    logger.info("Workflow terminated due to timeout", instance_id=instance_id)
-
-                    await self.update_workflow_status(instance_id, "TIMEOUT", processing_time, "timeout")
-
-            except Exception as e:
-                # Handle any other misc. failures
-                processing_time = time.time() - workflow_start_time
-
-                logger.exception(
-                    "Workflow monitoring failed",
-                    instance_id=instance_id,
-                    processing_time=f"{processing_time:.4f}s",
-                    error=str(e),
-                    pid=os.getpid(),
-                )
-
-                # Update workflow status for error
-                await self.update_workflow_status(instance_id, "ERROR", processing_time, str(e))
-
-            finally:
-                # Always clean up
-                async with self.lock:
-                    if instance_id in self.active_workflows:
-                        del self.active_workflows[instance_id]
-
-    async def _wait_for_completion(self, instance_id, workflow_start_time: float):
-        """Wait for workflow to complete and return the final status"""
-
-        error_count = 0
-        tracer = get_tracer()
-
-        # Add trace attributes for workflow status monitoring
-        with tracer.start_as_current_span("wait_for_completion") as current_span:
-            current_span.set_attribute("workflow.instance_id", instance_id)
-            current_span.set_attribute("workflow.wait_for_completion", True)
-
-            while True:
-                try:
-                    state = await asyncio.to_thread(workflow_client.get_workflow_state, instance_id)
-                    status = self._get_status_string(state)
-                    error_count = 0  # Reset on successful check
-
-                    if status in ["COMPLETED", "FAILED", "TERMINATED", "ERROR"]:
-                        runtime_seconds = time.time() - workflow_start_time
-                        logger.info(
-                            "Workflow finished",
-                            instance_id=instance_id,
-                            final_status=status,
-                            runtime=f"{runtime_seconds:.4f}s",
-                            pid=os.getpid(),
-                        )
-
-                        # For failed workflows, capture the error message and update status
-                        if status in ["FAILED", "TERMINATED", "ERROR"]:
-                            error_msg = ""
-                            if status == "FAILED" and state.failure_details:
-                                error_msg = state.failure_details.message
-
-                            logger.debug(
-                                "Updating FAILED workflow status",
-                                processing_time=f"{time.time() - workflow_start_time:.4f}s",
-                            )
-                            await self.update_workflow_status(
-                                instance_id, status, runtime_seconds, error_msg[:100] if error_msg else status.lower()
-                            )
-                        else:
-                            logger.debug(
-                                "Updating SUCCESSFUL workflow status",
-                                processing_time=f"{time.time() - workflow_start_time:.4f}s",
-                            )
-                            await self.update_workflow_status(instance_id, status, runtime_seconds, "")
-
-                        logger.debug(
-                            "Publishing workflow status",
-                            processing_time=f"{time.time() - workflow_start_time:.4f}s",
-                        )
-                        # Publish workflow completion event for container tracking
-                        await self.publish_workflow_completion(instance_id, status == "COMPLETED")
-
-                        logger.debug(
-                            "Done publishing workflow status",
-                            processing_time=f"{time.time() - workflow_start_time:.4f}s",
-                        )
-
-                        # Return the actual status so _monitor_workflow knows what happened
-                        return status
-
-                    logger.debug(
-                        "Waiting for workflow completion",
-                        processing_time=f"{time.time() - workflow_start_time:.4f}s",
-                    )
-                    await asyncio.sleep(5)
-
-                except Exception as e:
-                    # specific case when we're standing the system down, so want to mark this as still running
-                    #   [error    ] Unhandled RPC error while fetching workflow state: StatusCode.UNAVAILABLE - failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:50003: Failed to connect to remote host: connect: Connection refused (111) [DaprWorkflowClient]
-                    if "StatusCode.UNAVAILABLE" in f"{e}":
-                        return "RUNNING"
-
-                    error_count += 1
-                    logger.warning(
-                        f"Error checking workflow status: {str(e)}",
-                        instance_id=instance_id,
-                        error_count=error_count,
-                        pid=os.getpid(),
-                    )
-
-                    if error_count >= 3:  # Break after 3 consecutive errors
-                        logger.error(
-                            "Too many consecutive errors checking workflow status",
-                            instance_id=instance_id,
-                            error_count=error_count,
-                            pid=os.getpid(),
-                        )
-                        # Return ERROR status so the monitoring can handle it appropriately
-                        return "ERROR"
-
-                    await asyncio.sleep(0.3)
 
     async def start_workflow_single_enrichment(
         self, workflow_input: SingleEnrichmentWorkflowInput | dict[str, str]
@@ -592,18 +416,18 @@ class WorkflowManager:
                 object_id = workflow_input.object_id
 
                 # Store workflow in database (simplified - just for monitoring)
-                async with self.pool.acquire() as conn:
-                    await conn.execute(
-                        """
-                        INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                        VALUES ($1, $2, $3, $4, $5)
-                        """,
-                        instance_id,
-                        object_id,
-                        f"bulk:{enrichment_name} ({object_id})",  # Use enrichment name as filename
-                        "RUNNING",
-                        datetime.fromtimestamp(start_time),
-                    )
+                # async with self.pool.acquire() as conn:
+                #     await conn.execute(
+                #         """
+                #         INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
+                #         VALUES ($1, $2, $3, $4, $5)
+                #         """,
+                #         instance_id,
+                #         object_id,
+                #         f"bulk:{enrichment_name} ({object_id})",  # Use enrichment name as filename
+                #         "RUNNING",
+                #         datetime.fromtimestamp(start_time),
+                #     )
 
                 # Add to active workflows tracking
                 async with self.lock:
@@ -629,7 +453,9 @@ class WorkflowManager:
 
                 # Convert Pydantic model to dict for Dapr workflow
                 workflow_input_dict = (
-                    workflow_input.model_dump() if isinstance(workflow_input, SingleEnrichmentWorkflowInput) else workflow_input
+                    workflow_input.model_dump()
+                    if isinstance(workflow_input, SingleEnrichmentWorkflowInput)
+                    else workflow_input
                 )
 
                 # Use asyncio.to_thread() to prevent blocking the event loop
@@ -640,98 +466,16 @@ class WorkflowManager:
                     input=workflow_input_dict,
                 )
 
-                # Start a task to monitor this workflow for completion/failure/timeout
-                monitor_task = asyncio.create_task(self._monitor_single_enrichment_workflow(instance_id, start_time))
-                self.background_tasks.add(monitor_task)
-                monitor_task.add_done_callback(self.background_tasks.discard)
+                # TODO: Start a task to monitor this workflow for completion/failure/timeout
+                # monitor_task = asyncio.create_task(self._monitor_single_enrichment_workflow(instance_id, start_time))
+                # self.background_tasks.add(monitor_task)
+                # monitor_task.add_done_callback(self.background_tasks.discard)
 
                 return instance_id
 
-        except Exception as e:
-            logger.exception(e, message="Error starting single enrichment workflow")
+        except Exception:
+            logger.exception(message="Error starting single enrichment workflow")
             raise
-
-    async def _monitor_single_enrichment_workflow(self, instance_id: str, workflow_start_time: float) -> None:
-        """Monitor a single enrichment workflow until completion or timeout
-
-        Args:
-            instance_id: The workflow instance ID (UUID string without hyphens)
-            workflow_start_time: Timestamp when the workflow was started (from time.time())
-        """
-        tracer = get_tracer()
-
-        with tracer.start_as_current_span("monitor_single_enrichment_workflow") as current_span:
-            current_span.set_attribute("workflow.instance_id", instance_id)
-            current_span.set_attribute("workflow.monitor", True)
-
-            try:
-                try:
-                    # Use wait_for to implement a timeout
-                    final_status = await asyncio.wait_for(
-                        self._wait_for_completion(instance_id, workflow_start_time),
-                        timeout=self.max_execution_time,
-                    )
-
-                    processing_time = time.time() - workflow_start_time
-
-                    await self.update_workflow_status(instance_id, final_status, processing_time)
-
-                    logger.info(
-                        "Single enrichment workflow completed",
-                        instance_id=instance_id,
-                        processing_time=f"{processing_time:.4f}s",
-                        final_status=final_status,
-                        pid=os.getpid(),
-                    )
-
-                except TimeoutError:
-                    processing_time = time.time() - workflow_start_time
-
-                    logger.warning(
-                        "Single enrichment workflow timed out after exceeding maximum execution time",
-                        instance_id=instance_id,
-                        max_execution_time=f"{self.max_execution_time}s",
-                        actual_time=f"{processing_time:.4f}s",
-                        pid=os.getpid(),
-                    )
-
-                    try:
-                        await asyncio.to_thread(workflow_client.terminate_workflow, instance_id, recursive=True)
-                        logger.info(
-                            "Single enrichment workflow terminated due to timeout",
-                            instance_id=instance_id,
-                            pid=os.getpid(),
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "Failed to terminate timed-out single enrichment workflow",
-                            instance_id=instance_id,
-                            error=str(e),
-                        )
-
-                    # Update workflow status for timeout
-                    await self.update_workflow_status(instance_id, "TIMEOUT", processing_time, "timeout")
-
-            except Exception as e:
-                # Handle any other misc. failures
-                processing_time = time.time() - workflow_start_time
-
-                logger.exception(
-                    "Single enrichment workflow monitoring failed",
-                    instance_id=instance_id,
-                    processing_time=f"{processing_time:.4f}s",
-                    error=str(e),
-                    pid=os.getpid(),
-                )
-
-                # Update workflow status for error
-                await self.update_workflow_status(instance_id, "ERROR", processing_time, str(e))
-
-            finally:
-                # Always clean up
-                async with self.lock:
-                    if instance_id in self.active_workflows:
-                        del self.active_workflows[instance_id]
 
     async def cleanup(self):
         """Clean up background tasks during shutdown (pool is externally managed)"""

@@ -1493,7 +1493,21 @@ class OleFileIO:
         """
         close the OLE file, to release the file object
         """
-        self.fp.close()
+        if self.fp:
+            self.fp.close()
+
+    def __enter__(self):
+        """
+        Context manager entry point - returns self for 'with' statement
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Context manager exit point - ensures file is closed
+        """
+        self.close()
+        return False
 
     def _check_duplicate_stream(self, first_sect, minifat=False):
         """
@@ -2159,129 +2173,132 @@ class OleFileIO:
         data = {}
 
         try:
-            # header
-            s = fp.read(28)
-            clsid = _clsid(s[8:24])
-
-            # format id
-            s = fp.read(20)
-            fmtid = _clsid(s[:16])
-            fp.seek(i32(s, 16))
-
-            # get section
-            s = b"****" + fp.read(i32(fp.read(4)) - 4)
-            # number of properties:
-            num_props = i32(s, 4)
-        except BaseException as exc:
-            # catch exception while parsing property header, and only raise
-            # a DEFECT_INCORRECT then return an empty dict, because this is not
-            # a fatal error when parsing the whole file
-            msg = "Error while parsing properties header in stream %s: %s" % (repr(streampath), exc)
-            self._raise_defect(DEFECT_INCORRECT, msg, type(exc))
-            return data
-
-        for i in range(num_props):
             try:
-                id = 0  # just in case of an exception
-                id = i32(s, 8 + i * 8)
-                offset = i32(s, 12 + i * 8)
-                type = i32(s, offset)
+                # header
+                s = fp.read(28)
+                clsid = _clsid(s[8:24])
 
-                debug("property id=%d: type=%d offset=%X" % (id, type, offset))
+                # format id
+                s = fp.read(20)
+                fmtid = _clsid(s[:16])
+                fp.seek(i32(s, 16))
 
-                # test for common types first (should perhaps use
-                # a dictionary instead?)
-
-                if type == VT_I2:  # 16-bit signed integer
-                    value = i16(s, offset + 4)
-                    if value >= 32768:
-                        value = value - 65536
-                elif type == VT_UI2:  # 2-byte unsigned integer
-                    value = i16(s, offset + 4)
-                elif type in (VT_I4, VT_INT, VT_ERROR):
-                    # VT_I4: 32-bit signed integer
-                    # VT_ERROR: HRESULT, similar to 32-bit signed integer,
-                    # see http://msdn.microsoft.com/en-us/library/cc230330.aspx
-                    value = i32(s, offset + 4)
-                elif type in (VT_UI4, VT_UINT):  # 4-byte unsigned integer
-                    value = i32(s, offset + 4)  # FIXME
-                elif type in (VT_BSTR, VT_LPSTR):
-                    # CodePageString, see http://msdn.microsoft.com/en-us/library/dd942354.aspx
-                    # size is a 32 bits integer, including the null terminator, and
-                    # possibly trailing or embedded null chars
-                    # TODO: if codepage is unicode, the string should be converted as such
-                    count = i32(s, offset + 4)
-                    value = s[offset + 8 : offset + 8 + count - 1]
-                    # remove all null chars:
-                    value = value.replace(b"\x00", b"")
-                elif type == VT_BLOB:
-                    # binary large object (BLOB)
-                    # see http://msdn.microsoft.com/en-us/library/dd942282.aspx
-                    count = i32(s, offset + 4)
-                    value = s[offset + 8 : offset + 8 + count]
-                elif type == VT_LPWSTR:
-                    # UnicodeString
-                    # see http://msdn.microsoft.com/en-us/library/dd942313.aspx
-                    # "the string should NOT contain embedded or additional trailing
-                    # null characters."
-                    count = i32(s, offset + 4)
-                    value = self._decode_utf16_str(s[offset + 8 : offset + 8 + count * 2])
-                elif type == VT_FILETIME:
-                    value = long(i32(s, offset + 4)) + (long(i32(s, offset + 8)) << 32)
-                    # FILETIME is a 64-bit int: "number of 100ns periods
-                    # since Jan 1,1601".
-                    if convert_time and id not in no_conversion:
-                        debug(
-                            "Converting property #%d to python datetime, value=%d=%fs"
-                            % (id, value, float(value) / 10000000)
-                        )
-                        # convert FILETIME to Python datetime.datetime
-                        # inspired from http://code.activestate.com/recipes/511425-filetime-to-datetime/
-                        _FILETIME_null_date = datetime.datetime(1601, 1, 1, 0, 0, 0)
-                        debug("timedelta days=%d" % (value // (10 * 1000000 * 3600 * 24)))
-                        value = _FILETIME_null_date + datetime.timedelta(microseconds=value // 10)
-                    else:
-                        # legacy code kept for backward compatibility: returns a
-                        # number of seconds since Jan 1,1601
-                        value = value // 10000000  # seconds
-                elif type == VT_UI1:  # 1-byte unsigned integer
-                    value = i8(s[offset + 4])
-                elif type == VT_CLSID:
-                    value = _clsid(s[offset + 4 : offset + 20])
-                elif type == VT_CF:
-                    # PropertyIdentifier or ClipboardData??
-                    # see http://msdn.microsoft.com/en-us/library/dd941945.aspx
-                    count = i32(s, offset + 4)
-                    value = s[offset + 8 : offset + 8 + count]
-                elif type == VT_BOOL:
-                    # VARIANT_BOOL, 16 bits bool, 0x0000=Fals, 0xFFFF=True
-                    # see http://msdn.microsoft.com/en-us/library/cc237864.aspx
-                    value = bool(i16(s, offset + 4))
-                else:
-                    value = None  # everything else yields "None"
-                    debug("property id=%d: type=%d not implemented in parser yet" % (id, type))
-
-                # missing: VT_EMPTY, VT_NULL, VT_R4, VT_R8, VT_CY, VT_DATE,
-                # VT_DECIMAL, VT_I1, VT_I8, VT_UI8,
-                # see http://msdn.microsoft.com/en-us/library/dd942033.aspx
-
-                # FIXME: add support for VT_VECTOR
-                # VT_VECTOR is a 32 uint giving the number of items, followed by
-                # the items in sequence. The VT_VECTOR value is combined with the
-                # type of items, e.g. VT_VECTOR|VT_BSTR
-                # see http://msdn.microsoft.com/en-us/library/dd942011.aspx
-
-                # print("%08x" % id, repr(value), end=" ")
-                # print("(%s)" % VT[i32(s, offset) & 0xFFF])
-
-                data[id] = value
+                # get section
+                s = b"****" + fp.read(i32(fp.read(4)) - 4)
+                # number of properties:
+                num_props = i32(s, 4)
             except BaseException as exc:
-                # catch exception while parsing each property, and only raise
-                # a DEFECT_INCORRECT, because parsing can go on
-                msg = "Error while parsing property id %d in stream %s: %s" % (id, repr(streampath), exc)
+                # catch exception while parsing property header, and only raise
+                # a DEFECT_INCORRECT then return an empty dict, because this is not
+                # a fatal error when parsing the whole file
+                msg = "Error while parsing properties header in stream %s: %s" % (repr(streampath), exc)
                 self._raise_defect(DEFECT_INCORRECT, msg, type(exc))
+                return data
 
-        return data
+            for i in range(num_props):
+                try:
+                    id = 0  # just in case of an exception
+                    id = i32(s, 8 + i * 8)
+                    offset = i32(s, 12 + i * 8)
+                    type = i32(s, offset)
+
+                    debug("property id=%d: type=%d offset=%X" % (id, type, offset))
+
+                    # test for common types first (should perhaps use
+                    # a dictionary instead?)
+
+                    if type == VT_I2:  # 16-bit signed integer
+                        value = i16(s, offset + 4)
+                        if value >= 32768:
+                            value = value - 65536
+                    elif type == VT_UI2:  # 2-byte unsigned integer
+                        value = i16(s, offset + 4)
+                    elif type in (VT_I4, VT_INT, VT_ERROR):
+                        # VT_I4: 32-bit signed integer
+                        # VT_ERROR: HRESULT, similar to 32-bit signed integer,
+                        # see http://msdn.microsoft.com/en-us/library/cc230330.aspx
+                        value = i32(s, offset + 4)
+                    elif type in (VT_UI4, VT_UINT):  # 4-byte unsigned integer
+                        value = i32(s, offset + 4)  # FIXME
+                    elif type in (VT_BSTR, VT_LPSTR):
+                        # CodePageString, see http://msdn.microsoft.com/en-us/library/dd942354.aspx
+                        # size is a 32 bits integer, including the null terminator, and
+                        # possibly trailing or embedded null chars
+                        # TODO: if codepage is unicode, the string should be converted as such
+                        count = i32(s, offset + 4)
+                        value = s[offset + 8 : offset + 8 + count - 1]
+                        # remove all null chars:
+                        value = value.replace(b"\x00", b"")
+                    elif type == VT_BLOB:
+                        # binary large object (BLOB)
+                        # see http://msdn.microsoft.com/en-us/library/dd942282.aspx
+                        count = i32(s, offset + 4)
+                        value = s[offset + 8 : offset + 8 + count]
+                    elif type == VT_LPWSTR:
+                        # UnicodeString
+                        # see http://msdn.microsoft.com/en-us/library/dd942313.aspx
+                        # "the string should NOT contain embedded or additional trailing
+                        # null characters."
+                        count = i32(s, offset + 4)
+                        value = self._decode_utf16_str(s[offset + 8 : offset + 8 + count * 2])
+                    elif type == VT_FILETIME:
+                        value = long(i32(s, offset + 4)) + (long(i32(s, offset + 8)) << 32)
+                        # FILETIME is a 64-bit int: "number of 100ns periods
+                        # since Jan 1,1601".
+                        if convert_time and id not in no_conversion:
+                            debug(
+                                "Converting property #%d to python datetime, value=%d=%fs"
+                                % (id, value, float(value) / 10000000)
+                            )
+                            # convert FILETIME to Python datetime.datetime
+                            # inspired from http://code.activestate.com/recipes/511425-filetime-to-datetime/
+                            _FILETIME_null_date = datetime.datetime(1601, 1, 1, 0, 0, 0)
+                            debug("timedelta days=%d" % (value // (10 * 1000000 * 3600 * 24)))
+                            value = _FILETIME_null_date + datetime.timedelta(microseconds=value // 10)
+                        else:
+                            # legacy code kept for backward compatibility: returns a
+                            # number of seconds since Jan 1,1601
+                            value = value // 10000000  # seconds
+                    elif type == VT_UI1:  # 1-byte unsigned integer
+                        value = i8(s[offset + 4])
+                    elif type == VT_CLSID:
+                        value = _clsid(s[offset + 4 : offset + 20])
+                    elif type == VT_CF:
+                        # PropertyIdentifier or ClipboardData??
+                        # see http://msdn.microsoft.com/en-us/library/dd941945.aspx
+                        count = i32(s, offset + 4)
+                        value = s[offset + 8 : offset + 8 + count]
+                    elif type == VT_BOOL:
+                        # VARIANT_BOOL, 16 bits bool, 0x0000=Fals, 0xFFFF=True
+                        # see http://msdn.microsoft.com/en-us/library/cc237864.aspx
+                        value = bool(i16(s, offset + 4))
+                    else:
+                        value = None  # everything else yields "None"
+                        debug("property id=%d: type=%d not implemented in parser yet" % (id, type))
+
+                    # missing: VT_EMPTY, VT_NULL, VT_R4, VT_R8, VT_CY, VT_DATE,
+                    # VT_DECIMAL, VT_I1, VT_I8, VT_UI8,
+                    # see http://msdn.microsoft.com/en-us/library/dd942033.aspx
+
+                    # FIXME: add support for VT_VECTOR
+                    # VT_VECTOR is a 32 uint giving the number of items, followed by
+                    # the items in sequence. The VT_VECTOR value is combined with the
+                    # type of items, e.g. VT_VECTOR|VT_BSTR
+                    # see http://msdn.microsoft.com/en-us/library/dd942011.aspx
+
+                    # print("%08x" % id, repr(value), end=" ")
+                    # print("(%s)" % VT[i32(s, offset) & 0xFFF])
+
+                    data[id] = value
+                except BaseException as exc:
+                    # catch exception while parsing each property, and only raise
+                    # a DEFECT_INCORRECT, because parsing can go on
+                    msg = "Error while parsing property id %d in stream %s: %s" % (id, repr(streampath), exc)
+                    self._raise_defect(DEFECT_INCORRECT, msg, type(exc))
+
+            return data
+        finally:
+            fp.close()
 
     def get_metadata(self):
         """
@@ -3067,81 +3084,84 @@ from xml.etree.ElementTree import ElementTree
 
 def process_new_office(filename, hashcat_format=True):
     # detect version of new Office used by reading "EncryptionInfo" stream
-    ole = OleFileIO(filename)
-    stream = ole.openstream("EncryptionInfo")
-    major_version = unpack("<h", stream.read(2))[0]
-    minor_version = unpack("<h", stream.read(2))[0]
-    encryptionFlags = unpack("<I", stream.read(4))[0]  # encryptionFlags
-    if encryptionFlags == 16:  # fExternal
-        sys.stderr.write("%s : An external cryptographic provider is not supported!\n" % filename)
-        return -1
+    with OleFileIO(filename) as ole:
+        stream = ole.openstream("EncryptionInfo")
+        try:
+            major_version = unpack("<h", stream.read(2))[0]
+            minor_version = unpack("<h", stream.read(2))[0]
+            encryptionFlags = unpack("<I", stream.read(4))[0]  # encryptionFlags
+            if encryptionFlags == 16:  # fExternal
+                sys.stderr.write("%s : An external cryptographic provider is not supported!\n" % filename)
+                return -1
 
-    if major_version == 0x04 and minor_version == 0x04:
-        # Office 2010 and 2013 file detected
-        if encryptionFlags != 0x40:  # fAgile
-            sys.stderr.write("%s : The encryption flags are not consistent with the encryption type\n" % filename)
-            return -2
+            if major_version == 0x04 and minor_version == 0x04:
+                # Office 2010 and 2013 file detected
+                if encryptionFlags != 0x40:  # fAgile
+                    sys.stderr.write("%s : The encryption flags are not consistent with the encryption type\n" % filename)
+                    return -2
 
-        # rest of the data is in XML format
-        data = stream.read()
-        xml_metadata_parser(data, filename)
-    else:
-        # Office 2007 file detected, process CryptoAPI Encryption Header
-        stm = stream
-        headerLength = unpack("<I", stm.read(4))[0]
-        unpack("<I", stm.read(4))[0]  # skipFlags
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # sizeExtra
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # algId
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # algHashId
-        headerLength -= 4
-        keySize = unpack("<I", stm.read(4))[0]
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # providerType
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # unused
-        headerLength -= 4
-        unpack("<I", stm.read(4))[0]  # unused
-        headerLength -= 4
-        CSPName = stm.read(headerLength)
-        provider = CSPName.decode("utf-16").lower()
-        # Encryption verifier
-        saltSize = unpack("<I", stm.read(4))[0]
-        assert saltSize == 16
-        salt = stm.read(saltSize)
-        encryptedVerifier = stm.read(16)
-        verifierHashSize = unpack("<I", stm.read(4))[0]
-        encryptedVerifierHash = stm.read(verifierHashSize)
+                # rest of the data is in XML format
+                data = stream.read()
+                xml_metadata_parser(data, filename)
+            else:
+                # Office 2007 file detected, process CryptoAPI Encryption Header
+                stm = stream
+                headerLength = unpack("<I", stm.read(4))[0]
+                unpack("<I", stm.read(4))[0]  # skipFlags
+                headerLength -= 4
+                unpack("<I", stm.read(4))[0]  # sizeExtra
+                headerLength -= 4
+                unpack("<I", stm.read(4))[0]  # algId
+                headerLength -= 4
+                unpack("<I", stm.read(4))[0]  # algHashId
+                headerLength -= 4
+                keySize = unpack("<I", stm.read(4))[0]
+                headerLength -= 4
+                unpack("<I", stm.read(4))[0]  # providerType
+                headerLength -= 4
+                unpack("<I", stm.read(4))[0]  # unused
+                headerLength -= 4
+                unpack("<I", stm.read(4))[0]  # unused
+                headerLength -= 4
+                CSPName = stm.read(headerLength)
+                provider = CSPName.decode("utf-16").lower()
+                # Encryption verifier
+                saltSize = unpack("<I", stm.read(4))[0]
+                assert saltSize == 16
+                salt = stm.read(saltSize)
+                encryptedVerifier = stm.read(16)
+                verifierHashSize = unpack("<I", stm.read(4))[0]
+                encryptedVerifierHash = stm.read(verifierHashSize)
 
-        if hashcat_format:
-            sys.stdout.write(
-                "$office$*%d*%d*%d*%d*%s*%s*%s\n"
-                % (
-                    2007,
-                    verifierHashSize,
-                    keySize,
-                    saltSize,
-                    binascii.hexlify(salt).decode("ascii"),
-                    binascii.hexlify(encryptedVerifier).decode("ascii"),
-                    binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
-                )
-            )
-        else:
-            sys.stdout.write(
-                "%s:$office$*%d*%d*%d*%d*%s*%s*%s\n"
-                % (
-                    os.path.basename(filename),
-                    2007,
-                    verifierHashSize,
-                    keySize,
-                    saltSize,
-                    binascii.hexlify(salt).decode("ascii"),
-                    binascii.hexlify(encryptedVerifier).decode("ascii"),
-                    binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
-                )
-            )
+                if hashcat_format:
+                    sys.stdout.write(
+                        "$office$*%d*%d*%d*%d*%s*%s*%s\n"
+                        % (
+                            2007,
+                            verifierHashSize,
+                            keySize,
+                            saltSize,
+                            binascii.hexlify(salt).decode("ascii"),
+                            binascii.hexlify(encryptedVerifier).decode("ascii"),
+                            binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
+                        )
+                    )
+                else:
+                    sys.stdout.write(
+                        "%s:$office$*%d*%d*%d*%d*%s*%s*%s\n"
+                        % (
+                            os.path.basename(filename),
+                            2007,
+                            verifierHashSize,
+                            keySize,
+                            saltSize,
+                            binascii.hexlify(salt).decode("ascii"),
+                            binascii.hexlify(encryptedVerifier).decode("ascii"),
+                            binascii.hexlify(encryptedVerifierHash)[0:64].decode("ascii"),
+                        )
+                    )
+        finally:
+            stream.close()
 
 
 def xml_metadata_parser(data, filename, hashcat_format=True):
@@ -3247,14 +3267,12 @@ def remove_extra_spaces(data):
 def process_file(filename, hashcat_format=True):
     # Test if a file is an OLE container
     try:
-        f = open(filename, "rb")
-        data = f.read(81920)  # is this enough?
-        if data[0:2] == b"PK":
-            # sys.stderr.write("%s : zip container found, file is " \
-            #             "unencrypted?, invalid OLE file!\n" % filename)
-            f.close()
-            return 1
-        f.close()
+        with open(filename, "rb") as f:
+            data = f.read(81920)  # is this enough?
+            if data[0:2] == b"PK":
+                # sys.stderr.write("%s : zip container found, file is " \
+                #             "unencrypted?, invalid OLE file!\n" % filename)
+                return 1
 
         # ACCDB handling hack for MS Access >= 2007 (Office 12)
         accdb_magic = b"Standard ACE DB"
@@ -3294,9 +3312,7 @@ def process_file(filename, hashcat_format=True):
         return 2
 
     # Open OLE file:
-    ole = OleFileIO(filename)
-
-    try:
+    with OleFileIO(filename) as ole:
         stream = None
 
         # find "summary" streams
@@ -3339,9 +3355,12 @@ def process_file(filename, hashcat_format=True):
         elif ["WordDocument"] in ole.listdir():
             typ = 1
             sdoc = ole.openstream("WordDocument")
-            stream = find_table(filename, sdoc)
-            if stream == "none":
-                return 5
+            try:
+                stream = find_table(filename, sdoc)
+                if stream == "none":
+                    return 5
+            finally:
+                sdoc.close()
 
         elif ["PowerPoint Document"] in ole.listdir():
             stream = "Current User"
@@ -3364,60 +3383,66 @@ def process_file(filename, hashcat_format=True):
             (filename, stream)
             return 3
 
-        if stream == "Workbook" or stream == "Book":
-            typ = 0
-            passinfo = find_rc4_passinfo_xls(filename, workbookStream)
-            if passinfo is None:
-                return 4
-        elif stream == "0Table" or stream == "1Table":
-            passinfo = find_rc4_passinfo_doc(filename, workbookStream)
-            if passinfo is None:
-                return 4
-        else:
-            sppt = ole.openstream("Current User")
-            offset = find_ppt_type(filename, sppt)
-            sppt = ole.openstream("PowerPoint Document")
-            ret = find_rc4_passinfo_ppt(filename, sppt, offset)
-            if not ret:
-                find_rc4_passinfo_ppt_bf(filename, sppt, offset)
+        try:
+            if stream == "Workbook" or stream == "Book":
+                typ = 0
+                passinfo = find_rc4_passinfo_xls(filename, workbookStream)
+                if passinfo is None:
+                    return 4
+            elif stream == "0Table" or stream == "1Table":
+                passinfo = find_rc4_passinfo_doc(filename, workbookStream)
+                if passinfo is None:
+                    return 4
+            else:
+                sppt_current_user = ole.openstream("Current User")
+                try:
+                    offset = find_ppt_type(filename, sppt_current_user)
+                finally:
+                    sppt_current_user.close()
 
-            return 6
+                sppt = ole.openstream("PowerPoint Document")
+                try:
+                    ret = find_rc4_passinfo_ppt(filename, sppt, offset)
+                    if not ret:
+                        find_rc4_passinfo_ppt_bf(filename, sppt, offset)
+                finally:
+                    sppt.close()
 
-        (salt, verifier, verifierHash) = passinfo
+                return 6
 
-        summary_extra = ""
-        # if have_summary:
-        #     summary_extra = ":::%s::%s" % (summary, filename)
+            (salt, verifier, verifierHash) = passinfo
 
-        if hashcat_format:
-            sys.stdout.write(
-                "$oldoffice$%s*%s*%s*%s%s\n"
-                % (
-                    typ,
-                    binascii.hexlify(salt).decode("ascii"),
-                    binascii.hexlify(verifier).decode("ascii"),
-                    binascii.hexlify(verifierHash).decode("ascii"),
-                    summary_extra,
+            summary_extra = ""
+            # if have_summary:
+            #     summary_extra = ":::%s::%s" % (summary, filename)
+
+            if hashcat_format:
+                sys.stdout.write(
+                    "$oldoffice$%s*%s*%s*%s%s\n"
+                    % (
+                        typ,
+                        binascii.hexlify(salt).decode("ascii"),
+                        binascii.hexlify(verifier).decode("ascii"),
+                        binascii.hexlify(verifierHash).decode("ascii"),
+                        summary_extra,
+                    )
                 )
-            )
-        else:
-            sys.stdout.write(
-                "%s:$oldoffice$%s*%s*%s*%s%s\n"
-                % (
-                    os.path.basename(filename),
-                    typ,
-                    binascii.hexlify(salt).decode("ascii"),
-                    binascii.hexlify(verifier).decode("ascii"),
-                    binascii.hexlify(verifierHash).decode("ascii"),
-                    summary_extra,
+            else:
+                sys.stdout.write(
+                    "%s:$oldoffice$%s*%s*%s*%s%s\n"
+                    % (
+                        os.path.basename(filename),
+                        typ,
+                        binascii.hexlify(salt).decode("ascii"),
+                        binascii.hexlify(verifier).decode("ascii"),
+                        binascii.hexlify(verifierHash).decode("ascii"),
+                        summary_extra,
+                    )
                 )
-            )
 
-        workbookStream.close()
-
-        return 0
-    finally:
-        ole.close()
+            return 0
+        finally:
+            workbookStream.close()
 
 
 def extract_file_encryption_hash(filename, hashcat_format=True):

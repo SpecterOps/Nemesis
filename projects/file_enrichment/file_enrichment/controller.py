@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI):
     global_vars.asyncpg_pool = await asyncpg.create_pool(
         postgres_connection_string,
         min_size=5,
-        max_size=15,
+        max_size=100,
     )
 
     global_vars.file_linking_engine = FileLinkingEngine(global_vars.asyncpg_pool)

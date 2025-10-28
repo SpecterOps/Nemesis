@@ -17,8 +17,9 @@ logger = get_logger(__name__)
 
 
 class Base64DecoderAnalyzer(EnrichmentModule):
+    name: str = "base64_decoder"
+    dependencies: list[str] = []
     def __init__(self, max_extractions: int = 30):
-        super().__init__("base64_decoder")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -34,7 +35,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         # Allow whitespace/newlines within long sequences
         self.long_base64_pattern = re.compile(r"([A-Za-z0-9+/\s]{200,}={0,2})")
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run on plaintext files.
 
         Args:
@@ -45,7 +46,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         # there are some performance issues, so we're disabling this one for now
         return False
 
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # skip carving if the file is not plaintext, of if it's an extracted strings.txt
         if not file_enriched.is_plaintext or (
@@ -226,7 +227,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         )
         return candidates
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file to find and decode base64 content.
 
         Args:
@@ -234,7 +235,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
             file_path: Optional path to already downloaded file
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
             enrichment_result = EnrichmentResult(module_name=self.name)
 
             # Download and read the file content (respect size limit)

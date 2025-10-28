@@ -7,7 +7,7 @@ from typing import Union
 import dnfile
 from common.logger import get_logger
 from common.models import DotNetInput, EnrichmentResult
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -107,25 +107,27 @@ def parse_dotnet_assembly(filename: Union[str, Path]) -> dict:
 
 
 class DotNetAnalyzer(EnrichmentModule):
+    name: str = "dotnet_analyzer"
+    dependencies: list[str] = ["pe"]
+
     def __init__(self):
-        super().__init__("dotnet_analyzer", dependencies=["pe"])
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         # get the current `file_enriched` from the database backend
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         should_run = "mono/.net assembly" in file_enriched.magic_type.lower()
 
         return should_run
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file using the dotnet service."""
         try:
             # get the current `file_enriched` FileEnriched object from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # publish a `dotnet-input` message for the process-heavy decompilation and InspectAssembly analysis in `dotnet_service`
             dotnet_input = DotNetInput(object_id=object_id)
@@ -148,8 +150,8 @@ class DotNetAnalyzer(EnrichmentModule):
 
             return enrichment
 
-        except Exception as e:
-            logger.exception(e, message="Error processing file", file_object_id=object_id)
+        except Exception:
+            logger.exception(message="Error processing file", file_object_id=object_id)
 
 
 def create_enrichment_module() -> EnrichmentModule:

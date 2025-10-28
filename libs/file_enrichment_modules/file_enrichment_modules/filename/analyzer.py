@@ -1,14 +1,15 @@
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
 
 
 class FilenameScanner(EnrichmentModule):
+    name: str = "filename_scanner"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("filename_scanner")
         self.workflows = ["default"]
 
         # List of sensitive terms to check for in filenames
@@ -45,7 +46,7 @@ class FilenameScanner(EnrichmentModule):
             "phpinfo",
         ]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Always returns True as filename scanning should run on all files.
 
         Args:
@@ -54,7 +55,7 @@ class FilenameScanner(EnrichmentModule):
         """
         return True
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file by checking its filename for sensitive terms.
 
         Args:
@@ -63,7 +64,7 @@ class FilenameScanner(EnrichmentModule):
         """
         try:
             # Get the current file_enriched from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             matches = []
             filename_lower = file_enriched.file_name.lower()

@@ -4,8 +4,7 @@ import re
 import struct
 from datetime import UTC, datetime, timedelta
 
-import psycopg
-from common.db import get_postgres_connection_str
+import asyncpg
 from common.logger import get_logger
 from Crypto.Cipher import AES, ChaCha20_Poly1305
 from nemesis_dpapi import Blob
@@ -119,53 +118,43 @@ def detect_encryption_type(encrypted_value: bytes) -> tuple[str, str | None]:
     return "unknown", None
 
 
-def get_state_key_id(source: str, username: str | None, browser: str, pg_conn=None) -> int | None:
-    """Get state key ID for key/abe encryption types.
+
+
+
+
+
+
+async def get_state_key_id(source: str, username: str | None, browser: str, asyncpg_pool: asyncpg.Pool) -> int | None:
+    """Get state key ID for key/abe encryption types using asyncpg.
 
     Args:
         source: Source value
         username: Username value
         browser: Browser value
-        pg_conn: existing Postgres connection
+        asyncpg_pool: Async Postgres connection pool
 
     Returns:
         State key ID if found, None otherwise
     """
-    if pg_conn:
-        try:
-            with pg_conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id FROM chromium.state_keys WHERE source = %s AND username = %s AND browser = %s",
-                    (source, username, browser),
-                )
-                result = cur.fetchone()
-                return result[0] if result else None
-        except Exception as e:
-            logger.warning("Failed to lookup state key ID", error=str(e))
-            return None
-    else:
-        try:
-            conn_str = get_postgres_connection_str()
-            with psycopg.connect(conn_str) as pg_conn:
-                with pg_conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT id FROM chromium.state_keys WHERE source = %s AND username = %s AND browser = %s",
-                        (source, username, browser),
-                    )
-                    result = cur.fetchone()
-                    return result[0] if result else None
-        except Exception as e:
-            logger.warning("Failed to lookup state key ID", error=str(e))
-            return None
+    try:
+        async with asyncpg_pool.acquire() as conn:
+            result = await conn.fetchrow(
+                "SELECT id FROM chromium.state_keys WHERE source = $1 AND username = $2 AND browser = $3",
+                source, username, browser
+            )
+            return result['id'] if result else None
+    except Exception as e:
+        logger.warning("Failed to lookup state key ID", error=str(e))
+        return None
 
 
-def get_state_key_bytes(state_key_id: int, encryption_type: str, pg_conn=None) -> bytes | None:
-    """Get decrypted state key bytes for key/abe encryption types.
+async def get_state_key_bytes(state_key_id: int, encryption_type: str, asyncpg_pool: asyncpg.Pool) -> bytes | None:
+    """Get decrypted state key bytes for key/abe encryption types using asyncpg.
 
     Args:
         state_key_id: State key ID
         encryption_type: Either 'key' or 'abe'
-        pg_conn: existing Postgres connection
+        asyncpg_pool: Async Postgres connection pool
 
     Returns:
         Decrypted key bytes if found and decrypted, None otherwise
@@ -176,138 +165,65 @@ def get_state_key_bytes(state_key_id: int, encryption_type: str, pg_conn=None) -
     column_name = "key_bytes_dec" if encryption_type == "key" else "app_bound_key_dec"
     is_decrypted_col = "key_is_decrypted" if encryption_type == "key" else "app_bound_key_is_decrypted"
 
-    if pg_conn:
-        try:
-            with pg_conn.cursor() as cur:
-                cur.execute(
-                    f"SELECT {column_name}, {is_decrypted_col} FROM chromium.state_keys WHERE id = %s",
-                    (state_key_id,),
-                )
-                result = cur.fetchone()
-                if result and result[1]:  # Check if is_decrypted is True
-                    return result[0]
-                return None
-        except Exception as e:
-            logger.warning("Failed to lookup state key bytes", error=str(e))
+    try:
+        async with asyncpg_pool.acquire() as conn:
+            result = await conn.fetchrow(
+                f"SELECT {column_name}, {is_decrypted_col} FROM chromium.state_keys WHERE id = $1",
+                state_key_id
+            )
+            if result and result[is_decrypted_col]:  # Check if is_decrypted is True
+                return result[column_name]
             return None
-    else:
-        try:
-            conn_str = get_postgres_connection_str()
-            with psycopg.connect(conn_str) as pg_conn:
-                with pg_conn.cursor() as cur:
-                    cur.execute(
-                        f"SELECT {column_name}, {is_decrypted_col} FROM chromium.state_keys WHERE id = %s",
-                        (state_key_id,),
-                    )
-                    result = cur.fetchone()
-                    if result and result[1]:  # Check if is_decrypted is True
-                        return result[0]
-                    return None
-        except Exception as e:
-            logger.warning("Failed to lookup state key bytes", error=str(e))
-            return None
+    except Exception as e:
+        logger.warning("Failed to lookup state key bytes", error=str(e))
+        return None
 
 
-def get_all_state_keys_from_source(source: str, pg_conn=None) -> list[dict]:
-    """Get all decrypted state keys from the same source.
+async def get_all_state_keys_from_source(source: str, asyncpg_pool: asyncpg.Pool) -> list[dict]:
+    """Get all decrypted state keys from the same source using asyncpg.
 
     Args:
         source: Source value
-        pg_conn: existing Postgres connection
+        asyncpg_pool: Async Postgres connection pool
 
     Returns:
         List of dictionaries containing state key information
     """
     state_keys = []
 
-    if pg_conn:
-        try:
-            with pg_conn.cursor() as cur:
-                cur.execute(
-                    """SELECT id, username, browser, key_bytes_dec, key_is_decrypted,
-                              app_bound_key_dec, app_bound_key_is_decrypted
-                       FROM chromium.state_keys WHERE source = %s""",
-                    (source,),
-                )
-                results = cur.fetchall()
-                for result in results:
-                    state_key_info = {
-                        "id": result[0],
-                        "username": result[1],
-                        "browser": result[2],
-                        "key_bytes_dec": result[3] if result[4] else None,  # Only if decrypted
-                        "app_bound_key_dec": result[5] if result[6] else None,  # Only if decrypted
-                    }
-                    state_keys.append(state_key_info)
-                return state_keys
-        except Exception as e:
-            logger.warning("Failed to lookup all state keys from source", error=str(e))
-            return []
-    else:
-        try:
-            conn_str = get_postgres_connection_str()
-            with psycopg.connect(conn_str) as pg_conn:
-                with pg_conn.cursor() as cur:
-                    cur.execute(
-                        """SELECT id, username, browser, key_bytes_dec, key_is_decrypted,
-                                  app_bound_key_dec, app_bound_key_is_decrypted
-                           FROM chromium.state_keys WHERE source = %s""",
-                        (source,),
-                    )
-                    results = cur.fetchall()
-                    for result in results:
-                        state_key_info = {
-                            "id": result[0],
-                            "username": result[1],
-                            "browser": result[2],
-                            "key_bytes_dec": result[3] if result[4] else None,  # Only if decrypted
-                            "app_bound_key_dec": result[5] if result[6] else None,  # Only if decrypted
-                        }
-                        state_keys.append(state_key_info)
-                    return state_keys
-        except Exception as e:
-            logger.warning("Failed to lookup all state keys from source", error=str(e))
-            return []
-
-
-def is_valid_text(data: bytes) -> bool:
-    """Check if decrypted bytes represent valid ASCII or UTF-8 text.
-
-    Args:
-        data: Bytes to validate
-
-    Returns:
-        True if data is valid text, False otherwise
-    """
-    if not data:
-        return False
-
     try:
-        # Try to decode as UTF-8
-        text = data.decode("utf-8")
-        # Check if it contains mostly printable characters
-        printable_chars = sum(1 for c in text if c.isprintable() or c.isspace())
-        return printable_chars / len(text) > 0.8  # At least 80% printable
-    except UnicodeDecodeError:
-        try:
-            # Try ASCII as fallback
-            text = data.decode("ascii")
-            printable_chars = sum(1 for c in text if c in "\x20-\x7e\t\n\r")
-            return printable_chars / len(text) > 0.8
-        except UnicodeDecodeError:
-            return False
+        async with asyncpg_pool.acquire() as conn:
+            results = await conn.fetch(
+                """SELECT id, username, browser, key_bytes_dec, key_is_decrypted,
+                          app_bound_key_dec, app_bound_key_is_decrypted
+                   FROM chromium.state_keys WHERE source = $1""",
+                source
+            )
+            for result in results:
+                state_key_info = {
+                    "id": result['id'],
+                    "username": result['username'],
+                    "browser": result['browser'],
+                    "key_bytes_dec": result['key_bytes_dec'] if result['key_is_decrypted'] else None,
+                    "app_bound_key_dec": result['app_bound_key_dec'] if result['app_bound_key_is_decrypted'] else None,
+                }
+                state_keys.append(state_key_info)
+            return state_keys
+    except Exception as e:
+        logger.warning("Failed to lookup all state keys from source", error=str(e))
+        return []
 
 
-def try_decrypt_with_all_keys(
-    encrypted_value: bytes, source: str, encryption_type: str, pg_conn=None
+async def try_decrypt_with_all_keys(
+    encrypted_value: bytes, source: str, encryption_type: str, asyncpg_pool: asyncpg.Pool
 ) -> tuple[bytes | None, int | None]:
-    """Try to decrypt with all available state keys from the same source.
+    """Try to decrypt with all available state keys from the same source using asyncpg.
 
     Args:
         encrypted_value: Raw encrypted value bytes
         source: Source value to look up keys from
         encryption_type: Either 'key' or 'abe'
-        pg_conn: existing Postgres connection
+        asyncpg_pool: Async Postgres connection pool
 
     Returns:
         Tuple of (decrypted_bytes, state_key_id) if successful, (None, None) otherwise
@@ -315,7 +231,7 @@ def try_decrypt_with_all_keys(
     if encryption_type not in ["key", "abe"]:
         return None, None
 
-    state_keys = get_all_state_keys_from_source(source, pg_conn)
+    state_keys = await get_all_state_keys_from_source(source, asyncpg_pool)
 
     for state_key in state_keys:
         key_bytes = state_key.get("key_bytes_dec") if encryption_type == "key" else state_key.get("app_bound_key_dec")
@@ -353,6 +269,36 @@ def try_decrypt_with_all_keys(
             continue
 
     return None, None
+
+
+def is_valid_text(data: bytes) -> bool:
+    """Check if decrypted bytes represent valid ASCII or UTF-8 text.
+
+    Args:
+        data: Bytes to validate
+
+    Returns:
+        True if data is valid text, False otherwise
+    """
+    if not data:
+        return False
+
+    try:
+        # Try to decode as UTF-8
+        text = data.decode("utf-8")
+        # Check if it contains mostly printable characters
+        printable_chars = sum(1 for c in text if c.isprintable() or c.isspace())
+        return printable_chars / len(text) > 0.8  # At least 80% printable
+    except UnicodeDecodeError:
+        try:
+            # Try ASCII as fallback
+            text = data.decode("ascii")
+            printable_chars = sum(1 for c in text if c in "\x20-\x7e\t\n\r")
+            return printable_chars / len(text) > 0.8
+        except UnicodeDecodeError:
+            return False
+
+
 
 
 def byte_xor(ba1, ba2):

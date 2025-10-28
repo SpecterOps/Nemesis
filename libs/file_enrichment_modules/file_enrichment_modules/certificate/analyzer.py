@@ -5,7 +5,7 @@ from pathlib import Path
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -16,8 +16,9 @@ logger = get_logger(__name__)
 
 
 class CertificateAnalyzer(EnrichmentModule):
+    name: str = "certificate_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("certificate_analyzer")
         self.storage = StorageMinio()
         self.workflows = ["default"]
 
@@ -39,9 +40,9 @@ class CertificateAnalyzer(EnrichmentModule):
             "123123",
         ]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Check if it's a certificate-related file by extension or magic type
         file_extension = Path(file_enriched.file_name).suffix.lower()
@@ -377,10 +378,10 @@ class CertificateAnalyzer(EnrichmentModule):
             logger.exception(e, message=f"Error analyzing certificate file for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process certificate file."""
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             if file_path:
                 return self._analyze_certificate(file_path, file_enriched)

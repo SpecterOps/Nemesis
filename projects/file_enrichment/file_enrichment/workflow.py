@@ -166,8 +166,8 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
             raise
 
         if not ctx.is_replaying:
-            logger.debug(
-                "Workflow completed successfully",
+            logger.info(
+                "All workflow activites have completed",
                 processing_time=f"{ctx.current_utc_datetime - start_time}",
             )
         return {}
@@ -259,8 +259,22 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
             logger.debug(f"Setting 'dpapi_manager' for '{module}'")
             module.dpapi_manager = dpapi_manager  # type: ignore
             module.loop = asyncio.get_running_loop()  # type: ignore
-        elif hasattr(wf_runtime, "dpapi_manager"):
+        elif hasattr(module, "dpapi_manager"):
             logger.debug(f"'dpapi_manager' already set for for '{module}'")
+
+    # Set asyncpg_pool on modules that need database access
+    for module in module_loader.modules.values():
+        if hasattr(module, "asyncpg_pool"):
+            logger.debug(f"Setting 'asyncpg_pool' for '{module}'")
+            module.asyncpg_pool = global_vars.asyncpg_pool  # type: ignore
+
+    # Initialize YaraRuleManager if present
+    if "yara" in module_loader.modules:
+        yara_module = module_loader.modules["yara"]
+        if hasattr(yara_module, "initialize"):
+            logger.info("Initializing Yara rule manager...")
+            await yara_module.initialize()
+            logger.info("Yara rule manager initialized successfully")
 
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
@@ -283,7 +297,7 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
     return execution_order
 
 
-def reload_yara_rules():
+async def reload_yara_rules():
     """Reloads all disk/state yara rules."""
 
     logger.debug("workflow/workflow.py reloading Yara rules")
@@ -292,7 +306,7 @@ def reload_yara_rules():
     if not isinstance(rule_manager, YaraRuleManager):
         raise ValueError(f"Yara rule manager is incorrect type. Type: {type(rule_manager)}")
 
-    rule_manager.load_rules()
+    await rule_manager.load_rules()
 
 
 # endregion

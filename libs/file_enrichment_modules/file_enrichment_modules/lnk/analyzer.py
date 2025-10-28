@@ -8,7 +8,7 @@ import LnkParse3
 import yaml
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -74,15 +74,16 @@ def convert_datetime(obj):
 
 
 class LnkParser(EnrichmentModule):
+    name: str = "lnk_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("lnk_parser")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         return "ms windows shortcut" in file_enriched.magic_type.lower()
 
     def _analyze_lnk(self, file_path: str, file_enriched) -> EnrichmentResult | None:
@@ -127,7 +128,7 @@ class LnkParser(EnrichmentModule):
             logger.exception(e, message=f"Error analyzing LNK file for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file.
 
         Args:
@@ -139,7 +140,7 @@ class LnkParser(EnrichmentModule):
         """
         try:
             # get the current `file_enriched` FileEnriched object from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

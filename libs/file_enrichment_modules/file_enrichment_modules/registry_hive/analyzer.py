@@ -7,8 +7,7 @@ import tempfile
 import textwrap
 from typing import TYPE_CHECKING
 
-import psycopg
-from common.db import get_postgres_connection_str
+import asyncpg
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
@@ -17,7 +16,6 @@ from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
 from nemesis_dpapi import DpapiSystemCredential
-from psycopg.rows import dict_row
 from pypykatz.registry.offline_parser import OffineRegistry as OfflineRegistry
 from regipy.registry import RegistryHive
 
@@ -29,17 +27,18 @@ logger = get_logger(__name__)
 
 
 class RegistryHiveAnalyzer(EnrichmentModule):
+    name: str = "registry_hive"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("registry_hive")
         self.storage = StorageMinio()
         self.workflows = ["default"]
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
-        self._conninfo = get_postgres_connection_str()
+        self.asyncpg_pool: asyncpg.Pool | None = None  # type: ignore
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         magic_type = file_enriched.magic_type.lower()
         mime_type = file_enriched.mime_type.lower()
 
@@ -89,80 +88,79 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             logger.error(f"Failed to extract bootkey: {e}")
             return None
 
-    def _find_existing_hive(self, file_enriched, target_hive_path: str) -> str | None:
+    async def _find_existing_hive(self, file_enriched, target_hive_path: str) -> str | None:
         """Find an existing hive by path."""
+        if not self.asyncpg_pool:
+            logger.warning("No connection pool available, cannot find existing hive")
+            return None
+
         try:
-            with psycopg.connect(self._conninfo, row_factory=dict_row) as conn:
-                with conn.cursor() as cur:
-                    # Look for existing hive by path
-                    cur.execute(
-                        """
-                        SELECT object_id
-                        FROM files_enriched
-                        WHERE source = %s
-                        AND LOWER(path) = LOWER(%s)
-                        ORDER BY timestamp DESC
-                        LIMIT 1
-                    """,
-                        (file_enriched.source, target_hive_path),
-                    )
+            async with self.asyncpg_pool.acquire() as conn:
+                # Look for existing hive by path
+                result = await conn.fetchrow(
+                    """
+                    SELECT object_id
+                    FROM files_enriched
+                    WHERE source = $1
+                    AND LOWER(path) = LOWER($2)
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                """,
+                    file_enriched.source, target_hive_path,
+                )
 
-                    result = cur.fetchone()
-                    if result:
-                        return str(result["object_id"])  # Convert UUID to string
+                if result:
+                    return str(result["object_id"])  # Convert UUID to string
 
-                    # Fallback query: look for registry files by magic_type and enrichment results
-                    # Extract the hive type from the target path (e.g., SECURITY from .../Windows/System32/Config/SECURITY)
-                    target_hive_type = posixpath.basename(target_hive_path).upper()
+                # Fallback query: look for registry files by magic_type and enrichment results
+                # Extract the hive type from the target path (e.g., SECURITY from .../Windows/System32/Config/SECURITY)
+                target_hive_type = posixpath.basename(target_hive_path).upper()
 
-                    cur.execute(
-                        """
-                        SELECT fe.object_id
-                        FROM files_enriched fe
-                        JOIN enrichments e ON fe.object_id = e.object_id
-                        WHERE fe.source = %s
-                        AND fe.magic_type = 'MS Windows registry file, NT/2000 or above'
-                        AND e.module_name = 'registry_hive'
-                        AND e.result_data->'results'->'hive_type' = %s
-                        ORDER BY fe.timestamp DESC
-                        LIMIT 1
-                    """,
-                        (file_enriched.source, f'"{target_hive_type}"'),
-                    )
+                result = await conn.fetchrow(
+                    """
+                    SELECT fe.object_id
+                    FROM files_enriched fe
+                    JOIN enrichments e ON fe.object_id = e.object_id
+                    WHERE fe.source = $1
+                    AND fe.magic_type = 'MS Windows registry file, NT/2000 or above'
+                    AND e.module_name = 'registry_hive'
+                    AND e.result_data->'results'->'hive_type' = $2
+                    ORDER BY fe.timestamp DESC
+                    LIMIT 1
+                """,
+                    file_enriched.source, f'"{target_hive_type}"',
+                )
 
-                    result = cur.fetchone()
-                    if result:
-                        return str(result["object_id"])  # Convert UUID to string
+                if result:
+                    return str(result["object_id"])  # Convert UUID to string
 
         except Exception as e:
             logger.error(f"Failed to find existing hive {target_hive_path}: {e}")
 
         return None
 
-    def _get_existing_hive_path(self, file_enriched, standard_path: str) -> str:
+    async def _get_existing_hive_path(self, file_enriched, standard_path: str) -> str:
         """Get the actual path of an existing hive, or return the standard path if not found."""
         # First try to find an existing hive
-        object_id = self._find_existing_hive(file_enriched, standard_path)
+        object_id = await self._find_existing_hive(file_enriched, standard_path)
 
-        if object_id:
+        if object_id and self.asyncpg_pool:
             # Found an existing hive, get its actual path from the database
             try:
-                with psycopg.connect(self._conninfo, row_factory=dict_row) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            SELECT path
-                            FROM files_enriched
-                            WHERE object_id = %s
-                            LIMIT 1
-                        """,
-                            (object_id,),
-                        )
+                async with self.asyncpg_pool.acquire() as conn:
+                    result = await conn.fetchrow(
+                        """
+                        SELECT path
+                        FROM files_enriched
+                        WHERE object_id = $1
+                        LIMIT 1
+                    """,
+                        object_id,
+                    )
 
-                        result = cur.fetchone()
-                        if result and result["path"]:
-                            logger.debug(f"Found existing hive at {result['path']} instead of {standard_path}")
-                            return result["path"]
+                    if result and result["path"]:
+                        logger.debug(f"Found existing hive at {result['path']} instead of {standard_path}")
+                        return result["path"]
             except Exception as e:
                 logger.error(f"Failed to get path for existing hive {object_id}: {e}")
 
@@ -186,8 +184,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 sam_standard_path = f"{drive}/Windows/System32/Config/SAM"
                 security_standard_path = f"{drive}/Windows/System32/Config/SECURITY"
 
-                sam_path = self._get_existing_hive_path(file_enriched, sam_standard_path)
-                security_path = self._get_existing_hive_path(file_enriched, security_standard_path)
+                sam_path = await self._get_existing_hive_path(file_enriched, sam_standard_path)
+                security_path = await self._get_existing_hive_path(file_enriched, security_standard_path)
 
                 await add_file_linking(
                     source=file_enriched.source,
@@ -195,6 +193,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     linked_file_path=sam_path,
                     link_type="registry_system",
                     collection_reason="SYSTEM hive can decrypt SAM accounts",
+                    connection_pool=self.asyncpg_pool,
                 )
 
                 await add_file_linking(
@@ -203,13 +202,14 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     linked_file_path=security_path,
                     link_type="registry_system",
                     collection_reason="SYSTEM hive required to decrypt SECURITY data",
+                    connection_pool=self.asyncpg_pool,
                 )
 
             elif hive_type in ["SAM", "SECURITY"]:
                 # Link to SYSTEM hive
                 # First check if it exists at a non-standard location
                 system_standard_path = f"{drive}/Windows/System32/Config/SYSTEM"
-                system_path = self._get_existing_hive_path(file_enriched, system_standard_path)
+                system_path = await self._get_existing_hive_path(file_enriched, system_standard_path)
 
                 await add_file_linking(
                     source=file_enriched.source,
@@ -217,6 +217,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     linked_file_path=system_path,
                     link_type="registry_system",
                     collection_reason=f"SYSTEM hive required to decrypt {hive_type} data",
+                    connection_pool=self.asyncpg_pool,
                 )
 
         except Exception as e:
@@ -685,18 +686,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         return summary
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Do the file enrichment.
-
-        Args:
-            object_id: The object ID of the file
-            file_path: Optional path to already downloaded file
-
-        Returns:
-            EnrichmentResult or None if processing fails
-        """
-        return await self._process_async(object_id, file_path)
-
-    async def _process_async(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process registry hive file and extract relevant information."""
         try:
             file_enriched = await get_file_enriched_async(object_id)
@@ -765,8 +754,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             sam_path = f"{drive}/Windows/System32/Config/SAM"
             security_path = f"{drive}/Windows/System32/Config/SECURITY"
 
-            sam_object_id = self._find_existing_hive(file_enriched, sam_path)
-            security_object_id = self._find_existing_hive(file_enriched, security_path)
+            sam_object_id = await self._find_existing_hive(file_enriched, sam_path)
+            security_object_id = await self._find_existing_hive(file_enriched, security_path)
 
             # Process SAM if found
             if sam_object_id:
@@ -795,7 +784,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
             # if drive:
             system_path = f"{drive}/Windows/System32/Config/SYSTEM"
-            system_object_id = self._find_existing_hive(file_enriched, system_path)
+            system_object_id = await self._find_existing_hive(file_enriched, system_path)
 
             if system_object_id:
                 # Download the SYSTEM hive

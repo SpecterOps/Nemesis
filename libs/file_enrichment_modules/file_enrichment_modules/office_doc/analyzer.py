@@ -9,7 +9,7 @@ import msoffcrypto
 import olefile
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.office_doc.office2john import extract_file_encryption_hash
@@ -122,10 +122,9 @@ def check_rms_protected(file_path):
     # Try OLE approach if ZIP check failed or returned False
     try:
         if olefile.isOleFile(file_path):
-            ole = olefile.OleFileIO(file_path)
-            if ole.exists("\x06DataSpaces/TransformInfo/DRMEncryptedTransform"):
-                return True
-            ole.close()
+            with olefile.OleFileIO(file_path) as ole:
+                if ole.exists("\x06DataSpaces/TransformInfo/DRMEncryptedTransform"):
+                    return True
     except:
         pass
 
@@ -324,15 +323,16 @@ def parse_office_new_file(file_path: str) -> dict[str, Any]:
 
 
 class OfficeAnalyzer(EnrichmentModule):
+    name: str = "office_analyzer"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("office_analyzer")
         self.storage = StorageMinio()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file extension and type."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Check file extension
         path = file_enriched.path.lower() if file_enriched.path else ""
@@ -416,7 +416,7 @@ class OfficeAnalyzer(EnrichmentModule):
             logger.exception(e, message=f"Error analyzing Office document for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Office file using the storage system.
 
         Args:
@@ -427,7 +427,7 @@ class OfficeAnalyzer(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

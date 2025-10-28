@@ -7,7 +7,7 @@ from datetime import datetime
 import yara_x
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -15,8 +15,9 @@ logger = get_logger(__name__)
 
 
 class SlackRootStateParser(EnrichmentModule):
+    name: str = "slack_root_state_parser"
+    dependencies: list[str] = []
     def __init__(self):
-        super().__init__("slack_root_state_parser")
         self.storage = StorageMinio()
 
         # the workflows this module should automatically run in
@@ -51,9 +52,9 @@ rule Detect_Slack_RootState {
 }
         """)
 
-    def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Initial checks for file type and name
         if file_enriched.file_name.lower() != "root-state.json":
@@ -219,7 +220,7 @@ rule Detect_Slack_RootState {
             logger.exception(e, message=f"Error analyzing Slack root-state.json for {file_enriched.file_name}")
             return None
 
-    def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Slack root-state.json file.
 
         Args:
@@ -230,7 +231,7 @@ rule Detect_Slack_RootState {
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

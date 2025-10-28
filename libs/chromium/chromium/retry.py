@@ -2,17 +2,17 @@
 
 from uuid import UUID
 
-import psycopg
+import asyncpg
 from common.logger import get_logger
 from nemesis_dpapi import Blob, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 
-from .helpers import decrypt_chrome_string, get_postgres_connection_str, get_state_key_bytes
+from .helpers import decrypt_chrome_string, get_state_key_bytes
 
 logger = get_logger(__name__)
 
 
 async def retry_decrypt_chromium_data(
-    masterkey_guid: UUID, dpapi_manager: DpapiManager, masterkey_type: str | None = None
+    masterkey_guid: UUID, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool, masterkey_type: str | None = None
 ) -> dict:
     """Retry decrypting cookies and logins that failed to decrypt previously.
 
@@ -23,6 +23,7 @@ async def retry_decrypt_chromium_data(
     Args:
         masterkey_guid: The GUID of the newly available masterkey
         dpapi_manager: DpapiManager instance for decryption
+        asyncpg_pool: Async Postgres connection pool
         masterkey_type: Optional masterkey type ('system', 'user', 'unknown')
 
     Returns:
@@ -42,31 +43,28 @@ async def retry_decrypt_chromium_data(
         "errors": [],
     }
 
-    conn_str = get_postgres_connection_str()
-
     try:
-        with psycopg.connect(conn_str) as pg_conn:
-            # Retry cookies
-            cookies_result = await _retry_decrypt_cookies(masterkey_guid, dpapi_manager, pg_conn)
-            result["cookies_attempted"] = cookies_result["attempted"]
-            result["cookies_decrypted"] = cookies_result["decrypted"]
-            result["errors"].extend(cookies_result["errors"])
+        # Retry cookies
+        cookies_result = await _retry_decrypt_cookies(masterkey_guid, dpapi_manager, asyncpg_pool)
+        result["cookies_attempted"] = cookies_result["attempted"]
+        result["cookies_decrypted"] = cookies_result["decrypted"]
+        result["errors"].extend(cookies_result["errors"])
 
-            # Retry logins
-            logins_result = await _retry_decrypt_logins(masterkey_guid, dpapi_manager, pg_conn)
-            result["logins_attempted"] = logins_result["attempted"]
-            result["logins_decrypted"] = logins_result["decrypted"]
-            result["errors"].extend(logins_result["errors"])
+        # Retry logins
+        logins_result = await _retry_decrypt_logins(masterkey_guid, dpapi_manager, asyncpg_pool)
+        result["logins_attempted"] = logins_result["attempted"]
+        result["logins_decrypted"] = logins_result["decrypted"]
+        result["errors"].extend(logins_result["errors"])
 
-            logger.warning(
-                "Completed retroactive chromium data decryption for masterkey",
-                masterkey_guid=masterkey_guid,
-                cookies_attempted=result["cookies_attempted"],
-                cookies_decrypted=result["cookies_decrypted"],
-                logins_attempted=result["logins_attempted"],
-                logins_decrypted=result["logins_decrypted"],
-                errors=len(result["errors"]),
-            )
+        logger.warning(
+            "Completed retroactive chromium data decryption for masterkey",
+            masterkey_guid=masterkey_guid,
+            cookies_attempted=result["cookies_attempted"],
+            cookies_decrypted=result["cookies_decrypted"],
+            logins_attempted=result["logins_attempted"],
+            logins_decrypted=result["logins_decrypted"],
+            errors=len(result["errors"]),
+        )
 
     except Exception as e:
         error_msg = f"Database error during retroactive chromium data decryption: {str(e)}"
@@ -76,13 +74,13 @@ async def retry_decrypt_chromium_data(
     return result
 
 
-async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManager, pg_conn) -> dict:
+async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool) -> dict:
     """Retry decrypting cookies that previously failed.
 
     Args:
         masterkey_guid: The GUID of the newly available masterkey
         dpapi_manager: DpapiManager instance for decryption
-        pg_conn: PostgreSQL connection
+        asyncpg_pool: Async Postgres connection pool
 
     Returns:
         Dict with {"attempted": int, "decrypted": int, "errors": list}
@@ -92,21 +90,20 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
     # Find all undecrypted cookies
     # For DPAPI: only those matching this masterkey
     # For key/abe: all undecrypted (state keys may now be available)
-    with pg_conn.cursor() as cur:
-        cur.execute(
+    async with asyncpg_pool.acquire() as conn:
+        cookies = await conn.fetch(
             """
             SELECT id, encryption_type, masterkey_guid, state_key_id,
                    value_enc, source, username, browser
             FROM chromium.cookies
             WHERE is_decrypted = FALSE
             AND (
-                (encryption_type = 'dpapi' AND masterkey_guid = %s)
+                (encryption_type = 'dpapi' AND masterkey_guid = $1)
                 OR encryption_type IN ('key', 'abe')
             )
             """,
-            (masterkey_guid,),
+            str(masterkey_guid)
         )
-        cookies = cur.fetchall()
 
     logger.debug(
         "Found undecrypted cookies to retry",
@@ -116,14 +113,21 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
 
     for cookie in cookies:
         result["attempted"] += 1
-        cookie_id, encryption_type, cookie_masterkey_guid, state_key_id, value_enc, source, username, browser = cookie
+        cookie_id = cookie['id']
+        encryption_type = cookie['encryption_type']
+        cookie_masterkey_guid = cookie['masterkey_guid']
+        state_key_id = cookie['state_key_id']
+        value_enc = cookie['value_enc']
+        source = cookie['source']
+        username = cookie['username']
+        browser = cookie['browser']
 
         try:
             value_dec = None
             decrypted = False
 
             # Try DPAPI decryption
-            if encryption_type == "dpapi" and cookie_masterkey_guid == masterkey_guid:
+            if encryption_type == "dpapi" and cookie_masterkey_guid == str(masterkey_guid):
                 try:
                     value_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(value_enc))
                     if value_dec_bytes:
@@ -140,7 +144,7 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
             elif encryption_type in ["key", "abe"]:
                 # Try with existing state_key_id if available
                 if state_key_id:
-                    state_key_bytes = get_state_key_bytes(state_key_id, encryption_type, pg_conn)
+                    state_key_bytes = await get_state_key_bytes(state_key_id, encryption_type, asyncpg_pool)
                     if state_key_bytes:
                         try:
                             value_dec_bytes = decrypt_chrome_string(value_enc, state_key_bytes, encryption_type)
@@ -171,23 +175,22 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
                 # If no state_key_id or decryption failed, try to find matching state key
                 if not decrypted and username and browser:
                     try:
-                        with pg_conn.cursor() as cur2:
+                        async with asyncpg_pool.acquire() as conn:
                             # Try to find a decrypted state key for this source/username/browser
-                            cur2.execute(
+                            state_key_row = await conn.fetchrow(
                                 """
                                 SELECT id FROM chromium.state_keys
-                                WHERE source = %s AND username = %s AND browser = %s
+                                WHERE source = $1 AND username = $2 AND browser = $3
                                 AND (
-                                    (key_is_decrypted = TRUE AND %s = 'key')
-                                    OR (app_bound_key_is_decrypted = TRUE AND %s = 'abe')
+                                    (key_is_decrypted = TRUE AND $4 = 'key')
+                                    OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
                                 )
                                 """,
-                                (source, username, browser, encryption_type, encryption_type),
+                                source, username, browser, encryption_type, encryption_type
                             )
-                            state_key_row = cur2.fetchone()
                             if state_key_row:
-                                new_state_key_id = state_key_row[0]
-                                state_key_bytes = get_state_key_bytes(new_state_key_id, encryption_type, pg_conn)
+                                new_state_key_id = state_key_row['id']
+                                state_key_bytes = await get_state_key_bytes(new_state_key_id, encryption_type, asyncpg_pool)
                                 if state_key_bytes:
                                     try:
                                         value_dec_bytes = decrypt_chrome_string(
@@ -221,16 +224,15 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
 
             # Update database if decrypted
             if decrypted and value_dec:
-                with pg_conn.cursor() as cur:
-                    cur.execute(
+                async with asyncpg_pool.acquire() as conn:
+                    await conn.execute(
                         """
                         UPDATE chromium.cookies
-                        SET value_dec = %s, is_decrypted = TRUE, state_key_id = %s
-                        WHERE id = %s
+                        SET value_dec = $1, is_decrypted = TRUE, state_key_id = $2
+                        WHERE id = $3
                         """,
-                        (value_dec, state_key_id, cookie_id),
+                        value_dec, state_key_id, cookie_id
                     )
-                pg_conn.commit()
                 result["decrypted"] += 1
 
         except Exception as e:
@@ -241,13 +243,13 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
     return result
 
 
-async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManager, pg_conn) -> dict:
+async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool) -> dict:
     """Retry decrypting logins that previously failed.
 
     Args:
         masterkey_guid: The GUID of the newly available masterkey
         dpapi_manager: DpapiManager instance for decryption
-        pg_conn: PostgreSQL connection
+        asyncpg_pool: Async Postgres connection pool
 
     Returns:
         Dict with {"attempted": int, "decrypted": int, "errors": list}
@@ -255,21 +257,20 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
     result = {"attempted": 0, "decrypted": 0, "errors": []}
 
     # Find all undecrypted logins
-    with pg_conn.cursor() as cur:
-        cur.execute(
+    async with asyncpg_pool.acquire() as conn:
+        logins = await conn.fetch(
             """
             SELECT id, encryption_type, masterkey_guid, state_key_id,
                    password_value_enc, source, username, browser
             FROM chromium.logins
             WHERE is_decrypted = FALSE
             AND (
-                (encryption_type = 'dpapi' AND masterkey_guid = %s)
+                (encryption_type = 'dpapi' AND masterkey_guid = $1)
                 OR encryption_type IN ('key', 'abe')
             )
             """,
-            (masterkey_guid,),
+            str(masterkey_guid)
         )
-        logins = cur.fetchall()
 
     logger.debug(
         "Found undecrypted logins to retry",
@@ -279,23 +280,21 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
 
     for login in logins:
         result["attempted"] += 1
-        (
-            login_id,
-            encryption_type,
-            login_masterkey_guid,
-            state_key_id,
-            password_value_enc,
-            source,
-            username,
-            browser,
-        ) = login
+        login_id = login['id']
+        encryption_type = login['encryption_type']
+        login_masterkey_guid = login['masterkey_guid']
+        state_key_id = login['state_key_id']
+        password_value_enc = login['password_value_enc']
+        source = login['source']
+        username = login['username']
+        browser = login['browser']
 
         try:
             password_dec = None
             decrypted = False
 
             # Try DPAPI decryption
-            if encryption_type == "dpapi" and login_masterkey_guid == masterkey_guid:
+            if encryption_type == "dpapi" and login_masterkey_guid == str(masterkey_guid):
                 try:
                     password_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(password_value_enc))
                     if password_dec_bytes:
@@ -312,7 +311,7 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
             elif encryption_type in ["key", "abe"]:
                 # Try with existing state_key_id if available
                 if state_key_id:
-                    state_key_bytes = get_state_key_bytes(state_key_id, encryption_type, pg_conn)
+                    state_key_bytes = await get_state_key_bytes(state_key_id, encryption_type, asyncpg_pool)
                     if state_key_bytes:
                         try:
                             password_dec_bytes = decrypt_chrome_string(
@@ -344,37 +343,36 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
                 # If no state_key_id or decryption failed, try to find matching state key
                 if not decrypted and source:
                     try:
-                        with pg_conn.cursor() as cur2:
+                        async with asyncpg_pool.acquire() as conn:
                             if username and browser:
                                 # Try to find a decrypted state key for this source/username/browser
-                                cur2.execute(
+                                state_key_row = await conn.fetchrow(
                                     """
                                     SELECT id FROM chromium.state_keys
-                                    WHERE source = %s AND username = %s AND browser = %s
+                                    WHERE source = $1 AND username = $2 AND browser = $3
                                     AND (
-                                        (key_is_decrypted = TRUE AND %s = 'key')
-                                        OR (app_bound_key_is_decrypted = TRUE AND %s = 'abe')
+                                        (key_is_decrypted = TRUE AND $4 = 'key')
+                                        OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
                                     )
                                     """,
-                                    (source, username, browser, encryption_type, encryption_type),
+                                    source, username, browser, encryption_type, encryption_type
                                 )
                             else:
                                 # if no username/password, just restrict to SOURCE
-                                cur2.execute(
+                                state_key_row = await conn.fetchrow(
                                     """
                                     SELECT id FROM chromium.state_keys
-                                    WHERE source = %s
+                                    WHERE source = $1
                                     AND (
-                                        (key_is_decrypted = TRUE AND %s = 'key')
-                                        OR (app_bound_key_is_decrypted = TRUE AND %s = 'abe')
+                                        (key_is_decrypted = TRUE AND $2 = 'key')
+                                        OR (app_bound_key_is_decrypted = TRUE AND $3 = 'abe')
                                     )
                                     """,
-                                    (source, encryption_type, encryption_type),
+                                    source, encryption_type, encryption_type
                                 )
-                            state_key_row = cur2.fetchone()
                             if state_key_row:
-                                new_state_key_id = state_key_row[0]
-                                state_key_bytes = get_state_key_bytes(new_state_key_id, encryption_type, pg_conn)
+                                new_state_key_id = state_key_row['id']
+                                state_key_bytes = await get_state_key_bytes(new_state_key_id, encryption_type, asyncpg_pool)
                                 if state_key_bytes:
                                     try:
                                         password_dec_bytes = decrypt_chrome_string(
@@ -406,16 +404,15 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
 
             # Update database if decrypted
             if decrypted and password_dec:
-                with pg_conn.cursor() as cur:
-                    cur.execute(
+                async with asyncpg_pool.acquire() as conn:
+                    await conn.execute(
                         """
                         UPDATE chromium.logins
-                        SET password_value_dec = %s, is_decrypted = TRUE, state_key_id = %s
-                        WHERE id = %s
+                        SET password_value_dec = $1, is_decrypted = TRUE, state_key_id = $2
+                        WHERE id = $3
                         """,
-                        (password_dec, state_key_id, login_id),
+                        password_dec, state_key_id, login_id
                     )
-                pg_conn.commit()
                 result["decrypted"] += 1
 
         except Exception as e:
