@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: schedulerconfig
+  name: documentconversionconfig
 spec:
   # workflow:
   #   maxConcurrentWorkflowInvocations: 1
@@ -15,9 +15,3 @@ spec:
       isSecure: false
   metric:
     enabled: true
-  httpPipeline:
-    handlers:
-    - name: maximum-request-size
-      type: middleware.http.requestsize
-      properties:
-        maxBodySize: "300MB"

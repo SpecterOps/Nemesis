@@ -3,12 +3,8 @@ kind: Configuration
 metadata:
   name: schedulerconfig
 spec:
-  workflow:
-    maxConcurrentWorkflowInvocations: 1
-    maxConcurrentActivityInvocations: 1
-  httpPipeline:
-    handlers:
-    - name: maximum-request-size
-      type: middleware.http.requestsize
-      properties:
-        maxBodySize: "300MB"
+  # workflow:
+  #   maxConcurrentWorkflowInvocations: 1
+  #   maxConcurrentActivityInvocations: 1
+  metric:
+    enabled: true
