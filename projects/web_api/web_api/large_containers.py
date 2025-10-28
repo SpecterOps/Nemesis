@@ -692,11 +692,53 @@ class LargeContainerProcessor:
             logger.error(f"Error creating container record: {e}", container_id=container_id)
             raise
 
+    def update_container_status(self, container_id: str, status: str) -> None:
+        """Update container status in database
+
+        Args:
+            container_id: Container UUID
+            status: New status value
+        """
+        try:
+            with psycopg.connect(self.postgres_connection_string) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE container_processing
+                        SET status = %s
+                        WHERE container_id = %s
+                    """,
+                        (status, container_id),
+                    )
+                    conn.commit()
+
+            logger.debug(
+                "Updated container status",
+                container_id=container_id,
+                status=status
+            )
+        except Exception as e:
+            logger.error(f"Error updating container status: {e}", container_id=container_id)
+
     def update_container_extraction_progress(
         self, container_id: str, total_files_extracted: int, total_bytes_extracted: int
     ) -> None:
-        """Update container extraction progress in database"""
+        """Update container extraction completion in database (called when extraction is done)
+
+        Args:
+            container_id: Container UUID
+            total_files_extracted: Final number of files extracted
+            total_bytes_extracted: Final number of bytes extracted
+        """
         try:
+            logger.info(
+                "Attempting to update container extraction progress in database",
+                container_id=container_id,
+                files_extracted=total_files_extracted,
+                bytes_extracted=total_bytes_extracted,
+                status=ContainerStatus.EXTRACTED
+            )
+
             with psycopg.connect(self.postgres_connection_string) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -709,15 +751,56 @@ class LargeContainerProcessor:
                     """,
                         (total_files_extracted, total_bytes_extracted, ContainerStatus.EXTRACTED, container_id),
                     )
+                    rows_affected = cur.rowcount
                     conn.commit()
 
-            logger.debug(
-                "Updated container extraction progress",
+            logger.info(
+                "Successfully updated container extraction completion",
                 container_id=container_id,
                 files_extracted=total_files_extracted,
+                bytes_extracted=total_bytes_extracted,
+                rows_affected=rows_affected
             )
+
+            if rows_affected == 0:
+                logger.warning(
+                    "No rows were updated - container_id may not exist in database",
+                    container_id=container_id
+                )
+            else:
+                # Verify the update by reading it back
+                with psycopg.connect(self.postgres_connection_string) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT status, total_files_extracted, total_bytes_extracted
+                            FROM container_processing
+                            WHERE container_id = %s
+                        """,
+                            (container_id,),
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            logger.info(
+                                "Verified database state after update",
+                                container_id=container_id,
+                                status=row[0],
+                                total_files_extracted=row[1],
+                                total_bytes_extracted=row[2]
+                            )
+                        else:
+                            logger.error(
+                                "Container not found in database after update",
+                                container_id=container_id
+                            )
+
         except Exception as e:
-            logger.error(f"Error updating container extraction progress: {e}", container_id=container_id)
+            logger.exception(
+                f"Error updating container extraction progress: {e}",
+                container_id=container_id,
+                files=total_files_extracted,
+                bytes=total_bytes_extracted
+            )
 
     def update_container_workflow_progress(
         self, container_id: str, file_size: int = 0, increment_completed: bool = False, increment_failed: bool = False
@@ -894,15 +977,41 @@ class LargeContainerProcessor:
                 # Store container info for tracking
                 self.progress_tracker.set_container_info(container_id, {"container_id": container_id})
 
+                # Update status to EXTRACTING before starting extraction
+                self.update_container_status(container_id, ContainerStatus.EXTRACTING)
+
                 # Process the container
                 processed_files = extractor.extract_and_process(file_path)
 
-                # Update extraction completion in database
+                # Update extraction completion in database with final counts
                 progress = self.progress_tracker.get_progress(container_id)
+
+                logger.info(
+                    "Extraction complete, updating database",
+                    container_id=container_id,
+                    processed_files=processed_files,
+                    progress_exists=progress is not None
+                )
+
                 if progress:
-                    self.update_container_extraction_progress(
-                        container_id, processed_files, progress["processed_bytes"]
+                    processed_bytes = progress["processed_bytes"]
+                    logger.info(
+                        "Calling update_container_extraction_progress",
+                        container_id=container_id,
+                        processed_files=processed_files,
+                        processed_bytes=processed_bytes
                     )
+                    self.update_container_extraction_progress(
+                        container_id, processed_files, processed_bytes
+                    )
+                else:
+                    logger.error(
+                        "Progress tracker returned None, cannot update extraction counts",
+                        container_id=container_id,
+                        processed_files=processed_files
+                    )
+                    # Still try to update status to extracted even if we don't have byte counts
+                    self.update_container_status(container_id, ContainerStatus.EXTRACTED)
 
                 return {
                     "container_id": container_id,

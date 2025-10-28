@@ -589,7 +589,7 @@ CREATE TABLE IF NOT EXISTS container_processing (
     project VARCHAR(255),
     status VARCHAR(50) NOT NULL DEFAULT 'submitted',
     total_files_extracted INTEGER DEFAULT 0,
-    total_bytes_extracted  INTEGER DEFAULT 0,
+    total_bytes_extracted BIGINT DEFAULT 0,
     submitted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     expiration TIMESTAMP WITH TIME ZONE,
     processing_started_at TIMESTAMP WITH TIME ZONE,
@@ -598,7 +598,7 @@ CREATE TABLE IF NOT EXISTS container_processing (
     workflows_completed INTEGER DEFAULT 0,
     workflows_failed INTEGER DEFAULT 0,
     workflows_total INTEGER DEFAULT 0,
-    total_bytes_processed  INTEGER DEFAULT 0
+    total_bytes_processed BIGINT DEFAULT 0
 );
 
 

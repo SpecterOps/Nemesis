@@ -151,7 +151,12 @@ const StatusBadge = ({ status }) => {
   const getStatusConfig = (status) => {
     switch (status) {
       case 'completed':
+      case 'workflows_complete':
         return { icon: CheckCircle, className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', label: 'Completed' };
+      case 'extracting':
+        return { icon: Download, className: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', label: 'Extracting' };
+      case 'extracted':
+        return { icon: HardDrive, className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200', label: 'Extracted' };
       case 'processing':
         return { icon: Activity, className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', label: 'Processing' };
       case 'submitted':
@@ -206,6 +211,7 @@ const ContainerCard = ({ container }) => {
     return `${diffSeconds}s`;
   };
 
+  const isExtracting = container.status === 'extracting';
   const fileProgressPercentage = container.total_files_extracted > 0 ?
     (container.workflows_completed / container.total_files_extracted) * 100 : 0;
 
@@ -268,42 +274,58 @@ const ContainerCard = ({ container }) => {
 
       {/* Progress Section */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-        <div className="flex justify-around items-center mb-3">
-          <ProgressCircle
-            percentage={fileProgressPercentage}
-            label="Processed Files"
-            tooltip={
-              <div className="space-y-1">
-                <div className="font-medium">File Processing Progress</div>
-                <div>Processed: {container.workflows_completed?.toLocaleString() || 0}</div>
-                <div>Total Extracted: {container.total_files_extracted?.toLocaleString() || 0}</div>
-                <div>Progress: {Math.round(fileProgressPercentage)}%</div>
+        {isExtracting ? (
+          <div className="flex items-center justify-center space-x-2 bg-purple-50 dark:bg-purple-900/20 rounded p-4">
+            <Download className="h-5 w-5 text-purple-500 animate-pulse" />
+            <div className="text-center">
+              <div className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                Extracting Files from Container
               </div>
-            }
-          />
-
-          <ProgressCircle
-            percentage={byteProgressPercentage}
-            label="Processed Bytes"
-            tooltip={
-              <div className="space-y-1">
-                <div className="font-medium">Byte Processing Progress</div>
-                <div>Processed: {formatBytes(container.total_bytes_processed || 0)}</div>
-                <div>Total Extracted: {formatBytes(container.total_bytes_extracted || 0)}</div>
-                <div>Progress: {Math.round(byteProgressPercentage)}%</div>
+              <div className="text-xs text-purple-500 dark:text-purple-500 mt-1">
+                Progress tracking will be available once extraction completes
               </div>
-            }
-          />
-        </div>
-
-        {/* Failed workflows counter */}
-        {container.workflows_failed > 0 && (
-          <div className="flex items-center justify-center space-x-2 bg-red-50 dark:bg-red-900/20 rounded p-2">
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            <span className="text-sm text-red-600 dark:text-red-400">
-              {container.workflows_failed} Failed File Workflows
-            </span>
+            </div>
           </div>
+        ) : (
+          <>
+            <div className="flex justify-around items-center mb-3">
+              <ProgressCircle
+                percentage={fileProgressPercentage}
+                label="Processed Files"
+                tooltip={
+                  <div className="space-y-1">
+                    <div className="font-medium">File Processing Progress</div>
+                    <div>Processed: {container.workflows_completed?.toLocaleString() || 0}</div>
+                    <div>Total Extracted: {container.total_files_extracted?.toLocaleString() || 0}</div>
+                    <div>Progress: {Math.round(fileProgressPercentage)}%</div>
+                  </div>
+                }
+              />
+
+              <ProgressCircle
+                percentage={byteProgressPercentage}
+                label="Processed Bytes"
+                tooltip={
+                  <div className="space-y-1">
+                    <div className="font-medium">Byte Processing Progress</div>
+                    <div>Processed: {formatBytes(container.total_bytes_processed || 0)}</div>
+                    <div>Total Extracted: {formatBytes(container.total_bytes_extracted || 0)}</div>
+                    <div>Progress: {Math.round(byteProgressPercentage)}%</div>
+                  </div>
+                }
+              />
+            </div>
+
+            {/* Failed workflows counter */}
+            {container.workflows_failed > 0 && (
+              <div className="flex items-center justify-center space-x-2 bg-red-50 dark:bg-red-900/20 rounded p-2">
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+                <span className="text-sm text-red-600 dark:text-red-400">
+                  {container.workflows_failed} Failed File Workflows
+                </span>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -323,7 +345,7 @@ const FilterControls = ({ filters, onFilterChange, sortBy, sortOrder, onSortChan
     { value: 'original_size', label: 'File Size' }
   ];
 
-  const statusOptions = ['processing', 'extracted', 'workflows_complete', 'failed'];
+  const statusOptions = ['processing', 'extracting', 'extracted', 'workflows_complete', 'failed'];
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
@@ -779,7 +801,7 @@ const Containers = () => {
 
           <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {containers.filter(c => c.status === 'processing' || c.status === 'extracted').length}
+              {containers.filter(c => c.status === 'processing' || c.status === 'extracting' || c.status === 'extracted').length}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Processing Containers</div>
           </div>
