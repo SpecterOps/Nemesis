@@ -79,7 +79,7 @@ services:
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
@@ -153,7 +153,7 @@ services:
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     depends_on: [noseyparker-scanner, placement]
     network_mode: "service:noseyparker-scanner"
 
@@ -212,7 +212,7 @@ services:
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     depends_on: [dotnet-service, placement]
     network_mode: "service:dotnet-service"
 
@@ -270,7 +270,7 @@ services:
         "--resources-path",
         "/dapr/components",
         "--config",
-        "/dapr/configuration/config.yaml",
+        "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
         "--enable-metrics",
         "--dapr-graceful-shutdown-seconds",
         "5",
@@ -279,7 +279,7 @@ services:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/:/dapr/configuration/
     environment:
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
@@ -393,7 +393,7 @@ services:
     volumes:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
@@ -455,7 +455,7 @@ services:
         "--resources-path",
         "/dapr/components",
         "--config",
-        "/dapr/configuration/config.yaml",
+        "/dapr/configuration/agents_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
         "--enable-metrics",
         "--dapr-graceful-shutdown-seconds",
         "5",
@@ -463,7 +463,7 @@ services:
     volumes:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/:/dapr/configuration/
     environment:
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
@@ -524,7 +524,7 @@ services:
       ]
     volumes:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
@@ -590,7 +590,7 @@ services:
         "--resources-path",
         "/dapr/components",
         "--config",
-        "/dapr/configuration/config.yaml",
+        "/dapr/configuration/document_conversion_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
         "--enable-metrics",
         "--dapr-graceful-shutdown-seconds",
         "5",
@@ -599,7 +599,7 @@ services:
       - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/:/dapr/configuration/
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
@@ -661,7 +661,7 @@ services:
         "5",
       ]
     volumes:
-      - ./infra/dapr/configuration/config_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
       - empty:/dapr/components:ro
 
     depends_on:

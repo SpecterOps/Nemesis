@@ -6,6 +6,15 @@ spec:
   # workflow:
   #   maxConcurrentWorkflowInvocations: 1
   #   maxConcurrentActivityInvocations: 1
+  tracing:
+    expandParams: true
+    samplingRate: "1"
+    otel:
+      protocol: grpc
+      endpointAddress: "otel-collector:4317"
+      isSecure: false
+  metric:
+    enabled: true
   httpPipeline:
     handlers:
     - name: maximum-request-size
