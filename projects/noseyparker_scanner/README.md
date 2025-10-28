@@ -21,18 +21,19 @@ The workflow is:
 
 The following ENV variables can be set:
 
-| Variable         | Default            | Description                                         |
-| ---------------- | ------------------ | --------------------------------------------------- |
-| DAPR_PORT        | 3500               | The HTTP DAPR port (not currently used)             |
-| DAPR_GRPC_PORT   | 50001              | The GRPC DAPR port                                  |
-| PUBSUB_NAME      | pubsub             | The name of the Dapr pub/sub queue to use           |
-| INPUT_TOPIC      | noseyparker-input  | The name of the pub/sub input topic to subscribe to |
-| OUTPUT_TOPIC     | noseyparker-output | The name of the pub/sub output topic to publish to  |
-| SNIPPET_LENGTH   | 512                | Length of surrounding context to pull on a match    |
-| MINIO_ENDPOINT   | none               | Minio server to download files from                 |
-| MINIO_BUCKET     | none               | Bucket name to download files from                  |
-| MINIO_ACCESS_KEY | none               | Minio access key                                    |
-| MINIO_SECRET_KEY | none               | Minio secret key                                    |
+| Variable         | Default            | Description                                            |
+| ---------------- | ------------------ | ------------------------------------------------------ |
+| DECOMPRESS_ZIPS  | false              | Set to `true` to decompress and scan ZIP file contents |
+| DAPR_PORT        | 3500               | The HTTP DAPR port (not currently used)                |
+| DAPR_GRPC_PORT   | 50001              | The GRPC DAPR port                                     |
+| PUBSUB_NAME      | pubsub             | The name of the Dapr pub/sub queue to use              |
+| INPUT_TOPIC      | noseyparker-input  | The name of the pub/sub input topic to subscribe to    |
+| OUTPUT_TOPIC     | noseyparker-output | The name of the pub/sub output topic to publish to     |
+| SNIPPET_LENGTH   | 512                | Length of surrounding context to pull on a match       |
+| MINIO_ENDPOINT   | none               | Minio server to download files from                    |
+| MINIO_BUCKET     | none               | Bucket name to download files from                     |
+| MINIO_ACCESS_KEY | none               | Minio access key                                       |
+| MINIO_SECRET_KEY | none               | Minio secret key                                       |
 
 
 ## Message Format
