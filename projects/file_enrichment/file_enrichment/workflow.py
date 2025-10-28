@@ -268,6 +268,14 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
             logger.debug(f"Setting 'asyncpg_pool' for '{module}'")
             module.asyncpg_pool = global_vars.asyncpg_pool  # type: ignore
 
+    # Initialize YaraRuleManager if present
+    if "yara" in module_loader.modules:
+        yara_module = module_loader.modules["yara"]
+        if hasattr(yara_module, "initialize"):
+            logger.info("Initializing Yara rule manager...")
+            await yara_module.initialize()
+            logger.info("Yara rule manager initialized successfully")
+
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
     execution_order = topological_sort(graph)
@@ -289,7 +297,7 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
     return execution_order
 
 
-def reload_yara_rules():
+async def reload_yara_rules():
     """Reloads all disk/state yara rules."""
 
     logger.debug("workflow/workflow.py reloading Yara rules")
@@ -298,7 +306,7 @@ def reload_yara_rules():
     if not isinstance(rule_manager, YaraRuleManager):
         raise ValueError(f"Yara rule manager is incorrect type. Type: {type(rule_manager)}")
 
-    rule_manager.load_rules()
+    await rule_manager.load_rules()
 
 
 # endregion

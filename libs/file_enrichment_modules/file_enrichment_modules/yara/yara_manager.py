@@ -1,16 +1,15 @@
+import asyncio
 import glob
 import os
 import threading
 from datetime import UTC, datetime
 
+import asyncpg
 import plyara
-import psycopg
 import yara_x
-from common.db import get_postgres_connection_str
 from common.dependency_checks import check_directory_exists
 from common.logger import get_logger
 from plyara import utils as plyara_utils
-from psycopg.rows import dict_row
 
 logger = get_logger(__name__)
 
@@ -25,13 +24,18 @@ class YaraRuleManager:
         self.parser = plyara.Plyara()
         self._compiler = yara_x.Compiler()
         self._compiled_rules: yara_x.Rules | None = None
-        self._conninfo = get_postgres_connection_str()
+        self.asyncpg_pool: asyncpg.Pool | None = None  # Connection pool for database operations
 
+    async def initialize(self):
+        """Initialize the Yara rule manager by loading and compiling rules.
+
+        This should be called after asyncpg_pool is set.
+        """
         # Load and compile rules from disk first
-        self._process_disk_rules()
+        await self._process_disk_rules()
 
         # Then load enabled rules from database
-        self.load_rules()
+        await self.load_rules()
 
     def _get_scanner(self) -> yara_x.Scanner | None:
         """Get or create thread-local scanner instance."""
@@ -48,7 +52,7 @@ class YaraRuleManager:
         if hasattr(self._thread_local, "scanner"):
             delattr(self._thread_local, "scanner")
 
-    def _process_disk_rules(self):
+    async def _process_disk_rules(self):
         """Load Yara rules from disk and insert into database if they don't exist."""
         try:
             disk_sources = {}
@@ -93,28 +97,28 @@ class YaraRuleManager:
                     return
 
                 # Insert rules into database if they don't exist
-                with psycopg.connect(self._conninfo) as conn:
+                if not self.asyncpg_pool:
+                    logger.warning("No asyncpg pool available, cannot insert disk rules into database")
+                    return
+
+                async with self.asyncpg_pool.acquire() as conn:
                     for rule_name, rule_text in disk_rules.items():
                         try:
-                            with conn.cursor() as cur:
-                                # Try to insert the rule if it doesn't exist
-                                cur.execute(
-                                    """
-                                    INSERT INTO yara_rules
-                                        (name, content, source, enabled, alert_enabled, created_at, updated_at)
-                                    VALUES
-                                        (%s, %s, %s, true, true, %s, %s)
-                                    ON CONFLICT (name) DO NOTHING
-                                    """,
-                                    (
-                                        rule_name,
-                                        rule_text.strip(),
-                                        disk_sources[rule_name],
-                                        datetime.now(UTC),
-                                        datetime.now(UTC),
-                                    ),
-                                )
-                            conn.commit()
+                            # Try to insert the rule if it doesn't exist
+                            await conn.execute(
+                                """
+                                INSERT INTO yara_rules
+                                    (name, content, source, enabled, alert_enabled, created_at, updated_at)
+                                VALUES
+                                    ($1, $2, $3, true, true, $4, $5)
+                                ON CONFLICT (name) DO NOTHING
+                                """,
+                                rule_name,
+                                rule_text.strip(),
+                                disk_sources[rule_name],
+                                datetime.now(UTC),
+                                datetime.now(UTC),
+                            )
                         except Exception as e:
                             logger.warn("Error inserting disk rule", rule=rule_name)
                             logger.debug(f"Error inserting disk rule: {e}", rule=rule_name)
@@ -126,7 +130,7 @@ class YaraRuleManager:
             logger.exception(e, message="Error processing disk rules")
             raise
 
-    def get_rule_content(self, rule_name: str) -> str | None:
+    async def get_rule_content(self, rule_name: str) -> str | None:
         """
         Retrieve the content of a Yara rule by name.
 
@@ -136,39 +140,43 @@ class YaraRuleManager:
         Returns:
             The rule content if found, None otherwise
         """
+        if not self.asyncpg_pool:
+            logger.warning("No asyncpg pool available, cannot retrieve rule content")
+            return None
+
         try:
-            with psycopg.connect(self._conninfo, row_factory=dict_row) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT content
-                        FROM yara_rules
-                        WHERE name = %s
-                        """,
-                        (rule_name,),
-                    )
-                    result = cur.fetchone()
-                    return result["content"] if result else None
+            async with self.asyncpg_pool.acquire() as conn:
+                result = await conn.fetchrow(
+                    """
+                    SELECT content
+                    FROM yara_rules
+                    WHERE name = $1
+                    """,
+                    rule_name,
+                )
+                return result["content"] if result else None
         except Exception as e:
             logger.error(f"Error retrieving rule: {e}", rule=rule_name)
             return None
 
-    def load_rules(self):
+    async def load_rules(self):
         """Load all enabled rules from database and compile them."""
+        if not self.asyncpg_pool:
+            logger.warning("No asyncpg pool available, cannot load rules from database")
+            return
+
         try:
             # Create a new compiler instance
             self._compiler = yara_x.Compiler()
             valid_rules = 0
 
-            with psycopg.connect(self._conninfo, row_factory=dict_row) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        SELECT name, content, source
-                        FROM yara_rules
-                        WHERE enabled = true
-                        ORDER BY name
-                    """)
-                    rules = cur.fetchall()
+            async with self.asyncpg_pool.acquire() as conn:
+                rules = await conn.fetch("""
+                    SELECT name, content, source
+                    FROM yara_rules
+                    WHERE enabled = true
+                    ORDER BY name
+                """)
 
             logger.info(f"Loading {len(rules)} yara rules from the database")
 

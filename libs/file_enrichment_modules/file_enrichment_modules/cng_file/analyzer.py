@@ -7,10 +7,9 @@ parsing their structure and attempting to decrypt DPAPI-protected components.
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-import psycopg
+import asyncpg
 import yara_x
 from chromium.local_state import retry_decrypt_state_keys_for_chromekey
-from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import EnrichmentResult
 from common.state_helpers import get_file_enriched, get_file_enriched_async
@@ -23,7 +22,6 @@ from file_enrichment_modules.cng_file.cng_parser import (
 )
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import Blob, BlobDecryptionError, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
-from psycopg.rows import dict_row
 
 if TYPE_CHECKING:
     import asyncio
@@ -39,7 +37,7 @@ class CngFileAnalyzer(EnrichmentModule):
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.workflows = ["default"]
-        self._conninfo = get_postgres_connection_str()
+        self.asyncpg_pool: asyncpg.Pool | None = None  # Connection pool for database operations
 
         # Yara rule to identify CNG files
         self.yara_rule = yara_x.compile("""
@@ -216,42 +214,42 @@ rule is_cng_file
             encrypted_bytes: Raw DPAPI blob bytes
             decrypted_bytes: Final 32-byte decrypted key material (if available)
         """
+        if not self.asyncpg_pool:
+            logger.warning("No asyncpg pool available, cannot store Chrome key")
+            return
+
         try:
-            with psycopg.connect(self._conninfo, row_factory=dict_row) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO chromium.chrome_keys (
-                            originating_object_id,
-                            agent_id,
-                            source,
-                            project,
-                            key_masterkey_guid,
-                            key_bytes_enc,
-                            key_bytes_dec,
-                            key_is_decrypted
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (key_masterkey_guid) DO UPDATE SET
-                            originating_object_id = EXCLUDED.originating_object_id,
-                            agent_id = EXCLUDED.agent_id,
-                            project = EXCLUDED.project,
-                            key_masterkey_guid = EXCLUDED.key_masterkey_guid,
-                            key_bytes_enc = EXCLUDED.key_bytes_enc,
-                            key_bytes_dec = EXCLUDED.key_bytes_dec,
-                            key_is_decrypted = EXCLUDED.key_is_decrypted
-                        """,
-                        (
-                            file_enriched.object_id,
-                            file_enriched.agent_id,
-                            file_enriched.source,
-                            file_enriched.project,
-                            masterkey_guid,
-                            encrypted_bytes,
-                            decrypted_bytes,
-                            decrypted_bytes is not None,
-                        ),
-                    )
-                    conn.commit()
+            async with self.asyncpg_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO chromium.chrome_keys (
+                        originating_object_id,
+                        agent_id,
+                        source,
+                        project,
+                        key_masterkey_guid,
+                        key_bytes_enc,
+                        key_bytes_dec,
+                        key_is_decrypted
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (key_masterkey_guid) DO UPDATE SET
+                        originating_object_id = EXCLUDED.originating_object_id,
+                        agent_id = EXCLUDED.agent_id,
+                        project = EXCLUDED.project,
+                        key_masterkey_guid = EXCLUDED.key_masterkey_guid,
+                        key_bytes_enc = EXCLUDED.key_bytes_enc,
+                        key_bytes_dec = EXCLUDED.key_bytes_dec,
+                        key_is_decrypted = EXCLUDED.key_is_decrypted
+                    """,
+                    file_enriched.object_id,
+                    file_enriched.agent_id,
+                    file_enriched.source,
+                    file_enriched.project,
+                    masterkey_guid,
+                    encrypted_bytes,
+                    decrypted_bytes,
+                    decrypted_bytes is not None,
+                )
 
             logger.info(
                 f"Stored Chrome key for source {file_enriched.source}, "

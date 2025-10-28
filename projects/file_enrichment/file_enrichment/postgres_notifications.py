@@ -59,7 +59,7 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
 
                         if channel == "nemesis_yara_reload":
                             logger.info("Processing yara reload notification")
-                            reload_yara_rules()
+                            await reload_yara_rules()
 
                         elif channel == "nemesis_workflow_reset":
                             logger.info("Processing workflow reset notification")
