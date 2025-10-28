@@ -259,7 +259,7 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
             logger.debug(f"Setting 'dpapi_manager' for '{module}'")
             module.dpapi_manager = dpapi_manager  # type: ignore
             module.loop = asyncio.get_running_loop()  # type: ignore
-        elif hasattr(wf_runtime, "dpapi_manager"):
+        elif hasattr(module, "dpapi_manager"):
             logger.debug(f"'dpapi_manager' already set for for '{module}'")
 
     # Set asyncpg_pool on modules that need database access
