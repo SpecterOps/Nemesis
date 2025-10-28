@@ -4,7 +4,7 @@ from typing import Any
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.pdf.pdf2john import PdfParser
@@ -98,7 +98,7 @@ class PDFAnalyzer(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         return "pdf document" in file_enriched.magic_type.lower()
 
     def _analyze_pdf(self, file_path: str, file_enriched) -> EnrichmentResult | None:
@@ -162,7 +162,7 @@ The document is encrypted. Attempt to crack it using the following hash:
         """
         try:
             # get the current `file_enriched` from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

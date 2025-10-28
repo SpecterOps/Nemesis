@@ -7,7 +7,7 @@ from typing import Union
 import dnfile
 from common.logger import get_logger
 from common.models import DotNetInput, EnrichmentResult
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -118,7 +118,7 @@ class DotNetAnalyzer(EnrichmentModule):
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         # get the current `file_enriched` from the database backend
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         should_run = "mono/.net assembly" in file_enriched.magic_type.lower()
 
         return should_run
@@ -127,7 +127,7 @@ class DotNetAnalyzer(EnrichmentModule):
         """Process file using the dotnet service."""
         try:
             # get the current `file_enriched` FileEnriched object from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # publish a `dotnet-input` message for the process-heavy decompilation and InspectAssembly analysis in `dotnet_service`
             dotnet_input = DotNetInput(object_id=object_id)

@@ -5,7 +5,7 @@ import textwrap
 import yaml
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from PIL import Image
@@ -240,7 +240,7 @@ class ExifMetadataExtractor(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Check if file extension is supported
         extension = file_enriched.extension.lower() if file_enriched.extension else ""
@@ -313,7 +313,7 @@ class ExifMetadataExtractor(EnrichmentModule):
         """
         try:
             # get the current `file_enriched` FileEnriched object from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

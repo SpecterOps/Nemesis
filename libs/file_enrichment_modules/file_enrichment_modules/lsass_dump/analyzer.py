@@ -62,7 +62,7 @@ class LsassDumpParser(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         return "mini dump crash report" in file_enriched.magic_type.lower()
 
     def _convert_bytes_to_string(self, value):

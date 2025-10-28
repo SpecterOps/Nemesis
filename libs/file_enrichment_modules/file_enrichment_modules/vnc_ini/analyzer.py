@@ -5,7 +5,7 @@ from pathlib import Path
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from Crypto.Cipher import DES
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -31,7 +31,7 @@ class VncParser(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         should_run = (
             file_enriched.file_name.lower().endswith(".ini")
             and "vnc" in file_enriched.file_name.lower()
@@ -202,7 +202,7 @@ class VncParser(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

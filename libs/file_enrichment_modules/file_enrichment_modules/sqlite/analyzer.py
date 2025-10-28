@@ -6,7 +6,7 @@ from typing import Any
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -101,7 +101,7 @@ class SqliteParser(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
         should_run = (
             "sqlite 3.x database" in file_enriched.magic_type.lower()
             or file_enriched.file_name.lower().endswith(".sqlite")
@@ -176,7 +176,7 @@ class SqliteParser(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

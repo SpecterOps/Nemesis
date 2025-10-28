@@ -8,7 +8,7 @@ from uuid import UUID
 import asyncpg
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_linking import add_file_linking
 from impacket.dpapi import DPAPI_BLOB
@@ -41,7 +41,7 @@ async def process_chromium_local_state(
     """
     logger.info("Processing Chromium Local State file", object_id=object_id)
 
-    file_enriched = get_file_enriched(object_id)
+    file_enriched = await get_file_enriched_async(object_id)
 
     # Extract username and browser from file path
     username, browser = parse_chromium_file_path(file_enriched.path or "")

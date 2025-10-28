@@ -1,18 +1,19 @@
 # enrichment_modules/chromium_logins/analyzer.py
 
-import asyncio
 from typing import TYPE_CHECKING
 
 import yara_x
 from chromium import process_chromium_local_state
 from common.logger import get_logger
 from common.models import EnrichmentResult
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager
 
 if TYPE_CHECKING:
+    import asyncio
+
     from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)
@@ -56,7 +57,7 @@ rule Chrome_Local_State
             file_path: Optional path to already downloaded file
         """
 
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Check if file is < 5 megs and JSON magic type
         if not ((file_enriched.size < 5000000) and ("json" in file_enriched.magic_type.lower())):

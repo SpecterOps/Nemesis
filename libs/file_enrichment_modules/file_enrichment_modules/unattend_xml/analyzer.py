@@ -7,7 +7,7 @@ from pathlib import Path
 import yara_x
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -67,7 +67,7 @@ rule Detect_Windows_Unattend_XML {
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Initial checks for file type and name
         if not (file_enriched.is_plaintext and file_enriched.file_name.lower() == "unattend.xml"):
@@ -279,7 +279,7 @@ rule Detect_Windows_Unattend_XML {
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

@@ -6,7 +6,7 @@ from typing import Any
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.kdbx.keepass2john import process_database
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -236,7 +236,7 @@ class KDBXAnalyzer(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         if file_enriched.magic_type:
             return "keepass" in file_enriched.magic_type.lower() and "kdbx" in file_enriched.magic_type.lower()
@@ -329,7 +329,7 @@ class KDBXAnalyzer(EnrichmentModule):
         """
         try:
             # get the current `file_enriched` from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

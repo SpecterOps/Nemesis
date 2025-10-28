@@ -47,7 +47,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Check file size - masterkey files are typically small (usually less than 2KB)
         if file_enriched.size > 2048:

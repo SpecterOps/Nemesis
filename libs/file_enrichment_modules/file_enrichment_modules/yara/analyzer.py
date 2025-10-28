@@ -3,7 +3,7 @@ import binascii
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_enrichment_modules.yara.yara_manager import YaraRuleManager
@@ -183,7 +183,7 @@ class YaraScanner(EnrichmentModule):
         """
         try:
             # Get the current file_enriched from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             # Use provided file_path if available, otherwise download
             if file_path:

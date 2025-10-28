@@ -5,7 +5,6 @@ import tempfile
 from common.helpers import is_container
 from common.logger import get_logger
 from common.models import EnrichmentResult, File, Transform
-from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.container_contents.containers import ContainerExtractor
@@ -25,7 +24,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # Check if the file is a supported container type
         should_run = is_container(file_enriched.mime_type)
@@ -70,7 +69,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process container file and extract its contents."""
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
             enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
             transforms = []
             extracted_files = []

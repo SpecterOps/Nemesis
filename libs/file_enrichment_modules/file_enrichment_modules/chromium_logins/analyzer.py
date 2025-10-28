@@ -9,7 +9,7 @@ import yara_x
 from chromium import convert_chromium_timestamp, process_chromium_logins
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -56,7 +56,7 @@ rule Chrome_Logins_Tables
             file_path: Optional path to already downloaded file
         """
 
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         if "sqlite 3.x database" not in file_enriched.magic_type.lower():
             return False

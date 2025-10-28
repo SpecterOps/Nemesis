@@ -1,6 +1,6 @@
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
-from common.state_helpers import get_file_enriched
+from common.state_helpers import get_file_enriched_async
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
@@ -64,7 +64,7 @@ class FilenameScanner(EnrichmentModule):
         """
         try:
             # Get the current file_enriched from the database backend
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
 
             matches = []
             filename_lower = file_enriched.file_name.lower()

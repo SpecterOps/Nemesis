@@ -46,7 +46,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
         # there are some performance issues, so we're disabling this one for now
         return False
 
-        file_enriched = get_file_enriched(object_id)
+        file_enriched = await get_file_enriched_async(object_id)
 
         # skip carving if the file is not plaintext, of if it's an extracted strings.txt
         if not file_enriched.is_plaintext or (
@@ -235,7 +235,7 @@ class Base64DecoderAnalyzer(EnrichmentModule):
             file_path: Optional path to already downloaded file
         """
         try:
-            file_enriched = get_file_enriched(object_id)
+            file_enriched = await get_file_enriched_async(object_id)
             enrichment_result = EnrichmentResult(module_name=self.name)
 
             # Download and read the file content (respect size limit)

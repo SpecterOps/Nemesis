@@ -38,7 +38,7 @@ async def publish_enriched_file(ctx: WorkflowActivityContext, activity_input):
 
             return True
 
-    except Exception as e:
-        logger.exception(e, message="Error publishing enriched file data", object_id=object_id)
+    except Exception:
+        logger.exception(message="Error publishing enriched file data", object_id=object_id)
         # Don't raise to ensure workflow can complete
         return False
