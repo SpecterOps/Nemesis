@@ -166,7 +166,7 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
             raise
 
         if not ctx.is_replaying:
-            logger.debug(
+            logger.info(
                 "All workflow activites have completed",
                 processing_time=f"{ctx.current_utc_datetime - start_time}",
             )

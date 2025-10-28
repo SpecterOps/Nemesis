@@ -524,7 +524,7 @@ class WorkflowManager:
                         "Waiting for workflow completion",
                         processing_time=f"{time.time() - workflow_start_time:.4f}s",
                     )
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(0.3)
 
                 except Exception as e:
                     # specific case when we're standing the system down, so want to mark this as still running
@@ -629,7 +629,9 @@ class WorkflowManager:
 
                 # Convert Pydantic model to dict for Dapr workflow
                 workflow_input_dict = (
-                    workflow_input.model_dump() if isinstance(workflow_input, SingleEnrichmentWorkflowInput) else workflow_input
+                    workflow_input.model_dump()
+                    if isinstance(workflow_input, SingleEnrichmentWorkflowInput)
+                    else workflow_input
                 )
 
                 # Use asyncio.to_thread() to prevent blocking the event loop
