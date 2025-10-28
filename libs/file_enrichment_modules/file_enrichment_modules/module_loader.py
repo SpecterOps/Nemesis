@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+import asyncpg
 from common.logger import get_logger
 from common.models import EnrichmentResult
 
@@ -19,6 +20,7 @@ class EnrichmentModule(Protocol):
 
     name: str
     dependencies: list[str]
+    asyncpg_pool: asyncpg.Pool | None  # Optional connection pool for database operations
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should process the given file.

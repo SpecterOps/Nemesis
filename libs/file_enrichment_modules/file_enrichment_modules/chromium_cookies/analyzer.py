@@ -32,6 +32,7 @@ class ChromeCookiesParser(EnrichmentModule):
 
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
+        self.asyncpg_pool = None  # type: ignore
 
         # Yara rule to check for Chrome Cookies tables
         self.yara_rule = yara_x.compile("""
@@ -91,7 +92,7 @@ rule Chrome_Cookies_Tables
             transforms = []
 
             # Use the chromium library to process and insert into database
-            process_chromium_cookies(object_id, file_path)
+            await process_chromium_cookies(object_id, file_path, self.dpapi_manager, self.asyncpg_pool)
 
             # Configure SQLite to handle non-UTF8 data for report generation
             def adapt_bytes(b):

@@ -29,6 +29,7 @@ class ChromeLocalStateParser(EnrichmentModule):
 
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
+        self.asyncpg_pool = None  # type: ignore
 
         # Yara rule to check for Chrome Login Data tables
         self.yara_rule = yara_x.compile("""
@@ -79,7 +80,7 @@ rule Chrome_Local_State
 
         try:
             # Use the chromium library to process and insert into database
-            state_key_data = await process_chromium_local_state(self.dpapi_manager, object_id, file_path)
+            state_key_data = await process_chromium_local_state(self.dpapi_manager, object_id, file_path, self.asyncpg_pool)
 
             if state_key_data:
                 # Debug: Check for coroutines in state_key_data

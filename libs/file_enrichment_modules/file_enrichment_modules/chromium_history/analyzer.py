@@ -23,6 +23,8 @@ class ChromeHistoryParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
+        self.asyncpg_pool = None  # type: ignore
+
         # Yara rule to check for Chrome History tables
         self.yara_rule = yara_x.compile("""
 rule Chrome_Downloads_Tables
@@ -82,7 +84,7 @@ rule Chrome_Downloads_Tables
             transforms = []
 
             # Use the chromium library to process and insert into the database
-            process_chromium_history(object_id, file_path)
+            await process_chromium_history(object_id, file_path, self.asyncpg_pool)
 
             # Configure SQLite to handle non-UTF8 data for report generation
             def adapt_bytes(b):

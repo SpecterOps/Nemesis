@@ -2,32 +2,31 @@
 
 from uuid import UUID
 
-import psycopg
+import asyncpg
 from common.logger import get_logger
 from file_enrichment_modules.cng_file.cng_parser import check_bcrypt_key_blob, extract_final_key_material
 from nemesis_dpapi import Blob, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 
-from .helpers import get_postgres_connection_str
 from .local_state import retry_decrypt_state_keys_for_chromekey
 
 logger = get_logger(__name__)
 
 
-async def _retry_state_keys_for_chromekey_after_decrypt(source: str, chromekey: bytes):
+async def _retry_state_keys_for_chromekey_after_decrypt(source: str, chromekey: bytes, asyncpg_pool: asyncpg.Pool):
     """Helper to retry state key decryption after a chromekey is decrypted.
 
     Import is done here to avoid circular dependency issues.
     """
-    return await retry_decrypt_state_keys_for_chromekey(source, chromekey)
+    return await retry_decrypt_state_keys_for_chromekey(source, chromekey, asyncpg_pool)
 
 
-async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManager, pg_conn) -> dict:
+async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool) -> dict:
     """Attempt to decrypt a single chrome_key record using currently available masterkeys.
 
     Args:
         chrome_key_id: The ID of the chrome_key record to decrypt
         dpapi_manager: DpapiManager instance for decryption
-        pg_conn: PostgreSQL connection
+        asyncpg_pool: Async Postgres connection pool
 
     Returns:
         Dict with decryption results: {
@@ -39,23 +38,27 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
     cng_key_blob_entropy = b'xT5rZW5qVVbrvpuA\x00'
 
     # Fetch the chrome_key record
-    with pg_conn.cursor() as cur:
-        cur.execute(
+    async with asyncpg_pool.acquire() as conn:
+        row = await conn.fetchrow(
             """
             SELECT id, source, key_masterkey_guid, key_bytes_enc,
                    key_bytes_dec, key_is_decrypted
             FROM chromium.chrome_keys
-            WHERE id = %s
+            WHERE id = $1
             """,
-            (chrome_key_id,),
+            chrome_key_id
         )
-        row = cur.fetchone()
 
         if not row:
             logger.warning("Chrome key not found", chrome_key_id=chrome_key_id)
             return result
 
-        (record_id, source, key_masterkey_guid, key_bytes_enc, key_bytes_dec, key_is_decrypted) = row
+        record_id = row['id']
+        source = row['source']
+        key_masterkey_guid = row['key_masterkey_guid']
+        key_bytes_enc = row['key_bytes_enc']
+        key_bytes_dec = row['key_bytes_dec']
+        key_is_decrypted = row['key_is_decrypted']
 
     # Skip if already decrypted
     if key_is_decrypted:
@@ -84,23 +87,20 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
                             )
 
                             # Update database
-                            with pg_conn.cursor() as cur:
-                                cur.execute(
+                            async with asyncpg_pool.acquire() as conn:
+                                await conn.execute(
                                     """
                                     UPDATE chromium.chrome_keys
-                                    SET key_bytes_dec = %s, key_is_decrypted = %s,
-                                        key_masterkey_guid = %s
-                                    WHERE id = %s
+                                    SET key_bytes_dec = $1, key_is_decrypted = $2,
+                                        key_masterkey_guid = $3
+                                    WHERE id = $4
                                     """,
-                                    (key_bytes_dec, key_is_decrypted, dpapi_blob.masterkey_guid, chrome_key_id),
+                                    key_bytes_dec, key_is_decrypted, str(dpapi_blob.masterkey_guid), chrome_key_id
                                 )
-
-                            # Commit the chrome_key update before trying state_keys
-                            pg_conn.commit()
 
                             # Now try to decrypt any state_keys waiting for this chromekey
                             try:
-                                state_keys_result = await _retry_state_keys_for_chromekey_after_decrypt(source, key_bytes_dec)
+                                state_keys_result = await _retry_state_keys_for_chromekey_after_decrypt(source, key_bytes_dec, asyncpg_pool)
                                 result["state_keys_result"] = state_keys_result
                                 logger.info(
                                     "Completed retroactive state_key decryption for newly decrypted chromekey",
@@ -129,21 +129,19 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
 
         except Exception as e:
             logger.warning("Error processing chrome_key", chrome_key_id=chrome_key_id, error=str(e))
-    else:
-        # Commit even if no decryption happened (for consistency)
-        pg_conn.commit()
 
     return result
 
 
 async def retry_decrypt_chrome_keys_for_masterkey(
-    masterkey_guid: UUID, dpapi_manager: DpapiManager, masterkey_type: str | None = None
+    masterkey_guid: UUID, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool, masterkey_type: str | None = None
 ) -> dict:
     """Find all chrome_keys waiting for this masterkey and try to decrypt them.
 
     Args:
         masterkey_guid: The GUID of the newly available masterkey
         dpapi_manager: DpapiManager instance for decryption
+        asyncpg_pool: Async Postgres connection pool
         masterkey_type: Optional masterkey type ('system', 'user', 'unknown') for optimization
 
     Returns:
@@ -164,50 +162,46 @@ async def retry_decrypt_chrome_keys_for_masterkey(
         )
         return result
 
-    conn_str = get_postgres_connection_str()
-
     try:
-        with psycopg.connect(conn_str) as pg_conn:
+        async with asyncpg_pool.acquire() as conn:
             # Find all chrome_keys that might need this masterkey
-            with pg_conn.cursor() as cur:
-                # SYSTEM keys are used for chrome_keys, but if type is unknown, still try
-                query = """
-                    SELECT DISTINCT id FROM chromium.chrome_keys
-                    WHERE key_masterkey_guid = %s AND key_is_decrypted = FALSE
-                """
-                cur.execute(query, (masterkey_guid,))
+            # SYSTEM keys are used for chrome_keys, but if type is unknown, still try
+            query = """
+                SELECT DISTINCT id FROM chromium.chrome_keys
+                WHERE key_masterkey_guid = $1 AND key_is_decrypted = FALSE
+            """
+            chrome_key_rows = await conn.fetch(query, str(masterkey_guid))
+            chrome_key_ids = [row['id'] for row in chrome_key_rows]
 
-                chrome_key_ids = [row[0] for row in cur.fetchall()]
+        logger.debug(
+            "Found chrome_keys potentially waiting for masterkey",
+            masterkey_guid=masterkey_guid,
+            masterkey_type=masterkey_type,
+            count=len(chrome_key_ids),
+        )
 
-            logger.debug(
-                "Found chrome_keys potentially waiting for masterkey",
-                masterkey_guid=masterkey_guid,
-                masterkey_type=masterkey_type,
-                count=len(chrome_key_ids),
-            )
+        # Try to decrypt each chrome_key
+        for chrome_key_id in chrome_key_ids:
+            result["chrome_keys_attempted"] += 1
+            try:
+                decrypt_result = await retry_decrypt_chrome_key(chrome_key_id, dpapi_manager, asyncpg_pool)
 
-            # Try to decrypt each chrome_key
-            for chrome_key_id in chrome_key_ids:
-                result["chrome_keys_attempted"] += 1
-                try:
-                    decrypt_result = await retry_decrypt_chrome_key(chrome_key_id, dpapi_manager, pg_conn)
+                # Check if decryption succeeded
+                if decrypt_result["decrypted"]:
+                    result["chrome_keys_decrypted"] += 1
 
-                    # Check if decryption succeeded
-                    if decrypt_result["decrypted"]:
-                        result["chrome_keys_decrypted"] += 1
+            except Exception as e:
+                error_msg = f"Error processing chrome_key {chrome_key_id}: {str(e)}"
+                logger.warning("Failed to retry decrypt chrome_key", chrome_key_id=chrome_key_id, error=str(e))
+                result["errors"].append(error_msg)
 
-                except Exception as e:
-                    error_msg = f"Error processing chrome_key {chrome_key_id}: {str(e)}"
-                    logger.warning("Failed to retry decrypt chrome_key", chrome_key_id=chrome_key_id, error=str(e))
-                    result["errors"].append(error_msg)
-
-            logger.info(
-                "Completed retroactive chrome_key decryption for masterkey",
-                masterkey_guid=masterkey_guid,
-                attempted=result["chrome_keys_attempted"],
-                decrypted=result["chrome_keys_decrypted"],
-                errors=len(result["errors"]),
-            )
+        logger.info(
+            "Completed retroactive chrome_key decryption for masterkey",
+            masterkey_guid=masterkey_guid,
+            attempted=result["chrome_keys_attempted"],
+            decrypted=result["chrome_keys_decrypted"],
+            errors=len(result["errors"]),
+        )
 
     except Exception as e:
         error_msg = f"Database error during retroactive chrome_key decryption: {str(e)}"

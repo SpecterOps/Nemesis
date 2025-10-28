@@ -13,6 +13,7 @@ from chromium import (
     retry_decrypt_state_keys_for_masterkey,
 )
 from common.logger import get_logger
+from file_enrichment import global_vars
 from common.models2.dpapi import (
     DomainBackupKeyCredential,
     DpapiCredentialRequest,
@@ -72,6 +73,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
             chrome_key_result = await retry_decrypt_chrome_keys_for_masterkey(
                 evnt.masterkey_guid,
                 self.dpapi_manager,
+                global_vars.asyncpg_pool,
                 masterkey_type,
             )
 
@@ -86,6 +88,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
             result = await retry_decrypt_state_keys_for_masterkey(
                 evnt.masterkey_guid,
                 self.dpapi_manager,
+                global_vars.asyncpg_pool,
                 masterkey_type,
             )
 
@@ -101,6 +104,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
                 chromium_data_result = await retry_decrypt_chromium_data(
                     evnt.masterkey_guid,
                     self.dpapi_manager,
+                    global_vars.asyncpg_pool,
                     masterkey_type,
                 )
 

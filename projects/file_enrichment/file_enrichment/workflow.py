@@ -262,6 +262,12 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
         elif hasattr(wf_runtime, "dpapi_manager"):
             logger.debug(f"'dpapi_manager' already set for for '{module}'")
 
+    # Set asyncpg_pool on modules that need database access
+    for module in module_loader.modules.values():
+        if hasattr(module, "asyncpg_pool"):
+            logger.debug(f"Setting 'asyncpg_pool' for '{module}'")
+            module.asyncpg_pool = global_vars.asyncpg_pool  # type: ignore
+
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
     execution_order = topological_sort(graph)
