@@ -87,6 +87,12 @@ jobs:
           if [ "${{ matrix.service.name }}" = "frontend" ]; then
             cp version.json ./projects/frontend/public/version.json
             echo "Copied version.json to frontend public directory"
+
+            # Create template env.js file (will be populated at runtime by env.sh)
+            cat > ./projects/frontend/public/env.js << 'EOF'
+          window.ENV = { HASURA_ADMIN_SECRET: '%HASURA_ADMIN_SECRET%' };
+          EOF
+            echo "Created template env.js in frontend public directory"
           fi
 
       - name: Set up Docker Buildx
