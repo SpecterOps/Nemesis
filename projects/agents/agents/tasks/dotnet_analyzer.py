@@ -15,6 +15,7 @@ from pathlib import Path
 import psycopg
 import structlog
 from agents.base_agent import BaseAgent
+from agents.logger import set_agent_metadata
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import DotNetAnalysisResponse
@@ -464,6 +465,13 @@ Provide analysis in markdown format with actionable security findings."""
             return {"success": False, "error": "AI model not available for .NET analysis"}
 
         try:
+            # Set metadata for this agent run
+            set_agent_metadata(
+                agent_name="dotnet_analyzer",
+                object_id=object_id,
+                tags=["dotnet", "reverse_engineering"],
+            )
+
             # Download the file to a temporary location for analysis
             file_enriched = get_file_enriched(object_id)
             with self.storage.download(object_id) as temp_file:

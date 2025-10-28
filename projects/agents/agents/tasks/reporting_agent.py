@@ -4,6 +4,7 @@ import json
 
 import structlog
 from agents.base_agent import BaseAgent
+from agents.logger import set_agent_metadata
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import ReportSynthesisResponse
@@ -118,6 +119,14 @@ Be concise, factual, and focus on risk impact rather than detection methods."""
             return {"success": False, "error": "AI model not available for report synthesis"}
 
         try:
+            # Set metadata for this agent run
+            set_agent_metadata(
+                agent_name="report_generator",
+                report_type=report_type,
+                source_name=source_name,
+                tags=["reporting", "risk_assessment"],
+            )
+
             # Get the current prompt from database or default
             current_prompt = self.get_prompt()
 

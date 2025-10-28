@@ -6,6 +6,7 @@ import tempfile
 import psycopg
 import structlog
 from agents.base_agent import BaseAgent
+from agents.logger import set_agent_metadata
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import CredentialAnalysisResponse, CredentialWithContext
@@ -136,6 +137,13 @@ Return your findings as a structured list. If no credentials are found, return a
             return {"success": False, "error": "AI model not available for credential analysis"}
 
         try:
+            # Set metadata for this agent run
+            set_agent_metadata(
+                agent_name="credential_analyzer",
+                object_id=object_id,
+                tags=["credential_extraction"],
+            )
+
             # Get text content
             text_content = self._get_text_content(object_id)
             if not text_content:

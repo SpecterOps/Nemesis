@@ -6,6 +6,7 @@ import tempfile
 import psycopg
 import structlog
 from agents.base_agent import BaseAgent
+from agents.logger import set_agent_metadata
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import TranslationResponse
@@ -114,6 +115,14 @@ class TextTranslator(BaseAgent):
             return {"success": False, "error": "AI model not available for text translation"}
 
         try:
+            # Set metadata for this agent run
+            set_agent_metadata(
+                agent_name="text_translator",
+                object_id=object_id,
+                target_language=target_language,
+                tags=["translation"],
+            )
+
             # Get text content
             text_content = self._get_text_content(object_id)
             if not text_content:
