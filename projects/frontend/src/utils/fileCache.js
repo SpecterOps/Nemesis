@@ -179,8 +179,9 @@ export async function cachedFetch(url, options = {}) {
     if (cached) {
       return cached;
     }
-    // If not in cache (request failed), throw error
-    throw new Error('Deduplicated request failed - no cached response available');
+    // If not in cache (caching may have failed), fallback to direct fetch
+    console.warn('[FileCache] Deduplicated request cache miss, falling back to direct fetch:', cacheKey);
+    return fetch(url, options);
   }
 
   // Fetch from network
@@ -207,8 +208,10 @@ export async function cachedFetch(url, options = {}) {
       // Get from cache so we return a fresh Response object
       const cached = await fileCache.get(url);
       if (!cached) {
-        console.error('[FileCache] ERROR: Cache miss after successful fetch!', cacheKey);
-        console.error('[FileCache] Cache contents:', Array.from(fileCache.cache.keys()));
+        console.warn('[FileCache] Cache miss after successful fetch, falling back to direct fetch:', cacheKey);
+        console.log('[FileCache] Cache contents:', Array.from(fileCache.cache.keys()));
+        // Fallback to direct fetch if caching failed
+        return fetch(url, options);
       }
       return cached;
     } else {
