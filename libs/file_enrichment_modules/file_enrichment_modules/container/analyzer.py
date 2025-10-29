@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 class ContainerAnalyzer(EnrichmentModule):
     name: str = "container_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         self.workflows = ["default"]

@@ -102,7 +102,7 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
                 OR encryption_type IN ('key', 'abe')
             )
             """,
-            str(masterkey_guid)
+            str(masterkey_guid),
         )
 
     logger.debug(
@@ -113,14 +113,14 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
 
     for cookie in cookies:
         result["attempted"] += 1
-        cookie_id = cookie['id']
-        encryption_type = cookie['encryption_type']
-        cookie_masterkey_guid = cookie['masterkey_guid']
-        state_key_id = cookie['state_key_id']
-        value_enc = cookie['value_enc']
-        source = cookie['source']
-        username = cookie['username']
-        browser = cookie['browser']
+        cookie_id = cookie["id"]
+        encryption_type = cookie["encryption_type"]
+        cookie_masterkey_guid = cookie["masterkey_guid"]
+        state_key_id = cookie["state_key_id"]
+        value_enc = cookie["value_enc"]
+        source = cookie["source"]
+        username = cookie["username"]
+        browser = cookie["browser"]
 
         try:
             value_dec = None
@@ -186,11 +186,17 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
                                     OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
                                 )
                                 """,
-                                source, username, browser, encryption_type, encryption_type
+                                source,
+                                username,
+                                browser,
+                                encryption_type,
+                                encryption_type,
                             )
                             if state_key_row:
-                                new_state_key_id = state_key_row['id']
-                                state_key_bytes = await get_state_key_bytes(new_state_key_id, encryption_type, asyncpg_pool)
+                                new_state_key_id = state_key_row["id"]
+                                state_key_bytes = await get_state_key_bytes(
+                                    new_state_key_id, encryption_type, asyncpg_pool
+                                )
                                 if state_key_bytes:
                                     try:
                                         value_dec_bytes = decrypt_chrome_string(
@@ -231,7 +237,9 @@ async def _retry_decrypt_cookies(masterkey_guid: UUID, dpapi_manager: DpapiManag
                         SET value_dec = $1, is_decrypted = TRUE, state_key_id = $2
                         WHERE id = $3
                         """,
-                        value_dec, state_key_id, cookie_id
+                        value_dec,
+                        state_key_id,
+                        cookie_id,
                     )
                 result["decrypted"] += 1
 
@@ -269,7 +277,7 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
                 OR encryption_type IN ('key', 'abe')
             )
             """,
-            str(masterkey_guid)
+            str(masterkey_guid),
         )
 
     logger.debug(
@@ -280,14 +288,14 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
 
     for login in logins:
         result["attempted"] += 1
-        login_id = login['id']
-        encryption_type = login['encryption_type']
-        login_masterkey_guid = login['masterkey_guid']
-        state_key_id = login['state_key_id']
-        password_value_enc = login['password_value_enc']
-        source = login['source']
-        username = login['username']
-        browser = login['browser']
+        login_id = login["id"]
+        encryption_type = login["encryption_type"]
+        login_masterkey_guid = login["masterkey_guid"]
+        state_key_id = login["state_key_id"]
+        password_value_enc = login["password_value_enc"]
+        source = login["source"]
+        username = login["username"]
+        browser = login["browser"]
 
         try:
             password_dec = None
@@ -355,7 +363,11 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
                                         OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
                                     )
                                     """,
-                                    source, username, browser, encryption_type, encryption_type
+                                    source,
+                                    username,
+                                    browser,
+                                    encryption_type,
+                                    encryption_type,
                                 )
                             else:
                                 # if no username/password, just restrict to SOURCE
@@ -368,11 +380,15 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
                                         OR (app_bound_key_is_decrypted = TRUE AND $3 = 'abe')
                                     )
                                     """,
-                                    source, encryption_type, encryption_type
+                                    source,
+                                    encryption_type,
+                                    encryption_type,
                                 )
                             if state_key_row:
-                                new_state_key_id = state_key_row['id']
-                                state_key_bytes = await get_state_key_bytes(new_state_key_id, encryption_type, asyncpg_pool)
+                                new_state_key_id = state_key_row["id"]
+                                state_key_bytes = await get_state_key_bytes(
+                                    new_state_key_id, encryption_type, asyncpg_pool
+                                )
                                 if state_key_bytes:
                                     try:
                                         password_dec_bytes = decrypt_chrome_string(
@@ -411,7 +427,9 @@ async def _retry_decrypt_logins(masterkey_guid: UUID, dpapi_manager: DpapiManage
                         SET password_value_dec = $1, is_decrypted = TRUE, state_key_id = $2
                         WHERE id = $3
                         """,
-                        password_dec, state_key_id, login_id
+                        password_dec,
+                        state_key_id,
+                        login_id,
                     )
                 result["decrypted"] += 1
 

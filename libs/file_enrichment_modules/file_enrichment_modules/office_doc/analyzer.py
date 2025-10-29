@@ -325,6 +325,7 @@ def parse_office_new_file(file_path: str) -> dict[str, Any]:
 class OfficeAnalyzer(EnrichmentModule):
     name: str = "office_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

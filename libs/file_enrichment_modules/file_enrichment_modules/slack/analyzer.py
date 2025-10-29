@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 class SlackRootStateParser(EnrichmentModule):
     name: str = "slack_root_state_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 

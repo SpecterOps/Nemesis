@@ -8,7 +8,7 @@ from uuid import UUID
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyType
@@ -52,6 +52,7 @@ class Credential:
 class LsassDumpParser(EnrichmentModule):
     name: str = "lsass_dump"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

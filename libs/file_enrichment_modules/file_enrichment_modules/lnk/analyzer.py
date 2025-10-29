@@ -76,6 +76,7 @@ def convert_datetime(obj):
 class LnkParser(EnrichmentModule):
     name: str = "lnk_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

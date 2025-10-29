@@ -32,6 +32,7 @@ logger = get_logger(__name__)
 class CngFileAnalyzer(EnrichmentModule):
     name: str = "cng_analyzer"
     dependencies: list[str] = []
+
     def __init__(self, standalone: bool = False):
         self.storage = StorageMinio()
         self.dpapi_manager: DpapiManager = None  # type: ignore

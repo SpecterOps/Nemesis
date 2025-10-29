@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 class SysprepParser(EnrichmentModule):
     name: str = "sysprep_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 

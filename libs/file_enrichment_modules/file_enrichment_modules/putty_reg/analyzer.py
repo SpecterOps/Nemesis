@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 class PuttyParser(EnrichmentModule):
     name: str = "putty_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

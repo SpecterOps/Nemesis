@@ -37,7 +37,7 @@ async def recover_interrupted_workflows(pool) -> None:
                 WHERE status = 'RUNNING'
                 RETURNING object_id
             """)
-            running_object_ids = [row['object_id'] for row in running_ids]
+            running_object_ids = [row["object_id"] for row in running_ids]
 
             if running_object_ids:
                 logger.info(f"Atomically claimed {len(running_object_ids)} interrupted workflows", pid=os.getpid())
@@ -66,19 +66,25 @@ async def recover_interrupted_workflows(pool) -> None:
                 if row:
                     # Convert database row to File-compatible dict
                     file_data = {
-                        "object_id": str(row['object_id']),
-                        "agent_id": row['agent_id'],
-                        "source": row['source'],
-                        "project": row['project'],
-                        "timestamp": row['timestamp'],
-                        "expiration": row['expiration'],
-                        "path": row['path'],
-                        "originating_object_id": str(row['originating_object_id']) if row['originating_object_id'] else None,
-                        "originating_container_id": str(row['originating_container_id']) if row['originating_container_id'] else None,
-                        "nesting_level": row['nesting_level'],
-                        "creation_time": row['file_creation_time'].isoformat() if row['file_creation_time'] else None,
-                        "access_time": row['file_access_time'].isoformat() if row['file_access_time'] else None,
-                        "modification_time": row['file_modification_time'].isoformat() if row['file_modification_time'] else None,
+                        "object_id": str(row["object_id"]),
+                        "agent_id": row["agent_id"],
+                        "source": row["source"],
+                        "project": row["project"],
+                        "timestamp": row["timestamp"],
+                        "expiration": row["expiration"],
+                        "path": row["path"],
+                        "originating_object_id": str(row["originating_object_id"])
+                        if row["originating_object_id"]
+                        else None,
+                        "originating_container_id": str(row["originating_container_id"])
+                        if row["originating_container_id"]
+                        else None,
+                        "nesting_level": row["nesting_level"],
+                        "creation_time": row["file_creation_time"].isoformat() if row["file_creation_time"] else None,
+                        "access_time": row["file_access_time"].isoformat() if row["file_access_time"] else None,
+                        "modification_time": row["file_modification_time"].isoformat()
+                        if row["file_modification_time"]
+                        else None,
                     }
                     recovered_files.append(file_data)
                     logger.debug("Recovered file data for workflow", object_id=object_id, pid=os.getpid())

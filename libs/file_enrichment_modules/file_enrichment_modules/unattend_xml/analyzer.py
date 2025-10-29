@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 class UnattendParser(EnrichmentModule):
     name: str = "unattend_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 

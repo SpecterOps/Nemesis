@@ -91,6 +91,7 @@ def parse_pdf_file(file_path: str) -> dict[str, Any]:
 class PDFAnalyzer(EnrichmentModule):
     name: str = "pdf_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

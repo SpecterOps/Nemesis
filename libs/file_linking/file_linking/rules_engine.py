@@ -204,9 +204,7 @@ class FileLinkingEngine:
 
         return final_path, status
 
-    async def _resolve_forward_for_table(
-        self, source: str, real_path: str, table_name: str
-    ) -> None:
+    async def _resolve_forward_for_table(self, source: str, real_path: str, table_name: str) -> None:
         """
         Perform forward resolution for a specific table: check if a real path matches placeholders.
 
@@ -463,4 +461,3 @@ class FileLinkingEngine:
             )
 
         return linkings_created
-

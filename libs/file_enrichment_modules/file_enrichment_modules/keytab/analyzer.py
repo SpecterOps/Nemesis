@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 class KeytabAnalyzer(EnrichmentModule):
     name: str = "keytab_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 

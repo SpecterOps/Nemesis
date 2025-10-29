@@ -23,7 +23,10 @@ logger = get_logger(__name__)
 
 
 async def process_chromium_cookies(
-    object_id: str, file_path: str | None = None, dpapi_manager: DpapiManager | None = None, asyncpg_pool: asyncpg.Pool | None = None
+    object_id: str,
+    file_path: str | None = None,
+    dpapi_manager: DpapiManager | None = None,
+    asyncpg_pool: asyncpg.Pool | None = None,
 ) -> None:
     """Process Chromium Cookies file and insert cookies into database.
 
@@ -72,7 +75,12 @@ def _translate_samesite(samesite_int: int) -> str:
 
 
 async def _insert_cookies(
-    file_enriched, username: str | None, browser: str, db_path: str, dpapi_manager: DpapiManager | None = None, asyncpg_pool: asyncpg.Pool | None = None
+    file_enriched,
+    username: str | None,
+    browser: str,
+    db_path: str,
+    dpapi_manager: DpapiManager | None = None,
+    asyncpg_pool: asyncpg.Pool | None = None,
 ) -> None:
     """Extract cookies from Cookies database and insert into chromium.cookies table."""
     try:

@@ -24,6 +24,7 @@ logger = get_logger(__name__)
 class ChromeCookiesParser(EnrichmentModule):
     name: str = "chrome_cookies_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 

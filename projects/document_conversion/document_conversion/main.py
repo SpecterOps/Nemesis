@@ -135,7 +135,7 @@ async def lifespan(app: FastAPI):
             logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
         )
 
-    except Exception as e:
+    except Exception:
         logger.exception(message="Error initializing service")
         raise
 
@@ -179,7 +179,7 @@ def is_pdf_encrypted(pdf_path):
         # Check if the PDF is encrypted
         return reader.is_encrypted
 
-    except Exception as e:
+    except Exception:
         logger.exception("Error checking PDF")
         return None
 
@@ -265,7 +265,7 @@ def store_transform(ctx, activity_input):
                 )
             conn.commit()
         logger.debug(f"Stored {transform_type} transform", object_id=file_enriched_object_id)
-    except Exception as e:
+    except Exception:
         logger.exception(message=f"Error storing {transform_type} transform")
         raise
 
@@ -301,7 +301,7 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
             new_object_id=transform.object_id,
             originating_object_id=file_enriched.object_id,
         )
-    except Exception as e:
+    except Exception:
         logger.exception(message="Error publishing file message")
         raise
 
@@ -665,7 +665,7 @@ def document_conversion_workflow(ctx: DaprWorkflowContext, workflow_input: dict)
 
         return {"status": "completed", "transforms_count": len(valid_transforms)}
 
-    except Exception as e:
+    except Exception:
         logger.exception(message="Error in text extraction workflow")
         raise
 
@@ -705,7 +705,7 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
         # Start monitoring task for this workflow
         asyncio.create_task(monitor_workflow_completion(instance_id))
 
-    except Exception as e:
+    except Exception:
         # Release semaphore on error
         workflow_semaphore.release()
         logger.exception(message="Error starting document conversion workflow")
@@ -756,7 +756,7 @@ async def monitor_workflow_completion(instance_id: str):
                 logger.warning(f"Error checking workflow status for {instance_id}: {check_error}")
                 await asyncio.sleep(2)  # Wait longer on error
 
-    except Exception as e:
+    except Exception:
         logger.exception(message=f"Error monitoring workflow {instance_id}")
 
     finally:
@@ -809,7 +809,7 @@ async def handle_file_enriched(event: CloudEvent[FileEnriched]):
         # Start workflow with semaphore control for backpressure
         await start_workflow_with_concurrency_control(file_enriched)
 
-    except Exception as e:
+    except Exception:
         logger.exception(message="Error handling file_enriched event")
         raise
 

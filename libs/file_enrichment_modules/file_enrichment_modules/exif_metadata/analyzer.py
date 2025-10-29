@@ -233,6 +233,7 @@ def format_exif_display(exif_data):
 class ExifMetadataExtractor(EnrichmentModule):
     name: str = "exif_metadata"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

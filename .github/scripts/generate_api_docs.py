@@ -27,8 +27,8 @@ def extract_openapi_spec() -> dict[str, Any]:
 
         # Mock Dapr dependencies to avoid connection issues
         import sys
-        from unittest.mock import MagicMock
         from types import ModuleType
+        from unittest.mock import MagicMock
 
         # Create a mock module factory that returns modules, not MagicMocks
         def create_mock_module(name):
@@ -36,14 +36,16 @@ def extract_openapi_spec() -> dict[str, Any]:
             module = ModuleType(name)
             module.__path__ = []  # Makes it a package
             module.__package__ = name
+
             # Add a __getattr__ that returns more mock modules for any submodule access
             def mock_getattr(attr_name):
-                if attr_name.startswith('_'):
+                if attr_name.startswith("_"):
                     raise AttributeError(f"module '{name}' has no attribute '{attr_name}'")
                 submodule_name = f"{name}.{attr_name}"
                 if submodule_name not in sys.modules:
                     sys.modules[submodule_name] = create_mock_module(submodule_name)
                 return sys.modules[submodule_name]
+
             module.__getattr__ = mock_getattr
             return module
 
@@ -111,6 +113,7 @@ def extract_openapi_spec() -> dict[str, Any]:
         sys.exit(1)
     except Exception as e:
         import traceback
+
         print(f"Error generating OpenAPI spec: {e}")
         print("\nFull traceback:")
         traceback.print_exc()

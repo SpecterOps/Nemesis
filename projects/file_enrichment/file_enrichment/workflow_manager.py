@@ -204,6 +204,7 @@ class WorkflowManager:
                     # Try to terminate the workflow in Dapr
                     try:
                         from . import global_vars
+
                         await asyncio.to_thread(global_vars.workflow_client.terminate_workflow, wf_id)
                     except Exception as e:
                         logger.warning(f"Could not terminate workflow {wf_id}: {e}")

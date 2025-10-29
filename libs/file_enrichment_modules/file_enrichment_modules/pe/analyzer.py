@@ -337,6 +337,7 @@ def parse_pe_file(file_path: str) -> dict[str, Any]:
 class PEAnalyzer(EnrichmentModule):
     name: str = "pe_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

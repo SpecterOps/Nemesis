@@ -122,8 +122,7 @@ async def handle_feedback_subscription():
     while True:
         try:
             transport = WebsocketsTransport(
-                url="ws://hasura:8080/v1/graphql",
-                headers={"x-hasura-admin-secret": hasura_admin_secret}
+                url="ws://hasura:8080/v1/graphql", headers={"x-hasura-admin-secret": hasura_admin_secret}
             )
 
             async with Client(
@@ -307,21 +306,15 @@ async def get_apprise_info():
         if url.startswith("slack://"):
             # Extract channel name from Slack URL format: slack://TOKEN@WORKSPACE/#channel
             import re
-            channel_match = re.search(r'#([^?]+)', url)
+
+            channel_match = re.search(r"#([^?]+)", url)
             if channel_match:
                 channel_name = channel_match.group(1)
 
                 if tag and tag != "default":
-                    channels.append({
-                        "name": channel_name,
-                        "type": "tagged",
-                        "tag": tag
-                    })
+                    channels.append({"name": channel_name, "type": "tagged", "tag": tag})
                 else:
-                    channels.append({
-                        "name": channel_name,
-                        "type": "main"
-                    })
+                    channels.append({"name": channel_name, "type": "main"})
 
     return {"channels": channels}
 

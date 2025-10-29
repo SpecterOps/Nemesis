@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 class Base64DecoderAnalyzer(EnrichmentModule):
     name: str = "base64_decoder"
     dependencies: list[str] = []
+
     def __init__(self, max_extractions: int = 30):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

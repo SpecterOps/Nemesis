@@ -32,10 +32,7 @@ def render_source_report_html(report_data: dict) -> str:
     if ai_synthesis and ai_synthesis.get("report_markdown"):
         # print(f"DEBUG pdf_generator: Converting markdown to HTML, length={len(ai_synthesis['report_markdown'])}")
         # Convert markdown to HTML
-        html_content = markdown.markdown(
-            ai_synthesis["report_markdown"],
-            extensions=['extra', 'nl2br', 'sane_lists']
-        )
+        html_content = markdown.markdown(ai_synthesis["report_markdown"], extensions=["extra", "nl2br", "sane_lists"])
         # print(f"DEBUG pdf_generator: HTML length={len(html_content)}")
         ai_synthesis = {
             "risk_level": ai_synthesis.get("risk_level"),

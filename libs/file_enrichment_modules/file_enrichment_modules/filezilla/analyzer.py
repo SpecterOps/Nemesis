@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 class FileZillaParser(EnrichmentModule):
     name: str = "filezilla_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

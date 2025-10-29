@@ -15,6 +15,7 @@ logger = get_logger(__name__)
 class ParquetFileParser(EnrichmentModule):
     name: str = "parquet_file_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 

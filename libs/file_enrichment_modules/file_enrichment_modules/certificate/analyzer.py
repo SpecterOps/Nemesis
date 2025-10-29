@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 class CertificateAnalyzer(EnrichmentModule):
     name: str = "certificate_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         self.workflows = ["default"]

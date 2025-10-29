@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 class DPAPIMasterkeyAnalyzer(EnrichmentModule):
     name: str = "dpapi_masterkey"
     dependencies: list[str] = []
+
     def __init__(self, standalone: bool = False):
         self.storage = StorageMinio()
         self.dpapi_manager: DpapiManager = None  # type: ignore
@@ -78,7 +79,8 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                     ORDER BY timestamp DESC
                     LIMIT 1
                 """,
-                    file_enriched.source, target_hive_path,
+                    file_enriched.source,
+                    target_hive_path,
                 )
 
                 if result:
@@ -100,7 +102,8 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                     ORDER BY fe.timestamp DESC
                     LIMIT 1
                 """,
-                    file_enriched.source, f'"{target_hive_type}"',
+                    file_enriched.source,
+                    f'"{target_hive_type}"',
                 )
 
                 if result:

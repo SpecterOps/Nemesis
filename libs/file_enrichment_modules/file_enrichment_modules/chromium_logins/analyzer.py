@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 class ChromeLoginsParser(EnrichmentModule):
     name: str = "chrome_logins_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 

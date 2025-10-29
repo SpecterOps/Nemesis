@@ -35,7 +35,9 @@ DEFAULT_BLOB_PROVIDER_GUID = UUID("DF9D8CD0-1501-11D1-8C7A-00C04FC297EB")
 _PATTERN_SYSTEM_USER = re.compile(r"/windows/system32/microsoft/protect/s-1-5-18/user/", re.IGNORECASE)
 _PATTERN_SYSTEM = re.compile(r"/windows/system32/microsoft/protect/s-1-5-18/", re.IGNORECASE)
 _PATTERN_SERVICE_PROFILES = re.compile(r"/windows/serviceprofiles/(localservice|networkservice)/", re.IGNORECASE)
-_PATTERN_USER_FULL = re.compile(r"/users/.+/appdata/roaming/microsoft/protect/s-1-5-21-[\d-]+/[0-9a-f-]+", re.IGNORECASE)
+_PATTERN_USER_FULL = re.compile(
+    r"/users/.+/appdata/roaming/microsoft/protect/s-1-5-21-[\d-]+/[0-9a-f-]+", re.IGNORECASE
+)
 _PATTERN_USER_FALLBACK = re.compile(r"/users/.+/appdata/roaming/microsoft/protect/", re.IGNORECASE)
 
 

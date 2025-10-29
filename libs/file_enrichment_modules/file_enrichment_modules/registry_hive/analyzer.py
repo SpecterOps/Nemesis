@@ -29,6 +29,7 @@ logger = get_logger(__name__)
 class RegistryHiveAnalyzer(EnrichmentModule):
     name: str = "registry_hive"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         self.workflows = ["default"]
@@ -106,7 +107,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     ORDER BY timestamp DESC
                     LIMIT 1
                 """,
-                    file_enriched.source, target_hive_path,
+                    file_enriched.source,
+                    target_hive_path,
                 )
 
                 if result:
@@ -128,7 +130,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     ORDER BY fe.timestamp DESC
                     LIMIT 1
                 """,
-                    file_enriched.source, f'"{target_hive_type}"',
+                    file_enriched.source,
+                    f'"{target_hive_type}"',
                 )
 
                 if result:

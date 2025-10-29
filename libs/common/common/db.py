@@ -13,7 +13,14 @@ def get_postgres_connection_str(dapr_client: DaprClient | None = None) -> str:
     def fetch_secrets(client: DaprClient) -> dict:
         """Fetch all required PostgreSQL secrets."""
         secrets = {}
-        secret_keys = ["POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "POSTGRES_PARAMETERS"]
+        secret_keys = [
+            "POSTGRES_USER",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_HOST",
+            "POSTGRES_PORT",
+            "POSTGRES_DB",
+            "POSTGRES_PARAMETERS",
+        ]
 
         for key in secret_keys:
             try:

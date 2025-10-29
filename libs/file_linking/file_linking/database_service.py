@@ -25,7 +25,9 @@ class FileLinkingDatabaseService:
     def __init__(self, connection_pool: asyncpg.Pool):
         self.pool = connection_pool
 
-    async def add_file_listing(self, source: str, path: str, status: FileListingStatus, object_id: str | None = None) -> bool:
+    async def add_file_listing(
+        self, source: str, path: str, status: FileListingStatus, object_id: str | None = None
+    ) -> bool:
         """
         Add or update entry in file_listings table.
 
@@ -75,7 +77,9 @@ class FileLinkingDatabaseService:
 
         return False
 
-    async def add_file_linking(self, source: str, file_path_1: str, file_path_2: str, link_type: str | None = None) -> bool:
+    async def add_file_linking(
+        self, source: str, file_path_1: str, file_path_2: str, link_type: str | None = None
+    ) -> bool:
         """
         Add relationship between two files in file_linkings table.
 
@@ -148,8 +152,12 @@ class FileLinkingDatabaseService:
                 return []
 
             # Build LIKE conditions from PLACEHOLDERS array for each table
-            placeholder_conditions_listings = " OR ".join([f"file_listings.path LIKE '%{p.name}%'" for p in PLACEHOLDERS])
-            placeholder_conditions_linkings = " OR ".join([f"file_linkings.file_path_2 LIKE '%{p.name}%'" for p in PLACEHOLDERS])
+            placeholder_conditions_listings = " OR ".join(
+                [f"file_listings.path LIKE '%{p.name}%'" for p in PLACEHOLDERS]
+            )
+            placeholder_conditions_linkings = " OR ".join(
+                [f"file_linkings.file_path_2 LIKE '%{p.name}%'" for p in PLACEHOLDERS]
+            )
 
             query = f"""
                 SELECT 'file_listings' as table_name, path

@@ -229,6 +229,7 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
 class KDBXAnalyzer(EnrichmentModule):
     name: str = "kdbx_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         # the workflows this module should automatically run in

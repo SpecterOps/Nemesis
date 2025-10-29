@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 class DpapiBlobAnalyzer(EnrichmentModule):
     name: str = "dpapi_analyzer"
     dependencies: list[str] = []
+
     def __init__(self, standalone: bool = False):
         self.storage = StorageMinio()
         self.dapr_client = DaprClient()
@@ -56,13 +57,13 @@ rule has_dpapi_blob
         """
         lines = []
         for i in range(0, len(data), 16):
-            chunk = data[i:i+16]
-            hex_part = ' '.join(f'{b:02x}' for b in chunk)
+            chunk = data[i : i + 16]
+            hex_part = " ".join(f"{b:02x}" for b in chunk)
             # Pad hex part to align ASCII
             hex_part = hex_part.ljust(48)
-            ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
-            lines.append(f'{offset+i:08x}  {hex_part}  {ascii_part}')
-        return '\n'.join(lines)
+            ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
+            lines.append(f"{offset + i:08x}  {hex_part}  {ascii_part}")
+        return "\n".join(lines)
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed by scanning for DPAPI blobs.
@@ -183,13 +184,15 @@ rule has_dpapi_blob
                         if blob.get("decrypted_data") and len(blob["decrypted_data"]) <= 1000:
                             base64_content = base64.b64encode(blob["decrypted_data"]).decode("utf-8")
 
-                        writer.writerow([
-                            blob["dpapi_master_key_guid"],
-                            blob.get("blob_offset", 0),
-                            blob.get("blob_length", 0),
-                            blob.get("is_decrypted", False),
-                            base64_content,
-                        ])
+                        writer.writerow(
+                            [
+                                blob["dpapi_master_key_guid"],
+                                blob.get("blob_offset", 0),
+                                blob.get("blob_length", 0),
+                                blob.get("is_decrypted", False),
+                                base64_content,
+                            ]
+                        )
 
                     tmp_csv.flush()
                     csv_object_id = self.storage.upload_file(tmp_csv.name)

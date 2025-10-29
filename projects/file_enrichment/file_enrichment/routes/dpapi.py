@@ -13,7 +13,6 @@ from chromium import (
     retry_decrypt_state_keys_for_masterkey,
 )
 from common.logger import get_logger
-from file_enrichment import global_vars
 from common.models2.dpapi import (
     DomainBackupKeyCredential,
     DpapiCredentialRequest,
@@ -26,6 +25,7 @@ from common.models2.dpapi import (
 )
 from Crypto.Hash import SHA1
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from file_enrichment import global_vars
 from nemesis_dpapi import (
     DomainBackupKey,
     DpapiManager,

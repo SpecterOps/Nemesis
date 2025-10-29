@@ -9,6 +9,7 @@ logger = get_logger(__name__)
 class FilenameScanner(EnrichmentModule):
     name: str = "filename_scanner"
     dependencies: list[str] = []
+
     def __init__(self):
         self.workflows = ["default"]
 

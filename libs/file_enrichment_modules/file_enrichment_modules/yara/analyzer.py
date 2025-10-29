@@ -54,6 +54,7 @@ def format_hex_like_xxd(data):
 class YaraScanner(EnrichmentModule):
     name: str = "yara_scanner"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         self.rule_manager = YaraRuleManager()
