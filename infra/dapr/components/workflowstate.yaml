@@ -6,8 +6,6 @@ spec:
   type: state.postgresql
   version: v1
   metadata:
-  - name: connectionString
-    value: "postgresql://username:password@hostname:5432/databasename?sslmode=disable"
   - name: host
     secretKeyRef:
       name: POSTGRES_HOST
@@ -27,14 +25,12 @@ spec:
   - name: password
     secretKeyRef:
       name: POSTGRES_PASSWORD
-      key: POSTGRES_PASSWORD  
+      key: POSTGRES_PASSWORD
   - name: actorStateStore
     value: "true"
-  - name: table
-    value: "state"
-  - name: metadataTable
-    value: "metadata" 
-  - name: schema
-    value: "public"
+  - name: tablePrefix
+    value: "public."
+  - name: metadataTableName
+    value: "dapr_metadata"
 auth:
   secretStore: nemesis-secret-store
