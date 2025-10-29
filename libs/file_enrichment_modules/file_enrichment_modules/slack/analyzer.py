@@ -216,8 +216,8 @@ rule Detect_Slack_RootState {
             enrichment_result.transforms = transforms
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing Slack root-state.json for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing Slack root-state.json for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -240,8 +240,8 @@ rule Detect_Slack_RootState {
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_slack_root_state(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing Slack root-state.json file")
+        except Exception:
+            logger.exception(message="Error processing Slack root-state.json file")
             return None
 
 

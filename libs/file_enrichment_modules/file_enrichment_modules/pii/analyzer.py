@@ -277,8 +277,8 @@ rule detect_pii
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing PII for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing PII for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -301,8 +301,8 @@ rule detect_pii
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_pii(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing file for PII detection")
+        except Exception:
+            logger.exception(message="Error processing file for PII detection")
             return None
 
 

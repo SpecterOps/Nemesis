@@ -234,8 +234,8 @@ rule Windows_Unattended_Answer_File {
             enrichment_result.transforms = [displayable_parsed]
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing sysprep config for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing sysprep config for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -258,8 +258,8 @@ rule Windows_Unattended_Answer_File {
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_sysprep(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing sysprep config file")
+        except Exception:
+            logger.exception(message="Error processing sysprep config file")
             return None
 
 

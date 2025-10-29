@@ -7,7 +7,7 @@ import asyncpg
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
@@ -239,8 +239,8 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             enrichment_result.results = results_data
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error in DPAPI masterkey process()")
+        except Exception:
+            logger.exception(message="Error in DPAPI masterkey process()")
 
 
 def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:

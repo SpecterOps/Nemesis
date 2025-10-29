@@ -101,8 +101,8 @@ class FilenameScanner(EnrichmentModule):
 
             return None
 
-        except Exception as e:
-            logger.exception(e, message="Error in process()")
+        except Exception:
+            logger.exception(message="Error in process()")
             return None
 
     def _create_summary_markdown(self, filename, matches):

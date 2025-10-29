@@ -55,15 +55,15 @@ class StorageMinio:
 
             try:
                 self.minio_client.fget_object(self.bucket_name, file_uuid, temp_file.name)
-            except BaseException as e:
-                logger.exception(e, message="Failed to download file")
+            except BaseException:
+                logger.exception(message="Failed to download file")
                 raise
             finally:
                 logger.debug("Downloaded file", file_uuid=file_uuid)
 
             return temp_file
-        except Exception as e:
-            logger.exception(e, file_uuid=file_uuid, bucket_name=self.bucket_name)
+        except Exception:
+            logger.exception(file_uuid=file_uuid, bucket_name=self.bucket_name)
             raise
 
     def download_bytes(self, file_uuid: str, offset: int = 0, length: int = 0) -> bytes:
@@ -80,12 +80,12 @@ class StorageMinio:
                 logger.debug("Successfully downloaded file", file_uuid=file_uuid)
                 return file_data
 
-            except BaseException as e:
-                logger.exception(e, message="Failed to download file")
+            except BaseException:
+                logger.exception(message="Failed to download file")
                 raise
 
-        except Exception as e:
-            logger.exception(e, file_uuid=file_uuid, bucket_name=self.bucket_name)
+        except Exception:
+            logger.exception(file_uuid=file_uuid, bucket_name=self.bucket_name)
             raise
 
     def download_stream(self, file_uuid: str, chunk_size: int = 1024 * 1024):
@@ -119,20 +119,20 @@ class StorageMinio:
                 response.close()
                 logger.debug("Successfully streamed file", file_uuid=file_uuid)
 
-            except BaseException as e:
-                logger.exception(e, message="Failed to stream file")
+            except BaseException:
+                logger.exception(message="Failed to stream file")
                 raise
 
-        except Exception as e:
-            logger.exception(e, file_uuid=file_uuid, bucket_name=self.bucket_name)
+        except Exception:
+            logger.exception(file_uuid=file_uuid, bucket_name=self.bucket_name)
             raise
 
     def get_object_stats(self, object_name):
         """Get states about the object."""
         try:
             return self.minio_client.stat_object(self.bucket_name, object_name)
-        except Exception as e:
-            logger.exception(e, "Error pulling object stats", object_name=object_name)
+        except Exception:
+            logger.exception("Error pulling object stats", object_name=object_name)
             raise
 
     def check_file_exists(self, object_name):
@@ -176,8 +176,8 @@ class StorageMinio:
 
             return file_uuid
 
-        except Exception as e:
-            logger.exception(e, bucket_name=self.bucket_name)
+        except Exception:
+            logger.exception(bucket_name=self.bucket_name)
             raise
 
     def upload_file(self, file_path: str) -> uuid.UUID:
@@ -190,8 +190,8 @@ class StorageMinio:
                 file_path=file_path,
             )
             return file_uuid
-        except Exception as e:
-            logger.exception(e, file_path=file_path, bucket_name=self.bucket_name)
+        except Exception:
+            logger.exception(file_path=file_path, bucket_name=self.bucket_name)
             raise
 
     def upload(self, data: bytes) -> uuid.UUID:
@@ -205,8 +205,8 @@ class StorageMinio:
                 length=len(data),
             )
             return file_uuid
-        except Exception as e:
-            logger.exception(e, bucket_name=self.bucket_name)
+        except Exception:
+            logger.exception(bucket_name=self.bucket_name)
             raise
 
     def delete_object(self, object_id: str) -> bool:
@@ -222,8 +222,8 @@ class StorageMinio:
             self.minio_client.remove_object(self.bucket_name, object_id)
             logger.debug("Deleted object from Minio", object_id=object_id, bucket=self.bucket_name)
             return True
-        except Exception as e:
-            logger.exception(e, message="Failed to delete object from Minio", object_id=object_id)
+        except Exception:
+            logger.exception(message="Failed to delete object from Minio", object_id=object_id)
             return False
 
     def delete_objects(self, object_ids: list[str]) -> int:

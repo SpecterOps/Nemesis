@@ -168,8 +168,8 @@ class ParquetFileParser(EnrichmentModule):
             enrichment_result.transforms = transforms
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing Parquet file for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing Parquet file for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -192,8 +192,8 @@ class ParquetFileParser(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_parquet(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing Parquet file")
+        except Exception:
+            logger.exception(message="Error processing Parquet file")
             return None
 
 

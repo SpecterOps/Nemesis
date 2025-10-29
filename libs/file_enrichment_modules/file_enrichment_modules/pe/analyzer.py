@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 #         binary = lief.parse(file_path)
 #         return json.loads(lief.to_json(binary))
 #     except Exception as e:
-#         logger.exception(e, message="Error in process()")
+#         logger.exception(message="Error in process()")
 #         return None
 
 
@@ -330,7 +330,7 @@ def parse_pe_file(file_path: str) -> dict[str, Any]:
         return result
 
     except Exception as e:
-        logger.exception(e, message="Error parsing PE file")
+        logger.exception(message="Error parsing PE file")
         return {"error": str(e)}
 
 
@@ -385,8 +385,8 @@ rule is_pe
             enrichment_result = EnrichmentResult(module_name=self.name)
             enrichment_result.results = parse_pe_file(file_path)
             return enrichment_result
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing PE file for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing PE file for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -410,8 +410,8 @@ rule is_pe
                 with self.storage.download(file_enriched.object_id) as file:
                     return self._analyze_pe(file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error in PE file analysis", file_object_id=object_id)
+        except Exception:
+            logger.exception(message="Error in PE file analysis", file_object_id=object_id)
             return None
 
 

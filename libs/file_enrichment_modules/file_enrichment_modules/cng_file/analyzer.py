@@ -12,7 +12,7 @@ import yara_x
 from chromium.local_state import retry_decrypt_state_keys_for_chromekey
 from common.logger import get_logger
 from common.models import EnrichmentResult
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.cng_file.cng_parser import (
     check_bcrypt_key_blob,
@@ -158,8 +158,8 @@ rule is_cng_file
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error in CNG file processing")
+        except Exception:
+            logger.exception(message="Error in CNG file processing")
             return None
 
     async def _decrypt_private_properties(self, private_props_blob: bytes) -> None:

@@ -124,8 +124,8 @@ class LnkParser(EnrichmentModule):
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing LNK file for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing LNK file for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -149,8 +149,8 @@ class LnkParser(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_lnk(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing file", file_object_id=object_id)
+        except Exception:
+            logger.exception(message="Error processing file", file_object_id=object_id)
             return None
 
 

@@ -358,7 +358,7 @@ rule Keytab_File
             return enrichment_result
 
         except Exception as e:
-            logger.exception(e, message=f"Error processing keytab file: {file_enriched.file_name}")
+            logger.exception(message=f"Error processing keytab file: {file_enriched.file_name}")
 
             # Create an error report with more detailed information
             error_report = [
@@ -417,8 +417,8 @@ rule Keytab_File
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_keytab_file(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error in keytab analyzer")
+        except Exception:
+            logger.exception(message="Error in keytab analyzer")
             return None
 
 

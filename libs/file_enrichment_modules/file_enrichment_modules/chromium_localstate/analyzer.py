@@ -96,8 +96,8 @@ rule Chrome_Local_State
 
                 return enrichment
 
-        except Exception as e:
-            logger.exception(e, message="Error processing Chrome Local State file")
+        except Exception:
+            logger.exception(message="Error processing Chrome Local State file")
 
 
 def create_enrichment_module() -> EnrichmentModule:

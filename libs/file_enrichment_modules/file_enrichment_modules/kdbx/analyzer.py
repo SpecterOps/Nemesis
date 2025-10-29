@@ -141,7 +141,7 @@ def parse_kdbx_file(file_path: str) -> dict[str, Any]:
             parsed_data["hash_error"] = f"Failed to generate hash: {str(e)}"
 
     except Exception as e:
-        logger.exception(e, message="Error parsing KDBX file")
+        logger.exception(message="Error parsing KDBX file")
         parsed_data["error"] = f"Error parsing KDBX file: {str(e)}"
 
     return parsed_data
@@ -220,8 +220,8 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
             else:
                 result[name] = value_data
 
-    except Exception as e:
-        logger.exception(e, message="Error parsing variant dictionary")
+    except Exception:
+        logger.exception(message="Error parsing variant dictionary")
 
     return result
 
@@ -338,8 +338,8 @@ class KDBXAnalyzer(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as file:
                     return self._analyze_kdbx(file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing KDBX file")
+        except Exception:
+            logger.exception(message="Error processing KDBX file")
             return None
 
 

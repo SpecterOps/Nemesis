@@ -1,4 +1,5 @@
 """Sync LiteLLM model pricing to Phoenix for cost tracking."""
+
 import os
 
 import asyncpg
@@ -22,9 +23,7 @@ async def fetch_litellm_model_info(admin_key: str) -> dict | None:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                "http://litellm:4000/model/info",
-                headers={"Authorization": f"Bearer {admin_key}"},
-                timeout=10.0
+                "http://litellm:4000/model/info", headers={"Authorization": f"Bearer {admin_key}"}, timeout=10.0
             )
             response.raise_for_status()
             return response.json()
@@ -100,18 +99,15 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
                 SELECT id FROM generative_models
                 WHERE name = $1 AND deleted_at IS NULL
                 """,
-                model_name
+                model_name,
             )
 
             if existing_model:
-                model_id = existing_model['id']
+                model_id = existing_model["id"]
                 logger.info(f"Model '{model_name}' already exists with ID {model_id}, updating pricing")
 
                 # Delete existing token prices for this model
-                await conn.execute(
-                    "DELETE FROM token_prices WHERE model_id = $1",
-                    model_id
-                )
+                await conn.execute("DELETE FROM token_prices WHERE model_id = $1", model_id)
             else:
                 # Insert new model into generative_models table
                 model_id = await conn.fetchval(
@@ -123,8 +119,8 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
                     """,
                     model_name,  # name
                     model_name,  # name_pattern (same as name for exact match)
-                    "litellm",   # provider (required field, cannot be NULL)
-                    False        # is_built_in
+                    "litellm",  # provider (required field, cannot be NULL)
+                    False,  # is_built_in
                 )
                 logger.info(f"Created new model '{model_name}' with ID {model_id}")
 
@@ -137,9 +133,9 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
                 """,
                 model_id,
                 "input",  # token_type
-                True,     # is_prompt
+                True,  # is_prompt
                 pricing["input_cost_per_token"],  # base_rate (cost per token)
-                None      # customization (no customization)
+                None,  # customization (no customization)
             )
 
             # Insert token prices for output tokens
@@ -151,9 +147,9 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
                 """,
                 model_id,
                 "output",  # token_type
-                False,     # is_prompt
+                False,  # is_prompt
                 pricing["output_cost_per_token"],  # base_rate (cost per token)
-                None       # customization (no customization)
+                None,  # customization (no customization)
             )
 
             logger.info(
@@ -164,8 +160,8 @@ async def insert_phoenix_model_pricing(database_url: str, model_name: str, prici
 
         return True
 
-    except Exception as e:
-        logger.exception(e, message="Failed to insert model pricing into Phoenix database")
+    except Exception:
+        logger.exception(message="Failed to insert model pricing into Phoenix database")
         return False
     finally:
         if conn:
@@ -199,10 +195,7 @@ async def sync_pricing_to_phoenix(model_name: str = "default") -> bool:
         if not admin_key:
             try:
                 with DaprClient() as client:
-                    secret = client.get_secret(
-                        store_name="nemesis-secret-store",
-                        key="LITELLM_ADMIN_KEY"
-                    )
+                    secret = client.get_secret(store_name="nemesis-secret-store", key="LITELLM_ADMIN_KEY")
                     admin_key = secret.secret.get("LITELLM_ADMIN_KEY")
             except Exception as e:
                 logger.warning(f"Could not get LITELLM_ADMIN_KEY from Dapr: {e}")
@@ -248,8 +241,8 @@ async def sync_pricing_to_phoenix(model_name: str = "default") -> bool:
 
         return success
 
-    except Exception as e:
-        logger.exception(e, message="Failed to sync pricing to Phoenix")
+    except Exception:
+        logger.exception(message="Failed to sync pricing to Phoenix")
         return False
 
 

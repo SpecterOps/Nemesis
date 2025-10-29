@@ -222,8 +222,8 @@ rule Chrome_Downloads_Tables
             enrichment_result.transforms = transforms
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error processing Chrome History database")
+        except Exception:
+            logger.exception(message="Error processing Chrome History database")
 
 
 def create_enrichment_module() -> EnrichmentModule:

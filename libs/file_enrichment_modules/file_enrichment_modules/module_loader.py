@@ -105,8 +105,8 @@ class ModuleLoader:
                 logger.info("Successfully loaded module", module_name=module_dir.name)
             else:
                 logger.warning("Module does not have create_enrichment_module()", module=module_dir.name)
-        except Exception as e:
-            logger.exception(e, message="Failed to load module", module_name=module_dir.name)
+        except Exception:
+            logger.exception(message="Failed to load module", module_name=module_dir.name)
             raise
 
     async def load_modules(self):

@@ -44,8 +44,8 @@ async def noseyparker_subscription_handler(event: CloudEvent[NoseyParkerOutput])
             scan_stats=stats,
         )
 
-    except Exception as e:
-        logger.exception(e, message="Error processing Nosey Parker output event", pid=os.getpid())
+    except Exception:
+        logger.exception(message="Error processing Nosey Parker output event", pid=os.getpid())
         raise
 
 
@@ -64,8 +64,8 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
     # Split the token into header, payload, and signature
     try:
         header_b64, payload_b64, signature = jwt_token.split(".")
-    except Exception as e:
-        logger.exception(e, message="Invalid JWT format. Expected three parts separated by dots.", jwt_token=jwt_token)
+    except Exception:
+        logger.exception(message="Invalid JWT format. Expected three parts separated by dots.", jwt_token=jwt_token)
         return False, {}
 
     # Decode the payload
@@ -77,8 +77,8 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
     try:
         payload_json = base64.b64decode(payload_b64).decode("utf-8")
         payload = json.loads(payload_json)
-    except Exception as e:
-        logger.exception(e, message="Error decoding JWT payload", jwt_token=jwt_token)
+    except Exception:
+        logger.exception(message="Error decoding JWT payload", jwt_token=jwt_token)
         return True, {}
 
     # Check if token is expired
@@ -91,8 +91,8 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
             return False, payload
 
         return current_time > int(payload["exp"]), payload
-    except Exception as e:
-        logger.exception(e, message="Error processing jwt_token", jwt_token=jwt_token)
+    except Exception:
+        logger.exception(message="Error processing jwt_token", jwt_token=jwt_token)
         return True, payload
 
 
@@ -312,6 +312,6 @@ async def store_noseyparker_results(
 
         return enrichment_result
 
-    except Exception as e:
-        logger.exception(e, message="Error storing NoseyParker results", object_id=object_id)
+    except Exception:
+        logger.exception(message="Error storing NoseyParker results", object_id=object_id)
         return None

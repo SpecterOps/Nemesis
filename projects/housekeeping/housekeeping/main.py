@@ -61,7 +61,7 @@ async def get_expired_object_ids(expiration_date: datetime | None = None) -> lis
             return [str(record["object_id"]) for record in records]
 
     except Exception as e:
-        logger.exception(e, message="Error getting expired object IDs from database")
+        logger.exception(message="Error getting expired object IDs from database")
         return []
 
 
@@ -89,7 +89,7 @@ async def get_transform_object_ids(object_ids: list[str]) -> list[str]:
             transform_object_ids = [str(record["transform_object_id"]) for record in transform_records]
             return transform_object_ids
     except Exception as e:
-        logger.exception(e, message="Error getting transform object IDs from database")
+        logger.exception(message="Error getting transform object IDs from database")
         return []
 
 
@@ -142,7 +142,7 @@ async def delete_database_entries(object_ids: list[str]) -> bool:
             )
             return True
     except Exception as e:
-        logger.exception(e, message="Error deleting database entries")
+        logger.exception(message="Error deleting database entries")
         return False
 
 
@@ -180,7 +180,7 @@ async def delete_expired_chromium_data(expiration_date: datetime | None = None) 
             return True
 
     except Exception as e:
-        logger.exception(e, message="Error deleting chromium data")
+        logger.exception(message="Error deleting chromium data")
         return False
 
 
@@ -234,7 +234,7 @@ async def delete_expired_file_listings(expiration_date: datetime | None = None) 
             return True
 
     except Exception as e:
-        logger.exception(e, message="Error deleting expired file_listings")
+        logger.exception(message="Error deleting expired file_listings")
         return False
 
 
@@ -288,7 +288,7 @@ async def delete_expired_file_linkings(expiration_date: datetime | None = None) 
             return True
 
     except Exception as e:
-        logger.exception(e, message="Error deleting expired file_linkings")
+        logger.exception(message="Error deleting expired file_linkings")
         return False
 
 
@@ -348,7 +348,7 @@ async def delete_expired_dpapi_data(expiration_date: datetime | None = None) -> 
             return True
 
     except Exception as e:
-        logger.exception(e, message="Error deleting expired dpapi data")
+        logger.exception(message="Error deleting expired dpapi data")
         return False
 
 
@@ -402,7 +402,7 @@ async def delete_expired_containers(expiration_date: datetime | None = None) -> 
             return True
 
     except Exception as e:
-        logger.exception(e, message="Error deleting expired containers")
+        logger.exception(message="Error deleting expired containers")
         return False
 
 
@@ -489,7 +489,7 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
         logger.info("Cleanup completed!")
 
     except Exception as e:
-        logger.exception(e, message="Error running cleanup job")
+        logger.exception(message="Error running cleanup job")
 
 
 @asynccontextmanager
@@ -543,7 +543,7 @@ async def lifespan(app: FastAPI):
             logger.info("Database connection pool closed")
 
     except Exception as e:
-        logger.exception(e, message="Error during service initialization")
+        logger.exception(message="Error during service initialization")
         raise
 
 

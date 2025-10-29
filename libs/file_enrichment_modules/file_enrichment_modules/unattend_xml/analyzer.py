@@ -264,8 +264,8 @@ rule Detect_Windows_Unattend_XML {
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing unattend.xml for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing unattend.xml for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -288,8 +288,8 @@ rule Detect_Windows_Unattend_XML {
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_unattend_xml(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing unattend.xml file")
+        except Exception:
+            logger.exception(message="Error processing unattend.xml file")
             return None
 
 

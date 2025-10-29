@@ -74,8 +74,8 @@ async def lifespan(app: FastAPI):
         logger.info(f"Alert rate limiter configured with {MAX_CONCURRENT_ALERTS} concurrent alerts")
         logger.info(f"Alert retry policy: {MAX_ALERT_RETRIES} retries with {RETRY_DELAY_SECONDS}s delay")
 
-    except Exception as e:
-        logger.exception(e, message="Error initializing Apprise")
+    except Exception:
+        logger.exception(message="Error initializing Apprise")
         raise
 
     yield
@@ -176,8 +176,8 @@ async def handle_feedback_subscription():
                     else:
                         logger.error("Failed to send feedback notification through Apprise after retries")
 
-        except Exception as e:
-            logger.exception(e, message="Error in feedback subscription, reconnecting in 5 seconds...")
+        except Exception:
+            logger.exception(message="Error in feedback subscription, reconnecting in 5 seconds...")
             await asyncio.sleep(5)
 
 
@@ -285,8 +285,8 @@ async def handle_alert(event: CloudEvent[Alert]):
 
         return {}
 
-    except Exception as e:
-        logger.exception(e, message="Error processing alert event")
+    except Exception:
+        logger.exception(message="Error processing alert event")
         raise
 
 

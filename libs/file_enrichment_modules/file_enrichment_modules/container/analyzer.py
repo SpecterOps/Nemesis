@@ -134,8 +134,8 @@ class ContainerAnalyzer(EnrichmentModule):
                     )
                 ]
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing container contents for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing container contents for {file_enriched.file_name}")
             return None
 
         return enrichment_result
@@ -160,8 +160,8 @@ class ContainerAnalyzer(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_container(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error in container analyzer")
+        except Exception:
+            logger.exception(message="Error in container analyzer")
 
 
 def create_enrichment_module() -> EnrichmentModule:

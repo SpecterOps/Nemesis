@@ -114,8 +114,8 @@ class ContainerContentsAnalyzer(EnrichmentModule):
                 enrichment_result.transforms = transforms
                 return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error processing container contents")
+        except Exception:
+            logger.exception(message="Error processing container contents")
             raise
 
 

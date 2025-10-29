@@ -136,7 +136,7 @@ async def lifespan(app: FastAPI):
         )
 
     except Exception as e:
-        logger.exception(e, message="Error initializing service")
+        logger.exception(message="Error initializing service")
         raise
 
     yield
@@ -180,7 +180,7 @@ def is_pdf_encrypted(pdf_path):
         return reader.is_encrypted
 
     except Exception as e:
-        logger.exception(e, "Error checking PDF")
+        logger.exception("Error checking PDF")
         return None
 
 
@@ -266,7 +266,7 @@ def store_transform(ctx, activity_input):
             conn.commit()
         logger.debug(f"Stored {transform_type} transform", object_id=file_enriched_object_id)
     except Exception as e:
-        logger.exception(e, message=f"Error storing {transform_type} transform")
+        logger.exception(message=f"Error storing {transform_type} transform")
         raise
 
 
@@ -302,7 +302,7 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
             originating_object_id=file_enriched.object_id,
         )
     except Exception as e:
-        logger.exception(e, message="Error publishing file message")
+        logger.exception(message="Error publishing file message")
         raise
 
 
@@ -378,7 +378,7 @@ def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> dict | 
             return result
 
     except Exception as e:
-        logger.exception(e, message="Error in Tika text extraction", object_id=object_id)
+        logger.exception(message="Error in Tika text extraction", object_id=object_id)
 
         # Record failure in database
         try:
@@ -457,7 +457,7 @@ def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dict | No
                 return result
 
     except Exception as e:
-        logger.exception(e, message="Error extracting strings", object_id=object_id)
+        logger.exception(message="Error extracting strings", object_id=object_id)
 
         # Record failure in database
         try:
@@ -577,7 +577,7 @@ def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict | Non
                 os.rename(temp_file_with_ext, temp_file.name)
 
     except Exception as e:
-        logger.exception(e, message="Error in PDF conversion", object_id=object_id)
+        logger.exception(message="Error in PDF conversion", object_id=object_id)
 
         # Record failure in database
         try:
@@ -666,7 +666,7 @@ def document_conversion_workflow(ctx: DaprWorkflowContext, workflow_input: dict)
         return {"status": "completed", "transforms_count": len(valid_transforms)}
 
     except Exception as e:
-        logger.exception(e, message="Error in text extraction workflow")
+        logger.exception(message="Error in text extraction workflow")
         raise
 
 
@@ -708,7 +708,7 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
     except Exception as e:
         # Release semaphore on error
         workflow_semaphore.release()
-        logger.exception(e, message="Error starting document conversion workflow")
+        logger.exception(message="Error starting document conversion workflow")
         raise
 
 
@@ -757,7 +757,7 @@ async def monitor_workflow_completion(instance_id: str):
                 await asyncio.sleep(2)  # Wait longer on error
 
     except Exception as e:
-        logger.exception(e, message=f"Error monitoring workflow {instance_id}")
+        logger.exception(message=f"Error monitoring workflow {instance_id}")
 
     finally:
         # Always clean up and release semaphore
@@ -810,7 +810,7 @@ async def handle_file_enriched(event: CloudEvent[FileEnriched]):
         await start_workflow_with_concurrency_control(file_enriched)
 
     except Exception as e:
-        logger.exception(e, message="Error handling file_enriched event")
+        logger.exception(message="Error handling file_enriched event")
         raise
 
 
@@ -834,5 +834,5 @@ async def health_check():
         return {"status": "healthy"}
 
     except Exception as e:
-        logger.exception(e, message="Health check failed")
+        logger.exception(message="Health check failed")
         return {"status": "unhealthy", "error": str(e)}

@@ -8,7 +8,6 @@ from typing import Any
 from common.helpers import is_plaintext
 from common.logger import get_logger
 from common.models import EnrichmentResult, File, Transform
-from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -412,8 +411,8 @@ class Base64DecoderAnalyzer(EnrichmentModule):
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error in base64_decoder process()", file_object_id=object_id)
+        except Exception:
+            logger.exception(message="Error in base64_decoder process()", file_object_id=object_id)
             return None
 
 

@@ -114,8 +114,8 @@ def get_file_enriched(object_id: str) -> FileEnriched:
     except ValueError as e:
         logger.error(f"File not found: {str(e)}")
         raise
-    except Exception as e:
-        logger.exception(e, message="Error retrieving file_enriched from PostgreSQL")
+    except Exception:
+        logger.exception(message="Error retrieving file_enriched from PostgreSQL")
         raise
 
 
@@ -162,6 +162,6 @@ async def get_file_enriched_async(object_id: str, connection: str | asyncpg.Pool
     except ValueError as e:
         logger.error(f"File not found: {str(e)}")
         raise
-    except Exception as e:
-        logger.exception(e, message="Error retrieving file_enriched from PostgreSQL (async)")
+    except Exception:
+        logger.exception(message="Error retrieving file_enriched from PostgreSQL (async)")
         raise

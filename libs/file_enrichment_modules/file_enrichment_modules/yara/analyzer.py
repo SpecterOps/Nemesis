@@ -192,8 +192,8 @@ class YaraScanner(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_yara(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error in process()")
+        except Exception:
+            logger.exception(message="Error in process()")
 
 
 def create_enrichment_module() -> EnrichmentModule:

@@ -196,8 +196,8 @@ rule has_putty_reg
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing Putty registry for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing Putty registry for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -220,8 +220,8 @@ rule has_putty_reg
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_putty_registry(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing Putty registry file")
+        except Exception:
+            logger.exception(message="Error processing Putty registry file")
             return None
 
 

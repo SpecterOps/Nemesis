@@ -442,5 +442,5 @@ async def reload_yara_rules():
 #             logger.info("Successfully stored file features in dataset", object_id=file_enriched.object_id)
 
 #     except Exception as e:
-#         logger.exception(e, message="Error extracting and storing features", activity_input=activity_input)
+#         logger.exception(message="Error extracting and storing features", activity_input=activity_input)
 #         raise

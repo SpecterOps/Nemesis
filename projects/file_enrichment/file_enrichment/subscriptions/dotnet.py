@@ -321,6 +321,6 @@ async def store_dotnet_results(
 
         return enrichment_result
 
-    except Exception as e:
-        logger.exception(e, message="Error storing DotNet results", object_id=object_id)
+    except Exception:
+        logger.exception(message="Error storing DotNet results", object_id=object_id)
         return None

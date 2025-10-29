@@ -161,8 +161,8 @@ class SqliteParser(EnrichmentModule):
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing SQLite database for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing SQLite database for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -185,8 +185,8 @@ class SqliteParser(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_sqlite_database(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing SQLite database")
+        except Exception:
+            logger.exception(message="Error processing SQLite database")
             return None
 
 

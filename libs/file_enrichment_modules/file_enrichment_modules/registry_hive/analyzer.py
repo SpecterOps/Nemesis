@@ -11,7 +11,7 @@ import asyncpg
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
@@ -66,8 +66,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         try:
             return RegistryHive(file_path).hive_type.upper()
-        except Exception as e:
-            logger.exception(e, "Error parsing using regipy")
+        except Exception:
+            logger.exception("Error parsing using regipy")
 
         return None
 
@@ -581,8 +581,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     }
                     results["services"].append(service_info)
 
-        except Exception as e:
-            logger.exception(e, message="Failed to process SYSTEM hive with pypykatz")
+        except Exception:
+            logger.exception(message="Failed to process SYSTEM hive with pypykatz")
             # Return empty results on error
             results = {
                 "bootkey": None,
@@ -698,8 +698,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return await self._analyze_registry_hive_file(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing registry hive file")
+        except Exception:
+            logger.exception(message="Error processing registry hive file")
             return None
 
     def _get_lsa_secret_output_string(self, secret: dict, truncate_length: int = 8196, markdown: bool = False) -> str:
@@ -972,7 +972,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             logger.info("Successfully registered DPAPI_SYSTEM credential with DPAPI manager")
 
         except Exception as e:
-            logger.exception(e, f"Failed to register DPAPI_SYSTEM credential: {e}")
+            logger.exception(f"Failed to register DPAPI_SYSTEM credential: {e}")
 
 
 def create_enrichment_module() -> EnrichmentModule:

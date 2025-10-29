@@ -157,6 +157,6 @@ async def save_file_enriched_to_db(file_enriched: dict) -> None:
                 json.dumps(file_enriched.get("hashes")) if file_enriched.get("hashes") else None,
             )
             logger.debug("Stored file_enriched in PostgreSQL", object_id=file_enriched["object_id"])
-    except Exception as e:
-        logger.exception(e, message="Error storing file_enriched in PostgreSQL", file_enriched=file_enriched)
+    except Exception:
+        logger.exception(message="Error storing file_enriched in PostgreSQL", file_enriched=file_enriched)
         raise

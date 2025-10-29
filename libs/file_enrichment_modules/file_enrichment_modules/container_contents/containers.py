@@ -261,8 +261,8 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
         else:
             raise FileNotSupportedException("File is not a supported archive format")
 
-    except Exception as e:
-        logger.exception(e, message="Error in safe_extract_archive")
+    except Exception:
+        logger.exception(message="Error in safe_extract_archive")
         return False
 
 
@@ -506,6 +506,6 @@ class ContainerExtractor:
                     if os.path.exists(tmp_dir):
                         shutil.rmtree(tmp_dir, ignore_errors=True)
 
-        except Exception as e:
-            logger.exception(e, "Error processing container", file_enriched=file_enriched)
+        except Exception:
+            logger.exception("Error processing container", file_enriched=file_enriched)
             raise

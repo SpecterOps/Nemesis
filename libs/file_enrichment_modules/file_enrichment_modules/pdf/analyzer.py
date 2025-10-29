@@ -82,7 +82,7 @@ def parse_pdf_file(file_path: str) -> dict[str, Any]:
                         pass
 
     except Exception as e:
-        logger.exception(e, message="Error in PdfReader")
+        logger.exception(message="Error in PdfReader")
         parsed_data["error"] = f"Error parsing PDF file: {str(e)}"
 
     return parsed_data
@@ -146,8 +146,8 @@ The document is encrypted. Attempt to crack it using the following hash:
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing PDF file for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing PDF file for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -171,8 +171,8 @@ The document is encrypted. Attempt to crack it using the following hash:
                 with self.storage.download(file_enriched.object_id) as file:
                     return self._analyze_pdf(file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing PDF file")
+        except Exception:
+            logger.exception(message="Error processing PDF file")
             return None
 
 

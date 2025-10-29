@@ -1,4 +1,3 @@
-import asyncio
 import glob
 import os
 import threading
@@ -126,8 +125,8 @@ class YaraRuleManager:
 
                 logger.info(f"Processed {len(disk_rules)} disk rules")
 
-        except Exception as e:
-            logger.exception(e, message="Error processing disk rules")
+        except Exception:
+            logger.exception(message="Error processing disk rules")
             raise
 
     async def get_rule_content(self, rule_name: str) -> str | None:
@@ -214,8 +213,8 @@ class YaraRuleManager:
                 self._compiled_rules = None
                 self._clear_scanner()
 
-        except Exception as e:
-            logger.exception(e, message="Error loading rules from database")
+        except Exception:
+            logger.exception(message="Error loading rules from database")
             raise
 
     def match(self, target) -> list[yara_x.Match]:

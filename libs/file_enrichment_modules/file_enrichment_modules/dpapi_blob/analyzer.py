@@ -7,7 +7,7 @@ import tempfile
 import yara_x
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from file_enrichment_modules.dpapi_blob.dpapi_helpers import carve_dpapi_blobs_from_file
@@ -286,8 +286,8 @@ List of unique masterkey GUIDs associated with the found blobs:
 
                 return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error in DPAPI process()")
+        except Exception:
+            logger.exception(message="Error in DPAPI process()")
 
 
 def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:
