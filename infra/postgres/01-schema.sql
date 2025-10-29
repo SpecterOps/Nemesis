@@ -354,6 +354,23 @@ CREATE TABLE IF NOT EXISTS agent_prompts (
 
 
 -----------------------
+-- Alert Settings
+-----------------------
+CREATE TABLE IF NOT EXISTS alert_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    alerting_enabled BOOLEAN NOT NULL DEFAULT true,
+    minimum_severity INTEGER NOT NULL DEFAULT 4 CHECK (minimum_severity >= 0 AND minimum_severity <= 10),
+    category_excluded TEXT[] DEFAULT '{}',
+    category_included TEXT[] DEFAULT '{}',
+    file_path_excluded_regex TEXT[] DEFAULT '{}',
+    file_path_included_regex TEXT[] DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT single_row_check CHECK (id = 1)
+);
+
+
+-----------------------
 -- FILE LINKINGS
 -----------------------
 CREATE TABLE IF NOT EXISTS file_linkings (
@@ -527,6 +544,11 @@ CREATE OR REPLACE TRIGGER update_yara_rules_updated_at
 
 CREATE OR REPLACE TRIGGER update_agent_prompts_updated_at
     BEFORE UPDATE ON agent_prompts
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE OR REPLACE TRIGGER update_alert_settings_updated_at
+    BEFORE UPDATE ON alert_settings
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 

@@ -1,5 +1,8 @@
 # hasura/metadata/tables.yaml
 - table:
+    name: alert_settings
+    schema: public
+- table:
     name: document_search_results
     schema: public
 - table:

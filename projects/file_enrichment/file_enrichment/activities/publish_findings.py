@@ -68,7 +68,14 @@ async def publish_findings_alerts(ctx: WorkflowActivityContext, activity_input):
 
                     body = f"{finding_message}{rule_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
 
-                    alert = Alert(title=finding_name, body=body, service=origin_name)
+                    alert = Alert(
+                        title=finding_name,
+                        body=body,
+                        service=origin_name,
+                        category=category,
+                        severity=severity,
+                        file_path=file_path,
+                    )
                     client.publish_event(
                         pubsub_name="pubsub",
                         topic_name="alert",

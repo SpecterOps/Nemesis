@@ -404,84 +404,6 @@ services:
       rabbitmq: { condition: service_healthy }
     network_mode: "service:alerting"
 
-  agents:
-    image: ghcr.io/specterops/nemesis/agents:latest
-    environment:
-      - DAPR_HTTP_PORT=3509
-      - DAPR_GRPC_PORT=50009
-      - NEMESIS_URL=${NEMESIS_URL:?}
-      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
-      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
-      - LITELLM_ADMIN_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
-      - MAX_BUDGET=${LLM_MAX_BUDGET:-100}
-      - BUDGET_DURATION=${LLM_BUDGET_DURATION:-30d}
-      - DOTNET_ANALYSIS_RUN_REQUEST_LIMIT=${DOTNET_ANALYSIS_RUN_REQUEST_LIMIT:-25}    # max LLM calls to use per .NET program analysis run
-      - DOTNET_ANALYSIS_RUN_TOKENS_LIMIT=${DOTNET_ANALYSIS_RUN_TOKENS_LIMIT:-1000000} # max tokens to use per .NET program analysis run
-      # if we hit this number of the same triage values for the same file, all future findings get that value
-      - TRIAGE_CONSENSUS_THRESHOLD=${TRIAGE_CONSENSUS_THRESHOLD:-3}
-      # Phoenix LLM tracing configuration
-      - PHOENIX_ENABLED=${PHOENIX_ENABLED:-false}
-      - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
-      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
-      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
-    logging: *logging-config
-    depends_on:
-      postgres: { condition: service_healthy }
-      placement: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-      hasura: { condition: service_healthy }
-    healthcheck: *healthcheck-python-svc
-  agents-dapr:
-    image: "daprio/daprd:1.16.1"
-    command:
-      [
-        "./daprd",
-        "--max-body-size",
-        "1Gi",
-        "--app-id",
-        "agents",
-        "--app-port",
-        "8000",
-        "--dapr-http-port",
-        "3509",
-        "--dapr-grpc-port",
-        "50009",
-        "--placement-host-address",
-        "placement:50006",
-        "--scheduler-host-address",
-        "scheduler:50007",
-        "--resources-path",
-        "/dapr/components",
-        "--config",
-        "/dapr/configuration/agents_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
-        "--enable-metrics",
-        "--dapr-graceful-shutdown-seconds",
-        "5",
-      ]
-    volumes:
-      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
-      - ./infra/dapr/configuration/:/dapr/configuration/
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:?}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
-      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
-      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-    depends_on:
-      agents: { condition: service_started }
-      placement: { condition: service_started }
-      scheduler: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-    network_mode: "service:agents"
-
   housekeeping:
     image: ghcr.io/specterops/nemesis/housekeeping:latest
     environment:
@@ -864,35 +786,6 @@ services:
       retries: 3
       start_period: 30s
 
-  phoenix:
-    profiles: ["monitoring"]
-    image: arizephoenix/phoenix:11.24.1
-    environment:
-      - PHOENIX_WORKING_DIR=/data
-      - PHOENIX_HOST_ROOT_PATH=/phoenix
-      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
-      - PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=100
-    volumes:
-      - phoenix_data:/data
-    # ports:
-    #   - "6006:6006"  # Phoenix UI port, for debugging
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.phoenix.loadbalancer.server.port=6006"
-      - "traefik.http.routers.phoenix.rule=PathPrefix(`/phoenix`)"
-      - "traefik.http.routers.phoenix.entrypoints=websecure"
-      - "traefik.http.routers.phoenix.tls=true"
-      - "traefik.http.routers.phoenix.middlewares=auth,phoenix-stripprefix"
-      - "traefik.http.middlewares.phoenix-stripprefix.stripprefix.prefixes=/phoenix"
-    depends_on:
-      postgres: { condition: service_healthy }
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz').read()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
   loki:
     profiles: ["monitoring"]
     image: grafana/loki:3.3.2
@@ -1017,6 +910,87 @@ services:
   # LLM Services (optional profile)
   ############################
 
+
+  agents:
+    profiles: ["llm"]
+    image: ghcr.io/specterops/nemesis/agents:latest
+    environment:
+      - DAPR_HTTP_PORT=3509
+      - DAPR_GRPC_PORT=50009
+      - NEMESIS_URL=${NEMESIS_URL:?}
+      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
+      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
+      - LITELLM_ADMIN_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
+      - MAX_BUDGET=${LLM_MAX_BUDGET:-100}
+      - BUDGET_DURATION=${LLM_BUDGET_DURATION:-30d}
+      - DOTNET_ANALYSIS_RUN_REQUEST_LIMIT=${DOTNET_ANALYSIS_RUN_REQUEST_LIMIT:-25}    # max LLM calls to use per .NET program analysis run
+      - DOTNET_ANALYSIS_RUN_TOKENS_LIMIT=${DOTNET_ANALYSIS_RUN_TOKENS_LIMIT:-1000000} # max tokens to use per .NET program analysis run
+      # if we hit this number of the same triage values for the same file, all future findings get that value
+      - TRIAGE_CONSENSUS_THRESHOLD=${TRIAGE_CONSENSUS_THRESHOLD:-3}
+      # Phoenix LLM tracing configuration
+      - PHOENIX_ENABLED=${PHOENIX_ENABLED:-false}
+      - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
+      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
+    logging: *logging-config
+    depends_on:
+      postgres: { condition: service_healthy }
+      placement: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+      hasura: { condition: service_healthy }
+    healthcheck: *healthcheck-python-svc
+  agents-dapr:
+    profiles: ["llm"]
+    image: "daprio/daprd:1.16.1"
+    command:
+      [
+        "./daprd",
+        "--max-body-size",
+        "1Gi",
+        "--app-id",
+        "agents",
+        "--app-port",
+        "8000",
+        "--dapr-http-port",
+        "3509",
+        "--dapr-grpc-port",
+        "50009",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--config",
+        "/dapr/configuration/agents_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
+      ]
+    volumes:
+      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
+      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
+      - ./infra/dapr/configuration/:/dapr/configuration/
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
+    depends_on:
+      agents: { condition: service_started }
+      placement: { condition: service_started }
+      scheduler: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+    network_mode: "service:agents"
+
   litellm:
     profiles: ["llm"]
     image: ghcr.io/berriai/litellm:v1.74.0-stable
@@ -1050,3 +1024,32 @@ services:
       - "traefik.http.services.litellm.loadbalancer.server.port=4000"
       - "traefik.http.routers.litellm.entrypoints=websecure"
       - "traefik.http.routers.litellm.tls=true"
+
+  phoenix:
+    profiles: ["llm"]
+    image: arizephoenix/phoenix:11.24.1
+    environment:
+      - PHOENIX_WORKING_DIR=/data
+      - PHOENIX_HOST_ROOT_PATH=/phoenix
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
+      - PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=100
+    volumes:
+      - phoenix_data:/data
+    # ports:
+    #   - "6006:6006"  # Phoenix UI port, for debugging
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.phoenix.loadbalancer.server.port=6006"
+      - "traefik.http.routers.phoenix.rule=PathPrefix(`/phoenix`)"
+      - "traefik.http.routers.phoenix.entrypoints=websecure"
+      - "traefik.http.routers.phoenix.tls=true"
+      - "traefik.http.routers.phoenix.middlewares=auth,phoenix-stripprefix"
+      - "traefik.http.middlewares.phoenix-stripprefix.stripprefix.prefixes=/phoenix"
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

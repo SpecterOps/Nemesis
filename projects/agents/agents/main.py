@@ -12,7 +12,7 @@ from agents.helpers import check_triage_consensus, fetch_finding_details, get_li
 from agents.model_manager import ModelManager
 from agents.phoenix_cost_sync import sync_pricing_to_phoenix
 from agents.prompt_manager import PromptManager
-from agents.schemas import NoseyParkerData, TriageCategory, TriageRequest, TriageResult
+from agents.schemas import TriageCategory, TriageRequest, TriageResult
 from agents.tasks.credential_analyzer import analyze_credentials
 from agents.tasks.dotnet_analyzer import analyze_dotnet_assembly
 from agents.tasks.summarizer import summarize_text
@@ -254,75 +254,6 @@ def extract_summary_from_triage_request(triage_request: TriageRequest) -> str | 
     return None
 
 
-def handle_jwt_triage(ctx: DaprWorkflowContext, triage_request: TriageRequest, summary: str):
-    """
-    Handle JWT finding triage using rule-based validation.
-
-    Checks if the summary contains JWT-specific markers and processes the finding
-    with rule-based validation instead of LLM triage.
-
-    Args:
-        ctx: Dapr workflow context
-        finding_id: The finding ID being triaged
-        summary: The finding summary text
-        file_path: Path to the file containing the JWT
-
-    Returns:
-        True if this is a JWT finding that was processed, False otherwise
-
-    Yields:
-        Workflow activity calls for JWT validation and result insertion
-    """
-    # Check if it's a JWT finding
-    if triage_request.origin_name != "noseyparker":
-        return False
-
-    if not triage_request.raw_data:
-        if not ctx.is_replaying:
-            logger.warning(f"No raw_data available for noseyparker finding {triage_request.finding_id}")
-        return False
-
-    try:
-        noseyparker_data = NoseyParkerData(**triage_request.raw_data)
-    except Exception as e:
-        if not ctx.is_replaying:
-            logger.error(f"Failed to parse noseyparker data for finding {triage_request.finding_id}: {e}")
-        return False
-
-    # Check if this is specifically a JWT finding
-    if noseyparker_data.match.rule_name != "JSON Web Token (base64url-encoded)":
-        return False
-
-    if not ctx.is_replaying:
-        logger.info(f"Processing JWT finding {triage_request.finding_id} with rule-based triage")
-
-    jwt_wrapper = agent_manager.get_wrapper_function("jwt")
-    jwt_result = yield ctx.call_activity(
-        jwt_wrapper,
-        input={
-            "summary": summary,
-            "file_path": triage_request.file_path,
-        },
-    )
-
-    result = TriageResult(
-        finding_id=triage_request.finding_id,
-        decision=jwt_result["decision"],
-        explanation=jwt_result.get("explanation", "JWT validation completed"),
-        confidence=1.0,
-        true_positive_context=None,
-        success=True,
-    )
-
-    yield ctx.call_activity(
-        insert_triage_result,
-        input={
-            "finding_id": triage_request.finding_id,
-            "triage_result": result.model_dump(),
-        },
-    )
-
-    return True
 
 
 @workflow_runtime.workflow
@@ -339,6 +270,8 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
 
         # Step 1: Extract out the finding summary
         summary = extract_summary_from_triage_request(triage_request)
+        import pprint
+        pprint.pprint(summary)
 
         if not summary:
             logger.warning(f"No summary found for finding {finding_id}")
@@ -362,12 +295,7 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
 
         file_path = triage_request.file_path
 
-        # Step 2: Check if it's a JWT finding and handle non-LLM triage
-        jwt_handled = yield from handle_jwt_triage(ctx, triage_request, summary)
-        if jwt_handled:
-            return
-
-        # Step 3: Check for finding consensus:
+        # Step 2: Check for finding consensus:
         #         If we hit this number of the same triage values for the same file, all future findings get that value
         consensus_threshold = int(os.getenv("TRIAGE_CONSENSUS_THRESHOLD", 3))
         consensus = yield ctx.call_activity(
@@ -402,7 +330,7 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
             )
             return
 
-        # Step 4: Use LLM validation agent if ModelManager has a model available
+        # Step 3: Use LLM validation agent if ModelManager has a model available
         if ModelManager.is_available():
             if not ctx.is_replaying:
                 logger.info(f"Processing finding {finding_id} with AI validation")
