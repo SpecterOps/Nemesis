@@ -8,13 +8,11 @@ from datetime import datetime
 
 import asyncpg
 from common.logger import get_logger
-from common.models import SingleEnrichmentWorkflowInput
+from common.models import File, SingleEnrichmentWorkflowInput
 from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
-from .global_vars import workflow_client
 from .tracing import get_trace_injector, get_tracer
-from .workflow import enrichment_workflow
 
 logger = get_logger(__name__)
 
@@ -205,7 +203,8 @@ class WorkflowManager:
 
                     # Try to terminate the workflow in Dapr
                     try:
-                        await asyncio.to_thread(workflow_client.terminate_workflow, wf_id)
+                        from . import global_vars
+                        await asyncio.to_thread(global_vars.workflow_client.terminate_workflow, wf_id)
                     except Exception as e:
                         logger.warning(f"Could not terminate workflow {wf_id}: {e}")
 
@@ -302,8 +301,11 @@ class WorkflowManager:
                 "timestamp": datetime.now().isoformat(),
             }
 
-    async def start_workflow(self, workflow_input):
+    async def start_workflow(self, file: File):
         """Start a workflow"""
+        from . import global_vars
+        from .workflow import enrichment_workflow
+
         start_time = time.time()
         tracer = get_tracer()
 
@@ -312,23 +314,22 @@ class WorkflowManager:
             # initializing it in the database
             instance_id = str(uuid.uuid4()).replace("-", "")
 
+            # Extract file object for metadata
+            file_obj = file
+            object_id = file_obj.object_id
+            base_filename = os.path.basename(file_obj.path) if file_obj.path else None
+
+            # Serialize the workflow input for Dapr (convert File object to dict)
+            workflow_input_serializable = {
+                "file": json.loads(file_obj.model_dump_json(exclude_unset=True)),
+                "execution_order": global_vars.module_execution_order,
+            }
+
             with tracer.start_as_current_span("start_workflow") as current_span:
                 # Add workflow ID to trace for Jaeger queries
                 current_span.set_attribute("workflow.instance_id", instance_id)
                 current_span.set_attribute("workflow.type", "enrichment_workflow")
-
-                if "file" in workflow_input and "object_id" in workflow_input["file"]:
-                    current_span.set_attribute("workflow.object_id", workflow_input["file"]["object_id"])
-
-                # Extract metadata for tracking
-                base_filename = None
-                object_id = None
-                if "file" in workflow_input:
-                    if "path" in workflow_input["file"]:
-                        filepath = workflow_input["file"]["path"]
-                        base_filename = os.path.basename(filepath)
-                    if "object_id" in workflow_input["file"]:
-                        object_id = workflow_input["file"].get("object_id")
+                current_span.set_attribute("workflow.object_id", object_id)
 
                 # Store workflow in database
                 # async with self.pool.acquire() as conn:
@@ -362,10 +363,10 @@ class WorkflowManager:
 
                 # Actually schedule the workflow
                 await asyncio.to_thread(
-                    workflow_client.schedule_new_workflow,
+                    global_vars.workflow_client.schedule_new_workflow,
                     instance_id=instance_id,
                     workflow=enrichment_workflow,
-                    input=workflow_input,
+                    input=workflow_input_serializable,
                 )
 
                 # TODO: Mnitor this workflow for completion/failure/timeout
@@ -449,6 +450,7 @@ class WorkflowManager:
 
                 # Actually schedule the workflow
                 # Import here to avoid circular import
+                from . import global_vars
                 from .workflow import single_enrichment_workflow
 
                 # Convert Pydantic model to dict for Dapr workflow
@@ -460,7 +462,7 @@ class WorkflowManager:
 
                 # Use asyncio.to_thread() to prevent blocking the event loop
                 await asyncio.to_thread(
-                    workflow_client.schedule_new_workflow,
+                    global_vars.workflow_client.schedule_new_workflow,
                     instance_id=instance_id,
                     workflow=single_enrichment_workflow,
                     input=workflow_input_dict,

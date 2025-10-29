@@ -18,14 +18,16 @@ logger = get_logger(__name__)
 
 
 @workflow_activity
-async def get_basic_analysis(ctx: WorkflowActivityContext, activity_input):
+async def get_basic_analysis(ctx: WorkflowActivityContext, activity_input: dict):
     """
     Perform 'basic' analysis on a file and save to database. Run for every file.
 
     This activity downloads the file, processes it to extract metadata,
     and saves the results to the database.
     """
-    object_id = activity_input["object_id"]
+
+    # Extract object_id from the activity_input dict
+    object_id = activity_input.get("object_id") if isinstance(activity_input, dict) else activity_input
 
     with global_vars.storage.download(object_id) as file:
         file_enriched = process_basic_analysis(file.name, activity_input)

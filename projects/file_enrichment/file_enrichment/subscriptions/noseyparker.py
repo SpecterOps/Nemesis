@@ -13,6 +13,7 @@ import file_enrichment.global_vars as global_vars
 from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
 from common.models import (
+    CloudEvent,
     EnrichmentResult,
     FileObject,
     Finding,
@@ -26,8 +27,10 @@ from common.models import (
 logger = get_logger(__name__)
 
 
-async def process_noseyparker_event(nosey_output: NoseyParkerOutput):
-    """Process incoming Nosey Parker scan results"""
+async def noseyparker_subscription_handler(event: CloudEvent[NoseyParkerOutput]):
+    """Handler for incoming Nosey Parker scan results"""
+    nosey_output = event.data
+
     try:
         object_id = nosey_output.object_id
         matches = nosey_output.scan_result.matches

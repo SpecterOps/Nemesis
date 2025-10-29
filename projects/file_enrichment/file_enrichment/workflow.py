@@ -3,6 +3,7 @@ import asyncio
 
 import dapr.ext.workflow as wf
 from common.logger import get_logger
+from common.models import File
 from common.workflows.setup import wf_runtime
 from file_enrichment_modules.module_loader import ModuleLoader
 from file_enrichment_modules.yara.yara_manager import YaraRuleManager
@@ -85,13 +86,17 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
     start_time = ctx.current_utc_datetime
 
     try:
-        input_file = workflow_input["file"]
-        object_id = input_file["object_id"]  # the only guaranteed field to exist
+        # Parse the workflow input to strongly typed objects
+        file_data = workflow_input["file"]
+        file_obj = File.model_validate(file_data)
+        execution_order: list[str] = global_vars.module_execution_order
+        object_id = file_obj.object_id
 
         if not ctx.is_replaying:
             logger.debug("Workflow input", object_id=object_id, workflow_input=workflow_input)
 
-        file_enriched = yield ctx.call_activity(get_basic_analysis, input=input_file)
+        # Convert file back to dict for activity (activities expect dict)
+        file_enriched = yield ctx.call_activity(get_basic_analysis, input=file_data)
         if not ctx.is_replaying:
             logger.debug(
                 "get_basic_analysis complete",
@@ -103,7 +108,7 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
             ctx.call_activity(check_file_linkings, input={"object_id": object_id}),
             ctx.call_activity(
                 run_enrichment_modules,
-                input={"object_id": object_id, "execution_order": workflow_input["execution_order"]},
+                input={"object_id": object_id, "execution_order": execution_order},
             ),
         ]
 
@@ -231,7 +236,7 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 ##########################################
 
 
-async def initialize_workflow_runtime(dpapi_manager: DpapiManager):
+async def initialize_workflow_runtime(dpapi_manager: DpapiManager) -> list[str]:
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
 
     global wf_runtime, asyncio_loop

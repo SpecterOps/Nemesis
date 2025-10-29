@@ -10,6 +10,8 @@ from dapr.ext.workflow.logger.options import LoggerOptions
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking import FileLinkingEngine
 
+from .workflow_manager import WorkflowManager
+
 workflow_client = wf.DaprWorkflowClient(
     logger_options=LoggerOptions(
         log_level=WORKFLOW_CLIENT_LOG_LEVEL,
@@ -31,3 +33,6 @@ asyncio_loop: asyncio.AbstractEventLoop = None
 # Note: file_linking_engine is initialized after asyncpg_pool is created
 # See initialization code that sets this up with the pool
 file_linking_engine: FileLinkingEngine = None
+
+module_execution_order: list[str] = []
+workflow_manager: WorkflowManager = None

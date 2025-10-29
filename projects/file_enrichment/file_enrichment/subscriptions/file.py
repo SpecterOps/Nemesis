@@ -5,25 +5,21 @@ from datetime import datetime
 
 import file_enrichment.global_vars as global_vars
 from common.logger import get_logger
-from common.models import File
+from common.models import CloudEvent, File
 
 logger = get_logger(__name__)
 
 
-async def process_file_event(file: File, workflow_manager, module_execution_order: list):
-    """Process incoming new file events"""
+async def file_subscription_handler(event: CloudEvent[File]):
+    """Handler for incoming file events"""
+    file = event.data
+
     try:
         await save_file_message(file)
+        await global_vars.workflow_manager.start_workflow(file)
 
-        workflow_input = {
-            "file": file.model_dump(exclude_unset=True, mode="json"),
-            "execution_order": module_execution_order,
-        }
-
-        await workflow_manager.start_workflow(workflow_input)
-
-    except Exception as e:
-        logger.exception(e, message="Error processing file event", pid=os.getpid())
+    except Exception:
+        logger.exception(message="Error processing file event", pid=os.getpid())
         raise
 
 
@@ -83,6 +79,6 @@ async def save_file_message(file: File):
 
         logger.debug("Successfully saved file message to database", object_id=file.object_id, pid=os.getpid())
 
-    except Exception as e:
-        logger.exception(e, message="Error saving file message to database", object_id=file.object_id, pid=os.getpid())
+    except Exception:
+        logger.exception(message="Error saving file message to database", object_id=file.object_id, pid=os.getpid())
         raise

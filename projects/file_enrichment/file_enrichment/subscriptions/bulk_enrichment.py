@@ -1,34 +1,26 @@
 """Handler for bulk enrichment task subscription events."""
 
 from common.logger import get_logger
-from common.models import BulkEnrichmentEvent, SingleEnrichmentWorkflowInput
-from file_enrichment.workflow_manager import WorkflowManager
+from common.models import BulkEnrichmentEvent, CloudEvent, SingleEnrichmentWorkflowInput
 
 logger = get_logger(__name__)
 
 
-async def process_bulk_enrichment_event(
-    evnt: BulkEnrichmentEvent, workflow_manager: WorkflowManager, global_module_map: dict
-) -> None:
-    """Process individual bulk enrichment tasks
+async def bulk_enrichment_subscription_handler(event: CloudEvent[BulkEnrichmentEvent]) -> None:
+    """Handler for individual bulk enrichment tasks"""
+    import file_enrichment.global_vars as global_vars
 
-    Args:
-        task: The bulk enrichment task containing enrichment name and object ID
-        workflow_manager: The workflow manager to schedule enrichment workflows
-        global_module_map: Map of available enrichment modules
+    evnt = event.data
 
-    Raises:
-        Exception: If task processing fails
-    """
     try:
-        logger.debug("Received bulk enrichment task", enrichment_name=evnt.enrichment_name, object_id=object_id)
+        logger.debug("Received bulk enrichment task", enrichment_name=evnt.enrichment_name, object_id=evnt.object_id)
 
         # Check if module exists
-        if not global_module_map:
+        if not global_vars.global_module_map:
             logger.error("Modules not initialized")
             return
 
-        if evnt.enrichment_name not in global_module_map:
+        if evnt.enrichment_name not in global_vars.global_module_map:
             logger.error(f"Enrichment module '{evnt.enrichment_name}' not found")
             return
 
@@ -39,7 +31,7 @@ async def process_bulk_enrichment_event(
         )
 
         # This will block if we're at max capacity, providing natural backpressure
-        await workflow_manager.start_workflow_single_enrichment(workflow_input)
+        await global_vars.workflow_manager.start_workflow_single_enrichment(workflow_input)
 
     except Exception:
         logger.exception("Error processing bulk enrichment task")

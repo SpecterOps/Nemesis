@@ -8,6 +8,7 @@ import file_enrichment.global_vars as global_vars
 from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
 from common.models import (
+    CloudEvent,
     DotNetAssemblyAnalysis,
     DotNetOutput,
     EnrichmentResult,
@@ -26,8 +27,9 @@ from file_enrichment.tracing import get_trace_injector
 logger = get_logger(__name__)
 
 
-async def process_dotnet_event(dotnet_output: DotNetOutput) -> None:
-    """Process incoming .NET processing results from the dotnet_service"""
+async def dotnet_subscription_handler(event: CloudEvent[DotNetOutput]) -> None:
+    """Handler for incoming .NET processing results from the dotnet_service."""
+    dotnet_output = event.data
 
     logger.debug("Received DotNet output event", data=dotnet_output.model_dump_json())
 
