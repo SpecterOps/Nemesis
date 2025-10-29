@@ -4,7 +4,7 @@ metadata:
   name: statestore
 spec:
   type: state.postgresql
-  version: v1
+  version: v2
   metadata:
   - name: host
     secretKeyRef:
