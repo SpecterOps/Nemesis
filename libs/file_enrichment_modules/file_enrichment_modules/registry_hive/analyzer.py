@@ -1,5 +1,4 @@
 # enrichment_modules/registry_hive/analyzer.py
-import asyncio
 import os
 import posixpath
 import shutil
@@ -34,7 +33,6 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         self.storage = StorageMinio()
         self.workflows = ["default"]
         self.dpapi_manager: DpapiManager = None  # type: ignore
-        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.asyncpg_pool: asyncpg.Pool | None = None  # type: ignore
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:

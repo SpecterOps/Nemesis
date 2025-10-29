@@ -2,13 +2,16 @@ import glob
 import os
 import threading
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-import asyncpg
 import plyara
 import yara_x
 from common.dependency_checks import check_directory_exists
 from common.logger import get_logger
 from plyara import utils as plyara_utils
+
+if TYPE_CHECKING:
+    import asyncpg
 
 logger = get_logger(__name__)
 
@@ -30,11 +33,9 @@ class YaraRuleManager:
 
         This should be called after asyncpg_pool is set.
         """
-        # Load and compile rules from disk first
+        logger.debug("Initializing YaraRuleManager")
         await self._process_disk_rules()
-
-        # Then load enabled rules from database
-        await self.load_rules()
+        await self.load_db_rules()
 
     def _get_scanner(self) -> yara_x.Scanner | None:
         """Get or create thread-local scanner instance."""
@@ -158,7 +159,7 @@ class YaraRuleManager:
             logger.error(f"Error retrieving rule: {e}", rule=rule_name)
             return None
 
-    async def load_rules(self):
+    async def load_db_rules(self):
         """Load all enabled rules from database and compile them."""
         if not self.asyncpg_pool:
             logger.warning("No asyncpg pool available, cannot load rules from database")

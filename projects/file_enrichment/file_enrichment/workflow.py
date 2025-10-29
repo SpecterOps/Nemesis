@@ -77,26 +77,20 @@ def topological_sort(graph):
 
 
 @wf_runtime.workflow
-def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
+def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
     """Main workflow that orchestrates all enrichment activities."""
 
+    file_obj = File.model_validate(file_dict)
+    execution_order: list[str] = global_vars.module_execution_order
+    object_id = file_obj.object_id
+
     if not ctx.is_replaying:
-        logger.debug("Starting main enrichment workflow", workflow_input=workflow_input)
+        logger.debug("Starting main enrichment workflow", object_id=object_id, workflow_input=file_dict)
 
     start_time = ctx.current_utc_datetime
 
     try:
-        # Parse the workflow input to strongly typed objects
-        file_data = workflow_input["file"]
-        file_obj = File.model_validate(file_data)
-        execution_order: list[str] = global_vars.module_execution_order
-        object_id = file_obj.object_id
-
-        if not ctx.is_replaying:
-            logger.debug("Workflow input", object_id=object_id, workflow_input=workflow_input)
-
-        # Convert file back to dict for activity (activities expect dict)
-        file_enriched = yield ctx.call_activity(get_basic_analysis, input=file_data)
+        file_enriched = yield ctx.call_activity(get_basic_analysis, input=file_dict)
         if not ctx.is_replaying:
             logger.debug(
                 "get_basic_analysis complete",
@@ -104,12 +98,12 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
             )
 
         enrichment_tasks = [
-            ctx.call_activity(handle_file_if_plaintext, input=file_enriched),
-            ctx.call_activity(check_file_linkings, input={"object_id": object_id}),
             ctx.call_activity(
                 run_enrichment_modules,
                 input={"object_id": object_id, "execution_order": execution_order},
             ),
+            ctx.call_activity(check_file_linkings, input={"object_id": object_id}),
+            ctx.call_activity(handle_file_if_plaintext, input=file_enriched),
         ]
 
         try:
@@ -117,7 +111,7 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
 
             if not ctx.is_replaying:
                 logger.debug(
-                    "Enrichment tasks complete - handle_file_if_plaintext, enrichment_module_workflow",
+                    "Enrichment tasks complete - handle_file_if_plaintext, check_file_linkings, enrichment_module_workflow",
                     processing_time=f"{ctx.current_utc_datetime - start_time}",
                 )
         except Exception as e:
@@ -132,10 +126,12 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
                     "repr": repr(task),
                 }
                 # Try to extract activity name if available
-                if hasattr(task, "_activity_name"):
-                    task_info["activity_name"] = task._activity_name
-                if hasattr(task, "_input"):
-                    task_info["input"] = str(task._input)[:200]  # Truncate long inputs
+                activity_name = getattr(task, "_activity_name", None)
+                if activity_name is not None:
+                    task_info["activity_name"] = activity_name
+                task_input = getattr(task, "_input", None)
+                if task_input is not None:
+                    task_info["input"] = str(task_input)[:200]  # Truncate long inputs
                 task_details.append(task_info)
 
             logger.exception(
@@ -150,9 +146,9 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
             raise
 
         final_tasks = [
-            ctx.call_activity(publish_enriched_file, input={"object_id": object_id}),
+            ctx.call_activity(publish_enriched_file, input=object_id),
             # ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
-            ctx.call_activity(publish_findings_alerts, input={"object_id": object_id}),
+            ctx.call_activity(publish_findings_alerts, input=object_id),
         ]
 
         try:
@@ -178,7 +174,7 @@ def enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
         return {}
 
     except Exception:
-        logger.exception("Error in main workflow execution", workflow_input=workflow_input)
+        logger.exception("Error in main workflow execution", workflow_input=file_dict)
         raise
 
 
@@ -255,20 +251,14 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager) -> list[str]:
     available_modules = {
         name: module
         for name, module in module_loader.modules.items()
-        if hasattr(module, "workflows") and workflow_name in module.workflows
+        if workflow_name in getattr(module, "workflows", [])
     }
 
     # janky pass-through for any modules that have a 'dpapi_manager' property
     for module in module_loader.modules.values():
-        if hasattr(module, "dpapi_manager") and module.dpapi_manager is None:
-            logger.debug(f"Setting 'dpapi_manager' for '{module}'")
+        if hasattr(module, "dpapi_manager"):
             module.dpapi_manager = dpapi_manager  # type: ignore
-            module.loop = asyncio.get_running_loop()  # type: ignore
-        elif hasattr(module, "dpapi_manager"):
-            logger.debug(f"'dpapi_manager' already set for for '{module}'")
 
-    # Set asyncpg_pool on modules that need database access
-    for module in module_loader.modules.values():
         if hasattr(module, "asyncpg_pool"):
             logger.debug(f"Setting 'asyncpg_pool' for '{module}'")
             module.asyncpg_pool = global_vars.asyncpg_pool  # type: ignore
@@ -276,10 +266,8 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager) -> list[str]:
     # Initialize YaraRuleManager if present
     if "yara" in module_loader.modules:
         yara_module = module_loader.modules["yara"]
-        if hasattr(yara_module, "initialize"):
-            logger.info("Initializing Yara rule manager...")
+        if isinstance(yara_module, YaraRuleManager):
             await yara_module.initialize()
-            logger.info("Yara rule manager initialized successfully")
 
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
@@ -311,7 +299,7 @@ async def reload_yara_rules():
     if not isinstance(rule_manager, YaraRuleManager):
         raise ValueError(f"Yara rule manager is incorrect type. Type: {type(rule_manager)}")
 
-    await rule_manager.load_rules()
+    await rule_manager.load_db_rules()
 
 
 # endregion

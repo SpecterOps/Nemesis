@@ -13,6 +13,7 @@ from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
 from .tracing import get_trace_injector, get_tracer
+from .workflow_tracking_service import WorkflowTrackingService
 
 logger = get_logger(__name__)
 
@@ -27,14 +28,22 @@ class WorkflowManager:
             pool: asyncpg connection pool (externally managed)
             max_execution_time: maximum time (in seconds) until a workflow is killed
         """
-        self.active_workflows = {}  # {instance_id: workflow_info}
-        self.lock = asyncio.Lock()  # For synchronizing access to active_workflows
         self.max_execution_time = max_execution_time
         self.background_tasks = set()  # Track background tasks to prevent GC
         self.pool = pool
+        self.tracking_service: WorkflowTrackingService = None
 
     async def __aenter__(self):
         """Async context manager entry - start background tasks"""
+
+        # Initialize workflow tracking service with workflow_client from global_vars
+        from . import global_vars
+
+        self.tracking_service = WorkflowTrackingService(
+            pool=self.pool,
+            workflow_client=global_vars.workflow_client,
+            max_execution_time=self.max_execution_time,
+        )
 
         # Start background cleanup task
         cleanup_task = asyncio.create_task(self._cleanup_loop())
@@ -48,6 +57,10 @@ class WorkflowManager:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit - cleanup background tasks (pool is externally managed)"""
         logger.info("Cleaning up WorkflowManager...")
+
+        # Cleanup tracking service first
+        if self.tracking_service:
+            await self.tracking_service.cleanup()
 
         # Cancel all background tasks
         for task in self.background_tasks:
@@ -209,9 +222,12 @@ class WorkflowManager:
                     except Exception as e:
                         logger.warning(f"Could not terminate workflow {wf_id}: {e}")
 
-                    # Update database status
-                    await self.update_workflow_status(
-                        wf_id, "TIMEOUT", runtime_seconds, "cleaned up by cleanup_stale_workflows"
+                    # Update database status using tracking service
+                    await self.tracking_service.update_status(
+                        wf_id,
+                        "TIMEOUT",
+                        runtime_seconds=runtime_seconds,
+                        error_message="cleaned up by cleanup_stale_workflows",
                     )
 
                     # Publish completion event
@@ -224,159 +240,81 @@ class WorkflowManager:
         """
         Generalized function to update workflow status in database.
 
+        DEPRECATED: Use self.tracking_service.update_status() instead.
+        This method is kept for backward compatibility but delegates to the tracking service.
+
         Args:
             instance_id: The workflow instance ID
             status: The status to set (COMPLETED, FAILED, ERROR, TIMEOUT, etc.)
             runtime_seconds: Runtime in seconds (optional)
             error_message: Error message to append to enrichments_failure (optional)
         """
-
-        try:
-            async with self.pool.acquire() as conn:
-                if error_message:
-                    # Update with error message appended to enrichments_failure
-                    await conn.execute(
-                        """
-                        UPDATE workflows
-                        SET status = $1,
-                            runtime_seconds = COALESCE($2, runtime_seconds),
-                            enrichments_failure = array_append(enrichments_failure, $3)
-                        WHERE wf_id = $4
-                        """,
-                        status,
-                        runtime_seconds,
-                        error_message[:100],
-                        instance_id,
-                    )
-                else:
-                    # Update without modifying enrichments_failure
-                    await conn.execute(
-                        """
-                        UPDATE workflows
-                        SET status = $1,
-                            runtime_seconds = COALESCE($2, runtime_seconds)
-                        WHERE wf_id = $3
-                        """,
-                        status,
-                        runtime_seconds,
-                        instance_id,
-                    )
-
-            logger.debug(
-                "Updated workflow status",
-                instance_id=instance_id,
-                status=status,
-                runtime_seconds=runtime_seconds,
-                has_error=bool(error_message),
-                pid=os.getpid(),
-            )
-        except Exception as e:
-            logger.error(
-                "Failed to update workflow status in database",
-                instance_id=instance_id,
-                status=status,
-                error=str(e),
-                pid=os.getpid(),
-            )
+        await self.tracking_service.update_status(
+            instance_id=instance_id,
+            status=status,
+            runtime_seconds=runtime_seconds,
+            error_message=error_message,
+        )
 
     async def reset(self):
         """Reset the workflow manager's state."""
-        async with self.lock:
-            # Clear active workflows
-            self.active_workflows.clear()
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute("DELETE FROM workflows")
+        except Exception:
+            logger.exception(message="Error resetting workflows in database")
 
-            # Reset workflows in database
-            try:
-                async with self.pool.acquire() as conn:
-                    # Clear existing workflows
-                    #   TODO: should this only include running workflows?
-                    await conn.execute("DELETE FROM workflows")
-            except Exception:
-                logger.exception(message="Error resetting workflows in database")
+        logger.info("WorkflowManager reset")
 
-            logger.info("WorkflowManager reset", active_count=len(self.active_workflows))
-
-            return {
-                "status": "success",
-                "message": "Workflow manager reset successfully",
-                "timestamp": datetime.now().isoformat(),
-            }
+        return {
+            "status": "success",
+            "message": "Workflow manager reset successfully",
+            "timestamp": datetime.now().isoformat(),
+        }
 
     async def start_workflow(self, file: File):
         """Start a workflow"""
         from . import global_vars
-        from .workflow import enrichment_workflow
+        from .workflow import enrichment_pipeline_workflow
 
-        start_time = time.time()
         tracer = get_tracer()
 
-        try:
-            # Generate the workflow ID first so we can schedule the workflow after
-            # initializing it in the database
-            instance_id = str(uuid.uuid4()).replace("-", "")
+        instance_id = str(uuid.uuid4()).replace("-", "")
+        object_id = file.object_id
+        base_filename = os.path.basename(file.path) if file.path else None
 
-            # Extract file object for metadata
-            file_obj = file
-            object_id = file_obj.object_id
-            base_filename = os.path.basename(file_obj.path) if file_obj.path else None
+        logger.info(
+            "Scheduling workflow",
+            instance_id=instance_id,
+            object_id=object_id,
+        )
 
-            # Serialize the workflow input for Dapr (convert File object to dict)
-            workflow_input_serializable = {
-                "file": json.loads(file_obj.model_dump_json(exclude_unset=True)),
-                "execution_order": global_vars.module_execution_order,
-            }
+        with tracer.start_as_current_span("start_workflow") as current_span:
+            current_span.set_attribute("workflow.instance_id", instance_id)
+            current_span.set_attribute("workflow.type", "enrichment_workflow")
+            current_span.set_attribute("workflow.object_id", object_id)
 
-            with tracer.start_as_current_span("start_workflow") as current_span:
-                # Add workflow ID to trace for Jaeger queries
-                current_span.set_attribute("workflow.instance_id", instance_id)
-                current_span.set_attribute("workflow.type", "enrichment_workflow")
-                current_span.set_attribute("workflow.object_id", object_id)
-
-                # Store workflow in database
-                # async with self.pool.acquire() as conn:
-                #     await conn.execute(
-                #         """
-                #         INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                #         VALUES ($1, $2, $3, $4, $5)
-                #         """,
-                #         instance_id,
-                #         object_id,
-                #         base_filename,
-                #         "RUNNING",
-                #         datetime.fromtimestamp(start_time),
-                #     )
-
-                # Add to active workflows tracking
-                async with self.lock:
-                    self.active_workflows[instance_id] = {
-                        "object_id": object_id,
-                        "start_time": start_time,
-                        "filename": base_filename,
-                    }
-
-                logger.info(
-                    "Scheduling workflow",
+            try:
+                # Start tracking workflow in database
+                await self.tracking_service.register_workflow(
                     instance_id=instance_id,
                     object_id=object_id,
-                    active_count=len(self.active_workflows),
-                    pid=os.getpid(),
+                    filename=base_filename,
                 )
 
-                # Actually schedule the workflow
+                # Schedule the workflow in Dapr
                 await asyncio.to_thread(
                     global_vars.workflow_client.schedule_new_workflow,
                     instance_id=instance_id,
-                    workflow=enrichment_workflow,
-                    input=workflow_input_serializable,
+                    workflow=enrichment_pipeline_workflow,
+                    input=file.model_dump(exclude_unset=True),
                 )
-
-                # TODO: Mnitor this workflow for completion/failure/timeout
 
                 return instance_id
 
-        except Exception:
-            logger.exception(message="Error starting workflow")
-            raise
+            except Exception:
+                logger.exception(message="Error starting workflow")
+                raise
 
     async def start_workflow_single_enrichment(
         self, workflow_input: SingleEnrichmentWorkflowInput | dict[str, str]
@@ -416,36 +354,20 @@ class WorkflowManager:
                 # Extract metadata for tracking
                 enrichment_name = workflow_input.enrichment_name
                 object_id = workflow_input.object_id
+                filename = f"bulk:{enrichment_name} ({object_id})"
 
-                # Store workflow in database (simplified - just for monitoring)
-                # async with self.pool.acquire() as conn:
-                #     await conn.execute(
-                #         """
-                #         INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                #         VALUES ($1, $2, $3, $4, $5)
-                #         """,
-                #         instance_id,
-                #         object_id,
-                #         f"bulk:{enrichment_name} ({object_id})",  # Use enrichment name as filename
-                #         "RUNNING",
-                #         datetime.fromtimestamp(start_time),
-                #     )
-
-                # Add to active workflows tracking
-                async with self.lock:
-                    self.active_workflows[instance_id] = {
-                        "object_id": object_id,
-                        "start_time": start_time,
-                        "filename": f"bulk:{enrichment_name} ({object_id})",
-                        "enrichment_name": enrichment_name,
-                    }
+                # Start tracking workflow in database
+                await self.tracking_service.register_workflow(
+                    instance_id=instance_id,
+                    object_id=object_id,
+                    filename=filename,
+                )
 
                 logger.debug(
                     "Triggering single enrichment workflow",
                     instance_id=instance_id,
                     enrichment_name=enrichment_name,
                     object_id=object_id,
-                    active_count=len(self.active_workflows),
                     pid=os.getpid(),
                 )
 
@@ -469,10 +391,12 @@ class WorkflowManager:
                     input=workflow_input_dict,
                 )
 
-                # TODO: Start a task to monitor this workflow for completion/failure/timeout
-                # monitor_task = asyncio.create_task(self._monitor_single_enrichment_workflow(instance_id, start_time))
-                # self.background_tasks.add(monitor_task)
-                # monitor_task.add_done_callback(self.background_tasks.discard)
+                # Start monitoring workflow for completion/failure/timeout
+                await self.tracking_service.start_monitoring(
+                    instance_id=instance_id,
+                    start_time=start_time,
+                    completion_callback=self.publish_workflow_completion,
+                )
 
                 return instance_id
 
@@ -483,6 +407,10 @@ class WorkflowManager:
     async def cleanup(self):
         """Clean up background tasks during shutdown (pool is externally managed)"""
         logger.info("Cleaning up WorkflowManager background tasks")
+
+        # Cleanup tracking service first
+        if self.tracking_service:
+            await self.tracking_service.cleanup()
 
         # Cancel all background tasks
         for task in self.background_tasks:

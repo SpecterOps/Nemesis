@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 
 @workflow_activity
-async def get_basic_analysis(ctx: WorkflowActivityContext, activity_input: dict):
+async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict):
     """
     Perform 'basic' analysis on a file and save to database. Run for every file.
 
@@ -26,14 +26,15 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, activity_input: dict)
     and saves the results to the database.
     """
 
-    # Extract object_id from the activity_input dict
-    object_id = activity_input.get("object_id") if isinstance(activity_input, dict) else activity_input
+    object_id = file_dict.get("object_id")
+    if not object_id or not isinstance(object_id, str):
+        raise ValueError("file object_id is not a uuid string")
 
     with global_vars.storage.download(object_id) as file:
-        file_enriched = process_basic_analysis(file.name, activity_input)
-        await save_file_enriched_to_db(file_enriched)
+        file_enriched_dict = process_basic_analysis(file.name, file_dict)
+        await save_file_enriched_to_db(file_enriched_dict)
 
-        return file_enriched
+        return file_enriched_dict
 
 
 def parse_timestamp(ts):
@@ -43,7 +44,7 @@ def parse_timestamp(ts):
     return ts
 
 
-def process_basic_analysis(temp_file_path: str, activity_input: dict) -> dict:
+def process_basic_analysis(temp_file_path: str, file_dict: dict) -> dict:
     """
     Process a file and extract basic metadata including hashes, mime type, etc.
 
@@ -54,7 +55,7 @@ def process_basic_analysis(temp_file_path: str, activity_input: dict) -> dict:
     Returns:
         Dictionary with all file enrichment data (activity_input merged with basic_analysis)
     """
-    path = activity_input.get("path", "")
+    path = file_dict.get("path", "")
 
     mime_type = magic.from_file(temp_file_path, mime=True)
     if mime_type == "text/plain" or helpers.is_text_file(temp_file_path):
@@ -78,7 +79,7 @@ def process_basic_analysis(temp_file_path: str, activity_input: dict) -> dict:
     }
 
     file_enriched = {
-        **activity_input,
+        **file_dict,
         **basic_analysis,
     }
 

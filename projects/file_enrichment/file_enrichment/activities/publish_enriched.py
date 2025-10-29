@@ -14,11 +14,11 @@ logger = get_logger(__name__)
 
 
 @workflow_activity
-async def publish_enriched_file(ctx: WorkflowActivityContext, activity_input):
+async def publish_enriched_file(ctx: WorkflowActivityContext, object_id: str):
     """
     Activity to publish enriched file data to pubsub after retrieving from state store.
     """
-    object_id = activity_input["object_id"]
+
     file_enriched = await get_file_enriched_async(object_id)
 
     try:

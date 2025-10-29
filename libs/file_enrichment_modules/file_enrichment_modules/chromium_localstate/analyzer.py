@@ -12,7 +12,6 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager
 
 if TYPE_CHECKING:
-    import asyncio
 
     from nemesis_dpapi import DpapiManager
 
@@ -30,7 +29,6 @@ class ChromeLocalStateParser(EnrichmentModule):
         self.workflows = ["default"]
 
         self.dpapi_manager: DpapiManager = None  # type: ignore
-        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.asyncpg_pool = None  # type: ignore
 
         # Yara rule to check for Chrome Login Data tables
