@@ -33,6 +33,8 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
         logger.info("Starting enrichment modules processing", object_id=object_id, execution_order=execution_order)
 
         results = []
+        success_list = []
+        failure_list = []
 
         try:
             with global_vars.storage.download(object_id) as temp_file:
@@ -45,6 +47,12 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
 
                 modules_to_process = await determine_modules_to_process(object_id, temp_file.name, execution_order)
                 span.set_attribute("modules_to_process_count", len(modules_to_process))
+                logger.info(
+                    "Modules determined for processing",
+                    object_id=object_id,
+                    modules_to_process=modules_to_process,
+                    module_count=len(modules_to_process),
+                )
 
                 for module_name in modules_to_process:
                     # Create a span for each module execution
@@ -60,25 +68,46 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                                 await store_enrichment_results(object_id, module_name, result)
 
                                 results.append((module_name, {"status": "success", "module": module_name}))
-                                logger.debug("Module completed successfully", module_name=module_name)
+                                logger.debug("Module completed successfully with results", module_name=module_name)
                                 module_span.set_attribute("module.status", "success")
                             else:
                                 results.append((module_name, None))
-                                logger.debug("Module returned no result", module_name=module_name)
-                                module_span.set_attribute("module.status", "no_result")
+                                logger.debug("Module completed successfully with no results", module_name=module_name)
+                                module_span.set_attribute("module.status", "success_no_results")
+
+                            # Add to success list regardless of whether it returned results
+                            # The module ran without errors, so it's a successful execution
+                            success_list.append(module_name)
 
                         except Exception as e:
                             logger.exception(
                                 "Error in enrichment module", module_name=module_name, object_id=object_id, error=str(e)
                             )
 
-                            # Update workflow in database with failed module
-                            await record_module_failure(object_id, module_name, e)
-
+                            failure_list.append(f"{module_name}:{str(e)[:100]}")
                             results.append((module_name, None))
                             module_span.set_attribute("module.status", "error")
                             module_span.set_attribute("module.error", str(e)[:200])
                             # Continue with other modules instead of raising
+
+            # Update enrichment results in workflows table using tracking_service
+            instance_id = ctx.workflow_id
+            logger.info(
+                "About to update enrichment results",
+                instance_id=instance_id,
+                object_id=object_id,
+                success_list=success_list,
+                failure_list=failure_list,
+            )
+            await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+                instance_id=instance_id, success_list=success_list, failure_list=failure_list
+            )
+            logger.info(
+                "Updated enrichment results in workflows table",
+                instance_id=instance_id,
+                success_count=len(success_list),
+                failure_count=len(failure_list),
+            )
 
         except Exception as e:
             logger.exception("Error in run_enrichment_modules", object_id=object_id, error=str(e))
@@ -172,31 +201,3 @@ async def store_enrichment_results(object_id: str, module_name: str, result: Enr
                     json.dumps(finding.raw_data),
                     json.dumps([obj.model_dump_json() for obj in finding.data]),
                 )
-
-        # Update workflow in database with successful module
-        await conn.execute(
-            """
-            UPDATE workflows
-            SET enrichments_success = array_append(enrichments_success, $1)
-            WHERE object_id = $2
-            """,
-            module_name,
-            object_id,
-        )
-
-
-async def record_module_failure(object_id: str, module_name: str, error: Exception):
-    """Record a module failure in the database."""
-    try:
-        async with global_vars.asyncpg_pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE workflows
-                SET enrichments_failure = array_append(enrichments_failure, $1)
-                WHERE object_id = $2
-                """,
-                f"{module_name}:{str(error)[:100]}",
-                object_id,
-            )
-    except Exception as db_error:
-        logger.error(f"Failed to update workflow failure in database: {str(db_error)}")

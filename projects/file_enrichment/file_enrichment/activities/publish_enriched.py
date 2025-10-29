@@ -36,6 +36,14 @@ async def publish_enriched_file(ctx: WorkflowActivityContext, object_id: str):
                 data_content_type="application/json",
             )
 
+            # Update workflow status to COMPLETED after successful publish
+            from .. import global_vars
+            instance_id = ctx.workflow_id
+            await global_vars.workflow_manager.tracking_service.update_status(
+                instance_id=instance_id,
+                status="COMPLETED"
+            )
+
             return True
 
     except Exception:

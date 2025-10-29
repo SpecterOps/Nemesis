@@ -206,17 +206,26 @@ async def store_noseyparker_results(
         pool (asyncpg.Pool): Database connection pool
     """
     try:
+        # Update enrichment results using tracking_service
         try:
+            # Get workflow ID from object_id
             async with global_vars.asyncpg_pool.acquire() as conn:
-                await conn.execute(
+                workflow_row = await conn.fetchrow(
                     """
-                    UPDATE workflows
-                    SET enrichments_success = array_append(enrichments_failure, $1)
-                    WHERE object_id = $2
+                    SELECT wf_id FROM workflows WHERE object_id = $1
                     """,
-                    "noseyparker",
                     object_id,
                 )
+
+            if workflow_row:
+                instance_id = workflow_row["wf_id"]
+                await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+                    instance_id=instance_id,
+                    success_list=["noseyparker"],
+                )
+                logger.debug("Updated noseyparker enrichment success", instance_id=instance_id, object_id=object_id)
+            else:
+                logger.warning("No workflow found for object_id, skipping enrichment update", object_id=object_id)
         except Exception as db_error:
             logger.error(f"Failed to update noseyparker enrichment success in database: {str(db_error)}")
 

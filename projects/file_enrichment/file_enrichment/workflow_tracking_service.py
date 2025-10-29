@@ -1,12 +1,10 @@
 # src/workflow/workflow_tracking_service.py
 import asyncio
-import time
 from datetime import datetime
 from typing import Optional
 
 import asyncpg
 from common.logger import get_logger
-from dapr.ext.workflow.workflow_state import WorkflowStatus
 
 logger = get_logger(__name__)
 
@@ -134,12 +132,12 @@ class WorkflowTrackingService:
         success_list: Optional[list[str]] = None,
         failure_list: Optional[list[str]] = None,
     ) -> None:
-        """Update enrichment success/failure arrays.
+        """Update enrichment success/failure arrays by appending to existing values.
 
         Args:
             instance_id: The workflow instance ID
-            success_list: List of successful enrichment module names
-            failure_list: List of failed enrichment module names
+            success_list: List of successful enrichment module names to append
+            failure_list: List of failed enrichment module names to append
         """
         try:
             async with self.pool.acquire() as conn:
@@ -147,8 +145,8 @@ class WorkflowTrackingService:
                     await conn.execute(
                         """
                         UPDATE workflows
-                        SET enrichments_success = $1,
-                            enrichments_failure = $2
+                        SET enrichments_success = enrichments_success || $1,
+                            enrichments_failure = enrichments_failure || $2
                         WHERE wf_id = $3
                         """,
                         success_list,
@@ -159,7 +157,7 @@ class WorkflowTrackingService:
                     await conn.execute(
                         """
                         UPDATE workflows
-                        SET enrichments_success = $1
+                        SET enrichments_success = enrichments_success || $1
                         WHERE wf_id = $2
                         """,
                         success_list,
@@ -169,7 +167,7 @@ class WorkflowTrackingService:
                     await conn.execute(
                         """
                         UPDATE workflows
-                        SET enrichments_failure = $1
+                        SET enrichments_failure = enrichments_failure || $1
                         WHERE wf_id = $2
                         """,
                         failure_list,
@@ -230,176 +228,6 @@ class WorkflowTrackingService:
                 error=str(e),
             )
             raise
-
-    async def start_monitoring(self, instance_id: str, start_time: float, completion_callback=None) -> None:
-        """Launch background task to monitor workflow via Dapr.
-
-        Args:
-            instance_id: The workflow instance ID
-            start_time: Workflow start time (from time.time())
-            completion_callback: Optional async callback function to call on completion/failure
-                                 Should accept (instance_id, completed: bool) as arguments
-        """
-        # Create monitoring task
-        task = asyncio.create_task(self._monitor_workflow(instance_id, start_time, completion_callback))
-        self.monitoring_tasks[instance_id] = task
-        self.background_tasks.add(task)
-        task.add_done_callback(self.background_tasks.discard)
-        task.add_done_callback(lambda t: self.monitoring_tasks.pop(instance_id, None))
-
-        logger.debug(
-            "Started monitoring workflow",
-            instance_id=instance_id,
-            monitoring_count=len(self.monitoring_tasks),
-        )
-
-    async def _monitor_workflow(self, instance_id: str, start_time: float, completion_callback=None) -> None:
-        """Background task to monitor workflow state and update database.
-
-        Args:
-            instance_id: The workflow instance ID
-            start_time: Workflow start time (from time.time())
-            completion_callback: Optional async callback function
-        """
-        poll_interval = 5  # Poll every 5 seconds
-        running_logged = False
-
-        try:
-            while True:
-                await asyncio.sleep(poll_interval)
-
-                # Check for timeout
-                elapsed_time = time.time() - start_time
-                if elapsed_time > self.max_execution_time:
-                    logger.warning(
-                        "Workflow exceeded max execution time",
-                        instance_id=instance_id,
-                        elapsed_time=elapsed_time,
-                        max_time=self.max_execution_time,
-                    )
-                    await self.update_status(
-                        instance_id,
-                        "TIMEOUT",
-                        runtime_seconds=elapsed_time,
-                        error_message="Exceeded max execution time",
-                    )
-
-                    # Call completion callback with failure
-                    if completion_callback:
-                        try:
-                            await completion_callback(instance_id, completed=False)
-                        except Exception as e:
-                            logger.error(
-                                "Error in completion callback",
-                                instance_id=instance_id,
-                                error=str(e),
-                            )
-                    break
-
-                # Query Dapr for workflow state
-                try:
-                    state = await asyncio.to_thread(self.workflow_client.get_workflow_state, instance_id)
-
-                    if state.runtime_status == WorkflowStatus.RUNNING:
-                        if not running_logged:
-                            await self.update_status(instance_id, "RUNNING")
-                            running_logged = True
-
-                    elif state.runtime_status == WorkflowStatus.COMPLETED:
-                        runtime = time.time() - start_time
-                        await self.update_status(instance_id, "COMPLETED", runtime_seconds=runtime)
-                        logger.info(
-                            "Workflow completed successfully",
-                            instance_id=instance_id,
-                            runtime_seconds=runtime,
-                        )
-
-                        # Call completion callback with success
-                        if completion_callback:
-                            try:
-                                await completion_callback(instance_id, completed=True)
-                            except Exception as e:
-                                logger.error(
-                                    "Error in completion callback",
-                                    instance_id=instance_id,
-                                    error=str(e),
-                                )
-                        break
-
-                    elif state.runtime_status == WorkflowStatus.FAILED:
-                        runtime = time.time() - start_time
-                        error_msg = state.failure_details.message if state.failure_details else "Unknown error"
-                        await self.update_status(
-                            instance_id,
-                            "FAILED",
-                            runtime_seconds=runtime,
-                            error_message=error_msg,
-                        )
-                        logger.warning(
-                            "Workflow failed",
-                            instance_id=instance_id,
-                            error=error_msg,
-                            runtime_seconds=runtime,
-                        )
-
-                        # Call completion callback with failure
-                        if completion_callback:
-                            try:
-                                await completion_callback(instance_id, completed=False)
-                            except Exception as e:
-                                logger.error(
-                                    "Error in completion callback",
-                                    instance_id=instance_id,
-                                    error=str(e),
-                                )
-                        break
-
-                    elif state.runtime_status == WorkflowStatus.TERMINATED:
-                        runtime = time.time() - start_time
-                        await self.update_status(
-                            instance_id,
-                            "TERMINATED",
-                            runtime_seconds=runtime,
-                            error_message="Workflow was terminated",
-                        )
-                        logger.warning(
-                            "Workflow was terminated",
-                            instance_id=instance_id,
-                            runtime_seconds=runtime,
-                        )
-
-                        # Call completion callback with failure
-                        if completion_callback:
-                            try:
-                                await completion_callback(instance_id, completed=False)
-                            except Exception as e:
-                                logger.error(
-                                    "Error in completion callback",
-                                    instance_id=instance_id,
-                                    error=str(e),
-                                )
-                        break
-
-                except Exception as e:
-                    logger.error(
-                        "Error querying workflow state from Dapr",
-                        instance_id=instance_id,
-                        error=str(e),
-                    )
-                    # Continue monitoring despite error
-
-        except asyncio.CancelledError:
-            logger.debug(
-                "Workflow monitoring cancelled",
-                instance_id=instance_id,
-            )
-            raise
-        except Exception as e:
-            logger.exception(
-                "Unexpected error in workflow monitoring",
-                instance_id=instance_id,
-                error=str(e),
-            )
 
     async def cleanup(self) -> None:
         """Clean up all monitoring tasks during shutdown."""

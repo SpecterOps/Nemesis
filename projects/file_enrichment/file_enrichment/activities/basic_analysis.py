@@ -26,6 +26,8 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict):
     and saves the results to the database.
     """
 
+    await global_vars.workflow_manager.tracking_service.update_status(instance_id=ctx.workflow_id, status="RUNNING")
+
     object_id = file_dict.get("object_id")
     if not object_id or not isinstance(object_id, str):
         raise ValueError("file object_id is not a uuid string")

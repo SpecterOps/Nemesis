@@ -391,13 +391,6 @@ class WorkflowManager:
                     input=workflow_input_dict,
                 )
 
-                # Start monitoring workflow for completion/failure/timeout
-                await self.tracking_service.start_monitoring(
-                    instance_id=instance_id,
-                    start_time=start_time,
-                    completion_callback=self.publish_workflow_completion,
-                )
-
                 return instance_id
 
         except Exception:
