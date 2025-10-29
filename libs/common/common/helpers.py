@@ -224,7 +224,7 @@ def is_plaintext(data: bytes, sample_size: int = 1024) -> bool:
         return False
 
 
-def sanitize_file_path(file_path: str, num_chars=4):
+def sanitize_file_path(file_path: str, num_chars=5):
     """
     Replaces all but the first `num_chars` characters of a file path string with *'s,
     while preserving the file extension.

@@ -3,7 +3,9 @@ import os
 import re
 from contextlib import asynccontextmanager
 
+import aiohttp
 import apprise
+import common.helpers as helpers
 from common.logger import get_logger
 from common.models import Alert, CloudEvent
 from dapr.clients import DaprClient
@@ -26,7 +28,12 @@ alert_settings = {
     "category_included": [],
     "file_path_excluded_regex": [],
     "file_path_included_regex": [],
+    "llm_triage_values_to_alert": ["true_positive"],
 }
+
+# LLM configuration
+llm_enabled = False
+LLM_EXCLUDED_CATEGORIES = ["extracted_hash", "yara_match", "extracted_data"]
 
 # Alert pool configuration
 MAX_CONCURRENT_ALERTS = int(os.getenv("MAX_CONCURRENT_ALERTS", "10"))
@@ -56,6 +63,49 @@ def process_apprise_url(url):
     return (match.group(1).strip("'\""), match.group(2))
 
 
+async def check_llm_enabled():
+    """Check if the agents service is available (LLM functionality enabled).
+
+    Retries up to 5 times with 10-second delays to handle containers starting in different orders.
+    """
+    dapr_port = os.getenv("DAPR_HTTP_PORT", "3500")
+    agents_health_url = f"http://localhost:{dapr_port}/v1.0/invoke/agents/method/healthz"
+
+    max_retries = 3
+    retry_delay = 10
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            # Try to reach agents service via Dapr
+            async with aiohttp.ClientSession() as session:
+                async with session.get(agents_health_url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                    if response.status == 200:
+                        logger.info("LLM functionality detected - agents service is available", attempt=attempt)
+                        return True
+                    else:
+                        logger.info(
+                            "Agents service responded with non-200 status",
+                            status=response.status,
+                            attempt=attempt,
+                            max_retries=max_retries
+                        )
+        except Exception as e:
+            logger.info(
+                "LLM functionality not available - agents service not reachable",
+                error=str(e),
+                attempt=attempt,
+                max_retries=max_retries
+            )
+
+        # If not the last attempt, wait before retrying
+        if attempt < max_retries:
+            logger.info(f"Waiting {retry_delay} seconds before retry...", attempt=attempt)
+            await asyncio.sleep(retry_delay)
+
+    logger.info("LLM functionality disabled - agents service not available after all retries")
+    return False
+
+
 async def load_alert_settings():
     """Load alert settings from database, creating defaults if none exist."""
     global alert_settings
@@ -69,6 +119,7 @@ async def load_alert_settings():
                 category_included
                 file_path_excluded_regex
                 file_path_included_regex
+                llm_triage_values_to_alert
             }
         }
     """)
@@ -82,7 +133,8 @@ async def load_alert_settings():
                 category_excluded: [],
                 category_included: [],
                 file_path_excluded_regex: [],
-                file_path_included_regex: []
+                file_path_included_regex: [],
+                llm_triage_values_to_alert: ["true_positive"]
             }, on_conflict: {
                 constraint: alert_settings_pkey,
                 update_columns: []
@@ -120,6 +172,7 @@ async def load_alert_settings():
                     "category_included": settings.get("category_included", []),
                     "file_path_excluded_regex": settings.get("file_path_excluded_regex", []),
                     "file_path_included_regex": settings.get("file_path_included_regex", []),
+                    "llm_triage_values_to_alert": settings.get("llm_triage_values_to_alert", ["true_positive"]),
                 })
                 logger.info("Alert settings loaded", settings=alert_settings)
             else:
@@ -132,7 +185,7 @@ async def load_alert_settings():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan manager for FastAPI - handles startup and shutdown events"""
-    global is_initialized
+    global is_initialized, llm_enabled
 
     try:
         apprise_urls = os.getenv("APPRISE_URLS", "")
@@ -151,6 +204,10 @@ async def lifespan(app: FastAPI):
 
         is_initialized = True
 
+        # Check if LLM functionality is enabled
+        llm_enabled = await check_llm_enabled()
+        logger.info(f"LLM functionality: {'enabled' if llm_enabled else 'disabled'}")
+
         # Load alert settings from database
         await load_alert_settings()
 
@@ -161,6 +218,11 @@ async def lifespan(app: FastAPI):
         # Start feedback subscription
         feedback_subscription_task = asyncio.create_task(handle_feedback_subscription())
         logger.info("Started feedback subscription handler")
+
+        # Start triage subscription if LLM is enabled
+        if llm_enabled:
+            triage_subscription_task = asyncio.create_task(handle_findings_triage_subscription())
+            logger.info("Started findings triage subscription handler")
 
         logger.info(f"Alert rate limiter configured with {MAX_CONCURRENT_ALERTS} concurrent alerts")
         logger.info(f"Alert retry policy: {MAX_ALERT_RETRIES} retries with {RETRY_DELAY_SECONDS}s delay")
@@ -196,6 +258,7 @@ async def handle_alert_settings_subscription():
                 category_included
                 file_path_excluded_regex
                 file_path_included_regex
+                llm_triage_values_to_alert
                 updated_at
             }
         }
@@ -228,6 +291,7 @@ async def handle_alert_settings_subscription():
                         "category_included": settings.get("category_included", []),
                         "file_path_excluded_regex": settings.get("file_path_excluded_regex", []),
                         "file_path_included_regex": settings.get("file_path_included_regex", []),
+                        "llm_triage_values_to_alert": settings.get("llm_triage_values_to_alert", ["true_positive"]),
                     })
                     logger.info("Alert settings updated", settings=alert_settings)
 
@@ -325,6 +389,143 @@ async def handle_feedback_subscription():
             await asyncio.sleep(5)
 
 
+async def handle_findings_triage_subscription():
+    """Sets up and handles subscription to findings_triage_history table in Hasura for LLM-triaged findings."""
+    global alert_settings
+
+    SUBSCRIPTION = gql("""
+        subscription FindingsTriage {
+            findings_triage_history(
+                where: {automated: {_eq: true}},
+                order_by: {timestamp: desc}
+            ) {
+                id
+                finding_id
+                value
+                explanation
+                confidence
+                true_positive_context
+                timestamp
+                finding {
+                    finding_name
+                    category
+                    severity
+                    data
+                    origin_type
+                    origin_name
+                    files_enriched {
+                        path
+                        object_id
+                    }
+                }
+            }
+        }
+    """)
+
+    # Track which triage IDs we've already processed to avoid duplicates
+    processed_triage_ids = set()
+
+    while True:
+        try:
+            transport = WebsocketsTransport(
+                url="ws://hasura:8080/v1/graphql",
+                headers={"x-hasura-admin-secret": hasura_admin_secret}
+            )
+
+            async with Client(
+                transport=transport,
+                fetch_schema_from_transport=False,
+            ) as session:
+                async for result in session.subscribe(SUBSCRIPTION):
+                    if result is None:
+                        continue
+
+                    triage_list = result.get("findings_triage_history", [])
+                    if not triage_list:
+                        continue
+
+                    for triage in triage_list:
+                        triage_id = triage["id"]
+
+                        # Skip if we've already processed this triage
+                        if triage_id in processed_triage_ids:
+                            continue
+
+                        triage_value = triage["value"]
+                        llm_triage_values = alert_settings.get("llm_triage_values_to_alert", ["true_positive"])
+
+                        # Only alert if triage value is in configured list
+                        if triage_value not in llm_triage_values:
+                            logger.debug(
+                                f"Skipping alert for finding - triage value '{triage_value}' not in configured list",
+                                finding_id=triage["finding_id"],
+                                configured_values=llm_triage_values
+                            )
+                            processed_triage_ids.add(triage_id)
+                            continue
+
+                        finding = triage.get("finding")
+                        if not finding:
+                            logger.warning(f"No finding data for triage ID {triage_id}")
+                            processed_triage_ids.add(triage_id)
+                            continue
+
+                        # Extract finding details
+                        finding_name = finding.get("finding_name", "Unknown Finding")
+                        category = finding.get("category")
+                        severity = finding.get("severity")
+                        origin_name = finding.get("origin_name")
+                        file_enriched = finding.get("files_enriched")
+                        file_path = file_enriched.get("path") if file_enriched else None
+
+                        object_id = file_enriched.get("object_id") if file_enriched else None
+
+                        # Build alert body using Slack markdown format
+                        body_parts = []
+                        if category and severity is not None:
+                            body_parts.append(f"- *Category:* {category} / *Severity:* {severity}")
+                        if file_path:
+                            body_parts.append(f"- *File Path:* {helpers.sanitize_file_path(file_path)}")
+                        if triage.get("confidence") is not None:
+                            body_parts.append(f"- *Triage Value:* {triage_value} (*Confidence:* {triage['confidence']:.2f})")
+
+                        # Add links to finding and file using Slack format
+                        if object_id:
+                            nemesis_finding_url = f"{nemesis_url}findings?object_id={object_id}"
+                            nemesis_file_url = f"{nemesis_url}files?object_id={object_id}"
+                            body_parts.append(f"*<{nemesis_finding_url}|View Finding in Nemesis>* / *<{nemesis_file_url}|View File in Nemesis>*")
+
+                        body = "\n".join(body_parts)
+
+                        # Create alert with all required fields for filtering
+                        alert = Alert(
+                            title=finding_name,
+                            body=body,
+                            service=origin_name,
+                            category=category,
+                            severity=severity,
+                            file_path=file_path,
+                        )
+
+                        logger.info(
+                            f"Processing LLM-triaged finding alert",
+                            finding_id=triage["finding_id"],
+                            triage_value=triage_value,
+                            category=category,
+                            severity=severity
+                        )
+
+                        # Send alert through normal filtering and rate limiting
+                        await send_alert_with_retries(alert)
+
+                        # Mark as processed
+                        processed_triage_ids.add(triage_id)
+
+        except Exception as e:
+            logger.exception(e, message="Error in findings triage subscription, reconnecting in 5 seconds...")
+            await asyncio.sleep(5)
+
+
 @app.post("/test/alert")
 async def test_alert(payload: dict):
     """Test endpoint that prints alert details to console"""
@@ -408,6 +609,7 @@ def should_filter_alert(alert: Alert) -> tuple[bool, str]:
         if file_path_included_regexes:
             matched_any = False
             for pattern in file_path_included_regexes:
+                logger.warning(f"file_path: {alert.file_path}, regex: {pattern}")
                 if not pattern:  # Skip empty patterns
                     continue
                 try:
@@ -445,19 +647,17 @@ async def send_alert_with_retries(alert):
     Returns:
         bool: True if the alert was successfully sent, False otherwise
     """
-    logger.info("send_alert_with_retries 1")
+
     if not is_initialized:
         logger.error("Apprise services not yet initialized")
         return False
-    logger.info("send_alert_with_retries 2")
+
     # Check if alert should be filtered
-    logger.info("send_alert_with_retries 3")
     should_filter, reason = should_filter_alert(alert)
-    logger.info(f"send_alert_with_retries 4: {should_filter}")
+
     if should_filter:
         logger.info(f"Alert filtered: {reason}", alert_title=alert.title)
         return False
-    logger.info(f"send_alert_with_retries 5")
 
     # Prepare the alert parameters
     title = alert.title

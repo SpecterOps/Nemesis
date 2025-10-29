@@ -22,6 +22,7 @@ from common.models import (
     NoseyParkerOutput,
     ScanStats,
 )
+from file_enrichment.activities.publish_findings import publish_alerts_for_findings
 
 logger = get_logger(__name__)
 
@@ -319,6 +320,13 @@ async def store_noseyparker_results(
                 )
 
         logger.info("Successfully stored NoseyParker results", object_id=object_id, match_count=len(matches))
+
+        # Publish alerts for noseyparker findings (only for this origin)
+        if findings_list:
+            await publish_alerts_for_findings(
+                object_id=object_id,
+                origin_include=["noseyparker"]
+            )
 
         return enrichment_result
 

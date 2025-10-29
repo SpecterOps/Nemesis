@@ -190,7 +190,7 @@ const Sidebar = ({ onCollapse }) => {
     { id: 'findings', label: `Findings - ${findingsCount} Untriaged`, icon: Siren, path: '/findings', count: findingsCount },
     { id: 'file-browser', label: 'File Browser', icon: FolderTree, path: '/file-browser' },
     { id: 'chromium', label: 'Chromium', icon: Globe, path: '/chromium' },
-    { id: 'dpapi', label: 'Dpapi', icon: Key, path: '/dpapi' },
+    { id: 'dpapi', label: 'DPAPI', icon: Key, path: '/dpapi' },
     { id: 'search', label: 'Document Search', icon: Search, path: '/search' },
     { id: 'yara', label: 'Yara Rules', icon: FileSearch, path: '/yara-rules' },
     { id: 'containers', label: 'Containers', icon: FileArchive, path: '/containers' },

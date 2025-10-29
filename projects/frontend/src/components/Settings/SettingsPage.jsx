@@ -57,7 +57,8 @@ const SettingsPage = () => {
     category_excluded: [],
     category_included: [],
     file_path_excluded_regex: [],
-    file_path_included_regex: []
+    file_path_included_regex: [],
+    llm_triage_values_to_alert: ['true_positive']
   });
   const [alertSettingsLoaded, setAlertSettingsLoaded] = useState(false);
   const [alertSettingsSaving, setAlertSettingsSaving] = useState(false);
@@ -120,6 +121,7 @@ const SettingsPage = () => {
                   category_included
                   file_path_excluded_regex
                   file_path_included_regex
+                  llm_triage_values_to_alert
                 }
               }
             `
@@ -136,7 +138,8 @@ const SettingsPage = () => {
               category_excluded: settings.category_excluded || [],
               category_included: settings.category_included || [],
               file_path_excluded_regex: settings.file_path_excluded_regex || [],
-              file_path_included_regex: settings.file_path_included_regex || []
+              file_path_included_regex: settings.file_path_included_regex || [],
+              llm_triage_values_to_alert: settings.llm_triage_values_to_alert || ['true_positive']
             });
           }
           // Always mark as loaded, even if no settings exist (will use defaults)
@@ -185,6 +188,59 @@ const SettingsPage = () => {
     setShowDatePicker(false);
   };
 
+  // Handler for toggling alerting enabled (auto-saves)
+  const handleAlertingEnabledToggle = async () => {
+    const newValue = !alertSettings.alerting_enabled;
+
+    // Update local state immediately
+    setAlertSettings({...alertSettings, alerting_enabled: newValue});
+
+    try {
+      const response = await fetch('/hasura/v1/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+        },
+        body: JSON.stringify({
+          query: `
+            mutation UpdateAlertingEnabled($alerting_enabled: Boolean!) {
+              insert_alert_settings_one(
+                object: {
+                  id: 1,
+                  alerting_enabled: $alerting_enabled
+                },
+                on_conflict: {
+                  constraint: alert_settings_pkey,
+                  update_columns: [alerting_enabled]
+                }
+              ) {
+                id
+              }
+            }
+          `,
+          variables: {
+            alerting_enabled: newValue
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.errors) {
+        throw new Error(result.errors[0].message);
+      }
+    } catch (error) {
+      console.error('Error saving alerting enabled setting:', error);
+      // Revert local state on error
+      setAlertSettings({...alertSettings, alerting_enabled: !newValue});
+      setAlertSettingsError('Failed to save alerting enabled setting');
+    }
+  };
+
   // Handler for saving alert settings
   const handleAlertSettingsSave = async () => {
     setAlertSettingsSaving(true);
@@ -205,7 +261,8 @@ const SettingsPage = () => {
               $category_excluded: [String!]!,
               $category_included: [String!]!,
               $file_path_excluded_regex: [String!]!,
-              $file_path_included_regex: [String!]!
+              $file_path_included_regex: [String!]!,
+              $llm_triage_values_to_alert: [String!]!
             ) {
               insert_alert_settings_one(
                 object: {
@@ -215,7 +272,8 @@ const SettingsPage = () => {
                   category_excluded: $category_excluded,
                   category_included: $category_included,
                   file_path_excluded_regex: $file_path_excluded_regex,
-                  file_path_included_regex: $file_path_included_regex
+                  file_path_included_regex: $file_path_included_regex,
+                  llm_triage_values_to_alert: $llm_triage_values_to_alert
                 },
                 on_conflict: {
                   constraint: alert_settings_pkey,
@@ -225,7 +283,8 @@ const SettingsPage = () => {
                     category_excluded,
                     category_included,
                     file_path_excluded_regex,
-                    file_path_included_regex
+                    file_path_included_regex,
+                    llm_triage_values_to_alert
                   ]
                 }
               ) {
@@ -239,7 +298,8 @@ const SettingsPage = () => {
             category_excluded: alertSettings.category_excluded,
             category_included: alertSettings.category_included,
             file_path_excluded_regex: alertSettings.file_path_excluded_regex,
-            file_path_included_regex: alertSettings.file_path_included_regex
+            file_path_included_regex: alertSettings.file_path_included_regex,
+            llm_triage_values_to_alert: alertSettings.llm_triage_values_to_alert
           }
         })
       });
@@ -364,54 +424,108 @@ const SettingsPage = () => {
         </SettingsSection>
 
         {/* Alert Settings section */}
-        <SettingsSection
-          icon={Bell}
-          title="Alert Settings"
-          description="Configure alert filtering and notification preferences"
-        >
-          <div className="space-y-4">
-            {/* Row 1: Enable Alerting and Minimum Severity */}
-            <div className="grid grid-cols-2 gap-4 items-end">
-              {/* Alerting Enabled Toggle */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Enable Alerting
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  Master switch for all alert notifications
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setAlertSettings({...alertSettings, alerting_enabled: !alertSettings.alerting_enabled})}
-                  className={`w-full px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                    alertSettings.alerting_enabled
-                      ? 'bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white focus:ring-green-500'
-                      : 'bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white focus:ring-red-500'
-                  }`}
-                >
-                  {alertSettings.alerting_enabled ? 'Enabled' : 'Disabled'}
-                </button>
+        <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="p-6">
+            {/* Header Row with Title and Enable Toggle */}
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Alert Settings
+                </h3>
               </div>
-
-              {/* Minimum Severity */}
-              <div>
-                <label htmlFor="minimum_severity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Minimum Severity (0-10)
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  Only send alerts for findings with severity at or above this threshold
-                </p>
-                <input
-                  id="minimum_severity"
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={alertSettings.minimum_severity}
-                  onChange={(e) => setAlertSettings({...alertSettings, minimum_severity: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              <button
+                type="button"
+                onClick={handleAlertingEnabledToggle}
+                className={`px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                  alertSettings.alerting_enabled
+                    ? 'bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white focus:ring-green-500'
+                    : 'bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white focus:ring-red-500'
+                }`}
+              >
+                {alertSettings.alerting_enabled ? 'Enabled' : 'Disabled'}
+              </button>
             </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Configure alert filtering and notification preferences
+            </p>
+
+            <div className="space-y-4">
+              {/* Row 1: Minimum Severity and LLM Triage Values */}
+              <div className="grid grid-cols-2 gap-4 items-end">
+                {/* Minimum Severity */}
+                <div>
+                  <label htmlFor="minimum_severity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Minimum Severity (0-10)
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Only send alerts for findings with severity at or above this threshold
+                  </p>
+                  <input
+                    id="minimum_severity"
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={alertSettings.minimum_severity}
+                    onChange={(e) => setAlertSettings({...alertSettings, minimum_severity: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* LLM Triage Values to Alert */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    LLM Triage Values to Alert On
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    When LLM functionality is enabled, only alert on findings with these triage values
+                  </p>
+                  <div className="flex gap-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={alertSettings.llm_triage_values_to_alert.includes('true_positive')}
+                        onChange={(e) => {
+                          const newValues = e.target.checked
+                            ? [...alertSettings.llm_triage_values_to_alert, 'true_positive']
+                            : alertSettings.llm_triage_values_to_alert.filter(v => v !== 'true_positive');
+                          setAlertSettings({ ...alertSettings, llm_triage_values_to_alert: newValues });
+                        }}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">True Positive</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={alertSettings.llm_triage_values_to_alert.includes('needs_review')}
+                        onChange={(e) => {
+                          const newValues = e.target.checked
+                            ? [...alertSettings.llm_triage_values_to_alert, 'needs_review']
+                            : alertSettings.llm_triage_values_to_alert.filter(v => v !== 'needs_review');
+                          setAlertSettings({ ...alertSettings, llm_triage_values_to_alert: newValues });
+                        }}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Needs Review</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={alertSettings.llm_triage_values_to_alert.includes('false_positive')}
+                        onChange={(e) => {
+                          const newValues = e.target.checked
+                            ? [...alertSettings.llm_triage_values_to_alert, 'false_positive']
+                            : alertSettings.llm_triage_values_to_alert.filter(v => v !== 'false_positive');
+                          setAlertSettings({ ...alertSettings, llm_triage_values_to_alert: newValues });
+                        }}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">False Positive</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
 
             {/* Row 2: Category Included and Excluded */}
             <div className="grid grid-cols-2 gap-4 items-end">
@@ -517,16 +631,17 @@ const SettingsPage = () => {
               </div>
             )}
 
-            {/* Save Button */}
-            <button
-              onClick={handleAlertSettingsSave}
-              disabled={alertSettingsSaving || !alertSettingsLoaded}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {alertSettingsSaving ? 'Saving...' : 'Save Alert Settings'}
-            </button>
+              {/* Save Button */}
+              <button
+                onClick={handleAlertSettingsSave}
+                disabled={alertSettingsSaving || !alertSettingsLoaded}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {alertSettingsSaving ? 'Saving...' : 'Save Alert Settings'}
+              </button>
+            </div>
           </div>
-        </SettingsSection>
+        </div>
 
         {/* Data Settings section with updated styling */}
         <SettingsSection

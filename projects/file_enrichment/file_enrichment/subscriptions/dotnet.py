@@ -21,6 +21,7 @@ from common.models import (
 )
 from common.state_helpers import get_file_enriched_async
 from dapr.clients import DaprClient
+from file_enrichment.activities.publish_findings import publish_alerts_for_findings
 from file_enrichment.tracing import get_trace_injector
 
 logger = get_logger(__name__)
@@ -316,6 +317,13 @@ async def store_dotnet_results(
                 )
 
         logger.info("Successfully stored DotNet results", object_id=object_id, has_findings=len(findings_list) > 0)
+
+        # Publish alerts for dotnet findings (only for this origin)
+        if findings_list:
+            await publish_alerts_for_findings(
+                object_id=object_id,
+                origin_include=["dotnet_service"]
+            )
 
         return enrichment_result
 
