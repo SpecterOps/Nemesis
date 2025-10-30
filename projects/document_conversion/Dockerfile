@@ -100,9 +100,10 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64/jre \
     LOG_LEVEL=INFO \
     UVICORN_HOST=0.0.0.0 \
     UVICORN_PORT=8000 \
-    UVICORN_WORKERS=1 \
     UVICORN_PROXY_HEADERS=1 \
-    UVICORN_ACCESS_LOG=false
+    UVICORN_WORKERS=1 \
+    UVICORN_ACCESS_LOG=false \
+    UVICORN_LOG_LEVEL=info
 
 # Copy only the virtual environment from the bundle stage
 COPY --from=bundle /venv /venv
