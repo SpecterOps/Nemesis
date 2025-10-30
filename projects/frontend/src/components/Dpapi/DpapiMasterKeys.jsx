@@ -61,7 +61,7 @@ const Row = React.memo(({ index, style, data }) => {
         </Tooltip>
       </div>
       <div
-        className={`px-4 flex-shrink-0 w-80 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'backup_key_guid' ? 'bg-green-200 dark:bg-green-800' : ''}`}
+        className={`px-4 flex-shrink-0 w-96 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'backup_key_guid' ? 'bg-green-200 dark:bg-green-800' : ''}`}
         onDoubleClick={() => handleCellDoubleClick(record.backup_key_guid, 'backup_key_guid')}
         title="Double-click to copy"
       >
@@ -261,7 +261,7 @@ const DpapiMasterKeys = () => {
           currentSort={sortColumn}
           currentDirection={sortDirection}
           onSort={handleSort}
-          className="flex-shrink-0 w-80"
+          className="flex-shrink-0 w-96"
         >
           Backup Key GUID
         </SortableHeader>
