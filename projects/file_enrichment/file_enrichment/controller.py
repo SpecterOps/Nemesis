@@ -21,7 +21,7 @@ from .routes.dpapi import dpapi_background_monitor, dpapi_router
 from .routes.enrichments import router as enrichments_router
 from .subscriptions.bulk_enrichment import bulk_enrichment_subscription_handler
 from .subscriptions.dotnet import dotnet_subscription_handler
-from .subscriptions.file import file_subscription_handler
+from .subscriptions.file import file_subscription_handler, start_workers, stop_workers
 from .subscriptions.noseyparker import noseyparker_subscription_handler
 from .workflow import initialize_workflow_runtime, wf_runtime
 from .workflow_manager import WorkflowManager
@@ -98,6 +98,10 @@ async def lifespan(app: FastAPI):
                 background_dpapi_task = asyncio.create_task(dpapi_background_monitor(app.state.dpapi_manager))
                 logger.info("Started masterkey watcher task")
 
+                # Start file processing workers
+                start_workers()
+                logger.info("Started file processing workers")
+
                 # Recover any interrupted workflows before starting normal processing
                 await recover_interrupted_workflows(global_vars.asyncpg_pool)
 
@@ -111,6 +115,10 @@ async def lifespan(app: FastAPI):
 
             finally:
                 logger.info("Shutting down workflow runtime...", pid=os.getpid())
+
+                # Stop file processing workers
+                await stop_workers()
+                logger.info("Stopped file processing workers", pid=os.getpid())
 
                 # Cleanup DpapiManager
                 if hasattr(app.state, "dpapi_manager") and app.state.dpapi_manager:
@@ -151,7 +159,7 @@ app = FastAPI(lifespan=lifespan)
 dapr_app = DaprApp(app)
 
 # Register subscriptions
-dapr_app.subscribe(pubsub="pubsub", topic="file")(file_subscription_handler)
+dapr_app.subscribe(pubsub="files", topic="file")(file_subscription_handler)
 dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")(bulk_enrichment_subscription_handler)
 dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")(noseyparker_subscription_handler)
 dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")(dotnet_subscription_handler)

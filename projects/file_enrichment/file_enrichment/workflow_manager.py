@@ -272,7 +272,7 @@ class WorkflowManager:
             "timestamp": datetime.now().isoformat(),
         }
 
-    async def start_workflow(self, file: File):
+    async def run_workflow(self, file: File):
         """Start a workflow"""
         from . import global_vars
         from .workflow import enrichment_pipeline_workflow
@@ -309,6 +309,8 @@ class WorkflowManager:
                     workflow=enrichment_pipeline_workflow,
                     input=file.model_dump(exclude_unset=True),
                 )
+
+                await asyncio.to_thread(global_vars.workflow_client.wait_for_workflow_completion, instance_id)
 
                 return instance_id
 

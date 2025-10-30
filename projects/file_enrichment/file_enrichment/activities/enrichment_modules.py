@@ -30,7 +30,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
         span.set_attribute("object_id", object_id)
         span.set_attribute("module_count", len(execution_order))
 
-        logger.info("Starting enrichment modules processing", object_id=object_id, execution_order=execution_order)
+        logger.info("Starting enrichment modules processing", object_id=object_id)
 
         results = []
         success_list = []
@@ -92,17 +92,10 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
 
             # Update enrichment results in workflows table using tracking_service
             instance_id = ctx.workflow_id
-            logger.info(
-                "About to update enrichment results",
-                instance_id=instance_id,
-                object_id=object_id,
-                success_list=success_list,
-                failure_list=failure_list,
-            )
             await global_vars.workflow_manager.tracking_service.update_enrichment_results(
                 instance_id=instance_id, success_list=success_list, failure_list=failure_list
             )
-            logger.info(
+            logger.debug(
                 "Updated enrichment results in workflows table",
                 instance_id=instance_id,
                 success_count=len(success_list),
@@ -138,7 +131,6 @@ async def determine_modules_to_process(object_id: str, temp_file_path: str, exec
         except Exception as e:
             logger.exception("Error in should_process", module_name=module_name, error=str(e))
 
-    logger.info("Modules selected for processing", object_id=object_id, modules_to_process=modules_to_process)
     return modules_to_process
 
 

@@ -1513,7 +1513,7 @@ async def submit_file(file_data: FileModel) -> uuid.UUID:
                 mode="json",
             )
             await client.publish_event(
-                pubsub_name="pubsub",
+                pubsub_name="files",
                 topic_name="file",
                 data=json.dumps(data),
                 data_content_type="application/json",

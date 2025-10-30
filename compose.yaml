@@ -70,6 +70,8 @@ services:
         "scheduler:50007",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/config.yaml",
         "--enable-metrics",
@@ -77,7 +79,7 @@ services:
         "5",
       ]
     volumes:
-      - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
@@ -140,6 +142,8 @@ services:
         "placement:50006",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/config.yaml",
         "--app-max-concurrency",
@@ -199,6 +203,8 @@ services:
         "placement:50006",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/config.yaml",
         "--app-max-concurrency",
@@ -220,7 +226,7 @@ services:
     image: ghcr.io/specterops/nemesis/file-enrichment:latest
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
     volumes: []
@@ -236,11 +242,10 @@ services:
       - NEMESIS_URL=${NEMESIS_URL:?}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
-      - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
+      # - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
       - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
       - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
       - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
-      - UVICORN_WORKERS=1  # Reduce to 1 worker to avoid cross-process contention
       - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
       - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
     logging: *logging-config
@@ -269,6 +274,8 @@ services:
         "scheduler:50007",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
         "--enable-metrics",
@@ -276,7 +283,7 @@ services:
         "5",
       ]
     volumes:
-      - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/:/dapr/configuration/
@@ -296,6 +303,258 @@ services:
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:file-enrichment"
+
+
+  file-enrichment-1:
+    image: ghcr.io/specterops/nemesis/file-enrichment:latest
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes: []
+      # Uncomment the following line to use custom YARA rules
+      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
+    environment:
+      - APP_ID=file-enrichment-1
+      - DAPR_GRPC_PORT=50003
+      - DAPR_HTTP_PORT=3503
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
+      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
+      - NEMESIS_URL=${NEMESIS_URL:?}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
+      # - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
+      - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
+      - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
+      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
+      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
+      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
+    logging: *logging-config
+    depends_on:
+      postgres: { condition: service_started }
+      placement: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+  file-enrichment-1-dapr:
+    image: "daprio/daprd:1.16.1"
+    command:
+      [
+        "./daprd",
+        "--max-body-size",
+        "1Gi",
+        "--app-id",
+        "file-enrichment-1",
+        "--app-port",
+        "8001",
+        "--dapr-http-port",
+        "3503",
+        "--dapr-grpc-port",
+        "50003",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
+        "--config",
+        "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
+      ]
+    volumes:
+      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
+      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
+      - ./infra/dapr/configuration/:/dapr/configuration/
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
+    depends_on:
+      file-enrichment-1: { condition: service_started }
+      placement: { condition: service_started }
+      scheduler: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+    network_mode: "service:file-enrichment-1"
+
+  file-enrichment-2:
+    image: ghcr.io/specterops/nemesis/file-enrichment:latest
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes: []
+      # Uncomment the following line to use custom YARA rules
+      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
+    environment:
+      - APP_ID=file-enrichment-2
+      - DAPR_GRPC_PORT=50003
+      - DAPR_HTTP_PORT=3503
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
+      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
+      - NEMESIS_URL=${NEMESIS_URL:?}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
+      # - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
+      - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
+      - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
+      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
+      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
+      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
+    logging: *logging-config
+    depends_on:
+      postgres: { condition: service_started }
+      placement: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+  file-enrichment-2-dapr:
+    image: "daprio/daprd:1.16.1"
+    command:
+      [
+        "./daprd",
+        "--max-body-size",
+        "1Gi",
+        "--app-id",
+        "file-enrichment-2",
+        "--app-port",
+        "8001",
+        "--dapr-http-port",
+        "3503",
+        "--dapr-grpc-port",
+        "50003",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
+        "--config",
+        "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
+      ]
+    volumes:
+      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
+      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
+      - ./infra/dapr/configuration/:/dapr/configuration/
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
+    depends_on:
+      file-enrichment-2: { condition: service_started }
+      placement: { condition: service_started }
+      scheduler: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+    network_mode: "service:file-enrichment-2"
+
+
+  file-enrichment-3:
+    image: ghcr.io/specterops/nemesis/file-enrichment:latest
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes: []
+      # Uncomment the following line to use custom YARA rules
+      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
+    environment:
+      - APP_ID=file-enrichment-3
+      - DAPR_GRPC_PORT=50003
+      - DAPR_HTTP_PORT=3503
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
+      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
+      - NEMESIS_URL=${NEMESIS_URL:?}
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
+      # - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
+      - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
+      - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
+      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
+      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
+      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
+    logging: *logging-config
+    depends_on:
+      postgres: { condition: service_started }
+      placement: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+  file-enrichment-3-dapr:
+    image: "daprio/daprd:1.16.1"
+    command:
+      [
+        "./daprd",
+        "--max-body-size",
+        "1Gi",
+        "--app-id",
+        "file-enrichment-3",
+        "--app-port",
+        "8001",
+        "--dapr-http-port",
+        "3503",
+        "--dapr-grpc-port",
+        "50003",
+        "--placement-host-address",
+        "placement:50006",
+        "--scheduler-host-address",
+        "scheduler:50007",
+        "--resources-path",
+        "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
+        "--config",
+        "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
+      ]
+    volumes:
+      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
+      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
+      - ./infra/dapr/configuration/:/dapr/configuration/
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:?}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
+      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
+    depends_on:
+      file-enrichment-3: { condition: service_started }
+      placement: { condition: service_started }
+      scheduler: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
+    network_mode: "service:file-enrichment-3"
+
+
+
+
 
   frontend:
     image: ghcr.io/specterops/nemesis/frontend:latest
@@ -384,6 +643,8 @@ services:
         "scheduler:50007",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/config.yaml",
         "--enable-metrics",
@@ -454,6 +715,8 @@ services:
         "scheduler:50007",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/agents_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
         "--enable-metrics",
@@ -516,6 +779,8 @@ services:
         "scheduler:50007",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/config.yaml",
         "--enable-metrics",
@@ -589,6 +854,8 @@ services:
         "scheduler:50007",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/document_conversion_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
         "--enable-metrics",
@@ -654,6 +921,8 @@ services:
         "scheduler:50007",
         "--resources-path",
         "/dapr/components",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
         "--config",
         "/dapr/configuration/config.yaml",
         "--enable-metrics",
@@ -733,6 +1002,8 @@ services:
       "-c", "max_connections=200",
       "-c", "shared_buffers=256MB"
     ]
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-enrichment}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}

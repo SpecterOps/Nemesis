@@ -1,5 +1,6 @@
 """Handler for file subscription events."""
 
+import asyncio
 import os
 from datetime import datetime
 
@@ -10,16 +11,105 @@ from common.models import CloudEvent, File
 logger = get_logger(__name__)
 
 
+# Configuration
+max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 2))
+NUM_WORKERS = max_parallel_workflows
+
+# Queue for file processing
+file_queue: asyncio.Queue = None
+worker_tasks: list[asyncio.Task] = []
+
+
+async def worker(worker_id: int):
+    """Worker task that continuously processes files from the queue"""
+    logger.info(f"Worker {worker_id} started", pid=os.getpid())
+
+    while True:
+        try:
+            # Get the next file from the queue
+            file = await file_queue.get()
+
+            try:
+                logger.debug(f"Worker {worker_id} processing file", object_id=file.object_id, pid=os.getpid())
+
+                # Save file and run workflow
+                await save_file_message(file)
+                await global_vars.workflow_manager.run_workflow(file)
+
+                logger.debug(f"Worker {worker_id} completed file", object_id=file.object_id, pid=os.getpid())
+
+            except Exception:
+                logger.exception(
+                    message=f"Worker {worker_id} error processing file", object_id=file.object_id, pid=os.getpid()
+                )
+            finally:
+                # Mark the task as done
+                file_queue.task_done()
+
+        except asyncio.CancelledError:
+            logger.info(f"Worker {worker_id} cancelled", pid=os.getpid())
+            break
+        except Exception:
+            logger.exception(message=f"Worker {worker_id} unexpected error", pid=os.getpid())
+
+
+def start_workers():
+    """Start the worker tasks"""
+    global file_queue, worker_tasks
+
+    if file_queue is not None:
+        logger.warning("Workers already started", pid=os.getpid())
+        return
+
+    # Create a bounded queue - only allows NUM_WORKERS items
+    # This ensures we only accept work when a worker is available
+    file_queue = asyncio.Queue(maxsize=NUM_WORKERS)
+    worker_tasks = []
+
+    for i in range(NUM_WORKERS):
+        task = asyncio.create_task(worker(i))
+        worker_tasks.append(task)
+
+    logger.info(f"Started {NUM_WORKERS} workers", pid=os.getpid())
+
+
+async def stop_workers():
+    """Stop all worker tasks"""
+    global worker_tasks, file_queue
+
+    if not worker_tasks:
+        logger.warning("No workers to stop", pid=os.getpid())
+        return
+
+    logger.info("Stopping workers...", pid=os.getpid())
+
+    # Cancel all worker tasks
+    for task in worker_tasks:
+        task.cancel()
+
+    # Wait for all workers to finish
+    await asyncio.gather(*worker_tasks, return_exceptions=True)
+
+    worker_tasks = []
+    file_queue = None
+
+    logger.info("All workers stopped", pid=os.getpid())
+
+
 async def file_subscription_handler(event: CloudEvent[File]):
     """Handler for incoming file events"""
     file = event.data
 
     try:
-        await save_file_message(file)
-        await global_vars.workflow_manager.start_workflow(file)
+        # Try to add file to the queue
+        # put() will block until a worker is available (queue has space)
+        # This ensures we only accept work when there's capacity
+        await file_queue.put(file)
+
+        logger.debug("File added to queue", object_id=file.object_id, queue_size=file_queue.qsize(), pid=os.getpid())
 
     except Exception:
-        logger.exception(message="Error processing file event", pid=os.getpid())
+        logger.exception(message="Error adding file to queue", pid=os.getpid())
         raise
 
 
