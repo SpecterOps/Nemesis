@@ -17,7 +17,6 @@ For a general overview of the Nemesis project structure, see the [overview](over
     - [Findings](#findings)
     - [Dashboard Settings](#dashboard-settings)
   - [Alerting](#alerting)
-    - [User Feedback](#user-feedback)
   - [Submitting Files via the API](#submitting-files-via-the-api)
     - [API Documentation](#api-documentation)
 
@@ -162,11 +161,7 @@ If Slack alerting is enabled (i.e., if the `APPRISE_URLS` ENV variable is set), 
 
 See the [Apprise Wiki](https://github.com/caronc/apprise/wiki) for the string format needed for each alerting service.
 
-### User Feedback
-
-If you want user feedback from the [File Details viewer](#file-details) to be routed for alerting, use an Apprise link like `slack://Nemesis@T...k/#nemesis-feedback?tag=feedback` - this will route user feedback actions to that specified channel, with regular alerts going to any configured channel without the feedback tag.
-
-You can configure multiple Apprise URLs for alerting and user feedback (i.e., alerting to multiple services).
+There are more details on alert configuration, filtering, and user feedback on the [Alerting](./alerting.md) page.
 
 ## Submitting Files via the API
 
@@ -189,3 +184,5 @@ Navigating to the "Help" menu reachable in the bottom left of the Nemesis interf
 ![Swagger API Documentation](images/api-swagger.png)
 
 ![ReDoc API Documentation](images/api-redoc.png)
+
+Additionally, the API documentation is dynamically rebuilt by GitHub actions when the relevant files are modified and published to [API](./api.md) for up-to-date offline access.

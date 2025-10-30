@@ -17,6 +17,7 @@ nav:
 
   - Usage:
     - usage_guide.md
+    - alerting.md
     - cli.md
     - containers.md
     - agents.md
@@ -24,6 +25,7 @@ nav:
     - performance.md
     - yara.md
     - chromium.md
+    - reporting.md
 
   - Services:
     - dapr.md

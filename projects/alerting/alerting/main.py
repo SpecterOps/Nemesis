@@ -729,10 +729,9 @@ async def get_apprise_info():
     for apprise_url in apprise_urls.split(","):
         url, tag = process_apprise_url(apprise_url)
 
-        # Only process Slack URLs
+        # Only process Slack URLs for this status as we can pull the channel (if possible)
         if url.startswith("slack://"):
             # Extract channel name from Slack URL format: slack://TOKEN@WORKSPACE/#channel
-            import re
             channel_match = re.search(r'#([^?]+)', url)
             if channel_match:
                 channel_name = channel_match.group(1)

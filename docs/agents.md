@@ -6,13 +6,14 @@ Nemesis integrates a number of LLM agents as well as some rule-based agents for 
 
 Nemesis currently has the following agents:
 
-| Agent Name            | Type       | Runs Automatically | Purpose                                                                                            |
-| --------------------- | ---------- | ------------------ | -------------------------------------------------------------------------------------------------- |
-| `validate`            | LLM-based  | true               | Validates security findings by triaging them as true positives, false positives, or needing review |
-| `credential_analyzer` | LLM-based  | false              | Extracts credentials and passwords from text content using LLM analysis                            |
-| `dotnet_analyzer`     | LLM-based  | false              | Adapted .NET vulnerability analyzer from @Dreadnode.                                               |
-| `summarizer`          | LLM-based  | false              | Creates concise summaries of text content using LLM analysis                                       |
-| `jwt`                 | Rule-based | true               | Rule-based JWT analysis that checks expiry status and identifies sample data                       |
+| Agent Name               | Runs Automatically | Purpose                                                                                            |
+| ------------------------ | ------------------ | -------------------------------------------------------------------------------------------------- |
+| `Finding Validator`      | true               | Validates security findings by triaging them as true positives, false positives, or needing review |
+| `Credential Analyzer`    | false              | Extracts credentials and passwords from text content using LLM analysis                            |
+| `.NET Assembly Analyzer` | false              | Adapted .NET vulnerability analyzer from @Dreadnode.                                               |
+| `Text Summarizer`        | false              | Creates concise summaries of text content using LLM analysis                                       |
+| `Text Translator`        | false              | Uses an LLM to translate a document to a target language.                                          |
+| `Report Generator`       | false              | Uses an LLM to translate a document to a target language.                                          |
 
 ## Setup
 
@@ -62,9 +63,15 @@ The text `summarizer` agent is an LLM-powered agent that will summarize. Like th
 
 ![Agent Text Summarizer](images/agent_text_summarizer.png)
 
-### JWT Validator
+### Text Translator
 
-The JWT validator is a rule-based agent that will extract JWT tokens from Nosey Parker findings and mark the finding as "false_positive" if the token has expired.
+Almost the same as the text summarizer, the Translator agent can be manually triggered for appropriate documents, but has a target language to translate the entire document to:
+
+![Agent Translate](images/agent_translate_prompt.png)
+
+### Report Generator
+
+The Report Generator agent used in the [Reporting](./reporting.md) interface to synthesize various statistical and finding details for a particular host, or the entire system, into a LLM-driven report.
 
 ## The Nemesis Web Interface
 
