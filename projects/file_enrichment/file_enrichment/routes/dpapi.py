@@ -3,6 +3,8 @@
 import asyncio
 import base64
 import logging
+import re
+import asyncpg
 import urllib.parse
 from typing import Annotated
 from uuid import UUID
@@ -15,6 +17,7 @@ from chromium import (
 from common.logger import get_logger
 from file_enrichment import global_vars
 from common.models2.dpapi import (
+    ChromiumAppBoundKeyCredential,
     DomainBackupKeyCredential,
     DpapiCredentialRequest,
     DpapiSystemCredentialRequest,
@@ -218,6 +221,8 @@ async def submit_dpapi_credential(
                 result = await _handle_master_key_guid_pairs(dpapi_manager, request)
             elif isinstance(request, DpapiSystemCredentialRequest):
                 result = await _handle_dpapi_system_credential(dpapi_manager, request)
+            elif isinstance(request, ChromiumAppBoundKeyCredential):
+                result = await _handle_chromium_app_bound_key(dpapi_manager, request)
             elif isinstance(
                 request, (PasswordCredentialKey, NtlmHashCredentialKey, Sha1CredentialKey, Pbkdf2StrongCredentialKey)
             ):
@@ -322,6 +327,148 @@ async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: 
     await dpapi_manager.upsert_system_credential(dpapi_system_key)
 
     return {"status": "success", "type": "dpapi_system"}
+
+
+async def _handle_chromium_app_bound_key(
+        dpapi_manager: DpapiManagerDep,
+        request: ChromiumAppBoundKeyCredential) -> dict:
+    """Handle Chromium App-Bound-Encryption key credential submission."""
+
+    # Parse the key value from either format
+    key_value = request.value.strip()
+
+    if "\\x" in key_value:
+        # Handle Python escaped format (e.g., \x5f\x1a...)
+        cleaned = key_value.strip('"').strip("'")
+        key_bytes = cleaned.encode().decode("unicode_escape").encode("latin1")
+    else:
+        # Handle hex format (64 hex characters)
+        key_bytes = bytes.fromhex(key_value)
+
+    # Apply source prefix logic (same as FileUpload.tsx)
+    source = request.source.strip()
+    # Check if source already has a URI scheme
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', source):
+        # No scheme detected, apply host:// prefix by default
+        source = f"host://{source}"
+
+    username = request.username.strip()
+    browser = request.browser
+
+    # Try to insert with username collision handling
+    max_attempts = 10
+    is_default_username = username.upper() == "UNKNOWN"
+
+    for attempt in range(max_attempts):
+        try_username = username if attempt == 0 else f"{username}{attempt}"
+
+        try:
+            async with global_vars.asyncpg_pool.acquire() as conn:
+                # Insert into chromium.state_keys
+                await conn.execute(
+                    """
+                    INSERT INTO chromium.state_keys (
+                        originating_object_id,
+                        agent_id,
+                        source,
+                        project,
+                        username,
+                        browser,
+                        key_is_decrypted,
+                        app_bound_key_dec,
+                        app_bound_key_is_decrypted
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    """,
+                    None,  # originating_object_id
+                    None,  # agent_id
+                    source,
+                    None,  # project
+                    try_username,
+                    browser,
+                    False,  # key_is_decrypted
+                    key_bytes,  # app_bound_key_dec
+                    True,  # app_bound_key_is_decrypted
+                )
+
+            # Success!
+            result = {
+                "status": "success",
+                "type": "chromium_app_bound_key",
+                "source": source,
+                "browser": browser,
+                "username": try_username,
+            }
+
+            if attempt > 0:
+                result["message"] = f"Username '{username}' already exists, used '{try_username}' instead"
+
+            logger.info(
+                "Successfully inserted Chromium app-bound key",
+                source=source,
+                browser=browser,
+                username=try_username,
+                attempts=attempt + 1,
+            )
+
+            # Finally, try to decrypt chromium cookies and logins with newly submitted key
+            chromium_data_result = await retry_decrypt_chromium_data(
+                UUID(int=0),
+                dpapi_manager,
+                global_vars.asyncpg_pool
+            )
+
+            logger.debug(
+                "Completed retroactive chromium data decryption with new ABE key",
+                result=chromium_data_result,
+            )
+
+            return result
+
+        except asyncpg.UniqueViolationError as e:
+            # Unique constraint violation on (source, username, browser)
+            if not is_default_username:
+                # If username is not the default "UNKNOWN", fail immediately
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A Chromium app-bound key already exists for source '{source}', browser '{browser}', and username '{try_username}'. Please use a different username or source."
+                ) from e
+
+            # If username is "UNKNOWN", try incrementing
+            if attempt >= max_attempts - 1:
+                # Exhausted all attempts
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unable to insert Chromium app-bound key after {max_attempts} attempts. Too many entries with username pattern 'UNKNOWN*' for source '{source}' and browser '{browser}'."
+                ) from e
+
+            # Continue to next attempt
+            logger.debug(
+                "Username collision, retrying with incremented username",
+                source=source,
+                browser=browser,
+                username=try_username,
+                attempt=attempt + 1,
+            )
+            continue
+
+        except Exception as e:
+            logger.exception(
+                "Error inserting Chromium app-bound key",
+                source=source,
+                browser=browser,
+                username=try_username,
+                error=str(e),
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error while inserting Chromium app-bound key: {str(e)}"
+            ) from e
+
+    # Should never reach here, but just in case
+    raise HTTPException(
+        status_code=500,
+        detail="Unexpected error during Chromium app-bound key insertion"
+    )
 
 
 async def _handle_password_based_credential(

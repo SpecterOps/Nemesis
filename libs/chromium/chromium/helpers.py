@@ -118,12 +118,6 @@ def detect_encryption_type(encrypted_value: bytes) -> tuple[str, str | None]:
     return "unknown", None
 
 
-
-
-
-
-
-
 async def get_state_key_id(source: str, username: str | None, browser: str, asyncpg_pool: asyncpg.Pool) -> int | None:
     """Get state key ID for key/abe encryption types using asyncpg.
 
@@ -297,8 +291,6 @@ def is_valid_text(data: bytes) -> bool:
             return printable_chars / len(text) > 0.8
         except UnicodeDecodeError:
             return False
-
-
 
 
 def byte_xor(ba1, ba2):

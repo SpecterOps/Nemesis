@@ -932,7 +932,7 @@ async def stop_bulk_enrichment(
     tags=["dpapi"],
     responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
     summary="Submit DPAPI credential for masterkey decryption",
-    description="Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, and decrypted master keys.",
+    description="Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, decrypted master keys, and Chromium app-bound-encryption keys.",
 )
 async def submit_dpapi_credential(
     request: DpapiCredentialRequest = Body(..., description="The DPAPI credential data"),
