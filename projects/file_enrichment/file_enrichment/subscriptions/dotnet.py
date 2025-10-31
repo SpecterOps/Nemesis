@@ -212,7 +212,7 @@ async def store_dotnet_results(
                     origin_type=FindingOrigin.ENRICHMENT_MODULE,
                     origin_name="dotnet_service",
                     object_id=object_id,
-                    severity=2,
+                    severity=1,
                     raw_data=sanitize_for_jsonb(analysis.model_dump()),
                     data=[display_data],
                 )
@@ -248,7 +248,7 @@ async def store_dotnet_results(
                     origin_type=FindingOrigin.ENRICHMENT_MODULE,
                     origin_name="dotnet_service",
                     object_id=object_id,
-                    severity=9,
+                    severity=8,
                     raw_data=sanitize_for_jsonb(analysis.model_dump()),
                     data=[display_data],
                 )

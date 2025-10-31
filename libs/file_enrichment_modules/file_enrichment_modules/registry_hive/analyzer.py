@@ -828,7 +828,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             # Determine finding category and severity
             if hive_type == "SYSTEM" and analysis_results.get("bootkey"):
                 category = FindingCategory.CREDENTIAL
-                severity = 8
+                severity = 6
                 finding_name = "system_hive_bootkey_extracted"
             elif hive_type == "SAM" and analysis_results.get("accounts"):
                 category = FindingCategory.CREDENTIAL

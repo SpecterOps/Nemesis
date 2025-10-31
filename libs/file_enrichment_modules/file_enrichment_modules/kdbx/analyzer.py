@@ -291,7 +291,7 @@ class KDBXAnalyzer(EnrichmentModule):
                 origin_type=FindingOrigin.ENRICHMENT_MODULE,
                 origin_name=self.name,
                 object_id=file_enriched.object_id,
-                severity=5,
+                severity=4,
                 raw_data={"encryption_hash": encryption_hash},
                 data=[display_data],
             )

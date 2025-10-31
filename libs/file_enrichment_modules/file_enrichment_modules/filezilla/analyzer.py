@@ -266,7 +266,7 @@ rule Detect_FileZilla_Config {
                     origin_type=FindingOrigin.ENRICHMENT_MODULE,
                     origin_name=self.name,
                     object_id=file_enriched.object_id,
-                    severity=7 if has_creds else 4,
+                    severity=7 if has_creds else 1,
                     raw_data={"servers": servers, "file_type": file_enriched.file_name},
                     data=[display_data],
                 )
