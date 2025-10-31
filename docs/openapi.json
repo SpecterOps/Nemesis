@@ -599,7 +599,7 @@
           "dpapi"
         ],
         "summary": "Submit DPAPI credential for masterkey decryption",
-        "description": "Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, and decrypted master keys.",
+        "description": "Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, decrypted master keys, and Chromium app-bound-encryption keys.",
         "operationId": "submit_dpapi_credential_dpapi_credentials_post",
         "requestBody": {
           "content": {
@@ -1915,6 +1915,48 @@
         ],
         "title": "Body_upload_file_files_post"
       },
+      "ChromiumAppBoundKeyCredential": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "chromium_app_bound_key",
+            "title": "Type"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "browser": {
+            "type": "string",
+            "enum": [
+              "chrome",
+              "edge",
+              "brave",
+              "opera"
+            ],
+            "title": "Browser",
+            "default": "chrome"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username",
+            "default": "UNKNOWN"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "value",
+          "source"
+        ],
+        "title": "ChromiumAppBoundKeyCredential",
+        "description": "Chromium App-Bound-Encryption key credential."
+      },
       "CleanupRequest": {
         "properties": {
           "expiration": {
@@ -2136,6 +2178,9 @@
           },
           {
             "$ref": "#/components/schemas/DpapiSystemCredentialRequest"
+          },
+          {
+            "$ref": "#/components/schemas/ChromiumAppBoundKeyCredential"
           }
         ]
       },
