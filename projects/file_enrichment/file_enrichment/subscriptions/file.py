@@ -12,8 +12,7 @@ logger = get_logger(__name__)
 
 
 # Configuration
-max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 20))
-NUM_WORKERS = max_parallel_workflows
+NUM_WORKERS = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 1))
 
 # Queue for file processing
 file_queue: asyncio.Queue = None
@@ -70,7 +69,7 @@ def start_workers():
         task = asyncio.create_task(worker(i))
         worker_tasks.append(task)
 
-    logger.info(f"Started {NUM_WORKERS} workers", pid=os.getpid())
+    logger.info("Started file enrichment workers", num_workers=NUM_WORKERS, pid=os.getpid())
 
 
 async def stop_workers():

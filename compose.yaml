@@ -305,6 +305,7 @@ services:
       RABBITMQ_CONNECTION_STRING: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      MAX_PARALLEL_WORKFLOWS: ${MAX_PARALLEL_WORKFLOWS:-1}
     depends_on: &file-enrichment-dapr-depends-on
       file-enrichment: { condition: service_started }
       placement: { condition: service_started }
