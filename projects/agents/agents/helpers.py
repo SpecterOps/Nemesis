@@ -56,7 +56,7 @@ async def get_litellm_token():
         except RuntimeError as e:
             # Handle LiteLLM not being available gracefully
             if "LiteLLM API not available" in str(e):
-                logger.warning("LiteLLM service is not available - continuing with JWT-only")
+                logger.warning("LiteLLM service is not available")
             else:
                 logger.warning(f"LiteLLM initialization failed: {e}")
             return None
@@ -80,7 +80,7 @@ async def get_litellm_token():
                 logger.warning("No models available: LLM finding triage disabled", available_models=models)
                 return None
         else:
-            logger.warning("No LiteLLM token available - only JWT rule-based triage will be available")
+            logger.warning("No LiteLLM token available - LLM-based triage disabled")
             return None
 
     except Exception as e:

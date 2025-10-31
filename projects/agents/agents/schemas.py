@@ -77,16 +77,6 @@ class NoseyParkerData(BaseModel):
     match: NoseyParkerMatch = Field(..., description="Match information from Nosey Parker")
 
 
-class JWTAnalysis(BaseModel):
-    """Schema for JWT-specific analysis"""
-
-    is_expired: bool = Field(..., description="Whether the JWT is expired")
-    has_expiry_conflict: bool = Field(False, description="Whether there's conflicting expiry info")
-    is_sample_data: bool = Field(False, description="Whether this appears to be sample/test data")
-    decision: TriageCategory = Field(..., description="Triage decision for JWT")
-    explanation: str = Field(..., description="Explanation for the triage decision")
-
-
 class ValidateRequest(BaseModel):
     """Request for validation agent"""
 

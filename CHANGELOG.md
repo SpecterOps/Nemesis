@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SYSTEM wide and per SOURCE
   - API endpoints for statistic and PDF generation (via Gotenberg conversion)
   - Reporting summarization agent
+- Ability to enable/disable alerting, and filter alerts on specific criteria
 
 ### Changed
 
@@ -67,7 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix to keep strings.txt from sqlite dbs from processing
 - Path normalization: Fixed many bugs, removed lots of duplicate normalization, standardized normalization upon initial ingestion.
 - Countless linting and other fixes
-
+- Race condition when Nosey Parker / DotNET findings come in after the file enrichment workflow completes
+  - TODO: in the future, remove pub/sub from these containers and have `file_enrichment` remotely schedule workflows in these containers
+- Fixed container extraction status updates for large containers
 
 ## [2.1.3]
 

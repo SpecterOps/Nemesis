@@ -23,6 +23,7 @@ from common.models import (
     NoseyParkerOutput,
     ScanStats,
 )
+from file_enrichment.activities.publish_findings import publish_alerts_for_findings
 
 logger = get_logger(__name__)
 
@@ -247,6 +248,19 @@ async def store_noseyparker_results(
         # Create findings for each match
         findings_list = []
         for match in matches:
+            # Skip expired JWTs - don't create findings for them
+            if match.rule_type == "secret" and "json web token" in match.rule_name.lower():
+                jwt_token = match.matched_content.strip()
+                is_expired, _ = is_jwt_expired(jwt_token)
+                if is_expired:
+                    logger.debug(
+                        "Skipping expired JWT finding",
+                        object_id=object_id,
+                        rule_name=match.rule_name,
+                        file_path=match.file_path if hasattr(match, "file_path") else None,
+                    )
+                    continue
+
             # Generate summary for the finding (create_finding_summary should also be updated as shown above)
             summary_markdown = create_finding_summary(match)
 
@@ -318,6 +332,13 @@ async def store_noseyparker_results(
                 )
 
         logger.info("Successfully stored NoseyParker results", object_id=object_id, match_count=len(matches))
+
+        # Publish alerts for noseyparker findings (only for this origin)
+        if findings_list:
+            await publish_alerts_for_findings(
+                object_id=object_id,
+                origin_include=["noseyparker"]
+            )
 
         return enrichment_result
 
