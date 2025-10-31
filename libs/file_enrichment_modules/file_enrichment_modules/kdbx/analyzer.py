@@ -232,12 +232,14 @@ class KDBXAnalyzer(EnrichmentModule):
 
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         if file_enriched.magic_type:
             return "keepass" in file_enriched.magic_type.lower() and "kdbx" in file_enriched.magic_type.lower()
@@ -330,7 +332,7 @@ class KDBXAnalyzer(EnrichmentModule):
         """
         try:
             # get the current `file_enriched` from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

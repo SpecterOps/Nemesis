@@ -218,7 +218,7 @@ class YaraRuleManager:
             logger.exception(message="Error loading rules from database")
             raise
 
-    def match(self, target) -> list[yara_x.Match]:
+    def match(self, target) -> list[yara_x.Rule]:
         """
         Performs Yara matching on the given target.
         Target can be either a file path string or raw data.

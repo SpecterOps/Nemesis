@@ -13,6 +13,7 @@ from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import File as FileModel
 from common.models2.api import FileFilters
+from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
 from fastapi import HTTPException
@@ -166,8 +167,8 @@ class BaseContainerExtractor:
 
         data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
         self.dapr_client.publish_event(
-            pubsub_name="pubsub",
-            topic_name="file",
+            pubsub_name=FILES_PUBSUB,
+            topic_name=FILES_NEW_FILE_TOPIC,
             data=data,
             data_content_type="application/json",
         )

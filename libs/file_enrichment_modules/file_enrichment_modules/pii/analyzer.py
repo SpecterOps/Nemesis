@@ -20,6 +20,8 @@ class PIIAnalyzer(EnrichmentModule):
 
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         self.size_limit = 50_000_000  # 50MB size limit
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -86,7 +88,7 @@ rule detect_pii
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if file should be processed based on size and content."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         if file_enriched.is_plaintext:
             if file_enriched.size > self.size_limit:
@@ -292,7 +294,7 @@ rule detect_pii
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

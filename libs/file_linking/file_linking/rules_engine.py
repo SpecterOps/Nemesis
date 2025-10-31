@@ -319,7 +319,13 @@ class FileLinkingEngine:
             source = "unknown"
 
         logger.debug(
-            f"Applying linking rules to file: {file_path}, source: {source}, file_enriched: {list(file_enriched.model_dump().keys())}"
+            "Applying linking rules",
+            file_path=file_path,
+            source=source,
+            mime_type=file_enriched.mime_type,
+            magic_type=file_enriched.magic_type,
+            size=file_enriched.size,
+            is_container=file_enriched.is_container,
         )
 
         # Skip marking these commonly derived files as collected

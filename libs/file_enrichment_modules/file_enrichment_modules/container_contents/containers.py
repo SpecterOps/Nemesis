@@ -13,6 +13,7 @@ from io import SEEK_END
 import py7zr
 from common.logger import get_logger
 from common.models import File, FileEnriched
+from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from dapr.clients import DaprClient
 
 logger = get_logger(__name__)
@@ -334,7 +335,6 @@ class ContainerExtractor:
                 logger.info("Archive is encrypted", path=file_enriched.path, file_path_on_disk=temp_file.name)
             else:
                 logger.exception(
-                    e,
                     message="RuntimeError extracting archive",
                     path=file_enriched.path,
                     file_path_on_disk=temp_file.name,
@@ -361,9 +361,8 @@ class ContainerExtractor:
                 real_path = real_path.replace("/", "\\")
 
             return real_path
-        except Exception as e:
+        except Exception:
             logger.exception(
-                e,
                 message="Error calculating real path",
                 extracted_path=extracted_path,
                 archive_file_path=file_enriched.path,
@@ -374,8 +373,8 @@ class ContainerExtractor:
         """Publish file message to the message bus."""
         data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
         self.dapr_client.publish_event(
-            pubsub_name="pubsub",
-            topic_name="file",
+            pubsub_name=FILES_PUBSUB,
+            topic_name=FILES_NEW_FILE_TOPIC,
             data=data,
             data_content_type="application/json",
         )
@@ -454,9 +453,8 @@ class ContainerExtractor:
             )
             return True
 
-        except Exception as e:
+        except Exception:
             logger.exception(
-                e,
                 message="process_archive error",
                 extracted_file_path=extracted_file_path,
                 archive_file_path=file_enriched.path,

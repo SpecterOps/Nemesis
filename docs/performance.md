@@ -15,3 +15,23 @@ Minio
 ```
 minio_cluster_usage_objects_count{}
 ```
+
+
+# Jaeger
+See how long a particular activity takes:
+```
+curl -sk --user 'n:n' "https://localhost:7443/jaeger/api/traces?service=file-enrichment&operation=activity%7C%7Crun_enrichment_modules&limit=2000" | jq -r '
+  [
+    .data[]
+    .spans[]
+    | select(.operationName == "activity||run_enrichment_modules")
+    | .duration
+  ] as $durs
+  | {
+      count: ($durs | length),
+      min_ms: ($durs | min / 1000),
+      max_ms: ($durs | max / 1000),
+      avg_ms: (($durs | add / ($durs | length)) / 1000)
+    }
+'
+```

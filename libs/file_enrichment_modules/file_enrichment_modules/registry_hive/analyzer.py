@@ -6,7 +6,6 @@ import tempfile
 import textwrap
 from typing import TYPE_CHECKING
 
-import asyncpg
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
@@ -19,6 +18,7 @@ from pypykatz.registry.offline_parser import OffineRegistry as OfflineRegistry
 from regipy.registry import RegistryHive
 
 if TYPE_CHECKING:
+    import asyncpg
     from nemesis_dpapi import DpapiManager
 
 
@@ -31,13 +31,15 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         self.workflows = ["default"]
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.asyncpg_pool: asyncpg.Pool | None = None  # type: ignore
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         magic_type = file_enriched.magic_type.lower()
         mime_type = file_enriched.mime_type.lower()
 
@@ -689,7 +691,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process registry hive file and extract relevant information."""
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

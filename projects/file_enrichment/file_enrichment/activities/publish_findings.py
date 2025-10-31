@@ -5,6 +5,7 @@ import json
 import common.helpers as helpers
 from common.logger import get_logger
 from common.models import Alert
+from common.queues import ALERTING_NEW_ALERT_TOPIC, ALERTING_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
 from dapr.clients import DaprClient
@@ -21,7 +22,8 @@ async def publish_findings_alerts(ctx: WorkflowActivityContext, object_id: str):
     """
     Activity to publish enriched file data to pubsub after retrieving from state store.
     """
-    file_enriched = await get_file_enriched_async(object_id)
+    logger.info("Executing activity: publish_findings_alerts", object_id=object_id)
+    file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
     # Fetch findings from the database for this object_id
     async with global_vars.asyncpg_pool.acquire() as conn:
@@ -69,8 +71,8 @@ async def publish_findings_alerts(ctx: WorkflowActivityContext, object_id: str):
 
                     alert = Alert(title=finding_name, body=body, service=origin_name)
                     client.publish_event(
-                        pubsub_name="pubsub",
-                        topic_name="alert",
+                        pubsub_name=ALERTING_PUBSUB,
+                        topic_name=ALERTING_NEW_ALERT_TOPIC,
                         data=json.dumps(alert.model_dump(exclude_unset=True)),
                         data_content_type="application/json",
                     )

@@ -3,9 +3,9 @@ kind: Configuration
 metadata:
   name: daprConfig
 spec:
-  workflow:
-    maxConcurrentWorkflowInvocations: 2
-    maxConcurrentActivityInvocations: 2
+  # workflow:
+  #   maxConcurrentWorkflowInvocations: 2
+  #   maxConcurrentActivityInvocations: 2
   tracing:
     expandParams: true
     samplingRate: "1"

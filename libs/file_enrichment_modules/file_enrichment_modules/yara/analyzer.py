@@ -57,6 +57,8 @@ class YaraScanner(EnrichmentModule):
 
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         self.rule_manager = YaraRuleManager()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -184,7 +186,7 @@ class YaraScanner(EnrichmentModule):
         """
         try:
             # Get the current file_enriched from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

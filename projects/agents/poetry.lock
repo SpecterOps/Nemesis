@@ -329,6 +329,18 @@ files = [
 tests = ["mypy (>=1.14.0)", "pytest", "pytest-asyncio"]
 
 [[package]]
+name = "async-lru"
+version = "2.0.5"
+description = "Simple LRU cache for asyncio"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "async_lru-2.0.5-py3-none-any.whl", hash = "sha256:ab95404d8d2605310d345932697371a5f40def0487c03d6d0ad9138de52c9943"},
+    {file = "async_lru-2.0.5.tar.gz", hash = "sha256:481d52ccdd27275f42c43a928b4a50c3bfb2d67af4e78b170e3e0bb39c66e5bb"},
+]
+
+[[package]]
 name = "asyncio"
 version = "4.0.0"
 description = "Deprecated backport of asyncio; use the stdlib package instead"
@@ -768,12 +780,13 @@ name = "common"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
+async-lru = "^2.0.5"
 asyncpg = "^0.30.0"
 dapr = "1.16.0"
 dapr-ext-workflow = "^1.16.0"

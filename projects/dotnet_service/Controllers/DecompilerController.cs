@@ -24,8 +24,9 @@ namespace ILSpyDecompilerService.Controllers
         private readonly DecompilerEngine _decompilerEngine;
         private readonly AssemblyAnalysisService _assemblyAnalysisService;
         private readonly SemaphoreSlim _processingSemaphore;
-        private const string PubSubName = "pubsub";
-        private const string OutputTopicName = "dotnet-output";
+        private const string PubSubName = "dotnet";
+        private const string InputTopicName = "dotnet_input";
+        private const string OutputTopicName = "dotnet_output";
 
         public DecompilerController(
             ILogger<DecompilerController> logger,
@@ -47,7 +48,7 @@ namespace ILSpyDecompilerService.Controllers
             _logger.LogInformation("Maximum concurrent processing set to: {MaxConcurrentProcessing}", maxConcurrentProcessing);
         }
 
-        [Topic(PubSubName, "dotnet-input")]
+        [Topic(PubSubName, InputTopicName)]
         [HttpPost("process")]
         public async Task<IActionResult> ProcessDecompilationRequest([FromBody] InputMessage inputMessage)
         {

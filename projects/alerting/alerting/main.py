@@ -6,6 +6,10 @@ from contextlib import asynccontextmanager
 import apprise
 from common.logger import get_logger
 from common.models import Alert, CloudEvent
+from common.queues import (
+    ALERTING_NEW_ALERT_TOPIC,
+    ALERTING_PUBSUB,
+)
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI, HTTPException
@@ -268,7 +272,7 @@ async def send_alert_with_retries(alert):
     return False
 
 
-@dapr_app.subscribe(pubsub="pubsub", topic="alert")
+@dapr_app.subscribe(pubsub=ALERTING_PUBSUB, topic=ALERTING_NEW_ALERT_TOPIC)
 async def handle_alert(event: CloudEvent[Alert]):
     """Handler for `alert` events."""
     try:

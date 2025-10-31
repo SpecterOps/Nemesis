@@ -360,45 +360,159 @@ const StatsOverview = () => {
 
   const fetchTimeSeriesData = useCallback(async () => {
     try {
-      // Get current date and date 5 days ago
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 5);
-
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
-
-      // For Hasura we need to use a different approach since we can't do groupBy directly
-      // Let's get the data for each day separately
-      const getDatesArray = () => {
-        const dates = [];
-        const currentDate = new Date(startDate);
-        const end = new Date(endDate);
-
-        while (currentDate <= end) {
-          dates.push(new Date(currentDate));
-          currentDate.setDate(currentDate.getDate() + 1);
-        }
-
-        return dates;
+      // First, get the timestamp of the first uploaded file
+      const firstFileQuery = {
+        query: `
+          query GetFirstFile {
+            files_enriched(
+              where: { originating_object_id: { _is_null: true } }
+              order_by: { created_at: asc }
+              limit: 1
+            ) {
+              created_at
+            }
+          }
+        `,
+        variables: {}
       };
 
-      const dates = getDatesArray();
+      const firstFileResponse = await fetch('/hasura/v1/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+        },
+        body: JSON.stringify(firstFileQuery)
+      });
 
-      // Create a batch query for all dates
+      if (!firstFileResponse.ok) {
+        throw new Error(`Network response error: ${firstFileResponse.status}`);
+      }
+
+      const firstFileResult = await firstFileResponse.json();
+
+      if (firstFileResult.errors) {
+        throw new Error(firstFileResult.errors[0].message);
+      }
+
+      // Get current date and calculate start date
+      const endDate = new Date();
+      const startDate = new Date();
+
+      // Default to 5 days ago
+      startDate.setDate(startDate.getDate() - 5);
+
+      // If we have a first file, use its date if it's more recent than 5 days ago
+      if (firstFileResult.data.files_enriched && firstFileResult.data.files_enriched.length > 0) {
+        const firstFileDate = new Date(firstFileResult.data.files_enriched[0].created_at);
+        if (firstFileDate > startDate) {
+          // Use the first file's date
+          startDate.setTime(firstFileDate.getTime());
+        }
+      }
+
+      // Calculate time difference in milliseconds
+      const timeDiffMs = endDate - startDate;
+      const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
+
+      // Determine granularity based on time range
+      let granularity, intervalMs, minIntervals;
+
+      if (timeDiffHours < 2) {
+        // Less than 2 hours: use minutes (5-minute intervals)
+        granularity = 'minute';
+        intervalMs = 5 * 60 * 1000; // 5 minutes
+        minIntervals = 6; // At least 30 minutes
+      } else if (timeDiffHours < 48) {
+        // Less than 2 days: use hours
+        granularity = 'hour';
+        intervalMs = 60 * 60 * 1000; // 1 hour
+        minIntervals = 6; // At least 6 hours
+      } else {
+        // 2+ days: use days
+        granularity = 'day';
+        intervalMs = 24 * 60 * 60 * 1000; // 1 day
+        minIntervals = 2; // At least 2 days
+      }
+
+      // Ensure minimum number of intervals for visualization
+      const actualIntervals = Math.ceil(timeDiffMs / intervalMs);
+      if (actualIntervals < minIntervals) {
+        startDate.setTime(endDate.getTime() - (minIntervals * intervalMs));
+      }
+
+      // Round start date to interval boundary
+      if (granularity === 'day') {
+        startDate.setHours(0, 0, 0, 0);
+      } else if (granularity === 'hour') {
+        startDate.setMinutes(0, 0, 0);
+      } else if (granularity === 'minute') {
+        const minutes = startDate.getMinutes();
+        startDate.setMinutes(Math.floor(minutes / 5) * 5, 0, 0);
+      }
+
+      // Format dates using local timezone to avoid timezone shift issues
+      const formatLocalDate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      const startDateStr = formatLocalDate(startDate);
+      const endDateStr = formatLocalDate(endDate);
+
+      console.log('Time series date range:', { startDateStr, endDateStr, startDate, endDate, granularity });
+
+      // Generate time intervals based on granularity
+      const getIntervalsArray = () => {
+        const intervals = [];
+        const currentTime = new Date(startDate);
+        const end = new Date(endDate);
+
+        while (currentTime <= end) {
+          intervals.push(new Date(currentTime));
+
+          if (granularity === 'minute') {
+            currentTime.setMinutes(currentTime.getMinutes() + 5);
+          } else if (granularity === 'hour') {
+            currentTime.setHours(currentTime.getHours() + 1);
+          } else {
+            currentTime.setDate(currentTime.getDate() + 1);
+          }
+        }
+
+        return intervals;
+      };
+
+      const intervals = getIntervalsArray();
+
+      // Create a batch query for all intervals
       let filesQueryParts = '';
       let findingsQueryParts = '';
 
-      dates.forEach((date, index) => {
-        const dateStr = date.toISOString().split('T')[0];
-        const nextDate = new Date(date);
-        nextDate.setDate(nextDate.getDate() + 1);
-        const nextDateStr = nextDate.toISOString().split('T')[0];
+      intervals.forEach((intervalStart, index) => {
+        // Calculate end of this interval
+        const intervalEnd = new Date(intervalStart);
+
+        if (granularity === 'minute') {
+          intervalEnd.setMinutes(intervalEnd.getMinutes() + 5);
+        } else if (granularity === 'hour') {
+          intervalEnd.setHours(intervalEnd.getHours() + 1);
+        } else {
+          intervalEnd.setDate(intervalEnd.getDate() + 1);
+        }
+
+        // Convert to ISO strings (which include timezone offset)
+        const startTimestamp = intervalStart.toISOString();
+        const endTimestamp = intervalEnd.toISOString();
+
+        console.log(`Query for interval ${index}:`, { intervalStart, startTimestamp, endTimestamp });
 
         filesQueryParts += `
           files_day_${index}: files_enriched_aggregate(
             where: {
-              created_at: { _gte: "${dateStr}", _lt: "${nextDateStr}" },
+              created_at: { _gte: "${startTimestamp}", _lt: "${endTimestamp}" },
               originating_object_id: { _is_null: true }
             }
           ) {
@@ -411,7 +525,7 @@ const StatsOverview = () => {
         findingsQueryParts += `
           findings_day_${index}: findings_aggregate(
             where: {
-              created_at: { _gte: "${dateStr}", _lt: "${nextDateStr}" }
+              created_at: { _gte: "${startTimestamp}", _lt: "${endTimestamp}" }
             }
           ) {
             aggregate {
@@ -450,24 +564,34 @@ const StatsOverview = () => {
         throw new Error(result.errors[0].message);
       }
 
+      console.log('Time series GraphQL result:', result);
+
       // Process the response data into time series format
       const filesData = [];
       const findingsData = [];
 
-      dates.forEach((date, index) => {
-        const formattedDate = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      intervals.forEach((intervalStart, index) => {
+        // Format the label based on granularity
+        let formattedLabel;
+        if (granularity === 'minute') {
+          formattedLabel = intervalStart.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        } else if (granularity === 'hour') {
+          formattedLabel = intervalStart.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        } else {
+          formattedLabel = intervalStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        }
 
-        // Get file count for this day
+        // Get file count for this interval
         const fileCount = result.data[`files_day_${index}`]?.aggregate?.count || 0;
         filesData.push({
-          date: formattedDate,
+          date: formattedLabel,
           count: fileCount
         });
 
-        // Get findings count for this day
+        // Get findings count for this interval
         const findingsCount = result.data[`findings_day_${index}`]?.aggregate?.count || 0;
         findingsData.push({
-          date: formattedDate,
+          date: formattedLabel,
           count: findingsCount
         });
       });
@@ -485,7 +609,7 @@ const StatsOverview = () => {
 
   const fetchQueueStats = useCallback(async () => {
     try {
-      const response = await fetch('/api/queues/file');
+      const response = await fetch('/api/queues/files-new_file');
 
       if (!response.ok) {
         throw new Error(`Network response error: ${response.status}`);
@@ -495,7 +619,7 @@ const StatsOverview = () => {
       setQueueStats(data);
       setQueueError(null);
     } catch (err) {
-      console.error('Error fetching queue stats:', err);
+      console.error('Error fetching queue stats:', err);;
       setQueueError(err.message);
     } finally {
       setIsQueueLoading(false);
@@ -750,10 +874,10 @@ const StatsOverview = () => {
             />
             <StatCard
               title="Queued Files"
-              value={queueStats?.metrics?.ready_messages ?? 0}
+              value={queueStats?.metrics?.total_messages ?? 0}
               icon={Clock}
               isLoading={isQueueLoading}
-              tooltip="Files ready to be processed in the pub/sub queue"
+              tooltip={`Total unprocessed files waiting to be processed by ${queueStats?.metrics?.consumers ?? 0} consumers`}
             />
             <StatCard
               title="Completed Workflows"

@@ -24,33 +24,21 @@ services:
       dockerfile: ./projects/dotnet_service/Dockerfile
       target: prod
 
-  file-enrichment:
+  file-enrichment: &file-enrichment-build
     image: !reset null
     build:
       context: .
       dockerfile: ./projects/file_enrichment/Dockerfile
       target: prod
 
-  file-enrichment-1:
-    image: !reset null
-    build:
-      context: .
-      dockerfile: ./projects/file_enrichment/Dockerfile
-      target: prod
+  # file-enrichment-1:
+  #   <<: *file-enrichment-build
 
-  file-enrichment-2:
-    image: !reset null
-    build:
-      context: .
-      dockerfile: ./projects/file_enrichment/Dockerfile
-      target: prod
+  # file-enrichment-2:
+  #   <<: *file-enrichment-build
 
-  file-enrichment-3:
-    image: !reset null
-    build:
-      context: .
-      dockerfile: ./projects/file_enrichment/Dockerfile
-      target: prod
+  # file-enrichment-3:
+  #   <<: *file-enrichment-build
 
   frontend:
     image: !reset null

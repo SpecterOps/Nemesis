@@ -182,7 +182,7 @@ async def dpapi_background_monitor(dpapi_manager: DpapiManager) -> None:
             num_enc_masterkeys = len([mk for mk in num_masterkeys if not mk.is_decrypted])
             backupkeys = await dpapi_manager.get_backup_keys()
             num_system_creds = await dpapi_manager.get_system_credentials()
-            logger.info(
+            logger.debug(
                 "Background DPAPI loop tick",
                 total_mks=len(num_masterkeys),
                 num_enc_mks=num_enc_masterkeys,

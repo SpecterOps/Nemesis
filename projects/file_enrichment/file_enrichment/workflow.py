@@ -311,7 +311,7 @@ async def reload_yara_rules():
 #     try:
 #         logger.info("Starting feature extraction")
 #         object_id = activity_input["object_id"]
-#         file_enriched = get_file_enriched(object_id)
+#         file_enriched = await get_file_enriched_async(object_id)
 
 #         # we only want to process things that were submitted and not things extracted/post-processed
 #         #   so things that don't have an originating_object_id

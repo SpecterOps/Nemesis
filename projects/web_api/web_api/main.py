@@ -27,6 +27,13 @@ from common.models2.api import (
     YaraReloadResponse,
 )
 from common.models2.dpapi import DpapiCredentialRequest
+from common.queues import (
+    FILES_BULK_ENRICHMENT_TASK_TOPIC,
+    FILES_NEW_FILE_TOPIC,
+    FILES_PUBSUB,
+    WORKFLOW_MONITOR_COMPLETED_TOPIC,
+    WORKFLOW_MONITOR_PUBSUB,
+)
 from common.storage import StorageMinio
 from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
@@ -863,8 +870,8 @@ async def run_bulk_enrichment(
                 task = BulkEnrichmentEvent(enrichment_name=enrichment_name, object_id=str(object_id))
 
                 await client.publish_event(
-                    pubsub_name="pubsub",
-                    topic_name="bulk-enrichment-task",
+                    pubsub_name=FILES_PUBSUB,
+                    topic_name=FILES_BULK_ENRICHMENT_TASK_TOPIC,
                     data=json.dumps(task.model_dump()),
                     data_content_type="application/json",
                 )
@@ -1513,8 +1520,8 @@ async def submit_file(file_data: FileModel) -> uuid.UUID:
                 mode="json",
             )
             await client.publish_event(
-                pubsub_name="files",
-                topic_name="file",
+                pubsub_name=FILES_PUBSUB,
+                topic_name=FILES_NEW_FILE_TOPIC,
                 data=json.dumps(data),
                 data_content_type="application/json",
             )
@@ -1531,7 +1538,7 @@ async def submit_file(file_data: FileModel) -> uuid.UUID:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@dapr_app.subscribe(pubsub="pubsub", topic="workflow-completed")
+@dapr_app.subscribe(pubsub=WORKFLOW_MONITOR_PUBSUB, topic=WORKFLOW_MONITOR_COMPLETED_TOPIC)
 async def process_workflow_completion(event: CloudEvent):
     """Handler for workflow completion events to update container processing progress"""
     try:

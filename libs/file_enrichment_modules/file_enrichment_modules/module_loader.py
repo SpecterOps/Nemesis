@@ -90,12 +90,19 @@ class ModuleLoader:
 
         # Load the module
         try:
-            spec = importlib.util.spec_from_file_location(f"{__package__}.{module_dir.name}", module_path)
+            mod_name = f"{__package__}.{module_dir.name}"
+            spec = importlib.util.spec_from_file_location(mod_name, module_path)
+            if not spec:
+                raise Exception(f"Could not load module. Module Name: {mod_name}.  Path: {module_path}")
+
             module = importlib.util.module_from_spec(spec)
 
             # Add module directory to Python path if it's not already there
             if str(module_dir.parent) not in sys.path:
                 sys.path.insert(0, str(module_dir.parent))
+
+            if not spec.loader:
+                raise Exception("Spec has no loader attribute!")
 
             spec.loader.exec_module(module)
 

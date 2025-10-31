@@ -24,6 +24,8 @@ class VncParser(EnrichmentModule):
     def __init__(self):
         self.storage = StorageMinio()
 
+        self.asyncpg_pool = None  # type: ignore
+
         # Define the fixed DES key used by VNC
         self.des_key = bytes([0x23, 0x52, 0x6A, 0x3B, 0x58, 0x92, 0x67, 0x34])
 
@@ -32,7 +34,7 @@ class VncParser(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         should_run = (
             file_enriched.file_name.lower().endswith(".ini")
             and "vnc" in file_enriched.file_name.lower()
@@ -203,7 +205,7 @@ class VncParser(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

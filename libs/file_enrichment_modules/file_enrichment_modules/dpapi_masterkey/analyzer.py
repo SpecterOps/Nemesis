@@ -3,7 +3,6 @@ import posixpath
 import re
 from typing import TYPE_CHECKING
 
-import asyncpg
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult
@@ -16,6 +15,7 @@ from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile, MasterKeyType
 if TYPE_CHECKING:
     import asyncio
 
+    import asyncpg
     from nemesis_dpapi import DpapiManager
 
 
@@ -26,8 +26,10 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
     name: str = "dpapi_masterkey"
     dependencies: list[str] = []
 
-    def __init__(self, standalone: bool = False):
+    def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.asyncpg_pool: asyncpg.Pool | None = None  # type: ignore
@@ -48,7 +50,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check file size - masterkey files are typically small (usually less than 2KB)
         if file_enriched.size > 2048:
@@ -190,8 +192,8 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         """
 
         try:
-            file_enriched = await get_file_enriched_async(object_id)
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
             enrichment_result = EnrichmentResult(module_name=self.name)
 
             # Parse the masterkey file
@@ -246,6 +248,6 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             logger.exception(message="Error in DPAPI masterkey process()")
 
 
-def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:
-    """Factory function that creates the analyzer in either standalone or service mode."""
-    return DPAPIMasterkeyAnalyzer(standalone=standalone)
+def create_enrichment_module() -> EnrichmentModule:
+    """Factory function that creates the analyzer."""
+    return DPAPIMasterkeyAnalyzer()

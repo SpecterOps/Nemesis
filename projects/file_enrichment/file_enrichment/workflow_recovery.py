@@ -5,6 +5,7 @@ import random
 
 from common.logger import get_logger
 from common.models import File
+from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from dapr.clients import DaprClient
 
 from .tracing import get_trace_injector
@@ -107,8 +108,8 @@ async def recover_interrupted_workflows(pool) -> None:
 
                     # Publish with priority=3 for immediate processing
                     client.publish_event(
-                        pubsub_name="pubsub",
-                        topic_name="file",
+                        pubsub_name=FILES_PUBSUB,
+                        topic_name=FILES_NEW_FILE_TOPIC,
                         data=json.dumps(file_obj.model_dump(exclude_unset=True, mode="json")),
                         data_content_type="application/json",
                         metadata=(("priority", "3"),),

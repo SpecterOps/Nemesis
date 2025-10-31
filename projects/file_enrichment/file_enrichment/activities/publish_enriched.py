@@ -3,6 +3,7 @@
 import json
 
 from common.logger import get_logger
+from common.queues import FILES_FILE_ENRICHED_TOPIC, FILES_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
 from dapr.clients import DaprClient
@@ -18,8 +19,10 @@ async def publish_enriched_file(ctx: WorkflowActivityContext, object_id: str):
     """
     Activity to publish enriched file data to pubsub after retrieving from state store.
     """
+    from .. import global_vars
 
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
+    logger.info("Executing activity: publish_enriched_file", object_id=object_id)
 
     try:
         with DaprClient(headers_callback=get_trace_injector()) as client:
@@ -30,18 +33,16 @@ async def publish_enriched_file(ctx: WorkflowActivityContext, object_id: str):
 
             # Publish to pubsub
             client.publish_event(
-                pubsub_name="pubsub",
-                topic_name="file_enriched",
+                pubsub_name=FILES_PUBSUB,
+                topic_name=FILES_FILE_ENRICHED_TOPIC,
                 data=json.dumps(data),
                 data_content_type="application/json",
             )
 
             # Update workflow status to COMPLETED after successful publish
-            from .. import global_vars
             instance_id = ctx.workflow_id
             await global_vars.workflow_manager.tracking_service.update_status(
-                instance_id=instance_id,
-                status="COMPLETED"
+                instance_id=instance_id, status="COMPLETED"
             )
 
             return True

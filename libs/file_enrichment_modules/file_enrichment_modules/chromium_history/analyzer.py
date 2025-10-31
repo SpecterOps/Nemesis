@@ -20,10 +20,7 @@ class ChromeHistoryParser(EnrichmentModule):
 
     def __init__(self):
         self.storage = StorageMinio()
-
-        # the workflows this module should automatically run in
         self.workflows = ["default"]
-
         self.asyncpg_pool = None  # type: ignore
 
         # Yara rule to check for Chrome History tables
@@ -50,7 +47,7 @@ rule Chrome_Downloads_Tables
             file_path: Optional path to already downloaded file
         """
 
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check if filename is exactly "History" and SQLite magic type
         if not (file_enriched.file_name == "History" and "sqlite 3.x database" in file_enriched.magic_type.lower()):
@@ -80,7 +77,7 @@ rule Chrome_Downloads_Tables
             file_path: Optional path to already downloaded file
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
             enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
             transforms = []
 

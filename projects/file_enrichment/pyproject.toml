@@ -5,7 +5,7 @@ description = "The file enrichment workflow pipeline"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.14"
 fastapi = "^0.115.6"
 pydantic = "^2.10.4"
 python-magic = "^0.4.27"

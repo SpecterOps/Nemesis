@@ -9,6 +9,7 @@ from datetime import datetime
 import asyncpg
 from common.logger import get_logger
 from common.models import File, SingleEnrichmentWorkflowInput
+from common.queues import WORKFLOW_MONITOR_COMPLETED_TOPIC, WORKFLOW_MONITOR_PUBSUB
 from dapr.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
@@ -174,8 +175,8 @@ class WorkflowManager:
                     }
 
                     client.publish_event(
-                        pubsub_name="pubsub",
-                        topic_name="workflow-completed",
+                        pubsub_name=WORKFLOW_MONITOR_PUBSUB,
+                        topic_name=WORKFLOW_MONITOR_COMPLETED_TOPIC,
                         data=json.dumps(completion_data),
                         data_content_type="application/json",
                     )

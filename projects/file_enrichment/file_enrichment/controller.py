@@ -5,6 +5,15 @@ from contextlib import asynccontextmanager
 import asyncpg
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
+from common.queues import (
+    DOTNET_OUTPUT_TOPIC,
+    DOTNET_PUBSUB,
+    FILES_BULK_ENRICHMENT_TASK_TOPIC,
+    FILES_NEW_FILE_TOPIC,
+    FILES_PUBSUB,
+    NOSEYPARKER_OUTPUT_TOPIC,
+    NOSEYPARKER_PUBSUB,
+)
 from common.workflows.setup import set_fastapi_loop
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
@@ -52,8 +61,8 @@ async def lifespan(app: FastAPI):
 
     setup_debug_signals()
 
-    app.state.event_loop = asyncio.get_running_loop()
-    set_fastapi_loop(asyncio.get_event_loop())
+    loop = asyncio.get_running_loop()
+    set_fastapi_loop(loop)
 
     dapr_client = DaprClient()
     postgres_connection_string = get_postgres_connection_str(dapr_client)
@@ -69,7 +78,7 @@ async def lifespan(app: FastAPI):
     dpapi_manager = NemesisDpapiManager(
         storage_backend=global_vars.asyncpg_pool,
         auto_decrypt=True,
-        publisher=DaprDpapiEventPublisher(dapr_client, loop=app.state.event_loop),
+        publisher=DaprDpapiEventPublisher(dapr_client, loop=loop),
     )
     await dpapi_manager.__aenter__()
     app.state.dpapi_manager = dpapi_manager
@@ -106,7 +115,7 @@ async def lifespan(app: FastAPI):
                 await recover_interrupted_workflows(global_vars.asyncpg_pool)
 
                 logger.info(
-                    "Workflow runtime initialized successfully",
+                    "Workflow runtime initialized",
                     module_execution_order=global_vars.module_execution_order,
                     pid=os.getpid(),
                 )
@@ -159,10 +168,10 @@ app = FastAPI(lifespan=lifespan)
 dapr_app = DaprApp(app)
 
 # Register subscriptions
-dapr_app.subscribe(pubsub="files", topic="file")(file_subscription_handler)
-dapr_app.subscribe(pubsub="pubsub", topic="bulk-enrichment-task")(bulk_enrichment_subscription_handler)
-dapr_app.subscribe(pubsub="pubsub", topic="noseyparker-output")(noseyparker_subscription_handler)
-dapr_app.subscribe(pubsub="pubsub", topic="dotnet-output")(dotnet_subscription_handler)
+dapr_app.subscribe(pubsub=FILES_PUBSUB, topic=FILES_NEW_FILE_TOPIC)(file_subscription_handler)
+dapr_app.subscribe(pubsub=FILES_PUBSUB, topic=FILES_BULK_ENRICHMENT_TASK_TOPIC)(bulk_enrichment_subscription_handler)
+dapr_app.subscribe(pubsub=NOSEYPARKER_PUBSUB, topic=NOSEYPARKER_OUTPUT_TOPIC)(noseyparker_subscription_handler)
+dapr_app.subscribe(pubsub=DOTNET_PUBSUB, topic=DOTNET_OUTPUT_TOPIC)(dotnet_subscription_handler)
 
 # region API Routers/Endpoints
 app.include_router(dpapi_router)

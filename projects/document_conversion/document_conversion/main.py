@@ -26,7 +26,7 @@ from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from fastapi import FastAPI
 from psycopg_pool import ConnectionPool
 from PyPDF2 import PdfReader
-
+from common.queues import FILES_PUBSUB, FILES_NEW_FILE_TOPIC, FILES_FILE_ENRICHED_TOPIC
 logger = get_logger(__name__)
 
 storage = StorageMinio()
@@ -290,8 +290,8 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
 
         with DaprClient() as client:
             client.publish_event(
-                pubsub_name="pubsub",
-                topic_name="file",
+                pubsub_name=FILES_PUBSUB,
+                topic_name=FILES_NEW_FILE_TOPIC,
                 data=new_file.model_dump_json(),
                 data_content_type="application/json",
             )
@@ -451,7 +451,7 @@ def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dict | No
                         )
                     conn.commit()
 
-                logger.warning("'strings' sucessfully extracted to strings.txt", object_id=file_enriched.object_id)
+                logger.debug("'strings' sucessfully extracted to strings.txt", object_id=file_enriched.object_id)
 
                 result = transform.model_dump()
                 return result
@@ -772,7 +772,7 @@ async def monitor_workflow_completion(instance_id: str):
 # Main handling code
 
 
-@dapr_app.subscribe(pubsub="pubsub", topic="file_enriched")
+@dapr_app.subscribe(pubsub=FILES_PUBSUB, topic=FILES_FILE_ENRICHED_TOPIC)
 async def handle_file_enriched(event: CloudEvent[FileEnriched]):
     """Handler for file_enriched events with semaphore-based concurrency control."""
     try:

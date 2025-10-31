@@ -3,7 +3,7 @@ service:
   extensions: [jaeger_storage, jaeger_query, healthcheckv2]
   pipelines:
     traces:
-      receivers: [otlp, jaeger, zipkin]
+      receivers: [otlp, jaeger]
       processors: [batch]
       exporters: [jaeger_storage_exporter]
 
@@ -47,9 +47,6 @@ receivers:
         endpoint: "0.0.0.0:6831"
       thrift_binary:
         endpoint: "0.0.0.0:6832"
-
-  zipkin:
-    endpoint: "0.0.0.0:9411"
 
 # Processors
 processors:

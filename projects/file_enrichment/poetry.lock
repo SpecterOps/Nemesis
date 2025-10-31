@@ -311,10 +311,7 @@ files = [
 ]
 
 [package.dependencies]
-cffi = [
-    {version = ">=1.0.1", markers = "python_version < \"3.14\""},
-    {version = ">=2.0.0b1", markers = "python_version >= \"3.14\""},
-]
+cffi = {version = ">=1.0.1", markers = "python_version < \"3.14\""}
 
 [[package]]
 name = "asn1crypto"
@@ -345,6 +342,18 @@ asn1crypto = ">=1.3.0"
 asysocks = ">=0.2.17"
 minikerberos = ">=0.4.7"
 unicrypto = ">=0.0.10"
+
+[[package]]
+name = "async-lru"
+version = "2.0.5"
+description = "Simple LRU cache for asyncio"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "async_lru-2.0.5-py3-none-any.whl", hash = "sha256:ab95404d8d2605310d345932697371a5f40def0487c03d6d0ad9138de52c9943"},
+    {file = "async_lru-2.0.5.tar.gz", hash = "sha256:481d52ccdd27275f42c43a928b4a50c3bfb2d67af4e78b170e3e0bb39c66e5bb"},
+]
 
 [[package]]
 name = "asyncio"
@@ -904,18 +913,18 @@ name = "chromium"
 version = "0.1.0"
 description = "Modules Nemesis uses to handle Chromium files"
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
+asyncpg = "^0.30.0"
 common = {path = "../../libs/common", develop = true}
 dapr = "1.16.0"
 file_linking = {path = "../file_linking", develop = true}
 impacket = ">=0.12.0,<0.13.0"
 nemesis_dpapi = {path = "../nemesis_dpapi", develop = true}
-psycopg = {version = ">=3.0.0,<4.0.0", extras = ["binary"]}
 structlog = ">=20.0.0,<30.0.0"
 
 [package.source]
@@ -985,12 +994,13 @@ name = "common"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
+async-lru = "^2.0.5"
 asyncpg = "^0.30.0"
 dapr = "1.16.0"
 dapr-ext-workflow = "^1.16.0"
@@ -1247,7 +1257,7 @@ name = "file-enrichment-modules"
 version = "0.1.0"
 description = "Modules Nemesis uses to enrich files"
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -1263,7 +1273,6 @@ impacket = "^0.12.0"
 lnkparse3 = "^1.5.0"
 nemesis_dpapi = {path = "../nemesis_dpapi", develop = true}
 plyara = "^2.2.7"
-psycopg = "^3.2.4"
 pydantic = "^2.10.5"
 structlog = "^25.1.0"
 yara-x = "^1.0.1"
@@ -1277,7 +1286,7 @@ name = "file-linking"
 version = "0.1.0"
 description = "Modules Nemesis uses to handle file links and listings"
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
@@ -2252,13 +2261,14 @@ name = "nemesis-dpapi"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = ">=3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
 asyncpg = ">=0.29.0,<=0.30.0"
+common = {path = "../../libs/common", develop = true}
 cryptography = ">=42.0.0,<43.0.0"
 dapr = "1.16.0"
 dpapick3 = ">=0.7.1,<0.8.0"
@@ -4390,5 +4400,5 @@ type = ["pytest-mypy"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = "^3.12"
-content-hash = "3fabf80b239db81e20d419ce9e3da20d5f6e5ea9139afffdb8ca38659cfbcfa3"
+python-versions = ">=3.12,<3.14"
+content-hash = "d88b28fc6a08d9390119d09bc3c30fd5620bb54ee87b86ad5de87a94462e4659"

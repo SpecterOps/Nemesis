@@ -79,7 +79,8 @@ services:
         "5",
       ]
     volumes:
-      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
+      - ./infra/dapr/components/pubsub/workflow_monitor.yaml:/dapr/components/workflow_monitor.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
@@ -119,6 +120,8 @@ services:
       - MAX_FILE_SIZE_MB=200      # maximum file size to scan
       - DECOMPRESS_ZIPS=true      # whether to decompress+scan zips
       - MAX_EXTRACT_SIZE_MB=1000  # maximum number of bytes to extract if decompressing
+      - PUBSUB_NAME=noseyparker   # Name of the Dapr pubsub resource
+      - OUTPUT_TOPIC=noseyparker_output # Name of the output topic in Dapr
     volumes:
       - ./projects/noseyparker_scanner/custom_rules/:/opt/noseyparker:ro
   noseyparker-scanner-dapr:
@@ -155,7 +158,7 @@ services:
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     volumes:
-      - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/pubsub/noseyparker.yaml:/dapr/components/noseyparker.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     depends_on: [noseyparker-scanner, placement]
@@ -216,15 +219,15 @@ services:
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     volumes:
-      - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     depends_on: [dotnet-service, placement]
     network_mode: "service:dotnet-service"
 
-  file-enrichment:
+  file-enrichment: &file-enrichment-template
     image: ghcr.io/specterops/nemesis/file-enrichment:latest
-    healthcheck:
+    healthcheck: &file-enrichment-healthcheck
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
       interval: 5s
       timeout: 5s
@@ -232,28 +235,28 @@ services:
     volumes: []
       # Uncomment the following line to use custom YARA rules
       # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
-    environment:
-      - APP_ID=file-enrichment
-      - DAPR_GRPC_PORT=50003
-      - DAPR_HTTP_PORT=3503
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
-      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
-      - NEMESIS_URL=${NEMESIS_URL:?}
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
-      # - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
-      - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
-      - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
-      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
-      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
-      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
+    environment: &file-enrichment-environment
+      APP_ID: file-enrichment
+      DAPR_GRPC_PORT: 50003
+      DAPR_HTTP_PORT: 3503
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MAX_WORKFLOW_EXECUTION_TIME: ${MAX_WORKFLOW_EXECUTION_TIME:-300}
+      NEMESIS_MONITORING: ${NEMESIS_MONITORING:-disabled}
+      NEMESIS_URL: ${NEMESIS_URL:?}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE: true
+      # PYTHONASYNCIOTHREADPOOLSIZE: 100  # Increase thread pool for asyncio.to_thread()
+      RIGGING_GENERATOR_CREDENTIALS: ${RIGGING_GENERATOR_CREDENTIALS:-}
+      RIGGING_GENERATOR_SUMMARY: ${RIGGING_GENERATOR_SUMMARY:-}
+      RIGGING_GENERATOR_TRIAGE: ${RIGGING_GENERATOR_TRIAGE:-}
+      WORKFLOW_RUNTIME_LOG_LEVEL: ${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
+      WORKFLOW_CLIENT_LOG_LEVEL: ${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
     logging: *logging-config
-    depends_on:
+    depends_on: &file-enrichment-depends-on
       postgres: { condition: service_started }
       placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
-  file-enrichment-dapr:
+  file-enrichment-dapr: &file-enrichment-dapr-template
     image: "daprio/daprd:1.16.1"
     command:
       [
@@ -282,22 +285,27 @@ services:
         "--dapr-graceful-shutdown-seconds",
         "5",
       ]
-    volumes:
-      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
+    volumes: &file-enrichment-dapr-volumes
+      - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
+      - ./infra/dapr/components/pubsub/noseyparker.yaml:/dapr/components/noseyparker.yaml:ro
+      - ./infra/dapr/components/pubsub/alerting.yaml:/dapr/components/alerting.yaml:ro
+      - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
+      - ./infra/dapr/components/pubsub/dpapi.yaml:/dapr/components/dpapi.yaml:ro
+      - ./infra/dapr/components/pubsub/workflow_monitor.yaml:/dapr/components/workflow_monitor.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/:/dapr/configuration/
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:?}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
-      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
-      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-    depends_on:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-enrichment}
+      POSTGRES_PARAMETERS: ${POSTGRES_PARAMETERS:-sslmode=disable}
+      RABBITMQ_CONNECTION_STRING: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+    depends_on: &file-enrichment-dapr-depends-on
       file-enrichment: { condition: service_started }
       placement: { condition: service_started }
       scheduler: { condition: service_started }
@@ -305,252 +313,48 @@ services:
     network_mode: "service:file-enrichment"
 
 
-  file-enrichment-1:
-    image: ghcr.io/specterops/nemesis/file-enrichment:latest
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes: []
-      # Uncomment the following line to use custom YARA rules
-      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
-    environment:
-      - APP_ID=file-enrichment-1
-      - DAPR_GRPC_PORT=50003
-      - DAPR_HTTP_PORT=3503
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
-      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
-      - NEMESIS_URL=${NEMESIS_URL:?}
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
-      # - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
-      - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
-      - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
-      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
-      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
-      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
-    logging: *logging-config
-    depends_on:
-      postgres: { condition: service_started }
-      placement: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-  file-enrichment-1-dapr:
-    image: "daprio/daprd:1.16.1"
-    command:
-      [
-        "./daprd",
-        "--max-body-size",
-        "1Gi",
-        "--app-id",
-        "file-enrichment-1",
-        "--app-port",
-        "8001",
-        "--dapr-http-port",
-        "3503",
-        "--dapr-grpc-port",
-        "50003",
-        "--placement-host-address",
-        "placement:50006",
-        "--scheduler-host-address",
-        "scheduler:50007",
-        "--resources-path",
-        "/dapr/components",
-        "--log-level",
-        "${DAPR_LOG_LEVEL:-info}",
-        "--config",
-        "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
-        "--enable-metrics",
-        "--dapr-graceful-shutdown-seconds",
-        "5",
-      ]
-    volumes:
-      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
-      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
-      - ./infra/dapr/configuration/:/dapr/configuration/
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:?}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
-      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
-      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-    depends_on:
-      file-enrichment-1: { condition: service_started }
-      placement: { condition: service_started }
-      scheduler: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-    network_mode: "service:file-enrichment-1"
+  # file-enrichment-1:
+  #   <<: *file-enrichment-template
+  #   environment:
+  #     <<: *file-enrichment-environment
+  #     APP_ID: file-enrichment-1
+  # file-enrichment-1-dapr:
+  #   <<: *file-enrichment-dapr-template
+  #   depends_on:
+  #     file-enrichment-1: { condition: service_started }
+  #     placement: { condition: service_started }
+  #     scheduler: { condition: service_started }
+  #     rabbitmq: { condition: service_healthy }
+  #   network_mode: "service:file-enrichment-1"
 
-  file-enrichment-2:
-    image: ghcr.io/specterops/nemesis/file-enrichment:latest
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes: []
-      # Uncomment the following line to use custom YARA rules
-      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
-    environment:
-      - APP_ID=file-enrichment-2
-      - DAPR_GRPC_PORT=50003
-      - DAPR_HTTP_PORT=3503
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
-      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
-      - NEMESIS_URL=${NEMESIS_URL:?}
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
-      # - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
-      - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
-      - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
-      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
-      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
-      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
-    logging: *logging-config
-    depends_on:
-      postgres: { condition: service_started }
-      placement: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-  file-enrichment-2-dapr:
-    image: "daprio/daprd:1.16.1"
-    command:
-      [
-        "./daprd",
-        "--max-body-size",
-        "1Gi",
-        "--app-id",
-        "file-enrichment-2",
-        "--app-port",
-        "8001",
-        "--dapr-http-port",
-        "3503",
-        "--dapr-grpc-port",
-        "50003",
-        "--placement-host-address",
-        "placement:50006",
-        "--scheduler-host-address",
-        "scheduler:50007",
-        "--resources-path",
-        "/dapr/components",
-        "--log-level",
-        "${DAPR_LOG_LEVEL:-info}",
-        "--config",
-        "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
-        "--enable-metrics",
-        "--dapr-graceful-shutdown-seconds",
-        "5",
-      ]
-    volumes:
-      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
-      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
-      - ./infra/dapr/configuration/:/dapr/configuration/
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:?}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
-      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
-      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-    depends_on:
-      file-enrichment-2: { condition: service_started }
-      placement: { condition: service_started }
-      scheduler: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-    network_mode: "service:file-enrichment-2"
+  # file-enrichment-2:
+  #   <<: *file-enrichment-template
+  #   environment:
+  #     <<: *file-enrichment-environment
+  #     APP_ID: file-enrichment-2
+  # file-enrichment-2-dapr:
+  #   <<: *file-enrichment-dapr-template
+  #   depends_on:
+  #     file-enrichment-2: { condition: service_started }
+  #     placement: { condition: service_started }
+  #     scheduler: { condition: service_started }
+  #     rabbitmq: { condition: service_healthy }
+  #   network_mode: "service:file-enrichment-2"
 
 
-  file-enrichment-3:
-    image: ghcr.io/specterops/nemesis/file-enrichment:latest
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes: []
-      # Uncomment the following line to use custom YARA rules
-      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
-    environment:
-      - APP_ID=file-enrichment-3
-      - DAPR_GRPC_PORT=50003
-      - DAPR_HTTP_PORT=3503
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
-      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
-      - NEMESIS_URL=${NEMESIS_URL:?}
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
-      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
-      # - PYTHONASYNCIOTHREADPOOLSIZE=100  # Increase thread pool for asyncio.to_thread()
-      - RIGGING_GENERATOR_CREDENTIALS=${RIGGING_GENERATOR_CREDENTIALS:-}
-      - RIGGING_GENERATOR_SUMMARY=${RIGGING_GENERATOR_SUMMARY:-}
-      - RIGGING_GENERATOR_TRIAGE=${RIGGING_GENERATOR_TRIAGE:-}
-      - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
-      - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
-    logging: *logging-config
-    depends_on:
-      postgres: { condition: service_started }
-      placement: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-  file-enrichment-3-dapr:
-    image: "daprio/daprd:1.16.1"
-    command:
-      [
-        "./daprd",
-        "--max-body-size",
-        "1Gi",
-        "--app-id",
-        "file-enrichment-3",
-        "--app-port",
-        "8001",
-        "--dapr-http-port",
-        "3503",
-        "--dapr-grpc-port",
-        "50003",
-        "--placement-host-address",
-        "placement:50006",
-        "--scheduler-host-address",
-        "scheduler:50007",
-        "--resources-path",
-        "/dapr/components",
-        "--log-level",
-        "${DAPR_LOG_LEVEL:-info}",
-        "--config",
-        "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
-        "--enable-metrics",
-        "--dapr-graceful-shutdown-seconds",
-        "5",
-      ]
-    volumes:
-      - ./infra/dapr/components/file_enrichment.yaml:/dapr/components/pubsub.yaml:ro
-      - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
-      - ./infra/dapr/configuration/:/dapr/configuration/
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:?}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
-      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
-      - POSTGRES_DB=${POSTGRES_DB:-enrichment}
-      - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-    depends_on:
-      file-enrichment-3: { condition: service_started }
-      placement: { condition: service_started }
-      scheduler: { condition: service_started }
-      rabbitmq: { condition: service_healthy }
-    network_mode: "service:file-enrichment-3"
+  # file-enrichment-3:
+  #   <<: *file-enrichment-template
+  #   environment:
+  #     <<: *file-enrichment-environment
+  #     APP_ID: file-enrichment-3
+  # file-enrichment-3-dapr:
+  #   <<: *file-enrichment-dapr-template
+  #   depends_on:
+  #     file-enrichment-3: { condition: service_started }
+  #     placement: { condition: service_started }
+  #     scheduler: { condition: service_started }
+  #     rabbitmq: { condition: service_healthy }
+  #   network_mode: "service:file-enrichment-3"
 
 
 
@@ -652,7 +456,7 @@ services:
         "5",
       ]
     volumes:
-      - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/pubsub/alerting.yaml:/dapr/components/alerting.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
@@ -863,7 +667,7 @@ services:
         "5",
       ]
     volumes:
-      - ./infra/dapr/components/pubsub.yaml:/dapr/components/pubsub.yaml:ro
+      - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/:/dapr/configuration/

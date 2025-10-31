@@ -26,26 +26,42 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
 
     tracer = get_tracer()
 
+    logger.info("Executing activity: run_enrichment_modules", object_id=object_id)
+
     with tracer.start_as_current_span("run_enrichment_modules") as span:
         span.set_attribute("object_id", object_id)
         span.set_attribute("module_count", len(execution_order))
-
-        logger.info("Starting enrichment modules processing", object_id=object_id)
 
         results = []
         success_list = []
         failure_list = []
 
         try:
-            with global_vars.storage.download(object_id) as temp_file:
+            # Download file as a separate span
+            with tracer.start_as_current_span("download_file") as download_span:
+                download_span.set_attribute("object_id", object_id)
+                temp_file = global_vars.storage.download(object_id)
+                temp_file.__enter__()
+                file_size = os.path.getsize(temp_file.name)
+                download_span.set_attribute("file_size", file_size)
+
                 logger.debug(
                     "Downloaded file for processing",
                     object_id=object_id,
                     temp_file=temp_file.name,
-                    size=os.path.getsize(temp_file.name),
+                    size=file_size,
                 )
 
-                modules_to_process = await determine_modules_to_process(object_id, temp_file.name, execution_order)
+            try:
+                # Determine modules to process as a separate span (sibling to download_file)
+                with tracer.start_as_current_span("determine_modules_to_process") as determine_span:
+                    determine_span.set_attribute("object_id", object_id)
+                    determine_span.set_attribute("total_modules", len(execution_order))
+
+                    modules_to_process = await determine_modules_to_process(object_id, temp_file.name, execution_order)
+
+                    determine_span.set_attribute("modules_to_process_count", len(modules_to_process))
+
                 span.set_attribute("modules_to_process_count", len(modules_to_process))
                 logger.info(
                     "Modules determined for processing",
@@ -81,7 +97,10 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
 
                         except Exception as e:
                             logger.exception(
-                                "Error in enrichment module", module_name=module_name, object_id=object_id, error=str(e)
+                                "Error in enrichment module",
+                                module_name=module_name,
+                                object_id=object_id,
+                                error=str(e),
                             )
 
                             failure_list.append(f"{module_name}:{str(e)[:100]}")
@@ -89,6 +108,9 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                             module_span.set_attribute("module.status", "error")
                             module_span.set_attribute("module.error", str(e)[:200])
                             # Continue with other modules instead of raising
+            finally:
+                # Ensure temp_file is cleaned up
+                temp_file.__exit__(None, None, None)
 
             # Update enrichment results in workflows table using tracking_service
             instance_id = ctx.workflow_id

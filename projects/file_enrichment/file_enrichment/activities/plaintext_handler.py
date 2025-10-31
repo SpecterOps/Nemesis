@@ -6,6 +6,7 @@ import json
 from common.helpers import create_text_reader
 from common.logger import get_logger
 from common.models import NoseyParkerInput
+from common.queues import NOSEYPARKER_INPUT_TOPIC, NOSEYPARKER_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
 from dapr.clients import DaprClient
@@ -24,6 +25,8 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
     send a pub/sub message to NoseyParker
     """
     object_id = activity_input["object_id"]
+    logger.info("Executing activity: handle_file_if_plaintext", object_id=object_id)
+
     file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
     # if the file is plaintext, make sure we index it
@@ -33,15 +36,15 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
                 with create_text_reader(binary_file) as text_file:
                     await index_plaintext_content(f"{object_id}", text_file)
 
+    # Submit the file to NoseyParker
     nosey_parker_input = NoseyParkerInput(object_id=object_id)
     with DaprClient(headers_callback=get_trace_injector()) as client:
         client.publish_event(
-            pubsub_name="pubsub",
-            topic_name="noseyparker-input",
+            pubsub_name=NOSEYPARKER_PUBSUB,
+            topic_name=NOSEYPARKER_INPUT_TOPIC,
             data=json.dumps(nosey_parker_input.model_dump()),
             data_content_type="application/json",
         )
-    logger.debug(f"Published noseyparker_input: {object_id}")
 
 
 async def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, max_chunk_bytes: int = 800000):

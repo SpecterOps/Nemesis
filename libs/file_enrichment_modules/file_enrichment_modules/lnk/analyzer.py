@@ -79,12 +79,14 @@ class LnkParser(EnrichmentModule):
 
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         return "ms windows shortcut" in file_enriched.magic_type.lower()
 
     def _analyze_lnk(self, file_path: str, file_enriched) -> EnrichmentResult | None:
@@ -141,7 +143,7 @@ class LnkParser(EnrichmentModule):
         """
         try:
             # get the current `file_enriched` FileEnriched object from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

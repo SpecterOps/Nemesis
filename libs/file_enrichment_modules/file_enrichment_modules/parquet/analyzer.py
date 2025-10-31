@@ -19,12 +19,14 @@ class ParquetFileParser(EnrichmentModule):
     def __init__(self):
         self.storage = StorageMinio()
 
+        self.asyncpg_pool = None  # type: ignore
+
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check if file is a Parquet file
         return "apache parquet" in file_enriched.magic_type.lower()
@@ -184,7 +186,7 @@ class ParquetFileParser(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

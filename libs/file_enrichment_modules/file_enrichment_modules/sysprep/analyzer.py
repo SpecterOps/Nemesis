@@ -24,6 +24,8 @@ class SysprepParser(EnrichmentModule):
     def __init__(self):
         self.storage = StorageMinio()
 
+        self.asyncpg_pool = None  # type: ignore
+
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
@@ -71,7 +73,7 @@ rule Windows_Unattended_Answer_File {
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check basic conditions first
         if not (file_enriched.is_plaintext and file_enriched.file_name.lower() == "sysprep.inf"):
@@ -250,7 +252,7 @@ rule Windows_Unattended_Answer_File {
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

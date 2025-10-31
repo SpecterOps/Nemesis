@@ -25,12 +25,13 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict):
     This activity downloads the file, processes it to extract metadata,
     and saves the results to the database.
     """
-
-    await global_vars.workflow_manager.tracking_service.update_status(instance_id=ctx.workflow_id, status="RUNNING")
-
     object_id = file_dict.get("object_id")
     if not object_id or not isinstance(object_id, str):
         raise ValueError("file object_id is not a uuid string")
+
+    logger.info("Executing activity: get_basic_analysis", object_id=object_id)
+
+    await global_vars.workflow_manager.tracking_service.update_status(instance_id=ctx.workflow_id, status="RUNNING")
 
     with global_vars.storage.download(object_id) as file:
         file_enriched_dict = process_basic_analysis(file.name, file_dict)

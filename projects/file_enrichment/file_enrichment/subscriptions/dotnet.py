@@ -20,6 +20,7 @@ from common.models import (
     FindingOrigin,
     Transform,
 )
+from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from dapr.clients import DaprClient
 from file_enrichment.tracing import get_trace_injector
@@ -37,7 +38,7 @@ async def dotnet_subscription_handler(event: CloudEvent[DotNetOutput]) -> None:
     try:
         logger.debug("Processing dotnet results for object", object_id=dotnet_output.object_id)
 
-        file_enriched = await get_file_enriched_async(dotnet_output.object_id)
+        file_enriched = await get_file_enriched_async(dotnet_output.object_id, global_vars.asyncpg_pool)
 
         await store_dotnet_results(
             dotnet_output=dotnet_output,
@@ -170,8 +171,8 @@ async def store_dotnet_results(
                 with DaprClient(headers_callback=get_trace_injector()) as dapr_client:
                     data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
                     dapr_client.publish_event(
-                        pubsub_name="pubsub",
-                        topic_name="file",
+                        pubsub_name=FILES_PUBSUB,
+                        topic_name=FILES_NEW_FILE_TOPIC,
                         data=data,
                         data_content_type="application/json",
                     )

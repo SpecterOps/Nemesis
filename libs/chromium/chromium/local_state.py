@@ -41,7 +41,7 @@ async def process_chromium_local_state(
     """
     logger.info("Processing Chromium Local State file", object_id=object_id)
 
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, asyncpg_pool)
 
     # Extract username and browser from file path
     username, browser = parse_chromium_file_path(file_enriched.path or "")

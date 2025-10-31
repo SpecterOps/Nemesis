@@ -254,9 +254,18 @@ files = [
 ]
 
 [package.dependencies]
-cffi = [
-    {version = ">=1.0.1", markers = "python_version < \"3.14\""},
-    {version = ">=2.0.0b1", markers = "python_version >= \"3.14\""},
+cffi = {version = ">=1.0.1", markers = "python_version < \"3.14\""}
+
+[[package]]
+name = "async-lru"
+version = "2.0.5"
+description = "Simple LRU cache for asyncio"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "async_lru-2.0.5-py3-none-any.whl", hash = "sha256:ab95404d8d2605310d345932697371a5f40def0487c03d6d0ad9138de52c9943"},
+    {file = "async_lru-2.0.5.tar.gz", hash = "sha256:481d52ccdd27275f42c43a928b4a50c3bfb2d67af4e78b170e3e0bb39c66e5bb"},
 ]
 
 [[package]]
@@ -578,15 +587,19 @@ name = "common"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
+async-lru = "^2.0.5"
+asyncpg = "^0.30.0"
 dapr = "1.16.0"
+dapr-ext-workflow = "^1.16.0"
 fastapi = "^0.115.6"
 minio = "^7.2.14"
+psycopg = {version = "^3.2.9", extras = ["pool"]}
 pydantic = "^2.10.5"
 structlog = "^25.1.0"
 
@@ -2154,5 +2167,5 @@ propcache = ">=0.2.1"
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.12,<4.0"
-content-hash = "726aba1b7598a00fb78d05ccc3a8972bf7ad6840a27badf7baaa119fafd71ca8"
+python-versions = ">=3.12,<3.14"
+content-hash = "be2e0e84bc83b9894fbb525ce95647a972553a721d9e4d4d7efe468727e8e46e"

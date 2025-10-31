@@ -6,7 +6,7 @@ authors = ["SpecterOps"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.12,<4.0"
+python = ">=3.12,<3.14"
 pydantic = "^2.10.5"
 structlog = "^25.1.0"
 dapr = "1.16.0"
@@ -15,6 +15,7 @@ fastapi = "^0.115.6"
 dapr-ext-workflow = "^1.16.0"
 psycopg = {extras = ["pool"], version = "^3.2.9"}
 asyncpg = "^0.30.0"
+async-lru = "^2.0.5"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"

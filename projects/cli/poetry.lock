@@ -223,6 +223,18 @@ dev = ["cogapp", "pre-commit", "pytest", "wheel"]
 tests = ["pytest"]
 
 [[package]]
+name = "async-lru"
+version = "2.0.5"
+description = "Simple LRU cache for asyncio"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "async_lru-2.0.5-py3-none-any.whl", hash = "sha256:ab95404d8d2605310d345932697371a5f40def0487c03d6d0ad9138de52c9943"},
+    {file = "async_lru-2.0.5.tar.gz", hash = "sha256:481d52ccdd27275f42c43a928b4a50c3bfb2d67af4e78b170e3e0bb39c66e5bb"},
+]
+
+[[package]]
 name = "asyncio"
 version = "3.4.3"
 description = "reference implementation of PEP 3156"
@@ -577,15 +589,19 @@ name = "common"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
-dapr = "^1.14.0"
+async-lru = "^2.0.5"
+asyncpg = "^0.30.0"
+dapr = "1.16.0"
+dapr-ext-workflow = "^1.16.0"
 fastapi = "^0.115.6"
 minio = "^7.2.14"
+psycopg = {version = "^3.2.9", extras = ["pool"]}
 pydantic = "^2.10.5"
 structlog = "^25.1.0"
 
@@ -614,6 +630,22 @@ python-dateutil = ">=2.8.1"
 typing-extensions = ">=4.4.0"
 
 [[package]]
+name = "dapr-ext-workflow"
+version = "1.16.0"
+description = "The official release of Dapr Python SDK Workflow Authoring Extension."
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "dapr-ext-workflow-1.16.0.tar.gz", hash = "sha256:7487d174394d305e668784f4bac2dcecc757a1e0a8ddf6e5e1cb32c0a887be78"},
+    {file = "dapr_ext_workflow-1.16.0-py3-none-any.whl", hash = "sha256:028f6b3a340a5a8f0b061eacdef60de1ce52de2340f9636f517f799f73437ee8"},
+]
+
+[package.dependencies]
+dapr = ">=1.16.0"
+durabletask-dapr = ">=0.2.0a8"
+
+[[package]]
 name = "docker"
 version = "7.1.0"
 description = "A Python library for the Docker Engine API."
@@ -635,6 +667,23 @@ dev = ["coverage (==7.2.7)", "pytest (==7.4.2)", "pytest-cov (==4.1.0)", "pytest
 docs = ["myst-parser (==0.18.0)", "sphinx (==5.1.1)"]
 ssh = ["paramiko (>=2.4.3)"]
 websockets = ["websocket-client (>=1.3.0)"]
+
+[[package]]
+name = "durabletask-dapr"
+version = "0.2.0a9"
+description = "A Durable Task Client SDK for Python"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "durabletask_dapr-0.2.0a9-py3-none-any.whl", hash = "sha256:48c401c30c05a6122bdd1ee245e9b65c56dabb2dde3dfe6fe1d4ee47085e4a2e"},
+    {file = "durabletask_dapr-0.2.0a9.tar.gz", hash = "sha256:ec481840a043a9d15f67628386b0694e60a04de8015f8f56883f55e490ebbb56"},
+]
+
+[package.dependencies]
+asyncio = "*"
+grpcio = "*"
+protobuf = "*"
 
 [[package]]
 name = "dynaconf"
@@ -1301,6 +1350,46 @@ files = [
 ]
 
 [[package]]
+name = "psycopg"
+version = "3.2.12"
+description = "PostgreSQL database adapter for Python"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "psycopg-3.2.12-py3-none-any.whl", hash = "sha256:8a1611a2d4c16ae37eada46438be9029a35bb959bb50b3d0e1e93c0f3d54c9ee"},
+    {file = "psycopg-3.2.12.tar.gz", hash = "sha256:85c08d6f6e2a897b16280e0ff6406bef29b1327c045db06d21f364d7cd5da90b"},
+]
+
+[package.dependencies]
+psycopg-pool = {version = "*", optional = true, markers = "extra == \"pool\""}
+typing-extensions = {version = ">=4.6", markers = "python_version < \"3.13\""}
+tzdata = {version = "*", markers = "sys_platform == \"win32\""}
+
+[package.extras]
+binary = ["psycopg-binary (==3.2.12)"]
+c = ["psycopg-c (==3.2.12)"]
+dev = ["ast-comments (>=1.1.2)", "black (>=24.1.0)", "codespell (>=2.2)", "dnspython (>=2.1)", "flake8 (>=4.0)", "isort-psycopg", "isort[colors] (>=6.0)", "mypy (>=1.14)", "pre-commit (>=4.0.1)", "types-setuptools (>=57.4)", "types-shapely (>=2.0)", "wheel (>=0.37)"]
+docs = ["Sphinx (>=5.0)", "furo (==2022.6.21)", "sphinx-autobuild (>=2021.3.14)", "sphinx-autodoc-typehints (>=1.12)"]
+pool = ["psycopg-pool"]
+test = ["anyio (>=4.0)", "mypy (>=1.14)", "pproxy (>=2.7)", "pytest (>=6.2.5)", "pytest-cov (>=3.0)", "pytest-randomly (>=3.5)"]
+
+[[package]]
+name = "psycopg-pool"
+version = "3.2.7"
+description = "Connection Pool for Psycopg"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "psycopg_pool-3.2.7-py3-none-any.whl", hash = "sha256:4b47bb59d887ef5da522eb63746b9f70e2faf967d34aac4f56ffc65e9606728f"},
+    {file = "psycopg_pool-3.2.7.tar.gz", hash = "sha256:a77d531bfca238e49e5fb5832d65b98e69f2c62bfda3d2d4d833696bdc9ca54b"},
+]
+
+[package.dependencies]
+typing-extensions = ">=4.6"
+
+[[package]]
 name = "pycparser"
 version = "2.22"
 description = "C parser in Python"
@@ -1884,6 +1973,19 @@ files = [
 typing-extensions = ">=4.12.0"
 
 [[package]]
+name = "tzdata"
+version = "2025.2"
+description = "Provider of IANA time zone data"
+optional = false
+python-versions = ">=2"
+groups = ["main"]
+markers = "sys_platform == \"win32\""
+files = [
+    {file = "tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8"},
+    {file = "tzdata-2025.2.tar.gz", hash = "sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9"},
+]
+
+[[package]]
 name = "urllib3"
 version = "2.4.0"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
@@ -2145,5 +2247,5 @@ propcache = ">=0.2.1"
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.12,<4.0"
-content-hash = "54d782949abfdf19e5f70a09a63cc3e2a07f6a116ef1e3a484c19fa524819fd3"
+python-versions = ">=3.12,<3.14"
+content-hash = "681b696a435e3deaac39683c3cb57b3690dc444be2c5612d04d7557dc8a509ab"

@@ -340,6 +340,8 @@ class PEAnalyzer(EnrichmentModule):
 
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
@@ -356,7 +358,7 @@ rule is_pe
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Uses a Yara run to determine if this module should run."""
         # Get the current file_enriched from the database backend
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # download a max of 1000 bytes
         num_bytes = file_enriched.size if file_enriched.size < 1000 else 1000
@@ -402,7 +404,7 @@ rule is_pe
         """
         try:
             # Get the current file_enriched from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:

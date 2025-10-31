@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 
 # Configuration
-max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 2))
+max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 20))
 NUM_WORKERS = max_parallel_workflows
 
 # Queue for file processing

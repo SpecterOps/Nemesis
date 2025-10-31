@@ -24,7 +24,7 @@ async def process_chromium_history(
     """
     logger.info("Processing Chromium History file", object_id=object_id)
 
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, asyncpg_pool)
 
     # Extract username and browser from file path
     username, browser = parse_chromium_file_path(file_enriched.path or "")

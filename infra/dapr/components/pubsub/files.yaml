@@ -1,39 +1,6 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: pubsub
-spec:
-  type: pubsub.rabbitmq
-  version: v1
-  metadata:
-    - name: connectionString
-      secretKeyRef:
-        name: RABBITMQ_CONNECTION_STRING
-        key: RABBITMQ_CONNECTION_STRING
-    - name: durable
-      value: "true"
-    - name: deletedWhenUnused
-      value: "false"
-    - name: autoAck
-      value: "false"
-    - name: requeueInFailure
-      value: "true"
-    - name: reconnectWait
-      value: "3"
-    - name: concurrencyMode
-      value: parallel
-    - name: deliveryMode  # persistence setting
-      value: "2"
-    - name: prefetchCount # should be equal or less than the max concurrent workflows
-      value: "10"
-    - name: maxPriority   # set so we can prioritize some messages if wanted
-      value: "3"
-auth:
-  secretStore: nemesis-secret-store
----
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
   name: files
 spec:
   type: pubsub.rabbitmq
@@ -44,7 +11,7 @@ spec:
         name: RABBITMQ_CONNECTION_STRING
         key: RABBITMQ_CONNECTION_STRING
     - name: consumerID
-      value: file-enrichment-test             # Fixed consumerID means messages will be load balanced across all consumers (NOT broadcast). Results in a single RabbitMQ queue.
+      value: files              # Fixed consumerID means messages will be load balanced across all consumers (NOT broadcast). Results in a single RabbitMQ queue.
     - name: durable
       value: true
     - name: deleteWhenUnused    # Ensure the queue remains if the workers all die
@@ -62,6 +29,6 @@ spec:
     - name: maxPriority   # set so we can prioritize some messages if wanted
       value: "3"
     - name: prefetchCount # should be equal or less than the max concurrent workflows
-      value: "8"
+      value: "25"
 auth:
   secretStore: nemesis-secret-store

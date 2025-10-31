@@ -206,7 +206,7 @@ struct ScanStats {
 }
 
 // The callback handler with memory management
-#[topic(pub_sub_name = "pubsub", topic = "noseyparker-input")]
+#[topic(pub_sub_name = "noseyparker", topic = "noseyparker_input")]
 async fn handle_input_event(input: NoseyParkerInput) {
     info!("Processing pub/sub event for object_id: {}", input.object_id);
 
@@ -252,8 +252,8 @@ async fn handle_input_event(input: NoseyParkerInput) {
             );
 
             // Get pub/sub configuration from environment variables or use defaults
-            let pubsub_name = std::env::var("PUBSUB_NAME").unwrap_or_else(|_| "pubsub".to_string());
-            let output_topic = std::env::var("OUTPUT_TOPIC").unwrap_or_else(|_| "noseyparker-output".to_string());
+            let pubsub_name = std::env::var("PUBSUB_NAME").unwrap_or_else(|_| "noseyparker".to_string());
+            let output_topic = std::env::var("OUTPUT_TOPIC").unwrap_or_else(|_| "noseyparker_output".to_string());
 
             info!("Publishing result to output topic: {}", output_topic);
 

@@ -56,7 +56,7 @@ rule Chrome_Local_State
             file_path: Optional path to already downloaded file
         """
 
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check if file is < 5 megs and JSON magic type
         if not ((file_enriched.size < 5000000) and ("json" in file_enriched.magic_type.lower())):
