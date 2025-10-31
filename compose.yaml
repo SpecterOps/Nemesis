@@ -33,6 +33,7 @@ services:
       - DAPR_GRPC_PORT=50001
       - DAPR_HTTP_PORT=3500
       - DEFAULT_EXPIRATION_DAYS=${DEFAULT_EXPIRATION_DAYS:-100}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ${MOUNTED_CONTAINER_PATH:-empty-mounted-containers}:/mounted-containers
     logging: &logging-config
@@ -114,7 +115,7 @@ services:
       - MINIO_BUCKET=files
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
-      - RUST_LOG=info
+      - RUST_LOG=warn
       - SNIPPET_LENGTH=512        # context length around any Nosey Parker matches
       - MAX_CONCURRENT_FILES=2    # maximum number of concurrent files to scan
       - MAX_FILE_SIZE_MB=200      # maximum file size to scan
@@ -251,6 +252,7 @@ services:
       RIGGING_GENERATOR_TRIAGE: ${RIGGING_GENERATOR_TRIAGE:-}
       WORKFLOW_RUNTIME_LOG_LEVEL: ${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
       WORKFLOW_CLIENT_LOG_LEVEL: ${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
+      MAX_PARALLEL_WORKFLOWS: ${ENRICHMENT_MAX_PARALLEL_WORKFLOWS:-25}
     logging: *logging-config
     depends_on: &file-enrichment-depends-on
       postgres: { condition: service_started }
@@ -278,7 +280,7 @@ services:
         "--resources-path",
         "/dapr/components",
         "--log-level",
-        "${DAPR_LOG_LEVEL:-info}",
+        "${DAPR_LOG_LEVEL:-warn}",
         "--config",
         "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
         "--enable-metrics",
@@ -415,6 +417,7 @@ services:
       - DAPR_GRPC_PORT=50008
       - APPRISE_URLS=${APPRISE_URLS:-}
       - NEMESIS_URL=${NEMESIS_URL:?}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     logging: *logging-config
     depends_on:
       postgres: { condition: service_healthy }
@@ -477,6 +480,7 @@ services:
       - CLEANUP_SCHEDULE=*/3 * * * * # Every 3 minutes
       - DAPR_GRPC_PORT=50011
       - DAPR_HTTP_PORT=3510
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     logging: *logging-config
     depends_on:
       postgres: { condition: service_healthy }
@@ -548,6 +552,7 @@ services:
       - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng}
       - MAX_PARALLEL_WORKFLOWS=${MAX_PARALLEL_WORKFLOWS:-5}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
       interval: 10s

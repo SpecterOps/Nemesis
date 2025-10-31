@@ -352,7 +352,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "0.0.0.0:50042".parse().unwrap();
 
     // Configure logging
-    let env_filter = format!("noseyparker_scanner={},noseyparker={}", args.log_level, args.log_level);
+    // Use RUST_LOG environment variable if set, otherwise use the --log-level argument
+    let env_filter = if std::env::var("RUST_LOG").is_ok() {
+        tracing_subscriber::EnvFilter::from_default_env()
+    } else {
+        tracing_subscriber::EnvFilter::new(
+            format!("noseyparker_scanner={},noseyparker={}", args.log_level, args.log_level)
+        )
+    };
+
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_ansi(args.color)

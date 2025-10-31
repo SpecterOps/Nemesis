@@ -569,6 +569,8 @@ const StatsOverview = () => {
       // Process the response data into time series format
       const filesData = [];
       const findingsData = [];
+      let cumulativeFileCount = 0;
+      let cumulativeFindingsCount = 0;
 
       intervals.forEach((intervalStart, index) => {
         // Format the label based on granularity
@@ -581,18 +583,20 @@ const StatsOverview = () => {
           formattedLabel = intervalStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         }
 
-        // Get file count for this interval
+        // Get file count for this interval and add to cumulative total
         const fileCount = result.data[`files_day_${index}`]?.aggregate?.count || 0;
+        cumulativeFileCount += fileCount;
         filesData.push({
           date: formattedLabel,
-          count: fileCount
+          count: cumulativeFileCount
         });
 
-        // Get findings count for this interval
+        // Get findings count for this interval and add to cumulative total
         const findingsCount = result.data[`findings_day_${index}`]?.aggregate?.count || 0;
+        cumulativeFindingsCount += findingsCount;
         findingsData.push({
           date: formattedLabel,
-          count: findingsCount
+          count: cumulativeFindingsCount
         });
       });
 

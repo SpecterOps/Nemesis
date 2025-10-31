@@ -14,7 +14,7 @@ spec:
       value: dpapi              # Fixed consumerID means messages will be load balanced across all consumers (NOT broadcast). Results in a single RabbitMQ queue.
     - name: durable
       value: true
-    - name: deleteWhenUnused    # Ensure the queue remains if the workers all die
+    - name: deletedWhenUnused    # Ensure the queue remains if the workers all die (controls RabbitMQ auto-delete)
       value: false
     - name: autoAck             # Workers need to ack that work is completed
       value: false

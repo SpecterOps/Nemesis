@@ -97,18 +97,27 @@ def create_dotnet_finding_summary(analysis: DotNetAssemblyAnalysis) -> str:
         return ""
 
     # Add various method call sections
-    summary += add_method_section("Serialization Gadget Calls", analysis.SerializationGadgetCalls)
-    summary += add_method_section("WCF Server Calls", analysis.WcfServerCalls)
-    summary += add_method_section("Client Calls", analysis.ClientCalls)
-    summary += add_method_section("Remoting Calls", analysis.RemotingCalls)
-    summary += add_method_section("Execution Calls", analysis.ExecutionCalls)
+    if analysis.SerializationGadgetCalls:
+        summary += add_method_section("Serialization Gadget Calls", analysis.SerializationGadgetCalls)
+
+    if analysis.WcfServerCalls:
+        summary += add_method_section("WCF Server Calls", analysis.WcfServerCalls)
+
+    if analysis.ClientCalls:
+        summary += add_method_section("Client Calls", analysis.ClientCalls)
+
+    if analysis.RemotingCalls:
+        summary += add_method_section("Remoting Calls", analysis.RemotingCalls)
+
+    if analysis.ExecutionCalls:
+        summary += add_method_section("Execution Calls", analysis.ExecutionCalls)
 
     return summary
 
 
 async def store_dotnet_results(
     dotnet_output: DotNetOutput,
-    file_enriched: FileEnriched | None = None,
+    file_enriched: FileEnriched,
 ):
     """
     Store DotNet analysis results in the database, including creating findings and transforms.
@@ -197,6 +206,7 @@ async def store_dotnet_results(
                     object_id=object_id,
                     assembly_name=analysis.AssemblyName,
                     error=analysis.Error,
+                    path=file_enriched.file_name,
                 )
 
                 # Create a finding for the error
@@ -323,10 +333,7 @@ async def store_dotnet_results(
 
         # Publish alerts for dotnet findings (only for this origin)
         if findings_list:
-            await publish_alerts_for_findings(
-                object_id=object_id,
-                origin_include=["dotnet_service"]
-            )
+            await publish_alerts_for_findings(object_id=object_id, origin_include=["dotnet_service"])
 
         return enrichment_result
 
