@@ -170,48 +170,49 @@ async def execute_enrichment_module(object_id: str, temp_file_path: str, module_
 async def store_enrichment_results(object_id: str, module_name: str, result: EnrichmentResult):
     """Store enrichment results, transforms, and findings in the database."""
     async with global_vars.asyncpg_pool.acquire() as conn:
-        # Store enrichment
-        results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
-        await conn.execute(
-            """
-            INSERT INTO enrichments (object_id, module_name, result_data)
-            VALUES ($1, $2, $3)
-        """,
-            object_id,
-            module_name,
-            results_escaped,
-        )
+        async with conn.transaction():
+            # Store enrichment
+            results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
+            await conn.execute(
+                """
+                INSERT INTO enrichments (object_id, module_name, result_data)
+                VALUES ($1, $2, $3)
+            """,
+                object_id,
+                module_name,
+                results_escaped,
+            )
 
-        # Store any transforms
-        if result.transforms:
-            for transform in result.transforms:
-                await conn.execute(
-                    """
-                    INSERT INTO transforms (object_id, type, transform_object_id, metadata)
-                    VALUES ($1, $2, $3, $4)
-                """,
-                    object_id,
-                    transform.type,
-                    transform.object_id,
-                    json.dumps(transform.metadata) if transform.metadata else None,
-                )
+            # Store any transforms
+            if result.transforms:
+                for transform in result.transforms:
+                    await conn.execute(
+                        """
+                        INSERT INTO transforms (object_id, type, transform_object_id, metadata)
+                        VALUES ($1, $2, $3, $4)
+                    """,
+                        object_id,
+                        transform.type,
+                        transform.object_id,
+                        json.dumps(transform.metadata) if transform.metadata else None,
+                    )
 
-        # Store any findings
-        if result.findings:
-            for finding in result.findings:
-                await conn.execute(
-                    """
-                    INSERT INTO findings (
-                        finding_name, category, severity, object_id,
-                        origin_type, origin_name, raw_data, data
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                """,
-                    finding.finding_name,
-                    finding.category,
-                    finding.severity,
-                    object_id,
-                    finding.origin_type,
-                    finding.origin_name,
-                    json.dumps(finding.raw_data),
-                    json.dumps([obj.model_dump_json() for obj in finding.data]),
-                )
+            # Store any findings
+            if result.findings:
+                for finding in result.findings:
+                    await conn.execute(
+                        """
+                        INSERT INTO findings (
+                            finding_name, category, severity, object_id,
+                            origin_type, origin_name, raw_data, data
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    """,
+                        finding.finding_name,
+                        finding.category,
+                        finding.severity,
+                        object_id,
+                        finding.origin_type,
+                        finding.origin_name,
+                        json.dumps(finding.raw_data),
+                        json.dumps([obj.model_dump_json() for obj in finding.data]),
+                    )

@@ -280,7 +280,7 @@ async def upload_file(
 
         logger.debug("Received file upload request")
 
-        object_id = storage.upload_uploadfile(file)
+        object_id = await asyncio.to_thread(storage.upload_uploadfile, file)
         logger.info("File uploaded to datalake", object_id=object_id)
 
         file_metadata.path = normalize_path(file_metadata.path)

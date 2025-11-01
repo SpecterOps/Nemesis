@@ -34,9 +34,9 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
             notification_queue = asyncio.Queue()
 
             # Callback function to handle notifications
-            def notification_handler(connection, pid, channel, payload):
+            def notification_handler(connection, pid, channel, payload, queue=notification_queue):
                 try:
-                    notification_queue.put_nowait((channel, payload))
+                    queue.put_nowait((channel, payload))
                 except Exception as e:
                     logger.error("Error queuing notification", error=str(e))
 

@@ -1,5 +1,4 @@
 # src/workflow/workflow_tracking_service.py
-import asyncio
 from datetime import datetime
 from typing import Optional
 
@@ -23,8 +22,6 @@ class WorkflowTrackingService:
         self.pool = pool
         self.workflow_client = workflow_client
         self.max_execution_time = max_execution_time
-        self.monitoring_tasks = {}  # {instance_id: task}
-        self.background_tasks = set()  # Track background tasks to prevent GC
 
     async def register_workflow(self, instance_id: str, object_id: str, filename: Optional[str] = None) -> None:
         """Create initial workflow record with SCHEDULED status.
@@ -228,30 +225,3 @@ class WorkflowTrackingService:
                 error=str(e),
             )
             raise
-
-    async def cleanup(self) -> None:
-        """Clean up all monitoring tasks during shutdown."""
-        logger.info("Cleaning up workflow tracking service", task_count=len(self.background_tasks))
-
-        # Cancel all background tasks
-        for task in self.background_tasks:
-            if not task.done():
-                task.cancel()
-
-        # Wait for all tasks to complete/cancel
-        if self.background_tasks:
-            await asyncio.gather(*self.background_tasks, return_exceptions=True)
-
-        self.background_tasks.clear()
-        self.monitoring_tasks.clear()
-
-        logger.info("Workflow tracking service cleanup completed")
-
-    async def __aenter__(self):
-        """Async context manager entry."""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit - cleanup tasks."""
-        await self.cleanup()
-        return False  # Don't suppress exceptions

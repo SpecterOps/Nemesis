@@ -52,35 +52,36 @@ async def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, ma
     logger.debug(f"indexing plaintext for {object_id}")
 
     async with global_vars.asyncpg_pool.acquire() as conn:
-        await conn.execute("DELETE FROM plaintext_content WHERE object_id = $1", object_id)
+        async with conn.transaction():
+            await conn.execute("DELETE FROM plaintext_content WHERE object_id = $1", object_id)
 
-        chunk_number = 0
-        insert_query = """
-        INSERT INTO plaintext_content (object_id, chunk_number, content)
-        VALUES ($1, $2, $3);
-        """
+            chunk_number = 0
+            insert_query = """
+            INSERT INTO plaintext_content (object_id, chunk_number, content)
+            VALUES ($1, $2, $3);
+            """
 
-        # Read file content
-        file_content = file_obj.read()
+            # Read file content
+            file_content = file_obj.read()
 
-        # Process in chunks, ensuring we don't exceed byte limits
-        i = 0
-        while i < len(file_content):
-            # Take a chunk that's guaranteed to be under the byte limit
-            chunk_end = min(i + max_chunk_bytes // 4, len(file_content))  # Div by 4 for worst-case UTF-8
-            chunk_content = file_content[i:chunk_end]
+            # Process in chunks, ensuring we don't exceed byte limits
+            i = 0
+            while i < len(file_content):
+                # Take a chunk that's guaranteed to be under the byte limit
+                chunk_end = min(i + max_chunk_bytes // 4, len(file_content))  # Div by 4 for worst-case UTF-8
+                chunk_content = file_content[i:chunk_end]
 
-            # If chunk is still too big in bytes, trim it down
-            while len(chunk_content.encode("utf-8")) > max_chunk_bytes and chunk_content:
-                chunk_content = chunk_content[:-100]  # Remove 100 chars at a time
+                # If chunk is still too big in bytes, trim it down
+                while len(chunk_content.encode("utf-8")) > max_chunk_bytes and chunk_content:
+                    chunk_content = chunk_content[:-100]  # Remove 100 chars at a time
 
-            if chunk_content:  # Only insert non-empty chunks
-                actual_bytes = len(chunk_content.encode("utf-8"))
-                logger.debug(f"Inserting chunk {chunk_number} with {actual_bytes} bytes")
-                await conn.execute(insert_query, object_id, chunk_number, chunk_content)
-                chunk_number += 1
+                if chunk_content:  # Only insert non-empty chunks
+                    actual_bytes = len(chunk_content.encode("utf-8"))
+                    logger.debug(f"Inserting chunk {chunk_number} with {actual_bytes} bytes")
+                    await conn.execute(insert_query, object_id, chunk_number, chunk_content)
+                    chunk_number += 1
 
-            # Move to next chunk
-            i = chunk_end
+                # Move to next chunk
+                i = chunk_end
 
-        logger.debug("Indexed chunked content", object_id=object_id, num_chunks=chunk_number)
+            logger.debug("Indexed chunked content", object_id=object_id, num_chunks=chunk_number)

@@ -26,7 +26,7 @@ class FileLinkingDatabaseService:
         self.pool = connection_pool
 
     async def add_file_listing(
-        self, source: str, path: str, status: FileListingStatus, object_id: str | None = None
+        self, source: str, path: str, status: FileListingStatus, object_id: str | None = None, conn=None
     ) -> bool:
         """
         Add or update entry in file_listings table.
@@ -36,38 +36,54 @@ class FileLinkingDatabaseService:
             path: File path
             status: Current collection status
             object_id: UUID if file is already collected
+            conn: Optional database connection to use (for transactions)
 
         Returns:
             bool: True if successful, False otherwise
         """
         if source and path:
             try:
-                query = """
+                # Use ON CONFLICT DO NOTHING to avoid deadlocks, then do a separate UPDATE if needed
+                # This prevents concurrent transactions from waiting on each other
+                insert_query = """
                     INSERT INTO file_listings (source, path, object_id, status)
                     VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (source, path_lower) DO UPDATE SET
-                        object_id = CASE
-                            WHEN file_listings.status = 'collected' THEN file_listings.object_id
-                            ELSE EXCLUDED.object_id
-                        END,
-                        status = CASE
-                            WHEN file_listings.status = 'collected' THEN file_listings.status
-                            ELSE EXCLUDED.status
-                        END,
-                        updated_at = CURRENT_TIMESTAMP
+                    ON CONFLICT (source, path_lower) DO NOTHING
                 """
 
-                async with self.pool.acquire() as conn:
-                    await conn.execute(query, source, path, object_id, status.value)
+                update_query = """
+                    UPDATE file_listings
+                    SET object_id = CASE
+                            WHEN status = 'collected' THEN object_id
+                            ELSE $3
+                        END,
+                        status = CASE
+                            WHEN status = 'collected' THEN status
+                            ELSE $4
+                        END,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE source = $1 AND LOWER(path) = LOWER($2)
+                    AND (status != 'collected' OR $4 = 'collected')
+                """
 
-                    logger.debug(
-                        "Added/updated file listing",
-                        source=source,
-                        path=path,
-                        status=status.value,
-                        object_id=object_id,
-                    )
-                    return True
+                if conn:
+                    # Use provided connection (part of transaction)
+                    await conn.execute(insert_query, source, path, object_id, status.value)
+                    await conn.execute(update_query, source, path, object_id, status.value)
+                else:
+                    # Acquire new connection
+                    async with self.pool.acquire() as conn:
+                        await conn.execute(insert_query, source, path, object_id, status.value)
+                        await conn.execute(update_query, source, path, object_id, status.value)
+
+                logger.debug(
+                    "Added/updated file listing",
+                    source=source,
+                    path=path,
+                    status=status.value,
+                    object_id=object_id,
+                )
+                return True
 
             except Exception as e:
                 logger.exception(
@@ -78,7 +94,7 @@ class FileLinkingDatabaseService:
         return False
 
     async def add_file_linking(
-        self, source: str, file_path_1: str, file_path_2: str, link_type: str | None = None
+        self, source: str, file_path_1: str, file_path_2: str, link_type: str | None = None, conn=None
     ) -> bool:
         """
         Add relationship between two files in file_linkings table.
@@ -88,31 +104,45 @@ class FileLinkingDatabaseService:
             file_path_1: First file path
             file_path_2: Second file path (linked to first)
             link_type: Type of relationship (optional)
+            conn: Optional database connection to use (for transactions)
 
         Returns:
             bool: True if successful, False otherwise
         """
         if source and file_path_1 and file_path_2:
             try:
-                query = """
+                # Use ON CONFLICT DO NOTHING to avoid deadlocks, then do a separate UPDATE
+                insert_query = """
                     INSERT INTO file_linkings (source, file_path_1, file_path_2, link_type)
                     VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (source, file_path_1, file_path_2) DO UPDATE SET
-                        link_type = EXCLUDED.link_type,
-                        updated_at = CURRENT_TIMESTAMP
+                    ON CONFLICT (source, file_path_1, file_path_2) DO NOTHING
                 """
 
-                async with self.pool.acquire() as conn:
-                    await conn.execute(query, source, file_path_1, file_path_2, link_type)
+                update_query = """
+                    UPDATE file_linkings
+                    SET link_type = $4,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE source = $1 AND file_path_1 = $2 AND file_path_2 = $3
+                """
 
-                    logger.debug(
-                        "Added file linking",
-                        source=source,
-                        file_path_1=file_path_1,
-                        file_path_2=file_path_2,
-                        link_type=link_type,
-                    )
-                    return True
+                if conn:
+                    # Use provided connection (part of transaction)
+                    await conn.execute(insert_query, source, file_path_1, file_path_2, link_type)
+                    await conn.execute(update_query, source, file_path_1, file_path_2, link_type)
+                else:
+                    # Acquire new connection
+                    async with self.pool.acquire() as conn:
+                        await conn.execute(insert_query, source, file_path_1, file_path_2, link_type)
+                        await conn.execute(update_query, source, file_path_1, file_path_2, link_type)
+
+                logger.debug(
+                    "Added file linking",
+                    source=source,
+                    file_path_1=file_path_1,
+                    file_path_2=file_path_2,
+                    link_type=link_type,
+                )
+                return True
 
             except Exception as e:
                 logger.exception(
@@ -222,7 +252,7 @@ class FileLinkingDatabaseService:
             logger.exception("Error querying collected files", source=source, error=str(e))
             return []
 
-    async def update_file_listing_path(self, source: str, old_path: str, new_path: str) -> bool:
+    async def update_file_listing_path(self, source: str, old_path: str, new_path: str, conn=None) -> bool:
         """
         Update path in file_listings table.
 
@@ -232,6 +262,7 @@ class FileLinkingDatabaseService:
             source: Source identifier
             old_path: Current path (with placeholders)
             new_path: New path (resolved)
+            conn: Optional database connection to use (for transactions)
 
         Returns:
             bool: True if successful, False otherwise
@@ -243,17 +274,22 @@ class FileLinkingDatabaseService:
                 WHERE source = $1 AND LOWER(path) = LOWER($2)
             """
 
-            async with self.pool.acquire() as conn:
+            if conn:
+                # Use provided connection (part of transaction)
                 result = await conn.execute(query, source, old_path, new_path)
+            else:
+                # Acquire new connection
+                async with self.pool.acquire() as conn:
+                    result = await conn.execute(query, source, old_path, new_path)
 
-                logger.info(
-                    "Updated file listing path",
-                    source=source,
-                    old_path=old_path,
-                    new_path=new_path,
-                    result=result,
-                )
-                return True
+            logger.info(
+                "Updated file listing path",
+                source=source,
+                old_path=old_path,
+                new_path=new_path,
+                result=result,
+            )
+            return True
 
         except Exception as e:
             logger.exception(
@@ -265,7 +301,7 @@ class FileLinkingDatabaseService:
             )
             return False
 
-    async def update_file_linking_path(self, source: str, old_path: str, new_path: str) -> bool:
+    async def update_file_linking_path(self, source: str, old_path: str, new_path: str, conn=None) -> bool:
         """
         Update file_path_2 in file_linkings table.
 
@@ -275,6 +311,7 @@ class FileLinkingDatabaseService:
             source: Source identifier
             old_path: Current path (with placeholders)
             new_path: New path (resolved)
+            conn: Optional database connection to use (for transactions)
 
         Returns:
             bool: True if successful, False otherwise
@@ -286,17 +323,22 @@ class FileLinkingDatabaseService:
                 WHERE source = $1 AND LOWER(file_path_2) = LOWER($2)
             """
 
-            async with self.pool.acquire() as conn:
+            if conn:
+                # Use provided connection (part of transaction)
                 result = await conn.execute(query, source, old_path, new_path)
+            else:
+                # Acquire new connection
+                async with self.pool.acquire() as conn:
+                    result = await conn.execute(query, source, old_path, new_path)
 
-                logger.info(
-                    "Updated file linking path",
-                    source=source,
-                    old_path=old_path,
-                    new_path=new_path,
-                    result=result,
-                )
-                return True
+            logger.info(
+                "Updated file linking path",
+                source=source,
+                old_path=old_path,
+                new_path=new_path,
+                result=result,
+            )
+            return True
 
         except Exception as e:
             logger.exception(

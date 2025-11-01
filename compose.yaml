@@ -51,7 +51,7 @@ services:
       - "traefik.http.routers.web-api.tls=true"
       - "traefik.http.routers.web-api.middlewares=auth"
   web-api-dapr:
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",
@@ -126,7 +126,7 @@ services:
     volumes:
       - ./projects/noseyparker_scanner/custom_rules/:/opt/noseyparker:ro
   noseyparker-scanner-dapr:
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",
@@ -187,7 +187,7 @@ services:
     expose:
       - "5000"
   dotnet-service-dapr:
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",
@@ -252,14 +252,14 @@ services:
       RIGGING_GENERATOR_TRIAGE: ${RIGGING_GENERATOR_TRIAGE:-}
       WORKFLOW_RUNTIME_LOG_LEVEL: ${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
       WORKFLOW_CLIENT_LOG_LEVEL: ${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
-      MAX_PARALLEL_WORKFLOWS: ${ENRICHMENT_MAX_PARALLEL_WORKFLOWS:-25}
+      MAX_PARALLEL_WORKFLOWS: ${ENRICHMENT_MAX_PARALLEL_WORKFLOWS:-5}
     logging: *logging-config
     depends_on: &file-enrichment-depends-on
       postgres: { condition: service_started }
       placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   file-enrichment-dapr: &file-enrichment-dapr-template
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",
@@ -426,12 +426,12 @@ services:
       hasura: { condition: service_healthy }
     healthcheck: &healthcheck-python-svc
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
       start_period: 20s
   alerting-dapr:
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",
@@ -488,7 +488,7 @@ services:
       rabbitmq: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
   housekeeping-dapr:
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",
@@ -555,7 +555,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
     logging: *logging-config
@@ -564,7 +564,7 @@ services:
       placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   document-conversion-dapr:
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",
@@ -631,7 +631,7 @@ services:
       timeout: 10s
       retries: 3
   gotenberg-dapr:
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",
@@ -815,11 +815,11 @@ services:
       - ./infra/traefik/config:/config:ro
 
   placement:
-    image: "daprio/dapr:1.16.1"
+    image: "daprio/dapr:1.16.2"
     command: ["./placement", "-port", "50006", "--enable-metrics"]
 
   scheduler:
-    image: "daprio/dapr:1.16.1"
+    image: "daprio/dapr:1.16.2"
     command:
       [
         "./scheduler",
@@ -1022,7 +1022,7 @@ services:
     healthcheck: *healthcheck-python-svc
   agents-dapr:
     profiles: ["llm"]
-    image: "daprio/daprd:1.16.1"
+    image: "daprio/daprd:1.16.2"
     command:
       [
         "./daprd",

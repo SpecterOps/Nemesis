@@ -114,11 +114,18 @@ class WorkflowManager:
 
         try:
             async with self.pool.acquire() as conn:
-                # Get object_id from workflow
+                # Get workflow data with a single optimized JOIN query
                 row = await conn.fetchrow(
                     """
-                    SELECT object_id FROM workflows WHERE wf_id = $1
-                """,
+                    SELECT
+                        w.object_id,
+                        COALESCE(fe.originating_container_id, f.originating_container_id) as originating_container_id,
+                        COALESCE(fe.size, 0) as file_size
+                    FROM workflows w
+                    LEFT JOIN files_enriched fe ON fe.object_id = w.object_id
+                    LEFT JOIN files f ON f.object_id = w.object_id
+                    WHERE w.wf_id = $1
+                    """,
                     instance_id,
                 )
 
@@ -126,37 +133,8 @@ class WorkflowManager:
                     object_id, originating_container_id, file_size = None, None, 0
                 else:
                     object_id = row["object_id"]
-
-                    # Get originating_container_id and file size from files table
-                    file_row = await conn.fetchrow(
-                        """
-                        SELECT fe.originating_container_id, fe.size
-                        FROM files_enriched fe
-                        WHERE fe.object_id = $1
-                    """,
-                        object_id,
-                    )
-
-                    if file_row:
-                        originating_container_id = file_row["originating_container_id"]
-                        file_size = file_row["size"] or 0
-                    else:
-                        # Fallback to files table if not in files_enriched yet
-                        fallback_row = await conn.fetchrow(
-                            """
-                            SELECT f.originating_container_id, 0 as size
-                            FROM files f
-                            WHERE f.object_id = $1
-                        """,
-                            object_id,
-                        )
-
-                        if fallback_row:
-                            originating_container_id = fallback_row["originating_container_id"]
-                            file_size = fallback_row["size"] or 0
-                        else:
-                            originating_container_id = None
-                            file_size = 0
+                    originating_container_id = row["originating_container_id"]
+                    file_size = row["file_size"] or 0
             logger.debug(
                 f"publish_workflow_completion - object_id: {object_id}, originating_container_id: {originating_container_id}, file_size: {file_size}",
                 pid=os.getpid(),

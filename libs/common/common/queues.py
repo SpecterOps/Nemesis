@@ -8,6 +8,9 @@ DOTNET_PUBSUB = "dotnet"
 DOTNET_INPUT_TOPIC = "dotnet_input"
 DOTNET_OUTPUT_TOPIC = "dotnet_output"
 
+DPAPI_PUBSUB = "dpapi"
+DPAPI_EVENTS_TOPIC = "dpapi_events"
+
 FILES_PUBSUB = "files"
 FILES_NEW_FILE_TOPIC = "new_file"  # Emitted when a new file is uploaded
 FILES_FILE_ENRICHED_TOPIC = "file_enriched"  # Emitted when a file is finished being enriched

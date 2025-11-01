@@ -207,28 +207,6 @@ async def store_noseyparker_results(
         pool (asyncpg.Pool): Database connection pool
     """
     try:
-        # Update enrichment results using tracking_service
-        try:
-            # Get workflow ID from object_id
-            async with global_vars.asyncpg_pool.acquire() as conn:
-                workflow_row = await conn.fetchrow(
-                    """
-                    SELECT wf_id FROM workflows WHERE object_id = $1
-                    """,
-                    object_id,
-                )
-
-            if workflow_row:
-                instance_id = workflow_row["wf_id"]
-                await global_vars.workflow_manager.tracking_service.update_enrichment_results(
-                    instance_id=instance_id,
-                    success_list=["noseyparker"],
-                )
-                logger.debug("Updated noseyparker enrichment success", instance_id=instance_id, object_id=object_id)
-            else:
-                logger.warning("No workflow found for object_id, skipping enrichment update", object_id=object_id)
-        except Exception as db_error:
-            logger.error(f"Failed to update noseyparker enrichment success in database: {str(db_error)}")
 
         if not matches:
             logger.debug("No matches found, nothing to store", object_id=object_id)
@@ -289,47 +267,66 @@ async def store_noseyparker_results(
 
         # Store in database
         async with global_vars.asyncpg_pool.acquire() as conn:
-            # Store main enrichment result
-            results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
-            await conn.execute(
-                """
-                INSERT INTO enrichments (object_id, module_name, result_data)
-                VALUES ($1, $2, $3)
-                """,
-                object_id,
-                "noseyparker",
-                results_escaped,
-            )
+            async with conn.transaction():
+                # Get workflow ID and update enrichment results
+                workflow_row = await conn.fetchrow(
+                    """
+                    SELECT wf_id FROM workflows WHERE object_id = $1
+                    """,
+                    object_id,
+                )
 
-            # Store any findings
-            for finding in findings_list:
-                # Convert each FileObject to a JSON string
-                data_as_strings = []
-                for obj in finding.data:
-                    # Convert the model to a dict first
-                    if hasattr(obj, "model_dump"):
-                        obj_dict = obj.model_dump()
-                    else:
-                        obj_dict = obj
-                    sanitized_obj = sanitize_for_jsonb(obj_dict)
-                    data_as_strings.append(json.dumps(sanitized_obj))
+                if workflow_row:
+                    instance_id = workflow_row["wf_id"]
+                    await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+                        instance_id=instance_id,
+                        success_list=["noseyparker"],
+                    )
+                    logger.debug("Updated noseyparker enrichment success", instance_id=instance_id, object_id=object_id)
+                else:
+                    logger.warning("No workflow found for object_id, skipping enrichment update", object_id=object_id)
 
+                # Store main enrichment result
+                results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
                 await conn.execute(
                     """
-                    INSERT INTO findings (
-                        finding_name, category, severity, object_id,
-                        origin_type, origin_name, raw_data, data
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    INSERT INTO enrichments (object_id, module_name, result_data)
+                    VALUES ($1, $2, $3)
                     """,
-                    finding.finding_name,
-                    finding.category,
-                    finding.severity,
                     object_id,
-                    finding.origin_type,
-                    finding.origin_name,
-                    json.dumps(sanitize_for_jsonb(finding.raw_data)),
-                    json.dumps(data_as_strings),  # Store as array of JSON strings
+                    "noseyparker",
+                    results_escaped,
                 )
+
+                # Store any findings
+                for finding in findings_list:
+                    # Convert each FileObject to a JSON string
+                    data_as_strings = []
+                    for obj in finding.data:
+                        # Convert the model to a dict first
+                        if hasattr(obj, "model_dump"):
+                            obj_dict = obj.model_dump()
+                        else:
+                            obj_dict = obj
+                        sanitized_obj = sanitize_for_jsonb(obj_dict)
+                        data_as_strings.append(json.dumps(sanitized_obj))
+
+                    await conn.execute(
+                        """
+                        INSERT INTO findings (
+                            finding_name, category, severity, object_id,
+                            origin_type, origin_name, raw_data, data
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        """,
+                        finding.finding_name,
+                        finding.category,
+                        finding.severity,
+                        object_id,
+                        finding.origin_type,
+                        finding.origin_name,
+                        json.dumps(sanitize_for_jsonb(finding.raw_data)),
+                        json.dumps(data_as_strings),  # Store as array of JSON strings
+                    )
 
         logger.info("Successfully stored NoseyParker results", object_id=object_id, match_count=len(matches))
 

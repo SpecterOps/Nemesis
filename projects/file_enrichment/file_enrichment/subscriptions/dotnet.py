@@ -130,20 +130,6 @@ async def store_dotnet_results(
     decompilation_object_id = dotnet_output.decompilation
     analysis = dotnet_output.analysis
     try:
-        # Update workflow success status
-        try:
-            async with global_vars.asyncpg_pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    UPDATE workflows
-                    SET enrichments_success = array_append(enrichments_success, $1)
-                    WHERE object_id = $2
-                    """,
-                    "dotnet_service",
-                    object_id,
-                )
-        except Exception as db_error:
-            logger.error(f"Failed to update dotnet_service enrichment success in database: {str(db_error)}")
 
         # Create an enrichment result to store
         enrichment_result = EnrichmentResult(module_name="dotnet_service")
@@ -273,61 +259,73 @@ async def store_dotnet_results(
 
         # Store in database
         async with global_vars.asyncpg_pool.acquire() as conn:
-            # Store main enrichment result
-            results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
-            await conn.execute(
-                """
-                INSERT INTO enrichments (object_id, module_name, result_data)
-                VALUES ($1, $2, $3)
-                """,
-                object_id,
-                "dotnet_service",
-                results_escaped,
-            )
-
-            # Store any transforms
-            if enrichment_result.transforms:
-                for transform in enrichment_result.transforms:
-                    await conn.execute(
-                        """
-                        INSERT INTO transforms (object_id, type, transform_object_id, metadata)
-                        VALUES ($1, $2, $3, $4)
-                        """,
-                        object_id,
-                        transform.type,
-                        transform.object_id,
-                        json.dumps(transform.metadata) if transform.metadata else None,
-                    )
-
-            # Store any findings
-            for finding in findings_list:
-                # Convert each FileObject to a JSON string
-                data_as_strings = []
-                for obj in finding.data:
-                    # Convert the model to a dict first
-                    if hasattr(obj, "model_dump"):
-                        obj_dict = obj.model_dump()
-                    else:
-                        obj_dict = obj
-                    sanitized_obj = sanitize_for_jsonb(obj_dict)
-                    data_as_strings.append(json.dumps(sanitized_obj))
-
+            async with conn.transaction():
+                # Update workflow success status first
                 await conn.execute(
                     """
-                    INSERT INTO findings (
-                        finding_name, category, severity, object_id,
-                        origin_type, origin_name, raw_data, data
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    UPDATE workflows
+                    SET enrichments_success = array_append(enrichments_success, $1)
+                    WHERE object_id = $2
                     """,
-                    finding.finding_name,
-                    finding.category,
-                    finding.severity,
+                    "dotnet_service",
                     object_id,
-                    finding.origin_type,
-                    finding.origin_name,
-                    json.dumps(sanitize_for_jsonb(finding.raw_data)),
-                    json.dumps(data_as_strings),  # Store as array of JSON strings
                 )
+
+                # Store main enrichment result
+                results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
+                await conn.execute(
+                    """
+                    INSERT INTO enrichments (object_id, module_name, result_data)
+                    VALUES ($1, $2, $3)
+                    """,
+                    object_id,
+                    "dotnet_service",
+                    results_escaped,
+                )
+
+                # Store any transforms
+                if enrichment_result.transforms:
+                    for transform in enrichment_result.transforms:
+                        await conn.execute(
+                            """
+                            INSERT INTO transforms (object_id, type, transform_object_id, metadata)
+                            VALUES ($1, $2, $3, $4)
+                            """,
+                            object_id,
+                            transform.type,
+                            transform.object_id,
+                            json.dumps(transform.metadata) if transform.metadata else None,
+                        )
+
+                # Store any findings
+                for finding in findings_list:
+                    # Convert each FileObject to a JSON string
+                    data_as_strings = []
+                    for obj in finding.data:
+                        # Convert the model to a dict first
+                        if hasattr(obj, "model_dump"):
+                            obj_dict = obj.model_dump()
+                        else:
+                            obj_dict = obj
+                        sanitized_obj = sanitize_for_jsonb(obj_dict)
+                        data_as_strings.append(json.dumps(sanitized_obj))
+
+                    await conn.execute(
+                        """
+                        INSERT INTO findings (
+                            finding_name, category, severity, object_id,
+                            origin_type, origin_name, raw_data, data
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        """,
+                        finding.finding_name,
+                        finding.category,
+                        finding.severity,
+                        object_id,
+                        finding.origin_type,
+                        finding.origin_name,
+                        json.dumps(sanitize_for_jsonb(finding.raw_data)),
+                        json.dumps(data_as_strings),  # Store as array of JSON strings
+                    )
 
         logger.info("Successfully stored DotNet results", object_id=object_id, has_findings=len(findings_list) > 0)
 

@@ -11,6 +11,7 @@ from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
 from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyFile, MasterKeyType
+from nemesis_dpapi.exceptions import WriteOnceViolationError
 
 if TYPE_CHECKING:
     import asyncio
@@ -244,6 +245,8 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             enrichment_result.results = results_data
             return enrichment_result
 
+        except WriteOnceViolationError as e:
+            logger.warning(str(e))
         except Exception:
             logger.exception(message="Error in DPAPI masterkey process()")
 
