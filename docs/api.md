@@ -14,7 +14,7 @@ This documentation is automatically generated from the OpenAPI specification.
 
 Submit DPAPI credential for masterkey decryption
 
-Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, and decrypted master keys.
+Submit credential material to decrypt DPAPI master keys. Supports passwords, NTLM hashes, cred keys, domain backup keys, decrypted master keys, and Chromium app-bound-encryption keys.
 
 **Request Body:** `DpapiCredentialRequest` (JSON)
 
