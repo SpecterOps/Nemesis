@@ -2,7 +2,6 @@
 import asyncio
 import json
 import os
-import time
 import uuid
 from datetime import datetime
 
@@ -315,9 +314,6 @@ class WorkflowManager:
         tracer = get_tracer()
 
         try:
-            start_time = time.time()
-
-            # Generate the workflow ID
             instance_id = str(uuid.uuid4()).replace("-", "")
 
             # Normalize input to SingleEnrichmentWorkflowInput if dict
