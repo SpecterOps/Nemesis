@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastapi = { extras = ["all"], version = "^0.115.6" }
+fastapi = { extras = ["all"], version = "^0.121.0" }
 structlog = "^25.1.0"
 dapr = "1.16.0"
 pydantic = "^2.10.4"

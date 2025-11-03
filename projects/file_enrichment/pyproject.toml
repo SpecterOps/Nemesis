@@ -6,7 +6,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastapi = "^0.115.6"
+fastapi = "^0.121.0"
 pydantic = "^2.10.4"
 python-magic = "^0.4.27"
 binaryornot = "^0.4.4"

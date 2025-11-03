@@ -6,7 +6,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
-fastapi = "^0.115.6"
+fastapi = "^0.121.0"
 uvicorn = "^0.34.0"
 dapr = "1.16.0"
 dapr-ext-fastapi = "1.16.0"
@@ -31,4 +31,3 @@ pytest-asyncio = "^1.2.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
