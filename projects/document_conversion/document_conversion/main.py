@@ -25,7 +25,7 @@ from dapr.ext.workflow.logger.options import LoggerOptions
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from fastapi import FastAPI
 from psycopg_pool import ConnectionPool
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 
 logger = get_logger(__name__)
 
