@@ -25,8 +25,8 @@ from dapr.ext.workflow.logger.options import LoggerOptions
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from fastapi import FastAPI
 from psycopg_pool import ConnectionPool
-from PyPDF2 import PdfReader
-from common.queues import FILES_PUBSUB, FILES_NEW_FILE_TOPIC, FILES_FILE_ENRICHED_TOPIC
+from pypdf import PdfReader
+
 logger = get_logger(__name__)
 
 storage = StorageMinio()

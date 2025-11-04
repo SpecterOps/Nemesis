@@ -242,7 +242,7 @@ rule detect_pii
                     origin_type=FindingOrigin.ENRICHMENT_MODULE,
                     origin_name=self.name,
                     object_id=file_enriched.object_id,
-                    severity=8,
+                    severity=4,
                     raw_data={"findings": findings_by_type},
                     data=[display_data],
                 )

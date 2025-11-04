@@ -8,6 +8,9 @@ const DpapiSubmitCredential = () => {
   const [guid, setGuid] = useState('');
   const [domainController, setDomainController] = useState('');
   const [masterKeyData, setMasterKeyData] = useState('');
+  const [source, setSource] = useState('');
+  const [browser, setBrowser] = useState('chrome');
+  const [username, setUsername] = useState('UNKNOWN');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '', details: null });
   const [showDetails, setShowDetails] = useState(false);
@@ -64,6 +67,29 @@ const DpapiSubmitCredential = () => {
       placeholder: 'ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890',
       apiType: 'dpapi_system',
       description: 'System DPAPI credential used for machine-wide encryption. Collect from the DPAPI_SYSTEM LSA secret (e.g., via the SYSTEM and SECURITY registry hives) or using the LSA APIs (e.g. using mimikatz\s lsadump::secrets command).'
+    },
+    {
+      value: 'chromium_app_bound_key',
+      label: 'Chromium App-Bound-Encryption Key',
+      placeholder: '\\x31\\x8c\\x76\\x6c\\xd1\\x79\\x69\\xc0\\xa6\\x18\\x41\\x79\\xc4\\xc6\\x26\\x26\\x35\\x9b\\xd0\\x0b\\xb3\\x46\\x77\\x9e\\x14\\xd0\\x49\\xf1\\x4a\\x10\\xe0\\x1b',
+      apiType: 'chromium_app_bound_key',
+      requiresSource: true,
+      requiresBrowser: true,
+      supportsUsername: true,
+      description: (
+        <>
+          Decrypted Chromium App-Bound-Encryption key (32 bytes). Can be in hex format (64 characters) or Python escaped format (\x31\x8c...).
+          Extract using tools like{' '}
+          <a
+            href="https://github.com/KingOfTheNOPs/cookie-monster/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            cookie-monster
+          </a>.
+        </>
+      )
     }
   ];
 
@@ -72,6 +98,9 @@ const DpapiSubmitCredential = () => {
   const requiresGuid = selectedType?.requiresGuid || false;
   const supportsDomainController = selectedType?.supportsDomainController || false;
   const isStructuredValue = selectedType?.structuredValue || false;
+  const requiresSource = selectedType?.requiresSource || false;
+  const requiresBrowser = selectedType?.requiresBrowser || false;
+  const supportsUsername = selectedType?.supportsUsername || false;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -129,6 +158,11 @@ const DpapiSubmitCredential = () => {
       return;
     }
 
+    if (requiresSource && !source.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a Source' });
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage({ type: '', text: '', details: null });
 
@@ -152,7 +186,10 @@ const DpapiSubmitCredential = () => {
           }),
           ...(requiresUserSid && { user_sid: userSid }),
           ...(requiresGuid && guid.trim() && { guid }),
-          ...(supportsDomainController && domainController.trim() && { domain_controller: domainController })
+          ...(supportsDomainController && domainController.trim() && { domain_controller: domainController }),
+          ...(requiresSource && { source: source }),
+          ...(requiresBrowser && { browser: browser }),
+          ...(supportsUsername && { username: username })
         }),
       });
 
@@ -178,6 +215,9 @@ const DpapiSubmitCredential = () => {
         setGuid('');
         setDomainController('');
         setMasterKeyData('');
+        setSource('');
+        setBrowser('chrome');
+        setUsername('UNKNOWN');
       } else {
         let errorMessage = `HTTP ${response.status}`;
         let errorDetails = null;
@@ -249,6 +289,9 @@ const DpapiSubmitCredential = () => {
                   setGuid('');
                   setDomainController('');
                   setMasterKeyData('');
+                  setSource('');
+                  setBrowser('chrome');
+                  setUsername('UNKNOWN');
                   setMessage({ type: '', text: '', details: null });
                   setShowDetails(false);
                 }}
@@ -324,6 +367,67 @@ const DpapiSubmitCredential = () => {
             </div>
           )}
 
+          {/* Source, Browser, and Username - For chromium_app_bound_key */}
+          {requiresSource && (
+            <div className="grid grid-cols-3 gap-4">
+              {/* Source Input */}
+              <div className="col-span-1">
+                <label htmlFor="source" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Source <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="source"
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                  placeholder="HOSTNAME01"
+                  title="Auto-prefixed with host://"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  required
+                />
+              </div>
+
+              {/* Browser Input */}
+              <div className="col-span-1">
+                <label htmlFor="browser" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Browser <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    id="browser"
+                    value={browser}
+                    onChange={(e) => setBrowser(e.target.value)}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 appearance-none pr-10"
+                    required
+                  >
+                    <option value="chrome">Chrome</option>
+                    <option value="edge">Edge</option>
+                    <option value="brave">Brave</option>
+                    <option value="opera">Opera</option>
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                    <ChevronDown className="h-5 w-5 text-gray-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Username Input */}
+              <div className="col-span-1">
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="UNKNOWN"
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Master Key Data - For master_key_guid_pair */}
           {isStructuredValue && (
             <div>
@@ -371,7 +475,8 @@ const DpapiSubmitCredential = () => {
                 isSubmitting ||
                 (isStructuredValue ? !masterKeyData.trim() : !credentialValue.trim()) ||
                 (requiresUserSid && !userSid.trim()) ||
-                (requiresGuid && !guid.trim())
+                (requiresGuid && !guid.trim()) ||
+                (requiresSource && !source.trim())
               }
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >

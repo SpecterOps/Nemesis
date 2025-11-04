@@ -157,7 +157,7 @@ class YaraScanner(EnrichmentModule):
                         origin_type=FindingOrigin.ENRICHMENT_MODULE,
                         origin_name=self.name,
                         object_id=file_enriched.object_id,
-                        severity=8,
+                        severity=6,
                         raw_data={"match": yara_match},
                         data=[display_data],
                     )

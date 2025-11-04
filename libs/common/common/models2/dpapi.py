@@ -150,6 +150,49 @@ class DpapiSystemCredentialRequest(BaseModel):
         return v
 
 
+class ChromiumAppBoundKeyCredential(BaseModel):
+    """Chromium App-Bound-Encryption key credential."""
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    type: Literal["chromium_app_bound_key"]
+    value: str  # Hex string or Python escaped format (\\x5f\\x1a...)
+    source: str  # Required source identifier
+    browser: Literal["chrome", "edge", "brave", "opera"] = "chrome"  # Browser type
+    username: str = "UNKNOWN"  # Optional username, defaults to UNKNOWN
+
+    @field_validator("value")
+    @classmethod
+    def validate_key_format(cls, v):
+        """Validate that value is 32 bytes in either hex or escaped format."""
+        # Try to parse as Python escaped format first (e.g., \x5f\x1a...)
+        if "\\x" in v:
+            try:
+                # Remove any quotes and decode the escaped string
+                cleaned = v.strip().strip('"').strip("'")
+                # Convert escaped format to bytes
+                key_bytes = cleaned.encode().decode("unicode_escape").encode("latin1")
+                if len(key_bytes) != 32:
+                    raise ValueError(
+                        f"Chromium App-Bound key must be exactly 32 bytes, got {len(key_bytes)} bytes from escaped format"
+                    )
+                return v
+            except Exception as e:
+                raise ValueError(f"Invalid escaped format for Chromium App-Bound key: {str(e)}") from e
+
+        # Try to parse as hex format (64 hex characters = 32 bytes)
+        if re.match(r"^[0-9a-fA-F]+$", v):
+            if len(v) != 64:
+                raise ValueError(
+                    f"Chromium App-Bound key in hex format must be exactly 64 hex characters (32 bytes), got {len(v)} characters"
+                )
+            return v
+
+        raise ValueError(
+            "Chromium App-Bound key must be either 64 hex characters or Python escaped format (\\x5f\\x1a...)"
+        )
+
+
 def get_credential_type(v):
     """Discriminator function to determine credential type from 'type' field."""
     if isinstance(v, dict):
@@ -166,6 +209,7 @@ type DpapiCredentialRequest = Annotated[
         Annotated[DomainBackupKeyCredential, Tag("domain_backup_key")],
         Annotated[MasterKeyGuidPairList, Tag("master_key_guid_pair")],
         Annotated[DpapiSystemCredentialRequest, Tag("dpapi_system")],
+        Annotated[ChromiumAppBoundKeyCredential, Tag("chromium_app_bound_key")],
     ],
     Field(discriminator=Discriminator(get_credential_type)),
 ]

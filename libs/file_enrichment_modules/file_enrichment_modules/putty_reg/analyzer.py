@@ -158,7 +158,7 @@ rule has_putty_reg
                     origin_type=FindingOrigin.ENRICHMENT_MODULE,
                     origin_name=self.name,
                     object_id=file_enriched.object_id,
-                    severity=5,
+                    severity=3,
                     raw_data={"sessions": sessions},
                     data=[display_data],
                 )

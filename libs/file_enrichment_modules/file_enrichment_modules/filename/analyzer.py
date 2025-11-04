@@ -92,7 +92,7 @@ class FilenameScanner(EnrichmentModule):
                     origin_type=FindingOrigin.ENRICHMENT_MODULE,
                     origin_name=self.name,
                     object_id=file_enriched.object_id,
-                    severity=4,
+                    severity=3,
                     raw_data={"filename": file_enriched.file_name, "matches": matches},
                     data=[display_data],
                 )
