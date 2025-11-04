@@ -4,11 +4,11 @@ import asyncio
 import base64
 import logging
 import re
-import asyncpg
 import urllib.parse
 from typing import Annotated
 from uuid import UUID
 
+import asyncpg
 from chromium import (
     retry_decrypt_chrome_keys_for_masterkey,
     retry_decrypt_chromium_data,
@@ -329,9 +329,7 @@ async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: 
     return {"status": "success", "type": "dpapi_system"}
 
 
-async def _handle_chromium_app_bound_key(
-        dpapi_manager: DpapiManagerDep,
-        request: ChromiumAppBoundKeyCredential) -> dict:
+async def _handle_chromium_app_bound_key(dpapi_manager: DpapiManager, request: ChromiumAppBoundKeyCredential) -> dict:
     """Handle Chromium App-Bound-Encryption key credential submission."""
 
     # Parse the key value from either format
@@ -348,7 +346,7 @@ async def _handle_chromium_app_bound_key(
     # Apply source prefix logic (same as FileUpload.tsx)
     source = request.source.strip()
     # Check if source already has a URI scheme
-    if not re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', source):
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", source):
         # No scheme detected, apply host:// prefix by default
         source = f"host://{source}"
 
@@ -412,9 +410,7 @@ async def _handle_chromium_app_bound_key(
 
             # Finally, try to decrypt chromium cookies and logins with newly submitted key
             chromium_data_result = await retry_decrypt_chromium_data(
-                UUID(int=0),
-                dpapi_manager,
-                global_vars.asyncpg_pool
+                UUID(int=0), dpapi_manager, global_vars.asyncpg_pool
             )
 
             logger.debug(
@@ -430,7 +426,7 @@ async def _handle_chromium_app_bound_key(
                 # If username is not the default "UNKNOWN", fail immediately
                 raise HTTPException(
                     status_code=400,
-                    detail=f"A Chromium app-bound key already exists for source '{source}', browser '{browser}', and username '{try_username}'. Please use a different username or source."
+                    detail=f"A Chromium app-bound key already exists for source '{source}', browser '{browser}', and username '{try_username}'. Please use a different username or source.",
                 ) from e
 
             # If username is "UNKNOWN", try incrementing
@@ -438,7 +434,7 @@ async def _handle_chromium_app_bound_key(
                 # Exhausted all attempts
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unable to insert Chromium app-bound key after {max_attempts} attempts. Too many entries with username pattern 'UNKNOWN*' for source '{source}' and browser '{browser}'."
+                    detail=f"Unable to insert Chromium app-bound key after {max_attempts} attempts. Too many entries with username pattern 'UNKNOWN*' for source '{source}' and browser '{browser}'.",
                 ) from e
 
             # Continue to next attempt
@@ -460,15 +456,11 @@ async def _handle_chromium_app_bound_key(
                 error=str(e),
             )
             raise HTTPException(
-                status_code=500,
-                detail=f"Database error while inserting Chromium app-bound key: {str(e)}"
+                status_code=500, detail=f"Database error while inserting Chromium app-bound key: {str(e)}"
             ) from e
 
     # Should never reach here, but just in case
-    raise HTTPException(
-        status_code=500,
-        detail="Unexpected error during Chromium app-bound key insertion"
-    )
+    raise HTTPException(status_code=500, detail="Unexpected error during Chromium app-bound key insertion")
 
 
 async def _handle_password_based_credential(

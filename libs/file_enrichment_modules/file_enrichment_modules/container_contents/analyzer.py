@@ -7,7 +7,7 @@ from common.logger import get_logger
 from common.models import EnrichmentResult, File, Transform
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from file_enrichment_modules.container_contents.containers import ContainerExtractor
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -79,12 +79,12 @@ class ContainerContentsAnalyzer(EnrichmentModule):
             extracted_files = []
 
             # Initialize DaprClient and ContainerExtractor
-            with DaprClient() as dapr_client:
+            async with DaprClient() as dapr_client:
                 # Create a subclass to capture extracted files
                 class TrackingContainerExtractor(ContainerExtractor):
-                    def publish_file_message(self, file_message: File):
+                    async def publish_file_message(self, file_message: File):
                         extracted_files.append(file_message)
-                        super().publish_file_message(file_message)
+                        await super().publish_file_message(file_message)
 
                 tracking_extractor = TrackingContainerExtractor(
                     self.storage,
@@ -93,7 +93,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
                 )
 
                 # Extract the container contents
-                tracking_extractor.extract(file_enriched)
+                await tracking_extractor.extract(file_enriched)
 
                 # Generate and store the summary report
                 summary_content = self._generate_container_summary(extracted_files)

@@ -11,7 +11,7 @@ from common.models import Alert
 from common.queues import ALERTING_NEW_ALERT_TOPIC, ALERTING_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from .. import global_vars
@@ -119,7 +119,7 @@ async def publish_alerts_for_findings(
         )
 
         if findings:
-            with DaprClient(headers_callback=get_trace_injector()) as client:
+            async with DaprClient(headers_callback=get_trace_injector()) as client:
                 if file_enriched.path:
                     file_path = file_enriched.path
                 else:
@@ -172,7 +172,7 @@ async def publish_alerts_for_findings(
                         severity=severity,
                         file_path=file_path,
                     )
-                    client.publish_event(
+                    await client.publish_event(
                         pubsub_name=ALERTING_PUBSUB,
                         topic_name=ALERTING_NEW_ALERT_TOPIC,
                         data=json.dumps(alert.model_dump(exclude_unset=True)),

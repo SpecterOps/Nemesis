@@ -9,7 +9,6 @@ from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
 from file_enrichment_modules.dpapi_blob.dpapi_helpers import carve_dpapi_blobs_from_file
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import Blob, BlobDecryptionError, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
@@ -28,7 +27,6 @@ class DpapiBlobAnalyzer(EnrichmentModule):
         self.storage = StorageMinio()
 
         self.asyncpg_pool = None  # type: ignore
-        self.dapr_client = DaprClient()
         self.size_limit = 50000000  # only check the first 50 megs for DPAPI blobs, for performance
         self.max_blobs = 100
         self.dpapi_manager: DpapiManager = None  # type: ignore

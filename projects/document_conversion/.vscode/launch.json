@@ -1,0 +1,38 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: document_conversion",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "document_conversion.main:app",
+                "--reload",
+                "--workers",
+                "1",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8000"
+            ],
+            "env": {
+                "APP_ID": "document-conversion",
+                "DAPR_GRPC_PORT": "50003",
+                "DAPR_HTTP_PORT": "3503",
+                "ENVIRONMENT": "dev",
+                "LOG_LEVEL": "debug",
+                "MAX_PARALLEL_WORKFLOWS": "2",
+                "MINIO_ENDPOINT": "localhost:9000",
+                "POSTGRES_HOST": "localhost",
+                "WORKFLOW_RUNTIME_LOG_LEVEL": "INFO",
+                "WORKFLOW_CLIENT_LOG_LEVEL": "INFO",
+            },
+            "jinja": true,
+            "justMyCode": false
+        }
+    ]
+}

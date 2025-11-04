@@ -14,12 +14,14 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Rust
+# Pin to a specific version for reproducibility
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH
+    PATH=/usr/local/cargo/bin:$PATH \
+    RUST_VERSION=1.83.0
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup-init.sh \
-    && sh rustup-init.sh -y --no-modify-path --default-toolchain stable \
+    && sh rustup-init.sh -y --no-modify-path --default-toolchain ${RUST_VERSION} \
     && rm rustup-init.sh \
     && chmod -R a+w $RUSTUP_HOME $CARGO_HOME
 
@@ -34,22 +36,35 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup-init.sh \
 #     mv /signature-base-${YARA_COMMIT} /signature-base && \
 #     rm /tmp/signature-base.tar.gz
 
+# Copy dependency files first for better caching
+# This layer will only rebuild if pyproject.toml or poetry.lock files change
 COPY ./projects/file_enrichment/poetry.lock ./projects/file_enrichment/pyproject.toml /src/projects/file_enrichment/
 
+# Copy all libs (needed for local path dependencies in pyproject.toml)
+# Poetry needs the full lib code to resolve path dependencies
 COPY ./libs /src/libs
-COPY ./projects/file_enrichment /src/projects/file_enrichment/
 
 WORKDIR /src/projects/file_enrichment
+
+# Install all dependencies including local libs
+# This layer is cached unless poetry.lock or lib dependencies change
+RUN poetry install --no-root
+
+# Copy the project source code last
+# Changes to project code won't invalidate the dependency cache above
+COPY ./projects/file_enrichment /src/projects/file_enrichment/
+
+# Install the project itself in editable mode (fast since dependencies are already installed)
+# This ensures the project is importable and poetry run commands work
+RUN poetry install
 
 ########################
 # Development
 ########################
 FROM base AS dev
 #COPY --from=base /signature-base /signature-base
-COPY --from=base /src /src
 
 WORKDIR /src/projects/file_enrichment
-RUN poetry install
 # RUN poetry run python /src/libs/file_enrichment_modules/file_enrichment_modules/yara/clean_yara_rules.py \
 #     -i /signature-base/ \
 #     -o /src/libs/file_enrichment_modules/file_enrichment_modules/yara/signature-base.yara
@@ -86,8 +101,7 @@ ENTRYPOINT ["/bin/sh", "-c", " \
 ########################
 # Production
 ########################
-FROM dev AS bundle
-COPY --from=base /src /src
+FROM base AS bundle
 
 WORKDIR /src/projects/file_enrichment
 RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv

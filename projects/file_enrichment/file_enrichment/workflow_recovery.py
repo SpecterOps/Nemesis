@@ -6,7 +6,7 @@ import random
 from common.logger import get_logger
 from common.models import File
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 
 from .tracing import get_trace_injector
 
@@ -97,7 +97,7 @@ async def recover_interrupted_workflows(pool) -> None:
             return
 
         # Republish recovered files with priority
-        with DaprClient(headers_callback=get_trace_injector()) as client:
+        async with DaprClient(headers_callback=get_trace_injector()) as client:
             for file_data in recovered_files:
                 try:
                     # Filter out None values for File object creation
@@ -107,7 +107,7 @@ async def recover_interrupted_workflows(pool) -> None:
                     file_obj = File(**clean_file_data)
 
                     # Publish with priority=3 for immediate processing
-                    client.publish_event(
+                    await client.publish_event(
                         pubsub_name=FILES_PUBSUB,
                         topic_name=FILES_NEW_FILE_TOPIC,
                         data=json.dumps(file_obj.model_dump(exclude_unset=True, mode="json")),

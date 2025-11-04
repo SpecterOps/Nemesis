@@ -16,6 +16,7 @@ from common.db import get_postgres_connection_str
 from common.helpers import can_convert_to_pdf, can_extract_plaintext, extract_all_strings
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, WORKFLOW_RUNTIME_LOG_LEVEL, get_logger
 from common.models import CloudEvent, File, FileEnriched, Transform
+from common.queues import FILES_FILE_ENRICHED_TOPIC, FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
@@ -30,7 +31,7 @@ from pypdf import PdfReader
 logger = get_logger(__name__)
 
 storage = StorageMinio()
-db_pool = None
+db_pool: ConnectionPool = None
 workflow_client: DaprWorkflowClient = None
 
 max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 3))  # maximum workflows that can run at a time

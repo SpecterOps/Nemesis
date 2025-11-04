@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 
 @workflow_activity
-async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict):
+async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict) -> None:
     """
     Perform 'basic' analysis on a file and save to database. Run for every file.
 
@@ -36,8 +36,7 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict):
     with global_vars.storage.download(object_id) as file:
         file_enriched_dict = process_basic_analysis(file.name, file_dict)
         await save_file_enriched_to_db(file_enriched_dict)
-
-        return file_enriched_dict
+        # return file_enriched_dict
 
 
 def parse_timestamp(ts):

@@ -6,7 +6,7 @@ from common.logger import get_logger
 from common.queues import FILES_FILE_ENRICHED_TOPIC, FILES_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from ..tracing import get_trace_injector
@@ -25,14 +25,14 @@ async def publish_enriched_file(ctx: WorkflowActivityContext, object_id: str):
     logger.info("Executing activity: publish_enriched_file", object_id=object_id)
 
     try:
-        with DaprClient(headers_callback=get_trace_injector()) as client:
+        async with DaprClient(headers_callback=get_trace_injector()) as client:
             data = file_enriched.model_dump(
                 exclude_unset=True,
                 mode="json",
             )
 
             # Publish to pubsub
-            client.publish_event(
+            await client.publish_event(
                 pubsub_name=FILES_PUBSUB,
                 topic_name=FILES_FILE_ENRICHED_TOPIC,
                 data=json.dumps(data),

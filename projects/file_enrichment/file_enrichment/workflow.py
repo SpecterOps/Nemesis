@@ -5,6 +5,7 @@ import dapr.ext.workflow as wf
 from common.logger import get_logger
 from common.models import File
 from common.workflows.setup import wf_runtime
+from durabletask.task import TaskFailedError
 from file_enrichment_modules.module_loader import ModuleLoader
 from file_enrichment_modules.yara.yara_manager import YaraRuleManager
 from nemesis_dpapi import DpapiManager
@@ -81,7 +82,6 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
     """Main workflow that orchestrates all enrichment activities."""
 
     file_obj = File.model_validate(file_dict)
-    execution_order: list[str] = global_vars.module_execution_order
     object_id = file_obj.object_id
 
     if not ctx.is_replaying:
@@ -90,7 +90,7 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
     start_time = ctx.current_utc_datetime
 
     try:
-        file_enriched = yield ctx.call_activity(get_basic_analysis, input=file_dict)
+        yield ctx.call_activity(get_basic_analysis, input=file_dict)
         if not ctx.is_replaying:
             logger.debug(
                 "get_basic_analysis complete",
@@ -100,85 +100,58 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
         enrichment_tasks = [
             ctx.call_activity(
                 run_enrichment_modules,
-                input={"object_id": object_id, "execution_order": execution_order},
+                input={"object_id": object_id},
             ),
             ctx.call_activity(check_file_linkings, input={"object_id": object_id}),
-            ctx.call_activity(handle_file_if_plaintext, input=file_enriched),
+            ctx.call_activity(handle_file_if_plaintext, input={"object_id": object_id}),
         ]
 
-        try:
-            if not ctx.is_replaying:
-                results = yield wf.when_all(enrichment_tasks)
-                for r in results:
-                    logger.debug(f"enrichment_tasks result: {r}")
+        results = yield wf.when_all(enrichment_tasks)
 
-                logger.debug(
-                    "Enrichment tasks complete - handle_file_if_plaintext, check_file_linkings, enrichment_module_workflow",
-                    processing_time=f"{ctx.current_utc_datetime - start_time}",
-                )
-        except Exception as e:
-            import traceback
+        if not ctx.is_replaying:
+            for r in results:
+                logger.debug(f"enrichment_tasks result: {r}")
 
-            # Extract detailed information about each task
-            task_details = []
-            for i, task in enumerate(enrichment_tasks):
-                task_info = {
-                    "index": i,
-                    "type": type(task).__name__,
-                    "repr": repr(task),
-                }
-                # Try to extract activity name if available
-                activity_name = getattr(task, "_activity_name", None)
-                if activity_name is not None:
-                    task_info["activity_name"] = activity_name
-                task_input = getattr(task, "_input", None)
-                if task_input is not None:
-                    task_info["input"] = str(task_input)[:200]  # Truncate long inputs
-                task_details.append(task_info)
-
-            logger.exception(
-                "Error in enrichment tasks - handle_file_if_plaintext or enrichment_module_workflow",
-                error=str(e),
-                error_type=type(e).__name__,
-                error_args=e.args,
-                traceback=traceback.format_exc(),
-                enrichment_tasks_count=len(enrichment_tasks),
-                enrichment_tasks_details=task_details,
+            logger.debug(
+                "Enrichment tasks complete - handle_file_if_plaintext, check_file_linkings, enrichment_module_workflow",
+                processing_time=f"{ctx.current_utc_datetime - start_time}",
             )
-            raise
 
-        try:
-            final_tasks = [
-                ctx.call_activity(publish_enriched_file, input=object_id),
-                # ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
-                ctx.call_activity(publish_findings_alerts, input=object_id),
-            ]
+        final_tasks = [
+            ctx.call_activity(publish_enriched_file, input=object_id),
+            # ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
+            ctx.call_activity(publish_findings_alerts, input=object_id),
+        ]
 
-            if not ctx.is_replaying:
-                results = yield wf.when_all(final_tasks)
-                for r in results:
-                    logger.debug(f"final_tasks result: {r}")
+        if not ctx.is_replaying:
+            results = yield wf.when_all(final_tasks)
+            for r in results:
+                logger.debug(f"final_tasks result: {r}")
 
-                logger.debug(
-                    "Final tasks complete - publish_enriched_file, publish_findings_alerts",
-                    processing_time=f"{ctx.current_utc_datetime - start_time}",
-                )
-        except Exception as e:
-            logger.exception(
-                "Error in final tasks - publish_enriched_file, publish_findings_alerts",
-                error=str(e),
+            logger.debug(
+                "Final tasks complete - publish_enriched_file, publish_findings_alerts",
+                processing_time=f"{ctx.current_utc_datetime - start_time}",
             )
-            raise
 
         if not ctx.is_replaying:
             logger.info(
                 "All workflow activites have completed",
                 processing_time=f"{ctx.current_utc_datetime - start_time}",
             )
+
         return {}
 
+    except TaskFailedError as e:
+        logger.exception(
+            "An activity failed in the enrichment workflow",
+            workflow_input=file_dict,
+            error_type=e.details.error_type,
+            error_message=e.details.message,
+            stack_trace=e.details.stack_trace,
+        )
+
     except Exception:
-        logger.exception("Error in main workflow execution", workflow_input=file_dict)
+        logger.exception("Un execution", workflow_input=file_dict)
         raise
 
 

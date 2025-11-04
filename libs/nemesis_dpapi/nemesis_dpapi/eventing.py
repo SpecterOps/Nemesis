@@ -9,7 +9,7 @@ from typing import get_args
 from uuid import UUID
 
 from common.queues import DPAPI_EVENTS_TOPIC, DPAPI_PUBSUB
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from dapr.clients.grpc._response import TopicEventResponse, TopicEventResponseStatus
 from dapr.clients.grpc.subscription import SubscriptionMessage
 from pydantic import Field, field_validator, model_validator
@@ -167,7 +167,7 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
         new_event = TypedDpapiEvent(type_name=event_type, evnt=event)
 
         logger.debug(f"Publishing event of type {event_type} to Dapr")
-        self._dapr_client.publish_event(
+        await self._dapr_client.publish_event(
             pubsub_name=DPAPI_PUBSUB,
             topic_name=DPAPI_EVENTS_TOPIC,
             data=new_event.model_dump_json(),
@@ -204,7 +204,7 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
         """Start the Dapr client (if needed)."""
 
         logger.info("Starting Dapr subscriber handler...")
-        close_fn = self._dapr_client.subscribe_with_handler(
+        close_fn = await self._dapr_client.subscribe_with_handler(
             pubsub_name=DPAPI_PUBSUB,
             topic=DPAPI_EVENTS_TOPIC,
             handler_fn=self.process_message,

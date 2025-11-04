@@ -10,7 +10,7 @@ from common.models import DotNetInput, EnrichmentResult
 from common.queues import DOTNET_INPUT_TOPIC, DOTNET_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
@@ -134,8 +134,8 @@ class DotNetAnalyzer(EnrichmentModule):
 
             # publish a `dotnet-input` message for the process-heavy decompilation and InspectAssembly analysis in `dotnet_service`
             dotnet_input = DotNetInput(object_id=object_id)
-            with DaprClient() as client:
-                client.publish_event(
+            async with DaprClient() as client:
+                await client.publish_event(
                     pubsub_name=DOTNET_PUBSUB,
                     topic_name=DOTNET_INPUT_TOPIC,
                     data=json.dumps(dotnet_input.model_dump()),

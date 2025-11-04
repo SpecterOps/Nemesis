@@ -14,7 +14,7 @@ import py7zr
 from common.logger import get_logger
 from common.models import File, FileEnriched
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 
 logger = get_logger(__name__)
 
@@ -369,17 +369,17 @@ class ContainerExtractor:
             )
             return None
 
-    def publish_file_message(self, file_message: File):
+    async def publish_file_message(self, file_message: File):
         """Publish file message to the message bus."""
         data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
-        self.dapr_client.publish_event(
+        await self.dapr_client.publish_event(
             pubsub_name=FILES_PUBSUB,
             topic_name=FILES_NEW_FILE_TOPIC,
             data=data,
             data_content_type="application/json",
         )
 
-    def process_extracted_file(self, extracted_file_path, tmp_dir, file_enriched):
+    async def process_extracted_file(self, extracted_file_path, tmp_dir, file_enriched):
         """Process a single extracted file with security checks."""
         try:
             # Skip if not a file or empty
@@ -445,7 +445,7 @@ class ContainerExtractor:
                 nesting_level=nesting_level,
             )
 
-            self.publish_file_message(file_message)
+            await self.publish_file_message(file_message)
 
             logger.info(
                 f"Submitted extracted file '{real_path}' to Nemesis",
@@ -462,7 +462,7 @@ class ContainerExtractor:
 
         return False
 
-    def extract(self, file_enriched: FileEnriched):
+    async def extract(self, file_enriched: FileEnriched):
         """Process a container file and extract its contents."""
         try:
             with self.storage.download(file_enriched.object_id) as temp_file:
@@ -491,7 +491,7 @@ class ContainerExtractor:
                             )
                             break
 
-                        if self.process_extracted_file(str(extracted_file_path), tmp_dir, file_enriched):
+                        if await self.process_extracted_file(str(extracted_file_path), tmp_dir, file_enriched):
                             processed_files += 1
 
                     logger.info(

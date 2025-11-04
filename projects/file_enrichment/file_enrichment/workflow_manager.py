@@ -9,7 +9,7 @@ import asyncpg
 from common.logger import get_logger
 from common.models import File, SingleEnrichmentWorkflowInput
 from common.queues import WORKFLOW_MONITOR_COMPLETED_TOPIC, WORKFLOW_MONITOR_PUBSUB
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
 from .tracing import get_trace_injector, get_tracer
@@ -57,10 +57,6 @@ class WorkflowManager:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit - cleanup background tasks (pool is externally managed)"""
         logger.info("Cleaning up WorkflowManager...")
-
-        # Cleanup tracking service first
-        if self.tracking_service:
-            await self.tracking_service.cleanup()
 
         # Cancel all background tasks
         for task in self.background_tasks:
@@ -141,7 +137,7 @@ class WorkflowManager:
 
             # Only publish if we have a container ID to track
             if object_id and originating_container_id:
-                with DaprClient(headers_callback=get_trace_injector()) as client:
+                async with DaprClient(headers_callback=get_trace_injector()) as client:
                     completion_data = {
                         "object_id": str(object_id),
                         "originating_container_id": str(originating_container_id),
@@ -151,7 +147,7 @@ class WorkflowManager:
                         "timestamp": datetime.now().isoformat(),
                     }
 
-                    client.publish_event(
+                    await client.publish_event(
                         pubsub_name=WORKFLOW_MONITOR_PUBSUB,
                         topic_name=WORKFLOW_MONITOR_COMPLETED_TOPIC,
                         data=json.dumps(completion_data),
@@ -377,10 +373,6 @@ class WorkflowManager:
     async def cleanup(self):
         """Clean up background tasks during shutdown (pool is externally managed)"""
         logger.info("Cleaning up WorkflowManager background tasks")
-
-        # Cleanup tracking service first
-        if self.tracking_service:
-            await self.tracking_service.cleanup()
 
         # Cancel all background tasks
         for task in self.background_tasks:

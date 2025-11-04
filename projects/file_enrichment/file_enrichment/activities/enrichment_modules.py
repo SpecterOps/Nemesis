@@ -22,7 +22,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
     """Activity that runs all enrichment modules for a file with single file download."""
 
     object_id = activity_input["object_id"]
-    execution_order = activity_input["execution_order"]
+    execution_order = global_vars.module_execution_order
 
     tracer = get_tracer()
 
