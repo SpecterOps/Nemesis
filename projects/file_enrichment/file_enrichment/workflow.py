@@ -107,9 +107,11 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
         ]
 
         try:
-            yield wf.when_all(enrichment_tasks)
-
             if not ctx.is_replaying:
+                results = yield wf.when_all(enrichment_tasks)
+                for r in results:
+                    logger.debug(f"enrichment_tasks result: {r}")
+
                 logger.debug(
                     "Enrichment tasks complete - handle_file_if_plaintext, check_file_linkings, enrichment_module_workflow",
                     processing_time=f"{ctx.current_utc_datetime - start_time}",
@@ -145,16 +147,18 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
             )
             raise
 
-        final_tasks = [
-            ctx.call_activity(publish_enriched_file, input=object_id),
-            # ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
-            ctx.call_activity(publish_findings_alerts, input=object_id),
-        ]
-
         try:
-            yield wf.when_all(final_tasks)
+            final_tasks = [
+                ctx.call_activity(publish_enriched_file, input=object_id),
+                # ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
+                ctx.call_activity(publish_findings_alerts, input=object_id),
+            ]
 
             if not ctx.is_replaying:
+                results = yield wf.when_all(final_tasks)
+                for r in results:
+                    logger.debug(f"final_tasks result: {r}")
+
                 logger.debug(
                     "Final tasks complete - publish_enriched_file, publish_findings_alerts",
                     processing_time=f"{ctx.current_utc_datetime - start_time}",

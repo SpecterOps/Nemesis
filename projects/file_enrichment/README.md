@@ -74,3 +74,18 @@ Environment variables for tuning performance:
 - PostgreSQL connection pooling
 - Workflow status tracking
 - Module execution metrics
+
+
+# Debugging
+1. Start
+```
+DAPR_LOG_LEVEL=warn docker compose -f compose.yaml -f compose.prod.build.yaml -f projects/file_enrichment/docker-compose.debug.yml --profile monitoring up -V -d --no-deps -V --wait  file-enrichment-dapr
+```
+
+2. Launch the debugged application in VS code (F5)
+
+3. Now that it's running, restart the file enrichment services:
+```
+DAPR_LOG_LEVEL=debug docker compose -f compose.yaml -f compose.prod.build.yaml -f projects/file_enrichment/docker-compose.debug.yml --profile monitoring up -V -d --no-deps -V --wait
+file-enrichment file-enrichment-dapr
+```

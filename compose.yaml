@@ -13,6 +13,7 @@ volumes:
   postgres_data:
   prometheus_data:
   rabbitmq_data:
+  scheduler_data:
   empty:
   empty-mounted-containers:
 
@@ -116,12 +117,12 @@ services:
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
       - RUST_LOG=warn
-      - SNIPPET_LENGTH=512        # context length around any Nosey Parker matches
-      - MAX_CONCURRENT_FILES=2    # maximum number of concurrent files to scan
-      - MAX_FILE_SIZE_MB=200      # maximum file size to scan
-      - DECOMPRESS_ZIPS=true      # whether to decompress+scan zips
-      - MAX_EXTRACT_SIZE_MB=1000  # maximum number of bytes to extract if decompressing
-      - PUBSUB_NAME=noseyparker   # Name of the Dapr pubsub resource
+      - SNIPPET_LENGTH=512 # context length around any Nosey Parker matches
+      - MAX_CONCURRENT_FILES=2 # maximum number of concurrent files to scan
+      - MAX_FILE_SIZE_MB=200 # maximum file size to scan
+      - DECOMPRESS_ZIPS=true # whether to decompress+scan zips
+      - MAX_EXTRACT_SIZE_MB=1000 # maximum number of bytes to extract if decompressing
+      - PUBSUB_NAME=noseyparker # Name of the Dapr pubsub resource
       - OUTPUT_TOPIC=noseyparker_output # Name of the output topic in Dapr
     volumes:
       - ./projects/noseyparker_scanner/custom_rules/:/opt/noseyparker:ro
@@ -241,6 +242,7 @@ services:
       DAPR_GRPC_PORT: 50003
       DAPR_HTTP_PORT: 3503
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MAX_PARALLEL_WORKFLOWS: ${ENRICHMENT_MAX_PARALLEL_WORKFLOWS:-5}
       MAX_WORKFLOW_EXECUTION_TIME: ${MAX_WORKFLOW_EXECUTION_TIME:-300}
       NEMESIS_MONITORING: ${NEMESIS_MONITORING:-disabled}
       NEMESIS_URL: ${NEMESIS_URL:?}
@@ -252,11 +254,11 @@ services:
       RIGGING_GENERATOR_TRIAGE: ${RIGGING_GENERATOR_TRIAGE:-}
       WORKFLOW_RUNTIME_LOG_LEVEL: ${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
       WORKFLOW_CLIENT_LOG_LEVEL: ${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
-      MAX_PARALLEL_WORKFLOWS: ${ENRICHMENT_MAX_PARALLEL_WORKFLOWS:-5}
     logging: *logging-config
     depends_on: &file-enrichment-depends-on
       postgres: { condition: service_started }
       placement: { condition: service_started }
+      scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   file-enrichment-dapr: &file-enrichment-dapr-template
     image: "daprio/daprd:1.16.2"
@@ -277,10 +279,10 @@ services:
         "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
-        "--resources-path",
-        "/dapr/components",
         "--log-level",
         "${DAPR_LOG_LEVEL:-warn}",
+        "--resources-path",
+        "/dapr/components",
         "--config",
         "/dapr/configuration/file_enrichment_monitoring_${NEMESIS_MONITORING:-disabled}.yaml",
         "--enable-metrics",
@@ -307,14 +309,13 @@ services:
       RABBITMQ_CONNECTION_STRING: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
-      MAX_PARALLEL_WORKFLOWS: ${MAX_PARALLEL_WORKFLOWS:-1}
+      MAX_PARALLEL_WORKFLOWS: ${MAX_PARALLEL_WORKFLOWS:-5}
     depends_on: &file-enrichment-dapr-depends-on
       file-enrichment: { condition: service_started }
       placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:file-enrichment"
-
 
   # file-enrichment-1:
   #   <<: *file-enrichment-template
@@ -344,7 +345,6 @@ services:
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-2"
 
-
   # file-enrichment-3:
   #   <<: *file-enrichment-template
   #   environment:
@@ -358,10 +358,6 @@ services:
   #     scheduler: { condition: service_started }
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-3"
-
-
-
-
 
   frontend:
     image: ghcr.io/specterops/nemesis/frontend:latest
@@ -396,7 +392,7 @@ services:
       - HASURA_GRAPHQL_URL=http://hasura:8080/v1/graphql
       - JUPYTER_PASSWORD=${JUPYTER_PASSWORD:-}
     volumes:
-    - "./projects/jupyter/notebooks:/home/jovyan/work"
+      - "./projects/jupyter/notebooks:/home/jovyan/work"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/jupyter/api"]
       interval: 30s
@@ -680,7 +676,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
     volumes:
-    - minio_data:/data
+      - minio_data:/data
     command: server /data --console-address ":9001" --address ":9000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -727,11 +723,8 @@ services:
 
   postgres:
     image: postgres:17.6-alpine
-    command: [
-      "postgres",
-      "-c", "max_connections=200",
-      "-c", "shared_buffers=256MB"
-    ]
+    command:
+      ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
     ports:
       - "5432:5432"
     environment:
@@ -743,7 +736,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d enrichment"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
 
@@ -774,7 +767,7 @@ services:
       HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
       HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
     volumes:
-    - ./infra/hasura/metadata:/hasura-metadata:ro
+      - ./infra/hasura/metadata:/hasura-metadata:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.hasura.rule=PathPrefix(`/hasura`)"
@@ -816,7 +809,30 @@ services:
 
   placement:
     image: "daprio/dapr:1.16.2"
-    command: ["./placement", "-port", "50006", "--enable-metrics"]
+    command:
+      [
+        "./placement",
+        "-port",
+        "50006",
+        "--enable-metrics",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
+      ]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  scheduler-init:
+    image: busybox:latest
+    user: "0:0"
+    command: >
+      sh -c "
+        mkdir -p /data/default-dapr-scheduler-server-0 &&
+        chown -R 65532:65532 /data &&
+        chmod -R 755 /data
+      "
+    volumes:
+      - scheduler_data:/data
+    restart: "no"
 
   scheduler:
     image: "daprio/dapr:1.16.2"
@@ -825,9 +841,16 @@ services:
         "./scheduler",
         "--port",
         "50007",
-        "--etcd-data-dir=/var/lock/dapr/scheduler",
+        "--etcd-data-dir=/data",
         "--enable-metrics",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-info}",
       ]
+    depends_on:
+      postgres: { condition: service_healthy }
+      scheduler-init: { condition: service_completed_successfully }
+    volumes:
+      - scheduler_data:/data
 
   ############################
   # Monitoring Services (optional profile)
@@ -838,18 +861,18 @@ services:
     image: otel/opentelemetry-collector:latest
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
-    - ./infra/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+      - ./infra/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     depends_on: [jaeger]
 
   jaeger:
     profiles: ["monitoring"]
-    image: jaegertracing/jaeger:latest  # v2.x image
+    image: jaegertracing/jaeger:latest # v2.x image
     user: "0:0"
     environment:
       - QUERY_BASE_PATH=/jaeger
     volumes:
       - ./infra/jaeger/jaeger-config.yaml:/etc/jaeger/config.yaml
-      - jaeger_data:/badger  # Persist trace data
+      - jaeger_data:/badger # Persist trace data
     command: ["--config", "/etc/jaeger/config.yaml"]
     labels:
       - "traefik.enable=true"
@@ -859,7 +882,11 @@ services:
       - "traefik.http.routers.jaeger.tls=true"
       - "traefik.http.routers.jaeger.middlewares=auth"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:13133/status || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:13133/status || exit 1",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -874,8 +901,8 @@ services:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
     volumes:
-    - ./infra/loki:/etc/loki:ro
-    - loki_data:/loki
+      - ./infra/loki:/etc/loki:ro
+      - loki_data:/loki
     depends_on: [minio-init]
     healthcheck:
       test:
@@ -960,9 +987,9 @@ services:
     image: prom/node-exporter:latest
     restart: unless-stopped
     volumes:
-    - /proc:/host/proc:ro
-    - /sys:/host/sys:ro
-    - /:/rootfs:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
     command:
       [
         "--path.procfs=/host/proc",
@@ -977,18 +1004,16 @@ services:
     restart: unless-stopped
     privileged: true
     volumes:
-    - /:/rootfs:ro
-    - /dev/disk/:/dev/disk:ro
-    - /sys:/sys:ro
-    - /var/lib/docker/:/var/lib/docker:ro
-    - /var/run:/var/run:ro
+      - /:/rootfs:ro
+      - /dev/disk/:/dev/disk:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/run:/var/run:ro
     devices: ["/dev/kmsg:/dev/kmsg"]
-
 
   ############################
   # LLM Services (optional profile)
   ############################
-
 
   agents:
     profiles: ["llm"]
@@ -1002,7 +1027,7 @@ services:
       - LITELLM_ADMIN_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
       - MAX_BUDGET=${LLM_MAX_BUDGET:-100}
       - BUDGET_DURATION=${LLM_BUDGET_DURATION:-30d}
-      - DOTNET_ANALYSIS_RUN_REQUEST_LIMIT=${DOTNET_ANALYSIS_RUN_REQUEST_LIMIT:-25}    # max LLM calls to use per .NET program analysis run
+      - DOTNET_ANALYSIS_RUN_REQUEST_LIMIT=${DOTNET_ANALYSIS_RUN_REQUEST_LIMIT:-25} # max LLM calls to use per .NET program analysis run
       - DOTNET_ANALYSIS_RUN_TOKENS_LIMIT=${DOTNET_ANALYSIS_RUN_TOKENS_LIMIT:-1000000} # max tokens to use per .NET program analysis run
       # if we hit this number of the same triage values for the same file, all future findings get that value
       - TRIAGE_CONSENSUS_THRESHOLD=${TRIAGE_CONSENSUS_THRESHOLD:-3}
@@ -1090,7 +1115,17 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "--header=Authorization: Bearer sk-${LITELLM_ADMIN_PASSWORD:-admin123}", "http://localhost:4000/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "-O",
+          "/dev/null",
+          "--header=Authorization: Bearer sk-${LITELLM_ADMIN_PASSWORD:-admin123}",
+          "http://localhost:4000/health",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1127,7 +1162,13 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz').read()"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz').read()",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

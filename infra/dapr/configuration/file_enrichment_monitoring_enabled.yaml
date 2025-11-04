@@ -15,3 +15,5 @@ spec:
       isSecure: false
   metric:
     enabled: true
+    http:
+      increasedCardinality: false

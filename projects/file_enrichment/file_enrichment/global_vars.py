@@ -1,4 +1,3 @@
-# src/workflow/workflow.py
 import asyncio
 import os
 
@@ -36,3 +35,6 @@ file_linking_engine: FileLinkingEngine = None
 
 module_execution_order: list[str] = []
 workflow_manager: WorkflowManager = None
+
+postgres_notify_listener_task = None
+background_dpapi_task = None

@@ -3,6 +3,7 @@ import os
 from contextlib import asynccontextmanager
 
 import asyncpg
+import file_enrichment.global_vars as global_vars
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.queues import (
@@ -45,18 +46,11 @@ logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=o
 
 
 # Global tracking for bulk enrichment processes
-bulk_enrichment_tasks = {}  # {enrichment_name: task_info}
-bulk_enrichment_lock = asyncio.Lock()
-
-postgres_notify_listener_task = None
-background_dpapi_task = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager for workflow runtime setup/teardown"""
-    global postgres_notify_listener_task, background_dpapi_task
-
     logger.info("Initializing workflow runtime...", pid=os.getpid())
 
     setup_debug_signals()
@@ -86,9 +80,6 @@ async def lifespan(app: FastAPI):
     # Initialize workflow runtime and modules
     global_vars.module_execution_order = await initialize_workflow_runtime(dpapi_manager)
 
-    # Wait a bit for runtime to initialize
-    # await asyncio.sleep(5)
-
     try:
         # Use async context manager for WorkflowManager
         async with WorkflowManager(
@@ -98,13 +89,15 @@ async def lifespan(app: FastAPI):
 
             try:
                 # Start PostgreSQL NOTIFY listener in background
-                postgres_notify_listener_task = asyncio.create_task(
+                global_vars.postgres_notify_listener_task = asyncio.create_task(
                     postgres_notify_listener(global_vars.asyncpg_pool, global_vars.workflow_manager)
                 )
                 logger.info("Started PostgreSQL NOTIFY listener task")
 
                 # Start masterkey watcher in background
-                background_dpapi_task = asyncio.create_task(dpapi_background_monitor(app.state.dpapi_manager))
+                global_vars.background_dpapi_task = asyncio.create_task(
+                    dpapi_background_monitor(app.state.dpapi_manager)
+                )
                 logger.info("Started masterkey watcher task")
 
                 # Start file processing workers
@@ -135,20 +128,20 @@ async def lifespan(app: FastAPI):
                     await app.state.dpapi_manager.__aexit__(None, None, None)
 
                 # Cancel masterkey watcher task
-                if background_dpapi_task and not background_dpapi_task.done():
+                if global_vars.background_dpapi_task and not global_vars.background_dpapi_task.done():
                     logger.info("Cancelling masterkey watcher task...", pid=os.getpid())
-                    background_dpapi_task.cancel()
+                    global_vars.background_dpapi_task.cancel()
                     try:
-                        await background_dpapi_task
+                        await global_vars.background_dpapi_task
                     except asyncio.CancelledError:
                         logger.info("Masterkey watcher task cancelled", pid=os.getpid())
 
                 # Cancel PostgreSQL NOTIFY listener
-                if postgres_notify_listener_task and not postgres_notify_listener_task.done():
+                if global_vars.postgres_notify_listener_task and not global_vars.postgres_notify_listener_task.done():
                     logger.info("Cancelling PostgreSQL NOTIFY listener...")
-                    postgres_notify_listener_task.cancel()
+                    global_vars.postgres_notify_listener_task.cancel()
                     try:
-                        await postgres_notify_listener_task
+                        await global_vars.postgres_notify_listener_task
                     except asyncio.CancelledError:
                         logger.info("PostgreSQL NOTIFY listener cancelled")
 

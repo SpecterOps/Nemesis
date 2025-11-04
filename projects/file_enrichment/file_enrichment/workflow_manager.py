@@ -288,7 +288,7 @@ class WorkflowManager:
                     input=file.model_dump(exclude_unset=True),
                 )
 
-                await asyncio.to_thread(global_vars.workflow_client.wait_for_workflow_completion, instance_id)
+                # await asyncio.to_thread(global_vars.workflow_client.wait_for_workflow_completion, instance_id)
 
                 return instance_id
 
