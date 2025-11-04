@@ -80,7 +80,7 @@ async def is_llm_enabled():
 
 async def publish_alerts_for_findings(
     object_id: str, origin_include: list[str] | None = None, origin_exclude: list[str] | None = None
-):
+) -> None:
     """
     Core function to publish alerts for findings with optional origin filtering.
 

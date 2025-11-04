@@ -2,7 +2,6 @@
 
 import base64
 import json
-import os
 import re
 import time
 import uuid
@@ -34,19 +33,21 @@ async def noseyparker_subscription_handler(event: CloudEvent[NoseyParkerOutput])
 
     try:
         object_id = nosey_output.object_id
+        workflow_id = nosey_output.workflow_id
         matches = nosey_output.scan_result.matches
         stats = nosey_output.scan_result.stats
 
-        logger.debug(f"Found {len(matches)} matches for object {object_id}", pid=os.getpid())
+        logger.debug(f"Found {len(matches)} matches for object {object_id}")
 
         await store_noseyparker_results(
             object_id=object_id,
+            workflow_id=workflow_id,
             matches=matches,
             scan_stats=stats,
         )
 
     except Exception:
-        logger.exception(message="Error processing Nosey Parker output event", pid=os.getpid())
+        logger.exception(message="Error processing Nosey Parker output event")
         raise
 
 
@@ -194,6 +195,7 @@ def create_finding_summary(match_info):
 
 async def store_noseyparker_results(
     object_id: str,
+    workflow_id: str,
     matches: list[MatchInfo],
     scan_stats: ScanStats,
 ):
@@ -207,9 +209,12 @@ async def store_noseyparker_results(
         pool (asyncpg.Pool): Database connection pool
     """
     try:
-
         if not matches:
             logger.debug("No matches found, nothing to store", object_id=object_id)
+            await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+                instance_id=workflow_id,
+                success_list=["noseyparker"],
+            )
             return
 
         # Create an enrichment result to store
@@ -268,24 +273,6 @@ async def store_noseyparker_results(
         # Store in database
         async with global_vars.asyncpg_pool.acquire() as conn:
             async with conn.transaction():
-                # Get workflow ID and update enrichment results
-                workflow_row = await conn.fetchrow(
-                    """
-                    SELECT wf_id FROM workflows WHERE object_id = $1
-                    """,
-                    object_id,
-                )
-
-                if workflow_row:
-                    instance_id = workflow_row["wf_id"]
-                    await global_vars.workflow_manager.tracking_service.update_enrichment_results(
-                        instance_id=instance_id,
-                        success_list=["noseyparker"],
-                    )
-                    logger.debug("Updated noseyparker enrichment success", instance_id=instance_id, object_id=object_id)
-                else:
-                    logger.warning("No workflow found for object_id, skipping enrichment update", object_id=object_id)
-
                 # Store main enrichment result
                 results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
                 await conn.execute(
@@ -328,14 +315,17 @@ async def store_noseyparker_results(
                         json.dumps(data_as_strings),  # Store as array of JSON strings
                     )
 
+        # Update workflow enrichment status
+        await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+            instance_id=workflow_id,
+            success_list=["noseyparker"],
+        )
+
         logger.info("Successfully stored NoseyParker results", object_id=object_id, match_count=len(matches))
 
         # Publish alerts for noseyparker findings (only for this origin)
         if findings_list:
-            await publish_alerts_for_findings(
-                object_id=object_id,
-                origin_include=["noseyparker"]
-            )
+            await publish_alerts_for_findings(object_id=object_id, origin_include=["noseyparker"])
 
         return enrichment_result
 

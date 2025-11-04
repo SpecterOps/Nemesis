@@ -145,12 +145,14 @@ struct Args {
 #[derive(Debug, Deserialize, Serialize)]
 struct NoseyParkerInput {
     object_id: String,
+    workflow_id: String,
 }
 
 // Output model that matches the Python pydantic model
 #[derive(Debug, Deserialize, Serialize)]
 struct NoseyParkerOutput {
     object_id: String,
+    workflow_id: String,
     scan_result: ScanResults,
 }
 
@@ -241,6 +243,7 @@ async fn handle_input_event(input: NoseyParkerInput) {
             // Create output message
             let output = NoseyParkerOutput {
                 object_id: input.object_id.clone(),
+                workflow_id: input.workflow_id.clone(),
                 scan_result: scan_results,
             };
 

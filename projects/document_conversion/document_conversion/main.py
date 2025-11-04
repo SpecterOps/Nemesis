@@ -39,8 +39,8 @@ max_workflow_execution_time = int(
     os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300)
 )  # maximum time (in seconds) until a workflow is killed
 
-logger.info(f"max_parallel_workflows: {max_parallel_workflows}", pid=os.getpid())
-logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
+logger.info(f"max_parallel_workflows: {max_parallel_workflows}")
+logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}")
 
 # Semaphore for controlling concurrent workflow execution
 workflow_semaphore = asyncio.Semaphore(max_parallel_workflows)

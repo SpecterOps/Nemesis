@@ -40,7 +40,7 @@ max_workflow_execution_time = int(
     os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300)
 )  # maximum time (in seconds) until a workflow is killed
 
-logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
+logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}")
 
 
 # Global tracking for bulk enrichment processes
@@ -49,7 +49,7 @@ logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=o
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan manager for workflow runtime setup/teardown"""
-    logger.info("Initializing workflow runtime...", pid=os.getpid())
+    logger.info("Initializing workflow runtime...")
 
     setup_debug_signals()
 
@@ -108,25 +108,25 @@ async def lifespan(app: FastAPI):
                     yield
 
                 finally:
-                    logger.info("Shutting down workflow runtime...", pid=os.getpid())
+                    logger.info("Shutting down workflow runtime...")
 
                     # Stop file processing workers
                     await stop_workers()
-                    logger.info("Stopped file processing workers", pid=os.getpid())
+                    logger.info("Stopped file processing workers")
 
                     # Cleanup DpapiManager
                     if hasattr(app.state, "dpapi_manager") and app.state.dpapi_manager:
-                        logger.info("Closing DpapiManager...", pid=os.getpid())
+                        logger.info("Closing DpapiManager...")
                         await app.state.dpapi_manager.__aexit__(None, None, None)
 
                     # Cancel masterkey watcher task
                     if global_vars.background_dpapi_task and not global_vars.background_dpapi_task.done():
-                        logger.info("Cancelling masterkey watcher task...", pid=os.getpid())
+                        logger.info("Cancelling masterkey watcher task...")
                         global_vars.background_dpapi_task.cancel()
                         try:
                             await global_vars.background_dpapi_task
                         except asyncio.CancelledError:
-                            logger.info("Masterkey watcher task cancelled", pid=os.getpid())
+                            logger.info("Masterkey watcher task cancelled")
 
                     # Cancel PostgreSQL NOTIFY listener
                     if (
@@ -146,7 +146,7 @@ async def lifespan(app: FastAPI):
         finally:
             if global_vars.asyncpg_pool:
                 await global_vars.asyncpg_pool.close()
-                logger.info("AsyncPG pool closed", pid=os.getpid())
+                logger.info("AsyncPG pool closed")
 
 
 # Initialize FastAPI app with lifespan manager

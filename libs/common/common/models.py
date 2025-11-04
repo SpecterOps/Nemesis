@@ -141,13 +141,9 @@ class DotNetOutput(BaseModel):
 
 ##########################################
 #
-# Special case for NoseyParker
+# NoseyParker Models
 #
 ##########################################
-
-
-class NoseyParkerInput(BaseModel):
-    object_id: str
 
 
 class GitCommitInfo(BaseModel):
@@ -189,10 +185,16 @@ class ScanResults(BaseModel):
     scan_type: str = "regular"  # "regular", "zip", "git_repo"
 
 
+class NoseyParkerInput(BaseModel):
+    object_id: str
+    workflow_id: str
+
+
 class NoseyParkerOutput(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     object_id: str
+    workflow_id: str
     scan_result: ScanResults
 
     # Add a factory method to handle flexible parsing

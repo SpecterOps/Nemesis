@@ -55,9 +55,9 @@ jq_stats_prog='
     {
       operation: $opname,
       count: ($durs | length),
-      min_ms: ($durs | min / 1000),
-      max_ms: ($durs | max / 1000),
-      avg_ms: (($durs | add / ($durs | length)) / 1000)
+      min_ms: (($durs | min / 1000) * 1000 | round / 1000),
+      max_ms: (($durs | max / 1000) * 1000 | round / 1000),
+      avg_ms: ((($durs | add / ($durs | length)) / 1000) * 1000 | round / 1000)
     }
   end
 '
@@ -66,7 +66,7 @@ jq_stats_prog='
 # Helper: print header for a table
 ########################################
 print_header() {
-  printf "%-45s %10s %12s %12s %12s\n" "Operation" "Count" "Min (ms)" "Max (ms)" "Avg (ms)"
+  printf "%45s %12s %12s %12s %10s\n" "Operation" "Avg (ms)" "Min (ms)" "Max (ms)" "Count"
   printf "%s\n" "------------------------------------------------------------------------------------------------------------------------"
 }
 
@@ -86,16 +86,16 @@ for op in "${ops_a[@]}"; do
   )
 
   result=$(echo "$resp" | jq -r --arg opname "$op" \
-    "$jq_stats_prog | [.operation, .count, .min_ms, .max_ms, .avg_ms] | @tsv")
+    "$jq_stats_prog | [.operation, .avg_ms, .min_ms, .max_ms, .count] | @tsv")
 
   op_name=$(echo "$result" | cut -f1)
-  count=$(echo "$result" | cut -f2)
+  avg_ms=$(echo "$result" | cut -f2)
   min_ms=$(echo "$result" | cut -f3)
   max_ms=$(echo "$result" | cut -f4)
-  avg_ms=$(echo "$result" | cut -f5)
+  count=$(echo "$result" | cut -f5)
 
-  printf "%-45s %10s %12s %12s %12s\n" \
-    "$op_name" "$count" "${min_ms:-null}" "${max_ms:-null}" "${avg_ms:-null}"
+  printf "%45s %12s %12s %12s %10s\n" \
+    "$op_name" "${avg_ms:-null}" "${min_ms:-null}" "${max_ms:-null}" "$count"
 done
 
 ########################################
@@ -112,15 +112,15 @@ resp_b=$(
 
 for op in "${ops_b[@]}"; do
   result=$(echo "$resp_b" | jq -r --arg opname "$op" \
-    "$jq_stats_prog | [.operation, .count, .min_ms, .max_ms, .avg_ms] | @tsv")
+    "$jq_stats_prog | [.operation, .avg_ms, .min_ms, .max_ms, .count] | @tsv")
 
   op_name=$(echo "$result" | cut -f1)
-  count=$(echo "$result" | cut -f2)
+  avg_ms=$(echo "$result" | cut -f2)
   min_ms=$(echo "$result" | cut -f3)
   max_ms=$(echo "$result" | cut -f4)
-  avg_ms=$(echo "$result" | cut -f5)
+  count=$(echo "$result" | cut -f5)
 
-  printf "%-45s %10s %12s %12s %12s\n" \
-    "$op_name" "$count" "${min_ms:-null}" "${max_ms:-null}" "${avg_ms:-null}"
+  printf "%45s %12s %12s %12s %10s\n" \
+    "$op_name" "${avg_ms:-null}" "${min_ms:-null}" "${max_ms:-null}" "$count"
 done
 

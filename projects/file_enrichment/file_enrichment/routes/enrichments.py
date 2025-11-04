@@ -38,7 +38,7 @@ async def list_enabled_llm_enrichments() -> ModulesListResponse:
         return ModulesListResponse(modules=llm_enrichments)
 
     except Exception as e:
-        logger.exception(message="Error listing enabled LLM enrichment modules", pid=os.getpid())
+        logger.exception(message="Error listing enabled LLM enrichment modules")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
@@ -53,7 +53,7 @@ async def list_enrichments() -> ModulesListResponse:
         return ModulesListResponse(modules=module_names)
 
     except Exception as e:
-        logger.exception(message="Error listing enrichment modules", pid=os.getpid())
+        logger.exception(message="Error listing enrichment modules")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
 
