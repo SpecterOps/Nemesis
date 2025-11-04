@@ -113,16 +113,22 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                 temp_file.__exit__(None, None, None)
 
             # Update enrichment results in workflows table using tracking_service
-            instance_id = ctx.workflow_id
-            await global_vars.workflow_manager.tracking_service.update_enrichment_results(
-                instance_id=instance_id, success_list=success_list, failure_list=failure_list
-            )
-            logger.debug(
-                "Updated enrichment results in workflows table",
-                instance_id=instance_id,
-                success_count=len(success_list),
-                failure_count=len(failure_list),
-            )
+            with tracer.start_as_current_span("update_enrichment_results") as update_span:
+                instance_id = ctx.workflow_id
+                update_span.set_attribute("instance_id", instance_id)
+                update_span.set_attribute("success_count", len(success_list))
+                update_span.set_attribute("failure_count", len(failure_list))
+
+                await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+                    instance_id=instance_id, success_list=success_list, failure_list=failure_list
+                )
+
+                logger.debug(
+                    "Updated enrichment results in workflows table",
+                    instance_id=instance_id,
+                    success_count=len(success_list),
+                    failure_count=len(failure_list),
+                )
 
         except Exception as e:
             logger.exception("Error in run_enrichment_modules", object_id=object_id, error=str(e))

@@ -283,35 +283,10 @@ async fn handle_input_event(input: NoseyParkerInput) {
           input.object_id, CONCURRENCY_SEMAPHORE.available_permits() + 1);
 }
 
-/// Force memory cleanup and log memory usage - Enhanced for jemalloc
+/// Force memory cleanup - Simplified for better performance
 fn force_memory_cleanup() {
-    // Force garbage collection and memory trim on supported platforms
-    #[cfg(target_os = "linux")]
-    unsafe {
-        // malloc_trim works well with jemalloc and forces it to return memory to OS
-        let _result = libc::malloc_trim(0);
-    }
-
-    // For jemalloc, trigger arena cleanup with allocation patterns
-    // jemalloc responds well to allocation/deallocation cycles
-    {
-        // Force several allocation/deallocation cycles of different sizes
-        // This helps jemalloc clean up its internal structures
-        for i in 0..3 {
-            let size = (i + 1) * 1024 * 1024; // 1MB, 2MB, 3MB
-            let _dummy = vec![0u8; size];
-            drop(_dummy);
-        }
-    }
-
-    // Additional cleanup: force a larger allocation/deallocation
-    // This can trigger jemalloc to consolidate and return larger chunks
-    {
-        let _large_cleanup: Vec<u8> = Vec::with_capacity(10 * 1024 * 1024); // 10MB
-        drop(_large_cleanup);
-    }
-
-    // Force another malloc_trim after the allocation cycles
+    // On Linux, use malloc_trim to release memory back to the OS
+    // jemalloc (our allocator) responds well to this
     #[cfg(target_os = "linux")]
     unsafe {
         libc::malloc_trim(0);
@@ -1015,13 +990,13 @@ async fn scan_directory_with_enumerator(dir_path: &std::path::Path, snippet_leng
 
 /// Core blob scanning logic using NoseyParker matcher
 fn scan_blob_with_matcher(
-    blob: &Blob, 
+    blob: &Blob,
     snippet_length: usize,
     appearance_info: &input_enumerator::blob_appearance::BlobAppearanceSet,
     file_path: Option<String>
 ) -> Result<ScanResults> {
     let scan_start = Instant::now();
-    
+
     // Use the globally preloaded rules database
     let seen_blobs = BlobIdMap::new();
     let matcher_stats = Mutex::new(MatcherStats::default());

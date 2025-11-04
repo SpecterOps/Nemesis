@@ -42,7 +42,8 @@ The following ENV variables can be set:
 
 ```json
 {
-  "object_id": "550e8400-e29b-41d4-a716-446655440000"
+  "object_id": "550e8400-e29b-41d4-a716-446655440000",
+  "workflow_id": "de8ace77-bd11-412c-a81e-0fad56f0a638"
 }
 ```
 
@@ -51,6 +52,7 @@ The following ENV variables can be set:
 ```json
 {
   "object_id": "550e8400-e29b-41d4-a716-446655440000",
+  "workflow_id": "de8ace77-bd11-412c-a81e-0fad56f0a638",
   "scan_result": {
     "scan_duration_ms": 15,
     "bytes_scanned": 2020,
