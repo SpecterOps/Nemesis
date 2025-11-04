@@ -158,17 +158,27 @@ def get_os_user_and_host_string() -> str:
     help="Exclude glob pattern for container filtering (can be used multiple times). Only used with --container.",
 )
 @click.option(
-    "--repeat",
+    "-x",
+    "--times",
     type=int,
-    default=0,
-    help="Number of additional times to repeat the submission (default: 0 - no repeat)",
+    default=1,
+    help="Total number of times to submit (default: 1)",
     show_default=True,
 )
 @click.option(
+    "-d",
     "--folder",
     type=str,
     default=None,
-    help="Parent folder path to prepend to all uploaded file paths (e.g., 'C:\\Users\\Admin')",
+    help="Parent folder/directory path to prepend to all uploaded file paths (e.g., 'C:\\Users\\Admin')",
+    show_default=False,
+)
+@click.option(
+    "-m",
+    "--max-files",
+    type=int,
+    default=None,
+    help="Maximum number of files to submit when recursively processing directories",
     show_default=False,
 )
 def submit(
@@ -187,8 +197,9 @@ def submit(
     filters: str | None = None,
     include_pattern: tuple[str, ...] = (),
     exclude_pattern: tuple[str, ...] = (),
-    repeat: int = 0,
+    times: int = 1,
     folder: str | None = None,
+    max_files: int | None = None,
 ):
     """Submit files to Nemesis for processing"""
     pattern_type: str = "glob"  # only handle glob formats if passed manually, for now
@@ -209,8 +220,9 @@ def submit(
         include_pattern,
         exclude_pattern,
         pattern_type,
-        repeat,
+        times,
         folder,
+        max_files,
     )
 
 

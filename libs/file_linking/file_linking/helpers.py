@@ -78,8 +78,8 @@ async def add_file_linkings(
             finally:
                 # Note: We'll close this pool after use below
                 pass
-    except Exception as e:
-        logger.exception(e, "[add_file_linkings]")
+    except Exception:
+        logger.exception("[add_file_linkings]")
         return 0
 
     if not linked_file_paths:

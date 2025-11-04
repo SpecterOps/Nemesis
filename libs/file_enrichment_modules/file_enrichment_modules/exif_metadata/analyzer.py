@@ -233,14 +233,17 @@ def format_exif_display(exif_data):
 class ExifMetadataExtractor(EnrichmentModule):
     name: str = "exif_metadata"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check if file extension is supported
         extension = file_enriched.extension.lower() if file_enriched.extension else ""
@@ -297,8 +300,8 @@ class ExifMetadataExtractor(EnrichmentModule):
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing EXIF data for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing EXIF data for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -313,7 +316,7 @@ class ExifMetadataExtractor(EnrichmentModule):
         """
         try:
             # get the current `file_enriched` FileEnriched object from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -322,8 +325,8 @@ class ExifMetadataExtractor(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_exif(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing file", file_object_id=object_id)
+        except Exception:
+            logger.exception(message="Error processing file", file_object_id=object_id)
             return None
 
 

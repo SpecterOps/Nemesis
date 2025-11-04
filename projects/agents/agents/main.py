@@ -114,8 +114,8 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(handle_findings_subscription())
         logger.debug("Started findings subscription handler")
 
-    except Exception as e:
-        logger.exception(e, message="Error initializing service")
+    except Exception:
+        logger.exception(message="Error initializing service")
         raise
 
     yield
@@ -163,8 +163,8 @@ def check_consensus_activity(ctx: WorkflowActivityContext, activity_input: dict)
             consensus = check_triage_consensus(session, object_id, threshold)
             return consensus
 
-    except Exception as e:
-        logger.exception(e, message=f"Error checking consensus for object {object_id}")
+    except Exception:
+        logger.exception(message=f"Error checking consensus for object {object_id}")
         return None
 
 
@@ -224,8 +224,8 @@ def insert_triage_result(ctx: WorkflowActivityContext, activity_input: dict):
             confidence=triage_result["confidence"],
         )
 
-    except Exception as e:
-        logger.exception(e, message=f"Error inserting triage result for finding {finding_id}")
+    except Exception:
+        logger.exception(message=f"Error inserting triage result for finding {finding_id}")
         raise
 
 
@@ -372,8 +372,8 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
 
             return
 
-    except Exception as e:
-        logger.exception(e, message=f"Error in finding triage workflow for finding {finding_id}")
+    except Exception:
+        logger.exception(message=f"Error in finding triage workflow for finding {finding_id}")
 
 
 async def handle_findings_subscription():
@@ -469,20 +469,22 @@ async def handle_findings_subscription():
                                 elif state.runtime_status.name == "COMPLETED":
                                     logger.debug("Workflow completed", finding_id=finding_id, instance_id=instance_id)
                                 else:
-                                    logger.warning(f"Workflow failed! Status: {state.runtime_status.name}", instance_id=instance_id)
+                                    logger.warning(
+                                        f"Workflow failed! Status: {state.runtime_status.name}", instance_id=instance_id
+                                    )
 
                             except TimeoutError:
                                 logger.error("Workflow client timed out internally", instance_id=instance_id)
-                            except Exception as e:
-                                logger.exception(e, message=f"Error waiting for workflow completion for {finding_id}")
+                            except Exception:
+                                logger.exception(message=f"Error waiting for workflow completion for {finding_id}")
 
-                        except Exception as e:
-                            logger.exception(e, message=f"Error running workflow for finding {finding_id}")
+                        except Exception:
+                            logger.exception(message=f"Error running workflow for finding {finding_id}")
 
                         del finding_details
 
-        except Exception as e:
-            logger.exception(e, message="Error in findings subscription, reconnecting in 5 seconds...")
+        except Exception:
+            logger.exception(message="Error in findings subscription, reconnecting in 5 seconds...")
             await asyncio.sleep(5)
 
 
@@ -494,7 +496,7 @@ async def get_agents_metadata():
         agents = await asyncio.to_thread(agent_manager.get_agent_metadata)
         return {"agents": agents, "total_count": len(agents), "timestamp": datetime.now().isoformat()}
     except Exception as e:
-        logger.exception(e, message="Error getting agent metadata")
+        logger.exception(message="Error getting agent metadata")
         return {"agents": [], "total_count": 0, "error": str(e), "timestamp": datetime.now().isoformat()}
 
 
@@ -535,7 +537,7 @@ async def get_llm_spend_data():
             await conn.close()
 
     except Exception as e:
-        logger.exception(e, message="Error getting LLM spend data")
+        logger.exception(message="Error getting LLM spend data")
         return {
             "total_spend": 0.0,
             "total_tokens": 0,
@@ -553,8 +555,8 @@ async def _run_summarization_task(object_id: str):
         mock_ctx = type("MockContext", (), {})()
         result = await asyncio.to_thread(summarize_text, mock_ctx, {"object_id": object_id})
         logger.info("Text summarization completed", object_id=object_id, success=result.get("success"))
-    except Exception as e:
-        logger.exception(e, message="Error in background text summarization", object_id=object_id)
+    except Exception:
+        logger.exception(message="Error in background text summarization", object_id=object_id)
 
 
 @app.post("/agents/text_summarizer")
@@ -571,7 +573,7 @@ async def run_text_summarizer(request: dict):
         return {"success": True, "message": "Text summarization started in background"}
 
     except Exception as e:
-        logger.exception(e, message="Error starting text summarizer")
+        logger.exception(message="Error starting text summarizer")
         return {"success": False, "error": str(e)}
 
 
@@ -587,14 +589,12 @@ async def run_credential_analysis(request: dict):
         mock_ctx = type("MockContext", (), {})()
 
         # Run in background task - don't wait for completion
-        asyncio.create_task(
-            asyncio.to_thread(analyze_credentials, mock_ctx, {"object_id": object_id})
-        )
+        asyncio.create_task(asyncio.to_thread(analyze_credentials, mock_ctx, {"object_id": object_id}))
 
         return {"success": True, "message": "Credential analysis started in background"}
 
     except Exception as e:
-        logger.exception(e, message="Error starting credential analysis")
+        logger.exception(message="Error starting credential analysis")
         return {"success": False, "error": str(e)}
 
 
@@ -610,14 +610,12 @@ async def run_dotnet_analysis(request: dict):
         mock_ctx = type("MockContext", (), {})()
 
         # Run in background task - don't wait for completion
-        asyncio.create_task(
-            asyncio.to_thread(analyze_dotnet_assembly, mock_ctx, {"object_id": object_id})
-        )
+        asyncio.create_task(asyncio.to_thread(analyze_dotnet_assembly, mock_ctx, {"object_id": object_id}))
 
         return {"success": True, "message": ".NET analysis started in background"}
 
     except Exception as e:
-        logger.exception(e, message="Error starting .NET analysis")
+        logger.exception(message="Error starting .NET analysis")
         return {"success": False, "error": str(e)}
 
 
@@ -642,7 +640,7 @@ async def run_translation(request: dict):
         return {"success": True, "message": f"Translation to {target_language} started in background"}
 
     except Exception as e:
-        logger.exception(e, message="Error starting translation")
+        logger.exception(message="Error starting translation")
         return {"success": False, "error": str(e)}
 
 
@@ -675,7 +673,7 @@ def run_report_generator(request: dict):
         return result
 
     except Exception as e:
-        logger.exception(e, message="Error running report generator")
+        logger.exception(message="Error running report generator")
         return {"success": False, "error": str(e)}
 
 
@@ -689,5 +687,5 @@ async def health_check():
         return {"status": "healthy"}
 
     except Exception as e:
-        logger.exception(e, message="Health check failed")
+        logger.exception(message="Health check failed")
         return {"status": "unhealthy", "error": str(e)}

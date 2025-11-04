@@ -35,7 +35,7 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
         }
     """
     result = {"decrypted": False}
-    cng_key_blob_entropy = b'xT5rZW5qVVbrvpuA\x00'
+    cng_key_blob_entropy = b"xT5rZW5qVVbrvpuA\x00"
 
     # Fetch the chrome_key record
     async with asyncpg_pool.acquire() as conn:
@@ -46,19 +46,19 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
             FROM chromium.chrome_keys
             WHERE id = $1
             """,
-            chrome_key_id
+            chrome_key_id,
         )
 
         if not row:
             logger.warning("Chrome key not found", chrome_key_id=chrome_key_id)
             return result
 
-        record_id = row['id']
-        source = row['source']
-        key_masterkey_guid = row['key_masterkey_guid']
-        key_bytes_enc = row['key_bytes_enc']
-        key_bytes_dec = row['key_bytes_dec']
-        key_is_decrypted = row['key_is_decrypted']
+        record_id = row["id"]
+        source = row["source"]
+        key_masterkey_guid = row["key_masterkey_guid"]
+        key_bytes_enc = row["key_bytes_enc"]
+        key_bytes_dec = row["key_bytes_dec"]
+        key_is_decrypted = row["key_is_decrypted"]
 
     # Skip if already decrypted
     if key_is_decrypted:
@@ -73,7 +73,6 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
                 if decrypted_blob:
                     # Check for BCRYPT_KEY_DATA_BLOB and log details
                     if check_bcrypt_key_blob(decrypted_blob):
-
                         # Extract the final 32-byte key material
                         key_bytes_dec = extract_final_key_material(decrypted_blob)
 
@@ -95,12 +94,17 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
                                         key_masterkey_guid = $3
                                     WHERE id = $4
                                     """,
-                                    key_bytes_dec, key_is_decrypted, str(dpapi_blob.masterkey_guid), chrome_key_id
+                                    key_bytes_dec,
+                                    key_is_decrypted,
+                                    str(dpapi_blob.masterkey_guid),
+                                    chrome_key_id,
                                 )
 
                             # Now try to decrypt any state_keys waiting for this chromekey
                             try:
-                                state_keys_result = await _retry_state_keys_for_chromekey_after_decrypt(source, key_bytes_dec, asyncpg_pool)
+                                state_keys_result = await _retry_state_keys_for_chromekey_after_decrypt(
+                                    source, key_bytes_dec, asyncpg_pool
+                                )
                                 result["state_keys_result"] = state_keys_result
                                 logger.info(
                                     "Completed retroactive state_key decryption for newly decrypted chromekey",
@@ -171,7 +175,7 @@ async def retry_decrypt_chrome_keys_for_masterkey(
                 WHERE key_masterkey_guid = $1 AND key_is_decrypted = FALSE
             """
             chrome_key_rows = await conn.fetch(query, str(masterkey_guid))
-            chrome_key_ids = [row['id'] for row in chrome_key_rows]
+            chrome_key_ids = [row["id"] for row in chrome_key_rows]
 
         logger.debug(
             "Found chrome_keys potentially waiting for masterkey",

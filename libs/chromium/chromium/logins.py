@@ -23,7 +23,10 @@ logger = get_logger(__name__)
 
 
 async def process_chromium_logins(
-    object_id: str, file_path: str | None = None, dpapi_manager: DpapiManager | None = None, asyncpg_pool: asyncpg.Pool | None = None
+    object_id: str,
+    file_path: str | None = None,
+    dpapi_manager: DpapiManager | None = None,
+    asyncpg_pool: asyncpg.Pool | None = None,
 ) -> None:
     """Process Chromium Login Data file and insert logins into database using asyncpg.
 
@@ -35,7 +38,7 @@ async def process_chromium_logins(
     """
     logger.info("Processing Chromium Login Data file", object_id=object_id)
 
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, asyncpg_pool)
 
     # Extract username and browser from file path
     username, browser = parse_chromium_file_path(file_enriched.path or "")
@@ -61,7 +64,12 @@ async def process_chromium_logins(
 
 
 async def _insert_logins(
-    file_enriched, username: str | None, browser: str, db_path: str, dpapi_manager: DpapiManager | None = None, asyncpg_pool: asyncpg.Pool | None = None
+    file_enriched,
+    username: str | None,
+    browser: str,
+    db_path: str,
+    dpapi_manager: DpapiManager | None = None,
+    asyncpg_pool: asyncpg.Pool | None = None,
 ) -> None:
     """Extract logins from Login Data database and insert into chromium.logins table using asyncpg."""
     try:

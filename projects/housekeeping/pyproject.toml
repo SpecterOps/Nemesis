@@ -5,7 +5,7 @@ description = "Cleans up expired database entries and files."
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.12,<4.0"
+python = ">=3.12,<3.14"
 fastapi = "^0.121.0"
 uvicorn = "^0.34.0"
 dapr = "1.16.0"

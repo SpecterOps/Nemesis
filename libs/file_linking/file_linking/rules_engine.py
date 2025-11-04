@@ -204,9 +204,7 @@ class FileLinkingEngine:
 
         return final_path, status
 
-    async def _resolve_forward_for_table(
-        self, source: str, real_path: str, table_name: str
-    ) -> None:
+    async def _resolve_forward_for_table(self, source: str, real_path: str, table_name: str) -> None:
         """
         Perform forward resolution for a specific table: check if a real path matches placeholders.
 
@@ -303,6 +301,9 @@ class FileLinkingEngine:
         - Forward: resolves existing placeholder entries using this real file
         - Backward: checks if placeholder paths already have matching real files
 
+        Database operations use individual atomic upserts to avoid deadlocks in
+        concurrent file processing scenarios.
+
         Args:
             file_enriched: File data from files_enriched table
 
@@ -321,16 +322,23 @@ class FileLinkingEngine:
             source = "unknown"
 
         logger.debug(
-            f"Processing file: {file_path}, source: {source}, file_enriched: {list(file_enriched.model_dump().keys())}"
+            "Applying linking rules",
+            file_path=file_path,
+            source=source,
+            mime_type=file_enriched.mime_type,
+            magic_type=file_enriched.magic_type,
+            size=file_enriched.size,
+            is_container=file_enriched.is_container,
         )
 
         # Skip marking these commonly derived files as collected
         if file_path.endswith("/strings.txt") or file_path.endswith("/decompiled.zip"):
-            return
+            return 0
 
         # Forward resolution: Try to resolve existing placeholder entries with this real file
         # IMPORTANT: Do this BEFORE add_file_listing so the placeholder gets updated first,
         # then add_file_listing will find the updated row and not create a duplicate
+        # NOTE: No transaction wrapper to avoid deadlocks during concurrent processing
         await self._resolve_forward_for_table(source, file_path, "file_listings")
         await self._resolve_forward_for_table(source, file_path, "file_linkings")
 
@@ -412,6 +420,9 @@ class FileLinkingEngine:
         - If linked_path has placeholders: checks if real file exists (backward resolution)
         - If linked_path is real: checks if placeholder exists and resolves it (forward resolution)
 
+        Database operations use individual atomic upserts to avoid deadlocks in
+        concurrent file processing scenarios.
+
         Args:
             source: Source identifier
             source_file_path: Path of the file that triggered the linking
@@ -463,4 +474,3 @@ class FileLinkingEngine:
             )
 
         return linkings_created
-

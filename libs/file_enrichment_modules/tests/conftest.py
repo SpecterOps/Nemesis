@@ -2,7 +2,8 @@ import os
 import warnings
 
 # Ensure dev mode is enabled (catches many other bugs)
-os.environ['PYTHONDEVMODE'] = '1'
+os.environ["PYTHONDEVMODE"] = "1"
+
 
 # Configure warnings
 def pytest_configure(config):

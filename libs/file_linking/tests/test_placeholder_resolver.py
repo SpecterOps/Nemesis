@@ -193,7 +193,6 @@ class TestReplacePlaceholdersWithCaptures:
         assert result == expected
 
 
-
 @pytest.mark.asyncio
 class TestTryResolvePlaceholderPath:
     """Tests for try_resolve_placeholder_path method (backward resolution)."""

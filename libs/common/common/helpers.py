@@ -262,6 +262,7 @@ def get_file_extension(filepath):
         return "." + name_parts[-1]
     return ""
 
+
 def get_drive_from_path(path: str) -> str | None:
     """
     Extract Windows drive letter from a file path.
@@ -340,7 +341,6 @@ def get_drive_from_path(path: str) -> str | None:
         return f"/{drive_part}"
 
     return None
-
 
 
 def extract_all_strings(filename: str, min_len: int = 5):

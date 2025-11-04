@@ -240,7 +240,7 @@ def parse_office_ole_file(file_path: str) -> dict[str, Any]:
                 parsed_data["macros"] = macros
 
     except Exception as e:
-        logger.exception(e, message="Error parsing Office OLE file")
+        logger.exception(message="Error parsing Office OLE file")
         parsed_data["error"] = f"Error parsing Office OLE file: {str(e)}"
 
     return parsed_data
@@ -316,7 +316,7 @@ def parse_office_new_file(file_path: str) -> dict[str, Any]:
                 parsed_data["macros"] = macros
 
     except Exception as e:
-        logger.exception(e, message="Error parsing new Office file")
+        logger.exception(message="Error parsing new Office file")
         parsed_data["error"] = f"Error parsing Office file: {str(e)}"
 
     return parsed_data
@@ -325,14 +325,17 @@ def parse_office_new_file(file_path: str) -> dict[str, Any]:
 class OfficeAnalyzer(EnrichmentModule):
     name: str = "office_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file extension and type."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check file extension
         path = file_enriched.path.lower() if file_enriched.path else ""
@@ -412,8 +415,8 @@ class OfficeAnalyzer(EnrichmentModule):
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing Office document for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing Office document for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -427,7 +430,7 @@ class OfficeAnalyzer(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -436,8 +439,8 @@ class OfficeAnalyzer(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as file:
                     return self._analyze_office_document(file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing Office file")
+        except Exception:
+            logger.exception(message="Error processing Office file")
             return None
 
 

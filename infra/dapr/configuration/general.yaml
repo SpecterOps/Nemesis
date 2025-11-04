@@ -3,6 +3,10 @@ kind: Configuration
 metadata:
   name: schedulerconfig
 spec:
+  metric:
+    enabled: true
+    http:
+      increasedCardinality: false
   httpPipeline:
     handlers:
     - name: maximum-request-size

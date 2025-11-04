@@ -90,12 +90,19 @@ class ModuleLoader:
 
         # Load the module
         try:
-            spec = importlib.util.spec_from_file_location(f"{__package__}.{module_dir.name}", module_path)
+            mod_name = f"{__package__}.{module_dir.name}"
+            spec = importlib.util.spec_from_file_location(mod_name, module_path)
+            if not spec:
+                raise Exception(f"Could not load module. Module Name: {mod_name}.  Path: {module_path}")
+
             module = importlib.util.module_from_spec(spec)
 
             # Add module directory to Python path if it's not already there
             if str(module_dir.parent) not in sys.path:
                 sys.path.insert(0, str(module_dir.parent))
+
+            if not spec.loader:
+                raise Exception("Spec has no loader attribute!")
 
             spec.loader.exec_module(module)
 
@@ -105,8 +112,8 @@ class ModuleLoader:
                 logger.info("Successfully loaded module", module_name=module_dir.name)
             else:
                 logger.warning("Module does not have create_enrichment_module()", module=module_dir.name)
-        except Exception as e:
-            logger.exception(e, message="Failed to load module", module_name=module_dir.name)
+        except Exception:
+            logger.exception(message="Failed to load module", module_name=module_dir.name)
             raise
 
     async def load_modules(self):

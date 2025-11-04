@@ -35,10 +35,7 @@ class ModelManager:
         # Setup Phoenix tracing for LLM calls if enabled
         cls._instrumentation_enabled = setup_phoenix_llm_tracing()
 
-        logger.info(
-            f"ModelManager initialized with model: {model_name}",
-            phoenix_enabled=cls._instrumentation_enabled
-        )
+        logger.info(f"ModelManager initialized with model: {model_name}", phoenix_enabled=cls._instrumentation_enabled)
 
     @classmethod
     def get_model(cls) -> OpenAIModel | None:
@@ -57,10 +54,8 @@ class ModelManager:
                 cls._model = OpenAIModel(
                     model_name=cls._model_name,
                     provider=OpenAIProvider(
-                        base_url=cls._base_url,
-                        api_key=cls._token,
-                        http_client=create_rate_limit_client()
-                    )
+                        base_url=cls._base_url, api_key=cls._token, http_client=create_rate_limit_client()
+                    ),
                 )
                 logger.info(f"Created model instance: {cls._model_name}")
             except Exception as e:

@@ -266,9 +266,18 @@ files = [
 ]
 
 [package.dependencies]
-cffi = [
-    {version = ">=1.0.1", markers = "python_version < \"3.14\""},
-    {version = ">=2.0.0b1", markers = "python_version >= \"3.14\""},
+cffi = {version = ">=1.0.1", markers = "python_version < \"3.14\""}
+
+[[package]]
+name = "async-lru"
+version = "2.0.5"
+description = "Simple LRU cache for asyncio"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "async_lru-2.0.5-py3-none-any.whl", hash = "sha256:ab95404d8d2605310d345932697371a5f40def0487c03d6d0ad9138de52c9943"},
+    {file = "async_lru-2.0.5.tar.gz", hash = "sha256:481d52ccdd27275f42c43a928b4a50c3bfb2d67af4e78b170e3e0bb39c66e5bb"},
 ]
 
 [[package]]
@@ -624,12 +633,13 @@ name = "common"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
+async-lru = "^2.0.5"
 asyncpg = "^0.30.0"
 dapr = "1.16.0"
 dapr-ext-workflow = "^1.16.0"
@@ -2214,5 +2224,5 @@ propcache = ">=0.2.1"
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.12,<4.0"
-content-hash = "ccfeb772a18de76413f8cbc88495871652cca4b1092fb23886f573f00d386c2b"
+python-versions = ">=3.12,<3.14"
+content-hash = "5d265c196a8673186140fb8483b2c6752709b0b519e3c4a1f16d94b30b343cfc"

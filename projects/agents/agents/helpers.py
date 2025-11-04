@@ -118,8 +118,8 @@ async def fetch_finding_details(session, finding_id):
             return None
 
         return finding_details
-    except Exception as e:
-        logger.exception(e, message=f"Error fetching details for finding ID {finding_id}")
+    except Exception:
+        logger.exception(message=f"Error fetching details for finding ID {finding_id}")
         return None
 
 
@@ -166,6 +166,6 @@ def check_triage_consensus(session, object_id, threshold=3):
 
         return None
 
-    except Exception as e:
-        logger.exception(e, message=f"Error checking triage consensus for object {object_id}")
+    except Exception:
+        logger.exception(message=f"Error checking triage consensus for object {object_id}")
         return None

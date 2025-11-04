@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 class ChromeLoginsParser(EnrichmentModule):
     name: str = "chrome_logins_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 
@@ -56,7 +57,7 @@ rule Chrome_Logins_Tables
             file_path: Optional path to already downloaded file
         """
 
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         if "sqlite 3.x database" not in file_enriched.magic_type.lower():
             return False
@@ -85,7 +86,7 @@ rule Chrome_Logins_Tables
             file_path: Optional path to already downloaded file
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
             enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
             transforms = []
 
@@ -209,9 +210,8 @@ rule Chrome_Logins_Tables
             enrichment_result.transforms = transforms
             return enrichment_result
 
-        except Exception as e:
+        except Exception:
             logger.exception(
-                e,
                 message="Error processing Chrome Login Data database",
                 object_id=object_id,
                 file_path=file_enriched.path,

@@ -8,6 +8,10 @@ import apprise
 import common.helpers as helpers
 from common.logger import get_logger
 from common.models import Alert, CloudEvent
+from common.queues import (
+    ALERTING_NEW_ALERT_TOPIC,
+    ALERTING_PUBSUB,
+)
 from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI, HTTPException
@@ -87,14 +91,14 @@ async def check_llm_enabled():
                             "Agents service responded with non-200 status",
                             status=response.status,
                             attempt=attempt,
-                            max_retries=max_retries
+                            max_retries=max_retries,
                         )
         except Exception as e:
             logger.info(
                 "LLM functionality not available - agents service not reachable",
                 error=str(e),
                 attempt=attempt,
-                max_retries=max_retries
+                max_retries=max_retries,
             )
 
         # If not the last attempt, wait before retrying
@@ -146,8 +150,7 @@ async def load_alert_settings():
 
     try:
         transport = RequestsHTTPTransport(
-            url="http://hasura:8080/v1/graphql",
-            headers={"x-hasura-admin-secret": hasura_admin_secret}
+            url="http://hasura:8080/v1/graphql", headers={"x-hasura-admin-secret": hasura_admin_secret}
         )
 
         with Client(transport=transport, fetch_schema_from_transport=False) as session:
@@ -165,15 +168,17 @@ async def load_alert_settings():
 
             if settings_list:
                 settings = settings_list[0]
-                alert_settings.update({
-                    "alerting_enabled": settings.get("alerting_enabled", True),
-                    "minimum_severity": settings.get("minimum_severity", 4),
-                    "category_excluded": settings.get("category_excluded", []),
-                    "category_included": settings.get("category_included", []),
-                    "file_path_excluded_regex": settings.get("file_path_excluded_regex", []),
-                    "file_path_included_regex": settings.get("file_path_included_regex", []),
-                    "llm_triage_values_to_alert": settings.get("llm_triage_values_to_alert", ["true_positive"]),
-                })
+                alert_settings.update(
+                    {
+                        "alerting_enabled": settings.get("alerting_enabled", True),
+                        "minimum_severity": settings.get("minimum_severity", 4),
+                        "category_excluded": settings.get("category_excluded", []),
+                        "category_included": settings.get("category_included", []),
+                        "file_path_excluded_regex": settings.get("file_path_excluded_regex", []),
+                        "file_path_included_regex": settings.get("file_path_included_regex", []),
+                        "llm_triage_values_to_alert": settings.get("llm_triage_values_to_alert", ["true_positive"]),
+                    }
+                )
                 logger.info("Alert settings loaded", settings=alert_settings)
             else:
                 logger.warning("Failed to load alert settings, using defaults")
@@ -227,8 +232,8 @@ async def lifespan(app: FastAPI):
         logger.info(f"Alert rate limiter configured with {MAX_CONCURRENT_ALERTS} concurrent alerts")
         logger.info(f"Alert retry policy: {MAX_ALERT_RETRIES} retries with {RETRY_DELAY_SECONDS}s delay")
 
-    except Exception as e:
-        logger.exception(e, message="Error initializing Apprise")
+    except Exception:
+        logger.exception(message="Error initializing Apprise")
         raise
 
     yield
@@ -267,8 +272,7 @@ async def handle_alert_settings_subscription():
     while True:
         try:
             transport = WebsocketsTransport(
-                url="ws://hasura:8080/v1/graphql",
-                headers={"x-hasura-admin-secret": hasura_admin_secret}
+                url="ws://hasura:8080/v1/graphql", headers={"x-hasura-admin-secret": hasura_admin_secret}
             )
 
             async with Client(
@@ -284,19 +288,21 @@ async def handle_alert_settings_subscription():
                         continue
 
                     settings = settings_list[0]
-                    alert_settings.update({
-                        "alerting_enabled": settings.get("alerting_enabled", True),
-                        "minimum_severity": settings.get("minimum_severity", 4),
-                        "category_excluded": settings.get("category_excluded", []),
-                        "category_included": settings.get("category_included", []),
-                        "file_path_excluded_regex": settings.get("file_path_excluded_regex", []),
-                        "file_path_included_regex": settings.get("file_path_included_regex", []),
-                        "llm_triage_values_to_alert": settings.get("llm_triage_values_to_alert", ["true_positive"]),
-                    })
+                    alert_settings.update(
+                        {
+                            "alerting_enabled": settings.get("alerting_enabled", True),
+                            "minimum_severity": settings.get("minimum_severity", 4),
+                            "category_excluded": settings.get("category_excluded", []),
+                            "category_included": settings.get("category_included", []),
+                            "file_path_excluded_regex": settings.get("file_path_excluded_regex", []),
+                            "file_path_included_regex": settings.get("file_path_included_regex", []),
+                            "llm_triage_values_to_alert": settings.get("llm_triage_values_to_alert", ["true_positive"]),
+                        }
+                    )
                     logger.info("Alert settings updated", settings=alert_settings)
 
-        except Exception as e:
-            logger.exception(e, message="Error in alert settings subscription, reconnecting in 5 seconds...")
+        except Exception:
+            logger.exception(message="Error in alert settings subscription, reconnecting in 5 seconds...")
             await asyncio.sleep(5)
 
 
@@ -330,8 +336,7 @@ async def handle_feedback_subscription():
     while True:
         try:
             transport = WebsocketsTransport(
-                url="ws://hasura:8080/v1/graphql",
-                headers={"x-hasura-admin-secret": hasura_admin_secret}
+                url="ws://hasura:8080/v1/graphql", headers={"x-hasura-admin-secret": hasura_admin_secret}
             )
 
             async with Client(
@@ -384,8 +389,8 @@ async def handle_feedback_subscription():
                     else:
                         logger.error("Failed to send feedback notification through Apprise after retries")
 
-        except Exception as e:
-            logger.exception(e, message="Error in feedback subscription, reconnecting in 5 seconds...")
+        except Exception:
+            logger.exception(message="Error in feedback subscription, reconnecting in 5 seconds...")
             await asyncio.sleep(5)
 
 
@@ -428,8 +433,7 @@ async def handle_findings_triage_subscription():
     while True:
         try:
             transport = WebsocketsTransport(
-                url="ws://hasura:8080/v1/graphql",
-                headers={"x-hasura-admin-secret": hasura_admin_secret}
+                url="ws://hasura:8080/v1/graphql", headers={"x-hasura-admin-secret": hasura_admin_secret}
             )
 
             async with Client(
@@ -459,7 +463,7 @@ async def handle_findings_triage_subscription():
                             logger.debug(
                                 f"Skipping alert for finding - triage value '{triage_value}' not in configured list",
                                 finding_id=triage["finding_id"],
-                                configured_values=llm_triage_values
+                                configured_values=llm_triage_values,
                             )
                             processed_triage_ids.add(triage_id)
                             continue
@@ -487,13 +491,17 @@ async def handle_findings_triage_subscription():
                         if file_path:
                             body_parts.append(f"- *File Path:* {helpers.sanitize_file_path(file_path)}")
                         if triage.get("confidence") is not None:
-                            body_parts.append(f"- *Triage Value:* {triage_value} (*Confidence:* {triage['confidence']:.2f})")
+                            body_parts.append(
+                                f"- *Triage Value:* {triage_value} (*Confidence:* {triage['confidence']:.2f})"
+                            )
 
                         # Add links to finding and file using Slack format
                         if object_id:
                             nemesis_finding_url = f"{nemesis_url}findings?object_id={object_id}"
                             nemesis_file_url = f"{nemesis_url}files?object_id={object_id}"
-                            body_parts.append(f"*<{nemesis_finding_url}|View Finding in Nemesis>* / *<{nemesis_file_url}|View File in Nemesis>*")
+                            body_parts.append(
+                                f"*<{nemesis_finding_url}|View Finding in Nemesis>* / *<{nemesis_file_url}|View File in Nemesis>*"
+                            )
 
                         body = "\n".join(body_parts)
 
@@ -508,11 +516,11 @@ async def handle_findings_triage_subscription():
                         )
 
                         logger.info(
-                            f"Processing LLM-triaged finding alert",
+                            "Processing LLM-triaged finding alert",
                             finding_id=triage["finding_id"],
                             triage_value=triage_value,
                             category=category,
-                            severity=severity
+                            severity=severity,
                         )
 
                         # Send alert through normal filtering and rate limiting
@@ -521,8 +529,8 @@ async def handle_findings_triage_subscription():
                         # Mark as processed
                         processed_triage_ids.add(triage_id)
 
-        except Exception as e:
-            logger.exception(e, message="Error in findings triage subscription, reconnecting in 5 seconds...")
+        except Exception:
+            logger.exception(message="Error in findings triage subscription, reconnecting in 5 seconds...")
             await asyncio.sleep(5)
 
 
@@ -620,7 +628,7 @@ def should_filter_alert(alert: Alert) -> tuple[bool, str]:
                     logger.error(f"Invalid included regex pattern: {pattern}", error=str(e))
 
             if not matched_any:
-                return True, f"File path does not match any included regex patterns"
+                return True, "File path does not match any included regex patterns"
 
         # Then check excluded regexes - if any match, filter the alert
         if file_path_excluded_regexes:
@@ -695,9 +703,11 @@ async def send_alert_with_retries(alert):
     return False
 
 
-@dapr_app.subscribe(pubsub="pubsub", topic="alert")
+@dapr_app.subscribe(pubsub=ALERTING_PUBSUB, topic=ALERTING_NEW_ALERT_TOPIC)
 async def handle_alert(event: CloudEvent[Alert]):
     """Handler for `alert` events."""
+
+    logger.debug("Received an alert", title=event.data.title)
     try:
         alert = event.data
         if not alert.title:
@@ -711,8 +721,8 @@ async def handle_alert(event: CloudEvent[Alert]):
 
         return {}
 
-    except Exception as e:
-        logger.exception(e, message="Error processing alert event")
+    except Exception:
+        logger.exception(message="Error processing alert event")
         raise
 
 
@@ -732,21 +742,14 @@ async def get_apprise_info():
         # Only process Slack URLs for this status as we can pull the channel (if possible)
         if url.startswith("slack://"):
             # Extract channel name from Slack URL format: slack://TOKEN@WORKSPACE/#channel
-            channel_match = re.search(r'#([^?]+)', url)
+            channel_match = re.search(r"#([^?]+)", url)
             if channel_match:
                 channel_name = channel_match.group(1)
 
                 if tag and tag != "default":
-                    channels.append({
-                        "name": channel_name,
-                        "type": "tagged",
-                        "tag": tag
-                    })
+                    channels.append({"name": channel_name, "type": "tagged", "tag": tag})
                 else:
-                    channels.append({
-                        "name": channel_name,
-                        "type": "main"
-                    })
+                    channels.append({"name": channel_name, "type": "main"})
 
     return {"channels": channels}
 

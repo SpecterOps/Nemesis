@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 #         binary = lief.parse(file_path)
 #         return json.loads(lief.to_json(binary))
 #     except Exception as e:
-#         logger.exception(e, message="Error in process()")
+#         logger.exception(message="Error in process()")
 #         return None
 
 
@@ -330,15 +330,18 @@ def parse_pe_file(file_path: str) -> dict[str, Any]:
         return result
 
     except Exception as e:
-        logger.exception(e, message="Error parsing PE file")
+        logger.exception(message="Error parsing PE file")
         return {"error": str(e)}
 
 
 class PEAnalyzer(EnrichmentModule):
     name: str = "pe_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
@@ -355,7 +358,7 @@ rule is_pe
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Uses a Yara run to determine if this module should run."""
         # Get the current file_enriched from the database backend
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # download a max of 1000 bytes
         num_bytes = file_enriched.size if file_enriched.size < 1000 else 1000
@@ -385,8 +388,8 @@ rule is_pe
             enrichment_result = EnrichmentResult(module_name=self.name)
             enrichment_result.results = parse_pe_file(file_path)
             return enrichment_result
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing PE file for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing PE file for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -401,7 +404,7 @@ rule is_pe
         """
         try:
             # Get the current file_enriched from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -410,8 +413,8 @@ rule is_pe
                 with self.storage.download(file_enriched.object_id) as file:
                     return self._analyze_pe(file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error in PE file analysis", file_object_id=object_id)
+        except Exception:
+            logger.exception(message="Error in PE file analysis", file_object_id=object_id)
             return None
 
 

@@ -1,16 +1,17 @@
 """Publish findings and alerts activity."""
 
+import asyncio
 import json
 import os
-import aiohttp
-import asyncio
 
+import aiohttp
 import common.helpers as helpers
 from common.logger import get_logger
 from common.models import Alert
+from common.queues import ALERTING_NEW_ALERT_TOPIC, ALERTING_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from .. import global_vars
@@ -20,6 +21,7 @@ logger = get_logger(__name__)
 
 # Categories that are excluded from LLM triage (always alert immediately)
 LLM_EXCLUDED_CATEGORIES = ["extracted_hash", "yara_match", "extracted_data"]
+
 
 # Check if LLM is enabled (agents service is available)
 async def check_llm_enabled():
@@ -37,21 +39,21 @@ async def check_llm_enabled():
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=2)) as response:
                     if response.status == 200:
-                        logger.info(f"LLM functionality detected - agents service is available", attempt=attempt)
+                        logger.info("LLM functionality detected - agents service is available", attempt=attempt)
                         return True
                     else:
                         logger.info(
-                            f"Agents service responded with non-200 status",
+                            "Agents service responded with non-200 status",
                             status=response.status,
                             attempt=attempt,
-                            max_retries=max_retries
+                            max_retries=max_retries,
                         )
         except Exception as e:
             logger.info(
-                f"LLM functionality not available - agents service not reachable",
+                "LLM functionality not available - agents service not reachable",
                 error=str(e),
                 attempt=attempt,
-                max_retries=max_retries
+                max_retries=max_retries,
             )
 
         # If not the last attempt, wait before retrying
@@ -62,8 +64,10 @@ async def check_llm_enabled():
     logger.info("LLM functionality disabled - agents service not available after all retries")
     return False
 
+
 # Cache LLM status to avoid repeated checks
 _llm_enabled_cache = None
+
 
 async def is_llm_enabled():
     """Get cached LLM status, checking on first call."""
@@ -74,7 +78,9 @@ async def is_llm_enabled():
     return _llm_enabled_cache
 
 
-async def publish_alerts_for_findings(object_id: str, origin_include: list[str] = None, origin_exclude: list[str] = None):
+async def publish_alerts_for_findings(
+    object_id: str, origin_include: list[str] | None = None, origin_exclude: list[str] | None = None
+) -> None:
     """
     Core function to publish alerts for findings with optional origin filtering.
 
@@ -83,17 +89,17 @@ async def publish_alerts_for_findings(object_id: str, origin_include: list[str] 
         origin_include: If provided, only alert on findings from these origins
         origin_exclude: If provided, skip alerting on findings from these origins
     """
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
     # Build SQL query with origin filters
     where_clauses = ["object_id = $1"]
     params = [object_id]
 
     if origin_include:
-        where_clauses.append(f"origin_name = ANY($2)")
+        where_clauses.append("origin_name = ANY($2)")
         params.append(origin_include)
     elif origin_exclude:
-        where_clauses.append(f"origin_name != ALL($2)")
+        where_clauses.append("origin_name != ALL($2)")
         params.append(origin_exclude)
 
     query = f"""
@@ -109,11 +115,11 @@ async def publish_alerts_for_findings(object_id: str, origin_include: list[str] 
         logger.info(
             f"Fetched {len(findings)} findings for object_id {object_id}",
             origin_include=origin_include,
-            origin_exclude=origin_exclude
+            origin_exclude=origin_exclude,
         )
 
         if findings:
-            with DaprClient(headers_callback=get_trace_injector()) as client:
+            async with DaprClient(headers_callback=get_trace_injector()) as client:
                 if file_enriched.path:
                     file_path = file_enriched.path
                 else:
@@ -132,10 +138,10 @@ async def publish_alerts_for_findings(object_id: str, origin_include: list[str] 
                     # If LLM is enabled and this category will be triaged, skip immediate alert
                     if llm_enabled and category not in LLM_EXCLUDED_CATEGORIES:
                         logger.debug(
-                            f"Skipping immediate alert for finding - LLM triage will handle it",
+                            "Skipping immediate alert for finding - LLM triage will handle it",
                             finding_name=finding_name,
                             category=category,
-                            object_id=object_id
+                            object_id=object_id,
                         )
                         continue
 
@@ -166,9 +172,9 @@ async def publish_alerts_for_findings(object_id: str, origin_include: list[str] 
                         severity=severity,
                         file_path=file_path,
                     )
-                    client.publish_event(
-                        pubsub_name="pubsub",
-                        topic_name="alert",
+                    await client.publish_event(
+                        pubsub_name=ALERTING_PUBSUB,
+                        topic_name=ALERTING_NEW_ALERT_TOPIC,
                         data=json.dumps(alert.model_dump(exclude_unset=True)),
                         data_content_type="application/json",
                     )
@@ -176,7 +182,7 @@ async def publish_alerts_for_findings(object_id: str, origin_include: list[str] 
 
 
 @workflow_activity
-async def publish_findings_alerts(ctx: WorkflowActivityContext, activity_input):
+async def publish_findings_alerts(ctx: WorkflowActivityContext, object_id: str):
     """
     Workflow activity to publish alerts for findings, excluding async service origins.
 
@@ -184,10 +190,7 @@ async def publish_findings_alerts(ctx: WorkflowActivityContext, activity_input):
     from synchronous enrichment modules. Async services (dotnet, noseyparker) handle
     their own alerting when their results arrive.
     """
-    object_id = activity_input["object_id"]
+    logger.info("Executing activity: publish_findings_alerts", object_id=object_id)
 
     # Exclude async service origins to prevent double-alerting
-    await publish_alerts_for_findings(
-        object_id=object_id,
-        origin_exclude=["dotnet_service", "noseyparker"]
-    )
+    await publish_alerts_for_findings(object_id=object_id, origin_exclude=["dotnet_service", "noseyparker"])

@@ -1,5 +1,4 @@
 # enrichment_modules/lsass_dump/analyzer.py
-import asyncio
 import tempfile
 import textwrap
 from datetime import datetime
@@ -8,13 +7,15 @@ from uuid import UUID
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager, MasterKey, MasterKeyType
 from pypykatz.pypykatz import pypykatz
 
 if TYPE_CHECKING:
+    import asyncio
+
     from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)
@@ -52,8 +53,11 @@ class Credential:
 class LsassDumpParser(EnrichmentModule):
     name: str = "lsass_dump"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
         self.dpapi_manager: DpapiManager = None  # type: ignore
@@ -62,7 +66,7 @@ class LsassDumpParser(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         return "mini dump crash report" in file_enriched.magic_type.lower()
 
     def _convert_bytes_to_string(self, value):
@@ -546,7 +550,7 @@ class LsassDumpParser(EnrichmentModule):
         """Async helper for process method."""
 
         logger.debug("Starting async processing of LSASS dump", object_id=object_id)
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Use provided file_path if available, otherwise download
         if file_path:

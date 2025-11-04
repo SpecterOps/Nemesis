@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
 ## [2.1.4]
 
 ### Added
@@ -43,6 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - API endpoints for statistic and PDF generation (via Gotenberg conversion)
   - Reporting summarization agent
 - Ability to enable/disable alerting, and filter alerts on specific criteria
+- Performance:
+  - Convert almost all of file_enrichment/file_enrichment_modules to using async
+  - Made Dapr activities run in the asyncio loop
+  - Use a shared DB connection pool
+  - Use LRU cache for get_basic_enrichment calls
+  - Identify how to manually scale containers in docker compose by manually creating replicas
+  - Identified how to scale Dapr scheduler, if needed.
+  - OTEL spans for various enrichment module components
+  - Obtain prometheus metrics from Dapr components and other services.
+- Allow configuring logging settings of various containers via env vars in compose file.
+
 
 ### Changed
 
@@ -59,6 +72,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimized DPAPI masterkey decryption based on the type of masterkey
 - Converted several DB calls to async code
 - Optimized the housekeeping code to run in parallel and use transactions (where possible)
+- CLI: Renamed `--repeat` option to `--times` (or `-x`) in submit command. Now defaults to 1 and represents total number of submissions (not additional submissions).
+- UI: Changed the Dashboard "Files over time" graph adjust based on minutes/hours/days (rather than just default of days)
+- Refactored how activities, subscriptions, and routes are created in the file_enrichment service.
+- Simplified workflow tracking code
+- Updated Dapr state store to Postgres v2
+- Converted several subscriptions to use strongly typed Pydantic models
+- UI - File Viewer:
+  - Fixed "View Raw" triggering a download instead of opening in the browser
+  - Restrict strings to 1 MB.
+  - Cache files in memory to prevent re-downloading.
+- Enabled Python dev mode in file_enrichment dev container
+
 
 ### Fixed
 
@@ -71,6 +96,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Race condition when Nosey Parker / DotNET findings come in after the file enrichment workflow completes
   - TODO: in the future, remove pub/sub from these containers and have `file_enrichment` remotely schedule workflows in these containers
 - Fixed container extraction status updates for large containers
+- Converted all Dapr pubsub components to be task queues (not broadcast queues) to help with performance/scaling.
+- Fixed several File resource leaks in office2john
+- Normalized paths on upload instead of sprinkling normalization throughout codebase
+- dotnet_service serialization errors on some assemblies
 
 ## [2.1.3]
 

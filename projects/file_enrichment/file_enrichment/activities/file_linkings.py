@@ -17,6 +17,8 @@ async def check_file_linkings(ctx: WorkflowActivityContext, activity_input):
     """
 
     object_id = activity_input["object_id"]
+    logger.info("Executing activity: check_file_linkings", object_id=object_id)
+
     file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
     try:

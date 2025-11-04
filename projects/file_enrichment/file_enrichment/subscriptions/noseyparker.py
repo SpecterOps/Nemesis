@@ -2,7 +2,6 @@
 
 import base64
 import json
-import os
 import re
 import time
 import uuid
@@ -13,6 +12,7 @@ import file_enrichment.global_vars as global_vars
 from common.helpers import sanitize_for_jsonb
 from common.logger import get_logger
 from common.models import (
+    CloudEvent,
     EnrichmentResult,
     FileObject,
     Finding,
@@ -27,23 +27,27 @@ from file_enrichment.activities.publish_findings import publish_alerts_for_findi
 logger = get_logger(__name__)
 
 
-async def process_noseyparker_event(nosey_output: NoseyParkerOutput):
-    """Process incoming Nosey Parker scan results"""
+async def noseyparker_subscription_handler(event: CloudEvent[NoseyParkerOutput]):
+    """Handler for incoming Nosey Parker scan results"""
+    nosey_output = event.data
+
     try:
         object_id = nosey_output.object_id
+        workflow_id = nosey_output.workflow_id
         matches = nosey_output.scan_result.matches
         stats = nosey_output.scan_result.stats
 
-        logger.debug(f"Found {len(matches)} matches for object {object_id}", pid=os.getpid())
+        logger.debug(f"Found {len(matches)} matches for object {object_id}")
 
         await store_noseyparker_results(
             object_id=object_id,
+            workflow_id=workflow_id,
             matches=matches,
             scan_stats=stats,
         )
 
-    except Exception as e:
-        logger.exception(e, message="Error processing Nosey Parker output event", pid=os.getpid())
+    except Exception:
+        logger.exception(message="Error processing Nosey Parker output event")
         raise
 
 
@@ -62,8 +66,8 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
     # Split the token into header, payload, and signature
     try:
         header_b64, payload_b64, signature = jwt_token.split(".")
-    except Exception as e:
-        logger.exception(e, message="Invalid JWT format. Expected three parts separated by dots.", jwt_token=jwt_token)
+    except Exception:
+        logger.exception(message="Invalid JWT format. Expected three parts separated by dots.", jwt_token=jwt_token)
         return False, {}
 
     # Decode the payload
@@ -75,8 +79,8 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
     try:
         payload_json = base64.b64decode(payload_b64).decode("utf-8")
         payload = json.loads(payload_json)
-    except Exception as e:
-        logger.exception(e, message="Error decoding JWT payload", jwt_token=jwt_token)
+    except Exception:
+        logger.exception(message="Error decoding JWT payload", jwt_token=jwt_token)
         return True, {}
 
     # Check if token is expired
@@ -89,8 +93,8 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
             return False, payload
 
         return current_time > int(payload["exp"]), payload
-    except Exception as e:
-        logger.exception(e, message="Error processing jwt_token", jwt_token=jwt_token)
+    except Exception:
+        logger.exception(message="Error processing jwt_token", jwt_token=jwt_token)
         return True, payload
 
 
@@ -191,6 +195,7 @@ def create_finding_summary(match_info):
 
 async def store_noseyparker_results(
     object_id: str,
+    workflow_id: str,
     matches: list[MatchInfo],
     scan_stats: ScanStats,
 ):
@@ -204,22 +209,12 @@ async def store_noseyparker_results(
         pool (asyncpg.Pool): Database connection pool
     """
     try:
-        try:
-            async with global_vars.asyncpg_pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    UPDATE workflows
-                    SET enrichments_success = array_append(enrichments_failure, $1)
-                    WHERE object_id = $2
-                    """,
-                    "noseyparker",
-                    object_id,
-                )
-        except Exception as db_error:
-            logger.error(f"Failed to update noseyparker enrichment success in database: {str(db_error)}")
-
         if not matches:
             logger.debug("No matches found, nothing to store", object_id=object_id)
+            await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+                instance_id=workflow_id,
+                success_list=["noseyparker"],
+            )
             return
 
         # Create an enrichment result to store
@@ -277,59 +272,63 @@ async def store_noseyparker_results(
 
         # Store in database
         async with global_vars.asyncpg_pool.acquire() as conn:
-            # Store main enrichment result
-            results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
-            await conn.execute(
-                """
-                INSERT INTO enrichments (object_id, module_name, result_data)
-                VALUES ($1, $2, $3)
-                """,
-                object_id,
-                "noseyparker",
-                results_escaped,
-            )
-
-            # Store any findings
-            for finding in findings_list:
-                # Convert each FileObject to a JSON string
-                data_as_strings = []
-                for obj in finding.data:
-                    # Convert the model to a dict first
-                    if hasattr(obj, "model_dump"):
-                        obj_dict = obj.model_dump()
-                    else:
-                        obj_dict = obj
-                    sanitized_obj = sanitize_for_jsonb(obj_dict)
-                    data_as_strings.append(json.dumps(sanitized_obj))
-
+            async with conn.transaction():
+                # Store main enrichment result
+                results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
                 await conn.execute(
                     """
-                    INSERT INTO findings (
-                        finding_name, category, severity, object_id,
-                        origin_type, origin_name, raw_data, data
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    INSERT INTO enrichments (object_id, module_name, result_data)
+                    VALUES ($1, $2, $3)
                     """,
-                    finding.finding_name,
-                    finding.category,
-                    finding.severity,
                     object_id,
-                    finding.origin_type,
-                    finding.origin_name,
-                    json.dumps(sanitize_for_jsonb(finding.raw_data)),
-                    json.dumps(data_as_strings),  # Store as array of JSON strings
+                    "noseyparker",
+                    results_escaped,
                 )
+
+                # Store any findings
+                for finding in findings_list:
+                    # Convert each FileObject to a JSON string
+                    data_as_strings = []
+                    for obj in finding.data:
+                        # Convert the model to a dict first
+                        if hasattr(obj, "model_dump"):
+                            obj_dict = obj.model_dump()
+                        else:
+                            obj_dict = obj
+                        sanitized_obj = sanitize_for_jsonb(obj_dict)
+                        data_as_strings.append(json.dumps(sanitized_obj))
+
+                    await conn.execute(
+                        """
+                        INSERT INTO findings (
+                            finding_name, category, severity, object_id,
+                            origin_type, origin_name, raw_data, data
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        """,
+                        finding.finding_name,
+                        finding.category,
+                        finding.severity,
+                        object_id,
+                        finding.origin_type,
+                        finding.origin_name,
+                        json.dumps(sanitize_for_jsonb(finding.raw_data)),
+                        json.dumps(data_as_strings),  # Store as array of JSON strings
+                    )
+
+        # Update workflow enrichment status
+        await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+            instance_id=workflow_id,
+            success_list=["noseyparker"],
+        )
 
         logger.info("Successfully stored NoseyParker results", object_id=object_id, match_count=len(matches))
 
         # Publish alerts for noseyparker findings (only for this origin)
         if findings_list:
-            await publish_alerts_for_findings(
-                object_id=object_id,
-                origin_include=["noseyparker"]
-            )
+            await publish_alerts_for_findings(object_id=object_id, origin_include=["noseyparker"])
 
         return enrichment_result
 
-    except Exception as e:
-        logger.exception(e, message="Error storing NoseyParker results", object_id=object_id)
+    except Exception:
+        logger.exception(message="Error storing NoseyParker results", object_id=object_id)
         return None

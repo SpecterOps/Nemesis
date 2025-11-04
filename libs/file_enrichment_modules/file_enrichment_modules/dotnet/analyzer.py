@@ -7,9 +7,10 @@ from typing import Union
 import dnfile
 from common.logger import get_logger
 from common.models import DotNetInput, EnrichmentResult
+from common.queues import DOTNET_INPUT_TOPIC, DOTNET_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
@@ -112,13 +113,15 @@ class DotNetAnalyzer(EnrichmentModule):
 
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         # get the current `file_enriched` from the database backend
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         should_run = "mono/.net assembly" in file_enriched.magic_type.lower()
 
         return should_run
@@ -127,14 +130,14 @@ class DotNetAnalyzer(EnrichmentModule):
         """Process file using the dotnet service."""
         try:
             # get the current `file_enriched` FileEnriched object from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # publish a `dotnet-input` message for the process-heavy decompilation and InspectAssembly analysis in `dotnet_service`
             dotnet_input = DotNetInput(object_id=object_id)
-            with DaprClient() as client:
-                client.publish_event(
-                    pubsub_name="pubsub",
-                    topic_name="dotnet-input",
+            async with DaprClient() as client:
+                await client.publish_event(
+                    pubsub_name=DOTNET_PUBSUB,
+                    topic_name=DOTNET_INPUT_TOPIC,
                     data=json.dumps(dotnet_input.model_dump()),
                     data_content_type="application/json",
                 )

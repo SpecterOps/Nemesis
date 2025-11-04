@@ -44,9 +44,7 @@ def validate_and_calculate_sha1(
         calculated = SHA1.new(plaintext_key).digest()
         if plaintext_key_sha1 is not None:
             if calculated != plaintext_key_sha1:
-                raise ValueError(
-                    "Provided plaintext_key_sha1 does not match calculated SHA1 of plaintext_key"
-                )
+                raise ValueError("Provided plaintext_key_sha1 does not match calculated SHA1 of plaintext_key")
         return calculated
     return plaintext_key_sha1
 

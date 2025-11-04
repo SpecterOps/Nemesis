@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 class KeytabAnalyzer(EnrichmentModule):
     name: str = "keytab_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 
@@ -24,6 +25,8 @@ class KeytabAnalyzer(EnrichmentModule):
         self.workflows = ["default"]
 
         self.size_limit = 50000000  # only check the first 50 megs for DPAPI blobs, for performance
+
+        self.asyncpg_pool = None  # type: ignore
 
         # Key types mapping for readable output
         self.key_types = {
@@ -59,7 +62,7 @@ rule Keytab_File
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check file extension first
         if file_enriched.file_name.lower().endswith(".keytab"):
@@ -358,7 +361,7 @@ rule Keytab_File
             return enrichment_result
 
         except Exception as e:
-            logger.exception(e, message=f"Error processing keytab file: {file_enriched.file_name}")
+            logger.exception(message=f"Error processing keytab file: {file_enriched.file_name}")
 
             # Create an error report with more detailed information
             error_report = [
@@ -408,7 +411,7 @@ rule Keytab_File
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -417,8 +420,8 @@ rule Keytab_File
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_keytab_file(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error in keytab analyzer")
+        except Exception:
+            logger.exception(message="Error in keytab analyzer")
             return None
 
 

@@ -54,8 +54,11 @@ def format_hex_like_xxd(data):
 class YaraScanner(EnrichmentModule):
     name: str = "yara_scanner"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         self.rule_manager = YaraRuleManager()
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -183,7 +186,7 @@ class YaraScanner(EnrichmentModule):
         """
         try:
             # Get the current file_enriched from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -192,8 +195,8 @@ class YaraScanner(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_yara(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error in process()")
+        except Exception:
+            logger.exception(message="Error in process()")
 
 
 def create_enrichment_module() -> EnrichmentModule:

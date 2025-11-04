@@ -5,8 +5,9 @@ import tempfile
 from common.helpers import is_container
 from common.logger import get_logger
 from common.models import EnrichmentResult, File, Transform
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
+from dapr.aio.clients import DaprClient
 from file_enrichment_modules.container_contents.containers import ContainerExtractor
 from file_enrichment_modules.module_loader import EnrichmentModule
 
@@ -16,15 +17,18 @@ logger = get_logger(__name__)
 class ContainerContentsAnalyzer(EnrichmentModule):
     name: str = "container_contents_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 
         # Configuration for container extraction
         self.extracted_archive_size_limit = 1_073_741_824  # 1GB default
 
+        self.asyncpg_pool = None  # type: ignore
+
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check if the file is a supported container type
         should_run = is_container(file_enriched.mime_type)
@@ -69,18 +73,18 @@ class ContainerContentsAnalyzer(EnrichmentModule):
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process container file and extract its contents."""
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
             enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
             transforms = []
             extracted_files = []
 
             # Initialize DaprClient and ContainerExtractor
-            with DaprClient() as dapr_client:
+            async with DaprClient() as dapr_client:
                 # Create a subclass to capture extracted files
                 class TrackingContainerExtractor(ContainerExtractor):
-                    def publish_file_message(self, file_message: File):
+                    async def publish_file_message(self, file_message: File):
                         extracted_files.append(file_message)
-                        super().publish_file_message(file_message)
+                        await super().publish_file_message(file_message)
 
                 tracking_extractor = TrackingContainerExtractor(
                     self.storage,
@@ -89,7 +93,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
                 )
 
                 # Extract the container contents
-                tracking_extractor.extract(file_enriched)
+                await tracking_extractor.extract(file_enriched)
 
                 # Generate and store the summary report
                 summary_content = self._generate_container_summary(extracted_files)
@@ -114,8 +118,8 @@ class ContainerContentsAnalyzer(EnrichmentModule):
                 enrichment_result.transforms = transforms
                 return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error processing container contents")
+        except Exception:
+            logger.exception(message="Error processing container contents")
             raise
 
 

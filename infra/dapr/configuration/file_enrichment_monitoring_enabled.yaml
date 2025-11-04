@@ -1,11 +1,11 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: fileenrichmentconfig
+  name: daprConfig
 spec:
-  workflow:
-    maxConcurrentWorkflowInvocations: 1
-    maxConcurrentActivityInvocations: 1
+  # workflow:
+  #   maxConcurrentWorkflowInvocations: 2
+  #   maxConcurrentActivityInvocations: 2
   tracing:
     expandParams: true
     samplingRate: "1"
@@ -15,3 +15,5 @@ spec:
       isSecure: false
   metric:
     enabled: true
+    http:
+      increasedCardinality: false

@@ -194,13 +194,13 @@ Be concise, factual, and focus on risk impact rather than detection methods."""
 Please analyze the following data and provide a comprehensive risk assessment.
 
 ## Summary Statistics
-{json.dumps(report_data.get('summary', {}), indent=2)}
+{json.dumps(report_data.get("summary", {}), indent=2)}
 
 ## Risk Indicators
-{json.dumps(report_data.get('risk_indicators', {}), indent=2)}
+{json.dumps(report_data.get("risk_indicators", {}), indent=2)}
 
 ## Findings Analysis
-{json.dumps(report_data.get('findings_detail', {}), indent=2)}
+{json.dumps(report_data.get("findings_detail", {}), indent=2)}
 
 ## Top Verified Findings
 """
@@ -242,7 +242,9 @@ Please analyze the following system-wide data and provide a comprehensive risk a
         else:
             prompt += "No sources available.\n"
 
-        prompt += "\n\nBased on this system-wide data, provide your risk assessment focusing on overall exposure and impact."
+        prompt += (
+            "\n\nBased on this system-wide data, provide your risk assessment focusing on overall exposure and impact."
+        )
 
         return prompt
 

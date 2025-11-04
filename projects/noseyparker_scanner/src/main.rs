@@ -145,12 +145,14 @@ struct Args {
 #[derive(Debug, Deserialize, Serialize)]
 struct NoseyParkerInput {
     object_id: String,
+    workflow_id: String,
 }
 
 // Output model that matches the Python pydantic model
 #[derive(Debug, Deserialize, Serialize)]
 struct NoseyParkerOutput {
     object_id: String,
+    workflow_id: String,
     scan_result: ScanResults,
 }
 
@@ -206,7 +208,7 @@ struct ScanStats {
 }
 
 // The callback handler with memory management
-#[topic(pub_sub_name = "pubsub", topic = "noseyparker-input")]
+#[topic(pub_sub_name = "noseyparker", topic = "noseyparker_input")]
 async fn handle_input_event(input: NoseyParkerInput) {
     info!("Processing pub/sub event for object_id: {}", input.object_id);
 
@@ -241,6 +243,7 @@ async fn handle_input_event(input: NoseyParkerInput) {
             // Create output message
             let output = NoseyParkerOutput {
                 object_id: input.object_id.clone(),
+                workflow_id: input.workflow_id.clone(),
                 scan_result: scan_results,
             };
 
@@ -252,8 +255,8 @@ async fn handle_input_event(input: NoseyParkerInput) {
             );
 
             // Get pub/sub configuration from environment variables or use defaults
-            let pubsub_name = std::env::var("PUBSUB_NAME").unwrap_or_else(|_| "pubsub".to_string());
-            let output_topic = std::env::var("OUTPUT_TOPIC").unwrap_or_else(|_| "noseyparker-output".to_string());
+            let pubsub_name = std::env::var("PUBSUB_NAME").unwrap_or_else(|_| "noseyparker".to_string());
+            let output_topic = std::env::var("OUTPUT_TOPIC").unwrap_or_else(|_| "noseyparker_output".to_string());
 
             info!("Publishing result to output topic: {}", output_topic);
 
@@ -280,35 +283,10 @@ async fn handle_input_event(input: NoseyParkerInput) {
           input.object_id, CONCURRENCY_SEMAPHORE.available_permits() + 1);
 }
 
-/// Force memory cleanup and log memory usage - Enhanced for jemalloc
+/// Force memory cleanup - Simplified for better performance
 fn force_memory_cleanup() {
-    // Force garbage collection and memory trim on supported platforms
-    #[cfg(target_os = "linux")]
-    unsafe {
-        // malloc_trim works well with jemalloc and forces it to return memory to OS
-        let _result = libc::malloc_trim(0);
-    }
-
-    // For jemalloc, trigger arena cleanup with allocation patterns
-    // jemalloc responds well to allocation/deallocation cycles
-    {
-        // Force several allocation/deallocation cycles of different sizes
-        // This helps jemalloc clean up its internal structures
-        for i in 0..3 {
-            let size = (i + 1) * 1024 * 1024; // 1MB, 2MB, 3MB
-            let _dummy = vec![0u8; size];
-            drop(_dummy);
-        }
-    }
-
-    // Additional cleanup: force a larger allocation/deallocation
-    // This can trigger jemalloc to consolidate and return larger chunks
-    {
-        let _large_cleanup: Vec<u8> = Vec::with_capacity(10 * 1024 * 1024); // 10MB
-        drop(_large_cleanup);
-    }
-
-    // Force another malloc_trim after the allocation cycles
+    // On Linux, use malloc_trim to release memory back to the OS
+    // jemalloc (our allocator) responds well to this
     #[cfg(target_os = "linux")]
     unsafe {
         libc::malloc_trim(0);
@@ -352,7 +330,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "0.0.0.0:50042".parse().unwrap();
 
     // Configure logging
-    let env_filter = format!("noseyparker_scanner={},noseyparker={}", args.log_level, args.log_level);
+    // Use RUST_LOG environment variable if set, otherwise use the --log-level argument
+    let env_filter = if std::env::var("RUST_LOG").is_ok() {
+        tracing_subscriber::EnvFilter::from_default_env()
+    } else {
+        tracing_subscriber::EnvFilter::new(
+            format!("noseyparker_scanner={},noseyparker={}", args.log_level, args.log_level)
+        )
+    };
+
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_ansi(args.color)
@@ -1004,13 +990,13 @@ async fn scan_directory_with_enumerator(dir_path: &std::path::Path, snippet_leng
 
 /// Core blob scanning logic using NoseyParker matcher
 fn scan_blob_with_matcher(
-    blob: &Blob, 
+    blob: &Blob,
     snippet_length: usize,
     appearance_info: &input_enumerator::blob_appearance::BlobAppearanceSet,
     file_path: Option<String>
 ) -> Result<ScanResults> {
     let scan_start = Instant::now();
-    
+
     // Use the globally preloaded rules database
     let seen_blobs = BlobIdMap::new();
     let matcher_stats = Mutex::new(MatcherStats::default());

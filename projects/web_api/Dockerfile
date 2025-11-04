@@ -86,9 +86,10 @@ COPY --from=bundle /venv /venv
 # Uvicorn production settings
 ENV UVICORN_HOST=0.0.0.0 \
     UVICORN_PORT=8000 \
-    UVICORN_WORKERS=1 \
     UVICORN_PROXY_HEADERS=1 \
-    UVICORN_ACCESS_LOG=false
+    UVICORN_WORKERS=4 \
+    UVICORN_ACCESS_LOG=false \
+    UVICORN_LOG_LEVEL=info
 
 # TODO: Re-enable when we're ready for release
 # USER nemesis

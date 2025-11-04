@@ -8,7 +8,7 @@ import yara_x
 from plyara import utils as plyara_utils
 
 
-def clean_yara_rules(input_dir: str, output_file: str = None) -> None:
+def clean_yara_rules(input_dir: str, output_file: str | None = None) -> None:
     """
     Clean and combine Yara rules from input directory into a single file.
 

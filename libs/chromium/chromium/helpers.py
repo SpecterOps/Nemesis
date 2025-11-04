@@ -11,6 +11,7 @@ from nemesis_dpapi import Blob
 
 logger = get_logger(__name__)
 
+
 def is_sqlite3(filename):
     try:
         with open(filename, "rb") as f:
@@ -18,7 +19,6 @@ def is_sqlite3(filename):
         return header.startswith(b"SQLite format 3\0")
     except OSError:
         return False
-
 
 
 def convert_chromium_timestamp(timestamp: int, str_format: bool = False) -> datetime | str | None:
@@ -134,9 +134,11 @@ async def get_state_key_id(source: str, username: str | None, browser: str, asyn
         async with asyncpg_pool.acquire() as conn:
             result = await conn.fetchrow(
                 "SELECT id FROM chromium.state_keys WHERE source = $1 AND username = $2 AND browser = $3",
-                source, username, browser
+                source,
+                username,
+                browser,
             )
-            return result['id'] if result else None
+            return result["id"] if result else None
     except Exception as e:
         logger.warning("Failed to lookup state key ID", error=str(e))
         return None
@@ -162,8 +164,7 @@ async def get_state_key_bytes(state_key_id: int, encryption_type: str, asyncpg_p
     try:
         async with asyncpg_pool.acquire() as conn:
             result = await conn.fetchrow(
-                f"SELECT {column_name}, {is_decrypted_col} FROM chromium.state_keys WHERE id = $1",
-                state_key_id
+                f"SELECT {column_name}, {is_decrypted_col} FROM chromium.state_keys WHERE id = $1", state_key_id
             )
             if result and result[is_decrypted_col]:  # Check if is_decrypted is True
                 return result[column_name]
@@ -191,15 +192,15 @@ async def get_all_state_keys_from_source(source: str, asyncpg_pool: asyncpg.Pool
                 """SELECT id, username, browser, key_bytes_dec, key_is_decrypted,
                           app_bound_key_dec, app_bound_key_is_decrypted
                    FROM chromium.state_keys WHERE source = $1""",
-                source
+                source,
             )
             for result in results:
                 state_key_info = {
-                    "id": result['id'],
-                    "username": result['username'],
-                    "browser": result['browser'],
-                    "key_bytes_dec": result['key_bytes_dec'] if result['key_is_decrypted'] else None,
-                    "app_bound_key_dec": result['app_bound_key_dec'] if result['app_bound_key_is_decrypted'] else None,
+                    "id": result["id"],
+                    "username": result["username"],
+                    "browser": result["browser"],
+                    "key_bytes_dec": result["key_bytes_dec"] if result["key_is_decrypted"] else None,
+                    "app_bound_key_dec": result["app_bound_key_dec"] if result["app_bound_key_is_decrypted"] else None,
                 }
                 state_keys.append(state_key_info)
             return state_keys
@@ -296,6 +297,7 @@ def is_valid_text(data: bytes) -> bool:
 def byte_xor(ba1, ba2):
     return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
 
+
 def parse_abe_blob(abe_data: bytes, chromekey: bytes | None = None) -> dict | None:
     """Parse ABE (App-Bound Encryption) blob data.
 
@@ -331,7 +333,7 @@ def parse_abe_blob(abe_data: bytes, chromekey: bytes | None = None) -> dict | No
 
             if chromekey:
                 # gotta make sure to specify the \x00*16 IV here
-                cipher = AES.new(chromekey, AES.MODE_CBC, b'\x00' * 16)
+                cipher = AES.new(chromekey, AES.MODE_CBC, b"\x00" * 16)
                 result = cipher.decrypt(abe_parsed["encrAES"])
                 xor_key = bytes.fromhex("CCF8A1CEC56605B8517552BA1A2D061C03A29E90274FB2FCF59BA4B75C392390")
                 abe_parsed["xored_aes_key"] = byte_xor(result, xor_key)

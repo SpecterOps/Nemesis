@@ -12,7 +12,9 @@ from .helpers import convert_chromium_timestamp, parse_chromium_file_path
 logger = get_logger(__name__)
 
 
-async def process_chromium_history(object_id: str, file_path: str | None = None, asyncpg_pool: asyncpg.Pool | None = None) -> None:
+async def process_chromium_history(
+    object_id: str, file_path: str | None = None, asyncpg_pool: asyncpg.Pool | None = None
+) -> None:
     """Process Chromium History file and insert URLs and downloads into database.
 
     Args:
@@ -22,7 +24,7 @@ async def process_chromium_history(object_id: str, file_path: str | None = None,
     """
     logger.info("Processing Chromium History file", object_id=object_id)
 
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, asyncpg_pool)
 
     # Extract username and browser from file path
     username, browser = parse_chromium_file_path(file_enriched.path or "")
@@ -43,7 +45,9 @@ async def process_chromium_history(object_id: str, file_path: str | None = None,
     logger.debug("Completed processing Chromium History", object_id=object_id)
 
 
-async def _insert_history_urls(object_id: str, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool) -> None:
+async def _insert_history_urls(
+    object_id: str, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool
+) -> None:
     """Extract URLs from History and insert into chromium.history table."""
     try:
         # Read from SQLite
@@ -60,18 +64,20 @@ async def _insert_history_urls(object_id: str, file_enriched, username: str | No
         # Prepare data for PostgreSQL
         urls_data = []
         for url, title, visit_count, last_visit_time in rows:
-            urls_data.append((
-                file_enriched.object_id,
-                file_enriched.agent_id,
-                file_enriched.source,
-                file_enriched.project,
-                username,
-                browser,
-                url,
-                title,
-                visit_count,
-                convert_chromium_timestamp(last_visit_time),
-            ))
+            urls_data.append(
+                (
+                    file_enriched.object_id,
+                    file_enriched.agent_id,
+                    file_enriched.source,
+                    file_enriched.project,
+                    username,
+                    browser,
+                    url,
+                    title,
+                    visit_count,
+                    convert_chromium_timestamp(last_visit_time),
+                )
+            )
 
         # Insert into PostgreSQL using asyncpg
         async with asyncpg_pool.acquire() as conn:
@@ -97,7 +103,9 @@ async def _insert_history_urls(object_id: str, file_enriched, username: str | No
         raise
 
 
-async def _insert_history_downloads(object_id: str, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool) -> None:
+async def _insert_history_downloads(
+    object_id: str, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool
+) -> None:
     """Extract downloads from History and insert into chromium_downloads table."""
     try:
         # Read from SQLite
@@ -114,19 +122,21 @@ async def _insert_history_downloads(object_id: str, file_enriched, username: str
         # Prepare data for PostgreSQL
         downloads_data = []
         for tab_url, target_path, start_time, end_time, total_bytes in rows:
-            downloads_data.append((
-                file_enriched.object_id,
-                file_enriched.agent_id,
-                file_enriched.source,
-                file_enriched.project,
-                username,
-                browser,
-                tab_url,
-                target_path,
-                convert_chromium_timestamp(start_time),
-                convert_chromium_timestamp(end_time),
-                total_bytes,
-            ))
+            downloads_data.append(
+                (
+                    file_enriched.object_id,
+                    file_enriched.agent_id,
+                    file_enriched.source,
+                    file_enriched.project,
+                    username,
+                    browser,
+                    tab_url,
+                    target_path,
+                    convert_chromium_timestamp(start_time),
+                    convert_chromium_timestamp(end_time),
+                    total_bytes,
+                )
+            )
 
         # Insert into PostgreSQL using asyncpg
         async with asyncpg_pool.acquire() as conn:

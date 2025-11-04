@@ -1,6 +1,6 @@
 import { useUser } from '@/contexts/UserContext';
-import { AlertTriangle, Bell, Calendar, Database, Settings, Trash2, User } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
+import { AlertTriangle, Bell, Calendar, Database, Trash2, User } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import Dialog from '../ui/dialog';
 
 // SettingsSection component remains the same
@@ -193,7 +193,7 @@ const SettingsPage = () => {
     const newValue = !alertSettings.alerting_enabled;
 
     // Update local state immediately
-    setAlertSettings({...alertSettings, alerting_enabled: newValue});
+    setAlertSettings({ ...alertSettings, alerting_enabled: newValue });
 
     try {
       const response = await fetch('/hasura/v1/graphql', {
@@ -236,7 +236,7 @@ const SettingsPage = () => {
     } catch (error) {
       console.error('Error saving alerting enabled setting:', error);
       // Revert local state on error
-      setAlertSettings({...alertSettings, alerting_enabled: !newValue});
+      setAlertSettings({ ...alertSettings, alerting_enabled: !newValue });
       setAlertSettingsError('Failed to save alerting enabled setting');
     }
   };
@@ -437,11 +437,10 @@ const SettingsPage = () => {
               <button
                 type="button"
                 onClick={handleAlertingEnabledToggle}
-                className={`px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                  alertSettings.alerting_enabled
-                    ? 'bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white focus:ring-green-500'
-                    : 'bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white focus:ring-red-500'
-                }`}
+                className={`px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${alertSettings.alerting_enabled
+                  ? 'bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white focus:ring-green-500'
+                  : 'bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white focus:ring-red-500'
+                  }`}
               >
                 {alertSettings.alerting_enabled ? 'Enabled' : 'Disabled'}
               </button>
@@ -467,7 +466,7 @@ const SettingsPage = () => {
                     min="0"
                     max="10"
                     value={alertSettings.minimum_severity}
-                    onChange={(e) => setAlertSettings({...alertSettings, minimum_severity: e.target.value})}
+                    onChange={(e) => setAlertSettings({ ...alertSettings, minimum_severity: e.target.value })}
                     className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -527,109 +526,109 @@ const SettingsPage = () => {
                 </div>
               </div>
 
-            {/* Row 2: Category Included and Excluded */}
-            <div className="grid grid-cols-2 gap-4 items-end">
-              {/* Category Included */}
-              <div>
-                <label htmlFor="category_included" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Included Categories
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  Comma-separated list of categories to include (empty = all allowed). Example: credential,pii
-                </p>
-                <input
-                  id="category_included"
-                  type="text"
-                  value={alertSettings.category_included.join(',')}
-                  onChange={(e) => setAlertSettings({
-                    ...alertSettings,
-                    category_included: e.target.value ? e.target.value.split(',').map(s => s.trim()) : []
-                  })}
-                  className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="credential,pii,vulnerability"
-                />
+              {/* Row 2: Category Included and Excluded */}
+              <div className="grid grid-cols-2 gap-4 items-end">
+                {/* Category Included */}
+                <div>
+                  <label htmlFor="category_included" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Included Categories
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Comma-separated list of categories to include (empty = all allowed). Example: credential,pii
+                  </p>
+                  <input
+                    id="category_included"
+                    type="text"
+                    value={alertSettings.category_included.join(',')}
+                    onChange={(e) => setAlertSettings({
+                      ...alertSettings,
+                      category_included: e.target.value ? e.target.value.split(',').map(s => s.trim()) : []
+                    })}
+                    className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="credential,pii,vulnerability"
+                  />
+                </div>
+
+                {/* Category Excluded */}
+                <div>
+                  <label htmlFor="category_excluded" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Excluded Categories
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Comma-separated list of categories to exclude. Example: informational,misc
+                  </p>
+                  <input
+                    id="category_excluded"
+                    type="text"
+                    value={alertSettings.category_excluded.join(',')}
+                    onChange={(e) => setAlertSettings({
+                      ...alertSettings,
+                      category_excluded: e.target.value ? e.target.value.split(',').map(s => s.trim()) : []
+                    })}
+                    className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="informational,misc"
+                  />
+                </div>
               </div>
 
-              {/* Category Excluded */}
-              <div>
-                <label htmlFor="category_excluded" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Excluded Categories
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  Comma-separated list of categories to exclude. Example: informational,misc
-                </p>
-                <input
-                  id="category_excluded"
-                  type="text"
-                  value={alertSettings.category_excluded.join(',')}
-                  onChange={(e) => setAlertSettings({
-                    ...alertSettings,
-                    category_excluded: e.target.value ? e.target.value.split(',').map(s => s.trim()) : []
-                  })}
-                  className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="informational,misc"
-                />
-              </div>
-            </div>
+              {/* Row 3: File Path Regex Included and Excluded */}
+              <div className="grid grid-cols-2 gap-4 items-end">
+                {/* File Path Included Regex */}
+                <div>
+                  <label htmlFor="file_path_included_regex" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Included File Path Regex
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Only alert on files matching these regex patterns (one per line, empty = all paths allowed)
+                  </p>
+                  <textarea
+                    id="file_path_included_regex"
+                    rows="3"
+                    value={alertSettings.file_path_included_regex.join('\n')}
+                    onChange={(e) => setAlertSettings({
+                      ...alertSettings,
+                      file_path_included_regex: e.target.value.split('\n').filter(line => line.trim())
+                    })}
+                    className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    placeholder=".*\.(config|ini|yaml)$&#10;/etc/.*"
+                  />
+                </div>
 
-            {/* Row 3: File Path Regex Included and Excluded */}
-            <div className="grid grid-cols-2 gap-4 items-end">
-              {/* File Path Included Regex */}
-              <div>
-                <label htmlFor="file_path_included_regex" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Included File Path Regex
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  Only alert on files matching these regex patterns (one per line, empty = all paths allowed)
-                </p>
-                <textarea
-                  id="file_path_included_regex"
-                  rows="3"
-                  value={alertSettings.file_path_included_regex.join('\n')}
-                  onChange={(e) => setAlertSettings({
-                    ...alertSettings,
-                    file_path_included_regex: e.target.value.split('\n').filter(line => line.trim())
-                  })}
-                  className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                  placeholder=".*\.(config|ini|yaml)$&#10;/etc/.*"
-                />
+                {/* File Path Excluded Regex */}
+                <div>
+                  <label htmlFor="file_path_excluded_regex" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Excluded File Path Regex
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Exclude alerts for files matching these regex patterns (one per line)
+                  </p>
+                  <textarea
+                    id="file_path_excluded_regex"
+                    rows="3"
+                    value={alertSettings.file_path_excluded_regex.join('\n')}
+                    onChange={(e) => setAlertSettings({
+                      ...alertSettings,
+                      file_path_excluded_regex: e.target.value.split('\n').filter(line => line.trim())
+                    })}
+                    className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    placeholder=".*(test|sample|example).*&#10;.*\.(tmp|bak)$"
+                  />
+                </div>
               </div>
 
-              {/* File Path Excluded Regex */}
-              <div>
-                <label htmlFor="file_path_excluded_regex" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Excluded File Path Regex
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  Exclude alerts for files matching these regex patterns (one per line)
-                </p>
-                <textarea
-                  id="file_path_excluded_regex"
-                  rows="3"
-                  value={alertSettings.file_path_excluded_regex.join('\n')}
-                  onChange={(e) => setAlertSettings({
-                    ...alertSettings,
-                    file_path_excluded_regex: e.target.value.split('\n').filter(line => line.trim())
-                  })}
-                  className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                  placeholder=".*(test|sample|example).*&#10;.*\.(tmp|bak)$"
-                />
-              </div>
-            </div>
+              {/* Status Messages */}
+              {alertSettingsError && (
+                <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span className="text-sm">{alertSettingsError}</span>
+                </div>
+              )}
 
-            {/* Status Messages */}
-            {alertSettingsError && (
-              <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-sm">{alertSettingsError}</span>
-              </div>
-            )}
-
-            {alertSettingsSaved && (
-              <div className="text-sm text-green-600 dark:text-green-400">
-                Alert settings saved successfully!
-              </div>
-            )}
+              {alertSettingsSaved && (
+                <div className="text-sm text-green-600 dark:text-green-400">
+                  Alert settings saved successfully!
+                </div>
+              )}
 
               {/* Save Button */}
               <button

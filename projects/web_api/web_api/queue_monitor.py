@@ -14,15 +14,15 @@ class WorkflowQueueMonitor:
     """Provides queue metrics via RabbitMQ Management HTTP API."""
 
     TOPIC_TO_QUEUE_MAPPING = {
-        "file": "file-enrichment-file",
-        "yara": "file-enrichment-yara",
-        "dotnet-output": "file-enrichment-dotnet-output",
-        "noseyparker-output": "file-enrichment-noseyparker-output",
-        "workflow-completed": "web-api-workflow-completed",
-        "alert": "alerting-alert",
-        "dotnet-input": "dotnet-service-dotnet-input",
-        "noseyparker-input": "noseyparker-scanner-noseyparker-input",
+        "new_file": "file-enrichment-new_file",
         "file_enriched": "document-conversion-file_enriched",
+        "bulk_enrichment_task": "file-enrichment-bulk_enrichment_task",
+        "workflow_completed": "web-api-workflow_completed",
+        "new_alert": "alerting-new_alert",
+        "dotnet_input": "dotnet-service-dotnet_input",
+        "dotnet_output": "file-enrichment-dotnet_output",
+        "noseyparker_input": "noseyparker-scanner-noseyparker_input",
+        "noseyparker_output": "file-enrichment-noseyparker_output",
     }
     DEFAULT_TOPICS = list(TOPIC_TO_QUEUE_MAPPING.keys())
 

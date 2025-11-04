@@ -13,13 +13,14 @@ services:
   # The command args should match the service's sidecar values
   # in the docker-compose.yml file (<service>_dapr)
   file-enrichment-dapr:
-    command:
-      [
+    command: [
         "./daprd",
+        "--max-body-size",
+        "1Gi",
         "--app-id",
         "file-enrichment",
         "--app-port",
-        "8001", # The port that the app is listening on in VS code
+        "8001",
         "--dapr-http-port",
         "3503",
         "--dapr-grpc-port",
@@ -28,17 +29,25 @@ services:
         "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
+        "--log-level",
+        "${DAPR_LOG_LEVEL:-warn}",
         "--resources-path",
         "/dapr/components",
         "--config",
-        "/dapr/configuration/config.yaml",
+        "/dapr/configuration/file_enrichment_monitoring_disabled.yaml",
+        "--enable-metrics",
+        "--dapr-graceful-shutdown-seconds",
+        "5",
         "--app-channel-address",
-        "host.docker.internal"
-      ] # DO NOT CHANGE: Causes the sidecar look on the host for the App Channel
-    network_mode: !reset "" # Reset the network_mode...
+        "host.docker.internal", # DO NOT CHANGE: Causes the sidecar look on the host for the App Channel
+      ]
+
+    network_mode: !reset "service:file-enrichment" # Reset the network_mode...
+    # network_mode: !reset "" # Reset the network_mode...
     # networks:
-    #   # ... so that the sidecar can go into the normal network
-    #   - nemesis_default
+    #   - nemesis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
     # Expose the Dapr sidecar ports to the host so the app being debugged
     # can communicate with the sidecar running in the cluster
@@ -50,6 +59,27 @@ services:
   minio:
     ports:
       - "9000:9000"
+
+  otel-collector:
+    ports:
+      - "4317:4317"
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  # rabbitmq:
+  #   ports:
+  #     - "5672:5672"
+
+  # scheduler:
+  #   ports:
+  #     - "50007:50007"
+
+  # placement:
+  #   ports:
+  #     - "50006:50006"
+
   # file-enrichment-dapr:
   #   image: "daprio/daprd"
   #   command: [

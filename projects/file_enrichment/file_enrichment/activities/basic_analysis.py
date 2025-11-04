@@ -18,20 +18,25 @@ logger = get_logger(__name__)
 
 
 @workflow_activity
-async def get_basic_analysis(ctx: WorkflowActivityContext, activity_input):
+async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict) -> None:
     """
     Perform 'basic' analysis on a file and save to database. Run for every file.
 
     This activity downloads the file, processes it to extract metadata,
     and saves the results to the database.
     """
-    object_id = activity_input["object_id"]
+    object_id = file_dict.get("object_id")
+    if not object_id or not isinstance(object_id, str):
+        raise ValueError("file object_id is not a uuid string")
+
+    logger.info("Executing activity: get_basic_analysis", object_id=object_id)
+
+    await global_vars.workflow_manager.tracking_service.update_status(instance_id=ctx.workflow_id, status="RUNNING")
 
     with global_vars.storage.download(object_id) as file:
-        file_enriched = process_basic_analysis(file.name, activity_input)
-        await save_file_enriched_to_db(file_enriched)
-
-        return file_enriched
+        file_enriched_dict = process_basic_analysis(file.name, file_dict)
+        await save_file_enriched_to_db(file_enriched_dict)
+        # return file_enriched_dict
 
 
 def parse_timestamp(ts):
@@ -41,7 +46,7 @@ def parse_timestamp(ts):
     return ts
 
 
-def process_basic_analysis(temp_file_path: str, activity_input: dict) -> dict:
+def process_basic_analysis(temp_file_path: str, file_dict: dict) -> dict:
     """
     Process a file and extract basic metadata including hashes, mime type, etc.
 
@@ -52,7 +57,7 @@ def process_basic_analysis(temp_file_path: str, activity_input: dict) -> dict:
     Returns:
         Dictionary with all file enrichment data (activity_input merged with basic_analysis)
     """
-    path = activity_input.get("path", "")
+    path = file_dict.get("path", "")
 
     mime_type = magic.from_file(temp_file_path, mime=True)
     if mime_type == "text/plain" or helpers.is_text_file(temp_file_path):
@@ -76,7 +81,7 @@ def process_basic_analysis(temp_file_path: str, activity_input: dict) -> dict:
     }
 
     file_enriched = {
-        **activity_input,
+        **file_dict,
         **basic_analysis,
     }
 
@@ -155,6 +160,6 @@ async def save_file_enriched_to_db(file_enriched: dict) -> None:
                 json.dumps(file_enriched.get("hashes")) if file_enriched.get("hashes") else None,
             )
             logger.debug("Stored file_enriched in PostgreSQL", object_id=file_enriched["object_id"])
-    except Exception as e:
-        logger.exception(e, message="Error storing file_enriched in PostgreSQL", file_enriched=file_enriched)
+    except Exception:
+        logger.exception(message="Error storing file_enriched in PostgreSQL", file_enriched=file_enriched)
         raise

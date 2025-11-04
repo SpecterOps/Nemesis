@@ -18,8 +18,11 @@ logger = get_logger(__name__)
 class ContainerAnalyzer(EnrichmentModule):
     name: str = "container_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         self.workflows = ["default"]
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
@@ -29,7 +32,7 @@ class ContainerAnalyzer(EnrichmentModule):
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file (not used by container analyzer)
         """
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         return is_container(file_enriched.mime_type)
 
     def _format_size(self, size_in_bytes: int) -> str:
@@ -134,8 +137,8 @@ class ContainerAnalyzer(EnrichmentModule):
                     )
                 ]
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing container contents for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing container contents for {file_enriched.file_name}")
             return None
 
         return enrichment_result
@@ -151,7 +154,7 @@ class ContainerAnalyzer(EnrichmentModule):
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -160,8 +163,8 @@ class ContainerAnalyzer(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_container(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error in container analyzer")
+        except Exception:
+            logger.exception(message="Error in container analyzer")
 
 
 def create_enrichment_module() -> EnrichmentModule:

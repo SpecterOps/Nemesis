@@ -1,7 +1,9 @@
 import json
+from functools import lru_cache
 
 import asyncpg
 import psycopg
+from async_lru import alru_cache
 from common.db import get_postgres_connection_str
 from common.models import FileEnriched
 
@@ -77,9 +79,12 @@ def _transform_file_enriched_data(file_data: dict) -> dict:
     return file_data
 
 
+@lru_cache(maxsize=1024)
 def get_file_enriched(object_id: str) -> FileEnriched:
     """
     Retrieve a file_enriched record from PostgreSQL (synchronous).
+
+    Cached with LRU cache (maxsize=1024).
 
     Args:
         object_id: The object_id to query
@@ -114,18 +119,21 @@ def get_file_enriched(object_id: str) -> FileEnriched:
     except ValueError as e:
         logger.error(f"File not found: {str(e)}")
         raise
-    except Exception as e:
-        logger.exception(e, message="Error retrieving file_enriched from PostgreSQL")
+    except Exception:
+        logger.exception(message="Error retrieving file_enriched from PostgreSQL")
         raise
 
 
-async def get_file_enriched_async(object_id: str, connection: str | asyncpg.Pool | None = None) -> FileEnriched:
+@alru_cache(maxsize=1024)
+async def get_file_enriched_async(object_id: str, pool: asyncpg.Pool) -> FileEnriched:
     """
     Retrieve a file_enriched record from PostgreSQL (asynchronous using asyncpg).
 
+    Cached with async LRU cache (maxsize=1024). Cache key is based on object_id only.
+
     Args:
         object_id: The object_id to query
-        connection: Optional connection string or asyncpg.Pool. If not provided, uses get_postgres_connection_str()
+        pool: asyncpg connection pool to use for database operations
 
     Returns:
         FileEnriched model instance
@@ -135,18 +143,8 @@ async def get_file_enriched_async(object_id: str, connection: str | asyncpg.Pool
         Exception: For database or parsing errors
     """
     try:
-        # Determine if we're using a pool or creating a new connection
-        if isinstance(connection, asyncpg.Pool):
-            # Use the provided pool
-            row = await connection.fetchrow(_FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)
-        else:
-            # Use connection string (provided or default)
-            connection_string = connection if connection is not None else get_postgres_connection_str()
-            conn = await asyncpg.connect(connection_string)
-            try:
-                row = await conn.fetchrow(_FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)
-            finally:
-                await conn.close()
+        # Use the provided pool to fetch the record
+        row = await pool.fetchrow(_FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)
 
         if not row:
             raise ValueError(f"No file_enriched record found for object_id {object_id}")
@@ -162,6 +160,6 @@ async def get_file_enriched_async(object_id: str, connection: str | asyncpg.Pool
     except ValueError as e:
         logger.error(f"File not found: {str(e)}")
         raise
-    except Exception as e:
-        logger.exception(e, message="Error retrieving file_enriched from PostgreSQL (async)")
+    except Exception:
+        logger.exception(message="Error retrieving file_enriched from PostgreSQL (async)")
         raise

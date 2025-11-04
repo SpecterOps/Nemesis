@@ -217,8 +217,9 @@ def submit_main(
     include_pattern: tuple[str, ...] = (),
     exclude_pattern: tuple[str, ...] = (),
     pattern_type: str = "glob",
-    repeat: int = 0,
+    times: int = 1,
     folder: str | None = None,
+    max_files: int | None = None,
 ):
     """Submit files to Nemesis for processing.
 
@@ -248,12 +249,15 @@ def submit_main(
         # Upload container with inline patterns:
         main.py submit archive.zip --container --include-pattern "*.exe" --exclude-pattern "*/temp/*"
 
-        # Submit file twice (original + 1 repeat):
-        main.py submit /etc/issue --repeat 1
+        # Submit file exactly 10 times:
+        main.py submit /etc/issue --times 10
 
         # Upload files with custom parent folder path:
         main.py submit /tmp/data --folder "C:\\Users\\Admin\\Documents" -r
         # Files at /tmp/data/file.txt will have path "C:\\Users\\Admin\\Documents\\file.txt"
+
+        # Limit recursive upload to first 1000 files:
+        main.py submit /large/directory -r --max-files 1000
     """
     try:
         if debug:
@@ -270,9 +274,14 @@ def submit_main(
             logger.error("No files or paths specified")
             sys.exit(1)
 
-        # Validate repeat parameter
-        if repeat < 0:
-            logger.error("Repeat count must be at least 0")
+        # Validate times parameter
+        if times < 1:
+            logger.error("Times count must be at least 1")
+            sys.exit(1)
+
+        # Validate max_files parameter
+        if max_files is not None and max_files <= 0:
+            logger.error("Max files must be a positive integer")
             sys.exit(1)
 
         # Validate filter options
@@ -297,8 +306,9 @@ def submit_main(
             container=container,
             source=source,
             file_filters=file_filters,
-            repeat=repeat,
+            times=times,
             folder=folder,
+            max_files=max_files,
         )
 
         if not success:
@@ -322,8 +332,9 @@ def submit_files(
     container: bool = False,
     source: str | None = None,
     file_filters: dict | None = None,
-    repeat: int = 0,
+    times: int = 1,
     folder: str | None = None,
+    max_files: int | None = None,
 ):
     """Submit files to Nemesis"""
 
@@ -338,12 +349,12 @@ def submit_files(
     if not validate_auth(host, auth):
         return False
 
-    # Total submissions = 1 original + repeat additional submissions
-    total_submissions = 1 + repeat
+    # Total submissions = times (which now represents total, not additional)
+    total_submissions = times
 
     # Get list of files once
     temp_queue = Queue()
-    total_files = stream_files(paths, recursive, temp_queue)
+    total_files = stream_files(paths, recursive, temp_queue, max_files)
 
     if total_files == 0:
         logger.error("No files found to upload")
@@ -427,7 +438,7 @@ def submit_files(
     return overall_tracker.failed == 0
 
 
-def stream_files(paths: list[Path], recursive: bool, file_queue: Queue) -> int:
+def stream_files(paths: list[Path], recursive: bool, file_queue: Queue, max_files: int | None = None) -> int:
     """Stream files into the queue as they're discovered"""
     total_files = 0
 
@@ -436,6 +447,9 @@ def stream_files(paths: list[Path], recursive: bool, file_queue: Queue) -> int:
             if path.is_file():
                 file_queue.put(path)
                 total_files += 1
+                if max_files and total_files >= max_files:
+                    logger.info(f"Reached maximum file limit of {max_files}")
+                    return total_files
                 continue
 
             pattern = "**/*" if recursive else "*"
@@ -444,6 +458,9 @@ def stream_files(paths: list[Path], recursive: bool, file_queue: Queue) -> int:
                     if item.is_file():
                         file_queue.put(item)
                         total_files += 1
+                        if max_files and total_files >= max_files:
+                            logger.info(f"Reached maximum file limit of {max_files}")
+                            return total_files
                 except PermissionError:
                     logger.warning(f"Cannot access: {item}")
                 except Exception as e:

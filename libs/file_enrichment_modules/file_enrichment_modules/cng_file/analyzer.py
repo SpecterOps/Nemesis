@@ -7,12 +7,11 @@ parsing their structure and attempting to decrypt DPAPI-protected components.
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-import asyncpg
 import yara_x
 from chromium.local_state import retry_decrypt_state_keys_for_chromekey
 from common.logger import get_logger
 from common.models import EnrichmentResult
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.cng_file.cng_parser import (
     check_bcrypt_key_blob,
@@ -26,14 +25,19 @@ from nemesis_dpapi import Blob, BlobDecryptionError, DpapiManager, MasterKeyNotD
 if TYPE_CHECKING:
     import asyncio
 
+    import asyncpg
+
 logger = get_logger(__name__)
 
 
 class CngFileAnalyzer(EnrichmentModule):
     name: str = "cng_analyzer"
     dependencies: list[str] = []
-    def __init__(self, standalone: bool = False):
+
+    def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.workflows = ["default"]
@@ -72,7 +76,7 @@ rule is_cng_file
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # CNG files are typically small (< 10KB)
         if file_enriched.size > 10000:
@@ -96,7 +100,7 @@ rule is_cng_file
         """
 
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
             enrichment_result = EnrichmentResult(module_name=self.name)
 
             logger.info(f"Processing CNG file: {file_enriched.path} ({file_enriched.object_id})")
@@ -158,8 +162,8 @@ rule is_cng_file
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error in CNG file processing")
+        except Exception:
+            logger.exception(message="Error in CNG file processing")
             return None
 
     async def _decrypt_private_properties(self, private_props_blob: bytes) -> None:
@@ -260,7 +264,9 @@ rule is_cng_file
             if decrypted_bytes is not None:
                 try:
                     state_keys_result = await retry_decrypt_state_keys_for_chromekey(
-                        file_enriched.source, decrypted_bytes
+                        file_enriched.source,
+                        decrypted_bytes,
+                        self.asyncpg_pool,
                     )
                     logger.info(
                         "Completed retroactive state_key decryption for newly decrypted chromekey",
@@ -399,6 +405,6 @@ rule is_cng_file
         return None
 
 
-def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:
-    """Factory function that creates the analyzer in either standalone or service mode."""
-    return CngFileAnalyzer(standalone=standalone)
+def create_enrichment_module() -> EnrichmentModule:
+    """Factory function that creates the analyzer."""
+    return CngFileAnalyzer()

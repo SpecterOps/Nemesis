@@ -18,9 +18,12 @@ logger = get_logger(__name__)
 class CertificateAnalyzer(EnrichmentModule):
     name: str = "certificate_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
         self.workflows = ["default"]
+
+        self.asyncpg_pool = None  # type: ignore
 
         # Valid certificate file extensions
         self.valid_extensions = {".pem", ".crt", ".cer", ".der", ".p7b", ".p7c", ".pfx", ".p12"}
@@ -42,7 +45,7 @@ class CertificateAnalyzer(EnrichmentModule):
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check if it's a certificate-related file by extension or magic type
         file_extension = Path(file_enriched.file_name).suffix.lower()
@@ -374,14 +377,14 @@ class CertificateAnalyzer(EnrichmentModule):
             enrichment_result.transforms = [displayable_parsed]
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing certificate file for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing certificate file for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process certificate file."""
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             if file_path:
                 return self._analyze_certificate(file_path, file_enriched)
@@ -389,8 +392,8 @@ class CertificateAnalyzer(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_certificate(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing certificate file", file_object_id=object_id)
+        except Exception:
+            logger.exception(message="Error processing certificate file", file_object_id=object_id)
             return None
 
 

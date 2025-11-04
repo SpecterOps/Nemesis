@@ -141,7 +141,7 @@ def parse_kdbx_file(file_path: str) -> dict[str, Any]:
             parsed_data["hash_error"] = f"Failed to generate hash: {str(e)}"
 
     except Exception as e:
-        logger.exception(e, message="Error parsing KDBX file")
+        logger.exception(message="Error parsing KDBX file")
         parsed_data["error"] = f"Error parsing KDBX file: {str(e)}"
 
     return parsed_data
@@ -220,8 +220,8 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
             else:
                 result[name] = value_data
 
-    except Exception as e:
-        logger.exception(e, message="Error parsing variant dictionary")
+    except Exception:
+        logger.exception(message="Error parsing variant dictionary")
 
     return result
 
@@ -229,14 +229,17 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
 class KDBXAnalyzer(EnrichmentModule):
     name: str = "kdbx_analyzer"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         if file_enriched.magic_type:
             return "keepass" in file_enriched.magic_type.lower() and "kdbx" in file_enriched.magic_type.lower()
@@ -329,7 +332,7 @@ class KDBXAnalyzer(EnrichmentModule):
         """
         try:
             # get the current `file_enriched` from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -338,8 +341,8 @@ class KDBXAnalyzer(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as file:
                     return self._analyze_kdbx(file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing KDBX file")
+        except Exception:
+            logger.exception(message="Error processing KDBX file")
             return None
 
 

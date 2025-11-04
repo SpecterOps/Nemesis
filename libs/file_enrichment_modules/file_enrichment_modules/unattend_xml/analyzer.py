@@ -21,8 +21,11 @@ logger = get_logger(__name__)
 class UnattendParser(EnrichmentModule):
     name: str = "unattend_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
 
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -67,7 +70,7 @@ rule Detect_Windows_Unattend_XML {
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Initial checks for file type and name
         if not (file_enriched.is_plaintext and file_enriched.file_name.lower() == "unattend.xml"):
@@ -264,8 +267,8 @@ rule Detect_Windows_Unattend_XML {
 
             return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message=f"Error analyzing unattend.xml for {file_enriched.file_name}")
+        except Exception:
+            logger.exception(message=f"Error analyzing unattend.xml for {file_enriched.file_name}")
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
@@ -279,7 +282,7 @@ rule Detect_Windows_Unattend_XML {
             EnrichmentResult or None if processing fails
         """
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -288,8 +291,8 @@ rule Detect_Windows_Unattend_XML {
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return self._analyze_unattend_xml(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing unattend.xml file")
+        except Exception:
+            logger.exception(message="Error processing unattend.xml file")
             return None
 
 

@@ -1,29 +1,112 @@
 """Handler for file subscription events."""
 
+import asyncio
 import os
 from datetime import datetime
 
 import file_enrichment.global_vars as global_vars
 from common.logger import get_logger
-from common.models import File
+from common.models import CloudEvent, File
 
 logger = get_logger(__name__)
 
 
-async def process_file_event(file: File, workflow_manager, module_execution_order: list):
-    """Process incoming new file events"""
+# Configuration
+NUM_WORKERS = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 5))
+
+# Queue for file processing
+file_queue: asyncio.Queue = None
+worker_tasks: list[asyncio.Task] = []
+
+
+async def worker(worker_id: int):
+    """Worker task that continuously processes files from the queue"""
+    logger.info(f"Worker {worker_id} started")
+
+    while True:
+        try:
+            # Get the next file from the queue
+            file = await file_queue.get()
+
+            try:
+                logger.debug(f"Worker {worker_id} processing file", object_id=file.object_id)
+
+                # Save file and run workflow
+                await save_file_message(file)
+                await global_vars.workflow_manager.run_workflow(file)
+
+                logger.debug(f"Worker {worker_id} completed file", object_id=file.object_id)
+
+            except Exception:
+                logger.exception(message=f"Worker {worker_id} error processing file", object_id=file.object_id)
+            finally:
+                # Mark the task as done
+                file_queue.task_done()
+
+        except asyncio.CancelledError:
+            logger.info(f"Worker {worker_id} cancelled")
+            break
+        except Exception:
+            logger.exception(message=f"Worker {worker_id} unexpected error")
+
+
+def start_workers():
+    """Start the worker tasks"""
+    global file_queue, worker_tasks
+
+    if file_queue is not None:
+        logger.warning("Workers already started")
+        return
+
+    # Create a bounded queue - only allows NUM_WORKERS items
+    # This ensures we only accept work when a worker is available
+    file_queue = asyncio.Queue(maxsize=NUM_WORKERS)
+    worker_tasks = []
+
+    for i in range(NUM_WORKERS):
+        task = asyncio.create_task(worker(i))
+        worker_tasks.append(task)
+
+    logger.info("Started file enrichment workers", num_workers=NUM_WORKERS)
+
+
+async def stop_workers():
+    """Stop all worker tasks"""
+    global worker_tasks, file_queue
+
+    if not worker_tasks:
+        logger.warning("No workers to stop")
+        return
+
+    logger.info("Stopping workers...")
+
+    # Cancel all worker tasks
+    for task in worker_tasks:
+        task.cancel()
+
+    # Wait for all workers to finish
+    await asyncio.gather(*worker_tasks, return_exceptions=True)
+
+    worker_tasks = []
+    file_queue = None
+
+    logger.info("All workers stopped")
+
+
+async def file_subscription_handler(event: CloudEvent[File]):
+    """Handler for incoming file events"""
+    file = event.data
+
     try:
-        await save_file_message(file)
+        # Try to add file to the queue
+        # put() will block until a worker is available (queue has space)
+        # This ensures we only accept work when there's capacity
+        await file_queue.put(file)
 
-        workflow_input = {
-            "file": file.model_dump(exclude_unset=True, mode="json"),
-            "execution_order": module_execution_order,
-        }
+        logger.debug("File added to queue", object_id=file.object_id, queue_size=file_queue.qsize())
 
-        await workflow_manager.start_workflow(workflow_input)
-
-    except Exception as e:
-        logger.exception(e, message="Error processing file event", pid=os.getpid())
+    except Exception:
+        logger.exception(message="Error adding file to queue")
         raise
 
 
@@ -81,8 +164,8 @@ async def save_file_message(file: File):
                 datetime.fromisoformat(file.modification_time) if file.modification_time else None,
             )
 
-        logger.debug("Successfully saved file message to database", object_id=file.object_id, pid=os.getpid())
+        logger.debug("Successfully saved file message to database", object_id=file.object_id)
 
-    except Exception as e:
-        logger.exception(e, message="Error saving file message to database", object_id=file.object_id, pid=os.getpid())
+    except Exception:
+        logger.exception(message="Error saving file message to database", object_id=file.object_id)
         raise

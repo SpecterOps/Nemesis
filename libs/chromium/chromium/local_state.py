@@ -41,7 +41,7 @@ async def process_chromium_local_state(
     """
     logger.info("Processing Chromium Local State file", object_id=object_id)
 
-    file_enriched = await get_file_enriched_async(object_id)
+    file_enriched = await get_file_enriched_async(object_id, asyncpg_pool)
 
     # Extract username and browser from file path
     username, browser = parse_chromium_file_path(file_enriched.path or "")
@@ -98,8 +98,9 @@ def _parse_app_bound_key(app_bound_key_b64: str) -> tuple[bytes, str | None]:
         return base64.b64decode(app_bound_key_b64), None
 
 
-
-async def _add_user_masterkey_link(file_enriched, username: str | None, masterkey_guid: UUID, asyncpg_pool: asyncpg.Pool) -> None:
+async def _add_user_masterkey_link(
+    file_enriched, username: str | None, masterkey_guid: UUID, asyncpg_pool: asyncpg.Pool
+) -> None:
     """Add file linking entry for user masterkey."""
 
     # Skip trying to figure out the username/drive if we can
@@ -122,7 +123,9 @@ async def _add_user_masterkey_link(file_enriched, username: str | None, masterke
             f"{drive}/Users/{username}/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/{masterkey_guid}"
         )
 
-    await add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:user_masterkey", connection_pool=asyncpg_pool)
+    await add_file_linking(
+        file_enriched.source, file_enriched.path, masterkey_path, "windows:user_masterkey", connection_pool=asyncpg_pool
+    )
 
 
 async def _get_chromekey_from_source(source: str, asyncpg_pool: asyncpg.Pool) -> bytes | None:
@@ -138,10 +141,9 @@ async def _get_chromekey_from_source(source: str, asyncpg_pool: asyncpg.Pool) ->
     try:
         async with asyncpg_pool.acquire() as conn:
             result = await conn.fetchrow(
-                "SELECT key_bytes_dec FROM chromium.chrome_keys WHERE source = $1 AND key_is_decrypted = TRUE",
-                source
+                "SELECT key_bytes_dec FROM chromium.chrome_keys WHERE source = $1 AND key_is_decrypted = TRUE", source
             )
-            return result['key_bytes_dec'] if result else None
+            return result["key_bytes_dec"] if result else None
     except Exception as e:
         logger.warning("Failed to lookup chrome key from source", error=str(e))
         return None
@@ -235,13 +237,23 @@ async def _insert_state_keys(
             # Filename format: <hash>_<machineGuid>
             # Hash comes from Chromium calling NCryptOpenKey with the key name of "Google Chromekey1"
             # Hashing algorithm is described here: https://gist.github.com/leechristensen/40acb67ff5b788d6b78d81443b66b444
-            cng_system_private_key_path = (
-                f"{drive}/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<WINDOWS_MACHINE_GUID>"
-            )
+            cng_system_private_key_path = f"{drive}/ProgramData/Microsoft/Crypto/SystemKeys/7096db7aeb75c0d3497ecd56d355a695_<WINDOWS_MACHINE_GUID>"
 
             # add the masterkey file path (now that we know the key GUID) as a link/listing
-            await add_file_linking(file_enriched.source, file_enriched.path, masterkey_path, "windows:system_masterkey", connection_pool=asyncpg_pool)
-            await add_file_linking(file_enriched.source, file_enriched.path, cng_system_private_key_path, "windows:cng_system_private_key - Contains Chrome key used to encrypt the Local State", connection_pool=asyncpg_pool)
+            await add_file_linking(
+                file_enriched.source,
+                file_enriched.path,
+                masterkey_path,
+                "windows:system_masterkey",
+                connection_pool=asyncpg_pool,
+            )
+            await add_file_linking(
+                file_enriched.source,
+                file_enriched.path,
+                cng_system_private_key_path,
+                "windows:cng_system_private_key - Contains Chrome key used to encrypt the Local State",
+                connection_pool=asyncpg_pool,
+            )
 
             try:
                 # Parse only the DPAPI portion (after APPB header)
@@ -379,10 +391,12 @@ async def _insert_state_keys(
             # Get the inserted state key ID
             result = await conn.fetchrow(
                 "SELECT id FROM chromium.state_keys WHERE source = $1 AND username = $2 AND browser = $3",
-                file_enriched.source, username, browser
+                file_enriched.source,
+                username,
+                browser,
             )
             if result:
-                state_key_id = result['id']
+                state_key_id = result["id"]
 
                 logins_updated = await conn.execute(
                     """
@@ -392,7 +406,10 @@ async def _insert_state_keys(
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                 """,
-                    state_key_id, file_enriched.source, username, browser
+                    state_key_id,
+                    file_enriched.source,
+                    username,
+                    browser,
                 )
 
                 cookies_updated = await conn.execute(
@@ -403,7 +420,10 @@ async def _insert_state_keys(
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                 """,
-                    state_key_id, file_enriched.source, username, browser
+                    state_key_id,
+                    file_enriched.source,
+                    username,
+                    browser,
                 )
 
                 logger.info(
@@ -462,28 +482,28 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
             FROM chromium.state_keys
             WHERE id = $1
             """,
-            state_key_id
+            state_key_id,
         )
 
         if not row:
             logger.warning("State key not found", state_key_id=state_key_id)
             return result
 
-        record_id = row['id']
-        source = row['source']
-        username = row['username']
-        browser = row['browser']
-        key_masterkey_guid = row['key_masterkey_guid']
-        key_bytes_enc = row['key_bytes_enc']
-        key_bytes_dec = row['key_bytes_dec']
-        key_is_decrypted = row['key_is_decrypted']
-        app_bound_key_enc = row['app_bound_key_enc']
-        app_bound_key_system_masterkey_guid = row['app_bound_key_system_masterkey_guid']
-        app_bound_key_user_masterkey_guid = row['app_bound_key_user_masterkey_guid']
-        app_bound_key_system_dec = row['app_bound_key_system_dec']
-        app_bound_key_user_dec = row['app_bound_key_user_dec']
-        app_bound_key_dec = row['app_bound_key_dec']
-        app_bound_key_is_decrypted = row['app_bound_key_is_decrypted']
+        record_id = row["id"]
+        source = row["source"]
+        username = row["username"]
+        browser = row["browser"]
+        key_masterkey_guid = row["key_masterkey_guid"]
+        key_bytes_enc = row["key_bytes_enc"]
+        key_bytes_dec = row["key_bytes_dec"]
+        key_is_decrypted = row["key_is_decrypted"]
+        app_bound_key_enc = row["app_bound_key_enc"]
+        app_bound_key_system_masterkey_guid = row["app_bound_key_system_masterkey_guid"]
+        app_bound_key_user_masterkey_guid = row["app_bound_key_user_masterkey_guid"]
+        app_bound_key_system_dec = row["app_bound_key_system_dec"]
+        app_bound_key_user_dec = row["app_bound_key_user_dec"]
+        app_bound_key_dec = row["app_bound_key_dec"]
+        app_bound_key_is_decrypted = row["app_bound_key_is_decrypted"]
 
     # Try to decrypt pre-v127 encrypted_key
     if key_bytes_enc and len(key_bytes_enc) > 0 and not key_is_decrypted:
@@ -513,7 +533,10 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                                     key_masterkey_guid = $3
                                 WHERE id = $4
                                 """,
-                                key_bytes_dec, key_is_decrypted, str(dpapi_blob.masterkey_guid), state_key_id
+                                key_bytes_dec,
+                                key_is_decrypted,
+                                str(dpapi_blob.masterkey_guid),
+                                state_key_id,
                             )
 
                 except (MasterKeyNotFoundError, MasterKeyNotDecryptedError):
@@ -563,7 +586,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                                     app_bound_key_system_dec,
                                     str(system_blob.masterkey_guid),
                                     app_bound_key_user_masterkey_guid,
-                                    state_key_id
+                                    state_key_id,
                                 )
 
                     except (MasterKeyNotFoundError, MasterKeyNotDecryptedError):
@@ -618,7 +641,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                                         app_bound_key_dec,
                                         app_bound_key_is_decrypted,
                                         str(user_blob.masterkey_guid),
-                                        state_key_id
+                                        state_key_id,
                                     )
                             else:
                                 logger.warning("Failed to derive ABE key", state_key_id=state_key_id)
@@ -633,7 +656,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                                         """,
                                         app_bound_key_user_dec,
                                         str(user_blob.masterkey_guid),
-                                        state_key_id
+                                        state_key_id,
                                     )
                         else:
                             # Parsing failed - likely v3 waiting for chromekey
@@ -657,7 +680,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                                     """,
                                     app_bound_key_user_dec,
                                     str(user_blob.masterkey_guid),
-                                    state_key_id
+                                    state_key_id,
                                 )
 
                 except (MasterKeyNotFoundError, MasterKeyNotDecryptedError):
@@ -681,7 +704,10 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                     """,
-                    state_key_id, source, username, browser
+                    state_key_id,
+                    source,
+                    username,
+                    browser,
                 )
 
                 cookies_updated = await conn.execute(
@@ -692,7 +718,10 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                     """,
-                    state_key_id, source, username, browser
+                    state_key_id,
+                    source,
+                    username,
+                    browser,
                 )
 
                 if logins_updated or cookies_updated:
@@ -759,7 +788,7 @@ async def retry_decrypt_state_keys_for_masterkey(
                 """
                 state_key_rows = await conn.fetch(query, str(masterkey_guid), str(masterkey_guid), str(masterkey_guid))
 
-            state_key_ids = [row['id'] for row in state_key_rows]
+            state_key_ids = [row["id"] for row in state_key_rows]
 
         logger.debug(
             "Found state keys potentially waiting for masterkey",
@@ -846,12 +875,12 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
 
         # Try to decrypt each state_key with the chromekey
         for row in state_keys:
-            state_key_id = row['id']
-            source_val = row['source']
-            username = row['username']
-            browser = row['browser']
-            app_bound_key_user_dec = row['app_bound_key_user_dec']
-            user_masterkey_guid = row['app_bound_key_user_masterkey_guid']
+            state_key_id = row["id"]
+            source_val = row["source"]
+            username = row["username"]
+            browser = row["browser"]
+            app_bound_key_user_dec = row["app_bound_key_user_dec"]
+            user_masterkey_guid = row["app_bound_key_user_masterkey_guid"]
 
             result["state_keys_attempted"] += 1
 
@@ -882,7 +911,8 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
                                     app_bound_key_is_decrypted = TRUE
                                 WHERE id = $2
                                 """,
-                                app_bound_key_dec, state_key_id
+                                app_bound_key_dec,
+                                state_key_id,
                             )
 
                             # Link to existing logins/cookies
@@ -894,7 +924,10 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
                                 AND state_key_id IS NULL
                                 AND encryption_type IN ('key', 'abe')
                                 """,
-                                state_key_id, source_val, username, browser
+                                state_key_id,
+                                source_val,
+                                username,
+                                browser,
                             )
 
                             cookies_updated = await conn.execute(
@@ -905,7 +938,10 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
                                 AND state_key_id IS NULL
                                 AND encryption_type IN ('key', 'abe')
                                 """,
-                                state_key_id, source_val, username, browser
+                                state_key_id,
+                                source_val,
+                                username,
+                                browser,
                             )
 
                         result["state_keys_decrypted"] += 1

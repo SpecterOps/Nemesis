@@ -1,5 +1,4 @@
 # enrichment_modules/registry_hive/analyzer.py
-import asyncio
 import os
 import posixpath
 import shutil
@@ -7,11 +6,10 @@ import tempfile
 import textwrap
 from typing import TYPE_CHECKING
 
-import asyncpg
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking.helpers import add_file_linking
@@ -20,6 +18,7 @@ from pypykatz.registry.offline_parser import OffineRegistry as OfflineRegistry
 from regipy.registry import RegistryHive
 
 if TYPE_CHECKING:
+    import asyncpg
     from nemesis_dpapi import DpapiManager
 
 
@@ -29,16 +28,18 @@ logger = get_logger(__name__)
 class RegistryHiveAnalyzer(EnrichmentModule):
     name: str = "registry_hive"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
+
+        self.asyncpg_pool = None  # type: ignore
         self.workflows = ["default"]
         self.dpapi_manager: DpapiManager = None  # type: ignore
-        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.asyncpg_pool: asyncpg.Pool | None = None  # type: ignore
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         magic_type = file_enriched.magic_type.lower()
         mime_type = file_enriched.mime_type.lower()
 
@@ -66,8 +67,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         try:
             return RegistryHive(file_path).hive_type.upper()
-        except Exception as e:
-            logger.exception(e, "Error parsing using regipy")
+        except Exception:
+            logger.exception("Error parsing using regipy")
 
         return None
 
@@ -106,7 +107,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     ORDER BY timestamp DESC
                     LIMIT 1
                 """,
-                    file_enriched.source, target_hive_path,
+                    file_enriched.source,
+                    target_hive_path,
                 )
 
                 if result:
@@ -128,7 +130,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     ORDER BY fe.timestamp DESC
                     LIMIT 1
                 """,
-                    file_enriched.source, f'"{target_hive_type}"',
+                    file_enriched.source,
+                    f'"{target_hive_type}"',
                 )
 
                 if result:
@@ -581,8 +584,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     }
                     results["services"].append(service_info)
 
-        except Exception as e:
-            logger.exception(e, message="Failed to process SYSTEM hive with pypykatz")
+        except Exception:
+            logger.exception(message="Failed to process SYSTEM hive with pypykatz")
             # Return empty results on error
             results = {
                 "bootkey": None,
@@ -688,7 +691,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process registry hive file and extract relevant information."""
         try:
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             # Use provided file_path if available, otherwise download
             if file_path:
@@ -698,8 +701,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 with self.storage.download(file_enriched.object_id) as temp_file:
                     return await self._analyze_registry_hive_file(temp_file.name, file_enriched)
 
-        except Exception as e:
-            logger.exception(e, message="Error processing registry hive file")
+        except Exception:
+            logger.exception(message="Error processing registry hive file")
             return None
 
     def _get_lsa_secret_output_string(self, secret: dict, truncate_length: int = 8196, markdown: bool = False) -> str:
@@ -972,7 +975,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             logger.info("Successfully registered DPAPI_SYSTEM credential with DPAPI manager")
 
         except Exception as e:
-            logger.exception(e, f"Failed to register DPAPI_SYSTEM credential: {e}")
+            logger.exception(f"Failed to register DPAPI_SYSTEM credential: {e}")
 
 
 def create_enrichment_module() -> EnrichmentModule:

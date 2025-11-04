@@ -12,7 +12,6 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager
 
 if TYPE_CHECKING:
-    import asyncio
 
     from nemesis_dpapi import DpapiManager
 
@@ -22,6 +21,7 @@ logger = get_logger(__name__)
 class ChromeLocalStateParser(EnrichmentModule):
     name: str = "chrome_local_state_parser"
     dependencies: list[str] = []
+
     def __init__(self):
         self.storage = StorageMinio()
 
@@ -29,7 +29,6 @@ class ChromeLocalStateParser(EnrichmentModule):
         self.workflows = ["default"]
 
         self.dpapi_manager: DpapiManager = None  # type: ignore
-        self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.asyncpg_pool = None  # type: ignore
 
         # Yara rule to check for Chrome Login Data tables
@@ -57,7 +56,7 @@ rule Chrome_Local_State
             file_path: Optional path to already downloaded file
         """
 
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Check if file is < 5 megs and JSON magic type
         if not ((file_enriched.size < 5000000) and ("json" in file_enriched.magic_type.lower())):
@@ -81,7 +80,9 @@ rule Chrome_Local_State
 
         try:
             # Use the chromium library to process and insert into database
-            state_key_data = await process_chromium_local_state(self.dpapi_manager, object_id, file_path, self.asyncpg_pool)
+            state_key_data = await process_chromium_local_state(
+                self.dpapi_manager, object_id, file_path, self.asyncpg_pool
+            )
 
             if state_key_data:
                 # Debug: Check for coroutines in state_key_data
@@ -96,8 +97,8 @@ rule Chrome_Local_State
 
                 return enrichment
 
-        except Exception as e:
-            logger.exception(e, message="Error processing Chrome Local State file")
+        except Exception:
+            logger.exception(message="Error processing Chrome Local State file")
 
 
 def create_enrichment_module() -> EnrichmentModule:

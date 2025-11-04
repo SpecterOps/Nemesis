@@ -266,9 +266,18 @@ files = [
 ]
 
 [package.dependencies]
-cffi = [
-    {version = ">=1.0.1", markers = "python_version < \"3.14\""},
-    {version = ">=2.0.0b1", markers = "python_version >= \"3.14\""},
+cffi = {version = ">=1.0.1", markers = "python_version < \"3.14\""}
+
+[[package]]
+name = "async-lru"
+version = "2.0.5"
+description = "Simple LRU cache for asyncio"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "async_lru-2.0.5-py3-none-any.whl", hash = "sha256:ab95404d8d2605310d345932697371a5f40def0487c03d6d0ad9138de52c9943"},
+    {file = "async_lru-2.0.5.tar.gz", hash = "sha256:481d52ccdd27275f42c43a928b4a50c3bfb2d67af4e78b170e3e0bb39c66e5bb"},
 ]
 
 [[package]]
@@ -636,12 +645,13 @@ name = "common"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = ">=3.12,<4.0"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
+async-lru = "^2.0.5"
 asyncpg = "^0.30.0"
 dapr = "1.16.0"
 dapr-ext-workflow = "^1.16.0"
@@ -1454,14 +1464,14 @@ ldap3 = ">2.5.0,<2.5.2 || >2.5.2,<2.6 || >2.6"
 
 [[package]]
 name = "markdown"
-version = "3.9"
+version = "3.10"
 description = "Python implementation of John Gruber's Markdown."
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "markdown-3.9-py3-none-any.whl", hash = "sha256:9f4d91ed810864ea88a6f32c07ba8bee1346c0cc1f6b1f9f6c822f2a9667d280"},
-    {file = "markdown-3.9.tar.gz", hash = "sha256:d2900fe1782bd33bdbbd56859defef70c2e78fc46668f8eb9df3128138f2cb6a"},
+    {file = "markdown-3.10-py3-none-any.whl", hash = "sha256:b5b99d6951e2e4948d939255596523444c0e677c669700b1d17aa4a8a464cb7c"},
+    {file = "markdown-3.10.tar.gz", hash = "sha256:37062d4f2aa4b2b6b32aefb80faa300f82cc790cb949a35b8caede34f2b68c0e"},
 ]
 
 [package.extras]
@@ -1783,17 +1793,18 @@ name = "nemesis-dpapi"
 version = "0.1.0"
 description = ""
 optional = false
-python-versions = ">=3.12"
+python-versions = ">=3.12,<3.14"
 groups = ["main"]
 files = []
 develop = true
 
 [package.dependencies]
 asyncpg = ">=0.29.0,<=0.30.0"
+common = {path = "../../libs/common", develop = true}
 cryptography = ">=42.0.0,<47.0.0"
 dapr = "1.16.0"
 dpapick3 = ">=0.7.1,<0.8.0"
-impacket = ">=0.12.0,<0.14.0"
+impacket = ">=0.13.0,<0.14.0"
 pycryptodome = ">=3.23.0,<4.0.0"
 pydantic = ">=2.0.0,<3.0.0"
 
@@ -3797,5 +3808,5 @@ propcache = ">=0.2.1"
 
 [metadata]
 lock-version = "2.1"
-python-versions = "^3.12"
-content-hash = "fe14f315e9a81710862df9f82c05615aa3eea9c9a76d4cae0a8818cc952f67b4"
+python-versions = ">=3.12,<3.14"
+content-hash = "24ef2f823348ff25c13ffdc741e07ad735a7c6d9706faf37c69ba93843c21c42"

@@ -49,8 +49,8 @@
             "name": "projects → document_conversion"
         },
         {
-            "path": "../projects/dotnet_api",
-            "name": "projects → dotnet_api"
+            "path": "../projects/dotnet_service",
+            "name": "projects → dotnet_service"
         },
         {
             "path": "../projects/file_enrichment",
@@ -63,10 +63,6 @@
         {
             "path": "../projects/housekeeping",
             "name": "projects → housekeeping"
-        },
-        {
-            "path": "../projects/InspectAssembly",
-            "name": "projects → InspectAssembly"
         },
         {
             "path": "../projects/noseyparker_scanner",

@@ -9,8 +9,11 @@ logger = get_logger(__name__)
 class FilenameScanner(EnrichmentModule):
     name: str = "filename_scanner"
     dependencies: list[str] = []
+
     def __init__(self):
         self.workflows = ["default"]
+
+        self.asyncpg_pool = None  # type: ignore
 
         # List of sensitive terms to check for in filenames
         self.sensitive_terms = [
@@ -64,7 +67,7 @@ class FilenameScanner(EnrichmentModule):
         """
         try:
             # Get the current file_enriched from the database backend
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
             matches = []
             filename_lower = file_enriched.file_name.lower()
@@ -101,8 +104,8 @@ class FilenameScanner(EnrichmentModule):
 
             return None
 
-        except Exception as e:
-            logger.exception(e, message="Error in process()")
+        except Exception:
+            logger.exception(message="Error in process()")
             return None
 
     def _create_summary_markdown(self, filename, matches):

@@ -1,18 +1,20 @@
 # enrichment_modules/dpapi/analyzer.py
-import asyncio
 import base64
 import csv
 import tempfile
+from typing import TYPE_CHECKING
 
 import yara_x
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
-from common.state_helpers import get_file_enriched, get_file_enriched_async
+from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
-from dapr.clients import DaprClient
 from file_enrichment_modules.dpapi_blob.dpapi_helpers import carve_dpapi_blobs_from_file
 from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import Blob, BlobDecryptionError, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
+
+if TYPE_CHECKING:
+    import asyncio
 
 logger = get_logger(__name__)
 
@@ -20,9 +22,11 @@ logger = get_logger(__name__)
 class DpapiBlobAnalyzer(EnrichmentModule):
     name: str = "dpapi_analyzer"
     dependencies: list[str] = []
-    def __init__(self, standalone: bool = False):
+
+    def __init__(self):
         self.storage = StorageMinio()
-        self.dapr_client = DaprClient()
+
+        self.asyncpg_pool = None  # type: ignore
         self.size_limit = 50000000  # only check the first 50 megs for DPAPI blobs, for performance
         self.max_blobs = 100
         self.dpapi_manager: DpapiManager = None  # type: ignore
@@ -56,13 +60,13 @@ rule has_dpapi_blob
         """
         lines = []
         for i in range(0, len(data), 16):
-            chunk = data[i:i+16]
-            hex_part = ' '.join(f'{b:02x}' for b in chunk)
+            chunk = data[i : i + 16]
+            hex_part = " ".join(f"{b:02x}" for b in chunk)
             # Pad hex part to align ASCII
             hex_part = hex_part.ljust(48)
-            ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
-            lines.append(f'{offset+i:08x}  {hex_part}  {ascii_part}')
-        return '\n'.join(lines)
+            ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
+            lines.append(f"{offset + i:08x}  {hex_part}  {ascii_part}")
+        return "\n".join(lines)
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Check if this file should be processed by scanning for DPAPI blobs.
@@ -71,7 +75,7 @@ rule has_dpapi_blob
             object_id: The object ID of the file
             file_path: Optional path to already downloaded file
         """
-        file_enriched = await get_file_enriched_async(object_id)
+        file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         logger.debug(f"File {object_id} should be processed by DPAPI blob analyzer")
         if file_enriched.size > self.size_limit:
             logger.debug(
@@ -92,7 +96,7 @@ rule has_dpapi_blob
         return should_run
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process file in either workflow or standalone mode.
+        """Scans a file for DPAPI blobs.
 
         Args:
             object_id: The object ID of the file
@@ -101,7 +105,7 @@ rule has_dpapi_blob
 
         try:
             logger.info(f"Starting DPAPI blob analysis for object_id {object_id}")
-            file_enriched = await get_file_enriched_async(object_id)
+            file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
             logger.info(f"Retrieved enriched file data for object_id {object_id}")
 
             enrichment_result = EnrichmentResult(module_name=self.name)
@@ -183,13 +187,15 @@ rule has_dpapi_blob
                         if blob.get("decrypted_data") and len(blob["decrypted_data"]) <= 1000:
                             base64_content = base64.b64encode(blob["decrypted_data"]).decode("utf-8")
 
-                        writer.writerow([
-                            blob["dpapi_master_key_guid"],
-                            blob.get("blob_offset", 0),
-                            blob.get("blob_length", 0),
-                            blob.get("is_decrypted", False),
-                            base64_content,
-                        ])
+                        writer.writerow(
+                            [
+                                blob["dpapi_master_key_guid"],
+                                blob.get("blob_offset", 0),
+                                blob.get("blob_length", 0),
+                                blob.get("is_decrypted", False),
+                                base64_content,
+                            ]
+                        )
 
                     tmp_csv.flush()
                     csv_object_id = self.storage.upload_file(tmp_csv.name)
@@ -286,10 +292,10 @@ List of unique masterkey GUIDs associated with the found blobs:
 
                 return enrichment_result
 
-        except Exception as e:
-            logger.exception(e, message="Error in DPAPI process()")
+        except Exception:
+            logger.exception(message="Error in DPAPI process()")
 
 
-def create_enrichment_module(standalone: bool = False) -> EnrichmentModule:
-    """Factory function that creates the analyzer in either standalone or service mode."""
-    return DpapiBlobAnalyzer(standalone=standalone)
+def create_enrichment_module() -> EnrichmentModule:
+    """Factory function that creates the analyzer."""
+    return DpapiBlobAnalyzer()

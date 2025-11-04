@@ -13,7 +13,8 @@ from io import SEEK_END
 import py7zr
 from common.logger import get_logger
 from common.models import File, FileEnriched
-from dapr.clients import DaprClient
+from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
+from dapr.aio.clients import DaprClient
 
 logger = get_logger(__name__)
 
@@ -261,8 +262,8 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
         else:
             raise FileNotSupportedException("File is not a supported archive format")
 
-    except Exception as e:
-        logger.exception(e, message="Error in safe_extract_archive")
+    except Exception:
+        logger.exception(message="Error in safe_extract_archive")
         return False
 
 
@@ -334,7 +335,6 @@ class ContainerExtractor:
                 logger.info("Archive is encrypted", path=file_enriched.path, file_path_on_disk=temp_file.name)
             else:
                 logger.exception(
-                    e,
                     message="RuntimeError extracting archive",
                     path=file_enriched.path,
                     file_path_on_disk=temp_file.name,
@@ -361,26 +361,25 @@ class ContainerExtractor:
                 real_path = real_path.replace("/", "\\")
 
             return real_path
-        except Exception as e:
+        except Exception:
             logger.exception(
-                e,
                 message="Error calculating real path",
                 extracted_path=extracted_path,
                 archive_file_path=file_enriched.path,
             )
             return None
 
-    def publish_file_message(self, file_message: File):
+    async def publish_file_message(self, file_message: File):
         """Publish file message to the message bus."""
         data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
-        self.dapr_client.publish_event(
-            pubsub_name="pubsub",
-            topic_name="file",
+        await self.dapr_client.publish_event(
+            pubsub_name=FILES_PUBSUB,
+            topic_name=FILES_NEW_FILE_TOPIC,
             data=data,
             data_content_type="application/json",
         )
 
-    def process_extracted_file(self, extracted_file_path, tmp_dir, file_enriched):
+    async def process_extracted_file(self, extracted_file_path, tmp_dir, file_enriched):
         """Process a single extracted file with security checks."""
         try:
             # Skip if not a file or empty
@@ -446,7 +445,7 @@ class ContainerExtractor:
                 nesting_level=nesting_level,
             )
 
-            self.publish_file_message(file_message)
+            await self.publish_file_message(file_message)
 
             logger.info(
                 f"Submitted extracted file '{real_path}' to Nemesis",
@@ -454,9 +453,8 @@ class ContainerExtractor:
             )
             return True
 
-        except Exception as e:
+        except Exception:
             logger.exception(
-                e,
                 message="process_archive error",
                 extracted_file_path=extracted_file_path,
                 archive_file_path=file_enriched.path,
@@ -464,7 +462,7 @@ class ContainerExtractor:
 
         return False
 
-    def extract(self, file_enriched: FileEnriched):
+    async def extract(self, file_enriched: FileEnriched):
         """Process a container file and extract its contents."""
         try:
             with self.storage.download(file_enriched.object_id) as temp_file:
@@ -493,7 +491,7 @@ class ContainerExtractor:
                             )
                             break
 
-                        if self.process_extracted_file(str(extracted_file_path), tmp_dir, file_enriched):
+                        if await self.process_extracted_file(str(extracted_file_path), tmp_dir, file_enriched):
                             processed_files += 1
 
                     logger.info(
@@ -506,6 +504,6 @@ class ContainerExtractor:
                     if os.path.exists(tmp_dir):
                         shutil.rmtree(tmp_dir, ignore_errors=True)
 
-        except Exception as e:
-            logger.exception(e, "Error processing container", file_enriched=file_enriched)
+        except Exception:
+            logger.exception("Error processing container", file_enriched=file_enriched)
             raise

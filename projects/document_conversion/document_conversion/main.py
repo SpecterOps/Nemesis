@@ -16,6 +16,7 @@ from common.db import get_postgres_connection_str
 from common.helpers import can_convert_to_pdf, can_extract_plaintext, extract_all_strings
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, WORKFLOW_RUNTIME_LOG_LEVEL, get_logger
 from common.models import CloudEvent, File, FileEnriched, Transform
+from common.queues import FILES_FILE_ENRICHED_TOPIC, FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from common.state_helpers import get_file_enriched
 from common.storage import StorageMinio
 from dapr.clients import DaprClient
@@ -30,7 +31,7 @@ from pypdf import PdfReader
 logger = get_logger(__name__)
 
 storage = StorageMinio()
-db_pool = None
+db_pool: ConnectionPool = None
 workflow_client: DaprWorkflowClient = None
 
 max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 3))  # maximum workflows that can run at a time
@@ -38,8 +39,8 @@ max_workflow_execution_time = int(
     os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300)
 )  # maximum time (in seconds) until a workflow is killed
 
-logger.info(f"max_parallel_workflows: {max_parallel_workflows}", pid=os.getpid())
-logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}", pid=os.getpid())
+logger.info(f"max_parallel_workflows: {max_parallel_workflows}")
+logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}")
 
 # Semaphore for controlling concurrent workflow execution
 workflow_semaphore = asyncio.Semaphore(max_parallel_workflows)
@@ -135,8 +136,8 @@ async def lifespan(app: FastAPI):
             logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
         )
 
-    except Exception as e:
-        logger.exception(e, message="Error initializing service")
+    except Exception:
+        logger.exception(message="Error initializing service")
         raise
 
     yield
@@ -179,8 +180,8 @@ def is_pdf_encrypted(pdf_path):
         # Check if the PDF is encrypted
         return reader.is_encrypted
 
-    except Exception as e:
-        logger.exception(e, "Error checking PDF")
+    except Exception:
+        logger.exception("Error checking PDF")
         return None
 
 
@@ -265,8 +266,8 @@ def store_transform(ctx, activity_input):
                 )
             conn.commit()
         logger.debug(f"Stored {transform_type} transform", object_id=file_enriched_object_id)
-    except Exception as e:
-        logger.exception(e, message=f"Error storing {transform_type} transform")
+    except Exception:
+        logger.exception(message=f"Error storing {transform_type} transform")
         raise
 
 
@@ -290,8 +291,8 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
 
         with DaprClient() as client:
             client.publish_event(
-                pubsub_name="pubsub",
-                topic_name="file",
+                pubsub_name=FILES_PUBSUB,
+                topic_name=FILES_NEW_FILE_TOPIC,
                 data=new_file.model_dump_json(),
                 data_content_type="application/json",
             )
@@ -301,8 +302,8 @@ def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
             new_object_id=transform.object_id,
             originating_object_id=file_enriched.object_id,
         )
-    except Exception as e:
-        logger.exception(e, message="Error publishing file message")
+    except Exception:
+        logger.exception(message="Error publishing file message")
         raise
 
 
@@ -378,7 +379,7 @@ def extract_tika_text(ctx: WorkflowActivityContext, file_input: dict) -> dict | 
             return result
 
     except Exception as e:
-        logger.exception(e, message="Error in Tika text extraction", object_id=object_id)
+        logger.exception(message="Error in Tika text extraction", object_id=object_id)
 
         # Record failure in database
         try:
@@ -451,13 +452,13 @@ def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dict | No
                         )
                     conn.commit()
 
-                logger.warning("'strings' sucessfully extracted to strings.txt", object_id=file_enriched.object_id)
+                logger.debug("'strings' sucessfully extracted to strings.txt", object_id=file_enriched.object_id)
 
                 result = transform.model_dump()
                 return result
 
     except Exception as e:
-        logger.exception(e, message="Error extracting strings", object_id=object_id)
+        logger.exception(message="Error extracting strings", object_id=object_id)
 
         # Record failure in database
         try:
@@ -577,7 +578,7 @@ def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict | Non
                 os.rename(temp_file_with_ext, temp_file.name)
 
     except Exception as e:
-        logger.exception(e, message="Error in PDF conversion", object_id=object_id)
+        logger.exception(message="Error in PDF conversion", object_id=object_id)
 
         # Record failure in database
         try:
@@ -665,8 +666,8 @@ def document_conversion_workflow(ctx: DaprWorkflowContext, workflow_input: dict)
 
         return {"status": "completed", "transforms_count": len(valid_transforms)}
 
-    except Exception as e:
-        logger.exception(e, message="Error in text extraction workflow")
+    except Exception:
+        logger.exception(message="Error in text extraction workflow")
         raise
 
 
@@ -705,10 +706,10 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
         # Start monitoring task for this workflow
         asyncio.create_task(monitor_workflow_completion(instance_id))
 
-    except Exception as e:
+    except Exception:
         # Release semaphore on error
         workflow_semaphore.release()
-        logger.exception(e, message="Error starting document conversion workflow")
+        logger.exception(message="Error starting document conversion workflow")
         raise
 
 
@@ -756,8 +757,8 @@ async def monitor_workflow_completion(instance_id: str):
                 logger.warning(f"Error checking workflow status for {instance_id}: {check_error}")
                 await asyncio.sleep(2)  # Wait longer on error
 
-    except Exception as e:
-        logger.exception(e, message=f"Error monitoring workflow {instance_id}")
+    except Exception:
+        logger.exception(message=f"Error monitoring workflow {instance_id}")
 
     finally:
         # Always clean up and release semaphore
@@ -772,7 +773,7 @@ async def monitor_workflow_completion(instance_id: str):
 # Main handling code
 
 
-@dapr_app.subscribe(pubsub="pubsub", topic="file_enriched")
+@dapr_app.subscribe(pubsub=FILES_PUBSUB, topic=FILES_FILE_ENRICHED_TOPIC)
 async def handle_file_enriched(event: CloudEvent[FileEnriched]):
     """Handler for file_enriched events with semaphore-based concurrency control."""
     try:
@@ -809,8 +810,8 @@ async def handle_file_enriched(event: CloudEvent[FileEnriched]):
         # Start workflow with semaphore control for backpressure
         await start_workflow_with_concurrency_control(file_enriched)
 
-    except Exception as e:
-        logger.exception(e, message="Error handling file_enriched event")
+    except Exception:
+        logger.exception(message="Error handling file_enriched event")
         raise
 
 
@@ -834,5 +835,5 @@ async def health_check():
         return {"status": "healthy"}
 
     except Exception as e:
-        logger.exception(e, message="Health check failed")
+        logger.exception(message="Health check failed")
         return {"status": "unhealthy", "error": str(e)}

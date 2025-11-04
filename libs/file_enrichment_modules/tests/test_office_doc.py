@@ -27,12 +27,12 @@ class TestOfficeDocEncryption:
         assert len(encryption_hash) > 0, "Encryption hash should not be empty"
 
         # Office document hashes in hashcat format typically start with "$office$"
-        assert encryption_hash.startswith("$office$") or encryption_hash.startswith("$o"), \
+        assert encryption_hash.startswith("$office$") or encryption_hash.startswith("$o"), (
             f"Expected hash to start with '$office$' or '$o', got: {encryption_hash[:20]}"
+        )
 
         # Verify the exact hash value
-        assert encryption_hash == expected_hash, \
-            f"Expected hash:\n{expected_hash}\nGot:\n{encryption_hash}"
+        assert encryption_hash == expected_hash, f"Expected hash:\n{expected_hash}\nGot:\n{encryption_hash}"
 
     def test_extract_file_encryption_hash_with_hashcat_format(self):
         """Test extracting encryption hash with explicit hashcat format parameter."""
@@ -66,12 +66,12 @@ class TestOfficeDocEncryption:
         assert len(encryption_hash) > 0, "Encryption hash should not be empty"
 
         # OLE Office document hashes start with "$oldoffice$"
-        assert encryption_hash.startswith("$oldoffice$") or encryption_hash.startswith("$o"), \
+        assert encryption_hash.startswith("$oldoffice$") or encryption_hash.startswith("$o"), (
             f"Expected hash to start with '$oldoffice$' or '$o', got: {encryption_hash[:20]}"
+        )
 
         # Verify the exact hash value
-        assert encryption_hash == expected_hash, \
-            f"Expected hash:\n{expected_hash}\nGot:\n{encryption_hash}"
+        assert encryption_hash == expected_hash, f"Expected hash:\n{expected_hash}\nGot:\n{encryption_hash}"
 
     def test_extract_file_encryption_hash_nonexistent_file(self):
         """Test that the function handles non-existent files by returning empty string."""

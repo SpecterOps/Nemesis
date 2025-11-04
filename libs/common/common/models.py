@@ -86,14 +86,33 @@ class DotNetMethodInfo(BaseModel):
 class DotNetAssemblyAnalysis(BaseModel):
     AssemblyName: str
     Error: str | None = None
-    RemotingChannels: list[str] = []
+    RemotingChannels: list[str] | None = None
     IsWCFServer: bool = False
     IsWCFClient: bool = False
-    SerializationGadgetCalls: dict[str, list[DotNetMethodInfo]] = {}
-    WcfServerCalls: dict[str, list[DotNetMethodInfo]] = {}
-    ClientCalls: dict[str, list[DotNetMethodInfo]] = {}
-    RemotingCalls: dict[str, list[DotNetMethodInfo]] = {}
-    ExecutionCalls: dict[str, list[DotNetMethodInfo]] = {}
+    SerializationGadgetCalls: dict[str, list[DotNetMethodInfo]] | None = None
+    WcfServerCalls: dict[str, list[DotNetMethodInfo]] | None = None
+    ClientCalls: dict[str, list[DotNetMethodInfo]] | None = None
+    RemotingCalls: dict[str, list[DotNetMethodInfo]] | None = None
+    ExecutionCalls: dict[str, list[DotNetMethodInfo]] | None = None
+
+    @field_validator("RemotingChannels", mode="before")
+    @classmethod
+    def convert_null_to_empty_list(cls, v):
+        """Convert null RemotingChannels to empty list."""
+        return [] if v is None else v
+
+    @field_validator(
+        "SerializationGadgetCalls",
+        "WcfServerCalls",
+        "ClientCalls",
+        "RemotingCalls",
+        "ExecutionCalls",
+        mode="before",
+    )
+    @classmethod
+    def convert_null_to_empty_dict(cls, v):
+        """Convert null dict fields to empty dict."""
+        return {} if v is None else v
 
 
 class DotNetOutput(BaseModel):
@@ -122,13 +141,9 @@ class DotNetOutput(BaseModel):
 
 ##########################################
 #
-# Special case for NoseyParker
+# NoseyParker Models
 #
 ##########################################
-
-
-class NoseyParkerInput(BaseModel):
-    object_id: str
 
 
 class GitCommitInfo(BaseModel):
@@ -170,10 +185,16 @@ class ScanResults(BaseModel):
     scan_type: str = "regular"  # "regular", "zip", "git_repo"
 
 
+class NoseyParkerInput(BaseModel):
+    object_id: str
+    workflow_id: str
+
+
 class NoseyParkerOutput(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     object_id: str
+    workflow_id: str
     scan_result: ScanResults
 
     # Add a factory method to handle flexible parsing

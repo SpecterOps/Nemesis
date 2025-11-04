@@ -56,12 +56,14 @@ async def get_expired_object_ids(expiration_date: datetime | None = None) -> lis
                     SELECT object_id FROM files_enriched_dataset WHERE expiration < $3
                 ) AS expired
                 """,
-                comparison_date, comparison_date, comparison_date,
+                comparison_date,
+                comparison_date,
+                comparison_date,
             )
             return [str(record["object_id"]) for record in records]
 
-    except Exception as e:
-        logger.exception(e, message="Error getting expired object IDs from database")
+    except Exception:
+        logger.exception(message="Error getting expired object IDs from database")
         return []
 
 
@@ -88,8 +90,8 @@ async def get_transform_object_ids(object_ids: list[str]) -> list[str]:
             # Extract and return the transform_object_ids
             transform_object_ids = [str(record["transform_object_id"]) for record in transform_records]
             return transform_object_ids
-    except Exception as e:
-        logger.exception(e, message="Error getting transform object IDs from database")
+    except Exception:
+        logger.exception(message="Error getting transform object IDs from database")
         return []
 
 
@@ -141,8 +143,8 @@ async def delete_database_entries(object_ids: list[str]) -> bool:
                 object_count=len(object_ids),
             )
             return True
-    except Exception as e:
-        logger.exception(e, message="Error deleting database entries")
+    except Exception:
+        logger.exception(message="Error deleting database entries")
         return False
 
 
@@ -179,8 +181,8 @@ async def delete_expired_chromium_data(expiration_date: datetime | None = None) 
             logger.info("Successfully deleted all chromium data")
             return True
 
-    except Exception as e:
-        logger.exception(e, message="Error deleting chromium data")
+    except Exception:
+        logger.exception(message="Error deleting chromium data")
         return False
 
 
@@ -233,8 +235,8 @@ async def delete_expired_file_listings(expiration_date: datetime | None = None) 
             )
             return True
 
-    except Exception as e:
-        logger.exception(e, message="Error deleting expired file_listings")
+    except Exception:
+        logger.exception(message="Error deleting expired file_listings")
         return False
 
 
@@ -287,8 +289,8 @@ async def delete_expired_file_linkings(expiration_date: datetime | None = None) 
             )
             return True
 
-    except Exception as e:
-        logger.exception(e, message="Error deleting expired file_linkings")
+    except Exception:
+        logger.exception(message="Error deleting expired file_linkings")
         return False
 
 
@@ -347,8 +349,8 @@ async def delete_expired_dpapi_data(expiration_date: datetime | None = None) -> 
 
             return True
 
-    except Exception as e:
-        logger.exception(e, message="Error deleting expired dpapi data")
+    except Exception:
+        logger.exception(message="Error deleting expired dpapi data")
         return False
 
 
@@ -401,8 +403,8 @@ async def delete_expired_containers(expiration_date: datetime | None = None) -> 
             )
             return True
 
-    except Exception as e:
-        logger.exception(e, message="Error deleting expired containers")
+    except Exception:
+        logger.exception(message="Error deleting expired containers")
         return False
 
 
@@ -418,6 +420,7 @@ def _log_cleanup_result(result, success_msg: str, error_msg: str, round_num: int
 
 _CLEANUP_RETRY_COUNT = 3
 _CLEANUP_RETRY_DELAY = 20
+
 
 async def run_cleanup_job(expiration_date: datetime | None = None):
     """
@@ -452,7 +455,9 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
 
                 all_object_ids = list(set(expired_object_ids + transform_object_ids))
                 deleted_count = storage.delete_objects(all_object_ids)
-                logger.info("Deleted objects from Minio", count=deleted_count, total=len(all_object_ids), round=round_num)
+                logger.info(
+                    "Deleted objects from Minio", count=deleted_count, total=len(all_object_ids), round=round_num
+                )
 
             # Run database deletions in parallel
             logger.info("Starting parallel database cleanup operations", round=round_num)
@@ -473,8 +478,15 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
             )
 
             # Log results
-            _log_cleanup_result(db_result, "Successfully deleted database entries", "Failed to delete database entries", round_num)
-            _log_cleanup_result(container_result, "Successfully deleted container entries", "Failed to delete container entries", round_num)
+            _log_cleanup_result(
+                db_result, "Successfully deleted database entries", "Failed to delete database entries", round_num
+            )
+            _log_cleanup_result(
+                container_result,
+                "Successfully deleted container entries",
+                "Failed to delete container entries",
+                round_num,
+            )
             # _log_cleanup_result(dpapi_result, "Successfully deleted dpapi data", "Failed to delete dpapi data", round_num)
             # _log_cleanup_result(chromium_result, "Successfully deleted chromium data", "Failed to delete chromium data", round_num)
             # _log_cleanup_result(file_listings_result, "Successfully deleted file_listings", "Failed to delete file_listings", round_num)
@@ -488,8 +500,8 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
 
         logger.info("Cleanup completed!")
 
-    except Exception as e:
-        logger.exception(e, message="Error running cleanup job")
+    except Exception:
+        logger.exception(message="Error running cleanup job")
 
 
 @asynccontextmanager
@@ -542,8 +554,8 @@ async def lifespan(app: FastAPI):
             await db_pool.close()
             logger.info("Database connection pool closed")
 
-    except Exception as e:
-        logger.exception(e, message="Error during service initialization")
+    except Exception:
+        logger.exception(message="Error during service initialization")
         raise
 
 

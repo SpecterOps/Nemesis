@@ -4,7 +4,7 @@ from functools import wraps
 from typing import Any
 
 import dapr.ext.workflow as wf
-from common.logger import WORKFLOW_RUNTIME_LOG_LEVEL
+from common.logger import WORKFLOW_RUNTIME_LOG_LEVEL, get_logger
 from dapr.ext.workflow.logger.options import LoggerOptions
 
 wf_runtime: wf.WorkflowRuntime = wf.WorkflowRuntime(
@@ -12,6 +12,8 @@ wf_runtime: wf.WorkflowRuntime = wf.WorkflowRuntime(
         log_level=WORKFLOW_RUNTIME_LOG_LEVEL,
     )
 )
+
+logger = get_logger(__name__)
 
 
 def set_fastapi_loop(loop: asyncio.AbstractEventLoop) -> None:

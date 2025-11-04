@@ -390,13 +390,17 @@ class TestChromiumLocalStateLinking:
         assert len(login_data_file.path_templates) == 1, "login_data should have exactly one path template"
         login_template = login_data_file.path_templates[0]
         expanded_login_path = engine._expand_path_template(login_template, local_state_path)
-        assert expanded_login_path == expected_login_data_path, f"Expected {expected_login_data_path}, got {expanded_login_path}"
+        assert expanded_login_path == expected_login_data_path, (
+            f"Expected {expected_login_data_path}, got {expanded_login_path}"
+        )
 
         # Verify path template expansion for cookies
         assert len(cookies_file.path_templates) == 1, "cookies should have exactly one path template"
         cookies_template = cookies_file.path_templates[0]
         expanded_cookies_path = engine._expand_path_template(cookies_template, local_state_path)
-        assert expanded_cookies_path == expected_cookies_path, f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+        assert expanded_cookies_path == expected_cookies_path, (
+            f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+        )
 
     def test_chromium_local_state_links_opera_browser(self, engine):
         """Test that Opera browser Local State file creates correct links."""
@@ -430,8 +434,12 @@ class TestChromiumLocalStateLinking:
         expanded_login_path = engine._expand_path_template(login_data_file.path_templates[0], local_state_path)
         expanded_cookies_path = engine._expand_path_template(cookies_file.path_templates[0], local_state_path)
 
-        assert expanded_login_path == expected_login_data_path, f"Expected {expected_login_data_path}, got {expanded_login_path}"
-        assert expanded_cookies_path == expected_cookies_path, f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+        assert expanded_login_path == expected_login_data_path, (
+            f"Expected {expected_login_data_path}, got {expanded_login_path}"
+        )
+        assert expanded_cookies_path == expected_cookies_path, (
+            f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+        )
 
     def test_chromium_local_state_links_posix_paths(self, engine):
         """Test that Local State file works with POSIX-style paths (e.g., from Linux collection)."""
@@ -465,8 +473,12 @@ class TestChromiumLocalStateLinking:
         expanded_login_path = engine._expand_path_template(login_data_file.path_templates[0], local_state_path)
         expanded_cookies_path = engine._expand_path_template(cookies_file.path_templates[0], local_state_path)
 
-        assert expanded_login_path == expected_login_data_path, f"Expected {expected_login_data_path}, got {expanded_login_path}"
-        assert expanded_cookies_path == expected_cookies_path, f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+        assert expanded_login_path == expected_login_data_path, (
+            f"Expected {expected_login_data_path}, got {expanded_login_path}"
+        )
+        assert expanded_cookies_path == expected_cookies_path, (
+            f"Expected {expected_cookies_path}, got {expanded_cookies_path}"
+        )
 
     def test_chromium_local_state_wrong_mime_type_no_match(self, engine):
         """Test that a file with the right path but wrong MIME type doesn't trigger the rule."""
@@ -681,7 +693,9 @@ linked_files:
         """Test SID placeholder resolution."""
         from unittest.mock import AsyncMock
 
-        placeholder_path = "/C:/Windows/System32/Config/systemprofile/AppData/Local/<WINDOWS_SECURITY_IDENTIFIER>/file.dat"
+        placeholder_path = (
+            "/C:/Windows/System32/Config/systemprofile/AppData/Local/<WINDOWS_SECURITY_IDENTIFIER>/file.dat"
+        )
         real_path = "/C:/Windows/System32/Config/systemprofile/AppData/Local/S-1-5-18/file.dat"
 
         engine.db_service.get_placeholder_entries = AsyncMock(
@@ -705,8 +719,7 @@ linked_files:
         from unittest.mock import AsyncMock
 
         placeholder_path = (
-            "/C:/Users/<WINDOWS_USERNAME>/AppData/Roaming/Microsoft/Protect/"
-            "<WINDOWS_SECURITY_IDENTIFIER>/masterkey"
+            "/C:/Users/<WINDOWS_USERNAME>/AppData/Roaming/Microsoft/Protect/<WINDOWS_SECURITY_IDENTIFIER>/masterkey"
         )
         real_path = (
             "/C:/Users/bob.jones/AppData/Roaming/Microsoft/Protect/"
