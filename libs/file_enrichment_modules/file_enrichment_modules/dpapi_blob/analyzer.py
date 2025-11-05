@@ -76,7 +76,6 @@ rule has_dpapi_blob
             file_path: Optional path to already downloaded file
         """
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
-        logger.debug(f"File {object_id} should be processed by DPAPI blob analyzer")
         if file_enriched.size > self.size_limit:
             logger.debug(
                 f"[dpapi_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"

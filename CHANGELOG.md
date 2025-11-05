@@ -5,7 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [Unreleased]
+## [2.2.0]
+
 
 ## [2.1.4]
 
@@ -55,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - OTEL spans for various enrichment module components
   - Obtain prometheus metrics from Dapr components and other services.
 - Allow configuring logging settings of various containers via env vars in compose file.
-
+- `group_policy_preferences` and `mcafee_sitelist` file enrichment modules
 
 ### Changed
 
@@ -83,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Restrict strings to 1 MB.
   - Cache files in memory to prevent re-downloading.
 - Enabled Python dev mode in file_enrichment dev container
-
+- Temporarily disable re-running of Yara rules until internal architecture for bulk enrichment re-running is fixed
 
 ### Fixed
 
@@ -100,6 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed several File resource leaks in office2john
 - Normalized paths on upload instead of sprinkling normalization throughout codebase
 - dotnet_service serialization errors on some assemblies
+- Bumped various package versions to fix exposed dependabot security issues
+
 
 ## [2.1.3]
 
