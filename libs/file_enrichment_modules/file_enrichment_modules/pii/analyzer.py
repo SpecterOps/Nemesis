@@ -25,8 +25,11 @@ PII_ENTITY_CONFIG = {
 # Entities to detect (derived from config)
 SUPPORTED_PII_ENTITIES = list(PII_ENTITY_CONFIG.keys())
 
-# Minimum confidence score for PII detection (configurable via environment)
-PII_DETECTION_THRESHOLD = float(os.getenv("PII_DETECTION_THRESHOLD", "0.5"))
+# Minimum confidence score for PII detection (configurable via ENV variable)
+PII_DETECTION_THRESHOLD = float(os.getenv("PII_DETECTION_THRESHOLD", "0.7"))
+
+# Enable/disable PII detection (must be explicitly enabled)
+ENABLE_PII_DETECTION = os.getenv("ENABLE_PII_DETECTION", "False").lower() == "true"
 
 
 class PIIAnalyzer(EnrichmentModule):
@@ -63,6 +66,10 @@ class PIIAnalyzer(EnrichmentModule):
         Returns:
             True if the file is plaintext, False otherwise
         """
+        # Check if PII detection is enabled
+        if not ENABLE_PII_DETECTION:
+            return False
+
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         if file_enriched.is_plaintext:

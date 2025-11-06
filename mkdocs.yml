@@ -17,6 +17,7 @@ nav:
 
   - Usage:
     - usage_guide.md
+    - enrichment_configuration.md
     - alerting.md
     - cli.md
     - containers.md
@@ -35,7 +36,6 @@ nav:
 
   - Developer:
     - Adding File Enrichment Modules: file_enrichment_modules.md
-    - Adding Nosey Parker Rules: noseyparker_rules.md
     - Operational Data Reference: odr.md
     - Docker Compose Documentation: docker_compose.md
     - Nemesis API: api.md
