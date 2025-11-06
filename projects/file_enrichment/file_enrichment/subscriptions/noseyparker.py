@@ -253,6 +253,11 @@ async def store_noseyparker_results(
                 metadata={"summary": sanitize_for_jsonb(summary_markdown)},  # Sanitize the summary too
             )
 
+            # Determine severity based on rule type and name
+            severity = 7  # Default severity
+            if match.rule_type == "secret" and "generic secret" in match.rule_name.lower():
+                severity = 4
+
             # Create the finding with sanitized raw_data
             finding = Finding(
                 category=FindingCategory.CREDENTIAL,
@@ -260,7 +265,7 @@ async def store_noseyparker_results(
                 origin_type=FindingOrigin.ENRICHMENT_MODULE,
                 origin_name="noseyparker",
                 object_id=object_id,
-                severity=7,
+                severity=severity,
                 raw_data=sanitize_for_jsonb({"match": match.model_dump() if hasattr(match, "model_dump") else match}),
                 data=[display_data],
             )
