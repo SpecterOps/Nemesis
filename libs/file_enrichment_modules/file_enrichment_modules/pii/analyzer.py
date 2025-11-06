@@ -13,8 +13,17 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
 
-# PII entities to detect
-SUPPORTED_PII_ENTITIES = ["CREDIT_CARD", "US_SSN", "UK_NINO"]
+# PII entity configuration: maps Presidio entity types to display names
+#   To add more entities, just add them to this dict and they'll be detected automatically
+#   Entities are defined here: https://microsoft.github.io/presidio/supported_entities/
+PII_ENTITY_CONFIG = {
+    "CREDIT_CARD": "Credit Card Number",
+    "US_SSN": "Social Security Number",
+    "UK_NINO": "National Insurance Number",
+}
+
+# Entities to detect (derived from config)
+SUPPORTED_PII_ENTITIES = list(PII_ENTITY_CONFIG.keys())
 
 # Minimum confidence score for PII detection (configurable via environment)
 PII_DETECTION_THRESHOLD = float(os.getenv("PII_DETECTION_THRESHOLD", "0.5"))
@@ -80,12 +89,7 @@ class PIIAnalyzer(EnrichmentModule):
         Returns:
             Human-readable display name for the PII type
         """
-        entity_display_names = {
-            "CREDIT_CARD": "Credit Card Number",
-            "US_SSN": "Social Security Number",
-            "UK_NINO": "National Insurance Number",
-        }
-        return entity_display_names.get(entity_type, entity_type)
+        return PII_ENTITY_CONFIG.get(entity_type, entity_type)
 
     def _create_finding_summary(self, findings_by_type: dict[str, list[dict]]) -> str:
         """Create a markdown summary of PII findings."""
