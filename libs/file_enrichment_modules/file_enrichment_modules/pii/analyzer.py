@@ -1,9 +1,10 @@
 # enrichment_modules/pii/analyzer.py
+import os
 import tempfile
 import threading
 from pathlib import Path
 
-import yara_x
+from presidio_analyzer import AnalyzerEngine
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched_async
@@ -11,6 +12,12 @@ from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
+
+# PII entities to detect
+SUPPORTED_PII_ENTITIES = ["CREDIT_CARD", "US_SSN", "UK_NINO"]
+
+# Minimum confidence score for PII detection (configurable via environment)
+PII_DETECTION_THRESHOLD = float(os.getenv("PII_DETECTION_THRESHOLD", "0.5"))
 
 
 class PIIAnalyzer(EnrichmentModule):
@@ -22,72 +29,31 @@ class PIIAnalyzer(EnrichmentModule):
         self.storage = StorageMinio()
 
         self.asyncpg_pool = None  # type: ignore
-        self.size_limit = 50_000_000  # 50MB size limit
+        self.size_limit = 10_000_000  # 10MB size limit
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-        # Compile the rules once during initialization
-        self._compiler = yara_x.Compiler()
-        self._compiler.add_source(r"""
-rule detect_pii
-{
-    meta:
-        description = "Detects various types of PII including credit cards, SSNs, crypto addresses, and passport numbers"
-        date = "2025-01-28"
+    def _get_analyzer(self) -> AnalyzerEngine:
+        """Get or create thread-local AnalyzerEngine instance."""
+        if not hasattr(self._thread_local, "analyzer"):
+            self._thread_local.analyzer = AnalyzerEngine()
+        return self._thread_local.analyzer
 
-    strings:
-        // UK NHS Number
-        $nhs = /[0-9]{3}\\s[0-9]{3}\\s[0-9]{4}/ fullword
-
-        // UK National Insurance Number
-        $nino = /[A-CE-HJ-PR-T-WYZ][A-CE-HJ-PR-T-WYZ][0-9]{6}[A-CFHJ-NPR-TW-Z]/ fullword
-
-        // Credit Card Numbers
-        $cc1 = /4[0-9]{12}(?:[0-9]{3})?/ fullword  // Visa
-        $cc2 = /5[1-5][0-9]{14}/ fullword           // MasterCard
-        $cc3 = /3[47][0-9]{13}/ fullword            // American Express
-        $cc4 = /6(?:011|5[0-9]{2})[0-9]{12}/ fullword  // Discover
-
-        // US Social Security Numbers
-        $ssn = /([0-6][0-9]{2}|7[0-6][0-9]|77[0-9]|8[0-8][0-9]|89[0-9])-([0-9][1-9]|[1-9][0-9])-[1-9][0-9]{3}/ fullword
-
-        // Crypto Addresses
-        //$btc1 = /[13][a-km-zA-HJ-NP-Z1-9]{25,34}/ fullword
-        //$btc2 = /bc1[a-zA-HJ-NP-Z0-9]{25,39}/ fullword
-        //$eth = /0x[a-fA-F0-9]{40}/ fullword
-
-        // US Passport Numbers
-        //$passport = /[0-9]{9}|[A-Z][0-9]{8}/ fullword
-
-    condition:
-        any of ($cc*) or
-        $ssn or
-        //any of ($btc*) or
-        //$eth or
-        //$passport or
-        $nhs or
-        $nino
-}
-        """)
-        self._compiled_rules = self._compiler.build()
-
-    def _get_scanner(self) -> yara_x.Scanner | None:
-        """Get or create thread-local scanner instance."""
-        if not hasattr(self._thread_local, "scanner"):
-            if self._compiled_rules:
-                self._thread_local.scanner = yara_x.Scanner(self._compiled_rules)
-                self._thread_local.scanner.set_timeout(60)
-            else:
-                return None
-        return self._thread_local.scanner
-
-    def _clear_scanner(self):
-        """Clear the thread-local scanner if it exists."""
-        if hasattr(self._thread_local, "scanner"):
-            delattr(self._thread_local, "scanner")
+    def _clear_analyzer(self):
+        """Clear the thread-local analyzer if it exists."""
+        if hasattr(self._thread_local, "analyzer"):
+            delattr(self._thread_local, "analyzer")
 
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
-        """Determine if file should be processed based on size and content."""
+        """Determine if file should be processed based on plaintext detection.
+
+        Args:
+            object_id: The object ID of the file
+            file_path: Optional path to already downloaded file (unused in this implementation)
+
+        Returns:
+            True if the file is plaintext, False otherwise
+        """
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         if file_enriched.is_plaintext:
@@ -95,28 +61,9 @@ rule detect_pii
                 logger.warning(
                     f"[pii_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"
                 )
+            return True
 
-            if file_path:
-                # Use provided file path - read only the needed bytes
-                with open(file_path, "rb") as f:
-                    num_bytes = min(file_enriched.size, self.size_limit)
-                    file_bytes = f.read(num_bytes)
-            else:
-                # Fallback to downloading the file itself
-                num_bytes = file_enriched.size if file_enriched.size < self.size_limit else self.size_limit
-                file_bytes = self.storage.download_bytes(file_enriched.object_id, length=num_bytes)
-
-            scanner = self._get_scanner()
-            if not scanner:
-                logger.warning("No Yara rules compiled")
-                return False
-
-            matches = scanner.scan(file_bytes)
-            should_run = len(list(matches.matching_rules)) > 0
-
-            return should_run
-        else:
-            return False
+        return False
 
     def _get_match_context(self, content: str, offset: int, length: int, context_size: int = 50) -> str:
         """Get surrounding context for a match position."""
@@ -124,24 +71,21 @@ rule detect_pii
         end = min(len(content), offset + length + context_size)
         return content[start:end]
 
-    def _categorize_match(self, pattern_id: str) -> str:
-        """Categorize the type of PII based on the pattern identifier."""
-        # Pattern IDs come directly from the Yara rule identifiers
-        if pattern_id in ["cc1", "cc2", "cc3", "cc4"]:
-            return "Credit Card Number"
-        elif pattern_id == "ssn":
-            return "Social Security Number"
-        elif pattern_id in ["btc1", "btc2"]:
-            return "Bitcoin Address"
-        elif pattern_id == "eth":
-            return "Ethereum Address"
-        elif pattern_id == "passport":
-            return "US Passport Number"
-        elif pattern_id == "nhs":
-            return "NHS Number"
-        elif pattern_id == "nino":
-            return "National Insurance Number"
-        return "Unknown"
+    def _categorize_match(self, entity_type: str) -> str:
+        """Categorize the type of PII based on Presidio entity type.
+
+        Args:
+            entity_type: The Presidio entity type (e.g., "CREDIT_CARD", "US_SSN")
+
+        Returns:
+            Human-readable display name for the PII type
+        """
+        entity_display_names = {
+            "CREDIT_CARD": "Credit Card Number",
+            "US_SSN": "Social Security Number",
+            "UK_NINO": "National Insurance Number",
+        }
+        return entity_display_names.get(entity_type, entity_type)
 
     def _create_finding_summary(self, findings_by_type: dict[str, list[dict]]) -> str:
         """Create a markdown summary of PII findings."""
@@ -179,7 +123,7 @@ rule detect_pii
         return summary
 
     def _analyze_pii(self, file_path: str, file_enriched) -> EnrichmentResult | None:
-        """Analyze file for PII and generate enrichment result.
+        """Analyze file for PII using Presidio and generate enrichment result.
 
         Args:
             file_path: Path to the file to analyze for PII
@@ -190,43 +134,53 @@ rule detect_pii
         """
         enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
-        scanner = self._get_scanner()
-        if not scanner:
-            logger.warning("No Yara rules compiled")
-            return None
+        analyzer = self._get_analyzer()
 
         try:
+            # Read file with size limit
             content = Path(file_path).read_text(encoding="utf-8")
-            file_bytes = content.encode("utf-8")
 
-            scan_results = scanner.scan(file_bytes)
+            # Truncate content if it exceeds size limit
+            if len(content.encode("utf-8")) > self.size_limit:
+                # Find a safe truncation point (approximate character position)
+                approx_chars = int(self.size_limit * len(content) / len(content.encode("utf-8")))
+                content = content[:approx_chars]
+
+            # Analyze with Presidio
+            results = analyzer.analyze(
+                text=content,
+                entities=SUPPORTED_PII_ENTITIES,
+                language='en'
+            )
+
+            # Filter by threshold and organize by type
             findings_by_type = {}
 
-            for rule in scan_results.matching_rules:
-                for pattern in rule.patterns:
-                    if pattern.matches:
-                        # Get the pattern name directly from the identifier
-                        # Remove the $ prefix that Yara adds to pattern names
-                        pattern_name = pattern.identifier.lstrip("$")
-                        pii_type = self._categorize_match(pattern_name)
+            for result in results:
+                # Filter by confidence threshold
+                if result.score < PII_DETECTION_THRESHOLD:
+                    continue
 
-                        if pii_type not in findings_by_type:
-                            findings_by_type[pii_type] = []
+                pii_type = self._categorize_match(result.entity_type)
 
-                        for match in pattern.matches:
-                            if match.length < 1000:
-                                value = content[match.offset : match.offset + match.length]
-                                context = self._get_match_context(content, match.offset, match.length)
+                if pii_type not in findings_by_type:
+                    findings_by_type[pii_type] = []
 
-                                findings_by_type[pii_type].append(
-                                    {
-                                        "value": value,
-                                        "context": context,
-                                        "offset": match.offset,
-                                        "length": match.length,
-                                        "pattern_id": pattern_name,  # Store the clean pattern name
-                                    }
-                                )
+                # Extract the matched value and context
+                value = content[result.start:result.end]
+                length = result.end - result.start
+                context = self._get_match_context(content, result.start, length)
+
+                findings_by_type[pii_type].append(
+                    {
+                        "value": value,
+                        "context": context,
+                        "offset": result.start,
+                        "length": length,
+                        "score": result.score,
+                        "entity_type": result.entity_type,
+                    }
+                )
 
             if findings_by_type:
                 # Create finding summary
@@ -284,7 +238,7 @@ rule detect_pii
             return None
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process file to detect PII using Yara rules.
+        """Process file to detect PII using Microsoft Presidio.
 
         Args:
             object_id: The object ID of the file

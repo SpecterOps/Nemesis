@@ -58,6 +58,10 @@ COPY ./projects/file_enrichment /src/projects/file_enrichment/
 # This ensures the project is importable and poetry run commands work
 RUN poetry install
 
+# Pre-download Presidio's spaCy model (~400MB) to avoid runtime delay
+# This downloads the en_core_web_lg model used by AnalyzerEngine
+RUN poetry run python -c "from presidio_analyzer import AnalyzerEngine; AnalyzerEngine()"
+
 ########################
 # Development
 ########################
