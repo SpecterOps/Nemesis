@@ -1,6 +1,6 @@
-# Configuration Enrichments
+# Enrichment Configuration
 
-Several enrichments in Nemesis are configurable, and a few must be explicitly enabled due to the performance impact they impart. This document all current enrichment configuration optinos.
+Several file enricment modules in Nemesis are configurable, and a few must be explicitly enabled due to the performance impact they impart. This document details all current enrichment configuration options.
 
 
 ## PII Detection
@@ -23,11 +23,12 @@ A higher score will return fewer false positives at the risk of increased false 
 
 Currently the PII module detects the following entity types: `CREDIT_CARD`, `US_SSN`, `UK_NINO`. To add or remove PII entity types (defined at https://microsoft.github.io/presidio/supported_entities/), modify the `PII_ENTITY_CONFIG` at the top of the [PII file enrichment module](https://github.com/SpecterOps/Nemesis/blob/main/libs/file_enrichment_modules/file_enrichment_modules/pii/analyzer.py).
 
+
 ## Document Conversion
 
 ### ENV Variables
 
-The Document Conversion service has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
+The [Document Conversion service](https://github.com/SpecterOps/Nemesis/tree/main/projects/document_conversion) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
 
 | ENV Variable                  | Default Value | Description                                                     |
 | ----------------------------- | ------------- | --------------------------------------------------------------- |
@@ -45,7 +46,7 @@ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
 
 ### ENV Variables
 
-The Nosey Parker scanner service has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
+The [Nosey Parker scanner service](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
 
 | ENV Variable           | Default Value | Description                                                                     |
 | ---------------------- | ------------- | ------------------------------------------------------------------------------- |
@@ -93,6 +94,8 @@ If you want to add additional rules, just modify [rules.yaml](https://github.com
 
 
 ## .NET Service
+
+The [.NET scanning service](https://github.com/SpecterOps/Nemesis/tree/main/projects/dotnet_service) has a single ENV variable to configure.
 
 ### ENV Variables
 
