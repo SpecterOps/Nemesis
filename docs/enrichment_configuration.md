@@ -21,6 +21,7 @@ export PII_DETECTION_THRESHOLD=0.5
 
 A higher score will return fewer false positives at the risk of increased false negatives.
 
+Currently the PII module detects the following entity types: `CREDIT_CARD`, `US_SSN`, `UK_NINO`. To add or remove PII entity types (defined at https://microsoft.github.io/presidio/supported_entities/), modify the `PII_ENTITY_CONFIG` at the top of the [PII file enrichment module](https://github.com/SpecterOps/Nemesis/blob/main/libs/file_enrichment_modules/file_enrichment_modules/pii/analyzer.py).
 
 ## Document Conversion
 
