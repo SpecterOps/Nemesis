@@ -814,9 +814,7 @@ async def run_enrichment(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(
-            e, message="Error running enrichment", enrichment_name=enrichment_name, object_id=request.object_id
-        )
+        logger.exception("Error running enrichment", enrichment_name=enrichment_name, object_id=request.object_id)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

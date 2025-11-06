@@ -487,7 +487,7 @@ def get_monitor() -> ContainerMonitor:
 
 
 async def start_monitor():
-    """Start the container monitor asynchronously"""
+    """Start the container monitor"""
 
     def _start():
         monitor = get_monitor()
@@ -499,7 +499,7 @@ async def start_monitor():
 
 
 async def stop_monitor():
-    """Stop the container monitor asynchronously"""
+    """Stop the container monitor"""
 
     def _stop():
         monitor = get_monitor()

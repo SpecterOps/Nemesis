@@ -143,11 +143,10 @@ class InMemoryPublisher(DpapiEventPublisher):
 class DaprDpapiEventPublisher(DpapiEventPublisher):
     """DPAPI event publisher using Dapr pub/sub."""
 
-    def __init__(self, dapr_client: DaprClient, loop: asyncio.AbstractEventLoop | None = None):
+    def __init__(self, dapr_client: DaprClient):
         self._dapr_client = dapr_client
         self._observers: list[DpapiObserver] = []
         self._background_task = None
-        self._loop = loop if loop else asyncio.get_running_loop()
 
     async def register_subscriber(self, observer: DpapiObserver) -> None:
         """Attach an observer and start the Dapr subscription if not already started."""
@@ -174,7 +173,7 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
             data_content_type="application/json",
         )
 
-    def process_message(self, evnt: SubscriptionMessage) -> TopicEventResponse:
+    async def process_message(self, evnt: SubscriptionMessage) -> TopicEventResponse:
         """Process incoming Dapr pub/sub messages."""
 
         logger.debug(f"Processing event of type {evnt.type()}.  JSON: {json.dumps(evnt.data())}")
@@ -196,7 +195,7 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
             return TopicEventResponse(TopicEventResponseStatus.drop)
 
         for observer in self._observers:
-            asyncio.run_coroutine_threadsafe(observer.update(dpapi_event), self._loop)
+            await observer.update(dpapi_event)
 
         return TopicEventResponse(TopicEventResponseStatus.success)
 

@@ -92,7 +92,7 @@ rule is_cng_file
         return should_run
 
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
-        """Process CNG file asynchronously.
+        """Process CNG file.
 
         Args:
             object_id: The object ID of the file

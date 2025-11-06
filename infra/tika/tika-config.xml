@@ -20,11 +20,14 @@
         <!-- Multi-language support: add languages as needed (e.g., eng+spa+fra+deu) -->
         <param name="language" type="string">eng</param>
 
+        <!-- Path to ImageMagick binary directory (must end with /) -->
+        <param name="imageMagickPath" type="string">/usr/bin/</param>
+
         <!-- Timeout in seconds - adjust based on document complexity -->
-        <param name="timeout" type="int">300</param>
+        <param name="timeout" type="int">15</param>
 
         <!-- Image preprocessing improves accuracy -->
-        <param name="enableImageProcessing" type="bool">true</param>
+        <!-- <param name="enableImageProcessing" type="bool">true</param> -->
 
         <!-- Page segmentation mode: 3 is fully automatic (best for most documents) -->
         <param name="pageSegMode" type="string">3</param>

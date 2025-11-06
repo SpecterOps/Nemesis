@@ -290,11 +290,12 @@ services:
         "5",
       ]
     volumes: &file-enrichment-dapr-volumes
-      - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
-      - ./infra/dapr/components/pubsub/noseyparker.yaml:/dapr/components/noseyparker.yaml:ro
       - ./infra/dapr/components/pubsub/alerting.yaml:/dapr/components/alerting.yaml:ro
-      - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
+      - ./infra/dapr/components/pubsub/document_conversion.yaml:/dapr/components/document_conversion.yaml:ro
+      - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
       - ./infra/dapr/components/pubsub/dpapi.yaml:/dapr/components/dpapi.yaml:ro
+      - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
+      - ./infra/dapr/components/pubsub/noseyparker.yaml:/dapr/components/noseyparker.yaml:ro
       - ./infra/dapr/components/pubsub/workflow_monitor.yaml:/dapr/components/workflow_monitor.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
@@ -366,9 +367,11 @@ services:
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
     command: >
       sh -c "
+        if [ -f /version.json ]; then cp /version.json /app/public/version.json; fi &&
         SECRET=\"$$HASURA_ADMIN_SECRET\" &&
-        sed -i \"s/\\$$HASURA_ADMIN_SECRET/$$SECRET/g\" /usr/share/nginx/html/index.html &&
-        nginx -g 'daemon off;'
+        echo \"window.ENV = { HASURA_ADMIN_SECRET: '$$SECRET' };\" > /app/public/env.js &&
+        cd /app &&
+        npm run dev
       "
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
@@ -546,9 +549,10 @@ services:
       #   - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng chi_sim chi_tra jpn rus deu spa}
       # Note: each package installed will increase the image size!
       - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng}
-      - MAX_PARALLEL_WORKFLOWS=${MAX_PARALLEL_WORKFLOWS:-5}
+      - MAX_PARALLEL_WORKFLOWS=${DOCUMENTCONVERSION_WORKERS:-5}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - OMP_THREAD_LIMIT=1  # Limit the number of tesseract instances
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
       interval: 5s
@@ -589,6 +593,7 @@ services:
         "5",
       ]
     volumes:
+      - ./infra/dapr/components/pubsub/document_conversion.yaml:/dapr/components/document_conversion.yaml:ro
       - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class OutflankDownloadMonitor:
-    """Monitors and processes Outflank C2 downloads asynchronously.
+    """Monitors and processes Outflank C2 downloads.
 
     This class continuously polls for new downloads from an Outflank C2 server,
     verifies if they've been previously processed, and submits unprocessed downloads

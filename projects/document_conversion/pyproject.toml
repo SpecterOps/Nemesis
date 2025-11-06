@@ -18,12 +18,13 @@ minio = "^7.2.14"
 common = { path = "../../libs/common", develop = true }
 jpype1 = "^1.5.2"
 requests = "^2.32.3"
+httpx = "^0.28.1"
 psycopg = {extras = ["pool"], version = "^3.2.9"}
-pypdf = "^6.1.3"
 olefile = "^0.47"
 msoffcrypto-tool = "^5.4.2"
 protobuf = "6.31.1"
 asyncpg = "^0.30.0"
+pymupdf = "^1.26.6"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"
@@ -35,5 +36,5 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-document_conversion = "document_conversion.main:main"
+document_conversion = "document_conversion.controller:app"
 

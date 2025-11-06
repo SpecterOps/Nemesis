@@ -1,0 +1,34 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: document_conversion
+spec:
+  type: pubsub.rabbitmq
+  version: v1
+  metadata:
+    - name: connectionString
+      secretKeyRef:
+        name: RABBITMQ_CONNECTION_STRING
+        key: RABBITMQ_CONNECTION_STRING
+    - name: consumerID
+      value: files              # Fixed consumerID means messages will be load balanced across all consumers (NOT broadcast). Results in a single RabbitMQ queue.
+    - name: durable
+      value: true
+    - name: deletedWhenUnused    # Ensure the queue remains if the workers all die (controls RabbitMQ auto-delete)
+      value: false
+    - name: autoAck             # Workers need to ack that work is completed
+      value: false
+    - name: deliveryMode
+      value: 2                  # 1=transient messages(messages stay in-memory), 2=Persistent messages(use in conjunction with durable queues)
+    - name: publisherConfirm
+      value: true
+    - name: requeueInFailure    # Requeue after a negative acknowledgement
+      value: true
+    - name: enableDeadLetter    # Enable forwarding Messages that cannot be handled to a dead-letter topic
+      value: true
+    - name: maxPriority   # set so we can prioritize some messages if wanted
+      value: "3"
+    - name: prefetchCount # should be equal or less than the max concurrent workflows
+      value: "1"
+auth:
+  secretStore: nemesis-secret-store

@@ -268,6 +268,14 @@ class File(BaseModel):
     access_time: str | None = None
     modification_time: str | None = None
 
+    @field_validator("nesting_level")
+    @classmethod
+    def validate_nesting_level(cls, v):
+        """Ensure nesting_level is non-negative when set."""
+        if v is not None and v < 0:
+            raise ValueError("nesting_level must be >= 0")
+        return v
+
     @field_serializer("timestamp", "expiration")
     def serialize_datetime(self, dt: datetime, _info):
         return dt.isoformat()
@@ -292,6 +300,36 @@ class File(BaseModel):
             timestamp=metadata.timestamp,
             expiration=metadata.expiration,
             path=metadata.path,
+        )
+
+    def is_extracted_from_archive(self) -> bool:
+        """
+        Check if this file was extracted from a container/archive file.
+
+        Returns:
+            True if file has an originating_object_id and nesting_level > 0,
+            False otherwise
+        """
+        return (
+            self.originating_object_id is not None
+            and self.nesting_level is not None
+            and self.nesting_level > 0
+        )
+
+    def is_transform(self) -> bool:
+        """
+        Check if this file is a transform of another file.
+
+        A transform is a file derived from another file through processing
+        (e.g., decompilation, conversion) rather than extraction from an archive.
+
+        Returns:
+            True if file has an originating_object_id and nesting_level is None or 0,
+            False otherwise
+        """
+        return (
+            self.originating_object_id is not None
+            and (self.nesting_level is None or self.nesting_level == 0)
         )
 
 
