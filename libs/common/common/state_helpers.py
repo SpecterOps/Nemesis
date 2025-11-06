@@ -16,7 +16,7 @@ _FILE_ENRICHED_SELECT_QUERY = """
     SELECT
         object_id, agent_id, source, project, timestamp, expiration,
         path, file_name, extension, size, magic_type, mime_type,
-        is_plaintext, is_container, originating_object_id,
+        is_plaintext, is_container, originating_object_id, originating_container_id,
         nesting_level, file_creation_time, file_access_time,
         file_modification_time, security_info, hashes
     FROM files_enriched
@@ -54,6 +54,8 @@ def _transform_file_enriched_data(file_data: dict) -> dict:
         file_data["object_id"] = str(file_data["object_id"])
     if "originating_object_id" in file_data and file_data["originating_object_id"]:
         file_data["originating_object_id"] = str(file_data["originating_object_id"])
+    if "originating_container_id" in file_data and file_data["originating_container_id"]:
+        file_data["originating_container_id"] = str(file_data["originating_container_id"])
 
     # Convert datetime objects to ISO format strings
     datetime_fields = [

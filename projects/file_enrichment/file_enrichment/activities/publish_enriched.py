@@ -1,6 +1,7 @@
 """Publish enriched file activity."""
 
 import json
+import uuid
 
 from common.logger import get_logger
 from common.queues import FILES_FILE_ENRICHED_TOPIC, FILES_PUBSUB
@@ -10,6 +11,7 @@ from dapr.aio.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from ..tracing import get_trace_injector
+from ..workflow_completion import publish_workflow_completion
 
 logger = get_logger(__name__)
 
@@ -44,6 +46,11 @@ async def publish_enriched_file(ctx: WorkflowActivityContext, object_id: str):
             await global_vars.workflow_manager.tracking_service.update_status(
                 instance_id=instance_id, status="COMPLETED"
             )
+
+            # if this originated from a container, publish a message for the web_api to track for
+            #   large container processing
+            if file_enriched.originating_container_id and (file_enriched.originating_container_id != uuid.UUID(int=0)):
+                await publish_workflow_completion(instance_id)
 
             return True
 
