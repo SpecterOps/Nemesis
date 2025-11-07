@@ -1,0 +1,291 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Bot, Send, Trash2, Settings as SettingsIcon, AlertCircle } from 'lucide-react';
+import ExampleQueries from './ExampleQueries';
+import MessageBubble from './MessageBubble';
+import QueryModal from './QueryModal';
+
+const ChatbotPage = () => {
+  const [messages, setMessages] = useState([]);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [useHistory, setUseHistory] = useState(true);
+  const [showQueries, setShowQueries] = useState(false);
+  const [temperature, setTemperature] = useState(0.7);
+  const [queries, setQueries] = useState([]);
+  const [error, setError] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  // Auto-scroll to bottom when messages change
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const sendMessage = async (messageText) => {
+    if (!messageText.trim() || isStreaming) return;
+
+    const userMessage = { role: 'user', content: messageText.trim() };
+    setMessages(prev => [...prev, userMessage]);
+    setCurrentMessage('');
+    setIsStreaming(true);
+    setError(null);
+
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
+
+    try {
+      const response = await fetch('/api/chatbot/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: messageText.trim(),
+          history: useHistory ? messages : [],
+          use_history: useHistory,
+          temperature: temperature
+        }),
+        signal: abortControllerRef.current.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantMessage = '';
+
+      // Add empty assistant message that we'll update
+      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        assistantMessage += chunk;
+
+        // Update the last message (assistant's response) in real-time
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: 'assistant',
+            content: assistantMessage
+          };
+          return updated;
+        });
+      }
+
+      // TODO: Extract SQL queries from response if showQueries is enabled
+      // For now, queries would need to be returned in a structured format from backend
+
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log('Request aborted');
+      } else {
+        console.error('Streaming error:', err);
+        setError(err.message || 'Failed to get response from chatbot');
+
+        // Remove the empty assistant message if there was an error
+        setMessages(prev => prev.filter(msg => msg.content !== ''));
+      }
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    sendMessage(currentMessage);
+  };
+
+  const handleExampleClick = (example) => {
+    setCurrentMessage(example);
+  };
+
+  const clearHistory = () => {
+    if (window.confirm('Clear all conversation history?')) {
+      setMessages([]);
+      setQueries([]);
+      setError(null);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-6xl mx-auto p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center space-x-3">
+          <Bot className="w-8 h-8 text-blue-500" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Chatbot</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Query Nemesis data with natural language
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-3">
+          {/* Settings Toggle */}
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={`p-2 rounded-lg transition-colors ${
+              showSettings
+                ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+            }`}
+            title="Settings"
+          >
+            <SettingsIcon className="w-5 h-5" />
+          </button>
+
+          {/* Clear History */}
+          <button
+            onClick={clearHistory}
+            disabled={messages.length === 0}
+            className="flex items-center space-x-1 px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            title="Clear conversation history"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Clear History</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Settings</h3>
+
+          <div className="space-y-4">
+            {/* Temperature Control */}
+            <div>
+              <label className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-1">
+                <span>Temperature: {temperature.toFixed(1)}</span>
+                <span className="text-xs text-gray-500">
+                  {temperature < 0.3 ? 'Focused' : temperature < 0.7 ? 'Balanced' : 'Creative'}
+                </span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={temperature}
+                onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+              />
+            </div>
+
+            {/* Use History Toggle */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Use Conversation History</span>
+              <button
+                onClick={() => setUseHistory(!useHistory)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  useHistory ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    useHistory ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Show Queries Toggle */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Show SQL Queries</span>
+              <button
+                onClick={() => setShowQueries(!showQueries)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showQueries ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    showQueries ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Display */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-2">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Example Queries (show when no messages) */}
+      {messages.length === 0 && (
+        <ExampleQueries onExampleClick={handleExampleClick} />
+      )}
+
+      {/* Messages Container */}
+      <div className="flex-1 overflow-y-auto mb-4 space-y-4 px-2">
+        {messages.map((msg, idx) => (
+          <MessageBubble
+            key={idx}
+            message={msg}
+            isStreaming={isStreaming && idx === messages.length - 1}
+          />
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Query Modal */}
+      {showQueries && queries.length > 0 && (
+        <QueryModal queries={queries} />
+      )}
+
+      {/* Input Form */}
+      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <div className="flex space-x-2">
+          <textarea
+            value={currentMessage}
+            onChange={(e) => setCurrentMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask a question about your data..."
+            disabled={isStreaming}
+            className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+            rows={2}
+          />
+          <button
+            type="submit"
+            disabled={!currentMessage.trim() || isStreaming}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+          >
+            <Send className="w-5 h-5" />
+            <span>{isStreaming ? 'Sending...' : 'Send'}</span>
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Press Enter to send, Shift+Enter for new line
+        </p>
+      </form>
+    </div>
+  );
+};
+
+export default ChatbotPage;

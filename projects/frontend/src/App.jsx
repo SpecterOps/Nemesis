@@ -12,6 +12,7 @@ import {
   HelpCircle,
   Key,
   LayoutDashboard,
+  MessageSquare,
   Search,
   Settings,
   Siren,
@@ -41,6 +42,7 @@ import ThemeToggle from './components/ThemeToggle';
 import YaraRulesManager from './components/Yara/YaraManager';
 import Containers from './components/Containers/Containers';
 import AgentsPage from './components/Agents/AgentsPage';
+import ChatbotPage from './components/Chatbot/ChatbotPage';
 import FileBrowser from './components/FileBrowser/FileBrowser';
 import Chromium from './components/Chromium/Chromium';
 import Dpapi from './components/Dpapi/Dpapi';
@@ -197,9 +199,13 @@ const Sidebar = ({ onCollapse }) => {
     { id: 'reporting', label: 'Reporting', icon: BarChart2, path: '/reporting' }
   ];
 
-  // Add Agents tab if LiteLLM is available
+  // Add Chatbot and Agents tabs if LiteLLM is available
   const navigationItems = litellmAvailable
-    ? [...baseNavigationItems, { id: 'agents', label: 'Agents', icon: Bot, path: '/agents' }]
+    ? [
+        ...baseNavigationItems,
+        { id: 'chatbot', label: 'Chatbot', icon: MessageSquare, path: '/chatbot' },
+        { id: 'agents', label: 'Agents', icon: Bot, path: '/agents' }
+      ]
     : baseNavigationItems;
 
   const utilityItems = [
@@ -369,6 +375,7 @@ const App = () => {
                       <Route path="/dpapi" element={<Dpapi />} />
                       <Route path="/yara-rules" element={<YaraRulesManager />} />
                       <Route path="/containers" element={<Containers />} />
+                      <Route path="/chatbot" element={<ChatbotPage />} />
                       <Route path="/agents" element={<AgentsPage />} />
                       <Route path="/reporting" element={<ReportingPage />} />
                       <Route path="/reporting/source/:sourceName" element={<SourceReportPage />} />

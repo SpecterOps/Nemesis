@@ -838,3 +838,35 @@ CREATE OR REPLACE TRIGGER update_dpapi_system_credentials_updated_at
     BEFORE UPDATE ON dpapi.system_credentials
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+
+-----------------------
+-- CHATBOT READ-ONLY USER
+-----------------------
+-- Create read-only user for chatbot queries with restricted table access
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'chatbot_readonly') THEN
+        CREATE USER chatbot_readonly WITH PASSWORD 'chatbot_pass_change_me';
+    END IF;
+END
+$$;
+
+-- Grant connection and schema usage
+GRANT CONNECT ON DATABASE enrichment TO chatbot_readonly;
+GRANT USAGE ON SCHEMA public TO chatbot_readonly;
+GRANT USAGE ON SCHEMA chromium TO chatbot_readonly;
+
+-- Grant SELECT on specific tables only (chatbot-accessible tables)
+GRANT SELECT ON files_enriched TO chatbot_readonly;
+GRANT SELECT ON enrichments TO chatbot_readonly;
+GRANT SELECT ON findings TO chatbot_readonly;
+GRANT SELECT ON file_linkings TO chatbot_readonly;
+GRANT SELECT ON chromium.cookies TO chatbot_readonly;
+GRANT SELECT ON chromium.logins TO chatbot_readonly;
+
+-- Explicitly revoke write permissions to ensure read-only access
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM chatbot_readonly;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA chromium FROM chatbot_readonly;
+REVOKE CREATE ON SCHEMA public FROM chatbot_readonly;
+REVOKE CREATE ON SCHEMA chromium FROM chatbot_readonly;

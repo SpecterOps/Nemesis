@@ -7,7 +7,17 @@ RUN apt-get update && \
     apt-get install -y libpq5 \
     gcc libc6-dev curl wget libicu-dev && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    ARCH=$(dpkg --print-architecture) && \
+    wget https://go.dev/dl/go1.25.4.linux-${ARCH}.tar.gz && \
+    tar -C /usr/local -xzf go1.25.4.linux-${ARCH}.tar.gz && \
+    rm go1.25.4.linux-${ARCH}.tar.gz
+
+
+# Install genai-toolbox for chatbot MCP functionality
+ENV GOPATH=/go \
+    PATH=/usr/local/go/bin:/go/bin:$PATH
+RUN go install github.com/googleapis/genai-toolbox@v0.18.0
 
 
 # Install .NET Runtime
@@ -81,6 +91,11 @@ RUN apt-get update && \
 ENV DOTNET_ROOT=/usr/local/dotnet \
     PATH=/usr/local/dotnet:$PATH
 COPY --from=base /usr/local/dotnet /usr/local/dotnet
+
+# Copy genai-toolbox binary from base stage
+ENV GOPATH=/go \
+    PATH=/go/bin:$PATH
+COPY --from=base /go/bin/genai-toolbox /go/bin/genai-toolbox
 
 COPY --from=bundle /venv /venv
 

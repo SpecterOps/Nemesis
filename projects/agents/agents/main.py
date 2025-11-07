@@ -677,6 +677,23 @@ def run_report_generator(request: dict):
         return {"success": False, "error": str(e)}
 
 
+@app.post("/agents/chatbot/stream")
+async def chatbot_stream_endpoint(request: dict):
+    """Stream chatbot responses for interactive querying."""
+    try:
+        from agents.tasks.chatbot import ChatbotRequest, chatbot_stream
+
+        # Parse and validate request
+        chatbot_request = ChatbotRequest(**request)
+
+        # Stream the response
+        return await chatbot_stream(chatbot_request)
+
+    except Exception as e:
+        logger.exception(message="Error in chatbot streaming")
+        return {"success": False, "error": str(e)}
+
+
 @app.api_route("/healthz", methods=["GET", "HEAD"])
 async def health_check():
     """Health check endpoint."""

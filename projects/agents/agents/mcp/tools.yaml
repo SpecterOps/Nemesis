@@ -1,0 +1,407 @@
+# genai-toolbox configuration for Nemesis Chatbot
+# Database source definition
+sources:
+  chatbot-db:
+    kind: postgres
+    host: ${POSTGRES_HOST:postgres}
+    port: ${POSTGRES_PORT:5432}
+    database: ${POSTGRES_DB:enrichment}
+    user: chatbot_readonly
+    password: ${CHATBOT_DB_PASSWORD}
+
+# Custom SQL tools for querying Nemesis data
+tools:
+  # FILES_ENRICHED queries
+  count-files:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Count total files, optionally filtered by project, agent, source, or extension
+    parameters:
+      - name: project
+        type: string
+        description: Filter by project name (optional)
+      - name: agent_id
+        type: string
+        description: Filter by agent ID (optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+      - name: extension
+        type: string
+        description: Filter by file extension (optional)
+    statement: |
+      SELECT COUNT(*) as file_count
+      FROM files_enriched
+      WHERE ($1::text IS NULL OR project = $1)
+        AND ($2::text IS NULL OR agent_id = $2)
+        AND ($3::text IS NULL OR LOWER(source) LIKE LOWER('%' || $3 || '%'))
+        AND ($4::text IS NULL OR extension = $4)
+
+  search-files:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Search for files by name, path, or extension with optional filters
+    parameters:
+      - name: filename_pattern
+        type: string
+        description: Search pattern for filename (case-insensitive, optional)
+      - name: path_pattern
+        type: string
+        description: Search pattern for file path (case-insensitive, optional)
+      - name: extension
+        type: string
+        description: Filter by file extension (optional)
+      - name: project
+        type: string
+        description: Filter by project name (optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+      - name: limit
+        type: integer
+        description: Maximum number of results (default 100, max 1000)
+    statement: |
+      SELECT object_id, file_name, path, extension, size, magic_type, mime_type,
+             source, agent_id, project, timestamp
+      FROM files_enriched
+      WHERE ($1::text IS NULL OR LOWER(file_name) LIKE LOWER('%' || $1 || '%'))
+        AND ($2::text IS NULL OR LOWER(path) LIKE LOWER('%' || $2 || '%'))
+        AND ($3::text IS NULL OR extension = $3)
+        AND ($4::text IS NULL OR project = $4)
+        AND ($5::text IS NULL OR LOWER(source) LIKE LOWER('%' || $5 || '%'))
+      ORDER BY timestamp DESC
+      LIMIT LEAST(COALESCE($6, 100), 1000)
+
+  get-file-details:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Get detailed information about a specific file by object_id
+    parameters:
+      - name: object_id
+        type: string
+        description: The UUID of the file to retrieve
+    statement: |
+      SELECT *
+      FROM files_enriched
+      WHERE object_id = $1::uuid
+
+  # ENRICHMENTS queries
+  list-enrichment-modules:
+    kind: postgres-sql
+    source: chatbot-db
+    description: List all unique enrichment module names with their usage counts
+    statement: |
+      SELECT module_name, COUNT(*) as usage_count
+      FROM enrichments
+      GROUP BY module_name
+      ORDER BY usage_count DESC
+
+  get-file-enrichments:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Get all enrichment results for a specific file
+    parameters:
+      - name: object_id
+        type: string
+        description: The UUID of the file
+    statement: |
+      SELECT e.enrichment_id, e.module_name, e.result_data, e.created_at,
+             f.file_name, f.path
+      FROM enrichments e
+      JOIN files_enriched f ON e.object_id = f.object_id
+      WHERE e.object_id = $1::uuid
+      ORDER BY e.created_at DESC
+
+  search-enrichments-by-module:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Search enrichment results from a specific module
+    parameters:
+      - name: module_name
+        type: string
+        description: Name of the enrichment module
+      - name: limit
+        type: integer
+        description: Maximum number of results (default 100, max 1000)
+    statement: |
+      SELECT e.object_id, e.module_name, e.result_data, e.created_at,
+             f.file_name, f.path, f.source
+      FROM enrichments e
+      JOIN files_enriched f ON e.object_id = f.object_id
+      WHERE e.module_name = $1
+      ORDER BY e.created_at DESC
+      LIMIT LEAST(COALESCE($2, 100), 1000)
+
+  # FINDINGS queries
+  count-findings:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Count findings, optionally filtered by severity, category, or source
+    parameters:
+      - name: min_severity
+        type: integer
+        description: Minimum severity level (0-10, optional)
+      - name: category
+        type: string
+        description: Filter by finding category (optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+    statement: |
+      SELECT COUNT(*) as finding_count
+      FROM findings f
+      JOIN files_enriched fe ON f.object_id = fe.object_id
+      WHERE ($1::integer IS NULL OR f.severity >= $1)
+        AND ($2::text IS NULL OR f.category = $2)
+        AND ($3::text IS NULL OR LOWER(fe.source) LIKE LOWER('%' || $3 || '%'))
+
+  search-findings:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Search findings with filters for severity, category, and source
+    parameters:
+      - name: min_severity
+        type: integer
+        description: Minimum severity level (0-10, optional)
+      - name: category
+        type: string
+        description: Filter by finding category (optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+      - name: limit
+        type: integer
+        description: Maximum number of results (default 100, max 1000)
+    statement: |
+      SELECT f.finding_id, f.finding_name, f.category, f.severity, f.origin_type,
+             f.origin_name, f.data, f.created_at,
+             fe.file_name, fe.path, fe.source, fe.agent_id, fe.project
+      FROM findings f
+      JOIN files_enriched fe ON f.object_id = fe.object_id
+      WHERE ($1::integer IS NULL OR f.severity >= $1)
+        AND ($2::text IS NULL OR f.category = $2)
+        AND ($3::text IS NULL OR LOWER(fe.source) LIKE LOWER('%' || $3 || '%'))
+      ORDER BY f.severity DESC, f.created_at DESC
+      LIMIT LEAST(COALESCE($4, 100), 1000)
+
+  get-findings-by-category:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Get aggregated count of findings grouped by category
+    parameters:
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+    statement: |
+      SELECT f.category, COUNT(*) as count,
+             AVG(f.severity) as avg_severity,
+             MAX(f.severity) as max_severity
+      FROM findings f
+      JOIN files_enriched fe ON f.object_id = fe.object_id
+      WHERE ($1::text IS NULL OR LOWER(fe.source) LIKE LOWER('%' || $1 || '%'))
+      GROUP BY f.category
+      ORDER BY count DESC
+
+  get-triaged-findings:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Get findings with triage status (true positive, false positive, etc)
+    parameters:
+      - name: triage_value
+        type: string
+        description: Filter by triage value (e.g., true_positive, false_positive, optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+      - name: limit
+        type: integer
+        description: Maximum number of results (default 100, max 1000)
+    statement: |
+      SELECT f.finding_id, f.finding_name, f.category, f.severity,
+             fth.value as triage_value, fth.explanation, fth.timestamp as triage_timestamp,
+             fe.file_name, fe.path, fe.source
+      FROM findings f
+      JOIN findings_triage_history fth ON f.triage_id = fth.id
+      JOIN files_enriched fe ON f.object_id = fe.object_id
+      WHERE ($1::text IS NULL OR fth.value = $1)
+        AND ($2::text IS NULL OR LOWER(fe.source) LIKE LOWER('%' || $2 || '%'))
+      ORDER BY fth.timestamp DESC
+      LIMIT LEAST(COALESCE($3, 100), 1000)
+
+  # FILE_LINKINGS queries
+  find-linked-files:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Find files linked to a specific file path
+    parameters:
+      - name: file_path
+        type: string
+        description: The file path to search for (case-insensitive pattern match)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+      - name: limit
+        type: integer
+        description: Maximum number of results (default 100, max 1000)
+    statement: |
+      SELECT source, file_path_1, file_path_2, link_type, created_at
+      FROM file_linkings
+      WHERE (LOWER(file_path_1) LIKE LOWER('%' || $1 || '%')
+         OR LOWER(file_path_2) LIKE LOWER('%' || $1 || '%'))
+        AND ($2::text IS NULL OR LOWER(source) LIKE LOWER('%' || $2 || '%'))
+      ORDER BY created_at DESC
+      LIMIT LEAST(COALESCE($3, 100), 1000)
+
+  get-file-relationships:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Get all files linked to a specific file path in both directions
+    parameters:
+      - name: file_path
+        type: string
+        description: Exact file path to find relationships for
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+    statement: |
+      SELECT
+        CASE
+          WHEN file_path_1 = $1 THEN file_path_2
+          ELSE file_path_1
+        END as related_file,
+        link_type,
+        source,
+        created_at
+      FROM file_linkings
+      WHERE (file_path_1 = $1 OR file_path_2 = $1)
+        AND ($2::text IS NULL OR LOWER(source) LIKE LOWER('%' || $2 || '%'))
+      ORDER BY created_at DESC
+
+  # CHROMIUM.COOKIES queries
+  count-cookies:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Count browser cookies, optionally filtered by host or source
+    parameters:
+      - name: host_pattern
+        type: string
+        description: Filter by host_key pattern (case-insensitive, optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+    statement: |
+      SELECT COUNT(*) as cookie_count
+      FROM chromium.cookies
+      WHERE ($1::text IS NULL OR LOWER(host_key) LIKE LOWER('%' || $1 || '%'))
+        AND ($2::text IS NULL OR LOWER(source) LIKE LOWER('%' || $2 || '%'))
+
+  search-cookies:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Search browser cookies by host, name, or source
+    parameters:
+      - name: host_pattern
+        type: string
+        description: Filter by host_key pattern (case-insensitive, optional)
+      - name: name_pattern
+        type: string
+        description: Filter by cookie name pattern (case-insensitive, optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+      - name: is_decrypted
+        type: boolean
+        description: Filter by decryption status (optional)
+      - name: limit
+        type: integer
+        description: Maximum number of results (default 100, max 1000)
+    statement: |
+      SELECT host_key, name, path, value_dec, is_decrypted, is_secure, is_httponly,
+             expires_utc, source, username, browser, agent_id, project
+      FROM chromium.cookies
+      WHERE ($1::text IS NULL OR LOWER(host_key) LIKE LOWER('%' || $1 || '%'))
+        AND ($2::text IS NULL OR LOWER(name) LIKE LOWER('%' || $2 || '%'))
+        AND ($3::text IS NULL OR LOWER(source) LIKE LOWER('%' || $3 || '%'))
+        AND ($4::boolean IS NULL OR is_decrypted = $4)
+      ORDER BY expires_utc DESC NULLS LAST
+      LIMIT LEAST(COALESCE($5, 100), 1000)
+
+  # CHROMIUM.LOGINS queries
+  count-logins:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Count saved browser credentials, optionally filtered by URL or source
+    parameters:
+      - name: url_pattern
+        type: string
+        description: Filter by origin_url pattern (case-insensitive, optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+      - name: is_decrypted
+        type: boolean
+        description: Filter by decryption status (optional)
+    statement: |
+      SELECT COUNT(*) as login_count
+      FROM chromium.logins
+      WHERE ($1::text IS NULL OR LOWER(origin_url) LIKE LOWER('%' || $1 || '%'))
+        AND ($2::text IS NULL OR LOWER(source) LIKE LOWER('%' || $2 || '%'))
+        AND ($3::boolean IS NULL OR is_decrypted = $3)
+
+  search-logins:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Search browser saved credentials by URL, username, or source
+    parameters:
+      - name: url_pattern
+        type: string
+        description: Filter by origin_url pattern (case-insensitive, optional)
+      - name: username_pattern
+        type: string
+        description: Filter by username_value pattern (case-insensitive, optional)
+      - name: source
+        type: string
+        description: Filter by source (case-insensitive pattern match, optional)
+      - name: is_decrypted
+        type: boolean
+        description: Filter by decryption status (optional)
+      - name: limit
+        type: integer
+        description: Maximum number of results (default 100, max 1000)
+    statement: |
+      SELECT origin_url, username_value, password_value_dec, signon_realm,
+             is_decrypted, date_created, date_last_used, times_used,
+             source, username, browser, agent_id, project
+      FROM chromium.logins
+      WHERE ($1::text IS NULL OR LOWER(origin_url) LIKE LOWER('%' || $1 || '%'))
+        AND ($2::text IS NULL OR LOWER(username_value) LIKE LOWER('%' || $2 || '%'))
+        AND ($3::text IS NULL OR LOWER(source) LIKE LOWER('%' || $3 || '%'))
+        AND ($4::boolean IS NULL OR is_decrypted = $4)
+      ORDER BY date_last_used DESC NULLS LAST
+      LIMIT LEAST(COALESCE($5, 100), 1000)
+
+  find-lateral-movement-credentials:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Find decrypted credentials that could enable lateral movement to other hosts
+    parameters:
+      - name: source
+        type: string
+        description: Source/host to find credentials FROM (case-insensitive pattern match, optional)
+      - name: target_host_pattern
+        type: string
+        description: Filter credentials TO specific target hosts (case-insensitive, optional)
+      - name: limit
+        type: integer
+        description: Maximum number of results (default 100, max 1000)
+    statement: |
+      SELECT origin_url, username_value, password_value_dec, signon_realm,
+             date_last_used, times_used, source, username, browser
+      FROM chromium.logins
+      WHERE is_decrypted = true
+        AND password_value_dec IS NOT NULL
+        AND password_value_dec != ''
+        AND ($1::text IS NULL OR LOWER(source) LIKE LOWER('%' || $1 || '%'))
+        AND ($2::text IS NULL OR LOWER(origin_url) LIKE LOWER('%' || $2 || '%'))
+      ORDER BY times_used DESC, date_last_used DESC NULLS LAST
+      LIMIT LEAST(COALESCE($3, 100), 1000)
