@@ -18,6 +18,7 @@ const ChatbotPage = () => {
 
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const textareaRef = useRef(null);
 
   // Auto-scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -27,6 +28,16 @@ const ChatbotPage = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Refocus input after response completes
+  useEffect(() => {
+    if (!isStreaming && messages.length > 0) {
+      // Small delay to ensure DOM has updated
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
+    }
+  }, [isStreaming, messages.length]);
 
   // Fetch system prompt when settings are opened
   useEffect(() => {
@@ -376,6 +387,7 @@ const ChatbotPage = () => {
       <form onSubmit={handleSubmit} className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 pt-4 mt-4 pb-4">
         <div className="flex space-x-2">
           <textarea
+            ref={textareaRef}
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyPress={handleKeyPress}
