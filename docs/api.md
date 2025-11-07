@@ -8,6 +8,21 @@ This documentation is automatically generated from the OpenAPI specification.
 
 ---
 
+## Chatbot
+
+### `POST /chatbot/stream`
+
+Stream chatbot responses
+
+Stream interactive chatbot responses for querying Nemesis data
+
+**Request Body:** `ChatbotRequest` (JSON)
+
+**Returns:** 200 on success
+
+---
+
+
 ## Dpapi
 
 ### `POST /dpapi/credentials`
