@@ -563,6 +563,10 @@ services:
       postgres: { condition: service_started }
       placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
   document-conversion-dapr:
     image: "daprio/daprd:1.16.2"
     command:

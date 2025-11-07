@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import uuid
 
 import document_conversion.global_vars as global_vars
 from common.logger import get_logger
@@ -28,12 +29,14 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
     await workflow_semaphore.acquire()
 
     try:
-        instance_id = f"text-extraction-{file_enriched.object_id}"
+        # Generate instance_id with standardized format
+        object_id = file_enriched.object_id
+        instance_id = f"document_conversion_{uuid.uuid4().hex}_{object_id}"
 
         # Add to active workflows tracking
         async with workflow_lock:
             active_workflows[instance_id] = {
-                "object_id": file_enriched.object_id,
+                "object_id": object_id,
                 "start_time": asyncio.get_event_loop().time(),
                 "filename": file_enriched.file_name,
             }
@@ -41,9 +44,16 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
         logger.debug(
             "Scheduling document conversion workflow",
             instance_id=instance_id,
-            object_id=file_enriched.object_id,
+            object_id=object_id,
             file_name=file_enriched.file_name,
             active_count=len(active_workflows),
+        )
+
+        # Register workflow in database before scheduling
+        await global_vars.tracking_service.register_workflow(
+            instance_id=instance_id,
+            object_id=object_id,
+            filename=file_enriched.file_name,
         )
 
         # Schedule the workflow (using asyncio.to_thread for sync client)
@@ -51,7 +61,7 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
             global_vars.workflow_client.schedule_new_workflow,
             workflow=document_conversion_workflow,
             instance_id=instance_id,
-            input={"object_id": file_enriched.object_id},
+            input={"object_id": object_id},
         )
 
         # Start monitoring task for this workflow

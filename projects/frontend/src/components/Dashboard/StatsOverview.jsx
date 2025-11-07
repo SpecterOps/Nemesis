@@ -613,7 +613,7 @@ const StatsOverview = () => {
 
   const fetchQueueStats = useCallback(async () => {
     try {
-      const response = await fetch('/api/queues/files-new_file');
+      const response = await fetch('/api/queues');
 
       if (!response.ok) {
         throw new Error(`Network response error: ${response.status}`);
@@ -866,22 +866,15 @@ const StatsOverview = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Enrichment Service Section */}
-        <DashboardSection title="Enrichment Service">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        {/* Enrichment Overview Section */}
+        <DashboardSection title="Enrichment Overview">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
             <StatCard
               title="Active Workflows"
               value={enrichmentStats?.active_workflows ?? 0}
               icon={Activity}
               isLoading={isEnrichmentLoading}
               tooltip="File enrichment workflows currently running"
-            />
-            <StatCard
-              title="Queued Files"
-              value={queueStats?.metrics?.total_messages ?? 0}
-              icon={Clock}
-              isLoading={isQueueLoading}
-              tooltip={`Total unprocessed files waiting to be processed by ${queueStats?.metrics?.consumers ?? 0} consumers`}
             />
             <StatCard
               title="Completed Workflows"
@@ -897,6 +890,57 @@ const StatsOverview = () => {
               isLoading={isFailedWorkflowsLoading}
               tooltip="Workflows that failed, errored, or timed out"
             />
+          </div>
+
+          {/* Queued Files Breakdown */}
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Enrichment Queues</h3>
+            <div className="space-y-1">
+              {isQueueLoading ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin h-6 w-6 border-2 border-blue-500 rounded-full border-t-transparent" />
+                </div>
+              ) : queueStats?.queue_details ? (() => {
+                // Define the queues we want to display and their friendly names (in display order)
+                const queueDisplayConfig = [
+                  { topic: 'new_file', displayName: 'Enrichment Modules' },
+                  { topic: 'document_conversion_input', displayName: 'Document Conversion' },
+                  { topic: 'noseyparker_input', displayName: 'NoseyParker' },
+                  { topic: 'dotnet_input', displayName: 'Dotnet Analysis' },
+                  { topic: 'bulk_enrichment_task', displayName: 'Bulk Enrichment Tasks' },
+                ];
+
+                // Filter and map the queue details in the specified order
+                const filteredQueues = queueDisplayConfig
+                  .filter(({ topic }) => queueStats.queue_details[topic])
+                  .map(({ topic, displayName }) => ({
+                    topic,
+                    displayName,
+                    metrics: queueStats.queue_details[topic]
+                  }));
+
+                if (filteredQueues.length === 0) {
+                  return (
+                    <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                      No queue data available
+                    </div>
+                  );
+                }
+
+                return filteredQueues.map(({ topic, displayName, metrics }) => (
+                  <div key={topic} className="flex items-center justify-between px-3 py-1 bg-white dark:bg-gray-700 rounded shadow-sm">
+                    <span className="text-base font-medium text-gray-700 dark:text-gray-300">{displayName}</span>
+                    <span className="text-base font-bold text-blue-600 dark:text-blue-400">
+                      {metrics.total_messages.toLocaleString()}
+                    </span>
+                  </div>
+                ));
+              })() : (
+                <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                  No queue data available
+                </div>
+              )}
+            </div>
           </div>
 
           {!isEnrichmentLoading && processingTimeData && (
@@ -915,18 +959,17 @@ const StatsOverview = () => {
           )}
         </DashboardSection>
 
-        {/* Current Enrichment Workflows */}
-        <DashboardSection title="Current Enrichment Workflows">
+        {/* Running Enrichment Workflows */}
+        <DashboardSection title="Running Enrichment Workflows">
           {/* Remove the nested container div and put content directly in section */}
-          <div className="space-y-3">
-            {enrichmentStats?.active_details?.map((detail, index) => (
-              <div key={detail.id} className="p-3 bg-white dark:bg-gray-700 rounded shadow-sm flex justify-between items-center">
+          <div className="space-y-1">
+            {enrichmentStats?.active_details?.slice(0, 10).map((detail) => (
+              <div key={detail.id} className="p-2 bg-white dark:bg-gray-700 rounded shadow-sm flex justify-between items-center">
                 <div>
                   <div className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                    Workflow {detail.id.substring(0, 8)}
+                    {detail.id.substring(0, 18)}
                     {detail.filename && <span className="ml-2 font-normal text-gray-600 dark:text-gray-400">({detail.filename} / {detail.object_id})</span>}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Status: {detail.status}</div>
                 </div>
                 <div className="text-sm font-medium text-blue-500">
                   {detail.runtime_seconds ? detail.runtime_seconds.toFixed(2) : '0.00'}s
@@ -934,10 +977,17 @@ const StatsOverview = () => {
               </div>
             ))}
 
+            {/* Show count of additional workflows if there are more than 10 */}
+            {enrichmentStats?.active_details?.length > 10 && (
+              <div className="text-center py-2 text-gray-500 dark:text-gray-400 text-sm">
+                +{enrichmentStats.active_details.length - 10} more running workflows
+              </div>
+            )}
+
             {/* Show a message when there are no current workflows activities */}
             {(!enrichmentStats?.active_details || enrichmentStats.active_details.length === 0) && (
               <div className="text-center py-10 text-gray-500 dark:text-gray-400">
-                No current enrichment workflows running (this feature is currently disabled)
+                No current enrichment workflows running
               </div>
             )}
           </div>
@@ -955,7 +1005,6 @@ const StatsOverview = () => {
                   Workflow {workflow.id.substring(0, 8)}
                   {workflow.filename && <span className="ml-2 font-normal text-gray-600 dark:text-gray-400">({workflow.filename} / {workflow.object_id})</span>}
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Status: {workflow.status}</div>
                 {workflow.error && (
                   <div className="text-xs text-red-500 dark:text-red-400 mt-1 line-clamp-2">
                     Error: {workflow.error}
@@ -983,7 +1032,7 @@ const StatsOverview = () => {
           {/* Show a message when there are no failed workflows */}
           {(!failedWorkflows?.workflows || failedWorkflows.workflows.length === 0) && (
             <div className="text-center py-10 text-gray-500 dark:text-gray-400">
-              No failed workflows (this feature is currently disabled)
+              No failed workflows
             </div>
           )}
         </div>
@@ -994,7 +1043,7 @@ const StatsOverview = () => {
           <AlertTriangle className="w-5 h-5 text-yellow-500 dark:text-yellow-400" />
           <div className="flex flex-col">
             <span className="text-yellow-600 dark:text-yellow-400">
-              Warning: Enrichment service metrics unavailable: {enrichmentError}
+              Warning: Enrichment metrics unavailable: {enrichmentError}
             </span>
           </div>
         </div>

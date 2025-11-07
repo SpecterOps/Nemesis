@@ -16,10 +16,9 @@ from dapr.ext.workflow import DaprWorkflowClient
 from dapr.ext.workflow.logger.options import LoggerOptions
 from fastapi import FastAPI
 
+from .activities.extract_text import init_tika
 from .routes.health import router as health_router
 from .subscriptions.file_enriched import file_enriched_subscription_handler
-from .tika_init import init_tika
-from .workflow import initialize_workflow_runtime
 from .workflow_manager import max_parallel_workflows, max_workflow_execution_time
 
 logger = get_logger(__name__)
@@ -42,8 +41,7 @@ async def lifespan(app: FastAPI):
         loop = asyncio.get_running_loop()
         set_fastapi_loop(loop)
 
-        # Initialize Tika
-        global_vars.tika, global_vars.JavaFile = init_tika()
+        init_tika()
 
         # Set Gotenberg URL
         global_vars.gotenberg_url = (
@@ -57,9 +55,19 @@ async def lifespan(app: FastAPI):
             max_size=(3 * max_parallel_workflows),
         )
 
-        initialize_workflow_runtime()
+        wf_runtime.start()
+
         global_vars.workflow_client = DaprWorkflowClient(
             logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
+        )
+
+        # Initialize tracking service
+        from common.workflows.tracking_service import WorkflowTrackingService
+
+        global_vars.tracking_service = WorkflowTrackingService(
+            pool=global_vars.asyncpg_pool,
+            workflow_client=global_vars.workflow_client,
+            max_execution_time=max_workflow_execution_time,
         )
 
         logger.info("Document conversion service initialized successfully")

@@ -126,9 +126,304 @@ def parse_xmp_to_structured_data(xmp_xml: Optional[str]) -> dict[str, Any]:
     return result
 
 
+def _get_pdf_version(doc: fitz.Document, file_path: str) -> Optional[str]:
+    """Extract PDF version from document metadata or file header.
+
+    Args:
+        doc: PyMuPDF document object
+        file_path: Path to the PDF file
+
+    Returns:
+        PDF version string (e.g., "1.7") or None if not found
+    """
+    try:
+        # Try to get version from metadata
+        if doc.metadata and doc.metadata.get("format"):
+            format_str = doc.metadata["format"]
+            if format_str.startswith("PDF "):
+                return format_str.split(" ")[1]
+
+        # For encrypted PDFs, metadata may be None, so read version from file header
+        with open(file_path, 'rb') as f:
+            header = f.read(20)
+            if header.startswith(b'%PDF-'):
+                return header[5:8].decode('ascii')
+    except Exception as e:
+        logger.debug(f"Could not extract PDF version: {e}")
+
+    return None
+
+
+def _extract_basic_metadata(doc: fitz.Document) -> dict[str, Any]:
+    """Extract basic metadata from unencrypted PDF.
+
+    Args:
+        doc: PyMuPDF document object
+
+    Returns:
+        Dictionary with title, author, subject, creator, producer, keywords, trapped
+    """
+    metadata = {
+        "title": None,
+        "author": None,
+        "subject": None,
+        "creator": None,
+        "producer": None,
+        "created": None,
+        "modified": None,
+        "keywords": None,
+        "trapped": None,
+        "encryption_method": None,
+    }
+
+    try:
+        meta = doc.metadata
+        if not meta:
+            return metadata
+
+        metadata["title"] = meta.get("title", None) or None
+        metadata["author"] = meta.get("author", None) or None
+        metadata["subject"] = meta.get("subject", None) or None
+        metadata["creator"] = meta.get("creator", None) or None
+        metadata["producer"] = meta.get("producer", None) or None
+        metadata["keywords"] = meta.get("keywords", None) or None
+        metadata["trapped"] = meta.get("trapped", None) or None
+        metadata["encryption_method"] = meta.get("encryption", None)
+
+        # Handle creation date
+        if "creationDate" in meta and meta["creationDate"]:
+            try:
+                date_str = meta["creationDate"]
+                if date_str.startswith("D:"):
+                    date_str = date_str[2:]
+                if len(date_str) >= 14:
+                    metadata["created"] = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S").isoformat()
+                else:
+                    metadata["created"] = date_str
+            except Exception:
+                metadata["created"] = meta["creationDate"]
+
+        # Handle modification date
+        if "modDate" in meta and meta["modDate"]:
+            try:
+                date_str = meta["modDate"]
+                if date_str.startswith("D:"):
+                    date_str = date_str[2:]
+                if len(date_str) >= 14:
+                    metadata["modified"] = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S").isoformat()
+                else:
+                    metadata["modified"] = date_str
+            except Exception:
+                metadata["modified"] = meta["modDate"]
+
+    except Exception as e:
+        logger.debug(f"Error extracting basic metadata: {e}")
+
+    return metadata
+
+
+def _extract_page_info(doc: fitz.Document) -> dict[str, Any]:
+    """Extract page size and rotation from first page.
+
+    Args:
+        doc: PyMuPDF document object
+
+    Returns:
+        Dictionary with page_size and page_rotation, or empty dict if extraction fails
+    """
+    page_info = {}
+
+    try:
+        if doc.page_count > 0:
+            first_page = doc[0]
+            rect = first_page.rect
+            page_info["page_size"] = {
+                "width": round(rect.width, 2),
+                "height": round(rect.height, 2),
+                "unit": "points"
+            }
+            page_info["page_rotation"] = first_page.rotation
+    except Exception as e:
+        logger.debug(f"Error extracting page info: {e}")
+
+    return page_info
+
+
+
+
+def _detect_pdf_a(doc: fitz.Document) -> bool:
+    """Detect if PDF is PDF/A compliant.
+
+    Args:
+        doc: PyMuPDF document object
+
+    Returns:
+        True if PDF/A compliant, False otherwise
+    """
+    try:
+        xref_stream = doc.xref_stream(1)
+        if xref_stream and b"PDF/A" in xref_stream:
+            return True
+    except Exception as e:
+        logger.debug(f"Error detecting PDF/A: {e}")
+
+    return False
+
+
+def _detect_table_of_contents(doc: fitz.Document) -> bool:
+    """Detect if PDF has a table of contents.
+
+    Args:
+        doc: PyMuPDF document object
+
+    Returns:
+        True if TOC exists, False otherwise
+    """
+    try:
+        toc = doc.get_toc()
+        return bool(toc)
+    except Exception as e:
+        # get_toc() raises ValueError on encrypted PDFs
+        logger.debug(f"Error detecting TOC: {e}")
+
+    return False
+
+
+def _extract_xmp_metadata(doc: fitz.Document) -> Optional[dict[str, Any]]:
+    """Extract and parse XMP metadata to structured format.
+
+    Args:
+        doc: PyMuPDF document object
+
+    Returns:
+        Parsed XMP summary dictionary or None if extraction fails
+    """
+    try:
+        xmp_meta = doc.get_xml_metadata()
+        if xmp_meta:
+            return parse_xmp_to_structured_data(xmp_meta)
+    except Exception as e:
+        logger.debug(f"Error extracting XMP metadata: {e}")
+
+    return None
+
+
+def _count_images(doc: fitz.Document) -> int:
+    """Count total images across all pages.
+
+    Args:
+        doc: PyMuPDF document object
+
+    Returns:
+        Total number of images, or 0 if counting fails
+    """
+    try:
+        total_images = 0
+        for page_num in range(doc.page_count):
+            images = doc.get_page_images(page_num)
+            total_images += len(images)
+        return total_images
+    except Exception as e:
+        # get_page_images() raises ValueError on encrypted PDFs
+        logger.debug(f"Error counting images: {e}")
+
+    return 0
+
+
+def _extract_embedded_files(doc: fitz.Document) -> list[dict[str, Any]]:
+    """Extract information about embedded files.
+
+    Args:
+        doc: PyMuPDF document object
+
+    Returns:
+        List of embedded file dictionaries
+    """
+    embedded_files = []
+
+    try:
+        embfile_names = doc.embfile_names()
+        if embfile_names:
+            for i, name in enumerate(embfile_names):
+                try:
+                    info = doc.embfile_info(i)
+                    embedded_files.append({
+                        "name": name,
+                        "filename": info.get("filename"),
+                        "ufilename": info.get("ufilename"),
+                        "description": info.get("desc"),
+                        "size": info.get("size"),
+                        "creation_date": info.get("creationDate"),
+                        "modification_date": info.get("modDate"),
+                    })
+                except Exception:
+                    # If we can't get info, at least record the name
+                    embedded_files.append({"name": name})
+    except Exception as e:
+        logger.debug(f"Error extracting embedded files: {e}")
+
+    return embedded_files
+
+
+def _detect_signatures(doc: fitz.Document) -> bool:
+    """Detect if PDF has digital signatures.
+
+    Args:
+        doc: PyMuPDF document object
+
+    Returns:
+        True if signatures are detected, False otherwise
+    """
+    try:
+        sigflags = doc.get_sigflags()
+        return sigflags >= 0
+    except Exception as e:
+        logger.debug(f"Error detecting signatures: {e}")
+
+    return False
+
+
+def _extract_encryption_info(doc: fitz.Document, file_path: str) -> dict[str, Any]:
+    """Extract encryption hash for encrypted PDFs.
+
+    Args:
+        doc: PyMuPDF document object
+        file_path: Path to the PDF file
+
+    Returns:
+        Dictionary with encryption_hash and encryption_method
+    """
+    encryption_info = {
+        "encryption_hash": None | str,
+        "encryption_method": None,
+    }
+
+    try:
+        # Extract encryption hash using pdf2john
+        parser = PdfParser(file_path)
+        try:
+            hash_value = parser.parse()
+            if hash_value:
+                encryption_info["encryption_hash"] = hash_value.strip()
+        except Exception as e:
+            logger.debug(f"Failed to extract encryption hash: {e}")
+
+        # Extract encryption method from metadata if available
+        if doc.metadata and doc.metadata.get("encryption"):
+            encryption_info["encryption_method"] = doc.metadata["encryption"]
+
+    except Exception as e:
+        logger.debug(f"Error extracting encryption info: {e}")
+
+    return encryption_info
+
+
 def parse_pdf_file(file_path: str) -> dict[str, Any]:
     """
     Parse a PDF file and return its metadata and encryption information.
+
+    This function is now more robust with smaller helper functions that won't
+    break all parsing if one component fails.
 
     Args:
         file_path (str): Path to the PDF file
@@ -151,7 +446,6 @@ def parse_pdf_file(file_path: str) -> dict[str, Any]:
         "is_linearized": False,
         "is_repaired": False,
         "has_embedded_files": False,
-        "has_javascript": False,
         "has_forms": False,
         "has_signatures": False,
         "has_table_of_contents": False,
@@ -175,210 +469,79 @@ def parse_pdf_file(file_path: str) -> dict[str, Any]:
     }
 
     try:
-        doc = fitz.open(file_path)
-        parsed_data["is_encrypted"] = doc.is_encrypted
-        parsed_data["num_pages"] = doc.page_count
-
-        # Extract PDF version from metadata format field
-        if doc.metadata and doc.metadata.get("format"):
-            format_str = doc.metadata["format"]
-            if format_str.startswith("PDF "):
-                parsed_data["pdf_version"] = format_str.split(" ")[1]
-        else:
-            # For encrypted PDFs, metadata may be None, so read version from file header
-            try:
-                with open(file_path, 'rb') as f:
-                    header = f.read(20)
-                    if header.startswith(b'%PDF-'):
-                        parsed_data["pdf_version"] = header[5:8].decode('ascii')
-            except Exception:
-                pass
-
-        parsed_data["is_linearized"] = bool(doc.is_fast_webaccess)
-        parsed_data["has_embedded_files"] = doc.embfile_count() > 0
-        parsed_data["is_repaired"] = doc.is_repaired
-
-        # Extract document-level properties
-        parsed_data["page_layout"] = doc.pagelayout if doc.pagelayout else None
-        parsed_data["page_mode"] = doc.pagemode if doc.pagemode else None
-        parsed_data["language"] = doc.language if doc.language else None
-
-        # Extract digital signature information (works on both encrypted and unencrypted PDFs)
+        # Attempt to open the PDF file
         try:
-            sigflags = doc.get_sigflags()
-            parsed_data["has_signatures"] = sigflags >= 0
-        except Exception:
-            pass
+            doc = fitz.open(file_path)
+        except fitz.FileDataError as e:
+            # Handle corrupted, truncated, or invalid PDF files
+            logger.warning(f"Unable to open PDF file (corrupted/truncated/invalid): {file_path}", exc_info=False)
+            parsed_data["error"] = f"Corrupted or invalid PDF file: {str(e)}"
+            parsed_data["parse_status"] = "failed_to_open"
+            return parsed_data
+        except Exception as e:
+            # Handle other file opening errors
+            logger.error(f"Unexpected error opening PDF file: {file_path}", exc_info=True)
+            parsed_data["error"] = f"Failed to open PDF: {str(e)}"
+            parsed_data["parse_status"] = "failed_to_open"
+            return parsed_data
 
-        # Extract embedded file details (works on both encrypted and unencrypted PDFs)
+        # Extract basic information (works for both encrypted and unencrypted)
         try:
-            embfile_names = doc.embfile_names()
-            if embfile_names:
-                embedded_files_list = []
-                for i, name in enumerate(embfile_names):
-                    try:
-                        info = doc.embfile_info(i)
-                        embedded_files_list.append({
-                            "name": name,
-                            "filename": info.get("filename"),
-                            "ufilename": info.get("ufilename"),
-                            "description": info.get("desc"),
-                            "size": info.get("size"),
-                            "creation_date": info.get("creationDate"),
-                            "modification_date": info.get("modDate"),
-                        })
-                    except Exception:
-                        # If we can't get info, at least record the name
-                        embedded_files_list.append({"name": name})
-                parsed_data["embedded_files"] = embedded_files_list
-        except Exception:
-            pass
+            parsed_data["is_encrypted"] = doc.is_encrypted
+            parsed_data["num_pages"] = doc.page_count
+            parsed_data["pdf_version"] = _get_pdf_version(doc, file_path)
+            parsed_data["is_linearized"] = bool(doc.is_fast_webaccess)
+            parsed_data["has_embedded_files"] = doc.embfile_count() > 0
+            parsed_data["is_repaired"] = doc.is_repaired
+        except Exception as e:
+            logger.debug(f"Error extracting basic PDF properties: {e}")
+
+        # Extract document-level properties (works for both encrypted and unencrypted)
+        try:
+            parsed_data["page_layout"] = doc.pagelayout if doc.pagelayout else None
+            parsed_data["page_mode"] = doc.pagemode if doc.pagemode else None
+            parsed_data["language"] = doc.language if doc.language else None
+        except Exception as e:
+            logger.debug(f"Error extracting document properties: {e}")
+
+        # Extract signatures (works for both encrypted and unencrypted)
+        parsed_data["has_signatures"] = _detect_signatures(doc)
+
+        # Extract embedded files (works for both encrypted and unencrypted)
+        parsed_data["embedded_files"] = _extract_embedded_files(doc)
 
         if parsed_data["is_encrypted"]:
             # Handle encrypted PDFs
-            parser = PdfParser(file_path)
-            try:
-                hash_value = parser.parse()
-                if hash_value:
-                    parsed_data["encryption_hash"] = hash_value.strip()
-            except Exception as e:
-                parsed_data["error"] = f"Failed to extract hash: {str(e)}"
-
-            # Extract encryption method from metadata if available
-            if doc.metadata and doc.metadata.get("encryption"):
-                parsed_data["metadata"]["encryption_method"] = doc.metadata["encryption"]
-
-            # Extract permissions information for encrypted PDFs
-            parsed_data["permissions"] = {
-                "print": doc.permissions & fitz.PDF_PERM_PRINT != 0,  # type: ignore[attr-defined]
-                "modify": doc.permissions & fitz.PDF_PERM_MODIFY != 0,  # type: ignore[attr-defined]
-                "copy": doc.permissions & fitz.PDF_PERM_COPY != 0,  # type: ignore[attr-defined]
-                "annotate": doc.permissions & fitz.PDF_PERM_ANNOTATE != 0,  # type: ignore[attr-defined]
-                "form": doc.permissions & fitz.PDF_PERM_FORM != 0,  # type: ignore[attr-defined]
-                "accessibility": doc.permissions & fitz.PDF_PERM_ACCESSIBILITY != 0,  # type: ignore[attr-defined]
-                "assemble": doc.permissions & fitz.PDF_PERM_ASSEMBLE != 0,  # type: ignore[attr-defined]
-                "print_hq": doc.permissions & fitz.PDF_PERM_PRINT_HQ != 0,  # type: ignore[attr-defined]
-            }
+            encryption_info = _extract_encryption_info(doc, file_path)
+            parsed_data["encryption_hash"] = encryption_info["encryption_hash"]
+            parsed_data["metadata"]["encryption_method"] = encryption_info["encryption_method"]
         else:
-            # Handle unencrypted PDFs - extract metadata
-            meta = doc.metadata
-            if meta:
-                parsed_data["metadata"]["title"] = meta.get("title", None) or None
-                parsed_data["metadata"]["author"] = meta.get("author", None) or None
-                parsed_data["metadata"]["subject"] = meta.get("subject", None) or None
-                parsed_data["metadata"]["creator"] = meta.get("creator", None) or None
-                parsed_data["metadata"]["producer"] = meta.get("producer", None) or None
-                parsed_data["metadata"]["keywords"] = meta.get("keywords", None) or None
-                parsed_data["metadata"]["trapped"] = meta.get("trapped", None) or None
-                parsed_data["metadata"]["encryption_method"] = meta.get("encryption", None)
+            # Handle unencrypted PDFs - extract detailed metadata
+            parsed_data["metadata"] = _extract_basic_metadata(doc)
 
-                # Handle creation and modification dates
-                if "creationDate" in meta and meta["creationDate"]:
-                    try:
-                        # PyMuPDF returns dates in PDF format like "D:20240101120000"
-                        date_str = meta["creationDate"]
-                        if date_str.startswith("D:"):
-                            date_str = date_str[2:]
-                        # Parse the date string (format: YYYYMMDDHHmmss)
-                        if len(date_str) >= 14:
-                            parsed_data["metadata"]["created"] = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S").isoformat()
-                        else:
-                            parsed_data["metadata"]["created"] = date_str
-                    except Exception:
-                        parsed_data["metadata"]["created"] = meta["creationDate"]
+            # Extract page information
+            page_info = _extract_page_info(doc)
+            parsed_data["page_size"] = page_info.get("page_size")
+            parsed_data["page_rotation"] = page_info.get("page_rotation")
 
-                if "modDate" in meta and meta["modDate"]:
-                    try:
-                        date_str = meta["modDate"]
-                        if date_str.startswith("D:"):
-                            date_str = date_str[2:]
-                        if len(date_str) >= 14:
-                            parsed_data["metadata"]["modified"] = datetime.strptime(date_str[:14], "%Y%m%d%H%M%S").isoformat()
-                        else:
-                            parsed_data["metadata"]["modified"] = date_str
-                    except Exception:
-                        parsed_data["metadata"]["modified"] = meta["modDate"]
+            # Detect various PDF features (only for unencrypted PDFs)
+            parsed_data["has_forms"] = doc.is_form_pdf > 0
+            parsed_data["is_pdf_a"] = _detect_pdf_a(doc)
+            parsed_data["has_table_of_contents"] = _detect_table_of_contents(doc)
 
-            # Extract page size and rotation from first page
-            if doc.page_count > 0:
-                first_page = doc[0]
-                rect = first_page.rect
-                parsed_data["page_size"] = {
-                    "width": round(rect.width, 2),
-                    "height": round(rect.height, 2),
-                    "unit": "points"
-                }
-                parsed_data["page_rotation"] = first_page.rotation
+            # Extract XMP metadata (only for unencrypted PDFs)
+            parsed_data["xmp_summary"] = _extract_xmp_metadata(doc)
 
-            # Check for JavaScript by scanning PDF objects
-            try:
-                has_js = False
-                for xref in range(1, doc.xref_length()):
-                    # Check for /JavaScript key in object
-                    js = doc.xref_get_key(xref, "JS")
-                    if js[0] != "null":
-                        has_js = True
-                        break
-                    # Also check for /JavaScript string in object definition
-                    try:
-                        obj_str = doc.xref_object(xref)
-                        if obj_str and "/JavaScript" in obj_str:
-                            has_js = True
-                            break
-                    except Exception:
-                        pass
-                parsed_data["has_javascript"] = has_js
-            except Exception:
-                pass
-
-            # Check for forms (AcroForm)
-            try:
-                if hasattr(doc, 'is_form_pdf'):
-                    parsed_data["has_forms"] = doc.is_form_pdf
-            except Exception:
-                pass
-
-            # Check if PDF/A compliant
-            try:
-                xref_stream = doc.xref_stream(1)
-                if xref_stream and b"PDF/A" in xref_stream:
-                    parsed_data["is_pdf_a"] = True
-            except Exception:
-                pass
-
-            # Extract Table of Contents (only for unencrypted PDFs - fails on encrypted)
-            try:
-                toc = doc.get_toc()
-                parsed_data["has_table_of_contents"] = bool(toc)
-            except Exception:
-                # get_toc() raises ValueError on encrypted PDFs
-                pass
-
-            # Extract XMP metadata (works better on unencrypted PDFs)
-            # Parse to structured format instead of storing full XML (99.9% size reduction)
-            try:
-                xmp_meta = doc.get_xml_metadata()
-                if xmp_meta:
-                    parsed_data["xmp_summary"] = parse_xmp_to_structured_data(xmp_meta)
-            except Exception:
-                pass
-
-            # Count total images across all pages (only for unencrypted PDFs - fails on encrypted)
-            try:
-                total_images = 0
-                for page_num in range(doc.page_count):
-                    images = doc.get_page_images(page_num)
-                    total_images += len(images)
-                parsed_data["total_images"] = total_images
-            except Exception:
-                # get_page_images() raises ValueError on encrypted PDFs
-                pass
+            # Count images (only for unencrypted PDFs)
+            parsed_data["total_images"] = _count_images(doc)
 
         doc.close()
+        parsed_data["parse_status"] = "success"
 
     except Exception as e:
-        logger.exception(message="Error in PyMuPDF")
+        logger.exception(message="Unexpected error parsing PDF", path=file_path)
         parsed_data["error"] = f"Error parsing PDF file: {str(e)}"
+        parsed_data["parse_status"] = "failed"
 
     return parsed_data
 

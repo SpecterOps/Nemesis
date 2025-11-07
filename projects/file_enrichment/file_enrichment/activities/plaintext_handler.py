@@ -64,6 +64,9 @@ async def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, ma
             # Read file content
             file_content = file_obj.read()
 
+            # Sanitize content: remove null bytes which PostgreSQL text fields cannot store
+            file_content = file_content.replace("\x00", "")
+
             # Process in chunks, ensuring we don't exceed byte limits
             i = 0
             while i < len(file_content):

@@ -75,16 +75,10 @@ async def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict
                         )
 
                         # Record success in database
-                        async with global_vars.asyncpg_pool.acquire() as conn:
-                            await conn.execute(
-                                """
-                                UPDATE workflows
-                                SET enrichments_success = array_append(enrichments_success, $1)
-                                WHERE object_id = $2
-                                """,
-                                "convert_to_pdf",
-                                file_enriched.object_id,
-                            )
+                        await global_vars.tracking_service.update_enrichment_results(
+                            instance_id=ctx.workflow_id,
+                            success_list=["convert_to_pdf"],
+                        )
 
                         logger.debug(
                             "File successfully converted to PDF with Gotenberg", object_id=file_enriched.object_id
@@ -100,16 +94,10 @@ async def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict
                         )
 
                         # Record failure in database due to Gotenberg error
-                        async with global_vars.asyncpg_pool.acquire() as conn:
-                            await conn.execute(
-                                """
-                                UPDATE workflows
-                                SET enrichments_failure = array_append(enrichments_failure, $1)
-                                WHERE object_id = $2
-                                """,
-                                f"convert_to_pdf:Gotenberg returned status code {response.status_code}",
-                                file_enriched.object_id,
-                            )
+                        await global_vars.tracking_service.update_enrichment_results(
+                            instance_id=ctx.workflow_id,
+                            failure_list=[f"convert_to_pdf:Gotenberg returned status code {response.status_code}"],
+                        )
 
                         return None
 
@@ -121,16 +109,10 @@ async def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict
 
         # Record failure in database
         try:
-            async with global_vars.asyncpg_pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    UPDATE workflows
-                    SET enrichments_failure = array_append(enrichments_failure, $1)
-                    WHERE object_id = $2
-                    """,
-                    f"convert_to_pdf:{str(e)[:100]}",
-                    object_id,
-                )
+            await global_vars.tracking_service.update_enrichment_results(
+                instance_id=ctx.workflow_id,
+                failure_list=[f"convert_to_pdf:{str(e)[:100]}"],
+            )
         except Exception as db_error:
             logger.error(f"Failed to update convert_to_pdf failure in database: {str(db_error)}")
 

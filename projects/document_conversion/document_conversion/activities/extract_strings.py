@@ -54,16 +54,10 @@ async def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dic
         )
 
         # Record success in database
-        async with global_vars.asyncpg_pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE workflows
-                SET enrichments_success = array_append(enrichments_success, $1)
-                WHERE object_id = $2
-                """,
-                "extract_strings",
-                file_enriched.object_id,
-            )
+        await global_vars.tracking_service.update_enrichment_results(
+            instance_id=ctx.workflow_id,
+            success_list=["extract_strings"],
+        )
 
         logger.debug(
             "String extraction completed successfully",
@@ -78,16 +72,10 @@ async def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dic
 
         # Record failure in database
         try:
-            async with global_vars.asyncpg_pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    UPDATE workflows
-                    SET enrichments_failure = array_append(enrichments_failure, $1)
-                    WHERE object_id = $2
-                    """,
-                    f"extract_strings:{str(e)[:100]}",
-                    object_id,
-                )
+            await global_vars.tracking_service.update_enrichment_results(
+                instance_id=ctx.workflow_id,
+                failure_list=[f"extract_strings:{str(e)[:100]}"],
+            )
         except Exception as db_error:
             logger.error(f"Failed to update extract_strings module failure in database: {str(db_error)}")
 

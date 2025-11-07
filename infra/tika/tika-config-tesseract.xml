@@ -5,7 +5,10 @@
     <parser class="org.apache.tika.parser.DefaultParser" />
 
 
-    <!-- PDF Parser with OCR support -->
+    <!-- PDF Parser with OCR support 
+      - https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=109454066#PDFParser(ApachePDFBox)-OCR 
+      - https://cwiki.apache.org/confluence/display/tika/TikaOCR#TikaOCR-OCRandPDFs
+    -->
     <parser class="org.apache.tika.parser.pdf.PDFParser">
       <params>
         <!-- Auto: use OCR only when needed -->
@@ -26,6 +29,7 @@
   <detector class="org.apache.tika.langdetect.optimaize.OptimaizeLangDetector" />
   -->
 
+  <!-- https://cwiki.apache.org/confluence/display/TIKA/TikaOCR -->
   <parser class="org.apache.tika.parser.ocr.TesseractOCRParser">
     <params>
       <!-- Multi-language support: add languages as needed (e.g., eng+spa+fra+deu) -->

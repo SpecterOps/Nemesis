@@ -278,7 +278,7 @@ def escape_markdown(text):
 def sanitize_for_jsonb(obj):
     """
     Recursively sanitize a Python object (dict, list, or primitive) to be safe for PostgreSQL JSONB.
-    Handles null bytes and other problematic characters.
+    Handles null bytes, invalid Unicode surrogates, and other problematic characters.
 
     Args:
         obj: The object to sanitize (can be a dict, list, or primitive type)
@@ -295,6 +295,9 @@ def sanitize_for_jsonb(obj):
         cleaned = obj.replace("\x00", "")
         # Replace other problematic control characters
         cleaned = "".join(char for char in cleaned if char >= " " or char in "\n\r\t")
+        # Remove unpaired Unicode surrogates (U+D800 to U+DFFF)
+        # These are invalid in JSON and will cause PostgreSQL JSONB errors
+        cleaned = "".join(char for char in cleaned if not (0xD800 <= ord(char) <= 0xDFFF))
         return cleaned
     else:
         # Return non-string primitives as-is

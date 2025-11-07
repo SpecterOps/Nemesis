@@ -51,12 +51,6 @@ async def publish_enriched_file(ctx: WorkflowActivityContext, object_id: str):
                     data_content_type="application/json",
                 )
 
-            # Update workflow status to COMPLETED after successful publish
-            instance_id = ctx.workflow_id
-            await global_vars.workflow_manager.tracking_service.update_status(
-                instance_id=instance_id, status="COMPLETED"
-            )
-
             return True
 
     except Exception:
@@ -69,9 +63,9 @@ def should_convert_document(enriched: FileEnriched):
     """
     Determine if the file should be processed based on its metadata.
 
-    Specifically, we check:
-     1) if the file is already plaintext, don't submit
-     2) if a file doesn't have an originating_object_id (so is an original submission), submit it
+    Specifically, check:
+     1) if it's plaintext, don't submit
+     2) if no originating_object_id (so is an original submission - not derived from anything else), submit it
      3) if it does does it have a nesting level, meaning it's derived from a container and NOT from
     some type of already processed transform (e.g., so we don't extract text from a PDF converted from an office doc).
     """

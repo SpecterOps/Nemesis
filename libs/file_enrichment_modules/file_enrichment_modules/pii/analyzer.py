@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 
 import yara_x
+from common.helpers import create_text_reader
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched_async
@@ -196,8 +197,12 @@ rule detect_pii
             return None
 
         try:
-            content = Path(file_path).read_text(encoding="utf-8")
-            file_bytes = content.encode("utf-8")
+            # Use create_text_reader to handle various encodings and binary content
+            with open(file_path, "rb") as binary_file:
+                with create_text_reader(binary_file) as text_file:
+                    content = text_file.read()
+
+            file_bytes = content.encode("utf-8", errors="replace")
 
             scan_results = scanner.scan(file_bytes)
             findings_by_type = {}
