@@ -2,16 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Send, Trash2, Settings as SettingsIcon, AlertCircle } from 'lucide-react';
 import ExampleQueries from './ExampleQueries';
 import MessageBubble from './MessageBubble';
-import QueryModal from './QueryModal';
 
 const ChatbotPage = () => {
   const [messages, setMessages] = useState([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [useHistory, setUseHistory] = useState(true);
-  const [showQueries, setShowQueries] = useState(false);
   const [temperature, setTemperature] = useState(0.7);
-  const [queries, setQueries] = useState([]);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState('');
@@ -185,9 +182,6 @@ const ChatbotPage = () => {
         });
       }
 
-      // TODO: Extract SQL queries from response if showQueries is enabled
-      // For now, queries would need to be returned in a structured format from backend
-
     } catch (err) {
       if (err.name === 'AbortError') {
         console.log('Request aborted');
@@ -216,7 +210,6 @@ const ChatbotPage = () => {
   const clearHistory = () => {
     if (window.confirm('Clear all conversation history?')) {
       setMessages([]);
-      setQueries([]);
       setError(null);
     }
   };
@@ -311,23 +304,6 @@ const ChatbotPage = () => {
               </button>
             </div>
 
-            {/* Show Queries Toggle */}
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Show SQL Queries</span>
-              <button
-                onClick={() => setShowQueries(!showQueries)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  showQueries ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    showQueries ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-
             {/* System Prompt Editor */}
             <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">System Prompt</h4>
@@ -394,11 +370,6 @@ const ChatbotPage = () => {
           ))}
           <div ref={messagesEndRef} />
         </div>
-
-        {/* Query Modal */}
-        {showQueries && queries.length > 0 && (
-          <QueryModal queries={queries} />
-        )}
       </div>
 
       {/* Input Form */}
