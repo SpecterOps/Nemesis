@@ -1,6 +1,5 @@
 # src/workflow/workflow_manager.py
 import asyncio
-import json
 import os
 import uuid
 from datetime import datetime
@@ -8,12 +7,11 @@ from datetime import datetime
 import asyncpg
 from common.logger import get_logger
 from common.models import File, SingleEnrichmentWorkflowInput
-from common.queues import WORKFLOW_MONITOR_COMPLETED_TOPIC, WORKFLOW_MONITOR_PUBSUB
 from common.workflows.tracking_service import WorkflowTrackingService
-from dapr.aio.clients import DaprClient
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
-from .tracing import get_trace_injector, get_tracer
+from .tracing import get_tracer
+from .workflow_completion import publish_workflow_completion
 
 logger = get_logger(__name__)
 
@@ -93,79 +91,6 @@ class WorkflowManager:
 
         return state_obj.runtime_status.name
 
-    async def publish_workflow_completion(self, instance_id, completed=True):
-        """
-        Publish workflow completion event for container tracking.
-
-        These events are consumed by the web_api so we can track the state of
-        large container processing.
-
-        TODO: any way to eliminate the database reads by using the internal state?
-
-        Args:
-            instance_id: The workflow instance ID
-            completed: True if workflow completed successfully, False if failed
-        """
-
-        try:
-            async with self.pool.acquire() as conn:
-                # Get workflow data with a single optimized JOIN query
-                row = await conn.fetchrow(
-                    """
-                    SELECT
-                        w.object_id,
-                        COALESCE(fe.originating_container_id, f.originating_container_id) as originating_container_id,
-                        COALESCE(fe.size, 0) as file_size
-                    FROM workflows w
-                    LEFT JOIN files_enriched fe ON fe.object_id = w.object_id
-                    LEFT JOIN files f ON f.object_id = w.object_id
-                    WHERE w.wf_id = $1
-                    """,
-                    instance_id,
-                )
-
-                if not row or not row["object_id"]:
-                    object_id, originating_container_id, file_size = None, None, 0
-                else:
-                    object_id = row["object_id"]
-                    originating_container_id = row["originating_container_id"]
-                    file_size = row["file_size"] or 0
-            logger.debug(
-                f"publish_workflow_completion - object_id: {object_id}, originating_container_id: {originating_container_id}, file_size: {file_size}",
-                pid=os.getpid(),
-            )
-
-            # Only publish if we have a container ID to track
-            if object_id and originating_container_id:
-                async with DaprClient(headers_callback=get_trace_injector()) as client:
-                    completion_data = {
-                        "object_id": str(object_id),
-                        "originating_container_id": str(originating_container_id),
-                        "workflow_id": instance_id,
-                        "completed": completed,
-                        "file_size": file_size,
-                        "timestamp": datetime.now().isoformat(),
-                    }
-
-                    await client.publish_event(
-                        pubsub_name=WORKFLOW_MONITOR_PUBSUB,
-                        topic_name=WORKFLOW_MONITOR_COMPLETED_TOPIC,
-                        data=json.dumps(completion_data),
-                        data_content_type="application/json",
-                    )
-
-                    logger.debug(
-                        "Published workflow completion event",
-                        object_id=object_id,
-                        container_id=originating_container_id,
-                        completed=completed,
-                        workflow_id=instance_id,
-                        pid=os.getpid(),
-                    )
-
-        except Exception as e:
-            logger.error("Error publishing workflow completion event", workflow_id=instance_id, error=str(e))
-
     async def cleanup_stale_workflows(self):
         """Clean up workflows that were left running from previous service instances"""
         try:
@@ -204,8 +129,8 @@ class WorkflowManager:
                         error_message="cleaned up by cleanup_stale_workflows",
                     )
 
-                    # Publish completion event
-                    await self.publish_workflow_completion(wf_id, completed=False)
+                    # Publish completion event for large container processing
+                    await publish_workflow_completion(wf_id, completed=False)
 
         except Exception as e:
             logger.error(f"Error during stale workflow cleanup: {e}")

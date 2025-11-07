@@ -392,7 +392,8 @@ const YaraRulesManager = () => {
                   <span>Reload Yara Engine</span>
                 </button>
               </Tooltip>
-              <Tooltip content="Trigger a bulk re-run of all Yara rules against all files in the system" position="bottom">
+              {/* Temporarily disabled - will re-enable later */}
+              {/* <Tooltip content="Trigger a bulk re-run of all Yara rules against all files in the system" position="bottom">
                 <button
                   onClick={handleBulkRerun}
                   disabled={isBulkRunning}
@@ -404,7 +405,7 @@ const YaraRulesManager = () => {
                   <Clock className="w-4 h-4" />
                   <span>Re-run Yara Rules</span>
                 </button>
-              </Tooltip>
+              </Tooltip> */}
             </div>
           </div>
 

@@ -70,8 +70,8 @@ async def run_enrichment(
         # Get the module
         module = global_vars.global_module_map[enrichment_name]
 
-        # Check if we should process this file - run in thread since it might use sync operations
-        should_process = await asyncio.to_thread(module.should_process, enrichment_request.object_id)
+        # Check if we should process this file
+        should_process = await module.should_process(enrichment_request.object_id)
         if not should_process:
             return EnrichmentResponse(
                 status="skipped",
@@ -80,8 +80,8 @@ async def run_enrichment(
                 instance_id="",
             )
 
-        # Process the file in a separate thread to avoid event loop conflicts
-        result = await asyncio.to_thread(module.process, enrichment_request.object_id)
+        # Process the file
+        result = await module.process(enrichment_request.object_id)
 
         if result:
             # Store enrichment result in database

@@ -30,7 +30,7 @@ class UnattendParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-        self.size_limit = 5_000_000  # 5MB size limit
+        self.size_limit = 1_000_000  # 1MB size limit
 
         # Yara rule to detect unattend.xml files
         self.yara_rule = yara_x.compile("""
@@ -72,8 +72,8 @@ rule Detect_Windows_Unattend_XML {
         """Determine if this module should run based on file type."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
-        # Initial checks for file type and name
-        if not (file_enriched.is_plaintext and file_enriched.file_name.lower() == "unattend.xml"):
+        # ensure we only look at plaintext XMLs
+        if (not file_enriched.is_plaintext) or "text/xml" not in file_enriched.mime_type.lower():
             return False
 
         if file_path:

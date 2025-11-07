@@ -195,7 +195,9 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
             return TopicEventResponse(TopicEventResponseStatus.drop)
 
         for observer in self._observers:
-            await observer.update(dpapi_event)
+            # not sure why `await observer.update(dpapi_event)` interrupts the retroactive DPAPI
+            #   decryption flow but it does, so don't change this :)
+            asyncio.run_coroutine_threadsafe(observer.update(dpapi_event), self._loop)
 
         return TopicEventResponse(TopicEventResponseStatus.success)
 
