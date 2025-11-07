@@ -50,42 +50,27 @@ class ChatbotAgent(BaseAgent):
         self.has_prompt = True
         self.llm_temperature = 0.7  # Default, can be overridden per request
 
+        # Get max rows from environment
+        max_rows = int(os.getenv("MCP_MAX_POSTGRES_ROWS", "1000"))
+
         # System prompt - will be saved to DB on first use
-        self.system_prompt = """You are a data query assistant for Nemesis, an offensive security data platform.
+        self.system_prompt = f"""You are a data query assistant for Nemesis, an offensive security data platform.
 
-Your role is to retrieve and report data from the database. Do NOT provide recommendations, analysis, or suggestions - only report the requested data.
-
-You have access to a PostgreSQL database with the following tables:
-- files_enriched: Processed files with metadata (path, filename, extension, size, magic_type, hashes, etc.)
-- plaintext_content: Searchable text content extracted from files (full-text search available)
-- enrichments: Detailed analysis results from various enrichment modules (module_name, result_data)
-- findings: Security findings categorized by severity and type (finding_name, category, severity, data)
-- file_linkings: Relationships between files showing connections (source, file_path_1, file_path_2, link_type)
-- chromium.cookies: Browser cookies from Chromium-based browsers (host_key, name, value, expiration)
-- chromium.logins: Saved credentials from Chromium browsers (origin_url, username_value, password_value)
-
-Content Search Capabilities:
-- Use search-document-content to search through plaintext extracted from files
-- Supports full-text search across document content, logs, configuration files, etc.
-- Can filter by path, project, agent, source, or date range
-- Returns the first matching chunk from each file
+Your role is to retrieve and report data from the database. Do NOT provide recommendations, analysis, or suggestions - only report the requested data. You have access to MCP tools to query the Nemesis PostgreSQL database.
 
 When answering questions:
 1. Query the database using the appropriate tools
-2. Report ONLY the data retrieved - no analysis or recommendations
+2. Report ONLY the data retrieved unless explicitly instructed otherwise - i.e., no analysis or recommendations unless a user explicitly asks for it
 3. Present results clearly and concisely
 4. For large result sets, summarize counts and key details
 5. Use case-insensitive pattern matching for host/source filters
-6. Be brief - users want facts, not explanations
+6. Be brief - users want facts, not explanations unless they explicitly request them
 
 Query Guidelines:
-- Maximum 1000 rows per query
-- Use COUNT(*) for totals before retrieving detailed data
-- Use GROUP BY to aggregate when appropriate
+- Use a `limit` of {max_rows} for maximum results
 - Filter by severity, category, or source to narrow results
-- Use search-document-content when users ask to search "for" or "containing" specific text
-
-Remember: Report data only. Do not suggest next steps, provide security advice, or make recommendations."""
+- Use search-document-content when users ask to search "for" or "containing" specific text but otherwise restrict your usage of "search-document-content" since it can return a lot of results
+"""
 
         self.mcp_process = None
 
@@ -247,33 +232,51 @@ Remember: Report data only. Do not suggest next steps, provide security advice, 
             # Get the complete result and send it
             result = await agent.run(conversation)
 
-            # Log tool calls and their results
+            # Log tool calls and their results with full details
             tool_calls = []
             tool_errors = []
             if hasattr(result, 'all_messages'):
-                for msg in result.all_messages():
+                for msg_idx, msg in enumerate(result.all_messages()):
+                    logger.debug(f"Message {msg_idx}: type={type(msg).__name__}, role={getattr(msg, 'role', 'unknown')}")
                     if hasattr(msg, 'parts'):
-                        for part in msg.parts:
+                        for part_idx, part in enumerate(msg.parts):
+                            part_type = type(part).__name__
+                            logger.debug(f"  Part {part_idx}: type={part_type}")
+
+                            # Log tool calls (requests)
                             if hasattr(part, 'tool_name'):
                                 tool_info = {
                                     'tool': part.tool_name,
                                     'args': getattr(part, 'args', {})
                                 }
-                                # Check if there's an error in the tool result
-                                if hasattr(part, 'content'):
-                                    tool_info['content'] = str(part.content)[:200]  # First 200 chars
-                                if hasattr(part, 'error'):
-                                    tool_info['error'] = str(part.error)
-                                    tool_errors.append(tool_info)
+                                logger.info(f"TOOL CALL: {part.tool_name}", args=tool_info['args'])
                                 tool_calls.append(tool_info)
 
+                            # Log tool returns (responses)
+                            if hasattr(part, 'tool_name') and hasattr(part, 'content'):
+                                full_content = str(part.content)
+                                logger.debug(
+                                    f"TOOL RESPONSE: {part.tool_name}",
+                                    content_length=len(full_content),
+                                    full_content=full_content  # Log FULL content for debugging
+                                )
+
+                            # Log errors
+                            if hasattr(part, 'error'):
+                                error_info = {
+                                    'tool': getattr(part, 'tool_name', 'unknown'),
+                                    'error': str(part.error)
+                                }
+                                logger.error("TOOL ERROR", error_info=error_info)
+                                tool_errors.append(error_info)
+
             if tool_calls:
-                logger.info("MCP tools called", tool_calls=tool_calls, count=len(tool_calls))
+                logger.info("MCP tools called", count=len(tool_calls), tools=[t['tool'] for t in tool_calls])
             else:
                 logger.warning("No MCP tools were called by the LLM")
 
             if tool_errors:
-                logger.error("Tool errors occurred", errors=tool_errors)
+                logger.error("Tool errors occurred", error_count=len(tool_errors))
 
             # Extract just the text output from the result
             if hasattr(result, 'data'):
@@ -284,6 +287,13 @@ Remember: Report data only. Do not suggest next steps, provide security advice, 
                 final_text = str(result)
 
             logger.info(f"Got complete response, {len(final_text)} chars")
+
+            # Debug: Log final response to check for UUID corruption
+            if 'object_id' in final_text.lower() or 'uuid' in final_text.lower():
+                logger.warning(
+                    "FINAL RESPONSE contains object_id/UUID",
+                    final_response=final_text[:2000]  # Log first 2000 chars
+                )
 
             # Send the complete response
             if final_text:

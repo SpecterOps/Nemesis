@@ -71,7 +71,7 @@ tools:
         required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
-      SELECT object_id, file_name, path, extension, size, magic_type, mime_type,
+      SELECT object_id::text, file_name, path, extension, size, magic_type, mime_type,
              source, agent_id, project, timestamp
       FROM files_enriched
       WHERE ($1::text IS NULL OR LOWER(file_name) LIKE LOWER('%' || $1 || '%'))
@@ -91,7 +91,8 @@ tools:
         type: string
         description: The UUID of the file to retrieve
     statement: |
-      SELECT *
+      SELECT object_id::text, agent_id, source, project, timestamp, path, file_name,
+             extension, size, magic_type, mime_type, originating_object_id::text
       FROM files_enriched
       WHERE object_id = $1::uuid
 
@@ -115,7 +116,7 @@ tools:
         type: string
         description: The UUID of the file
     statement: |
-      SELECT e.enrichment_id, e.module_name, e.result_data, e.created_at,
+      SELECT e.enrichment_id, e.object_id::text, e.module_name, e.result_data, e.created_at,
              f.file_name, f.path
       FROM enrichments e
       JOIN files_enriched f ON e.object_id = f.object_id
@@ -135,7 +136,7 @@ tools:
         required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
-      SELECT e.object_id, e.module_name, e.result_data, e.created_at,
+      SELECT e.object_id::text, e.module_name, e.result_data, e.created_at,
              f.file_name, f.path, f.source
       FROM enrichments e
       JOIN files_enriched f ON e.object_id = f.object_id
@@ -201,6 +202,23 @@ tools:
         AND ($3::text IS NULL OR LOWER(fe.source) LIKE LOWER('%' || $3 || '%'))
       ORDER BY f.severity DESC, f.created_at DESC
       LIMIT LEAST(COALESCE($4, 100), 1000)
+
+  get-file-findings:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Get all findings for a specific file by object_id
+    parameters:
+      - name: object_id
+        type: string
+        description: The UUID of the file
+    statement: |
+      SELECT f.finding_id, f.finding_name, f.category, f.severity,
+             f.origin_type, f.origin_name, f.data, f.created_at,
+             fe.file_name, fe.path, fe.source, fe.agent_id, fe.project
+      FROM findings f
+      JOIN files_enriched fe ON f.object_id = fe.object_id
+      WHERE f.object_id = $1::uuid
+      ORDER BY f.severity DESC, f.created_at DESC
 
   get-findings-by-category:
     kind: postgres-sql
@@ -420,34 +438,34 @@ tools:
       ORDER BY date_last_used DESC NULLS LAST
       LIMIT LEAST(COALESCE($5, 100), 1000)
 
-  find-lateral-movement-credentials:
-    kind: postgres-sql
-    source: chatbot-db
-    description: Find decrypted credentials that could enable lateral movement to other hosts
-    parameters:
-      - name: source
-        type: string
-        required: false
-        description: Source/host to find credentials FROM (case-insensitive pattern match, optional)
-      - name: target_host_pattern
-        type: string
-        required: false
-        description: Filter credentials TO specific target hosts (case-insensitive, optional)
-      - name: limit
-        type: integer
-        required: false
-        description: Maximum number of results (default 100, max 1000)
-    statement: |
-      SELECT origin_url, username_value, password_value_dec, signon_realm,
-             date_last_used, times_used, source, username, browser
-      FROM chromium.logins
-      WHERE is_decrypted = true
-        AND password_value_dec IS NOT NULL
-        AND password_value_dec != ''
-        AND ($1::text IS NULL OR LOWER(source) LIKE LOWER('%' || $1 || '%'))
-        AND ($2::text IS NULL OR LOWER(origin_url) LIKE LOWER('%' || $2 || '%'))
-      ORDER BY times_used DESC, date_last_used DESC NULLS LAST
-      LIMIT LEAST(COALESCE($3, 100), 1000)
+  # find-lateral-movement-credentials:
+  #   kind: postgres-sql
+  #   source: chatbot-db
+  #   description: Find decrypted credentials that could enable lateral movement to other hosts
+  #   parameters:
+  #     - name: source
+  #       type: string
+  #       required: false
+  #       description: Source/host to find credentials FROM (case-insensitive pattern match, optional)
+  #     - name: target_host_pattern
+  #       type: string
+  #       required: false
+  #       description: Filter credentials TO specific target hosts (case-insensitive, optional)
+  #     - name: limit
+  #       type: integer
+  #       required: false
+  #       description: Maximum number of results (default 100, max 1000)
+  #   statement: |
+  #     SELECT origin_url, username_value, password_value_dec, signon_realm,
+  #            date_last_used, times_used, source, username, browser
+  #     FROM chromium.logins
+  #     WHERE is_decrypted = true
+  #       AND password_value_dec IS NOT NULL
+  #       AND password_value_dec != ''
+  #       AND ($1::text IS NULL OR LOWER(source) LIKE LOWER('%' || $1 || '%'))
+  #       AND ($2::text IS NULL OR LOWER(origin_url) LIKE LOWER('%' || $2 || '%'))
+  #     ORDER BY times_used DESC, date_last_used DESC NULLS LAST
+  #     LIMIT LEAST(COALESCE($3, 100), 1000)
 
   # PLAINTEXT CONTENT searches
   search-document-content:
@@ -487,7 +505,7 @@ tools:
         required: false
         description: Filter by source pattern using LIKE (optional)
     statement: |
-      SELECT object_id, chunk_number, content, file_name, path, extension,
+      SELECT object_id::text, chunk_number, content, file_name, path, extension,
              project, agent_id, source, timestamp
       FROM public.search_documents(
         $1,
