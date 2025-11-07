@@ -11,6 +11,7 @@ from pathlib import Path as PathLib
 from typing import Annotated
 from urllib.parse import urlparse
 
+import httpx
 import psycopg
 import requests
 from common.db import get_postgres_connection_str
@@ -45,7 +46,7 @@ from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
 from web_api.large_containers import LargeContainerProcessor
-from web_api.models.requests import CleanupRequest, EnrichmentRequest
+from web_api.models.requests import ChatbotRequest, CleanupRequest, EnrichmentRequest
 from web_api.models.responses import (
     ContainerStatusResponse,
     ContainerSubmissionResponse,
@@ -1418,6 +1419,60 @@ async def run_translation(
         raise
     except Exception as e:
         logger.exception(message="Error starting translation")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post(
+    "/chatbot/stream",
+    tags=["chatbot"],
+    summary="Stream chatbot responses",
+    description="Stream interactive chatbot responses for querying Nemesis data",
+)
+async def chatbot_stream(
+    request: ChatbotRequest = Body(..., description="Chatbot request with message and conversation history"),
+):
+    """
+    Stream chatbot responses via Dapr to agents service.
+    Uses HTTP streaming to provide real-time token-by-token responses.
+    """
+    try:
+        url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/chatbot/stream"
+
+        logger.debug("Proxying chatbot request to agents service", message_length=len(request.message))
+
+        async def stream_proxy():
+            """Generator function that streams chunks from agents service."""
+            try:
+                async with httpx.AsyncClient() as client:
+                    async with client.stream(
+                        "POST",
+                        url,
+                        json=request.model_dump(),
+                        timeout=120.0,
+                    ) as response:
+                        response.raise_for_status()
+                        async for chunk in response.aiter_bytes():
+                            if chunk:
+                                yield chunk
+            except httpx.HTTPStatusError as e:
+                logger.error("HTTP error from agents service", status_code=e.response.status_code)
+                error_msg = f"\n\n[Error: Agents service returned {e.response.status_code}]"
+                yield error_msg.encode()
+            except httpx.TimeoutException:
+                logger.error("Timeout streaming from agents service")
+                yield b"\n\n[Error: Request timeout]"
+            except Exception as e:
+                logger.exception("Error in stream proxy")
+                error_msg = f"\n\n[Error: {str(e)}]"
+                yield error_msg.encode()
+
+        return StreamingResponse(
+            stream_proxy(),
+            media_type="text/plain",
+        )
+
+    except Exception as e:
+        logger.exception(message="Error initiating chatbot stream")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 

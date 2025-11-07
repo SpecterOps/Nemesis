@@ -43,6 +43,7 @@ pillow = "^11.3.0"
 opentelemetry-api = "^1.38.0"
 opentelemetry-sdk = "^1.38.0"
 opentelemetry-exporter-otlp-proto-grpc = "^1.38.0"
+presidio-analyzer = "^2.2.360"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"
