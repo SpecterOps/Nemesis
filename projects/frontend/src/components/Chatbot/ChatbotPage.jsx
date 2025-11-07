@@ -14,6 +14,10 @@ const ChatbotPage = () => {
   const [queries, setQueries] = useState([]);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [originalPrompt, setOriginalPrompt] = useState('');
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [promptError, setPromptError] = useState(null);
 
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -26,6 +30,106 @@ const ChatbotPage = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Fetch system prompt when settings are opened
+  useEffect(() => {
+    if (showSettings && !systemPrompt) {
+      fetchSystemPrompt();
+    }
+  }, [showSettings]);
+
+  const fetchSystemPrompt = async () => {
+    try {
+      const query = {
+        query: `
+          query GetChatbotPrompt {
+            agent_prompts_by_pk(name: "chatbot") {
+              name
+              prompt
+              description
+            }
+          }
+        `
+      };
+
+      const response = await fetch('/hasura/v1/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+        },
+        body: JSON.stringify(query)
+      });
+
+      if (!response.ok) throw new Error('Network response error');
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+
+      const prompt = result.data.agent_prompts_by_pk?.prompt || '';
+      setSystemPrompt(prompt);
+      setOriginalPrompt(prompt);
+    } catch (err) {
+      console.error('Error fetching system prompt:', err);
+      setPromptError('Failed to load system prompt');
+    }
+  };
+
+  const saveSystemPrompt = async () => {
+    if (systemPrompt === originalPrompt) return;
+
+    setSavingPrompt(true);
+    setPromptError(null);
+
+    try {
+      const mutation = {
+        query: `
+          mutation UpsertChatbotPrompt($prompt: String!) {
+            insert_agent_prompts_one(
+              object: {
+                name: "chatbot",
+                prompt: $prompt,
+                description: "Interactive chatbot for querying Nemesis data"
+              },
+              on_conflict: {
+                constraint: agent_prompts_pkey,
+                update_columns: [prompt]
+              }
+            ) {
+              name
+              prompt
+            }
+          }
+        `,
+        variables: { prompt: systemPrompt }
+      };
+
+      const response = await fetch('/hasura/v1/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+        },
+        body: JSON.stringify(mutation)
+      });
+
+      if (!response.ok) throw new Error('Network response error');
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+
+      setOriginalPrompt(systemPrompt);
+      alert('System prompt saved successfully!');
+    } catch (err) {
+      console.error('Error saving system prompt:', err);
+      setPromptError('Failed to save system prompt');
+    } finally {
+      setSavingPrompt(false);
+    }
+  };
+
+  const cancelPromptEdit = () => {
+    setSystemPrompt(originalPrompt);
+    setPromptError(null);
+  };
 
   const sendMessage = async (messageText) => {
     if (!messageText.trim() || isStreaming) return;
@@ -125,7 +229,7 @@ const ChatbotPage = () => {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-6xl mx-auto p-4">
+    <div className="flex flex-col h-[calc(100vh-3rem)] max-w-6xl mx-auto px-4 pt-4 pb-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-3">
@@ -167,7 +271,7 @@ const ChatbotPage = () => {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto flex-shrink-0">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Settings</h3>
 
           <div className="space-y-4">
@@ -223,44 +327,82 @@ const ChatbotPage = () => {
                 />
               </button>
             </div>
+
+            {/* System Prompt Editor */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">System Prompt</h4>
+
+              {promptError && (
+                <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400">
+                  {promptError}
+                </div>
+              )}
+
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                className="w-full h-64 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono"
+                placeholder="Loading system prompt..."
+              />
+
+              <div className="flex space-x-2 mt-3">
+                <button
+                  onClick={saveSystemPrompt}
+                  disabled={savingPrompt || systemPrompt === originalPrompt}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {savingPrompt ? 'Saving...' : 'Save Prompt'}
+                </button>
+                <button
+                  onClick={cancelPromptEdit}
+                  disabled={savingPrompt || systemPrompt === originalPrompt}
+                  className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Error Display */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-2">
-          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
+        {/* Error Display */}
+        {error && (
+          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-2">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            </div>
           </div>
+        )}
+
+        {/* Example Queries (show when no messages) */}
+        {messages.length === 0 && (
+          <ExampleQueries onExampleClick={handleExampleClick} />
+        )}
+
+        {/* Messages */}
+        <div className="space-y-4 px-2">
+          {messages.map((msg, idx) => (
+            <MessageBubble
+              key={idx}
+              message={msg}
+              isStreaming={isStreaming && idx === messages.length - 1}
+            />
+          ))}
+          <div ref={messagesEndRef} />
         </div>
-      )}
 
-      {/* Example Queries (show when no messages) */}
-      {messages.length === 0 && (
-        <ExampleQueries onExampleClick={handleExampleClick} />
-      )}
-
-      {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto mb-4 space-y-4 px-2">
-        {messages.map((msg, idx) => (
-          <MessageBubble
-            key={idx}
-            message={msg}
-            isStreaming={isStreaming && idx === messages.length - 1}
-          />
-        ))}
-        <div ref={messagesEndRef} />
+        {/* Query Modal */}
+        {showQueries && queries.length > 0 && (
+          <QueryModal queries={queries} />
+        )}
       </div>
 
-      {/* Query Modal */}
-      {showQueries && queries.length > 0 && (
-        <QueryModal queries={queries} />
-      )}
-
       {/* Input Form */}
-      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 pt-4">
+      <form onSubmit={handleSubmit} className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 pt-4 mt-4 pb-4">
         <div className="flex space-x-2">
           <textarea
             value={currentMessage}

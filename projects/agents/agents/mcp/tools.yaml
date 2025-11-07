@@ -19,15 +19,19 @@ tools:
     parameters:
       - name: project
         type: string
+        required: false
         description: Filter by project name (optional)
       - name: agent_id
         type: string
+        required: false
         description: Filter by agent ID (optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
       - name: extension
         type: string
+        required: false
         description: Filter by file extension (optional)
     statement: |
       SELECT COUNT(*) as file_count
@@ -44,21 +48,27 @@ tools:
     parameters:
       - name: filename_pattern
         type: string
+        required: false
         description: Search pattern for filename (case-insensitive, optional)
       - name: path_pattern
         type: string
+        required: false
         description: Search pattern for file path (case-insensitive, optional)
       - name: extension
         type: string
+        required: false
         description: Filter by file extension (optional)
       - name: project
         type: string
+        required: false
         description: Filter by project name (optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
       - name: limit
         type: integer
+        required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
       SELECT object_id, file_name, path, extension, size, magic_type, mime_type,
@@ -122,6 +132,7 @@ tools:
         description: Name of the enrichment module
       - name: limit
         type: integer
+        required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
       SELECT e.object_id, e.module_name, e.result_data, e.created_at,
@@ -140,20 +151,23 @@ tools:
     parameters:
       - name: min_severity
         type: integer
+        required: false
         description: Minimum severity level (0-10, optional)
       - name: category
         type: string
+        required: false
         description: Filter by finding category (optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
     statement: |
       SELECT COUNT(*) as finding_count
       FROM findings f
       JOIN files_enriched fe ON f.object_id = fe.object_id
       WHERE ($1::integer IS NULL OR f.severity >= $1)
-        AND ($2::text IS NULL OR f.category = $2)
-        AND ($3::text IS NULL OR LOWER(fe.source) LIKE LOWER('%' || $3 || '%'))
+        AND ($2::text IS NULL OR $2 = '' OR f.category = $2)
+        AND ($3::text IS NULL OR $3 = '' OR LOWER(fe.source) LIKE LOWER('%' || $3 || '%'))
 
   search-findings:
     kind: postgres-sql
@@ -162,15 +176,19 @@ tools:
     parameters:
       - name: min_severity
         type: integer
+        required: false
         description: Minimum severity level (0-10, optional)
       - name: category
         type: string
+        required: false
         description: Filter by finding category (optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
       - name: limit
         type: integer
+        required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
       SELECT f.finding_id, f.finding_name, f.category, f.severity, f.origin_type,
@@ -191,6 +209,7 @@ tools:
     parameters:
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
     statement: |
       SELECT f.category, COUNT(*) as count,
@@ -209,12 +228,15 @@ tools:
     parameters:
       - name: triage_value
         type: string
+        required: false
         description: Filter by triage value (e.g., true_positive, false_positive, optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
       - name: limit
         type: integer
+        required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
       SELECT f.finding_id, f.finding_name, f.category, f.severity,
@@ -239,9 +261,11 @@ tools:
         description: The file path to search for (case-insensitive pattern match)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
       - name: limit
         type: integer
+        required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
       SELECT source, file_path_1, file_path_2, link_type, created_at
@@ -262,6 +286,7 @@ tools:
         description: Exact file path to find relationships for
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
     statement: |
       SELECT
@@ -285,9 +310,11 @@ tools:
     parameters:
       - name: host_pattern
         type: string
+        required: false
         description: Filter by host_key pattern (case-insensitive, optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
     statement: |
       SELECT COUNT(*) as cookie_count
@@ -302,18 +329,23 @@ tools:
     parameters:
       - name: host_pattern
         type: string
+        required: false
         description: Filter by host_key pattern (case-insensitive, optional)
       - name: name_pattern
         type: string
+        required: false
         description: Filter by cookie name pattern (case-insensitive, optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
       - name: is_decrypted
         type: boolean
+        required: false
         description: Filter by decryption status (optional)
       - name: limit
         type: integer
+        required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
       SELECT host_key, name, path, value_dec, is_decrypted, is_secure, is_httponly,
@@ -334,12 +366,15 @@ tools:
     parameters:
       - name: url_pattern
         type: string
+        required: false
         description: Filter by origin_url pattern (case-insensitive, optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
       - name: is_decrypted
         type: boolean
+        required: false
         description: Filter by decryption status (optional)
     statement: |
       SELECT COUNT(*) as login_count
@@ -355,18 +390,23 @@ tools:
     parameters:
       - name: url_pattern
         type: string
+        required: false
         description: Filter by origin_url pattern (case-insensitive, optional)
       - name: username_pattern
         type: string
+        required: false
         description: Filter by username_value pattern (case-insensitive, optional)
       - name: source
         type: string
+        required: false
         description: Filter by source (case-insensitive pattern match, optional)
       - name: is_decrypted
         type: boolean
+        required: false
         description: Filter by decryption status (optional)
       - name: limit
         type: integer
+        required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
       SELECT origin_url, username_value, password_value_dec, signon_realm,
@@ -387,12 +427,15 @@ tools:
     parameters:
       - name: source
         type: string
+        required: false
         description: Source/host to find credentials FROM (case-insensitive pattern match, optional)
       - name: target_host_pattern
         type: string
+        required: false
         description: Filter credentials TO specific target hosts (case-insensitive, optional)
       - name: limit
         type: integer
+        required: false
         description: Maximum number of results (default 100, max 1000)
     statement: |
       SELECT origin_url, username_value, password_value_dec, signon_realm,

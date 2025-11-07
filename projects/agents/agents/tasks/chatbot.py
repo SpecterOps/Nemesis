@@ -232,7 +232,7 @@ Remember: You are assisting red team operators and penetration testers. Focus on
                 system_prompt=current_prompt,
                 toolsets=[mcp_server],
                 instrument=ModelManager.is_instrumentation_enabled(),
-                retries=2,
+                retries=5,  # Increased from 2 to handle transient MCP tool failures
                 model_settings=ModelSettings(temperature=request.temperature),
             )
 
@@ -242,7 +242,42 @@ Remember: You are assisting red team operators and penetration testers. Focus on
             # Get the complete result and send it
             result = await agent.run(conversation)
 
-            final_text = result.data if hasattr(result, 'data') else str(result)
+            # Log tool calls and their results
+            tool_calls = []
+            tool_errors = []
+            if hasattr(result, 'all_messages'):
+                for msg in result.all_messages():
+                    if hasattr(msg, 'parts'):
+                        for part in msg.parts:
+                            if hasattr(part, 'tool_name'):
+                                tool_info = {
+                                    'tool': part.tool_name,
+                                    'args': getattr(part, 'args', {})
+                                }
+                                # Check if there's an error in the tool result
+                                if hasattr(part, 'content'):
+                                    tool_info['content'] = str(part.content)[:200]  # First 200 chars
+                                if hasattr(part, 'error'):
+                                    tool_info['error'] = str(part.error)
+                                    tool_errors.append(tool_info)
+                                tool_calls.append(tool_info)
+
+            if tool_calls:
+                logger.info("MCP tools called", tool_calls=tool_calls, count=len(tool_calls))
+            else:
+                logger.warning("No MCP tools were called by the LLM")
+
+            if tool_errors:
+                logger.error("Tool errors occurred", errors=tool_errors)
+
+            # Extract just the text output from the result
+            if hasattr(result, 'data'):
+                final_text = str(result.data)
+            elif hasattr(result, 'output'):
+                final_text = str(result.output)
+            else:
+                final_text = str(result)
+
             logger.info(f"Got complete response, {len(final_text)} chars")
 
             # Send the complete response
@@ -250,23 +285,6 @@ Remember: You are assisting red team operators and penetration testers. Focus on
                 yield final_text
             else:
                 logger.warning("No text in final result")
-
-            # Log tool calls
-            tool_calls = []
-            if hasattr(result, 'all_messages'):
-                for msg in result.all_messages():
-                    if hasattr(msg, 'parts'):
-                        for part in msg.parts:
-                            if hasattr(part, 'tool_name'):
-                                tool_calls.append({
-                                    'tool': part.tool_name,
-                                    'args': getattr(part, 'args', {})
-                                })
-
-            if tool_calls:
-                logger.info("MCP tools called", tool_calls=tool_calls, count=len(tool_calls))
-            else:
-                logger.warning("No MCP tools were called by the LLM")
 
             # Log completion metrics
             logger.info(
