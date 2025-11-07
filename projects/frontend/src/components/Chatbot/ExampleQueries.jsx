@@ -1,4 +1,3 @@
-import React from 'react';
 import { Lightbulb } from 'lucide-react';
 
 const ExampleQueries = ({ onExampleClick }) => {
@@ -15,8 +14,8 @@ const ExampleQueries = ({ onExampleClick }) => {
     },
     {
       title: 'Lateral Movement',
-      query: 'Show me Chrome login credentials that could be used for lateral movement to other hosts',
-      description: 'Identify exploitation opportunities',
+      query: 'How can I access example.com?',
+      description: 'Identify lateral movement opportunities',
     },
   ];
 

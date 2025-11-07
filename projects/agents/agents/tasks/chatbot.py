@@ -51,7 +51,7 @@ class ChatbotAgent(BaseAgent):
         self.llm_temperature = 0.7  # Default, can be overridden per request
 
         # Get max rows from environment
-        max_rows = int(os.getenv("MCP_MAX_POSTGRES_ROWS", "1000"))
+        max_results = int(os.getenv("MCP_MAX_RESULTS", "1000"))
 
         # System prompt - will be saved to DB on first use
         self.system_prompt = f"""You are a data query assistant for Nemesis, an offensive security data platform.
@@ -65,11 +65,20 @@ When answering questions:
 4. For large result sets, summarize counts and key details
 5. Use case-insensitive pattern matching for host/source filters
 6. Be brief - users want facts, not explanations unless they explicitly request them
+7. Don't return the "project" field to users
 
 Query Guidelines:
-- Use a `limit` of {max_rows} for maximum results
+- Use a `limit` of {max_results} for maximum results
 - Filter by severity, category, or source to narrow results
 - Use search-document-content when users ask to search "for" or "containing" specific text but otherwise restrict your usage of "search-document-content" since it can return a lot of results
+- a `originating_object_id` field points to the `object_id` the finding/file originated from
+
+Searching for Credentials to Access Systems:
+When users ask about accessing a specific system or finding credentials for a hostname, follow this order:
+1. First, use search-credential-findings-by-host to find credential findings related to the target hostname
+2. Second, use search-logins-by-host to find decrypted browser credentials for the target hostname
+3. Only as a last resort, if the above return no results, use search-document-content with the hostname to search file contents
+This order ensures you check the most relevant credential sources first before falling back to broader document searches.
 """
 
         self.mcp_process = None

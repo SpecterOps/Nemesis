@@ -1042,7 +1042,7 @@ services:
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
       # Chatbot configuration
       - CHATBOT_DB_PASSWORD=${CHATBOT_DB_PASSWORD:-chatbot_pass_change_me}
-      - MCP_MAX_POSTGRES_ROWS=${MCP_MAX_POSTGRES_ROWS:-1000}
+      - MCP_MAX_RESULTS=${MCP_MAX_RESULTS:-1000}
     logging: *logging-config
     depends_on:
       postgres: { condition: service_healthy }
