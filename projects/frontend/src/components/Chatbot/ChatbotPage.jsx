@@ -3,8 +3,18 @@ import { Bot, Send, Trash2, Settings as SettingsIcon, AlertCircle } from 'lucide
 import ExampleQueries from './ExampleQueries';
 import MessageBubble from './MessageBubble';
 
+const MESSAGES_STORAGE_KEY = 'chatbot_messages';
+
 const ChatbotPage = () => {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    // Load messages from localStorage on mount
+    try {
+      const saved = localStorage.getItem(MESSAGES_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [currentMessage, setCurrentMessage] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [useHistory, setUseHistory] = useState(true);
@@ -15,6 +25,7 @@ const ChatbotPage = () => {
   const [originalPrompt, setOriginalPrompt] = useState('');
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState(null);
+  const [spendData, setSpendData] = useState(null);
 
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -27,6 +38,15 @@ const ChatbotPage = () => {
 
   useEffect(() => {
     scrollToBottom();
+  }, [messages]);
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messages));
+    } catch (err) {
+      console.error('Failed to save messages to localStorage:', err);
+    }
   }, [messages]);
 
   // Refocus input after response completes
@@ -45,6 +65,27 @@ const ChatbotPage = () => {
       fetchSystemPrompt();
     }
   }, [showSettings]);
+
+  // Fetch spend data on mount
+  useEffect(() => {
+    fetchSpendData();
+  }, []);
+
+  const fetchSpendData = async () => {
+    try {
+      const response = await fetch('/api/agents/spend-data');
+      if (!response.ok) throw new Error('Network response error');
+      const result = await response.json();
+
+      setSpendData({
+        spend: result.total_spend,
+        total_tokens: result.total_tokens
+      });
+    } catch (err) {
+      console.error('Error fetching spend data:', err);
+      // Don't set error state - gracefully degrade
+    }
+  };
 
   const fetchSystemPrompt = async () => {
     try {
@@ -206,6 +247,8 @@ const ChatbotPage = () => {
     } finally {
       setIsStreaming(false);
       abortControllerRef.current = null;
+      // Refresh spend data after response completes
+      fetchSpendData();
     }
   };
 
@@ -222,6 +265,12 @@ const ChatbotPage = () => {
     if (window.confirm('Clear all conversation history?')) {
       setMessages([]);
       setError(null);
+      // Clear from localStorage as well
+      try {
+        localStorage.removeItem(MESSAGES_STORAGE_KEY);
+      } catch (err) {
+        console.error('Failed to clear messages from localStorage:', err);
+      }
     }
   };
 
@@ -245,6 +294,24 @@ const ChatbotPage = () => {
             </p>
           </div>
         </div>
+
+        {/* LLM Usage Stats */}
+        {spendData && (
+          <div className="flex items-center space-x-4 text-sm text-white">
+            <div className="text-center">
+              <div className="font-semibold">
+                ${spendData.spend ? spendData.spend.toFixed(4) : '0.0000'}
+              </div>
+              <div className="text-xs opacity-80">Total Spend</div>
+            </div>
+            <div className="text-center">
+              <div className="font-semibold">
+                {spendData.total_tokens ? spendData.total_tokens.toLocaleString() : '0'}
+              </div>
+              <div className="text-xs opacity-80">Total Tokens</div>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center space-x-3">
           {/* Settings Toggle */}
