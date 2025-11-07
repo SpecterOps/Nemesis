@@ -15,8 +15,8 @@ for dir in "${TARGET_DIRS[@]}"; do
     if [ -d "$dir" ]; then
         echo ""
         echo "🔍 Scanning: $dir"
-        # Find directories that contain a pyproject.toml file
-        find "$dir" -type f -name "pyproject.toml" | while read -r file; do
+        # Find directories that contain a pyproject.toml file (only immediate subdirectories)
+        find "$dir" -maxdepth 2 -type f -name "pyproject.toml" | while read -r file; do
             proj_dir=$(dirname "$file")
             echo ""
             echo ">>> Installing dependencies for: $proj_dir"

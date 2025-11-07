@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<properties>
+  <parsers>
+    <!-- Needed to ensure existing parsers fire -->
+    <parser class="org.apache.tika.parser.DefaultParser" />
+
+
+    <!-- PDF Parser with OCR support 
+      - https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=109454066#PDFParser(ApachePDFBox)-OCR 
+      - https://cwiki.apache.org/confluence/display/tika/TikaOCR#TikaOCR-OCRandPDFs
+    -->
+    <parser class="org.apache.tika.parser.pdf.PDFParser">
+      <params>
+        <!-- Auto: use OCR only when needed -->
+        <param name="ocrStrategy" type="string">auto</param>
+        <param name="extractInlineImages" type="bool">true</param>
+        <param name="extractFontNames" type="bool">true</param>
+        <!-- Prevent OOM on large PDFs -->
+        <param name="maxMainMemoryBytes" type="long">536870912</param>
+
+        <!-- Limit on the number of text characters to return (10Mb) -->
+        <param name="writeLimit" type="int">10000000</param>
+      </params>
+    </parser>
+
+  </parsers>
+
+  <!-- Enable language detection 
+  <detector class="org.apache.tika.langdetect.optimaize.OptimaizeLangDetector" />
+  -->
+
+  <!-- https://cwiki.apache.org/confluence/display/TIKA/TikaOCR -->
+  <parser class="org.apache.tika.parser.ocr.TesseractOCRParser">
+    <params>
+      <!-- Multi-language support: add languages as needed (e.g., eng+spa+fra+deu) -->
+      <param name="language" type="string">eng</param>
+
+      <!-- Path to ImageMagick binary directory (must end with /) -->
+      <param name="imageMagickPath" type="string">/usr/bin/</param>
+
+      <!-- Timeout in seconds - adjust based on document complexity -->
+      <param name="timeout" type="int">300</param>
+
+      <!-- Image preprocessing improves accuracy -->
+      <!-- <param name="enableImageProcessing" type="bool">true</param> -->
+
+      <!-- Page segmentation mode: 3 is fully automatic (best for most documents) -->
+      <param name="pageSegMode" type="string">3</param>
+
+      <!-- DPI for rendering PDFs to images - 300 is optimal for OCR -->
+      <param name="density" type="int">300</param>
+
+      <!-- Image depth - 4 bits is good balance between speed and quality -->
+      <param name="depth" type="int">4</param>
+
+      <!-- Color space - gray is faster, sufficient for most text -->
+      <param name="colorspace" type="string">gray</param>
+
+      <!-- Filter for better preprocessing -->
+      <param name="filter" type="string">triangle</param>
+
+      <!-- Resize images if too large (max dimension in pixels) -->
+      <param name="resize" type="int">900</param>
+
+      <!-- Apply image processing enhancements -->
+      <param name="applyRotation" type="bool">true</param>
+    </params>
+  </parser>
+
+</properties>

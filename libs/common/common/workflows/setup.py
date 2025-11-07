@@ -46,6 +46,7 @@ def workflow_activity(fn: Callable | None = None, *, name: str | None = None) ->
         @wf_runtime.activity(name=name)
         @wraps(func)
         def wrapped_fn(*args, **kwargs) -> Any:  # type: ignore
+            logger.debug(f"Executing activity: {name or func.__name__}")
             result = func(*args, **kwargs)
             if not asyncio.iscoroutine(result):
                 # If the result is not a coroutine, just return it as is.

@@ -1,6 +1,5 @@
 # src/workflow/workflow_manager.py
 import asyncio
-import json
 import os
 import uuid
 from datetime import datetime
@@ -8,12 +7,10 @@ from datetime import datetime
 import asyncpg
 from common.logger import get_logger
 from common.models import File, SingleEnrichmentWorkflowInput
-from common.queues import WORKFLOW_MONITOR_COMPLETED_TOPIC, WORKFLOW_MONITOR_PUBSUB
-from dapr.aio.clients import DaprClient
+from common.workflows.tracking_service import WorkflowTrackingService
 from dapr.ext.workflow.workflow_state import WorkflowStatus
 
-from .tracing import get_trace_injector, get_tracer
-from .workflow_tracking_service import WorkflowTrackingService
+from .tracing import get_tracer
 from .workflow_completion import publish_workflow_completion
 
 logger = get_logger(__name__)
@@ -181,8 +178,8 @@ class WorkflowManager:
 
         tracer = get_tracer()
 
-        instance_id = str(uuid.uuid4()).replace("-", "")
         object_id = file.object_id
+        instance_id = f"file_enrichment_{uuid.uuid4().hex}_{object_id}"
         base_filename = os.path.basename(file.path) if file.path else None
 
         logger.info(
@@ -238,11 +235,13 @@ class WorkflowManager:
         tracer = get_tracer()
 
         try:
-            instance_id = str(uuid.uuid4()).replace("-", "")
-
             # Normalize input to SingleEnrichmentWorkflowInput if dict
             if isinstance(workflow_input, dict):
                 workflow_input = SingleEnrichmentWorkflowInput(**workflow_input)
+
+            # Generate instance_id with standardized format
+            object_id = workflow_input.object_id
+            instance_id = f"file_enrichment_single_{uuid.uuid4().hex}_{object_id}"
 
             with tracer.start_as_current_span("start_single_enrichment_workflow") as span:
                 # Add workflow ID to trace for Jaeger queries
@@ -254,7 +253,6 @@ class WorkflowManager:
 
                 # Extract metadata for tracking
                 enrichment_name = workflow_input.enrichment_name
-                object_id = workflow_input.object_id
                 filename = f"bulk:{enrichment_name} ({object_id})"
 
                 # Start tracking workflow in database

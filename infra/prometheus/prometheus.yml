@@ -134,3 +134,8 @@ scrape_configs:
     metrics_path: '/metrics'
     static_configs:
       - targets: ['scheduler:9090']
+
+  - job_name: 'nemesis-otel-collector'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['otel-collector:8888']

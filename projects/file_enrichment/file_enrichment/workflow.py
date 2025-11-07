@@ -1,5 +1,6 @@
 # src/workflow/workflow.py
 import asyncio
+from datetime import datetime
 
 import dapr.ext.workflow as wf
 from common.logger import get_logger
@@ -13,11 +14,14 @@ from nemesis_dpapi import DpapiManager
 from . import global_vars
 from .activities import (
     check_file_linkings,
+    finalize_workflow_failure,
+    finalize_workflow_success,
     get_basic_analysis,
     handle_file_if_plaintext,
     publish_enriched_file,
     publish_findings_alerts,
     run_enrichment_modules,
+    update_workflow_status_to_running,
 )
 
 logger = get_logger(__name__)
@@ -87,9 +91,16 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
     if not ctx.is_replaying:
         logger.debug("Starting main enrichment workflow", object_id=object_id, workflow_input=file_dict)
 
+    # Use ctx.current_utc_datetime for workflow replay determinism
     start_time = ctx.current_utc_datetime
 
     try:
+        # Update workflow status to RUNNING
+        yield ctx.call_activity(
+            update_workflow_status_to_running,
+            input={},
+        )
+
         yield ctx.call_activity(get_basic_analysis, input=file_dict)
         if not ctx.is_replaying:
             logger.debug(
@@ -139,6 +150,12 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
                 processing_time=f"{ctx.current_utc_datetime - start_time}",
             )
 
+        # Mark workflow as completed
+        yield ctx.call_activity(
+            finalize_workflow_success,
+            input={"start_time": start_time.isoformat()},
+        )
+
         return {}
 
     except TaskFailedError as e:
@@ -150,8 +167,35 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
             stack_trace=e.details.stack_trace,
         )
 
-    except Exception:
-        logger.exception("Un execution", workflow_input=file_dict)
+        # Mark workflow as failed
+        try:
+            yield ctx.call_activity(
+                finalize_workflow_failure,
+                input={
+                    "error_message": str(e.details.message)[:200],
+                    "start_time": start_time.isoformat(),
+                },
+            )
+        except Exception:
+            logger.error("Failed to finalize workflow failure status")
+
+        raise
+
+    except Exception as e:
+        logger.exception("Unexpected error in execution", workflow_input=file_dict)
+
+        # Mark workflow as failed
+        try:
+            yield ctx.call_activity(
+                finalize_workflow_failure,
+                input={
+                    "error_message": str(e)[:200],
+                    "start_time": start_time.isoformat(),
+                },
+            )
+        except Exception:
+            logger.error("Failed to finalize workflow failure status")
+
         raise
 
 

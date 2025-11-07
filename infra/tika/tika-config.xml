@@ -11,52 +11,23 @@
     </params>
   </server>
 
+  <!-- Disable Tesseract OCR -->
   <parsers>
-    <!-- Needed to ensure existing parsers fire -->
-    <parser class="org.apache.tika.parser.DefaultParser"/>
-
-    <parser class="org.apache.tika.parser.ocr.TesseractOCRParser">
-      <params>
-        <!-- Multi-language support: add languages as needed (e.g., eng+spa+fra+deu) -->
-        <param name="language" type="string">eng</param>
-
-        <!-- Timeout in seconds - adjust based on document complexity -->
-        <param name="timeout" type="int">300</param>
-
-        <!-- Image preprocessing improves accuracy -->
-        <param name="enableImageProcessing" type="bool">true</param>
-
-        <!-- Page segmentation mode: 3 is fully automatic (best for most documents) -->
-        <param name="pageSegMode" type="string">3</param>
-
-        <!-- DPI for rendering PDFs to images - 300 is optimal for OCR -->
-        <param name="density" type="int">300</param>
-
-        <!-- Image depth - 4 bits is good balance between speed and quality -->
-        <param name="depth" type="int">4</param>
-
-        <!-- Color space - gray is faster, sufficient for most text -->
-        <param name="colorspace" type="string">gray</param>
-
-        <!-- Filter for better preprocessing -->
-        <param name="filter" type="string">triangle</param>
-
-        <!-- Resize images if too large (max dimension in pixels) -->
-        <param name="resize" type="int">900</param>
-
-        <!-- Apply image processing enhancements -->
-        <param name="applyRotation" type="bool">true</param>
-      </params>
+    <parser class="org.apache.tika.parser.DefaultParser">
+      <parser-exclude class="org.apache.tika.parser.ocr.TesseractOCRParser"/>
     </parser>
 
-    <!-- PDF Parser with OCR support -->
+    <!-- PDF Parser with OCR support 
+      - https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=109454066#PDFParser(ApachePDFBox)-OCR 
+      - https://cwiki.apache.org/confluence/display/tika/TikaOCR#TikaOCR-OCRandPDFs
+    -->
     <parser class="org.apache.tika.parser.pdf.PDFParser">
       <params>
         <!-- Auto: use OCR only when needed -->
-        <param name="ocrStrategy" type="string">auto</param>
-        <param name="extractInlineImages" type="bool">true</param>
-        <param name="extractFontNames" type="bool">true</param>
-        <!-- Prevent OOM on large PDFs -->
+        <param name="ocrStrategy" type="string">no_ocr</param>
+        <param name="extractInlineImages" type="bool">false</param>
+        <param name="extractFontNames" type="bool">false</param>
+        <!-- Prevent OOM on large PDFs - 512M -->
         <param name="maxMainMemoryBytes" type="long">536870912</param>
       </params>
     </parser>
@@ -65,5 +36,14 @@
 
   <!-- Enable language detection -->
   <detector class="org.apache.tika.langdetect.optimaize.OptimaizeLangDetector"/>
+
+  <!-- Configure thread pool for async parsing -->
+  <executorService>
+    <corePoolSize>1</corePoolSize>
+    <maximumPoolSize>1</maximumPoolSize>
+    <keepAliveTime>60</keepAliveTime>
+    <max-threads>1</max-threads>
+    <core-threads>1</core-threads>
+  </executorService>
 
 </properties>

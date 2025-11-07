@@ -15,6 +15,7 @@ RUN apt-get update && \
         libpq-dev \
         postgresql-client \
         binutils \
+        imagemagick \
         # Install fonts for better CJK support
         fonts-noto-cjk \
         fonts-noto-color-emoji && \
@@ -85,6 +86,7 @@ RUN apt-get update && \
         libpq-dev \
         postgresql-client \
         binutils \
+        imagemagick \
         # Install fonts for better CJK support
         fonts-noto-cjk \
         fonts-noto-color-emoji && \

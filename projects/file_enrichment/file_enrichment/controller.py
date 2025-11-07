@@ -53,8 +53,7 @@ async def lifespan(app: FastAPI):
 
     setup_debug_signals()
 
-    loop = asyncio.get_running_loop()
-    set_fastapi_loop(loop)
+    set_fastapi_loop(asyncio.get_running_loop())
 
     async with DaprClient() as dapr_client:
         global_vars.asyncpg_pool = await create_connection_pool(dapr_client)
@@ -64,7 +63,7 @@ async def lifespan(app: FastAPI):
         dpapi_manager = NemesisDpapiManager(
             storage_backend=global_vars.asyncpg_pool,
             auto_decrypt=True,
-            publisher=DaprDpapiEventPublisher(dapr_client, loop=loop),
+            publisher=DaprDpapiEventPublisher(dapr_client),
         )
         await dpapi_manager.__aenter__()
         app.state.dpapi_manager = dpapi_manager

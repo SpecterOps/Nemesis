@@ -143,11 +143,10 @@ class InMemoryPublisher(DpapiEventPublisher):
 class DaprDpapiEventPublisher(DpapiEventPublisher):
     """DPAPI event publisher using Dapr pub/sub."""
 
-    def __init__(self, dapr_client: DaprClient, loop: asyncio.AbstractEventLoop | None = None):
+    def __init__(self, dapr_client: DaprClient):
         self._dapr_client = dapr_client
         self._observers: list[DpapiObserver] = []
         self._background_task = None
-        self._loop = loop if loop else asyncio.get_running_loop()
 
     async def register_subscriber(self, observer: DpapiObserver) -> None:
         """Attach an observer and start the Dapr subscription if not already started."""

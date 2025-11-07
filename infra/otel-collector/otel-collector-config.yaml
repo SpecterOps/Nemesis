@@ -1,5 +1,10 @@
 # Documentation: https://opentelemetry.io/docs/collector/configuration/
 
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+    path: "/health"
+
 # Defines ingestion points for traces
 receivers:
   otlp:
@@ -12,35 +17,54 @@ receivers:
 
 # Defines where to send traces
 exporters:
-  prometheus:
-    endpoint: "0.0.0.0:8889"
+  # debug: {}
 
-  debug: {}
-
-  otlp:
+  otlp/jaeger:
     endpoint: "jaeger:4317"
     tls:
       insecure: true
       insecure_skip_verify: true
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 20000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
     
   # file:
   #   path: /tmp/otel-collector.json
 
 processors:
+  # prevents the collector from dying if Jaeger stalls
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  # send smaller, more frequent batches to Jaeger
   batch:
+    timeout: 5s
+    send_batch_size: 512
+    send_batch_max_size: 1024
 
 service:
+  extensions: [health_check]
+
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [debug, otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/jaeger]
+      # exporters: [debug, otlp]
+
+  telemetry:
     metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [debug, prometheus]
-    logs:
-      receivers: [otlp]
-      processors: []
-      exporters: [debug]
-      # exporters: [debug, file]
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: '0.0.0.0'
+                port: 8888

@@ -261,14 +261,9 @@ async def store_dotnet_results(
         async with global_vars.asyncpg_pool.acquire() as conn:
             async with conn.transaction():
                 # Update workflow success status first
-                await conn.execute(
-                    """
-                    UPDATE workflows
-                    SET enrichments_success = array_append(enrichments_success, $1)
-                    WHERE object_id = $2
-                    """,
-                    "dotnet_service",
-                    object_id,
+                await global_vars.workflow_manager.tracking_service.update_enrichment_results_by_object_id(
+                    object_id=object_id,
+                    success_list=["dotnet_service"],
                 )
 
                 # Store main enrichment result

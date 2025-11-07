@@ -31,12 +31,9 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict) -> N
 
     logger.info("Executing activity: get_basic_analysis", object_id=object_id)
 
-    await global_vars.workflow_manager.tracking_service.update_status(instance_id=ctx.workflow_id, status="RUNNING")
-
     with global_vars.storage.download(object_id) as file:
         file_enriched_dict = process_basic_analysis(file.name, file_dict)
         await save_file_enriched_to_db(file_enriched_dict)
-        # return file_enriched_dict
 
 
 def parse_timestamp(ts):

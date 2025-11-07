@@ -4,12 +4,12 @@ import tempfile
 import threading
 from pathlib import Path
 
-from presidio_analyzer import AnalyzerEngine
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
+from presidio_analyzer import AnalyzerEngine
 
 logger = get_logger(__name__)
 
