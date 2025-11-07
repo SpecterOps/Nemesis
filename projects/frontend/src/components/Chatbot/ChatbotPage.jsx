@@ -1,9 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Send, Trash2, Settings as SettingsIcon, AlertCircle } from 'lucide-react';
+import { AlertCircle, Bot, Send, Settings as SettingsIcon, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import ExampleQueries from './ExampleQueries';
 import MessageBubble from './MessageBubble';
 
 const MESSAGES_STORAGE_KEY = 'chatbot_messages';
+const TOKEN_WARNING_THRESHOLD = 50000;
+
+// Rough token estimation: ~4 characters per token
+const estimateTokens = (text) => {
+  return Math.ceil(text.length / 4);
+};
 
 const ChatbotPage = () => {
   const [messages, setMessages] = useState(() => {
@@ -26,6 +32,8 @@ const ChatbotPage = () => {
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState(null);
   const [spendData, setSpendData] = useState(null);
+  const [showTokenWarning, setShowTokenWarning] = useState(false);
+  const [estimatedTokens, setEstimatedTokens] = useState(0);
 
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -70,6 +78,17 @@ const ChatbotPage = () => {
   useEffect(() => {
     fetchSpendData();
   }, []);
+
+  // Calculate token usage and show warning if needed
+  useEffect(() => {
+    const totalText = messages.map(m => m.content).join(' ');
+    const tokens = estimateTokens(totalText);
+    setEstimatedTokens(tokens);
+
+    if (tokens > TOKEN_WARNING_THRESHOLD && !showTokenWarning) {
+      setShowTokenWarning(true);
+    }
+  }, [messages]);
 
   const fetchSpendData = async () => {
     try {
@@ -265,6 +284,7 @@ const ChatbotPage = () => {
     if (window.confirm('Clear all conversation history?')) {
       setMessages([]);
       setError(null);
+      setShowTokenWarning(false);
       // Clear from localStorage as well
       try {
         localStorage.removeItem(MESSAGES_STORAGE_KEY);
@@ -317,11 +337,10 @@ const ChatbotPage = () => {
           {/* Settings Toggle */}
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-lg transition-colors ${
-              showSettings
-                ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
-                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
-            }`}
+            className={`p-2 rounded-lg transition-colors ${showSettings
+              ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
+              : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+              }`}
             title="Settings"
           >
             <SettingsIcon className="w-5 h-5" />
@@ -370,14 +389,12 @@ const ChatbotPage = () => {
               <span className="text-sm text-gray-600 dark:text-gray-400">Use Conversation History</span>
               <button
                 onClick={() => setUseHistory(!useHistory)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  useHistory ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-                }`}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${useHistory ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
               >
                 <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    useHistory ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${useHistory ? 'translate-x-6' : 'translate-x-1'
+                    }`}
                 />
               </button>
             </div>
@@ -422,6 +439,26 @@ const ChatbotPage = () => {
 
       {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
+        {/* Token Warning */}
+        {showTokenWarning && (
+          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start space-x-2">
+            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                <strong>High token usage detected:</strong> Your conversation history is getting long (~{estimatedTokens.toLocaleString()} tokens)
+                and consuming significant LLM resources. Consider clicking "Clear History" to reset and reduce costs.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowTokenWarning(false)}
+              className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200"
+              title="Dismiss warning"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
         {/* Error Display */}
         {error && (
           <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-2">
