@@ -222,7 +222,7 @@ const ChatbotPage = () => {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3rem)] max-w-6xl mx-auto px-4 pt-4 pb-0">
+    <div className="flex flex-col h-[calc(100vh-1rem)] max-w-6xl mx-auto px-4 pt-4 pb-2">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-3">
