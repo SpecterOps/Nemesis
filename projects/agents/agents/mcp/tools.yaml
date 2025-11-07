@@ -448,3 +448,54 @@ tools:
         AND ($2::text IS NULL OR LOWER(origin_url) LIKE LOWER('%' || $2 || '%'))
       ORDER BY times_used DESC, date_last_used DESC NULLS LAST
       LIMIT LEAST(COALESCE($3, 100), 1000)
+
+  # PLAINTEXT CONTENT searches
+  search-document-content:
+    kind: postgres-sql
+    source: chatbot-db
+    description: Full-text search through plaintext content chunks of files. Returns the first matching chunk from each file.
+    parameters:
+      - name: search_query
+        type: string
+        description: Text to search for in document content (full-text search)
+      - name: path_pattern
+        type: string
+        required: false
+        description: Filter by file path pattern using LIKE (e.g., '%folder%', optional)
+      - name: agent_pattern
+        type: string
+        required: false
+        description: Filter by agent ID pattern using LIKE (optional)
+      - name: project_name
+        type: string
+        required: false
+        description: Filter by exact project name (optional)
+      - name: start_date
+        type: string
+        required: false
+        description: Filter files from this date onwards in ISO format (e.g., '2024-01-01', optional)
+      - name: end_date
+        type: string
+        required: false
+        description: Filter files up to this date in ISO format (e.g., '2024-12-31', optional)
+      - name: max_results
+        type: integer
+        required: false
+        description: Maximum number of results (default 100, max 1000)
+      - name: source_pattern
+        type: string
+        required: false
+        description: Filter by source pattern using LIKE (optional)
+    statement: |
+      SELECT object_id, chunk_number, content, file_name, path, extension,
+             project, agent_id, source, timestamp
+      FROM public.search_documents(
+        $1,
+        $2,
+        $3,
+        $4,
+        $5::timestamp with time zone,
+        $6::timestamp with time zone,
+        COALESCE($7, 100),
+        $8
+      )
