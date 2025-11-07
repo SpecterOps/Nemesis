@@ -49,8 +49,6 @@ class FileCache {
     this.cache.delete(key);
     this.cache.set(key, entry);
 
-    console.log('[FileCache] Cache hit:', key);
-
     // Create a new Response from the stored blob to avoid body stream issues
     const blob = entry.blob;
     return new Response(blob, {

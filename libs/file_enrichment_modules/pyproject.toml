@@ -21,6 +21,8 @@ chromium = { path = "../chromium", develop = true }
 lnkparse3 = "^1.5.0"
 dapr = "1.16.0"
 pymupdf = "^1.26.6"
+presidio-analyzer = "^2.2.358"
+spacy = "^3.8.3"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"
