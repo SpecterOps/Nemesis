@@ -1059,6 +1059,13 @@ services:
       rabbitmq: { condition: service_healthy }
       hasura: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp.rule=PathPrefix(`/mcp`)"
+      - "traefik.http.services.mcp.loadbalancer.server.port=5000"
+      - "traefik.http.routers.mcp.entrypoints=websecure"
+      - "traefik.http.routers.mcp.tls=true"
+      - "traefik.http.routers.mcp.middlewares=auth"
   agents-dapr:
     profiles: ["llm"]
     image: "daprio/daprd:1.16.2"

@@ -114,6 +114,15 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(handle_findings_subscription())
         logger.debug("Started findings subscription handler")
 
+        # Start MCP server for chatbot
+        try:
+            from agents.tasks.chatbot import get_chatbot_agent
+            chatbot_agent = get_chatbot_agent()
+            await chatbot_agent.start_mcp_server()
+            logger.info("MCP server started successfully")
+        except Exception as e:
+            logger.warning("Failed to start MCP server (this is optional)", error=str(e))
+
     except Exception:
         logger.exception(message="Error initializing service")
         raise
@@ -123,6 +132,15 @@ async def lifespan(app: FastAPI):
     # Cleanup on shutdown
     try:
         logger.info("Starting service shutdown cleanup")
+
+        # Stop MCP server
+        try:
+            from agents.tasks.chatbot import get_chatbot_agent
+            chatbot_agent = get_chatbot_agent()
+            await chatbot_agent.stop_mcp_server()
+            logger.info("MCP server stopped")
+        except Exception as e:
+            logger.warning("Error stopping MCP server", error=str(e))
 
         # PromptManager cleanup no longer needed with sync operations
 

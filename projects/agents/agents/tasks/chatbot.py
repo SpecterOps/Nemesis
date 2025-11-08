@@ -144,11 +144,11 @@ This order ensures you check the most relevant credential sources first before f
             # Get database connection string for chatbot readonly user
             db_url = self._get_chatbot_connection_string()
 
-            # Start genai-toolbox HTTP server (default port 5000)
+            # Start genai-toolbox HTTP server on 0.0.0.0:5000 to accept connections from Traefik
             logger.info("Starting genai-toolbox MCP HTTP server", tools_file=str(tools_file))
 
             self.mcp_process = subprocess.Popen(
-                ["genai-toolbox", "--tools-file", str(tools_file)],
+                ["genai-toolbox", "--tools-file", str(tools_file), "--address", "0.0.0.0"],
                 env={**os.environ, "DATABASE_URL": db_url},
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -158,13 +158,15 @@ This order ensures you check the most relevant credential sources first before f
             await asyncio.sleep(2)
 
             if self.mcp_process.poll() is not None:
+                stdout = self.mcp_process.stdout.read().decode() if self.mcp_process.stdout else ""
                 stderr = self.mcp_process.stderr.read().decode() if self.mcp_process.stderr else ""
                 # If it failed due to address in use, that's actually okay
                 if "address already in use" in stderr.lower():
                     logger.info("MCP server already running (address in use)")
                     self.mcp_process = None
                     return
-                raise RuntimeError(f"MCP server failed to start: {stderr}")
+                logger.error("MCP server startup failed", stdout=stdout, stderr=stderr, return_code=self.mcp_process.returncode)
+                raise RuntimeError(f"MCP server failed to start - return code: {self.mcp_process.returncode}, stderr: {stderr}, stdout: {stdout}")
 
             logger.info("MCP HTTP server started successfully on http://127.0.0.1:5000/mcp")
 
