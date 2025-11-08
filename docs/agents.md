@@ -14,6 +14,7 @@ Nemesis currently has the following agents:
 | `Text Summarizer`        | false              | Creates concise summaries of text content using LLM analysis                                       |
 | `Text Translator`        | false              | Uses an LLM to translate a document to a target language.                                          |
 | `Report Generator`       | false              | Uses an LLM to translate a document to a target language.                                          |
+| `Chatbot`                | false              | Allows LLM-powered chat over Nemesis data via the "Chatbot" icon on the left nav bar               |
 
 ## Setup
 
@@ -72,6 +73,29 @@ Almost the same as the text summarizer, the Translator agent can be manually tri
 ### Report Generator
 
 The Report Generator agent used in the [Reporting](./reporting.md) interface to synthesize various statistical and finding details for a particular host, or the entire system, into a LLM-driven report.
+
+### Chatbot
+
+The Chatbot agent powers the "Chatbot" icon in the left navigation panel. This allows operators to chat over Nemesis data, powered by a Postgres MCP server and [custom query functions](https://github.com/SpecterOps/Nemesis/blob/main/projects/agents/agents/mcp/tools.yaml).
+
+![Nemesis Chatbot](images/nemesis_chatbot.png)
+
+#### MCP
+
+Additionally, the MCP used by the Chatbot is exposed over the `/mcp` route in the main Nemesis interface. For demonstration purposes, a bridge is at [./tools/mcp_bridge.py](https://github.com/SpecterOps/Nemesis/blob/main/tools/mcp_bridge.py) and can be used with Claude Desktop with the following config:
+
+```json
+{
+  "mcpServers": {
+    "nemesis": {
+      "command": "python3",
+      "args": ["/Users/User/path/to/Nemesis/tools/mcp_bridge.py"]
+    }
+  }
+}
+```
+
+**Note:** modify the credentials in the [./tools/mcp_bridge.py](https://github.com/SpecterOps/Nemesis/blob/main/tools/mcp_bridge.py) file to match your credentials!
 
 ## The Nemesis Web Interface
 
