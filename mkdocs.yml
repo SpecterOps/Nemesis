@@ -22,6 +22,7 @@ nav:
     - cli.md
     - containers.md
     - agents.md
+    - chatbot.md
     - troubleshooting.md
     - performance.md
     - yara.md
