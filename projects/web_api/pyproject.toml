@@ -26,6 +26,7 @@ watchdog = "^6.0.0"
 pyyaml = "^6.0.2"
 jinja2 = "^3.1.6"
 markdown = "^3.9"
+httpx = "^0.28.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.2"

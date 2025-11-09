@@ -1119,6 +1119,47 @@
         }
       }
     },
+    "/chatbot/stream": {
+      "post": {
+        "tags": [
+          "chatbot"
+        ],
+        "summary": "Stream chatbot responses",
+        "description": "Stream interactive chatbot responses for querying Nemesis data",
+        "operationId": "chatbot_stream_chatbot_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatbotRequest",
+                "description": "Chatbot request with message and conversation history"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/available-services": {
       "get": {
         "tags": [
@@ -1914,6 +1955,57 @@
           "metadata"
         ],
         "title": "Body_upload_file_files_post"
+      },
+      "ChatbotMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatbotMessage",
+        "description": "A single chat message."
+      },
+      "ChatbotRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ChatbotMessage"
+            },
+            "type": "array",
+            "title": "History",
+            "default": []
+          },
+          "use_history": {
+            "type": "boolean",
+            "title": "Use History",
+            "default": true
+          },
+          "temperature": {
+            "type": "number",
+            "title": "Temperature",
+            "default": 0.7
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatbotRequest",
+        "description": "Request model for chatbot queries."
       },
       "ChromiumAppBoundKeyCredential": {
         "properties": {
