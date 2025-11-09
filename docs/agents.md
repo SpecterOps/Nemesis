@@ -26,7 +26,7 @@ In order to enable any LLM-powered agents, you first need to configure one or mo
 
 Agent settings/prompts can be viewed and modified in the `Settings` tab on the left, in the "Agents Configuration" section. This includes the LLM usage statistics for all LLM usage across Nemesis:
 
-[Nemesis Agents Configuration](./images/nemesis_agents_configuration.png)
+![Nemesis Agents Configuration](./images/nemesis_agents_configuration.png)
 
 You can modify agent system prompts by clicking "Edit", making your changes to the prompt, and clicking "Save":
 
