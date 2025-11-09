@@ -22,6 +22,16 @@ In order to enable any LLM-powered agents, you first need to configure one or mo
 
 ***Note:*** service keys/tokens/etc. should be configured in your .env file and can be used in `./infra/litellm/config.yaml` as demonstrated in the current config file.
 
+## Agent Settings
+
+Agent settings/prompts can be viewed and modified in the `Settings` tab on the left, in the "Agents Configuration" section. This includes the LLM usage statistics for all LLM usage across Nemesis:
+
+[Nemesis Agents Configuration](./images/nemesis_agents_configuration.png)
+
+You can modify agent system prompts by clicking "Edit", making your changes to the prompt, and clicking "Save":
+
+![Agents Web Interface Prompts](images/nemesis_dashboard_agents_prompt.png)
+
 ## Agent Details
 
 ### Finding Validator
@@ -80,34 +90,7 @@ The Chatbot agent powers the "Chatbot" icon in the left navigation panel. This a
 
 ![Nemesis Chatbot](images/nemesis_chatbot.png)
 
-#### MCP
-
-Additionally, the MCP used by the Chatbot is exposed over the `/mcp` route in the main Nemesis interface. For demonstration purposes, a bridge is at [./tools/mcp_bridge.py](https://github.com/SpecterOps/Nemesis/blob/main/tools/mcp_bridge.py) and can be used with Claude Desktop with the following config:
-
-```json
-{
-  "mcpServers": {
-    "nemesis": {
-      "command": "python3",
-      "args": ["/Users/User/path/to/Nemesis/tools/mcp_bridge.py"]
-    }
-  }
-}
-```
-
-**Note:** modify the credentials in the [./tools/mcp_bridge.py](https://github.com/SpecterOps/Nemesis/blob/main/tools/mcp_bridge.py) file to match your credentials!
-
 ## The Nemesis Web Interface
-
-### Agents Web Interface
-
-If the llm profile is used, the Nemesis frontend will detect that LiteLLM was deployed and enable a new "Agents" tab on the left. Clicking on this tab will show you the currently enabled agents, as well as the current token and cost spend for the system:
-
-![Agents Web Interface](images/nemesis_dashboard_agents.png)
-
-For LLM-powered agents, you can modify the main system prompt used by clicking "Edit", making your changes to the prompt, and clicking "Save":
-
-![Agents Web Interface Prompts](images/nemesis_dashboard_agents_prompt.png)
 
 ### Monitoring
 

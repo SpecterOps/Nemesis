@@ -20,7 +20,7 @@ Nemesis currently analyzes and manages the following DPAPI data sources:
 
 ### DPAPI Data Viewer
 
-The Nemesis frontend provides a dedicated DPAPI interface accessible through the main navigation. This interface organizes all DPAPI-related functionality into three main categories:
+The Nemesis frontend provides a dedicated DPAPI interface accessible through the `Chrome/DPAPI` navigation button on the left. This interface organizes all DPAPI-related functionality into three main categories:
 
 ### Master Keys Tab
 
