@@ -1,5 +1,7 @@
 """Global variables for document_conversion service."""
 
+import asyncio
+
 import asyncpg
 from common.workflows.tracking_service import WorkflowTrackingService
 from dapr.ext.workflow import DaprWorkflowClient
@@ -9,3 +11,4 @@ asyncpg_pool: asyncpg.Pool = None
 gotenberg_url: str = None
 workflow_client: DaprWorkflowClient = None
 tracking_service: WorkflowTrackingService = None
+workflow_purger_task: asyncio.Task = None

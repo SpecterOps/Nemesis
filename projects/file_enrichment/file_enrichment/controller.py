@@ -15,11 +15,12 @@ from common.queues import (
     NOSEYPARKER_PUBSUB,
 )
 from common.workflows.setup import set_fastapi_loop
+from common.workflows.tracking_service import WorkflowTrackingService
+from common.workflows.workflow_purger import WorkflowPurger
 from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI
 from file_enrichment.postgres_notifications import postgres_notify_listener
-from file_enrichment.workflow_recovery import recover_interrupted_workflows
 from file_linking import FileLinkingEngine
 from nemesis_dpapi import DpapiManager as NemesisDpapiManager
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
@@ -41,6 +42,33 @@ max_workflow_execution_time = int(
 )  # maximum time (in seconds) until a workflow is killed
 
 logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}")
+
+# Workflow purge interval in seconds
+workflow_purge_interval = int(os.getenv("WORKFLOW_PURGE_INTERVAL_SECONDS", "30"))
+
+
+async def workflow_purger_loop(workflow_purger: WorkflowPurger, interval_seconds: int):
+    """Background task that periodically purges completed workflows.
+
+    Args:
+        workflow_purger: WorkflowPurger instance
+        interval_seconds: Interval between purge cycles in seconds
+    """
+    logger.info(
+        "Starting workflow purger background task",
+        interval_seconds=interval_seconds,
+    )
+
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+            stats = await workflow_purger.run_purge_cycle()
+            logger.debug("Workflow purge cycle completed", **stats)
+        except asyncio.CancelledError:
+            logger.info("Workflow purger task cancelled")
+            raise
+        except Exception:
+            logger.exception(message="Error in workflow purger loop")
 
 
 # Global tracking for bulk enrichment processes
@@ -71,10 +99,26 @@ async def lifespan(app: FastAPI):
         # Initialize workflow runtime and modules
         global_vars.module_execution_order = await initialize_workflow_runtime(dpapi_manager)
 
+        # Initialize workflow tracking service as a global variable
+        global_vars.tracking_service = WorkflowTrackingService(
+            name="file_enrichment",
+            pool=global_vars.asyncpg_pool,
+            workflow_client=global_vars.workflow_client,
+        )
+
+        # Initialize workflow purger using the sync workflow_client from global_vars
+        workflow_purger = WorkflowPurger(
+            name="file_enrichment",
+            db_pool=global_vars.asyncpg_pool,
+            workflow_client=global_vars.workflow_client,
+        )
+        logger.info("Workflow purger initialized")
+
         try:
             # Use async context manager for WorkflowManager
             async with WorkflowManager(
-                pool=global_vars.asyncpg_pool, max_execution_time=max_workflow_execution_time
+                pool=global_vars.asyncpg_pool,
+                max_execution_time=max_workflow_execution_time,
             ) as wf_manager:
                 global_vars.workflow_manager = wf_manager
 
@@ -91,12 +135,18 @@ async def lifespan(app: FastAPI):
                     )
                     logger.info("Started masterkey watcher task")
 
+                    # Start workflow purger in background
+                    global_vars.workflow_purger_task = asyncio.create_task(
+                        workflow_purger_loop(workflow_purger, workflow_purge_interval)
+                    )
+                    logger.info(
+                        "Started workflow purger task",
+                        interval_seconds=workflow_purge_interval,
+                    )
+
                     # Start file processing workers
                     start_workers()
                     logger.info("Started file processing workers")
-
-                    # Recover any interrupted workflows before starting normal processing
-                    await recover_interrupted_workflows(global_vars.asyncpg_pool)
 
                     logger.info(
                         "Workflow runtime initialized",
@@ -138,6 +188,16 @@ async def lifespan(app: FastAPI):
                             await global_vars.postgres_notify_listener_task
                         except asyncio.CancelledError:
                             logger.info("PostgreSQL NOTIFY listener cancelled")
+
+                    # Cancel workflow purger task
+                    if hasattr(global_vars, "workflow_purger_task") and global_vars.workflow_purger_task:
+                        if not global_vars.workflow_purger_task.done():
+                            logger.info("Cancelling workflow purger task...")
+                            global_vars.workflow_purger_task.cancel()
+                            try:
+                                await global_vars.workflow_purger_task
+                            except asyncio.CancelledError:
+                                logger.info("Workflow purger task cancelled")
 
                     if wf_runtime:
                         wf_runtime.shutdown()

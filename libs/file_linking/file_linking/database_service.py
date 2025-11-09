@@ -43,38 +43,32 @@ class FileLinkingDatabaseService:
         """
         if source and path:
             try:
-                # Use ON CONFLICT DO NOTHING to avoid deadlocks, then do a separate UPDATE if needed
-                # This prevents concurrent transactions from waiting on each other
-                insert_query = """
+                # Use single upsert query for better performance
+                # UPDATE only executes on actual conflicts, not on every call
+                upsert_query = """
                     INSERT INTO file_listings (source, path, object_id, status)
                     VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (source, path_lower) DO NOTHING
-                """
-
-                update_query = """
-                    UPDATE file_listings
-                    SET object_id = CASE
-                            WHEN status = 'collected' THEN object_id
-                            ELSE $3
+                    ON CONFLICT (source, path_lower)
+                    DO UPDATE SET
+                        object_id = CASE
+                            WHEN file_listings.status = 'collected' THEN file_listings.object_id
+                            ELSE EXCLUDED.object_id
                         END,
                         status = CASE
-                            WHEN status = 'collected' THEN status
-                            ELSE $4
+                            WHEN file_listings.status = 'collected' THEN file_listings.status
+                            ELSE EXCLUDED.status
                         END,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE source = $1 AND LOWER(path) = LOWER($2)
-                    AND (status != 'collected' OR $4 = 'collected')
+                    WHERE file_listings.status != 'collected' OR EXCLUDED.status = 'collected'
                 """
 
                 if conn:
                     # Use provided connection (part of transaction)
-                    await conn.execute(insert_query, source, path, object_id, status.value)
-                    await conn.execute(update_query, source, path, object_id, status.value)
+                    await conn.execute(upsert_query, source, path, object_id, status.value)
                 else:
                     # Acquire new connection
                     async with self.pool.acquire() as conn:
-                        await conn.execute(insert_query, source, path, object_id, status.value)
-                        await conn.execute(update_query, source, path, object_id, status.value)
+                        await conn.execute(upsert_query, source, path, object_id, status.value)
 
                 logger.debug(
                     "Added/updated file listing",
@@ -111,29 +105,24 @@ class FileLinkingDatabaseService:
         """
         if source and file_path_1 and file_path_2:
             try:
-                # Use ON CONFLICT DO NOTHING to avoid deadlocks, then do a separate UPDATE
-                insert_query = """
+                # Use single upsert query for better performance
+                # UPDATE only executes on actual conflicts, not on every call
+                upsert_query = """
                     INSERT INTO file_linkings (source, file_path_1, file_path_2, link_type)
                     VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (source, file_path_1, file_path_2) DO NOTHING
-                """
-
-                update_query = """
-                    UPDATE file_linkings
-                    SET link_type = $4,
+                    ON CONFLICT (source, file_path_1, file_path_2)
+                    DO UPDATE SET
+                        link_type = EXCLUDED.link_type,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE source = $1 AND file_path_1 = $2 AND file_path_2 = $3
                 """
 
                 if conn:
                     # Use provided connection (part of transaction)
-                    await conn.execute(insert_query, source, file_path_1, file_path_2, link_type)
-                    await conn.execute(update_query, source, file_path_1, file_path_2, link_type)
+                    await conn.execute(upsert_query, source, file_path_1, file_path_2, link_type)
                 else:
                     # Acquire new connection
                     async with self.pool.acquire() as conn:
-                        await conn.execute(insert_query, source, file_path_1, file_path_2, link_type)
-                        await conn.execute(update_query, source, file_path_1, file_path_2, link_type)
+                        await conn.execute(upsert_query, source, file_path_1, file_path_2, link_type)
 
                 logger.debug(
                     "Added file linking",

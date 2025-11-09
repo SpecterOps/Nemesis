@@ -1,6 +1,5 @@
 # src/workflow/workflow.py
 import asyncio
-from datetime import datetime
 
 import dapr.ext.workflow as wf
 from common.logger import get_logger
@@ -189,7 +188,7 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
             yield ctx.call_activity(
                 finalize_workflow_failure,
                 input={
-                    "error_message": str(e)[:200],
+                    "error_message": str(e)[:400],
                     "start_time": start_time.isoformat(),
                 },
             )

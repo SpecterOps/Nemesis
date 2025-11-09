@@ -5,6 +5,7 @@ import asyncpg
 import dapr.ext.workflow as wf
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL
 from common.storage import StorageMinio
+from common.workflows.tracking_service import WorkflowTrackingService
 from dapr.ext.workflow.logger.options import LoggerOptions
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking import FileLinkingEngine
@@ -35,6 +36,8 @@ file_linking_engine: FileLinkingEngine = None
 
 module_execution_order: list[str] = []
 workflow_manager: WorkflowManager = None
+tracking_service: WorkflowTrackingService = None  # Workflow tracking service for monitoring workflow state
 
 postgres_notify_listener_task = None
 background_dpapi_task = None
+workflow_purger_task = None

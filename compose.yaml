@@ -519,6 +519,7 @@ services:
       ]
     volumes:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
+      - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
@@ -735,7 +736,13 @@ services:
   postgres:
     image: postgres:17.6-alpine
     command:
-      ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
+      [
+        "postgres",
+        "-c", "max_connections=200",
+        "-c", "shared_buffers=256MB",
+        "-c", "shared_preload_libraries=pg_stat_statements",
+        "-c", "pg_stat_statements.track=all"
+      ]
     ports:
       - "5432:5432"
     environment:

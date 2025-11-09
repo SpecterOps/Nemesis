@@ -31,7 +31,7 @@ async def bulk_enrichment_subscription_handler(event: CloudEvent[BulkEnrichmentE
         )
 
         # This will block if we're at max capacity, providing natural backpressure
-        await global_vars.workflow_manager.start_workflow_single_enrichment(workflow_input)
+        await global_vars.workflow_manager.run_single_enrichment_workflow(workflow_input)
 
     except Exception:
         logger.exception("Error processing bulk enrichment task")

@@ -5,10 +5,10 @@ RUN apk add --no-cache wget
 
 WORKDIR /app
 
-COPY package.json ./
+COPY package.json package-lock.json ./
 
-# Generate package-lock.json and install dependencies
-RUN npm install
+# Install dependencies
+RUN npm ci
 COPY . .
 
 # Note: version.json will be mounted as a volume in dev or copied during CI build

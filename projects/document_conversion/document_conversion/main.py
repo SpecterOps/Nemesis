@@ -11,6 +11,7 @@ from common.db import get_postgres_connection_str
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, get_logger
 from common.queues import DOCUMENT_CONVERSION_INPUT_TOPIC, DOCUMENT_CONVERSION_PUBSUB
 from common.workflows.setup import set_fastapi_loop, wf_runtime
+from common.workflows.workflow_purger import WorkflowPurger
 from dapr.ext.fastapi import DaprApp
 from dapr.ext.workflow import DaprWorkflowClient
 from dapr.ext.workflow.logger.options import LoggerOptions
@@ -30,6 +31,33 @@ logger.info(f"max_parallel_workflows: {max_parallel_workflows}")
 logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}")
 
 postgres_connection_string = get_postgres_connection_str()
+
+# Workflow purge interval in seconds
+workflow_purge_interval = int(os.getenv("WORKFLOW_PURGE_INTERVAL_SECONDS", "30"))
+
+
+async def workflow_purger_loop(workflow_purger: WorkflowPurger, interval_seconds: int):
+    """Background task that periodically purges completed workflows.
+
+    Args:
+        workflow_purger: WorkflowPurger instance
+        interval_seconds: Interval between purge cycles in seconds
+    """
+    logger.info(
+        "Starting workflow purger background task",
+        interval_seconds=interval_seconds,
+    )
+
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+            stats = await workflow_purger.run_purge_cycle()
+            logger.debug("Workflow purge cycle completed", **stats)
+        except asyncio.CancelledError:
+            logger.info("Workflow purger task cancelled")
+            raise
+        except Exception:
+            logger.exception(message="Error in workflow purger loop")
 
 
 @asynccontextmanager
@@ -65,9 +93,26 @@ async def lifespan(app: FastAPI):
         from common.workflows.tracking_service import WorkflowTrackingService
 
         global_vars.tracking_service = WorkflowTrackingService(
+            name="document_conversion",
             pool=global_vars.asyncpg_pool,
             workflow_client=global_vars.workflow_client,
-            max_execution_time=max_workflow_execution_time,
+        )
+
+        # Initialize workflow purger
+        workflow_purger = WorkflowPurger(
+            name="document_conversion",
+            db_pool=global_vars.asyncpg_pool,
+            workflow_client=global_vars.workflow_client,
+        )
+        logger.info("Workflow purger initialized")
+
+        # Start workflow purger in background
+        global_vars.workflow_purger_task = asyncio.create_task(
+            workflow_purger_loop(workflow_purger, workflow_purge_interval)
+        )
+        logger.info(
+            "Started workflow purger task",
+            interval_seconds=workflow_purge_interval,
         )
 
         logger.info("Document conversion service initialized successfully")
@@ -79,6 +124,16 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
+    # Cancel workflow purger task
+    if hasattr(global_vars, "workflow_purger_task") and global_vars.workflow_purger_task:
+        if not global_vars.workflow_purger_task.done():
+            logger.info("Cancelling workflow purger task...")
+            global_vars.workflow_purger_task.cancel()
+            try:
+                await global_vars.workflow_purger_task
+            except asyncio.CancelledError:
+                logger.info("Workflow purger task cancelled")
+
     if global_vars.asyncpg_pool:
         await global_vars.asyncpg_pool.close()
         logger.info("Database pool closed")
