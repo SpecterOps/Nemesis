@@ -367,14 +367,6 @@ services:
     depends_on: [postgres, hasura]
     environment:
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
-    command: >
-      sh -c "
-        if [ -f /version.json ]; then cp /version.json /app/public/version.json; fi &&
-        SECRET=\"$$HASURA_ADMIN_SECRET\" &&
-        echo \"window.ENV = { HASURA_ADMIN_SECRET: '$$SECRET' };\" > /app/public/env.js &&
-        cd /app &&
-        npm run dev
-      "
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
       interval: 10s
