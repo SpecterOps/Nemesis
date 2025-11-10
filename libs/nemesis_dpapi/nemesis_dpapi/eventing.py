@@ -147,6 +147,7 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
         self._dapr_client = dapr_client
         self._observers: list[DpapiObserver] = []
         self._background_task = None
+        self._loop = asyncio.get_event_loop()
 
     async def register_subscriber(self, observer: DpapiObserver) -> None:
         """Attach an observer and start the Dapr subscription if not already started."""
