@@ -45,27 +45,43 @@ The main method for operators/analysts to interact with Nemesis data is through 
 
 ### Files
 
-One of the common tasks for the dashboard is file triage, accessible through the `Files` page on the left navigation bar:
+To analyze files in Nemesis, visit the `Files` page in the left navigation pane:
 
 ![Nemesis Dashboard Files View](images/nemesis-dashboard-files.png)
 
-As files are processed by Nemesis, they will appear as lines on this page. By default the files will be sorted newest to oldest, but this can be modified by clicking the "Newest First" button at the top which will switch it to showing the oldest first.
+As Nemesis processes files, they appear as a new row on this page. By default, Nemesis displays all uploaded files from newest to older. Clicking on column headers changes sorting behavior and the toolbar allows filtering the list in various ways.
 
-Likewise, the "(Findings) All Files" is the default (showing all files), but clicking shows just files with findings. The "Filter by path" text entry can be used to filter by file path/name/extension, and entries can be filtered by agent ID.
+Each file's path has a blue dot to the left of it indicating if you have viewed it or not. Clicking on the row will bring you to the [File Details](#file-details) page and marks the file as viewed by you. Returning to the Files page, the blue indicator dot won't be present anymore. To only show files you have not viewed yet, you can click the dropdown in the top left of the toolbar and select one of the following options:
 
-When clicking on a file entry, you will be brought to the [File Details](#file-details) page. After viewing a file, the entry will be hidden by default on the "Files" page - click the "Files Unviewed by Me" entry on the top left to view select "Unviewed Files" to show files not viewed by anyone (including you), or "All Files" to view all files regardless of view state:
+- `All Files` - Shows all files (the default).
+- `Files Unviewed by Me` - Shows only files that **you** have not analyzed yet.
+- `Unviewed Files` - Shows files that **nobody** has analyzed (including you). This is useful when triaging files as a team.
 
 ![Nemesis Dashboard File View State](images/nemesis-dashboard-files-view-state.png)
 
-Also, clicking any column will sort by that column's values.
+
+Some files may have findings associated with them. To show only files that have findings, click the "(Findings) All Files" button. 
+
+Use the "Filter by path" search box to filter files by path/name/extension. Similarly, you can use the "Filter by Agent ID" to filter files by agent ID.
+
+On the File Details page you can [view and add tags](#file-tags) to a file. The "Filter by Tag" button allows you to filter the file list to particular tags.
+
 
 #### File Triage Mode
 
-In the main files view, type `t` to enter file triage mode:
+File Triage Mode is very convenient when you want to quickly navigate and view/triage files and findings.
+To enter File Triage Mode, hit the `t` key on the Files page:
 
 ![Nemesis Dashboard File Triage Mode](images/nemesis-dashboard-files-triage-mode.png)
 
-As the instructions specify, Use ↑↓ to navigate. Use Shift+↑↓ to select multiple rows. Ctrl/Cmd+A to select all. 'v' to mark as viewed, or ESC to exit. Only the files currently showed by the specified filters you've applied will be marked as viewed. These files will then be hidden from the main triage pane.
+As the instructions specify at the top of the page, the following actions are possible:
+- `Up/down(↑↓) arrow` - Navigate up and down the list of files.
+- `Right(→) arrow` - Navigate to the [File Details](#file-details) page. Use `Left(←) arrow` to navigate back.
+- `Ctrl/Cmd + A` - Select all files on the current page.
+- `v` - Marks the selected/highlighted file(s) as viewed.
+- `t` or `ESC` - Exits triage mode. 
+- `Ctrl/Cmd + Mouse Click` - Select an individual file.
+- `Shift + Mouse Click` - Select multiple files.
 
 #### File Details
 

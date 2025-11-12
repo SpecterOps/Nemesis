@@ -126,6 +126,10 @@ services:
       - OUTPUT_TOPIC=noseyparker_output # Name of the output topic in Dapr
     volumes:
       - ./projects/noseyparker_scanner/custom_rules/:/opt/noseyparker:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
   noseyparker-scanner-dapr:
     image: "daprio/daprd:1.16.2"
     command:
