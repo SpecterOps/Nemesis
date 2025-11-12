@@ -20,12 +20,13 @@ nav:
     - enrichment_configuration.md
     - alerting.md
     - cli.md
-    - containers.md
     - agents.md
+    - chatbot.md
     - troubleshooting.md
-    - performance.md
     - yara.md
-    - chromium.md
+    - Chromium Analysis: chromium.md
+    - DPAPI Analysis: dpapi.md
+    - Container Processing: containers.md
     - reporting.md
 
   - Services:
@@ -35,6 +36,7 @@ nav:
     - housekeeping.md
 
   - Developer:
+    - Performance Tuning: performance.md
     - Adding File Enrichment Modules: file_enrichment_modules.md
     - Operational Data Reference: odr.md
     - Docker Compose Documentation: docker_compose.md

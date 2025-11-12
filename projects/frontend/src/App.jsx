@@ -9,17 +9,15 @@ import {
   FileSearch,
   FileText,
   FolderTree,
+  Globe,
   HelpCircle,
-  Key,
   LayoutDashboard,
-  MessageSquare,
   Search,
   Settings,
   Siren,
-  Upload,
-  Globe
+  Upload
 } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Route, BrowserRouter as Router, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 // Providers
@@ -30,25 +28,23 @@ import { ThemeProvider } from './components/ThemeProvider';
 // Components
 import Tooltip from '@/components/shared/Tooltip2';
 import UserPromptOverlay from '@/components/User/UserPromptOverlay';
+import ChatbotPage from './components/Chatbot/ChatbotPage';
+import ChromiumDpapi from './components/ChromiumDpapi/ChromiumDpapi';
+import Containers from './components/Containers/Containers';
 import StatsOverview from './components/Dashboard/StatsOverview';
+import FileBrowser from './components/FileBrowser/FileBrowser';
 import FileList from './components/FileList/FileList';
 import FileUpload from './components/FileUpload/FileUpload';
 import FileViewer from './components/FileViewer/FileViewer';
 import FindingsListContainer from './components/Findings/FindingsList';
 import HelpPage from './components/Help/HelpPage';
+import ReportingPage from './components/Reporting/ReportingPage';
+import SourceReportPage from './components/Reporting/SourceReportPage';
+import SystemReportPage from './components/Reporting/SystemReportPage';
 import DocumentSearch from './components/Search/DocumentSearch';
 import SettingsPage from './components/Settings/SettingsPage';
 import ThemeToggle from './components/ThemeToggle';
 import YaraRulesManager from './components/Yara/YaraManager';
-import Containers from './components/Containers/Containers';
-import AgentsPage from './components/Agents/AgentsPage';
-import ChatbotPage from './components/Chatbot/ChatbotPage';
-import FileBrowser from './components/FileBrowser/FileBrowser';
-import Chromium from './components/Chromium/Chromium';
-import Dpapi from './components/Dpapi/Dpapi';
-import ReportingPage from './components/Reporting/ReportingPage';
-import SourceReportPage from './components/Reporting/SourceReportPage';
-import SystemReportPage from './components/Reporting/SystemReportPage';
 
 // Assets
 import logoDark from './img/nemesis_logo_dark.png';
@@ -190,22 +186,20 @@ const Sidebar = ({ onCollapse }) => {
     { id: 'upload', label: 'File Upload', icon: Upload, path: '/upload' },
     { id: 'files', label: 'Files', icon: FileText, path: '/files' },
     { id: 'findings', label: `Findings - ${findingsCount} Untriaged`, icon: Siren, path: '/findings', count: findingsCount },
-    { id: 'file-browser', label: 'File Browser', icon: FolderTree, path: '/file-browser' },
-    { id: 'chromium', label: 'Chromium', icon: Globe, path: '/chromium' },
-    { id: 'dpapi', label: 'DPAPI', icon: Key, path: '/dpapi' },
     { id: 'search', label: 'Document Search', icon: Search, path: '/search' },
+    { id: 'file-browser', label: 'File Browser', icon: FolderTree, path: '/file-browser' },
+    { id: 'chromium-dpapi', label: 'Chrome/DPAPI', icon: Globe, path: '/chrome-dpapi' },
     { id: 'yara', label: 'Yara Rules', icon: FileSearch, path: '/yara-rules' },
     { id: 'containers', label: 'Containers', icon: FileArchive, path: '/containers' },
     { id: 'reporting', label: 'Reporting', icon: BarChart2, path: '/reporting' }
   ];
 
-  // Add Chatbot and Agents tabs if LiteLLM is available
+  // Add Chatbot tab if LiteLLM is available
   const navigationItems = litellmAvailable
     ? [
-        ...baseNavigationItems,
-        { id: 'chatbot', label: 'Chatbot', icon: MessageSquare, path: '/chatbot' },
-        { id: 'agents', label: 'Agents', icon: Bot, path: '/agents' }
-      ]
+      ...baseNavigationItems,
+      { id: 'chatbot', label: 'Chatbot', icon: Bot, path: '/chatbot' }
+    ]
     : baseNavigationItems;
 
   const utilityItems = [
@@ -371,12 +365,10 @@ const App = () => {
                       <Route path="/upload" element={<FileUpload />} />
                       <Route path="/search" element={<DocumentSearch />} />
                       <Route path="/findings" element={<FindingsListContainer />} />
-                      <Route path="/chromium" element={<Chromium />} />
-                      <Route path="/dpapi" element={<Dpapi />} />
+                      <Route path="/chrome-dpapi" element={<ChromiumDpapi />} />
                       <Route path="/yara-rules" element={<YaraRulesManager />} />
                       <Route path="/containers" element={<Containers />} />
                       <Route path="/chatbot" element={<ChatbotPage />} />
-                      <Route path="/agents" element={<AgentsPage />} />
                       <Route path="/reporting" element={<ReportingPage />} />
                       <Route path="/reporting/source/:sourceName" element={<SourceReportPage />} />
                       <Route path="/reporting/system" element={<SystemReportPage />} />

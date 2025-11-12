@@ -19,7 +19,7 @@ Nemesis currently analyzes the following Chromium data sources:
 
 ### Chromium Data Viewer
 
-The Nemesis frontend provides a dedicated Chromium interface accessible through the main navigation. This interface organizes all extracted Chromium data into five main categories:
+The Nemesis frontend provides a dedicated Chromium interface accessible through the `Chrome/DPAPI` navigation button on the left. This interface organizes all extracted Chromium data into five main categories:
 
 ### History Tab
 

@@ -14,12 +14,23 @@ Nemesis currently has the following agents:
 | `Text Summarizer`        | false              | Creates concise summaries of text content using LLM analysis                                       |
 | `Text Translator`        | false              | Uses an LLM to translate a document to a target language.                                          |
 | `Report Generator`       | false              | Uses an LLM to translate a document to a target language.                                          |
+| `Chatbot`                | false              | Allows LLM-powered chat over Nemesis data via the "Chatbot" icon on the left nav bar               |
 
 ## Setup
 
 In order to enable any LLM-powered agents, you first need to configure one or more models in `./infra/litellm/config.yaml` . You can use any model provider that LiteLLM supports (more details [here](https://docs.litellm.ai/docs/proxy/configs)) - **ensure that at a minimum you have a model called "default"**. In the `agents` section of `./compose.yaml` you can adjust the MAX_BUDGET (default $100) and BUDGET_DURATION (default 30d) enrivonment variables as wanted. Then launch the "llm" profile for Nemesis by supplying `--llm` to the `./tools/nemesis-ctl.sh` script.
 
 ***Note:*** service keys/tokens/etc. should be configured in your .env file and can be used in `./infra/litellm/config.yaml` as demonstrated in the current config file.
+
+## Agent Settings
+
+Agent settings/prompts can be viewed and modified in the `Settings` tab on the left, in the "Agents Configuration" section. This includes the LLM usage statistics for all LLM usage across Nemesis:
+
+![Nemesis Agents Configuration](./images/nemesis_agents_configuration.png)
+
+You can modify agent system prompts by clicking "Edit", making your changes to the prompt, and clicking "Save":
+
+![Agents Web Interface Prompts](images/nemesis_dashboard_agents_prompt.png)
 
 ## Agent Details
 
@@ -73,17 +84,13 @@ Almost the same as the text summarizer, the Translator agent can be manually tri
 
 The Report Generator agent used in the [Reporting](./reporting.md) interface to synthesize various statistical and finding details for a particular host, or the entire system, into a LLM-driven report.
 
+### Chatbot
+
+The Chatbot agent powers the "Chatbot" icon in the left navigation panel. This allows operators to chat over Nemesis data, powered by a Postgres MCP server and [custom query functions](https://github.com/SpecterOps/Nemesis/blob/main/projects/agents/agents/mcp/tools.yaml).
+
+![Nemesis Chatbot](images/nemesis_chatbot.png)
+
 ## The Nemesis Web Interface
-
-### Agents Web Interface
-
-If the llm profile is used, the Nemesis frontend will detect that LiteLLM was deployed and enable a new "Agents" tab on the left. Clicking on this tab will show you the currently enabled agents, as well as the current token and cost spend for the system:
-
-![Agents Web Interface](images/nemesis_dashboard_agents.png)
-
-For LLM-powered agents, you can modify the main system prompt used by clicking "Edit", making your changes to the prompt, and clicking "Save":
-
-![Agents Web Interface Prompts](images/nemesis_dashboard_agents_prompt.png)
 
 ### Monitoring
 
