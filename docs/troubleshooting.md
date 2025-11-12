@@ -6,10 +6,14 @@ Nemesis has a number of services to help with assist with troubleshooting.
 
 ## Analyze Message Queues
 
-Nemesis uses RabbitMQ as its message queue. You can view the state of all the queues by navigating to the **Help** menu reachable in the bottom left of the Nemesis interface and clicking the `/rabbitmq/` route link will take you to the RabbitMQ interface. This interface can be used to track message delivery rates/etc. Clicking on "Queues and Streams" will allow you to view the state of the queues, including how many items are waiting to be processed (in the "Ready" column) and the rate at which Nemesis processing the queues:
+Nemesis uses message queue in its enrichment workflows. To quickly get an overview of the state of the queues, view the "Enrichment Queues" section in Nemesis's dashboard:
+
+![Nemesis Enrichment Queues](images/nemesis-dashboard-queues.png)
+
+
+  view the You can view the state of all the queues by navigating to the **Help** menu reachable in the bottom left of the Nemesis interface and clicking the `/rabbitmq/` route link will take you to the RabbitMQ interface. This interface can be used to track message counts, delivery rates, etc. Clicking on "Queues and Streams" will allow you to view the state of the queues, including how many items are waiting to be processed (in the "Ready" column) and the rate at which Nemesis processing the queues:
 
 ![RabbitMQ Dashboard](images/rabbitmq.png)
-
 
 If the queues are backed up, you have three options : 
 
