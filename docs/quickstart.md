@@ -11,7 +11,6 @@ Ensure your machine meets the following requirements:
 - **Memory**: 12+ GB RAM
 - **Disk Space**: 100 GB
 - **Architecture**: x64 or Arm
-- **Disk:** 80 GB
 
 - **Docker/Docker-Compose:**
   - Docker version 28.0.0 or higher is recommended. See [Docker's installation instructions](https://docs.docker.com/engine/install/) for instructions on installing Docker. Running the Docker Engine on Linux or on OS X via Docker Desktop is recommended. If using Docker Desktop, ensure that the VM is configured with sufficient RAM/Disk/swap.
@@ -84,7 +83,7 @@ After uploading the files, click on the "Files" link in the sidebar. Once Nemesi
 
 ![file listing](images/nemesis-dashboard-files.png)
 
-Click on the table row to to view the file's details:
+Click on the table row to view the file's details:
 ![Nemesis File Details](images/nemesis-dashboard-file-details.png)
 
 See [Data Ingestion](./usage_guide.md#data-ingestion) for additional ways to ingest data into Nemesis besides manually uploading files through the web interface.
@@ -94,8 +93,6 @@ See [Data Ingestion](./usage_guide.md#data-ingestion) for additional ways to ing
 Click on the "Help" button on the bottom left to view the additionally exposed Nemesis services. Each route listed is a hyperlink to the service. For logins, refer to the environment variables set.
 
 **NOTE:** The monitoring services (Grafana, Jaeger, and Prometheus) will only be available if you started with them enabled (`--monitoring`).
-
-**NOTE:** The /jupyter/ route will only be available if you started with it enabled (`--jupyter`).
 
 **NOTE:** The /jupyter/ route will only be available if you started with it enabled (`--jupyter`).
 
