@@ -13,7 +13,6 @@ exclude_docs: |
 nav:
   - Nemesis: index.md
   - Quickstart: quickstart.md
-  - Overview: overview.md
 
   - Usage:
     - usage_guide.md
@@ -30,12 +29,12 @@ nav:
     - reporting.md
 
   - Services:
-    - dapr.md
     - hasura.md
     - jupyter.md
     - housekeeping.md
 
   - Developer:
+    - Overview: overview.md
     - Performance Tuning: performance.md
     - Adding File Enrichment Modules: file_enrichment_modules.md
     - Operational Data Reference: odr.md
