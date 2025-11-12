@@ -368,7 +368,7 @@ def get_source_report_data(
                 SELECT
                     COUNT(*) as total_workflows,
                     COUNT(CASE WHEN status IN ('COMPLETED', 'completed') THEN 1 END) as completed,
-                    COUNT(CASE WHEN status IN ('FAILED', 'failed', 'ERROR', 'error', 'TERMINATED', 'terminated') THEN 1 END) as failed,
+                    COUNT(CASE WHEN status IN ('FAILED', 'failed', 'ERROR', 'error', 'TIMEOUT', 'timeout') THEN 1 END) as failed,
                     AVG(runtime_seconds) as avg_processing_time,
                     MAX(runtime_seconds) as max_processing_time
                 FROM workflows w

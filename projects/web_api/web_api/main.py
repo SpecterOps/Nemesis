@@ -545,7 +545,7 @@ async def get_status():
                     cur.execute("""
                         SELECT
                             COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed_count,
-                            COUNT(*) FILTER (WHERE status IN ('FAILED', 'TERMINATED', 'ERROR', 'TIMEOUT')) as failed_count,
+                            COUNT(*) FILTER (WHERE status IN ('FAILED', 'ERROR', 'TIMEOUT')) as failed_count,
                             COUNT(*) FILTER (WHERE status = 'RUNNING') as running_count,
                             AVG(runtime_seconds) FILTER (WHERE runtime_seconds IS NOT NULL) as avg_time,
                             MIN(runtime_seconds) FILTER (WHERE runtime_seconds IS NOT NULL) as min_time,
@@ -692,7 +692,7 @@ async def get_failed():
                             enrichments_failure,
                             filename
                         FROM workflows
-                        WHERE status IN ('FAILED', 'ERROR', 'TIMEOUT', 'TERMINATED')
+                        WHERE status IN ('FAILED', 'ERROR', 'TIMEOUT')
                         ORDER BY start_time DESC
                         LIMIT 100
                     """)

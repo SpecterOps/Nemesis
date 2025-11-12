@@ -1,6 +1,6 @@
 import asyncio
 import os
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import file_enrichment.global_vars as global_vars
 from common.db import create_connection_pool
@@ -14,7 +14,7 @@ from common.queues import (
     NOSEYPARKER_OUTPUT_TOPIC,
     NOSEYPARKER_PUBSUB,
 )
-from common.workflows.setup import set_fastapi_loop
+from common.workflows.setup import set_workflow_runtime_loop, wf_runtime
 from common.workflows.tracking_service import WorkflowTrackingService
 from common.workflows.workflow_purger import WorkflowPurger
 from dapr.aio.clients import DaprClient
@@ -22,20 +22,23 @@ from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI
 from file_enrichment.postgres_notifications import postgres_notify_listener
 from file_linking import FileLinkingEngine
+from grpc import RpcError
 from nemesis_dpapi import DpapiManager as NemesisDpapiManager
 from nemesis_dpapi.eventing import DaprDpapiEventPublisher
 
 from .debug_utils import setup_debug_signals
 from .routes.dpapi import dpapi_background_monitor, dpapi_router
 from .routes.enrichments import router as enrichments_router
+from .routes.health import router as health_router
 from .subscriptions.bulk_enrichment import bulk_enrichment_subscription_handler
 from .subscriptions.dotnet import dotnet_subscription_handler
 from .subscriptions.file import file_subscription_handler, start_workers, stop_workers
 from .subscriptions.noseyparker import noseyparker_subscription_handler
-from .workflow import initialize_workflow_runtime, wf_runtime
+from .workflow import initialize_enrichment_modules
 from .workflow_manager import WorkflowManager
 
 logger = get_logger(__name__)
+wf_runtime.start()
 
 max_workflow_execution_time = int(
     os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300)
@@ -44,34 +47,46 @@ max_workflow_execution_time = int(
 logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}")
 
 # Workflow purge interval in seconds
-workflow_purge_interval = int(os.getenv("WORKFLOW_PURGE_INTERVAL_SECONDS", "30"))
+workflow_purge_interval = int(os.getenv("WORKFLOW_PURGE_INTERVAL_SECONDS", "5"))
 
 
-async def workflow_purger_loop(workflow_purger: WorkflowPurger, interval_seconds: int):
-    """Background task that periodically purges completed workflows.
+async def cancel_task(task: asyncio.Task | None, task_name: str) -> None:
+    """Cancel an asyncio task gracefully.
 
     Args:
-        workflow_purger: WorkflowPurger instance
-        interval_seconds: Interval between purge cycles in seconds
+        task: The asyncio task to cancel
+        task_name: Human-readable name for logging purposes
     """
-    logger.info(
-        "Starting workflow purger background task",
-        interval_seconds=interval_seconds,
-    )
-
-    while True:
+    if task and not task.done():
+        logger.info(f"Cancelling {task_name}...")
+        task.cancel()
         try:
-            await asyncio.sleep(interval_seconds)
-            stats = await workflow_purger.run_purge_cycle()
-            logger.debug("Workflow purge cycle completed", **stats)
+            await task
         except asyncio.CancelledError:
-            logger.info("Workflow purger task cancelled")
-            raise
-        except Exception:
-            logger.exception(message="Error in workflow purger loop")
+            logger.info(f"{task_name} cancelled")
 
 
-# Global tracking for bulk enrichment processes
+def terminate_workflow_safe(workflow_id: str, workflow_name: str) -> None:
+    """Terminate a workflow gracefully, ignoring 'no such instance' errors.
+
+    Args:
+        workflow_id: The workflow instance ID to terminate
+        workflow_name: Human-readable name for logging purposes
+    """
+    try:
+        global_vars.workflow_client.terminate_workflow(workflow_id)
+        logger.info(f"Terminated {workflow_name}")
+    except RpcError as e:
+        details = e.details()
+        if details and "no such instance exists" in details:
+            pass  # Workflow doesn't exist, nothing to terminate
+        else:
+            logger.exception(f"Error terminating {workflow_name}")
+
+
+# Initialize FastAPI app with lifespan manager
+g_loop = asyncio.get_event_loop()
+set_workflow_runtime_loop(g_loop)
 
 
 @asynccontextmanager
@@ -79,25 +94,32 @@ async def lifespan(app: FastAPI):
     """FastAPI lifespan manager for workflow runtime setup/teardown"""
     logger.info("Initializing workflow runtime...")
 
+    loop = asyncio.get_running_loop()
+    logger.warn("FastAPI loop!", loop=loop, same=(g_loop == loop))
     setup_debug_signals()
 
-    set_fastapi_loop(asyncio.get_running_loop())
+    loop = asyncio.get_running_loop()
+    set_workflow_runtime_loop(loop)
 
-    async with DaprClient() as dapr_client:
+    async with AsyncExitStack() as stack:
+        dapr_client = await stack.enter_async_context(DaprClient())
+
         global_vars.asyncpg_pool = await create_connection_pool(dapr_client)
-
         global_vars.file_linking_engine = FileLinkingEngine(global_vars.asyncpg_pool)
 
-        dpapi_manager = NemesisDpapiManager(
-            storage_backend=global_vars.asyncpg_pool,
-            auto_decrypt=True,
-            publisher=DaprDpapiEventPublisher(dapr_client),
+        stack.push_async_callback(global_vars.asyncpg_pool.close)
+
+        dpapi_manager = await stack.enter_async_context(
+            NemesisDpapiManager(
+                storage_backend=global_vars.asyncpg_pool,
+                auto_decrypt=True,
+                publisher=DaprDpapiEventPublisher(dapr_client),
+            )
         )
-        await dpapi_manager.__aenter__()
         app.state.dpapi_manager = dpapi_manager
 
         # Initialize workflow runtime and modules
-        global_vars.module_execution_order = await initialize_workflow_runtime(dpapi_manager)
+        global_vars.module_execution_order = await initialize_enrichment_modules(dpapi_manager)
 
         # Initialize workflow tracking service as a global variable
         global_vars.tracking_service = WorkflowTrackingService(
@@ -106,109 +128,64 @@ async def lifespan(app: FastAPI):
             workflow_client=global_vars.workflow_client,
         )
 
-        # Initialize workflow purger using the sync workflow_client from global_vars
-        workflow_purger = WorkflowPurger(
-            name="file_enrichment",
-            db_pool=global_vars.asyncpg_pool,
-            workflow_client=global_vars.workflow_client,
-        )
         logger.info("Workflow purger initialized")
 
-        try:
-            # Use async context manager for WorkflowManager
-            async with WorkflowManager(
+        # Use async context manager for WorkflowManager
+        wf_manager = await stack.enter_async_context(
+            WorkflowManager(
                 pool=global_vars.asyncpg_pool,
                 max_execution_time=max_workflow_execution_time,
-            ) as wf_manager:
-                global_vars.workflow_manager = wf_manager
+            )
+        )
+        global_vars.workflow_manager = wf_manager
 
-                try:
-                    # Start PostgreSQL NOTIFY listener in background
-                    global_vars.postgres_notify_listener_task = asyncio.create_task(
-                        postgres_notify_listener(global_vars.asyncpg_pool, global_vars.workflow_manager)
-                    )
-                    logger.info("Started PostgreSQL NOTIFY listener task")
+        try:
+            postgres_notify_listener_task = asyncio.create_task(
+                postgres_notify_listener(global_vars.asyncpg_pool, global_vars.workflow_manager)
+            )
 
-                    # Start masterkey watcher in background
-                    global_vars.background_dpapi_task = asyncio.create_task(
-                        dpapi_background_monitor(app.state.dpapi_manager)
-                    )
-                    logger.info("Started masterkey watcher task")
+            background_dpapi_task = asyncio.create_task(dpapi_background_monitor(app.state.dpapi_manager))
 
-                    # Start workflow purger in background
-                    global_vars.workflow_purger_task = asyncio.create_task(
-                        workflow_purger_loop(workflow_purger, workflow_purge_interval)
-                    )
-                    logger.info(
-                        "Started workflow purger task",
-                        interval_seconds=workflow_purge_interval,
-                    )
+            purger = WorkflowPurger(
+                "file_enrichment",
+                global_vars.asyncpg_pool,
+                global_vars.workflow_client,
+                max_execution_time=max_workflow_execution_time,
+                batch_size=50,
+                interval_seconds=5,
+            )
+            cleanup_dapr_workflow_state_task = asyncio.create_task(purger.run())
 
-                    # Start file processing workers
-                    start_workers()
-                    logger.info("Started file processing workers")
+            # Start file processing workers
+            start_workers()
+            logger.info("Started file processing workers")
 
-                    logger.info(
-                        "Workflow runtime initialized",
-                        module_execution_order=global_vars.module_execution_order,
-                        pid=os.getpid(),
-                    )
+            logger.info(
+                "Workflow runtime initialized",
+                module_execution_order=global_vars.module_execution_order,
+            )
 
-                    yield
+            # Ensure workflow runtime is setup first before importing!
+            # await setup_workflow_purger(workflow_purger_monitor)
 
-                finally:
-                    logger.info("Shutting down workflow runtime...")
-
-                    # Stop file processing workers
-                    await stop_workers()
-                    logger.info("Stopped file processing workers")
-
-                    # Cleanup DpapiManager
-                    if hasattr(app.state, "dpapi_manager") and app.state.dpapi_manager:
-                        logger.info("Closing DpapiManager...")
-                        await app.state.dpapi_manager.__aexit__(None, None, None)
-
-                    # Cancel masterkey watcher task
-                    if global_vars.background_dpapi_task and not global_vars.background_dpapi_task.done():
-                        logger.info("Cancelling masterkey watcher task...")
-                        global_vars.background_dpapi_task.cancel()
-                        try:
-                            await global_vars.background_dpapi_task
-                        except asyncio.CancelledError:
-                            logger.info("Masterkey watcher task cancelled")
-
-                    # Cancel PostgreSQL NOTIFY listener
-                    if (
-                        global_vars.postgres_notify_listener_task
-                        and not global_vars.postgres_notify_listener_task.done()
-                    ):
-                        logger.info("Cancelling PostgreSQL NOTIFY listener...")
-                        global_vars.postgres_notify_listener_task.cancel()
-                        try:
-                            await global_vars.postgres_notify_listener_task
-                        except asyncio.CancelledError:
-                            logger.info("PostgreSQL NOTIFY listener cancelled")
-
-                    # Cancel workflow purger task
-                    if hasattr(global_vars, "workflow_purger_task") and global_vars.workflow_purger_task:
-                        if not global_vars.workflow_purger_task.done():
-                            logger.info("Cancelling workflow purger task...")
-                            global_vars.workflow_purger_task.cancel()
-                            try:
-                                await global_vars.workflow_purger_task
-                            except asyncio.CancelledError:
-                                logger.info("Workflow purger task cancelled")
-
-                    if wf_runtime:
-                        wf_runtime.shutdown()
+            yield
 
         finally:
-            if global_vars.asyncpg_pool:
-                await global_vars.asyncpg_pool.close()
-                logger.info("AsyncPG pool closed")
+            logger.info("FastAPI lifespan is shutting down...")
+
+            # Stop file processing workers
+            logger.info("Stopping file processing workers")
+            await stop_workers()
+
+            # Cancel background tasks
+            await cancel_task(background_dpapi_task, "masterkey watcher task")
+            await cancel_task(postgres_notify_listener_task, "PostgreSQL NOTIFY listener")
+            await cancel_task(cleanup_dapr_workflow_state_task, "Dapr workflow state purger")
+
+            # Terminate the workflow purger monitor
+            # terminate_workflow_safe("workflow-purger-monitor", "workflow purger monitor")
 
 
-# Initialize FastAPI app with lifespan manager
 app = FastAPI(lifespan=lifespan)
 dapr_app = DaprApp(app)
 
@@ -221,12 +198,60 @@ dapr_app.subscribe(pubsub=DOTNET_PUBSUB, topic=DOTNET_OUTPUT_TOPIC)(dotnet_subsc
 # region API Routers/Endpoints
 app.include_router(dpapi_router)
 app.include_router(enrichments_router)
+app.include_router(health_router)
 
 
-@app.api_route("/healthz", methods=["GET", "HEAD"])
-async def healthcheck():
-    """Health check endpoint for Docker healthcheck."""
-    return {"status": "healthy"}
+def setup_workflow_purger(purger_workflow):
+    logger.info("Setting up the dapr state purge workflow...")
+
+    workflow_instance_id = "workflow-purger-monitor"
+
+    # Check if the workflow is already running
+    try:
+        logger.info("Getting workflow purge state...")
+        instance_id = global_vars.workflow_client.schedule_new_workflow(
+            workflow=purger_workflow,
+            input=workflow_purge_interval,
+            instance_id=workflow_instance_id,
+        )
+        # state = global_vars.workflow_client.get_workflow_state(workflow_instance_id)
+        logger.info("Got workflow purge state...")
+    #     if state and state.runtime_status.name in ["RUNNING", "PENDING"]:
+    #         logger.info(
+    #             "Workflow purger monitor already running",
+    #             instance_id=workflow_instance_id,
+    #             status=state.runtime_status.name,
+    #         )
+    #     else:
+    #         # Start new workflow instance
+    #         instance_id = global_vars.workflow_client.schedule_new_workflow(
+    #             workflow=purger_workflow,
+    #             input=workflow_purge_interval,
+    #             instance_id=workflow_instance_id,
+    #         )
+    #         logger.info(
+    #             "Started workflow purger monitor",
+    #             instance_id=instance_id,
+    #             interval_seconds=workflow_purge_interval,
+    #         )
+    except Exception:
+        # Workflow doesn't exist, start it
+        logger.info("Dapr purge state workflow does not exist. Scheduling it")
+        # instance_id = global_vars.workflow_client.schedule_new_workflow(
+        #     workflow=purger_workflow,
+        #     input=workflow_purge_interval,
+        #     instance_id=workflow_instance_id,
+        # )
+        # logger.info(
+        #     "Started workflow purger monitor",
+        #     instance_id=instance_id,
+        #     interval_seconds=workflow_purge_interval,
+        # )
+
+    logger.warn("Purger setup done!!!!!!!!!!!!!!!!")
+
+
+# setup_workflow_purger(workflow_purger_monitor)
 
 
 # endregion

@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 import asyncpg
@@ -15,8 +14,9 @@ from .workflow_manager import WorkflowManager
 workflow_client = wf.DaprWorkflowClient(
     logger_options=LoggerOptions(
         log_level=WORKFLOW_CLIENT_LOG_LEVEL,
-    )
+    ),
 )
+
 activity_functions = {}
 storage = StorageMinio()
 global_module_map: dict[str, EnrichmentModule] = {}  # Enrichment modules loaded at initialization
@@ -28,7 +28,6 @@ nemesis_url = os.getenv("NEMESIS_URL", "http://localhost/")
 nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_url
 
 asyncpg_pool: asyncpg.Pool = None  # Connection pool for database operations
-asyncio_loop: asyncio.AbstractEventLoop = None
 
 # Note: file_linking_engine is initialized after asyncpg_pool is created
 # See initialization code that sets this up with the pool
@@ -38,6 +37,4 @@ module_execution_order: list[str] = []
 workflow_manager: WorkflowManager = None
 tracking_service: WorkflowTrackingService = None  # Workflow tracking service for monitoring workflow state
 
-postgres_notify_listener_task = None
-background_dpapi_task = None
-workflow_purger_task = None
+max_workflow_execution_time = int(os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300))

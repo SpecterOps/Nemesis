@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime
 
 from common.logger import get_logger
@@ -50,7 +49,6 @@ async def publish_workflow_completion(instance_id, completed=True):
                 file_size = row["file_size"] or 0
         logger.debug(
             f"publish_workflow_completion - object_id: {object_id}, originating_container_id: {originating_container_id}, file_size: {file_size}",
-            pid=os.getpid(),
         )
 
         # Only publish if we have a container ID to track
@@ -78,7 +76,6 @@ async def publish_workflow_completion(instance_id, completed=True):
                     container_id=originating_container_id,
                     completed=completed,
                     workflow_id=instance_id,
-                    pid=os.getpid(),
                 )
 
     except Exception as e:

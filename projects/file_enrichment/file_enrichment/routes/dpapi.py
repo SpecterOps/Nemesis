@@ -196,7 +196,7 @@ async def dpapi_background_monitor(dpapi_manager: DpapiManager) -> None:
         except Exception as e:
             logger.exception("Error in DPAPI background monitor", error=str(e))
 
-        await asyncio.sleep(5)
+        await asyncio.sleep(30)
 
 
 # Create the router directly - no prefix to maintain original URLs

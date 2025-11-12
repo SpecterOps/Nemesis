@@ -14,11 +14,12 @@ wf_runtime: wf.WorkflowRuntime = wf.WorkflowRuntime(
 )
 
 logger = get_logger(__name__)
+workflow_loop: asyncio.AbstractEventLoop = None
 
 
-def set_fastapi_loop(loop: asyncio.AbstractEventLoop) -> None:
-    global fastapi_loop
-    fastapi_loop = loop
+def set_workflow_runtime_loop(loop: asyncio.AbstractEventLoop) -> None:
+    global workflow_loop
+    workflow_loop = loop
 
 
 def workflow_activity(fn: Callable | None = None, *, name: str | None = None) -> Callable:
@@ -52,9 +53,9 @@ def workflow_activity(fn: Callable | None = None, *, name: str | None = None) ->
                 # If the result is not a coroutine, just return it as is.
                 return result
 
-            if fastapi_loop is None:
+            if workflow_loop is None:
                 raise RuntimeError("FastAPI event loop is not set.")
-            return asyncio.run_coroutine_threadsafe(result, fastapi_loop).result()
+            return asyncio.run_coroutine_threadsafe(result, workflow_loop).result()
 
         return wrapped_fn
 

@@ -102,6 +102,5 @@ def setup_debug_signals():
 
     logger.info(
         "Debug signal handlers installed",
-        pid=os.getpid(),
         usage="Kill -USR1 <pid> to dump all stacks, kill -USR2 <pid> to analyze blocking threads",
     )

@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import asyncpg
 import document_conversion.global_vars as global_vars
@@ -10,7 +10,7 @@ import jpype
 from common.db import get_postgres_connection_str
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, get_logger
 from common.queues import DOCUMENT_CONVERSION_INPUT_TOPIC, DOCUMENT_CONVERSION_PUBSUB
-from common.workflows.setup import set_fastapi_loop, wf_runtime
+from common.workflows.setup import set_workflow_runtime_loop, wf_runtime
 from common.workflows.workflow_purger import WorkflowPurger
 from dapr.ext.fastapi import DaprApp
 from dapr.ext.workflow import DaprWorkflowClient
@@ -36,45 +36,37 @@ postgres_connection_string = get_postgres_connection_str()
 workflow_purge_interval = int(os.getenv("WORKFLOW_PURGE_INTERVAL_SECONDS", "30"))
 
 
-async def workflow_purger_loop(workflow_purger: WorkflowPurger, interval_seconds: int):
-    """Background task that periodically purges completed workflows.
+async def cancel_task(task: asyncio.Task | None, task_name: str) -> None:
+    """Cancel an asyncio task gracefully.
 
     Args:
-        workflow_purger: WorkflowPurger instance
-        interval_seconds: Interval between purge cycles in seconds
+        task: The asyncio task to cancel
+        task_name: Human-readable name for logging purposes
     """
-    logger.info(
-        "Starting workflow purger background task",
-        interval_seconds=interval_seconds,
-    )
-
-    while True:
+    if task and not task.done():
+        logger.info(f"Cancelling {task_name}...")
+        task.cancel()
         try:
-            await asyncio.sleep(interval_seconds)
-            stats = await workflow_purger.run_purge_cycle()
-            logger.debug("Workflow purge cycle completed", **stats)
+            await task
         except asyncio.CancelledError:
-            logger.info("Workflow purger task cancelled")
-            raise
-        except Exception:
-            logger.exception(message="Error in workflow purger loop")
+            logger.info(f"{task_name} cancelled")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan manager for FastAPI - handles startup and shutdown events."""
     logger.info("Initializing application")
-    try:
-        # Set the FastAPI event loop for async workflow activities
-        loop = asyncio.get_running_loop()
-        set_fastapi_loop(loop)
 
+    # Set the FastAPI event loop for async workflow activities
+    loop = asyncio.get_running_loop()
+    set_workflow_runtime_loop(loop)
+
+    # Set Gotenberg URL
+    global_vars.gotenberg_url = f"http://localhost:{dapr_port}/v1.0/invoke/gotenberg/method/forms/libreoffice/convert"
+
+    async with AsyncExitStack() as stack:
         init_tika()
-
-        # Set Gotenberg URL
-        global_vars.gotenberg_url = (
-            f"http://localhost:{dapr_port}/v1.0/invoke/gotenberg/method/forms/libreoffice/convert"
-        )
+        stack.callback(jpype.shutdownJVM)
 
         # Initialize database pool
         global_vars.asyncpg_pool = await asyncpg.create_pool(
@@ -82,8 +74,10 @@ async def lifespan(app: FastAPI):
             min_size=max_parallel_workflows,
             max_size=(3 * max_parallel_workflows),
         )
+        stack.push_async_callback(global_vars.asyncpg_pool.close)
 
         wf_runtime.start()
+        stack.push_async_callback(wf_runtime.shutdown)
 
         global_vars.workflow_client = DaprWorkflowClient(
             logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
@@ -98,49 +92,28 @@ async def lifespan(app: FastAPI):
             workflow_client=global_vars.workflow_client,
         )
 
-        # Initialize workflow purger
-        workflow_purger = WorkflowPurger(
-            name="document_conversion",
-            db_pool=global_vars.asyncpg_pool,
-            workflow_client=global_vars.workflow_client,
-        )
-        logger.info("Workflow purger initialized")
+        try:
+            # Initialize and start workflow purger as background task
+            purger = WorkflowPurger(
+                "document_conversion",
+                global_vars.asyncpg_pool,
+                global_vars.workflow_client,
+                max_execution_time=max_workflow_execution_time,
+                batch_size=50,
+                interval_seconds=workflow_purge_interval,
+            )
+            cleanup_dapr_workflow_state_task = asyncio.create_task(purger.run())
+            logger.info("Workflow purger initialized")
 
-        # Start workflow purger in background
-        global_vars.workflow_purger_task = asyncio.create_task(
-            workflow_purger_loop(workflow_purger, workflow_purge_interval)
-        )
-        logger.info(
-            "Started workflow purger task",
-            interval_seconds=workflow_purge_interval,
-        )
+            logger.info("Document conversion service initialized successfully")
 
-        logger.info("Document conversion service initialized successfully")
+            yield
 
-    except Exception:
-        logger.exception(message="Error initializing service")
-        raise
+        finally:
+            logger.info("FastAPI lifespan is shutting down...")
 
-    yield
-
-    # Cleanup
-    # Cancel workflow purger task
-    if hasattr(global_vars, "workflow_purger_task") and global_vars.workflow_purger_task:
-        if not global_vars.workflow_purger_task.done():
-            logger.info("Cancelling workflow purger task...")
-            global_vars.workflow_purger_task.cancel()
-            try:
-                await global_vars.workflow_purger_task
-            except asyncio.CancelledError:
-                logger.info("Workflow purger task cancelled")
-
-    if global_vars.asyncpg_pool:
-        await global_vars.asyncpg_pool.close()
-        logger.info("Database pool closed")
-    if wf_runtime:
-        wf_runtime.shutdown()
-    if jpype.isJVMStarted():
-        jpype.shutdownJVM()
+            # Cancel background tasks
+            await cancel_task(cleanup_dapr_workflow_state_task, "Dapr workflow state purger")
 
 
 app = FastAPI(lifespan=lifespan)

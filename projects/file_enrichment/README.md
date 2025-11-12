@@ -77,15 +77,31 @@ Environment variables for tuning performance:
 
 
 # Debugging
-1. Start
-```
-DAPR_LOG_LEVEL=warn docker compose -f compose.yaml -f compose.prod.build.yaml -f projects/file_enrichment/docker-compose.debug.yml --profile monitoring up -V -d --no-deps -V --wait  file-enrichment-dapr
+1. Start everything:
+```bash
+NEMESIS_MONITORING=enabled \
+ENVIRONMENT=dev \
+LOG_LEVEL=debug \
+DAPR_LOG_LEVEL=warn \
+docker compose -f compose.yaml \
+  -f compose.prod.build.yaml \
+  -f projects/file_enrichment/docker-compose.debug.yml \
+  --profile monitoring \
+  up -V -d --no-deps -V --wait
 ```
 
 2. Launch the debugged application in VS code (F5)
 
 3. Now that it's running, restart the file enrichment services:
-```
-DAPR_LOG_LEVEL=debug docker compose -f compose.yaml -f compose.prod.build.yaml -f projects/file_enrichment/docker-compose.debug.yml --profile monitoring up -V -d --no-deps -V --wait
-file-enrichment file-enrichment-dapr
+```bash
+NEMESIS_MONITORING=enabled \
+ENVIRONMENT=dev \
+LOG_LEVEL=debug \
+DAPR_LOG_LEVEL=warn \
+docker compose -f compose.yaml \
+  -f compose.prod.build.yaml \
+  -f projects/file_enrichment/docker-compose.debug.yml \
+  --profile monitoring \
+  up -V -d --no-deps -V --wait \
+  file-enrichment file-enrichment-dapr
 ```

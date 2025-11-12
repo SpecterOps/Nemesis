@@ -602,7 +602,7 @@ CREATE TABLE IF NOT EXISTS workflows (
     filename VARCHAR(255),
     enrichments_success TEXT[] DEFAULT '{}',
     enrichments_failure TEXT[] DEFAULT '{}',
-    status TEXT NOT NULL CHECK (status IN ('SCHEDULED', 'RUNNING', 'COMPLETED', 'FAILED')),
+    status TEXT NOT NULL CHECK (status IN ('SCHEDULED', 'RUNNING', 'COMPLETED', 'FAILED', 'TIMEOUT')),
     runtime_seconds REAL,
     start_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_purged BOOLEAN NOT NULL DEFAULT false

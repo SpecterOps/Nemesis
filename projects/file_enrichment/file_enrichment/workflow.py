@@ -1,7 +1,7 @@
 # src/workflow/workflow.py
-import asyncio
 
 import dapr.ext.workflow as wf
+import file_enrichment.global_vars as global_vars
 from common.logger import get_logger
 from common.models import File
 from common.workflows.setup import wf_runtime
@@ -10,7 +10,6 @@ from file_enrichment_modules.module_loader import ModuleLoader
 from file_enrichment_modules.yara.yara_manager import YaraRuleManager
 from nemesis_dpapi import DpapiManager
 
-from . import global_vars
 from .activities import (
     check_file_linkings,
     finalize_workflow_failure,
@@ -252,10 +251,8 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 ##########################################
 
 
-async def initialize_workflow_runtime(dpapi_manager: DpapiManager) -> list[str]:
+async def initialize_enrichment_modules(dpapi_manager: DpapiManager) -> list[str]:
     """Initialize the workflow runtime and load modules. Returns the execution order for modules."""
-
-    global wf_runtime, asyncio_loop
 
     # Load enrichment modules
     module_loader = ModuleLoader()
@@ -263,8 +260,6 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager) -> list[str]:
     # Update the global_module_map in the enrichment_modules activity
 
     global_vars.global_module_map = module_loader.modules
-
-    asyncio_loop = asyncio.get_running_loop()
 
     # Filter modules by workflow and determine execution order
     workflow_name = "default"  # This could be made configurable later
@@ -304,8 +299,6 @@ async def initialize_workflow_runtime(dpapi_manager: DpapiManager) -> list[str]:
     )
 
     logger.info("Modules loaded and ready for processing", total_modules=len(available_modules))
-
-    wf_runtime.start()
 
     return execution_order
 

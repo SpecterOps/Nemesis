@@ -76,7 +76,6 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
                         logger.exception(
                             "Error processing PostgreSQL notification",
                             error=str(e),
-                            pid=os.getpid(),
                         )
             except asyncio.CancelledError:
                 logger.info("PostgreSQL NOTIFY listener cancelled")

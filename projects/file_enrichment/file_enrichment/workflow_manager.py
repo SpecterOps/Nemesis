@@ -76,7 +76,6 @@ class WorkflowManager:
                 "Workflow failed",
                 instance_id=state_obj.instance_id,
                 error=state_obj.failure_details.message if state_obj.failure_details else "Unknown",
-                pid=os.getpid(),
             )
 
         return state_obj.runtime_status.name
@@ -229,7 +228,6 @@ class WorkflowManager:
                     instance_id=instance_id,
                     enrichment_name=enrichment_name,
                     object_id=object_id,
-                    pid=os.getpid(),
                 )
 
                 # Actually schedule the workflow

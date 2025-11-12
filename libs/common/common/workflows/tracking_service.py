@@ -18,7 +18,6 @@ class WorkflowStatus(StrEnum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     TIMEOUT = "TIMEOUT"
-    TERMINATED = "TERMINATED"
 
 
 class WorkflowTrackingService:
