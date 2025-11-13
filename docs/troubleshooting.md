@@ -19,8 +19,7 @@ If the queues are backed up, you have three options :
 
 1. Do nothing and just wait until Nemesis completes processing the queues.
 2. Monitor Nemesis's performance and adjust its settings to your system and workloads (see [Nemesis Performance Tuning](./performance.md)).
-3. Purge the queues to stop processing. You can purge the queue by clicking on the queue name (e.g. `files-new_file` for newly added files) and clicking the "Purge Queue" button.
-
+3. Purge the queues to stop processing. You can purge the queue by clicking on the queue name in the RabbitMQ dashboard (e.g. `files-new_file` for newly added files) and clicking the "Purge Queue" button.
 
 ## Grafana
 

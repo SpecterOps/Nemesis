@@ -9,6 +9,7 @@ import asyncio
 
 import asyncpg
 import dapr.ext.workflow as wf
+import grpc
 from common.logger import get_logger
 from dapr.ext.workflow.workflow_state import WorkflowStatus as DaprWorkflowStatus
 
@@ -237,6 +238,14 @@ class WorkflowPurger:
                     dapr_status=state.runtime_status.name,
                 )
                 return (False, None)
+
+        except grpc.RpcError as e:
+            details = e.details()
+            if details and "no such instance exists" in details:
+                # Workflow doesn't exist anymore: another instance may have already purged it
+                return (True, wf_id)
+
+            return (True, wf_id)
 
         except Exception:
             logger.exception(

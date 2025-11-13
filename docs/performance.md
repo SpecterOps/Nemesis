@@ -8,6 +8,9 @@ If workflows begin to fail, or you are experiencing major performance issues (as
 ## Analyzing Queues
 Normally people realize Nemesis isn't going fast enough after uploading a bunch of files and it taking forever to process. Usually this is indicative that a bunch of files get queued up for processing, but aren't be processed fast enough. You can confirm this by [analyzing the message queues](./troubleshooting.md#analyze-message-queues).
 
+The message queue Ready counts (messages waiting to be processed) and rate of delivery will give you an idea of 
+- 
+
 
 
 # File Submission

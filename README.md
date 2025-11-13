@@ -26,7 +26,8 @@
 
 # Overview
 
-Nemesis is an offensive file enrichment pipeline and analysis tool.
+Nemesis is an open-source, centralized data processing platform that ingests, enriches, and allows collaborative analysis (with humans and AI) of files collected during offensive security assessments.
+
 
 Nemesis 2.0 is built on [Docker](https://www.docker.com/) with heavy [Dapr integration](https://dapr.io/), our goal with Nemesis was to create a centralized file processing platform that functions as an "offensive VirusTotal".
 
