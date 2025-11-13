@@ -91,7 +91,7 @@ const LinkedFilesSection = ({ filePath, source }) => {
                 file_listings(where: {
                   _and: [
                     { source: { _eq: $source } },
-                    { path: { _in: $paths } }
+                    { path_lower: { _in: $paths } }
                   ]
                 }) {
                   path
@@ -100,7 +100,7 @@ const LinkedFilesSection = ({ filePath, source }) => {
                 }
               }
             `,
-            variables: { paths: Array.from(linkedPaths), source }
+            variables: { paths: Array.from(linkedPaths).map(p => p.toLowerCase()), source }
           };
 
           const statusResponse = await fetch('/hasura/v1/graphql', {
