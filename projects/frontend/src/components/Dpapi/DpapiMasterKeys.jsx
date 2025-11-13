@@ -107,14 +107,24 @@ const DpapiMasterKeys = () => {
   const [error, setError] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
 
+  // Valid columns for sorting
+  const VALID_SORT_COLUMNS = ['guid', 'plaintext_key_sha1', 'backup_key_guid'];
+  const DEFAULT_SORT_COLUMN = 'guid';
+
   // Filter states
   const [guidFilter, setGuidFilter] = useState(() => searchParams.get('guid') || '');
-  const [sortColumn, setSortColumn] = useState(() => searchParams.get('sort_column') || 'guid');
+  const [sortColumn, setSortColumn] = useState(() => {
+    const columnFromUrl = searchParams.get('sort_column');
+    return VALID_SORT_COLUMNS.includes(columnFromUrl) ? columnFromUrl : DEFAULT_SORT_COLUMN;
+  });
   const [sortDirection, setSortDirection] = useState(() => searchParams.get('sort_direction') || 'asc');
 
   const handleSort = (column, direction) => {
-    setSortColumn(column);
-    setSortDirection(direction);
+    // Only allow sorting by valid columns
+    if (VALID_SORT_COLUMNS.includes(column)) {
+      setSortColumn(column);
+      setSortDirection(direction);
+    }
   };
 
   const buildWhereClause = () => {
