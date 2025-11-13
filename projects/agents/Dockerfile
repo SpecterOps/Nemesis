@@ -25,7 +25,7 @@ ENV DOTNET_ROOT=/usr/local/dotnet \
     PATH=/usr/local/dotnet:$PATH
 
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin \
-    --version latest \
+    --channel 8.0 \
     --runtime aspnetcore \
     --install-dir /usr/local/dotnet \
     && chmod +x /usr/local/dotnet/dotnet
