@@ -91,7 +91,7 @@ Clicking on a file entry in the "Files" view brings you to a file details view:
 
 On the top left of this view, you'll see basic metadata like the file name, magic/mime types, MD5/SHA1 hashes, etc.
 
-Press **[tab]** to autoscroll (or scroll manually) to get to the "File Content" view. Here, different tabs will display the summaries and transforms for a file. Pressing `p` will cycle between these views:
+Press **[tab]** to bring the focus to the "File Content" area. Here, different tabs will display the summaries and transforms for a file. Pressing **[tab]** again will cycle between these preview tabs:
 
 ![Nemesis File Details Content](images/nemesis-dashboard-file-details-content.png)
 
