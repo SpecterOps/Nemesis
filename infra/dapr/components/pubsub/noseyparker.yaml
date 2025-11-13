@@ -29,6 +29,6 @@ spec:
     - name: maxPriority   # set so we can prioritize some messages if wanted
       value: "3"
     - name: prefetchCount # should be equal or less than the max concurrent workflows
-      value: "25"
+      value: "100"
 auth:
   secretStore: nemesis-secret-store
