@@ -4,6 +4,24 @@ Nemesis has a number of services to help with assist with troubleshooting.
 
 **Note** that Grafana + Jaeger tracing are only available if you use the `--monitoring` flag when launching Nemesis!
 
+## Analyze Message Queues
+
+Nemesis uses message queue in its enrichment workflows. To quickly get an overview of the state of the queues, view the "Enrichment Queues" section in Nemesis's dashboard:
+
+![Nemesis Enrichment Queues](images/nemesis-dashboard-queues.png)
+
+
+  view the You can view the state of all the queues by navigating to the **Help** menu reachable in the bottom left of the Nemesis interface and clicking the `/rabbitmq/` route link will take you to the RabbitMQ interface. This interface can be used to track message counts, delivery rates, etc. Clicking on "Queues and Streams" will allow you to view the state of the queues, including how many items are waiting to be processed (in the "Ready" column) and the rate at which Nemesis processing the queues:
+
+![RabbitMQ Dashboard](images/rabbitmq.png)
+
+If the queues are backed up, you have three options : 
+
+1. Do nothing and just wait until Nemesis completes processing the queues.
+2. Monitor Nemesis's performance and adjust its settings to your system and workloads (see [Nemesis Performance Tuning](./performance.md)).
+3. Purge the queues to stop processing. You can purge the queue by clicking on the queue name (e.g. `files-new_file` for newly added files) and clicking the "Purge Queue" button.
+
+
 ## Grafana
 
 Navigating to the **Help** menu reachable in the bottom left of the Nemesis interface and clicking the `/grafana/` route link will take you to the Grafana interface. Clicking the **Metrics** Grafana link on the Help page will take you to the general metrics visualization:
@@ -22,11 +40,7 @@ Clicking the dashboards link in Grafana will bring you to a few preconfigured da
 
 ![Grafana Dashboard](images/grafana-dashboards.png)
 
-## RabbitMQ Dashboard
 
-While the queueing system for Nemesis is swappable with Dapr, Nemesis currently uses RabbitMQ. Navigating to the **Help** menu reachable in the bottom left of the Nemesis interface and clicking the `/rabbitmq/` route link will take you to the RabbitMQ interface. This interface can be used to track message delivery rates/etc.
-
-![RabbitMQ Dashboard](images/rabbitmq.png)
 
 ## Jaeger Tracing
 
@@ -47,3 +61,5 @@ This can help track down locations for slowdown or other failures- for example b
 While [Lazydocker](https://github.com/jesseduffield/lazydocker) is not a Nemesis specific project, we highly recommend it for general troubleshooting when using Docker containers:
 
 ![Lazydocker](images/lazydocker.png)
+
+Note: the CPU usage displayed in lazydocker is the CPU used by the container across all cores. So if there's 10 cores and a container is using 100% of a single core, then it'll display as 10%.

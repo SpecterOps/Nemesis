@@ -1,6 +1,8 @@
 # src/workflow/workflow_tracking_service.py
-from datetime import datetime
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Optional
+from uuid import uuid4
 
 import asyncpg
 from common.logger import get_logger
@@ -8,29 +10,55 @@ from common.logger import get_logger
 logger = get_logger(__name__)
 
 
+class WorkflowStatus(StrEnum):
+    """Workflow status enumeration."""
+
+    SCHEDULED = "SCHEDULED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    TIMEOUT = "TIMEOUT"
+
+
 class WorkflowTrackingService:
     """Service for tracking workflow lifecycle states in the database."""
 
-    def __init__(self, pool: asyncpg.Pool, workflow_client, max_execution_time: int = 300):
+    def __init__(self, name: str, pool: asyncpg.Pool, workflow_client):
         """Initialize the workflow tracking service.
 
         Args:
+            name: Name prefix for workflow instance IDs
             pool: asyncpg connection pool for database operations
             workflow_client: Dapr workflow client for monitoring workflow states
-            max_execution_time: Maximum time (in seconds) before a workflow is considered timed out
         """
+        self._name = name
         self.pool = pool
         self.workflow_client = workflow_client
-        self.max_execution_time = max_execution_time
 
-    async def register_workflow(self, instance_id: str, object_id: str, filename: Optional[str] = None) -> None:
+    def _create_instance_id(self, object_id: str) -> str:
+        """Create a workflow instance ID.
+
+        Args:
+            object_id: The object_id being processed
+
+        Returns:
+            Instance ID in format: <NAME>.<uuid>.<object_id>
+        """
+        instance_uuid = uuid4().hex
+        return f"{self._name}.{instance_uuid}.{object_id}"
+
+    async def register_workflow(self, object_id: str, filename: Optional[str] = None) -> str:
         """Create initial workflow record with SCHEDULED status.
 
         Args:
-            instance_id: The workflow instance ID
             object_id: The object_id being processed
             filename: Optional filename for display purposes
+
+        Returns:
+            The generated workflow instance ID
         """
+        instance_id = self._create_instance_id(object_id)
+
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute(
@@ -41,8 +69,8 @@ class WorkflowTrackingService:
                     instance_id,
                     object_id,
                     filename,
-                    "SCHEDULED",
-                    datetime.now(),
+                    WorkflowStatus.SCHEDULED,
+                    datetime.now(UTC),
                 )
 
             logger.debug(
@@ -52,6 +80,8 @@ class WorkflowTrackingService:
                 filename=filename,
                 status="SCHEDULED",
             )
+
+            return instance_id
         except Exception as e:
             logger.error(
                 "Failed to start tracking workflow",
@@ -64,16 +94,14 @@ class WorkflowTrackingService:
     async def update_status(
         self,
         instance_id: str,
-        status: str,
-        runtime_seconds: Optional[float] = None,
+        status: WorkflowStatus,
         error_message: Optional[str] = None,
     ) -> None:
-        """Update workflow status and optionally runtime/error information.
+        """Update workflow status and optionally error information.
 
         Args:
             instance_id: The workflow instance ID
-            status: New status (RUNNING, COMPLETED, FAILED, TIMEOUT, TERMINATED)
-            runtime_seconds: Optional runtime in seconds
+            status: New status (WorkflowStatus enum)
             error_message: Optional error message (appended to enrichments_failure)
         """
         try:
@@ -84,12 +112,10 @@ class WorkflowTrackingService:
                         """
                         UPDATE workflows
                         SET status = $1,
-                            runtime_seconds = COALESCE($2, runtime_seconds),
-                            enrichments_failure = array_append(enrichments_failure, $3)
-                        WHERE wf_id = $4
+                            enrichments_failure = array_append(enrichments_failure, $2)
+                        WHERE wf_id = $3
                         """,
                         status,
-                        runtime_seconds,
                         error_message[:100],  # Truncate long error messages
                         instance_id,
                     )
@@ -98,12 +124,10 @@ class WorkflowTrackingService:
                     await conn.execute(
                         """
                         UPDATE workflows
-                        SET status = $1,
-                            runtime_seconds = COALESCE($2, runtime_seconds)
-                        WHERE wf_id = $3
+                        SET status = $1
+                        WHERE wf_id = $2
                         """,
                         status,
-                        runtime_seconds,
                         instance_id,
                     )
 
@@ -111,7 +135,6 @@ class WorkflowTrackingService:
                 "Updated workflow status",
                 instance_id=instance_id,
                 status=status,
-                runtime_seconds=runtime_seconds,
                 has_error=bool(error_message),
             )
         except Exception as e:
@@ -284,6 +307,64 @@ class WorkflowTrackingService:
             logger.error(
                 "Failed to update enrichment results by object_id",
                 object_id=object_id,
+                error=str(e),
+            )
+            raise
+
+    async def finalize_workflow(self, instance_id: str) -> None:
+        """Finalize workflow by setting status to COMPLETED and calculating runtime.
+
+        Queries the database for the workflow start_time, calculates the runtime,
+        and updates the status to COMPLETED.
+
+        Args:
+            instance_id: The workflow instance ID
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                # Get the start time
+                row = await conn.fetchrow(
+                    """
+                    SELECT start_time
+                    FROM workflows
+                    WHERE wf_id = $1
+                    """,
+                    instance_id,
+                )
+
+                if not row:
+                    logger.error(
+                        "Cannot finalize workflow - workflow not found",
+                        instance_id=instance_id,
+                    )
+                    return
+
+                start_time = row["start_time"]
+                end_time = datetime.now(UTC)
+                runtime_seconds = (end_time - start_time).total_seconds()
+
+                # Update status to COMPLETED and set runtime_seconds
+                await conn.execute(
+                    """
+                    UPDATE workflows
+                    SET status = $1,
+                        runtime_seconds = $2
+                    WHERE wf_id = $3
+                    """,
+                    WorkflowStatus.COMPLETED,
+                    runtime_seconds,
+                    instance_id,
+                )
+
+            logger.info(
+                "Finalized workflow as completed",
+                instance_id=instance_id,
+                runtime_seconds=runtime_seconds,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to finalize workflow",
+                instance_id=instance_id,
                 error=str(e),
             )
             raise

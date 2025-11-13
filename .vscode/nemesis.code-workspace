@@ -94,6 +94,10 @@
             "projects/frontend/node_modules": true,
             "projects/frontend/dist": true
         },
+        "cSpell.words": [
+            "Dapr",
+            "Gotenberg"
+        ],
     },
     "extensions": {
         "recommendations": [

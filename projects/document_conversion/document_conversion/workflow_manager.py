@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-import uuid
 
 import document_conversion.global_vars as global_vars
 from common.logger import get_logger
@@ -29,9 +28,12 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
     await workflow_semaphore.acquire()
 
     try:
-        # Generate instance_id with standardized format
+        # Register workflow in database before scheduling
         object_id = file_enriched.object_id
-        instance_id = f"document_conversion_{uuid.uuid4().hex}_{object_id}"
+        instance_id = await global_vars.tracking_service.register_workflow(
+            object_id=object_id,
+            filename=file_enriched.file_name,
+        )
 
         # Add to active workflows tracking
         async with workflow_lock:
@@ -47,13 +49,6 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
             object_id=object_id,
             file_name=file_enriched.file_name,
             active_count=len(active_workflows),
-        )
-
-        # Register workflow in database before scheduling
-        await global_vars.tracking_service.register_workflow(
-            instance_id=instance_id,
-            object_id=object_id,
-            filename=file_enriched.file_name,
         )
 
         # Schedule the workflow (using asyncio.to_thread for sync client)

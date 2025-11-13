@@ -1,15 +1,15 @@
 # src/workflow/workflow_manager.py
 import asyncio
 import os
-import uuid
 from datetime import datetime
 
 import asyncpg
 from common.logger import get_logger
 from common.models import File, SingleEnrichmentWorkflowInput
-from common.workflows.tracking_service import WorkflowTrackingService
-from dapr.ext.workflow.workflow_state import WorkflowStatus
+from common.workflows.tracking_service import WorkflowStatus
+from dapr.ext.workflow.workflow_state import WorkflowStatus as DaprWorkflowStatus
 
+from . import global_vars
 from .tracing import get_tracer
 from .workflow_completion import publish_workflow_completion
 
@@ -29,19 +29,9 @@ class WorkflowManager:
         self.max_execution_time = max_execution_time
         self.background_tasks = set()  # Track background tasks to prevent GC
         self.pool = pool
-        self.tracking_service: WorkflowTrackingService = None
 
     async def __aenter__(self):
         """Async context manager entry - start background tasks"""
-
-        # Initialize workflow tracking service with workflow_client from global_vars
-        from . import global_vars
-
-        self.tracking_service = WorkflowTrackingService(
-            pool=self.pool,
-            workflow_client=global_vars.workflow_client,
-            max_execution_time=self.max_execution_time,
-        )
 
         # Start background cleanup task
         cleanup_task = asyncio.create_task(self._cleanup_loop())
@@ -81,12 +71,11 @@ class WorkflowManager:
 
     def _get_status_string(self, state_obj):
         """Convert workflow state to string"""
-        if state_obj.runtime_status == WorkflowStatus.FAILED:
+        if state_obj.runtime_status == DaprWorkflowStatus.FAILED:
             logger.warning(
                 "Workflow failed",
                 instance_id=state_obj.instance_id,
                 error=state_obj.failure_details.message if state_obj.failure_details else "Unknown",
-                pid=os.getpid(),
             )
 
         return state_obj.runtime_status.name
@@ -115,17 +104,14 @@ class WorkflowManager:
 
                     # Try to terminate the workflow in Dapr
                     try:
-                        from . import global_vars
-
                         await asyncio.to_thread(global_vars.workflow_client.terminate_workflow, wf_id)
                     except Exception as e:
                         logger.warning(f"Could not terminate workflow {wf_id}: {e}")
 
                     # Update database status using tracking service
-                    await self.tracking_service.update_status(
+                    await global_vars.tracking_service.update_status(
                         wf_id,
-                        "TIMEOUT",
-                        runtime_seconds=runtime_seconds,
+                        WorkflowStatus.TIMEOUT,
                         error_message="cleaned up by cleanup_stale_workflows",
                     )
 
@@ -134,26 +120,6 @@ class WorkflowManager:
 
         except Exception as e:
             logger.error(f"Error during stale workflow cleanup: {e}")
-
-    async def update_workflow_status(self, instance_id, status, runtime_seconds=None, error_message=None):
-        """
-        Generalized function to update workflow status in database.
-
-        DEPRECATED: Use self.tracking_service.update_status() instead.
-        This method is kept for backward compatibility but delegates to the tracking service.
-
-        Args:
-            instance_id: The workflow instance ID
-            status: The status to set (COMPLETED, FAILED, ERROR, TIMEOUT, etc.)
-            runtime_seconds: Runtime in seconds (optional)
-            error_message: Error message to append to enrichments_failure (optional)
-        """
-        await self.tracking_service.update_status(
-            instance_id=instance_id,
-            status=status,
-            runtime_seconds=runtime_seconds,
-            error_message=error_message,
-        )
 
     async def reset(self):
         """Reset the workflow manager's state."""
@@ -173,33 +139,31 @@ class WorkflowManager:
 
     async def run_workflow(self, file: File):
         """Start a workflow"""
-        from . import global_vars
         from .workflow import enrichment_pipeline_workflow
 
         tracer = get_tracer()
 
         object_id = file.object_id
-        instance_id = f"file_enrichment_{uuid.uuid4().hex}_{object_id}"
         base_filename = os.path.basename(file.path) if file.path else None
 
-        logger.info(
-            "Scheduling workflow",
-            instance_id=instance_id,
-            object_id=object_id,
-        )
-
         with tracer.start_as_current_span("start_workflow") as current_span:
-            current_span.set_attribute("workflow.instance_id", instance_id)
             current_span.set_attribute("workflow.type", "enrichment_workflow")
             current_span.set_attribute("workflow.object_id", object_id)
 
             try:
                 # Start tracking workflow in database
-                await self.tracking_service.register_workflow(
-                    instance_id=instance_id,
+                instance_id = await global_vars.tracking_service.register_workflow(
                     object_id=object_id,
                     filename=base_filename,
                 )
+
+                logger.info(
+                    "Scheduling workflow",
+                    instance_id=instance_id,
+                    object_id=object_id,
+                )
+
+                current_span.set_attribute("workflow.instance_id", instance_id)
 
                 # Schedule the workflow in Dapr
                 await asyncio.to_thread(
@@ -217,7 +181,7 @@ class WorkflowManager:
                 logger.exception(message="Error starting workflow")
                 raise
 
-    async def start_workflow_single_enrichment(
+    async def run_single_enrichment_workflow(
         self, workflow_input: SingleEnrichmentWorkflowInput | dict[str, str]
     ) -> str:
         """Start a single enrichment workflow
@@ -239,40 +203,35 @@ class WorkflowManager:
             if isinstance(workflow_input, dict):
                 workflow_input = SingleEnrichmentWorkflowInput(**workflow_input)
 
-            # Generate instance_id with standardized format
+            # Extract metadata for tracking
             object_id = workflow_input.object_id
-            instance_id = f"file_enrichment_single_{uuid.uuid4().hex}_{object_id}"
+            enrichment_name = workflow_input.enrichment_name
+            filename = f"bulk:{enrichment_name} ({object_id})"
 
             with tracer.start_as_current_span("start_single_enrichment_workflow") as span:
-                # Add workflow ID to trace for Jaeger queries
-                span.set_attribute("workflow.instance_id", instance_id)
                 span.set_attribute("workflow.start", True)
                 span.set_attribute("workflow.type", "single_enrichment_workflow")
-                span.set_attribute("workflow.enrichment_name", workflow_input.enrichment_name)
-                span.set_attribute("workflow.object_id", workflow_input.object_id)
-
-                # Extract metadata for tracking
-                enrichment_name = workflow_input.enrichment_name
-                filename = f"bulk:{enrichment_name} ({object_id})"
+                span.set_attribute("workflow.enrichment_name", enrichment_name)
+                span.set_attribute("workflow.object_id", object_id)
 
                 # Start tracking workflow in database
-                await self.tracking_service.register_workflow(
-                    instance_id=instance_id,
+                instance_id = await global_vars.tracking_service.register_workflow(
                     object_id=object_id,
                     filename=filename,
                 )
+
+                # Add workflow ID to trace for Jaeger queries
+                span.set_attribute("workflow.instance_id", instance_id)
 
                 logger.debug(
                     "Triggering single enrichment workflow",
                     instance_id=instance_id,
                     enrichment_name=enrichment_name,
                     object_id=object_id,
-                    pid=os.getpid(),
                 )
 
                 # Actually schedule the workflow
                 # Import here to avoid circular import
-                from . import global_vars
                 from .workflow import single_enrichment_workflow
 
                 # Convert Pydantic model to dict for Dapr workflow

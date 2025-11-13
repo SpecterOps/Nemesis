@@ -24,11 +24,19 @@
 
 ## Overview
 
-Nemesis is an offensive file enrichment pipeline.
+Nemesis is an offensive file enrichment pipeline and analysis tool.
 
 Nemesis 2.0 is built on [Docker](https://www.docker.com/) with heavy [Dapr integration](https://dapr.io/), our goal with Nemesis was to create a centralized file processing platform that functions as an "offensive VirusTotal".
 
-***Note that Nemesis v1.0 is incompatible with Nemesis 2.0!***
+_Note: the previous Nemesis 1.0.1 code base has been preserved [as a branch](https://github.com/SpecterOps/Nemesis/tree/nemesis-1.0.1)_
+
+## Setup / Installation
+Follow the [quickstart guide](docs/quickstart.md).
+
+
+## Usage
+See the [Nemesis Usage Guide](docs/usage_guide.md).
+
 
 ## Additional Information
 

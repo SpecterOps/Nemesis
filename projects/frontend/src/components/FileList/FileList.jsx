@@ -2,7 +2,7 @@ import Tooltip from '@/components/shared/Tooltip2';
 import { useTriageMode } from '@/contexts/TriageModeContext';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from 'graphql-ws';
-import { AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Clock, Eye, Search, Tag, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, Search, Tag, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
@@ -233,11 +233,10 @@ const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange 
               <button
                 key={page}
                 onClick={() => onPageChange(page)}
-                className={`${
-                  currentPage === page
-                    ? 'z-10 bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                    : 'bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                } relative inline-flex items-center px-4 py-2 text-sm font-medium`}
+                className={`${currentPage === page
+                  ? 'z-10 bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
+                  : 'bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  } relative inline-flex items-center px-4 py-2 text-sm font-medium`}
               >
                 {page}
               </button>
@@ -1033,9 +1032,10 @@ const FileList = () => {
       {isTriageMode && (
         <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
           <p className="text-sm text-blue-600 dark:text-blue-400">
-            Triage Mode Active - Use ↑↓ to navigate{isPaginated ? ' (across pages)' : ''}. Use Shift+↑↓ to select multiple rows. Ctrl/Cmd+A to select all{isPaginated ? ' on current page' : ''}.
+            Triage Mode Active(<a href="https://specterops.github.io/Nemesis/usage_guide/#file-triage-mode" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-700 dark:hover:text-blue-300">more info</a>) - Use ↑ ↓ ← → to navigate. Ctrl/Cmd+A to select all{isPaginated ? ' on current page' : ''}.
             'v' to mark{selectedFiles.size > 0 ? ' selected files' : ''} as viewed,
-            or ESC to exit
+            or ESC to exit{' '}
+
           </p>
         </div>
       )}

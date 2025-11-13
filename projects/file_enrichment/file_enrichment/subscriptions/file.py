@@ -119,7 +119,6 @@ async def save_file_message(file: File):
                 "nesting_level > 0, not saving file message",
                 nesting_level=file.nesting_level,
                 object_id=file.object_id,
-                pid=os.getpid(),
             )
             return
 

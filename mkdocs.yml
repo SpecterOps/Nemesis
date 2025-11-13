@@ -13,7 +13,6 @@ exclude_docs: |
 nav:
   - Nemesis: index.md
   - Quickstart: quickstart.md
-  - Overview: overview.md
 
   - Usage:
     - usage_guide.md
@@ -28,15 +27,15 @@ nav:
     - DPAPI Analysis: dpapi.md
     - Container Processing: containers.md
     - reporting.md
+    - Performance Tuning: performance.md
 
   - Services:
-    - dapr.md
     - hasura.md
     - jupyter.md
     - housekeeping.md
 
   - Developer:
-    - Performance Tuning: performance.md
+    - Project Overview: overview.md
     - Adding File Enrichment Modules: file_enrichment_modules.md
     - Operational Data Reference: odr.md
     - Docker Compose Documentation: docker_compose.md

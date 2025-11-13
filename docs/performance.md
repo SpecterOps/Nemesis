@@ -1,8 +1,18 @@
-# Performance Tuning
+# Nemesis Performance Tuning
 
-Nemesis may perform differently depending on the system architecture and resources, specifically RAM and the number of CPUs.
+This document details different ways to monitor and tune Nemesis's performance. Nemesis's performs differently depending on a variety of factors, including the host's architecture and resources (particularly CPU and RAM) and the workload (e.g. the number of files and imbalances in the the number of documents, .NET assemblies, source code, etc.).
 
-If workflows begin to fail, or you are experiencing major performance issues (as diagnosed by the [Troubleshooting](troubleshooting.md) document) there are a few tunable parameters that can help. Alternatively, if your performance is fine and you want to potentially increase performance, you can increase these values. Most/all of these values involve altering behaviors for the `file-enrichment` service.
+If workflows begin to fail, or you are experiencing major performance issues (as diagnosed by the [Troubleshooting](troubleshooting.md) document) there are a few tunable parameters that can help. Alternatively, if your performance is fine already and you want to potentially increase performance more or potentially reduce CPU/RAM usage (to save $$$), you can adjust these values. Most/all of these values involve altering behaviors the docker services responsible for file enrichment, namely the `file-enrichment`, `document-conversion`, and `noseyparker-scanner` services.
+
+# Analyzing Your Workload
+## Analyzing Queues
+Normally people realize Nemesis isn't going fast enough after uploading a bunch of files and it taking forever to process. Usually this is indicative that a bunch of files get queued up for processing, but aren't be processed fast enough. You can confirm this by [analyzing the message queues](./troubleshooting.md#analyze-message-queues).
+
+
+
+# File Submission
+
+
 
 
 # Useful Prometheus Metrics

@@ -3,7 +3,6 @@ import { useTheme } from '@/components/ThemeProvider';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -1022,7 +1021,7 @@ const FileViewer = () => {
     );
   };
 
-  // "p"" to swap preview tabs, <- to go back, tab to scroll to file data area
+  // <- to go back, tab to scroll to file data area or cycle tabs if already in view, f to jump to findings
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Only handle keyboard shortcuts when not in an input/textarea/monaco-editor
@@ -1032,20 +1031,32 @@ const FileViewer = () => {
       if (!isEditingText) {
         if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
-          fileContentRef.current?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start',
-            inline: 'nearest'
-          });
+
+          // Check if the file content section is already in view
+          if (fileContentRef.current) {
+            const rect = fileContentRef.current.getBoundingClientRect();
+            // Element is considered in view if its top is within the viewport
+            // Using a more lenient check: if the top is less than 100px from the top of viewport
+            const isInView = rect.top >= -50 && rect.top <= 100;
+
+            if (isInView) {
+              // If already in view, cycle through tabs
+              const tabs = getAvailableTabs();
+              const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
+              const nextIndex = (currentIndex + 1) % tabs.length;
+              setActiveTab(tabs[nextIndex].id);
+            } else {
+              // If not in view, scroll to it
+              fileContentRef.current.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+                inline: 'nearest'
+              });
+            }
+          }
         } else if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
           handleBackClick();
-        } else if (e.key === 'p' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
-          const tabs = getAvailableTabs();
-          const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
-          const nextIndex = (currentIndex + 1) % tabs.length;
-          setActiveTab(tabs[nextIndex].id);
         } else if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
           // Navigate to findings if count > 0
@@ -1321,6 +1332,11 @@ const FileViewer = () => {
 
   return (
     <div className="space-y-1">
+      <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border dark:border-gray-700 p-1">
+        <p className="text-sm text-blue-600 dark:text-blue-400">
+          Use ← to return to file list, [tab] to jump to preview (or cycle tabs if already there), and 'f' to jump to findings (if present)
+        </p>
+      </div>
       <div className="flex justify-between items-center">
         <div className="flex items-center space-x-4">
           <button
@@ -1337,11 +1353,7 @@ const FileViewer = () => {
         </div>
       </div>
 
-      <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border dark:border-gray-700 p-3">
-        <p className="text-sm text-blue-600 dark:text-blue-400">
-          Use ← to return to file list, [tab] to jump to preview, 'p' to cycle previews, and 'f' to jump to findings (if present)
-        </p>
-      </div>
+
 
       <FileDetailsSection
         fileData={fileData}
@@ -1380,6 +1392,11 @@ const FileViewer = () => {
               >
                 Findings: {fileData.findingsByObjectId_aggregate?.aggregate?.count || 0}
               </button>
+              {fileData?.size > 10 * 1024 * 1024 && (
+                <span className="text-yellow-600 dark:text-yellow-400 text-sm">
+                  File is too large to view directly. Maximum size is 10MB.
+                </span>
+              )}
               {shouldShowContainerAnalysisButton() && (
                 <button
                   onClick={handleContainerAnalysis}
@@ -1421,11 +1438,6 @@ const FileViewer = () => {
                 </button>
               )}
             </div>
-            {fileData?.size > 10 * 1024 * 1024 && (
-              <CardDescription className="text-yellow-600 dark:text-yellow-400 mt-1">
-                File is too large to view directly. Maximum size is 10MB.
-              </CardDescription>
-            )}
           </CardHeader>
           <CardContent className="pt-1">
             {isContentTruncated && renderContentTruncationAlert()}

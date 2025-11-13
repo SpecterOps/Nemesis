@@ -14,7 +14,7 @@ services:
   # in the docker-compose.yml file (<service>_dapr)
   file-enrichment-dapr:
     command: [
-        "./daprd",
+        "./daprd",r
         "--max-body-size",
         "1Gi",
         "--app-id",

@@ -130,7 +130,6 @@ async def store_dotnet_results(
     decompilation_object_id = dotnet_output.decompilation
     analysis = dotnet_output.analysis
     try:
-
         # Create an enrichment result to store
         enrichment_result = EnrichmentResult(module_name="dotnet_service")
         enrichment_result.results = {}
@@ -190,33 +189,10 @@ async def store_dotnet_results(
                 logger.error(
                     "DotNet assembly finished, but analysis failed",
                     object_id=object_id,
-                    assembly_name=analysis.AssemblyName,
                     error=analysis.Error,
                     path=file_enriched.file_name,
                 )
-
-                # Create a finding for the error
-                error_summary = f"# .NET Assembly Analysis Error: {analysis.AssemblyName}\n\n"
-                error_summary += f"**Error**: {analysis.Error}\n\n"
-                error_summary += "The assembly could not be analyzed.\n"
-
-                display_data = FileObject(
-                    type="finding_summary",
-                    metadata={"summary": sanitize_for_jsonb(error_summary)},
-                )
-
-                finding = Finding(
-                    category=FindingCategory.INFORMATIONAL,
-                    finding_name="dotnet_analysis_error",
-                    origin_type=FindingOrigin.ENRICHMENT_MODULE,
-                    origin_name="dotnet_service",
-                    object_id=object_id,
-                    severity=1,
-                    raw_data=sanitize_for_jsonb(analysis.model_dump()),
-                    data=[display_data],
-                )
-
-                findings_list.append(finding)
+                # Do not create a finding for errors - just log them
 
             # Check if there are any significant findings worth creating a finding for
             has_significant_findings = (
@@ -261,7 +237,7 @@ async def store_dotnet_results(
         async with global_vars.asyncpg_pool.acquire() as conn:
             async with conn.transaction():
                 # Update workflow success status first
-                await global_vars.workflow_manager.tracking_service.update_enrichment_results_by_object_id(
+                await global_vars.tracking_service.update_enrichment_results_by_object_id(
                     object_id=object_id,
                     success_list=["dotnet_service"],
                 )

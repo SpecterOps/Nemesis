@@ -1,4 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 -----------------------
 -- FILES
@@ -224,6 +225,14 @@ CREATE INDEX IF NOT EXISTS idx_findings_data_gin ON findings USING GIN (data);
 CREATE INDEX IF NOT EXISTS idx_files_view_history_username ON files_view_history(username);
 CREATE INDEX IF NOT EXISTS idx_files_view_history_composite ON files_view_history(object_id, username, timestamp);
 CREATE INDEX IF NOT EXISTS idx_files_enriched_dataset_agent_id ON files_enriched_dataset(agent_id);
+
+-- Performance indexes for findings and workflow tracking
+-- Used by GraphQL subscription ordering (FindingsList.jsx: order_by created_at desc)
+CREATE INDEX IF NOT EXISTS idx_findings_created_at ON findings(created_at DESC);
+-- Used by publish_findings.py for alert generation queries
+CREATE INDEX IF NOT EXISTS idx_findings_object_id ON findings(object_id);
+-- Composite index for finding triage history joins (finding_triage_histories with order_by timestamp)
+CREATE INDEX IF NOT EXISTS idx_findings_triage_history_composite ON findings_triage_history(finding_id, timestamp DESC);
 
 
 
@@ -593,10 +602,15 @@ CREATE TABLE IF NOT EXISTS workflows (
     filename VARCHAR(255),
     enrichments_success TEXT[] DEFAULT '{}',
     enrichments_failure TEXT[] DEFAULT '{}',
-    status TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('SCHEDULED', 'RUNNING', 'COMPLETED', 'FAILED', 'TIMEOUT')),
     runtime_seconds REAL,
-    start_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    start_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_purged BOOLEAN NOT NULL DEFAULT false
 );
+
+-- Used by subscription handlers (noseyparker, dotnet) for workflow updates by object_id
+-- Partial index: only indexes active workflows to reduce size and write overhead
+CREATE INDEX IF NOT EXISTS idx_workflows_object_id_active ON workflows(object_id) WHERE status IN ('SCHEDULED', 'RUNNING');
 
 
 -----------------------

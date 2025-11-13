@@ -41,7 +41,7 @@ const CustomTooltip = ({ children, content }) => {
 
       // Check if there's enough space on the right side
       const spaceOnRight = viewportWidth - containerRect.right;
-      const tooltipWidth = 288; // max-w-xs is roughly 288px
+      const tooltipWidth = 384; // max-w-md is 28rem (448px), but we use 384 for better fit
 
       if (spaceOnRight < tooltipWidth) {
         setPosition('left');
@@ -72,10 +72,11 @@ const CustomTooltip = ({ children, content }) => {
       {isVisible && (
         <div
           ref={tooltipRef}
-          className={`absolute z-10 p-2 text-sm bg-gray-800 text-white rounded shadow-lg max-w-xs -mt-2 ${position === 'right'
-            ? 'left-full ml-2'
-            : 'right-full mr-2'
+          className={`absolute z-10 p-3 text-sm bg-gray-900 text-white rounded shadow-xl whitespace-normal -mt-2 border-2 border-blue-600 ${position === 'right'
+            ? 'left-4'
+            : 'right-4'
             }`}
+          style={{ minWidth: '200px', maxWidth: '300px' }}
         >
           {content}
         </div>
@@ -729,14 +730,14 @@ const StatsOverview = () => {
               icon={FileText}
               isLoading={isLoading}
               onClick={() => handleNavigation('/files')}
-              tooltip="Total files submitted to Nemesis"
+              tooltip="Total files submitted from the queue for processing."
             />
             <StatCard
               title="Total Derived Files"
               value={stats ? (stats.totalFiles - stats.processedFiles) : 0}
               icon={Layers}
               isLoading={isLoading}
-              tooltip="Files derived from processing submitted files (Total Processed - Total Submitted)"
+              tooltip="Files derived from processing submitted files."
             />
             <StatCard
               title="Unviewed Files"
@@ -744,14 +745,13 @@ const StatsOverview = () => {
               icon={Eye}
               isLoading={isLoading}
               onClick={() => handleNavigation('/files?view_state=unviewed')}
-              tooltip="Files that haven't been viewed by anyone"
+              tooltip="Files that have not been viewed by anyone"
             />
             <StatCard
               title="Containers Processed"
               value={stats?.containersProcessed ?? 0}
               icon={FileArchive}
               isLoading={isLoading}
-              onClick={() => handleNavigation('/files')}
               tooltip="Archive files (.zip, .7z, etc.) processed"
             />
           </div>
@@ -874,14 +874,14 @@ const StatsOverview = () => {
               value={enrichmentStats?.active_workflows ?? 0}
               icon={Activity}
               isLoading={isEnrichmentLoading}
-              tooltip="File enrichment workflows currently running"
+              tooltip="File enrichment workflows currently running."
             />
             <StatCard
               title="Completed Workflows"
               value={enrichmentStats?.metrics?.completed_count ?? 0}
               icon={FileText}
               isLoading={isEnrichmentLoading}
-              tooltip="Files successfully processed by the File Enrichment service"
+              tooltip="Enrichment workflows successfully processed by all enrichment services."
             />
             <StatCard
               title="Failed Workflows"
@@ -903,7 +903,7 @@ const StatsOverview = () => {
               ) : queueStats?.queue_details ? (() => {
                 // Define the queues we want to display and their friendly names (in display order)
                 const queueDisplayConfig = [
-                  { topic: 'new_file', displayName: 'Enrichment Modules' },
+                  { topic: 'new_file', displayName: 'Files Queued for Processing' },
                   { topic: 'document_conversion_input', displayName: 'Document Conversion' },
                   { topic: 'noseyparker_input', displayName: 'NoseyParker' },
                   { topic: 'dotnet_input', displayName: 'Dotnet Analysis' },

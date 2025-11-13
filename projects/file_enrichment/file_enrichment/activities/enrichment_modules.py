@@ -119,7 +119,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                 update_span.set_attribute("success_count", len(success_list))
                 update_span.set_attribute("failure_count", len(failure_list))
 
-                await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+                await global_vars.tracking_service.update_enrichment_results(
                     instance_id=instance_id, success_list=success_list, failure_list=failure_list
                 )
 

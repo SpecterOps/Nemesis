@@ -211,7 +211,7 @@ async def store_noseyparker_results(
     try:
         if not matches:
             logger.debug("No matches found, nothing to store", object_id=object_id)
-            await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+            await global_vars.tracking_service.update_enrichment_results(
                 instance_id=workflow_id,
                 success_list=["noseyparker"],
             )
@@ -321,7 +321,7 @@ async def store_noseyparker_results(
                     )
 
         # Update workflow enrichment status
-        await global_vars.workflow_manager.tracking_service.update_enrichment_results(
+        await global_vars.tracking_service.update_enrichment_results(
             instance_id=workflow_id,
             success_list=["noseyparker"],
         )

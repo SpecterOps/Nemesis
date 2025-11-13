@@ -1,10 +1,10 @@
 import Tooltip from '@/components/shared/Tooltip';
 import { useTheme } from '@/components/ThemeProvider';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useUser } from '@/contexts/UserContext';
 import Editor from "@monaco-editor/react";
 import { ChevronDown, Plus, Tag, X } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const FileDetailsSection = ({ fileData, setFileData }) => {
@@ -31,6 +31,7 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
   const [fileTags, setFileTags] = useState([]);
   const newTagInputRef = useRef(null);
   const tagDropdownRef = useRef(null);
+  const [showMetadata, setShowMetadata] = useState(false);
 
   useEffect(() => {
     // Set initial tags from fileData
@@ -374,81 +375,101 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
 
   return (
     <Card className="bg-white dark:bg-dark-secondary shadow-lg mb-1 transition-colors">
-      <CardHeader className="border-b border-gray-200 dark:border-gray-700 py-4">
+      {/* <CardHeader className="border-b border-gray-200 dark:border-gray-700 py-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-4">
             <CardTitle className="text-gray-900 dark:text-gray-100">File Details</CardTitle>
           </div>
         </div>
-      </CardHeader>
+      </CardHeader> */}
       <CardContent className="p-0 pb-0">
         <div className="grid grid-cols-2 gap-4">
           <div className="p-4">
+            <div className="flex justify-between items-center mb-2">
+              <button
+                onClick={() => setShowMetadata(!showMetadata)}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {showMetadata ? '− Hide' : '+ Show'} Submission Metadata
+              </button>
+            </div>
             <table className="w-full">
               <tbody>
                 <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 w-32">File Name</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.file_name}</td>
+                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Magic Type</td>
+                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100  text-ellipsis">{fileData?.magic_type || 'Unknown'}</td>
                 </tr>
                 <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 w-32">Object ID</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.object_id}</td>
+                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">MIME Type</td>
+                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{fileData?.mime_type || 'Unknown'}</td>
                 </tr>
                 <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Agent ID</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.agent_id}</td>
+                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Source</td>
+                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{fileData?.source || 'Unknown'}</td>
                 </tr>
                 <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Source</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.source || 'Unknown'}</td>
+                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Size</td>
+                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                    {(() => {
+                      const bytes = fileData?.size || 0;
+                      if (bytes >= 1073741824) {
+                        return `${(bytes / 1073741824).toFixed(2)} GB`;
+                      } else if (bytes >= 1048576) {
+                        return `${(bytes / 1048576).toFixed(2)} MB`;
+                      } else {
+                        return `${(bytes / 1024).toFixed(2)} KB`;
+                      }
+                    })()}
+                  </td>
+                </tr>
+
+                <tr>
+                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Is Plaintext</td>
+                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{fileData?.is_plaintext ? 'Yes' : 'No'}</td>
                 </tr>
                 <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Project</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.project}</td>
+                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Is Container</td>
+                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{fileData?.is_container ? 'Yes' : 'No'}</td>
                 </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Size</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{`${(fileData?.size / 1024).toFixed(2)} KB`}</td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Magic Type</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 break-all">{fileData?.magic_type || 'Unknown'}</td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">MIME Type</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.mime_type || 'Unknown'}</td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Is Plaintext</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.is_plaintext ? 'Yes' : 'No'}</td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Is Container</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{fileData?.is_container ? 'Yes' : 'No'}</td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Upload Time</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{new Date(fileData?.timestamp).toLocaleString()}</td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Expiration</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100">{new Date(fileData?.expiration).toLocaleString()}</td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">MD5</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 break-all">{fileData?.hashes?.md5}</td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">SHA1</td>
-                  <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 break-all">{fileData?.hashes?.sha1}</td>
-                </tr>
+                {showMetadata && (
+                  <>
+                    <tr>
+                      <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Object ID</td>
+                      <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{fileData?.object_id}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Agent ID</td>
+                      <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{fileData?.agent_id}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Project</td>
+                      <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{fileData?.project}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Upload Time</td>
+                      <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{new Date(fileData?.timestamp).toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Expiration</td>
+                      <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{new Date(fileData?.expiration).toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">MD5</td>
+                      <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-hidden text-ellipsis">{fileData?.hashes?.md5}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">SHA1</td>
+                      <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-hidden text-ellipsis">{fileData?.hashes?.sha1}</td>
+                    </tr>
+                  </>
+                )}
                 {/* <tr>
-                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">SHA256</td>
+                  <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 w-40">SHA256</td>
                   <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 break-all">{fileData?.hashes?.sha256}</td>
                 </tr> */}
                 {fileData?.originating_object_id && (
                   <tr>
-                    <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Originating File</td>
+                    <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Originating File</td>
                     <td className="py-0.5 font-mono text-sm">
                       <button
                         onClick={() => navigate(`/files/${fileData.originating_object_id}`)}
@@ -461,7 +482,7 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
                 )}
                 {fileData?.originating_container_id && (
                   <tr>
-                    <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400">Originating Container</td>
+                    <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">Originating Container</td>
                     <td className="py-0.5 font-mono text-sm">
                       <button
                         onClick={() => navigate(`/containers?container_id=${fileData.originating_container_id}`)}
@@ -478,8 +499,8 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
 
           <div className="p-4">
             {/* Tag management section (where hashes were previously) */}
-            <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-4">
-              <div className="flex justify-between items-center mb-3">
+            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg mb-1">
+              <div className="flex justify-between items-center mb-1">
                 <h3 className="text-md font-medium text-gray-900 dark:text-gray-100 flex items-center">
                   <Tag className="w-4 h-4 mr-2" />
                   File Tags

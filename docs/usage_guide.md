@@ -22,10 +22,10 @@ For a general overview of the Nemesis project structure, see the [overview](over
 
 ## Data Ingestion
 
-Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in muliple ways, including:
+Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in multiple ways, including:
 
-* [Auto-ingesting data from C2 platorms](#nemesis-c2-connector-setup), including Mythic and Outflank C2.
-* [Manually uploading files on the "File Upload" page in the Nemesis's Dashboard UI.](#manual-file-upload)
+* [Auto-ingesting data from C2 platforms](#nemesis-c2-connector-setup), including Mythic and Outflank C2.
+* [Manually uploading files on the "File Upload" page in the Nemesis Dashboard UI.](#manual-file-upload)
 * [Using the CLI tool](./cli.md) to:
     * [submit individual files or entire folders/subfolders](./cli.md#file-submission)
     * [monitor a folder for new files and auto-submit them](./cli.md#folder-monitoring).
@@ -39,33 +39,49 @@ See the [CLI](./cli.md) documentation for more details on configuration.
 
 ## Nemesis Dashboard
 
-The main method for operators/analysts to interact with Nemesis data is through the Nemesis Dashboard. The dashboard can be accessed at `https://NEMESIS_IP/HOST:7443/`. The initial display shows details about the number of processed files and enrichment workflow information:
+The main method for operators/analysts to interact with Nemesis data is through the Nemesis Dashboard. The dashboard can be accessed at `https://NEMESIS_IP_OR_HOST:7443/`. The initial display shows details about the number of processed files and enrichment workflow information:
 
 ![Nemesis Dashboard](images/nemesis-dashboard.png)
 
 ### Files
 
-One of the common tasks for the dashboard is file triage, accessible through the `Files` page on the left navigation bar:
+To analyze files in Nemesis, visit the `Files` page in the left navigation pane:
 
 ![Nemesis Dashboard Files View](images/nemesis-dashboard-files.png)
 
-As files are processed by Nemesis, they will appear as lines on this page. By default the files will be sorted newest to oldest, but this can be modified by clicking the "Newest First" button at the top which will switch it to showing the oldest first.
+As Nemesis processes files, they appear as a new row on this page. By default, Nemesis displays all uploaded files from newest to older. Clicking on column headers changes sorting behavior and the toolbar allows filtering the list in various ways.
 
-Likewise, the "(Findings) All Files" is the default (showing all files), but clicking shows just files with findings. The "Filter by path" text entry can be used to filter by file path/name/extension, and entries can be filtered by agent ID.
+Each file's path has a blue dot to the left of it indicating if you have viewed it or not. Clicking on the row will bring you to the [File Details](#file-details) page and marks the file as viewed by you. Returning to the Files page, the blue indicator dot won't be present anymore. To only show files you have not viewed yet, you can click the dropdown in the top left of the toolbar and select one of the following options:
 
-When clicking on a file entry, you will be brought to the [File Details](#file-details) page. After viewing a file, the entry will be hidden by default on the "Files" page - click the "Files Unviewed by Me" entry on the top left to view select "Unviewed Files" to show files not viewed by anyone (including you), or "All Files" to view all files regardless of view state:
+- `All Files` - Shows all files (the default).
+- `Files Unviewed by Me` - Shows only files that **you** have not analyzed yet.
+- `Unviewed Files` - Shows files that **nobody** has analyzed (including you). This is useful when triaging files as a team.
 
 ![Nemesis Dashboard File View State](images/nemesis-dashboard-files-view-state.png)
 
-Also, clicking any column will sort by that column's values.
+
+Some files may have findings associated with them. To show only files that have findings, click the "(Findings) All Files" button. 
+
+Use the "Filter by path" search box to filter files by path/name/extension. Similarly, you can use the "Filter by Agent ID" to filter files by agent ID.
+
+On the File Details page you can [view and add tags](#file-tags) to a file. The "Filter by Tag" button allows you to filter the file list to particular tags.
+
 
 #### File Triage Mode
 
-In the main files view, type `t` to enter file triage mode:
+File Triage Mode is very convenient when you want to quickly navigate and view/triage files and findings.
+To enter File Triage Mode, hit the `t` key on the Files page:
 
 ![Nemesis Dashboard File Triage Mode](images/nemesis-dashboard-files-triage-mode.png)
 
-As the instructions specify, Use ↑↓ to navigate. Use Shift+↑↓ to select multiple rows. Ctrl/Cmd+A to select all. 'v' to mark as viewed, or ESC to exit. Only the files currently showed by the specified filters you've applied will be marked as viewed. These files will then be hidden from the main triage pane.
+As the instructions specify at the top of the page, the following actions are possible:
+- `Up/down(↑↓) arrow` - Navigate up and down the list of files.
+- `Right(→) arrow` - Navigate to the [File Details](#file-details) page. Use `Left(←) arrow` to navigate back.
+- `Ctrl/Cmd + A` - Select all files on the current page.
+- `v` - Marks the selected/highlighted file(s) as viewed.
+- `t` or `ESC` - Exits triage mode. 
+- `Ctrl/Cmd + Mouse Click` - Select an individual file.
+- `Shift + Mouse Click` - Select multiple files.
 
 #### File Details
 
@@ -75,15 +91,15 @@ Clicking on a file entry in the "Files" view brings you to a file details view:
 
 On the top left of this view, you'll see basic metadata like the file name, magic/mime types, MD5/SHA1 hashes, etc.
 
-Press **[tab]** to autoscroll (or scroll manually) to get to the "File Content" view. Here, different tabs will display the summaries and transforms for a file. Pressing `p` will cycle between these views:
+Press **[tab]** to bring the focus to the "File Content" area. Here, different tabs will display the summaries and transforms for a file. Pressing **[tab]** again will cycle between these preview tabs:
 
 ![Nemesis File Details Content](images/nemesis-dashboard-file-details-content.png)
 
-Any plaintext file identified with a specific file type will be rendered with that using the [Monaco](https://github.com/microsoft/monaco-editor) code editorL
+Any plaintext file identified with a specific file type will be rendered with that using the [Monaco](https://github.com/microsoft/monaco-editor) code editor:
 
 ![Nemesis File Details Monaco](images/nemesis-dashboard-file-details-monaco.png)
 
-If you scroll to the bottom of the page past "File Content" you cans see some basic details about the file enrichment workflow, including any successful and failed enrichments. Mousing over any failed enrichment module nodes will reveal a basic error message.
+If you scroll to the bottom of the page past "File Content" you can see some basic details about the file enrichment workflow, including any successful and failed enrichments. Mousing over any failed enrichment module nodes will reveal a basic error message.
 
 ![Nemesis File Details Enrichments](images/nemesis-dashboard-file-enrichment-status.png)
 
@@ -119,7 +135,7 @@ Clicking the topright filter icon will bring down filters you can apply for sear
 
 ### Findings
 
-One of the other common tasks for the dashboard is findings triage, accessible through the `Files` page on the left navigation bar:
+One of the other common tasks for the dashboard is findings triage, accessible through the `Findings` page on the left navigation bar:
 
 ![Nemesis Findings](images/nemesis-dashboard-findings.png)
 
@@ -135,7 +151,7 @@ Like with the `Files` page, type `t` to enter triage mode. This will add a check
 
 ![Nemesis Finding Triage](images/nemesis-dashboard-finding-triage.png)
 
-As the text details, use ↑↓ to navigate findings, → to view finding details details. You can select multiple with Shift + ↑↓, hitting space, or Ctrl+A. Clear selection with ESC. Typing 1, 2, or 3 will set the finding as true positive, false positive, or unknown:
+As the text details, use ↑↓ to navigate findings, → to view finding details. You can select multiple with Shift + ↑↓, hitting space, or Ctrl+A. Clear selection with ESC. Typing 1, 2, or 3 will set the finding as true positive, false positive, or unknown:
 
 ![Nemesis Finding Triage](images/nemesis-dashboard-finding-triage2.png)
 
@@ -151,11 +167,11 @@ Navigating to the "Settings" menu reachable in the bottom left of the Nemesis in
 
 Here, you can change your username/project ID, as well as modify the data expiration (in absolute date or number of days), and can clear the Nemesis database and datalake.
 
-Clicking the "Light Mode" or "Dark Mode" menu button in the bottom left will toggle display mods for the application
+Clicking the "Light Mode" or "Dark Mode" menu button in the bottom left will toggle display modes for the application
 
 ## Alerting
 
-If Slack alerting is enabled (i.e., if the `APPRISE_URLS` ENV variable is set), alerts on "interesting" files (e.g., parsed credentials, Nosey Parker hits, DPAPI data discovery, etc.) will be pushed to the configuered Slack webhook/channel with **Nemesis** as the bot user. These messages will contain the alert name, alert category, any additional details, a sanitized file path and a link to the [file details](#file-details) and finding details in the dashboard:
+If Slack alerting is enabled (i.e., if the `APPRISE_URLS` ENV variable is set), alerts on "interesting" files (e.g., parsed credentials, Nosey Parker hits, DPAPI data discovery, etc.) will be pushed to the configured Slack webhook/channel with **Nemesis** as the bot user. These messages will contain the alert name, alert category, any additional details, a sanitized file path and a link to the [file details](#file-details) and finding details in the dashboard:
 
 ![Nemesis Slack Alerting](images/nemesis-finding-slack-alert.png)
 
@@ -170,7 +186,7 @@ You can submit files using Nemesis's `submit` CLI tool:
 ./tools/submit.sh
 ```
 
-Uploading a with curl:
+Uploading a file with curl:
 ```bash
 curl -k -u n:n -F "file=@example.txt" \
         -F 'metadata={"agent_id":"agent123","project":"assess-test","timestamp":"2025-01-29T12:00:00Z","expiration":"2026-02-29T12:00:00Z","path":"/data/files"}' \

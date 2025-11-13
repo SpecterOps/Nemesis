@@ -1,6 +1,5 @@
 """Enrichment module routes."""
 
-import asyncio
 import json
 import os
 import uuid
@@ -147,6 +146,5 @@ async def run_enrichment(
             message="Error running enrichment module",
             enrichment_name=enrichment_name,
             object_id=enrichment_request.object_id,
-            pid=os.getpid(),
         )
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e

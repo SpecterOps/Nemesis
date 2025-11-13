@@ -433,8 +433,6 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
     """
     global storage, is_initialized
 
-    # TODO: Purge Dapr workflow state data either through the Dapr API (purge) or directly in the DB's "state" table.
-
     logger.info("Starting cleanup job", custom_expiration=expiration_date is not None, expiration_date=expiration_date)
 
     if not is_initialized:
@@ -524,7 +522,7 @@ async def lifespan(app: FastAPI):
         # Get the cron schedule from environment or use default (midnight every day)
         cron_schedule = os.getenv("CLEANUP_SCHEDULE", "0 0 * * *")
 
-        # Schedule the job using a cron trigger
+        # Schedule the cleanup job using a cron trigger
         scheduler.add_job(
             run_cleanup_job,
             CronTrigger.from_crontab(cron_schedule),
@@ -534,7 +532,10 @@ async def lifespan(app: FastAPI):
 
         # Start the scheduler
         scheduler.start()
-        logger.info("Scheduler started", cron_schedule=cron_schedule)
+        logger.info(
+            "Scheduler started",
+            cleanup_schedule=cron_schedule,
+        )
 
         # Set initialization flag
         is_initialized = True
