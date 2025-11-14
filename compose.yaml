@@ -792,7 +792,7 @@ services:
       - "traefik.http.routers.hasura.tls=true"
 
   traefik:
-    image: traefik:v3.4.4
+    image: traefik:v3.6.1
     command:
       - "--api.insecure=true"
       # - "--log.level=DEBUG"
