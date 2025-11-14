@@ -7,7 +7,7 @@ To add a new module, create a new folder matching Python's [PEP8 naming conventi
 
 Create a main `analyzer.py` file with your enrichment logic. The easiest method for this (and enrichment modules are fairly small) is to find an example module, and use it as a base with a LLM to help draft your code.
 
-If your module needs additional dependencies, you have two options. Before either, first [install Poetry](https://python-poetry.org/).
+If your module needs additional dependencies, you have two options. Before either, first [install Poetry](https://python-poetry.org/). To prevent version issues, we recommend installing version 2.0.1 of Poetry with `pipx install poetry==2.0.1`
 
 For the first option, you can `cd` to `projects/file_enrichment` or `libs/file_enrichment_modules/` and run `poetry add X` for the needed library.
 
@@ -29,25 +29,18 @@ Then in this folder, run `poetry add X` to add a new library. The dynamic module
 
 ## Tips / Tricks
 
-The `should_process()` function determines if the module should run on a file. You can either check the name or any other component of the base enriched file with `file_enriched = get_file_enriched(object_id)`:
+The async `should_process()` function  determines if the module should run on a file. You can either check the name or any other component of the base enriched file with `file_enriched = get_file_enriched(object_id)`:
 
 ```python
 ...
-def should_process(self, object_id: str, file_path: str | None = None) -> bool:
-    """Determine if this module should run based on file type
-
-    Args:
-        object_id: The object ID of the file
-        file_path: Optional path to already downloaded file
-    """
-    file_enriched = get_file_enriched(state_key)
-    # Check if file appears to be a VNC config file
+async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    """Determine if this module should run based on file type."""
+    file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
     should_run = (
         file_enriched.file_name.lower().endswith(".ini")
         and "vnc" in file_enriched.file_name.lower()
         and "text" in file_enriched.magic_type.lower()
     )
-    logger.debug(f"VncParser should_run: {should_run}, magic_type: {file_enriched.magic_type.lower()}")
     return should_run
 ...
 ```
@@ -70,15 +63,14 @@ rule has_dpapi_blob
 }
     """)
 
-def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
     """Check if this file should be processed by scanning for DPAPI blobs.
 
     Args:
         object_id: The object ID of the file
         file_path: Optional path to already downloaded file
     """
-    file_enriched = get_file_enriched(object_id)
-    logger.debug(f"File {object_id} should be processed by DPAPI blob analyzer")
+    file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
     if file_enriched.size > self.size_limit:
         logger.debug(
             f"[dpapi_analyzer] file {file_enriched.path} ({file_enriched.object_id} / {file_enriched.size} bytes) exceeds the size limit of {self.size_limit} bytes, only analyzing the first {self.size_limit} bytes"
