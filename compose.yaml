@@ -536,7 +536,7 @@ services:
   document-conversion:
     image: ghcr.io/specterops/nemesis/document-conversion:latest
     volumes:
-      - ./infra/tika/tika-config.xml:/tika-config.xml:ro
+      - ./infra/tika/tika-config${TIKA_USE_OCR:+-tesseract}.xml:/tika-config.xml:ro
     environment:
       - APP_ID=document-conversion
       - DAPR_GRPC_PORT=50002
