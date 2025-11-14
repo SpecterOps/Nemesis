@@ -33,14 +33,14 @@ The `should_process()` function determines if the module should run on a file. Y
 
 ```python
 ...
-def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
     """Determine if this module should run based on file type
 
     Args:
         object_id: The object ID of the file
         file_path: Optional path to already downloaded file
     """
-    file_enriched = get_file_enriched(state_key)
+    file_enriched = await get_file_enriched(state_key)
     # Check if file appears to be a VNC config file
     should_run = (
         file_enriched.file_name.lower().endswith(".ini")
@@ -70,14 +70,14 @@ rule has_dpapi_blob
 }
     """)
 
-def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
     """Check if this file should be processed by scanning for DPAPI blobs.
 
     Args:
         object_id: The object ID of the file
         file_path: Optional path to already downloaded file
     """
-    file_enriched = get_file_enriched(object_id)
+    file_enriched = await get_file_enriched(object_id)
     logger.debug(f"File {object_id} should be processed by DPAPI blob analyzer")
     if file_enriched.size > self.size_limit:
         logger.debug(
