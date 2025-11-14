@@ -685,6 +685,17 @@ def upload_file(
                 time.sleep(delay)
                 continue
             return False, f"Upload failed: {file_path} - {str(e)}", 0
+        except requests.exceptions.HTTPError as e:
+            # Handle HTTP errors (like 500) separately to include response body in debug mode
+            error_msg = f"Upload failed: {file_path} - {str(e)}"
+            if logger.isEnabledFor(logging.DEBUG) and hasattr(e, 'response') and e.response is not None:
+                try:
+                    response_body = e.response.text
+                    if response_body:
+                        error_msg += f"\nResponse body: {response_body}"
+                except Exception:
+                    pass  # If we can't get the response body, just use the original error
+            return False, error_msg, 0
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1 and "504" in str(e):
                 delay = base_delay * (2**attempt)

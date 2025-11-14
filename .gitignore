@@ -182,3 +182,9 @@ projects/dotnet_service/bin/
 projects/jupyter/notebooks/*.csv
 
 projects/frontend/public/env.js
+
+# Vim swap files
+*.swp
+*.swo
+*.swn
+*~
