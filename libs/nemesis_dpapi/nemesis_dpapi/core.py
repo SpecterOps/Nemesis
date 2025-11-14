@@ -737,7 +737,8 @@ class MasterKeyFile(BaseModel):
         domain_master_key = DPAPI_DOMAIN_RSA_MASTER_KEY(decrypted_key)
         buffer = domain_master_key["buffer"]
 
-        # If it's a version 3 masterkey, skip the first 8 bytes (structure is different)
+        # If it's a version 3 masterkey, skip the first 8 bytes
+        #  - Structure is different. First 8 bytes indicate encryption info.
         if len(decrypted_key) == 128:
             key_offset = 8
         elif len(decrypted_key) == 104:
