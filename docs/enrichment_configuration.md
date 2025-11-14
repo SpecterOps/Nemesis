@@ -34,6 +34,7 @@ The [Document Conversion service](https://github.com/SpecterOps/Nemesis/tree/mai
 | ----------------------------- | ------------- | --------------------------------------------------------------- |
 | `MAX_PARALLEL_WORKFLOWS`      | 5             | Maxmimum number of parallel conversion workflows allows         |
 | `MAX_WORKFLOW_EXECUTION_TIME` | 300           | Maximum time (in seconds) workflows can run before being killed |
+| `TIKA_USE_OCR`                | false         | Set to `true` to enable OCR support via Tessaract               |
 | `TIKA_OCR_LANGUAGES`          | eng           | Tika/Tesseract OCR languages supported.                         |
 
 If you want to have additional language packs supported (see https://github.com/tesseract-ocr/tessdata for a full list), run something like this before launching Nemesis or set the value in your .env :
@@ -41,6 +42,8 @@ If you want to have additional language packs supported (see https://github.com/
 ```bash
 export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
 ```
+
+**NOTE:** due to Docker's ENV variable substitution, setting `TIKA_USE_OCR=false` will be interpreted as true - either removing `TIKA_USE_OCR` from an .env file or setting `TIKA_USE_OCR=""` will disable OCR (the default).
 
 ## Nosey Parker
 
