@@ -19,7 +19,6 @@ from .activities import (
     publish_enriched_file,
     publish_findings_alerts,
     run_enrichment_modules,
-    update_workflow_status_to_running,
 )
 
 logger = get_logger(__name__)
@@ -93,12 +92,6 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
     start_time = ctx.current_utc_datetime
 
     try:
-        # Update workflow status to RUNNING
-        yield ctx.call_activity(
-            update_workflow_status_to_running,
-            input={},
-        )
-
         yield ctx.call_activity(get_basic_analysis, input=file_dict)
         if not ctx.is_replaying:
             logger.debug(
