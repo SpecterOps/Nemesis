@@ -25,15 +25,11 @@ extensions:
             keys: "/badger/keys"
             values: "/badger/values"
           ephemeral: false
-          
+
           # Disable sync writes for better performance under high load
           consistency: false
           maintenance_interval: 5m0s
           read_only: false
-          sync_writes: false
-          num_compactors: 4
-          num_level_zero_tables: 8
-          num_level_zero_tables_stall: 16
 
 receivers:
   otlp:

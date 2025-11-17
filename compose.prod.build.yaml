@@ -31,12 +31,15 @@ services:
       dockerfile: ./projects/file_enrichment/Dockerfile
       target: prod
 
+  ### Replica #1
   # file-enrichment-1:
   #   <<: *file-enrichment-build
 
+  ### Replica #2
   # file-enrichment-2:
   #   <<: *file-enrichment-build
 
+  ### Replica #3
   # file-enrichment-3:
   #   <<: *file-enrichment-build
 

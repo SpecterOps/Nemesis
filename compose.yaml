@@ -324,6 +324,7 @@ services:
       rabbitmq: { condition: service_healthy }
     network_mode: "service:file-enrichment"
 
+  ### Replica #1
   # file-enrichment-1:
   #   <<: *file-enrichment-template
   #   environment:
@@ -338,6 +339,7 @@ services:
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-1"
 
+  ### Replica #2
   # file-enrichment-2:
   #   <<: *file-enrichment-template
   #   environment:
@@ -352,6 +354,7 @@ services:
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-2"
 
+  ### Replica #3
   # file-enrichment-3:
   #   <<: *file-enrichment-template
   #   environment:
@@ -548,7 +551,7 @@ services:
       #   - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng chi_sim chi_tra jpn rus deu spa}
       # Note: each package installed will increase the image size!
       - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng}
-      - MAX_PARALLEL_WORKFLOWS=${DOCUMENTCONVERSION_WORKERS:-5}
+      - MAX_PARALLEL_WORKFLOWS=${DOCUMENTCONVERSION_MAX_PARALLEL_WORKFLOWS:-5}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - OMP_THREAD_LIMIT=1  # Limit the number of tesseract instances
