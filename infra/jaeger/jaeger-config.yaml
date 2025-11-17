@@ -25,10 +25,10 @@ extensions:
             keys: "/badger/keys"
             values: "/badger/values"
           ephemeral: false
+
           # Disable sync writes for better performance under high load
           consistency: false
           maintenance_interval: 5m0s
-          # Tune for write-heavy workloads
           read_only: false
 
 receivers:
@@ -36,6 +36,10 @@ receivers:
     protocols:
       grpc:
         endpoint: "0.0.0.0:4317"
+        max_recv_msg_size_mib: 32
+        max_concurrent_streams: 100
+        read_buffer_size: 524288
+        write_buffer_size: 524288
       # if nothing sends OTLP/HTTP to Jaeger directly, you can drop this:
       # http:
       #   endpoint: "0.0.0.0:4318"
@@ -48,9 +52,9 @@ processors:
     spike_limit_percentage: 20
 
   batch:
-    timeout: 10s
-    send_batch_size: 256
-    send_batch_max_size: 512
+    timeout: 5s
+    send_batch_size: 2048
+    send_batch_max_size: 4096
 
 exporters:
   jaeger_storage_exporter:

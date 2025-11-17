@@ -324,6 +324,7 @@ services:
       rabbitmq: { condition: service_healthy }
     network_mode: "service:file-enrichment"
 
+  ### Replica #1
   # file-enrichment-1:
   #   <<: *file-enrichment-template
   #   environment:
@@ -338,6 +339,7 @@ services:
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-1"
 
+  ### Replica #2
   # file-enrichment-2:
   #   <<: *file-enrichment-template
   #   environment:
@@ -352,6 +354,7 @@ services:
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-2"
 
+  ### Replica #3
   # file-enrichment-3:
   #   <<: *file-enrichment-template
   #   environment:
@@ -548,7 +551,7 @@ services:
       #   - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng chi_sim chi_tra jpn rus deu spa}
       # Note: each package installed will increase the image size!
       - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng}
-      - MAX_PARALLEL_WORKFLOWS=${DOCUMENTCONVERSION_WORKERS:-5}
+      - MAX_PARALLEL_WORKFLOWS=${DOCUMENTCONVERSION_MAX_PARALLEL_WORKFLOWS:-5}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - OMP_THREAD_LIMIT=1  # Limit the number of tesseract instances
@@ -707,7 +710,7 @@ services:
     restart: "no"
 
   rabbitmq:
-    image: rabbitmq:4.1.2-management
+    image: rabbitmq:4.2.0-management
     hostname: rabbitmq-node # have to do this for persistence reasons
     environment:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?}
@@ -717,6 +720,7 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 10s
@@ -730,7 +734,7 @@ services:
       - "traefik.http.routers.rabbitmq-ui.rule=PathPrefix(`/rabbitmq`)"
 
   postgres:
-    image: postgres:17.6-alpine
+    image: postgres:18.1
     command:
       [
         "postgres",
@@ -740,14 +744,14 @@ services:
         "-c", "pg_stat_statements.track=all"
       ]
     ports:
-      - "5432:5432"
+      - "${POSTGRES_EXTERNAL_PORT:-}5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-enrichment}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       POSTGRES_USER: ${POSTGRES_USER:?}
     volumes:
       - ./infra/postgres:/docker-entrypoint-initdb.d:ro
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d enrichment"]
       interval: 5s
@@ -792,7 +796,7 @@ services:
       - "traefik.http.routers.hasura.tls=true"
 
   traefik:
-    image: traefik:v3.4.4
+    image: traefik:v3.6.1
     command:
       - "--api.insecure=true"
       # - "--log.level=DEBUG"
@@ -882,8 +886,15 @@ services:
     profiles: ["monitoring"]
     image: jaegertracing/jaeger:latest # v2.x image
     user: "0:0"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
     environment:
       - QUERY_BASE_PATH=/jaeger
+      - GOGC=80
     volumes:
       - ./infra/jaeger/jaeger-config.yaml:/etc/jaeger/config.yaml
       - jaeger_data:/badger # Persist trace data

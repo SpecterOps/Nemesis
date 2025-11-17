@@ -29,7 +29,7 @@ Then in this folder, run `poetry add X` to add a new library. The dynamic module
 
 ## Tips / Tricks
 
-The async `should_process()` function  determines if the module should run on a file. You can either check the name or any other component of the base enriched file with `file_enriched = get_file_enriched(object_id)`:
+The async `should_process()` function  determines if the module should run on a file. You can either check the name or any other component of the base enriched file with `file_enriched = await get_file_enriched(object_id, self.asyncpg_pool)`:
 
 ```python
 ...

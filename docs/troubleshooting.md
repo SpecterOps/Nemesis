@@ -17,7 +17,7 @@ Nemesis uses message queue in its enrichment workflows. To quickly get an overvi
 
 If the queues are backed up, you have three options : 
 
-1. Do nothing and just wait until Nemesis completes processing the queues.
+1. Do nothing and just wait until Nemesis completes processing the queues. You can get a rough idea how long it will take to process by looking the `deliver / get` rates in the RabbitMQ interface's "Queues and Streams" page.
 2. Monitor Nemesis's performance and adjust its settings to your system and workloads (see [Nemesis Performance Tuning](./performance.md)).
 3. Purge the queues to stop processing. You can purge the queue by clicking on the queue name in the RabbitMQ dashboard (e.g. `files-new_file` for newly added files) and clicking the "Purge Queue" button.
 

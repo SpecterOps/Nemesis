@@ -10,6 +10,7 @@ import magic
 from common.helpers import get_file_extension, is_container
 from common.logger import get_logger
 from common.workflows.setup import workflow_activity
+from common.workflows.tracking_service import WorkflowStatus
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from .. import global_vars
@@ -28,6 +29,26 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict) -> N
     object_id = file_dict.get("object_id")
     if not object_id or not isinstance(object_id, str):
         raise ValueError("file object_id is not a uuid string")
+
+    instance_id = ctx.workflow_id
+
+    logger.info(
+        "Updating workflow status to RUNNING",
+        instance_id=instance_id,
+    )
+
+    try:
+        await global_vars.tracking_service.update_status(
+            instance_id=instance_id,
+            status=WorkflowStatus.RUNNING,
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to update workflow status to RUNNING",
+            instance_id=instance_id,
+            error=str(e),
+        )
+        raise e
 
     logger.info("Executing activity: get_basic_analysis", object_id=object_id)
 

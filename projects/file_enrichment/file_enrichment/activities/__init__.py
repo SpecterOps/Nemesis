@@ -6,7 +6,6 @@ from .file_linkings import check_file_linkings
 from .finalize_workflow import (
     finalize_workflow_failure,
     finalize_workflow_success,
-    update_workflow_status_to_running,
 )
 from .plaintext_handler import handle_file_if_plaintext
 from .publish_enriched import publish_enriched_file
@@ -21,5 +20,4 @@ __all__ = [
     "run_enrichment_modules",
     "finalize_workflow_success",
     "finalize_workflow_failure",
-    "update_workflow_status_to_running",
 ]

@@ -10,34 +10,6 @@ logger = get_logger(__name__)
 
 
 @workflow_activity
-async def update_workflow_status_to_running(ctx: WorkflowActivityContext, activity_input: dict) -> None:
-    """Mark workflow as running.
-
-    Args:
-        activity_input: Dict (currently unused, but kept for consistency)
-    """
-    instance_id = ctx.workflow_id
-
-    logger.info(
-        "Updating workflow status to RUNNING",
-        instance_id=instance_id,
-    )
-
-    try:
-        await global_vars.tracking_service.update_status(
-            instance_id=instance_id,
-            status=WorkflowStatus.RUNNING,
-        )
-    except Exception as e:
-        logger.error(
-            "Failed to update workflow status to RUNNING",
-            instance_id=instance_id,
-            error=str(e),
-        )
-        # Don't raise - we don't want to fail the workflow just because status update failed
-
-
-@workflow_activity
 async def finalize_workflow_success(ctx: WorkflowActivityContext, activity_input: dict) -> None:
     """Mark workflow as completed successfully.
 
