@@ -30,20 +30,20 @@ Currently the PII module detects the following entity types: `CREDIT_CARD`, `US_
 
 The [Document Conversion service](https://github.com/SpecterOps/Nemesis/tree/main/projects/document_conversion) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
 
-| ENV Variable                  | Default Value | Description                                                     |
-| ----------------------------- | ------------- | --------------------------------------------------------------- |
-| `MAX_PARALLEL_WORKFLOWS`      | 5             | Maxmimum number of parallel conversion workflows allows         |
-| `MAX_WORKFLOW_EXECUTION_TIME` | 300           | Maximum time (in seconds) workflows can run before being killed |
-| `TIKA_USE_OCR`                | false         | Set to `true` to enable OCR support via Tessaract               |
-| `TIKA_OCR_LANGUAGES`          | eng           | Tika/Tesseract OCR languages supported.                         |
+| ENV Variable                                | Default Value | Description                                                     |
+|---------------------------------------------|---------------|-----------------------------------------------------------------|
+| `DOCUMENTCONVERSION_MAX_PARALLEL_WORKFLOWS` | 5             | Maxmimum number of parallel conversion workflows allows         |
+| `MAX_WORKFLOW_EXECUTION_TIME`               | 300           | Maximum time (in seconds) workflows can run before being killed |
+| `TIKA_USE_OCR`                              | false         | Set to `true` to enable OCR support via Tessaract               |
+| `TIKA_OCR_LANGUAGES`                        | eng           | Tika/Tesseract OCR languages supported.                         |
 
-If you want to have additional language packs supported (see https://github.com/tesseract-ocr/tessdata for a full list), run something like this before launching Nemesis or set the value in your .env :
+If you want to have additional language packs supported (see https://github.com/tesseract-ocr/tessdata for a full list), run something like this before launching Nemesis or set the value in your `.env` file:
 
 ```bash
 export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
 ```
 
-**NOTE:** due to Docker's ENV variable substitution, setting `TIKA_USE_OCR=false` will be interpreted as true - either removing `TIKA_USE_OCR` from an .env file or setting `TIKA_USE_OCR=""` will disable OCR (the default).
+**NOTE:** due to Docker's ENV variable substitution, setting `TIKA_USE_OCR=false` will be interpreted as true - either removing `TIKA_USE_OCR` from an .env file or setting `TIKA_USE_OCR=""` will disable OCR (the default). Enabling OCR significantly increases CPU as it will OCR standalone images as well as all images embedded in documents.
 
 ## Nosey Parker
 
@@ -52,7 +52,7 @@ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
 The [Nosey Parker scanner service](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
 
 | ENV Variable           | Default Value | Description                                                                     |
-| ---------------------- | ------------- | ------------------------------------------------------------------------------- |
+|------------------------|---------------|---------------------------------------------------------------------------------|
 | `SNIPPET_LENGTH`       | 512           | Bytes of context length around Nosey Parker matches to pull in for findings     |
 | `MAX_CONCURRENT_FILES` | 2             | Maximum number of concurrent files to scan (raising increases resources needed) |
 | `MAX_FILE_SIZE_MB`     | 200           | Maximum file size to scan (in megabytes)                                        |
