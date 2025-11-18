@@ -612,6 +612,44 @@ CREATE TABLE IF NOT EXISTS workflows (
 -- Partial index: only indexes active workflows to reduce size and write overhead
 CREATE INDEX IF NOT EXISTS idx_workflows_object_id_active ON workflows(object_id) WHERE status IN ('SCHEDULED', 'RUNNING');
 
+-- Index for workflow purger queries (workflow_purger.py)
+-- Optimizes queries that find non-scheduled workflows needing purge verification
+-- Partial index: only indexes non-scheduled workflows to minimize size and write overhead
+CREATE INDEX IF NOT EXISTS idx_workflows_purge_candidates ON workflows(status, is_purged, start_time) WHERE status != 'SCHEDULED';
+
+
+-----------------------
+-- DAPR State Store
+-----------------------
+-- Dapr state store table for workflow state management
+-- This table experiences high churn with frequent inserts and deletes
+CREATE TABLE IF NOT EXISTS dapr_state (
+    key TEXT PRIMARY KEY,
+    value BYTEA NOT NULL,
+    etag UUID NOT NULL DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE,
+    expires_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Index for expiration-based queries
+CREATE INDEX IF NOT EXISTS dapr_state_expires_at_idx ON dapr_state(expires_at);
+
+-- Dapr metadata table
+CREATE TABLE IF NOT EXISTS dapr_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Configure aggressive autovacuum for dapr_state due to high insert/delete churn
+-- This prevents table bloat during bursty workloads
+ALTER TABLE dapr_state SET (
+    autovacuum_vacuum_scale_factor = 0.02,      -- Vacuum when 2% of rows change (default: 20%)
+    autovacuum_vacuum_cost_delay = 2,            -- Aggressive vacuuming with minimal delay
+    autovacuum_vacuum_cost_limit = 2000,         -- Allow more vacuum work per round (default: 200)
+    autovacuum_analyze_scale_factor = 0.05       -- Update statistics when 5% of rows change
+);
+
 
 -----------------------
 -- Container Processing Tracking
