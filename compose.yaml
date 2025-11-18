@@ -738,7 +738,7 @@ services:
         "-c",
         "max_connections=200",
         "-c",
-        "shared_buffers=256MB",
+        "shared_buffers=1GB",
         "-c",
         "shared_preload_libraries=pg_stat_statements",
         "-c",
