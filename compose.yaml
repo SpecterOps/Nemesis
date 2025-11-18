@@ -743,6 +743,12 @@ services:
         "shared_preload_libraries=pg_stat_statements",
         "-c",
         "pg_stat_statements.track=all",
+        "-c",
+        "tcp_keepalives_idle=5",
+        "-c",
+        "tcp_keepalives_interval=2",
+        "-c",
+        "tcp_keepalives_count=3",
       ]
     ports:
       - "${POSTGRES_EXTERNAL_PORT:-}5432"
