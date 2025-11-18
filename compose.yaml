@@ -118,7 +118,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
       - RUST_LOG=warn
       - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Nosey Parker matches
-      - MAX_CONCURRENT_FILES=${MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
+      - MAX_CONCURRENT_FILES=${NOSEYPARKER_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-200} # maximum file size to scan, in megabytes
       - DECOMPRESS_ZIPS=${DECOMPRESS_ZIPS:-true} # whether to decompress+scan zips
       - MAX_EXTRACT_SIZE_MB=${MAX_EXTRACT_SIZE_MB:-1000} # maximum number of megabytes to extract from ZIPs (if decompressing)
