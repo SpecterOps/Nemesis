@@ -129,7 +129,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
+          cpus: "1"
   noseyparker-scanner-dapr:
     image: "daprio/daprd:1.16.2"
     command:
@@ -551,7 +551,7 @@ services:
       - MAX_PARALLEL_WORKFLOWS=${DOCUMENTCONVERSION_WORKERS:-5}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - OMP_THREAD_LIMIT=1  # Limit the number of tesseract instances
+      - OMP_THREAD_LIMIT=1 # Limit the number of tesseract instances
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/healthz"]
       interval: 5s
@@ -565,7 +565,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
   document-conversion-dapr:
     image: "daprio/daprd:1.16.2"
     command:
@@ -735,10 +735,14 @@ services:
     command:
       [
         "postgres",
-        "-c", "max_connections=200",
-        "-c", "shared_buffers=256MB",
-        "-c", "shared_preload_libraries=pg_stat_statements",
-        "-c", "pg_stat_statements.track=all"
+        "-c",
+        "max_connections=200",
+        "-c",
+        "shared_buffers=256MB",
+        "-c",
+        "shared_preload_libraries=pg_stat_statements",
+        "-c",
+        "pg_stat_statements.track=all",
       ]
     ports:
       - "${POSTGRES_EXTERNAL_PORT:-}5432"
@@ -1025,6 +1029,10 @@ services:
     image: ghcr.io/google/cadvisor:v0.53.0
     restart: unless-stopped
     privileged: true
+    command:
+      - "--housekeeping_interval=30s"
+      - "--storage_duration=2m0s"
+      - "--docker_only=true"
     volumes:
       - /:/rootfs:ro
       - /dev/disk/:/dev/disk:ro
