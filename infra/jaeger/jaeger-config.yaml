@@ -25,8 +25,6 @@ extensions:
             keys: "/badger/keys"
             values: "/badger/values"
           ephemeral: false
-
-          # Disable sync writes for better performance under high load
           consistency: false
           maintenance_interval: 5m0s
           read_only: false

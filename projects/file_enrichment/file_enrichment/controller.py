@@ -94,8 +94,6 @@ async def lifespan(app: FastAPI):
     """FastAPI lifespan manager for workflow runtime setup/teardown"""
     logger.info("Initializing workflow runtime...")
 
-    loop = asyncio.get_running_loop()
-    logger.warn("FastAPI loop!", loop=loop, same=(g_loop == loop))
     setup_debug_signals()
 
     loop = asyncio.get_running_loop()
