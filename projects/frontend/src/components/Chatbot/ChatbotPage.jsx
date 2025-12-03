@@ -361,7 +361,7 @@ const ChatbotPage = () => {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto flex-shrink-0">
+        <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 max-h-[600px] overflow-y-auto flex-shrink-0">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Settings</h3>
 
           <div className="space-y-4">
@@ -439,26 +439,6 @@ const ChatbotPage = () => {
 
       {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
-        {/* Token Warning */}
-        {showTokenWarning && (
-          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start space-x-2">
-            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                <strong>High token usage detected:</strong> Your conversation history is getting long (~{estimatedTokens.toLocaleString()} tokens)
-                and consuming significant LLM resources. Consider clicking "Clear History" to reset and reduce costs.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowTokenWarning(false)}
-              className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200"
-              title="Dismiss warning"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        )}
-
         {/* Error Display */}
         {error && (
           <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-2">
@@ -483,6 +463,27 @@ const ChatbotPage = () => {
               isStreaming={isStreaming && idx === messages.length - 1}
             />
           ))}
+
+          {/* Token Warning - shown inline with messages */}
+          {showTokenWarning && messages.length > 0 && (
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start space-x-2">
+              <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  <strong>High token usage detected:</strong> Your conversation history is getting long (~{estimatedTokens.toLocaleString()} tokens)
+                  and consuming significant LLM resources. Consider clicking "Clear History" to reset and reduce costs.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTokenWarning(false)}
+                className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200"
+                title="Dismiss warning"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
