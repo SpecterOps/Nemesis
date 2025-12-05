@@ -685,6 +685,7 @@ services:
       -master.volumeSizeLimitMB=1024
       -volume.max=100
       -s3.config=/etc/seaweedfs/s3.json
+      -metricsPort=9324
     volumes:
       - seaweedfs_data:/data
       - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
@@ -693,9 +694,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    ports:
-      - "8333:8333"
-      - "9333:9333"
+    # ports:
+    #   - "8333:8333"
+    #   - "9333:9333"
+    #   - "9324:9324"  # Prometheus metrics
 
   seaweedfs-init:
     image: amazon/aws-cli:latest

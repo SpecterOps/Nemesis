@@ -8,41 +8,11 @@ scrape_configs:
     static_configs:
       - targets: ['traefik:8080']
 
-  - job_name: 'minio'
-    metrics_path: /minio/metrics/v3/cluster/health
+  - job_name: 'seaweedfs'
+    metrics_path: /metrics
     scheme: http
     static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-api'
-    metrics_path: /minio/metrics/v3/api/requests
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-bucket-api'
-    metrics_path: /minio/metrics/v3/bucket/api
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-cluster-usage-buckets'
-    metrics_path: /minio/metrics/v3/cluster/usage/buckets
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-cluster-usage-objects'
-    metrics_path: /minio/metrics/v3/cluster/usage/objects
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-drives'
-    metrics_path: /minio/metrics/v3/system/drive
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
+      - targets: ['seaweedfs:9324']
 
   - job_name: 'loki'
     metrics_path: '/metrics'
