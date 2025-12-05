@@ -19,20 +19,20 @@ class StorageMinio:
         bucket_name: str = "files",
         data_download_dir: str = "/tmp/",
     ) -> None:
-        # endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000"),
-        endpoint = "minio:9000"
+        # SeaweedFS S3 gateway endpoint
+        endpoint = "seaweedfs:8333"
 
         with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="MINIO_ROOT_USER")
-            minio_root_user = secret.secret["MINIO_ROOT_USER"]
+            secret = client.get_secret(store_name="nemesis-secret-store", key="S3_ACCESS_KEY")
+            s3_access_key = secret.secret["S3_ACCESS_KEY"]
 
-            secret = client.get_secret(store_name="nemesis-secret-store", key="MINIO_ROOT_PASSWORD")
-            minio_root_password = secret.secret["MINIO_ROOT_PASSWORD"]
+            secret = client.get_secret(store_name="nemesis-secret-store", key="S3_SECRET_KEY")
+            s3_secret_key = secret.secret["S3_SECRET_KEY"]
 
         self.minio_client = Minio(
             endpoint,
-            access_key=f"{minio_root_user}",
-            secret_key=f"{minio_root_password}",
+            access_key=f"{s3_access_key}",
+            secret_key=f"{s3_secret_key}",
             secure=False,
             http_client=PoolManager(
                 maxsize=30,

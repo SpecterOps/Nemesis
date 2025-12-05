@@ -8,7 +8,7 @@ volumes:
   grafana_data:
   jaeger_data:
   loki_data:
-  minio_data:
+  seaweedfs_data:
   phoenix_data:
   postgres_data:
   prometheus_data:
@@ -86,8 +86,8 @@ services:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - S3_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY:?}
+      - S3_SECRET_KEY=${SEAWEEDFS_SECRET_KEY:?}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
@@ -107,15 +107,15 @@ services:
   noseyparker-scanner:
     image: ghcr.io/specterops/nemesis/noseyparker-scanner:latest
     depends_on:
-      minio: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     environment:
       - DAPR_GRPC_PORT=50013
       - DAPR_PORT=3513
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?}
+      - MINIO_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY:?}
       - MINIO_BUCKET=files
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
+      - MINIO_ENDPOINT=http://seaweedfs:8333
+      - MINIO_SECRET_KEY=${SEAWEEDFS_SECRET_KEY:?}
       - RUST_LOG=warn
       - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Nosey Parker matches
       - MAX_CONCURRENT_FILES=${NOSEYPARKER_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
@@ -179,15 +179,15 @@ services:
       retries: 3
       start_period: 30s
     depends_on:
-      minio: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     environment:
       - DAPR_GRPC_PORT=50014
       - DAPR_PORT=3514
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?}
+      - MINIO_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY:?}
       - MINIO_BUCKET=files
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
+      - MINIO_ENDPOINT=http://seaweedfs:8333
+      - MINIO_SECRET_KEY=${SEAWEEDFS_SECRET_KEY:?}
       - ASPNETCORE_URLS=http://0.0.0.0:5000
     expose:
       - "5000"
@@ -314,8 +314,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-enrichment}
       POSTGRES_PARAMETERS: ${POSTGRES_PARAMETERS:-sslmode=disable}
       RABBITMQ_CONNECTION_STRING: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      S3_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY:?}
+      S3_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY:?}
       MAX_PARALLEL_WORKFLOWS: ${MAX_PARALLEL_WORKFLOWS:-5}
     depends_on: &file-enrichment-dapr-depends-on
       file-enrichment: { condition: service_started }
@@ -518,8 +518,8 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - S3_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY:?}
+      - S3_SECRET_KEY=${SEAWEEDFS_SECRET_KEY:?}
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
@@ -602,8 +602,8 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/:/dapr/configuration/
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - S3_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY:?}
+      - S3_SECRET_KEY=${SEAWEEDFS_SECRET_KEY:?}
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
@@ -677,33 +677,38 @@ services:
   ############################
   # Infrastructure Services
   ############################
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    environment:
-      MINIO_PROMETHEUS_AUTH_TYPE: public
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.01
+    command: >
+      server -filer -s3
+      -ip.bind=0.0.0.0
+      -master.volumeSizeLimitMB=1024
+      -volume.max=100
+      -s3.config=/etc/seaweedfs/s3.json
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001" --address ":9000"
+      - seaweedfs_data:/data
+      - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8333/status"]
       interval: 30s
-      timeout: 20s
+      timeout: 10s
       retries: 3
+    ports:
+      - "8333:8333"
+      - "9333:9333"
 
-  minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
-    depends_on: [minio]
+  seaweedfs-init:
+    image: amazon/aws-cli:latest
+    depends_on:
+      seaweedfs: { condition: service_healthy }
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-    entrypoint:
-      [
-        "/bin/sh",
-        "-c",
-        "sleep 1; until mc alias set minio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do echo 'Minio is not online. Waiting for it to start...'; sleep 2; done && mc mb minio/loki-data --ignore-existing && mc mb minio/files --ignore-existing",
-      ]
+      - AWS_ACCESS_KEY_ID=${SEAWEEDFS_ACCESS_KEY:?}
+      - AWS_SECRET_ACCESS_KEY=${SEAWEEDFS_SECRET_KEY:?}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        aws --endpoint-url=http://seaweedfs:8333 s3 mb s3://files --region us-east-1 || true
+        aws --endpoint-url=http://seaweedfs:8333 s3 mb s3://loki-data --region us-east-1 || true
     restart: "no"
 
   rabbitmq:
@@ -930,12 +935,12 @@ services:
     command:
       ["-config.file=/etc/loki/local-config.yaml", "-config.expand-env=true"]
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - S3_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY}
+      - S3_SECRET_KEY=${SEAWEEDFS_SECRET_KEY}
     volumes:
       - ./infra/loki:/etc/loki:ro
       - loki_data:/loki
-    depends_on: [minio-init]
+    depends_on: [seaweedfs-init]
     healthcheck:
       test:
         [
@@ -1132,8 +1137,8 @@ services:
       - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
+      - S3_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY:?}
+      - S3_SECRET_KEY=${SEAWEEDFS_SECRET_KEY:?}
     depends_on:
       agents: { condition: service_started }
       placement: { condition: service_started }

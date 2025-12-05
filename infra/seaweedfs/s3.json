@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "nemesis",
+      "credentials": [
+        {
+          "accessKey": "nemesis",
+          "secretKey": "Qwerty12345"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
