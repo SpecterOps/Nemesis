@@ -45,6 +45,8 @@ opentelemetry-sdk = "^1.38.0"
 opentelemetry-exporter-otlp-proto-grpc = "^1.38.0"
 presidio-analyzer = "^2.2.360"
 httpx = "^0.28.1"
+pydecipher = { git = "https://github.com/HarmJ0y/pydecipher.git" }
+oscrypto = { git = "https://github.com/wbond/oscrypto.git", rev = "d5f3437" }
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.2"

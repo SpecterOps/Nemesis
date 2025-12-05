@@ -326,6 +326,18 @@ files = [
 cffi = {version = ">=1.0.1", markers = "python_version < \"3.14\""}
 
 [[package]]
+name = "argparse"
+version = "1.4.0"
+description = "Python command-line parsing library"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "argparse-1.4.0-py2.py3-none-any.whl", hash = "sha256:c31647edb69fd3d465a847ea3157d37bed1f95f19760b11a47aa91c04b666314"},
+    {file = "argparse-1.4.0.tar.gz", hash = "sha256:62b089a55be1d8949cd2bc7e0df0bddb9e028faefc8c32038cc84862aefdd6e4"},
+]
+
+[[package]]
 name = "asn1crypto"
 version = "1.5.1"
 description = "Fast ASN.1 parser and serializer with definitions for private keys, public keys, certificates, CRL, OCSP, CMS, PKCS#3, PKCS#7, PKCS#8, PKCS#12, PKCS#5, X.509 and TSP"
@@ -723,6 +735,22 @@ files = [
     {file = "certifi-2025.11.12-py3-none-any.whl", hash = "sha256:97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b"},
     {file = "certifi-2025.11.12.tar.gz", hash = "sha256:d8ab5478f2ecd78af242878415affce761ca6bc54a22a27e026d7c25357c3316"},
 ]
+
+[[package]]
+name = "certvalidator"
+version = "0.11.1"
+description = "Validates X.509 certificates and paths"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "certvalidator-0.11.1-py2.py3-none-any.whl", hash = "sha256:77520b269f516d4fb0902998d5bd0eb3727fe153b659aa1cb828dcf12ea6b8de"},
+    {file = "certvalidator-0.11.1.tar.gz", hash = "sha256:922d141c94393ab285ca34338e18dd4093e3ae330b1f278e96c837cb62cffaad"},
+]
+
+[package.dependencies]
+asn1crypto = ">=0.18.1"
+oscrypto = ">=0.16.1"
 
 [[package]]
 name = "cffi"
@@ -2290,6 +2318,21 @@ typing-extensions = "*"
 urllib3 = "*"
 
 [[package]]
+name = "mscerts"
+version = "2025.8.29"
+description = "Python package for providing Microsoft's CA Bundle."
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "mscerts-2025.8.29-py3-none-any.whl", hash = "sha256:20f137b2361b48f478b78a51ca0f7b9d0b8e6ae9b336826dfc9dcbc2c067102c"},
+    {file = "mscerts-2025.8.29.tar.gz", hash = "sha256:8fac4be259165ffb05ebd72a1ce656ff595ecf0acee17ccdb93bd3616f1ec09c"},
+]
+
+[package.extras]
+stlupdate = ["asn1crypto", "requests", "signify"]
+
+[[package]]
 name = "msldap"
 version = "0.5.15"
 description = "Python library to play with MS LDAP"
@@ -2824,13 +2867,17 @@ description = "TLS (SSL) sockets, key generation, encryption, decryption, signin
 optional = false
 python-versions = "*"
 groups = ["main"]
-files = [
-    {file = "oscrypto-1.3.0-py2.py3-none-any.whl", hash = "sha256:2b2f1d2d42ec152ca90ccb5682f3e051fb55986e1b170ebde472b133713e7085"},
-    {file = "oscrypto-1.3.0.tar.gz", hash = "sha256:6f5fef59cb5b3708321db7cca56aed8ad7e662853351e7991fcf60ec606d47a4"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 asn1crypto = ">=1.5.1"
+
+[package.source]
+type = "git"
+url = "https://github.com/wbond/oscrypto.git"
+reference = "d5f3437"
+resolved_reference = "d5f3437ed24257895ae1edd9e503cfb352e635a8"
 
 [[package]]
 name = "packaging"
@@ -2859,6 +2906,18 @@ files = [
 [package.dependencies]
 oletools = ">=0.54"
 win-unicode-console = {version = "*", markers = "platform_system == \"Windows\" and platform_python_implementation != \"PyPy\""}
+
+[[package]]
+name = "pebble"
+version = "5.1.3"
+description = "Threading and multiprocessing eye-candy."
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "Pebble-5.1.3-py3-none-any.whl", hash = "sha256:8b28b1ede25de4b0d9249516d5fd794c330f8f03b692debe374619317ed0bdd7"},
+    {file = "pebble-5.1.3.tar.gz", hash = "sha256:9fdf00dde4abb09907817114ad8cf822836b6d6cc8f43a3f0ec741be276086e7"},
+]
 
 [[package]]
 name = "pefile"
@@ -3889,6 +3948,40 @@ files = [
 typing-extensions = ">=4.14.1"
 
 [[package]]
+name = "pydecipher"
+version = "1.0.0"
+description = "Python un-freezing and bytecode extraction + analysis framework"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = []
+develop = false
+
+[package.dependencies]
+argparse = "*"
+asn1crypto = "*"
+Pebble = "*"
+pefile = "*"
+pycryptodome = "*"
+python-magic = "*"
+signify = ">=0.3.0"
+six = "*"
+textdistance = "*"
+uncompyle6 = "*"
+xdis = ">=5.0.8"
+
+[package.extras]
+dev = ["black", "bump2version", "dataclasses", "flake8", "flake8-docstrings", "pre-commit", "pytest", "restructuredtext-lint", "sphinx", "sphinx_rtd_theme", "towncrier"]
+docs = ["sphinx", "sphinx_rtd_theme", "towncrier"]
+test = ["dataclasses", "pytest"]
+
+[package.source]
+type = "git"
+url = "https://github.com/HarmJ0y/pydecipher.git"
+reference = "HEAD"
+resolved_reference = "ecae8850a85320d74964ed84c8aedc352b8fdcd4"
+
+[[package]]
 name = "pygments"
 version = "2.19.2"
 description = "Pygments is a syntax highlighting package written in Python."
@@ -4600,6 +4693,29 @@ test = ["build[virtualenv] (>=1.0.3)", "filelock (>=3.4.0)", "ini2toml[lite] (>=
 type = ["importlib_metadata (>=7.0.2)", "jaraco.develop (>=7.21)", "mypy (==1.14.*)", "pytest-mypy"]
 
 [[package]]
+name = "signify"
+version = "0.9.1"
+description = "Module to generate and verify PE signatures"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "signify-0.9.1-py3-none-any.whl", hash = "sha256:7818f4abf709b93c88cfebdd611ab38ec8332c6506281308d0de5c89b5c6391d"},
+    {file = "signify-0.9.1.tar.gz", hash = "sha256:4607b4c2b14ea448b54239361a051f1a20142c9cf4ea3cf1ecb3c8d1be447c4e"},
+]
+
+[package.dependencies]
+asn1crypto = ">=1.3,<2"
+certvalidator = ">=0.11"
+mscerts = "*"
+oscrypto = ">=1.1,<2"
+typing_extensions = ">=4.6.0"
+
+[package.extras]
+full = ["olefile"]
+msi = ["olefile"]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -4760,6 +4876,28 @@ files = [
 ]
 
 [[package]]
+name = "spark-parser"
+version = "1.9.0"
+description = "An Earley-Algorithm Context-free grammar Parser Toolkit"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "spark_parser-1.9.0-py2-none-any.whl", hash = "sha256:fb17b1dc56de2d2554ae2c95705b2a5940a04b3a0aa43dcdf2fd609ad3edbf22"},
+    {file = "spark_parser-1.9.0-py310-none-any.whl", hash = "sha256:a1ab71c2df145b21c2c1c8aa5f001e36206bec259ec836504263ab7450881ad1"},
+    {file = "spark_parser-1.9.0-py311-none-any.whl", hash = "sha256:30ab1a6005a783ca39f73ad477efb1e12a1cb0123607543e71690d9fd6fecf49"},
+    {file = "spark_parser-1.9.0-py312-none-any.whl", hash = "sha256:036b8227c5b09a919a7eae50576f91d533124de1dbf9a9c654a2be5864f1c947"},
+    {file = "spark_parser-1.9.0-py313-none-any.whl", hash = "sha256:fc2e188601a6c8f7a68e2d7bd97ca377f6dc271a67607ff11e6beef39d0e9d1d"},
+    {file = "spark_parser-1.9.0.tar.gz", hash = "sha256:dc66d48c4265c4133db41a9c5fe9c1c502b3b20167df158a0f234cd31712cf64"},
+]
+
+[package.dependencies]
+click = "*"
+
+[package.extras]
+dev = ["pre-commit", "pytest"]
+
+[[package]]
 name = "srsly"
 version = "2.5.1"
 description = "Modern high-performance serialization utilities for Python"
@@ -4853,6 +4991,33 @@ files = [
 
 [package.extras]
 widechars = ["wcwidth"]
+
+[[package]]
+name = "textdistance"
+version = "4.6.3"
+description = "Compute distance between the two texts."
+optional = false
+python-versions = ">=3.5"
+groups = ["main"]
+files = [
+    {file = "textdistance-4.6.3-py3-none-any.whl", hash = "sha256:0cb1b2cc8e3339ddc3e0f8c870e49fb49de6ecc42a718917308b3c971f34aa56"},
+    {file = "textdistance-4.6.3.tar.gz", hash = "sha256:d6dabc50b4ea832cdcf0e1e6021bd0c7fcd9ade155888d79bb6a3c31fce2dc6f"},
+]
+
+[package.extras]
+all = ["Levenshtein", "distance", "jellyfish", "numpy", "py-stringmatching", "pylev", "pyxDamerauLevenshtein", "rapidfuzz (>=2.6.0)", "tabulate"]
+benchmark = ["Levenshtein", "distance", "jellyfish", "numpy", "py-stringmatching", "pylev", "pyxDamerauLevenshtein", "rapidfuzz (>=2.6.0)", "tabulate"]
+benchmarks = ["Levenshtein", "distance", "jellyfish", "numpy", "py-stringmatching", "pylev", "pyxDamerauLevenshtein", "rapidfuzz (>=2.6.0)", "tabulate"]
+common = ["Levenshtein", "jellyfish", "numpy", "pyxDamerauLevenshtein", "rapidfuzz (>=2.6.0)"]
+dameraulevenshtein = ["jellyfish", "pyxDamerauLevenshtein", "rapidfuzz (>=2.6.0)"]
+extra = ["Levenshtein", "jellyfish", "numpy", "pyxDamerauLevenshtein", "rapidfuzz (>=2.6.0)"]
+extras = ["Levenshtein", "jellyfish", "numpy", "pyxDamerauLevenshtein", "rapidfuzz (>=2.6.0)"]
+hamming = ["Levenshtein", "distance", "jellyfish", "rapidfuzz (>=2.6.0)"]
+jaro = ["Levenshtein", "rapidfuzz (>=2.6.0)"]
+jarowinkler = ["jellyfish", "rapidfuzz (>=2.6.0)"]
+levenshtein = ["Levenshtein", "rapidfuzz (>=2.6.0)"]
+lint = ["flake8", "flake8-blind-except", "flake8-bugbear", "flake8-commas", "flake8-logging-format", "flake8-mutable", "flake8-pep3101", "flake8-quotes", "flake8-string-format", "flake8-tidy-imports", "isort", "mypy", "pep8-naming", "twine", "types-tabulate"]
+test = ["hypothesis", "isort", "numpy", "pytest"]
 
 [[package]]
 name = "texttable"
@@ -5048,6 +5213,26 @@ files = [
     {file = "tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8"},
     {file = "tzdata-2025.2.tar.gz", hash = "sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9"},
 ]
+
+[[package]]
+name = "uncompyle6"
+version = "3.9.3"
+description = "Python cross-version byte-code decompiler"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "uncompyle6-3.9.3-py3-none-any.whl", hash = "sha256:c2b059147afb97498b6cc42eb14bd09dea23f513aee957f461d0ab84a02d3c36"},
+    {file = "uncompyle6-3.9.3-py36-none-any.whl", hash = "sha256:7f3e21e650400ae144d2189a503b8febf9e76bec6b1b9761a78001896dd43672"},
+    {file = "uncompyle6-3.9.3-py38-none-any.whl", hash = "sha256:501d873782b168d9f452a1316ad2caa4ee6853daf594518e6f3e0777cafa4ac8"},
+    {file = "uncompyle6-3.9.3-py39-none-any.whl", hash = "sha256:88b14b26e361e572a97b1c5092fe4a67102346927b75f52e8a738ed7ef587dbc"},
+    {file = "uncompyle6-3.9.3.tar.gz", hash = "sha256:78b764d4c843b0455fb39db6deb421a48d5d3ebb846537ba6444afe107c4ebc1"},
+]
+
+[package.dependencies]
+click = "*"
+spark-parser = ">=1.8.9,<1.9.2"
+xdis = ">=6.1.1,<6.2.0"
 
 [[package]]
 name = "unicodecsv"
@@ -5328,6 +5513,26 @@ files = [
 dev = ["pytest", "setuptools"]
 
 [[package]]
+name = "xdis"
+version = "6.1.5"
+description = "Python cross-version byte-code library and disassembler"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "xdis-6.1.5-py311-none-any.whl", hash = "sha256:ed18274c42d522b6cd100de262b45417a095b4b3eecedcc5020dbffe03f3816e"},
+    {file = "xdis-6.1.5-py313-none-any.whl", hash = "sha256:f4e5639045480b148601909de5e009637ff6f6a9a97ecc3f215dfc620f08e024"},
+    {file = "xdis-6.1.5.tar.gz", hash = "sha256:4c62219376e671f03db4747e1249e2a7fde10dc4edffbcb19730fd94b63feeb3"},
+]
+
+[package.dependencies]
+click = "*"
+six = ">=1.10.0"
+
+[package.extras]
+dev = ["pre-commit", "pytest", "tox"]
+
+[[package]]
 name = "yara-x"
 version = "1.9.0"
 description = "Python bindings for YARA-X"
@@ -5515,4 +5720,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "2652541216368d8569b04e4f456ad5b3a4f8ece5f5d06498debd36573a8c765f"
+content-hash = "2f87807c2bca3082e6a706ae177bfe0a98076ae2a5d2f6c5dc5fcc457906d0e0"

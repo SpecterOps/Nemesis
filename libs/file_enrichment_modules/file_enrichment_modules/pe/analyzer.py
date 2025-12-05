@@ -1,4 +1,9 @@
 # enrichment_modules/pe_analyzer/analzyer.py
+import os
+import shutil
+import tempfile
+import zipfile
+from glob import glob
 from pathlib import Path
 from typing import Any
 
@@ -355,6 +360,63 @@ rule is_pe
 }
         """)
 
+        self.python_packed_rule = yara_x.compile(r"""
+import "pe"
+import "hash"
+
+rule python_packed_executable
+{
+    meta:
+        description = "Identifies executable converted using PyInstaller or py2exe"
+        reference_pyinstaller = "https://bluecordsecurity.io/compiled-python-malware-analysis"
+        reference_py2exe = "https://blog.nviso.eu/2017/01/26/detecting-py2exe-executables-yara-rule/"
+        category = "INFO"
+
+    strings:
+        // PyInstaller indicators
+        $pyinst1 = "pyi-windows-manifest-filename" ascii wide
+        $pyinst2 = "pyi-runtime-tmpdir" ascii wide
+        $pyinst3 = "PyInstaller: " ascii wide
+        $pyinst4 = "_MEIPASS" ascii
+        $pyinst5 = "Cannot open PyInstaller archive" ascii
+        $pyinst6 = "pyiboot" ascii
+        $pyinst7 = "PYZ-00.pyz" ascii
+        $pyinst8 = "base_library.zip" ascii
+
+        // PyInstaller CArchive magic bytes (MEI\x0c\r\n\x0b\x0c)
+        $pyinst_magic = { 4D 45 49 0C 0D 0A 0B 0C }
+
+        // py2exe indicators (string-based fallback)
+        $py2exe1 = "PY2EXE_VERBOSE" ascii
+        $py2exe2 = "py2exe" ascii nocase
+        $py2exe3 = "PYTHONSCRIPT" ascii wide
+        $py2exe4 = "pythondll" ascii
+        $py2exe5 = "boot_common.py" ascii
+
+    condition:
+        uint16(0) == 0x5A4D and (
+            // PyInstaller detection
+            any of ($pyinst*) or
+
+            // py2exe detection via PYTHONSCRIPT resource type
+            (pe.number_of_resources > 0 and
+             for any i in (0..pe.number_of_resources-1) : (
+                pe.resources[i].type_string == "P\x00Y\x00T\x00H\x00O\x00N\x00S\x00C\x00R\x00I\x00P\x00T\x00"
+             )) or
+
+            // py2exe string-based detection fallback
+            any of ($py2exe*) or
+
+            // PyInstaller default icon hash check
+            (pe.number_of_resources > 0 and
+             for any i in (0..pe.number_of_resources-1) : (
+                pe.resources[i].type == pe.RESOURCE_TYPE_ICON and
+                hash.md5(pe.resources[i].offset, pe.resources[i].length) == "20d36c0a435caad0ae75d3e5f474650c"
+             ))
+        )
+}
+        """)
+
     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
         """Uses a Yara run to determine if this module should run."""
         # Get the current file_enriched from the database backend
@@ -392,6 +454,159 @@ rule is_pe
             logger.exception(message=f"Error analyzing PE file for {file_enriched.file_name}")
             return None
 
+    def _is_python_packed(self, file_bytes: bytes) -> bool:
+        """Check if PE is packed with PyInstaller or py2exe."""
+        matches = self.python_packed_rule.scan(file_bytes).matching_rules
+        return len(matches) > 0
+
+    def _unpack_python_pe(self, file_path: str) -> tuple[str | None, list[str], str | None]:
+        """Run pydecipher to unpack a Python-packed PE.
+
+        Returns:
+            Tuple of (log_file_path, list of .py file paths, output_dir) or (None, [], None) on failure.
+            Note: Caller is responsible for cleaning up output_dir.
+        """
+        import pydecipher.main
+
+        output_dir = tempfile.mkdtemp(prefix="pydecipher_")
+        try:
+            pydecipher.main.run([file_path, "-o", output_dir])
+
+            # Find log file (log_*.txt)
+            log_files = glob(os.path.join(output_dir, "log_*.txt"))
+            log_file = log_files[0] if log_files else None
+
+            # Find .py files - check both possible output directories:
+            # - overlay_data_output/ for PyInstaller
+            # - pythonscript_output/ for py2exe
+            py_files = []
+            for subdir_name in ["overlay_data_output", "pythonscript_output"]:
+                subdir_path = os.path.join(output_dir, subdir_name)
+                if os.path.isdir(subdir_path):
+                    py_files.extend(glob(os.path.join(subdir_path, "*.py")))
+
+            return log_file, py_files, output_dir
+
+        except Exception as e:
+            logger.warning("pydecipher failed to unpack file", error=str(e), file_path=file_path)
+            shutil.rmtree(output_dir, ignore_errors=True)
+            return None, [], None
+
+    def _create_unpacked_zip(self, log_file: str | None, py_files: list[str]) -> str | None:
+        """Create a zip file containing the log and .py files.
+
+        Returns:
+            Path to the created zip file, or None if nothing to zip.
+        """
+        if not log_file and not py_files:
+            return None
+
+        zip_path = tempfile.mktemp(suffix=".zip", prefix="UnpackedPython_")
+        try:
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                if log_file and os.path.exists(log_file):
+                    zf.write(log_file, os.path.basename(log_file))
+                for py_file in py_files:
+                    if os.path.exists(py_file):
+                        zf.write(py_file, os.path.basename(py_file))
+            return zip_path
+        except Exception as e:
+            logger.warning("Failed to create unpacked zip", error=str(e))
+            if os.path.exists(zip_path):
+                os.unlink(zip_path)
+            return None
+
+    async def _try_python_unpack(self, file_path: str, file_enriched, enrichment_result: EnrichmentResult | None) -> EnrichmentResult | None:
+        """Attempt to unpack Python-packed PE and add transform if successful."""
+        import json
+
+        from common.models import File, Transform
+        from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
+        from dapr.aio.clients import DaprClient
+
+        if enrichment_result is None:
+            return None
+
+        output_dir = None
+        zip_path = None
+
+        try:
+            # Read up to 1MB for YARA scan
+            scan_size = min(file_enriched.size, 1024 * 1024)
+            with open(file_path, "rb") as f:
+                file_bytes = f.read(scan_size)
+
+            if not self._is_python_packed(file_bytes):
+                return enrichment_result
+
+            logger.info("Detected Python-packed PE, attempting to unpack", file_name=file_enriched.file_name)
+
+            log_file, py_files, output_dir = self._unpack_python_pe(file_path)
+
+            if not log_file and not py_files:
+                logger.info("pydecipher produced no output files")
+                return enrichment_result
+
+            zip_path = self._create_unpacked_zip(log_file, py_files)
+            if not zip_path:
+                return enrichment_result
+
+            # Upload zip to storage
+            zip_object_id = self.storage.upload_file(zip_path)
+
+            # Create transform
+            transform = Transform(
+                type="UnpackedPython",
+                object_id=str(zip_object_id),
+                metadata={
+                    "file_name": "UnpackedPython.zip",
+                    "offer_as_download": True,
+                    "display_title": "Unpacked Python Source",
+                },
+            )
+            enrichment_result.transforms.append(transform)
+
+            # Publish the unpacked file as a new file message so it gets tracked in the database
+            file_message = File(
+                object_id=str(zip_object_id),
+                agent_id=file_enriched.agent_id,
+                project=file_enriched.project,
+                timestamp=file_enriched.timestamp,
+                expiration=file_enriched.expiration,
+                path=f"{file_enriched.path}/UnpackedPython.zip",
+                originating_object_id=file_enriched.object_id,
+                nesting_level=(file_enriched.nesting_level or 0) + 1,
+            )
+
+            async with DaprClient() as dapr_client:
+                data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
+                await dapr_client.publish_event(
+                    pubsub_name=FILES_PUBSUB,
+                    topic_name=FILES_NEW_FILE_TOPIC,
+                    data=data,
+                    data_content_type="application/json",
+                )
+
+            logger.info(
+                "Created UnpackedPython transform and published file",
+                py_file_count=len(py_files),
+                zip_object_id=str(zip_object_id),
+                originating_object_id=file_enriched.object_id,
+            )
+
+            return enrichment_result
+
+        except Exception as e:
+            logger.warning("Error during Python unpack attempt", error=str(e))
+            return enrichment_result
+
+        finally:
+            # Cleanup temp files
+            if zip_path and os.path.exists(zip_path):
+                os.unlink(zip_path)
+            if output_dir:
+                shutil.rmtree(output_dir, ignore_errors=True)
+
     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file using.
 
@@ -408,10 +623,16 @@ rule is_pe
 
             # Use provided file_path if available, otherwise download
             if file_path:
-                return self._analyze_pe(file_path, file_enriched)
+                result = self._analyze_pe(file_path, file_enriched)
+                # Check for Python packing and unpack
+                result = await self._try_python_unpack(file_path, file_enriched, result)
+                return result
             else:
                 with self.storage.download(file_enriched.object_id) as file:
-                    return self._analyze_pe(file.name, file_enriched)
+                    result = self._analyze_pe(file.name, file_enriched)
+                    # Check for Python packing and unpack
+                    result = await self._try_python_unpack(file.name, file_enriched, result)
+                    return result
 
         except Exception:
             logger.exception(message="Error in PE file analysis", file_object_id=object_id)
