@@ -4,7 +4,7 @@ ARG PYTHON_BASE_PROD_IMAGE=nemesis-python-base-prod
 FROM ${PYTHON_BASE_DEV_IMAGE} AS base
 
 ARG TIKA_OCR_LANGUAGES="eng"
-ARG TIKA_VERSION="3.1.0"
+ARG TIKA_VERSION="3.2.3"
 
 # Install dependencies including multiple Tesseract language packs
 RUN apt-get update && \
