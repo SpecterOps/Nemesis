@@ -91,6 +91,12 @@ class OutflankConfig(BaseConfig):
             return None
         return Path(v)
 
+class CobaltStrikeConfig(BaseConfig):
+    url: StrictHttpUrl
+    credential: PasswordCredential
+    project: str = Field(description="Project name for Nemesis file uploads")
+    poll_interval_sec: Annotated[int, Field(gt=0, description="Polling interval of the Cobalt Strike API in seconds")] = 3
+
 
 class Config(BaseConfig):
     cache_db_path: Path = Field(default_factory=lambda: Path("/tmp/connectors"), description="LevelDB cache path")
@@ -100,8 +106,9 @@ class Config(BaseConfig):
     nemesis: NemesisConfig
     mythic: list[MythicConfig] | None = Field(default_factory=list)
     outflank: list[OutflankConfig] | None = Field(default_factory=list)
+    cobaltstrike: list[CobaltStrikeConfig] | None = Field(default_factory=list)
 
-    @field_validator("mythic", "outflank", mode="before")
+    @field_validator("mythic", "outflank", "cobaltstrike", mode="before")
     @classmethod
     def ensure_list(cls, v):
         if v is None:

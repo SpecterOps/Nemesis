@@ -8,6 +8,7 @@ from cli.log import setup_logging
 from cli.monitor import monitor_main
 from cli.mythic_connector.mythic_connector import start
 from cli.stage1_connector.stage1_connector import run_outflank_connector
+from cli.cobaltstrike_connector.cobaltstrike_connector import run_cobaltstrike_connector
 from cli.submit import submit_main
 
 
@@ -17,6 +18,8 @@ def get_default_config_file(tool_name: str) -> str:
         return "settings_outflank.yaml"
     elif tool_name == "mythic":
         return "settings_mythic.yaml"
+    elif tool_name == "cobaltstrike":
+        return "settings_cobaltstrike.yaml"
     else:
         raise ValueError(f"Unknown tool name: {tool_name}")
 
@@ -101,6 +104,27 @@ def connect_mythic(config: str, debug: bool, showconfig: bool) -> None:
         click.echo(f"Unexpected error: {e}")
         raise click.Abort() from e
 
+@cli.command()
+@connector_options("cobaltstrike")
+def connect_cobaltstrike(config: str, debug: bool, showconfig: bool):
+    """Ingest Cobalt Strike data into Nemesis"""
+
+    if showconfig:
+        with open(config) as f:
+            click.echo(f.read())
+        sys.exit(0)
+
+    logger = setup_logging(debug)
+    try:
+        # get the absolute path of the config file
+        abs_path = click.format_filename(config)
+
+        logger.info("Starting Cobalt Strike connector using the config file: %s", abs_path)
+        cfg = load_config(config)
+        asyncio.run(run_cobaltstrike_connector(cfg, logger))
+    except Exception as e:
+        logger.exception("Unhandled exception in connector", e)
+        sys.exit(1)
 
 def get_os_user_and_host_string() -> str:
     """Get the current OS user and hostname for metadata"""
