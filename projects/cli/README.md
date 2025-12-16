@@ -46,6 +46,13 @@ Ingest data from Outflank Stage1 C2 into Nemesis.
 - Uses `settings_outflank.yaml` configuration file
 - `--showconfig`: Display example configuration
 
+### connect-cobaltstrike
+Ingest data from Cobalt Strike into Nemesis.
+
+**Configuration:**
+- Uses `settings_cobaltstrike.yaml` configuration file
+- `--showconfig`: Display example configuration
+
 ## Additional Tools
 
 - **stress_test**: Load testing tool for API performance evaluation
