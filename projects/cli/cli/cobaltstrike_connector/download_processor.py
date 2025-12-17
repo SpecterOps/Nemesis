@@ -154,7 +154,7 @@ class CobaltStrikeDownloadProcessor:
                 project=self.project,
                 timestamp=datetime.now(UTC),
                 expiration=datetime.now(UTC).replace(year=datetime.now().year + 1),
-                path=str(download.path),
+                path=f"{download.path}/{download.name}",
             )
             success, error, response = await self.upload_file(
                 str(downloaded_file_info.file_path),

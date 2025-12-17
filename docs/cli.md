@@ -279,6 +279,12 @@ docker run --rm -ti \
 
 Ingest data from Cobalt Strike into Nemesis.
 
+### Requirements
+
+- The Cobalt Strike API Server should be running. For information on starting the REST API server, see [Starting the REST API Server](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/welcome_starting-rest-server.htm).
+- Cobalt Strike should be installed and configured.
+- Cobalt Strike should be properly licensed
+
 ### Configuration
 
 Create a configuration file (e.g., `settings_cobaltstrike.yaml`):
