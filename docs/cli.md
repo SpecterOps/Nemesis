@@ -303,7 +303,7 @@ nemesis:
   max_file_size: 1000000000
 
 cobaltstrike:
-  - url: "https://cobaltstrike.example.com"
+  - url: "https://cobaltstrike.example.com:50443"
     credential:
       username: "nemesis_bot"
       password: "cobaltstrike_password"
