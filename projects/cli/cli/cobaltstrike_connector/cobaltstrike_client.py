@@ -187,7 +187,7 @@ class CobaltStrikeClient:
             try:
                 return await func(self, *args, **kwargs)
             except aiohttp.ClientResponseError as e:
-                if e.status == 401:  # Unauthorized - token might be expired
+                if e.status in (401,403):  # Unauthorized - token might be expired
                     self.logger.info("Token appears to be expired, attempting reauthentication")
                     if await self._reauthenticate():
                         self.logger.info("Reauthentication successful, retrying original request")
