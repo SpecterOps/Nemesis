@@ -1,0 +1,19 @@
+cache_db_path: "/tmp/nemesis_connectors"
+conn_timeout_sec: 5
+validate_https_certs: false
+
+nemesis:
+  url: "https://nemesis.example.com"
+  credential:
+    username: "connector_bot"
+    password: "pass"
+  expiration_days: 100
+  max_file_size: 1000000000
+
+cobaltstrike:
+  - url: "https://cobaltstrike.example.com:50443"
+    credential:
+      username: "nemesis_bot"
+      password: "cobaltstrike_password"
+    project: "my-assessment"
+    poll_interval_sec: 3

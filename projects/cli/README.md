@@ -4,13 +4,13 @@ A command-line interface for the Nemesis platform that provides file submission,
 
 ## Purpose
 
-This CLI tool serves as the primary interface for uploading files to Nemesis, monitoring directories for new files, and synchronizing data from C2 frameworks like Mythic and Outflank.
+This CLI tool serves as the primary interface for uploading files to Nemesis, monitoring directories for new files, and synchronizing data from C2 frameworks like Mythic, Cobalt Strike and Outflank.
 
 ## Features
 
 - **File submission**: Upload single files or entire directories to Nemesis
 - **Directory monitoring**: Real-time monitoring of folders for new files
-- **C2 connectors**: Synchronize data from Mythic and Outflank C2 frameworks
+- **C2 connectors**: Synchronize data from Mythic, Cobalt Strike and Outflank C2 frameworks
 - **Stress testing**: Load testing capabilities for the Nemesis API
 - **Module testing**: Execute file enrichment modules standalone for development
 
@@ -44,6 +44,13 @@ Ingest data from Outflank Stage1 C2 into Nemesis.
 
 **Configuration:**
 - Uses `settings_outflank.yaml` configuration file
+- `--showconfig`: Display example configuration
+
+### connect-cobaltstrike
+Ingest data from Cobalt Strike into Nemesis.
+
+**Configuration:**
+- Uses `settings_cobaltstrike.yaml` configuration file
 - `--showconfig`: Display example configuration
 
 ## Additional Tools

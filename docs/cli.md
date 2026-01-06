@@ -275,6 +275,63 @@ docker run --rm -ti \
 - **File Downloads**: Agent-collected files
 - **Screenshots**: Visual captures from agents
 
+## Cobalt Strike Connector
+
+Ingest data from Cobalt Strike into Nemesis.
+
+### Requirements
+
+- The Cobalt Strike API Server should be running. For information on starting the REST API server, see [Starting the REST API Server](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/welcome_starting-rest-server.htm).
+- Cobalt Strike should be installed and configured.
+- Cobalt Strike should be properly licensed
+
+### Configuration
+
+Create a configuration file (e.g., `settings_cobaltstrike.yaml`):
+
+```yaml
+cache_db_path: "/tmp/nemesis_connectors"
+conn_timeout_sec: 5
+validate_https_certs: true
+
+nemesis:
+  url: "https://nemesis.example.com"
+  credential:
+    username: "connector_bot"
+    password: "connector_password"
+  expiration_days: 100
+  max_file_size: 1000000000
+
+cobaltstrike:
+  - url: "https://cobaltstrike.example.com:50443"
+    credential:
+      username: "nemesis_bot"
+      password: "cobaltstrike_password"
+
+    project: "project name"
+    poll_interval_sec: 3
+```
+
+### Usage
+
+```bash
+# Run with mounted config file
+docker run \
+  --rm -ti \
+  -v /path/to/settings_cobaltstrike.yaml:/config/settings_cobaltstrike.yaml \
+  ghcr.io/specterops/nemesis/cli \
+  connect-cobaltstrike -c /config/settings_cobaltstrike.yaml
+
+# Show example configuration
+docker run --rm ghcr.io/specterops/nemesis/cli connect-cobaltstrike --showconfig
+
+# Enable debug logging
+docker run --rm \
+  -v /path/to/settings_cobaltstrike.yaml:/config/settings_cobaltstrike.yaml \
+  ghcr.io/specterops/nemesis/cli \
+  connect-cobaltstrike -c /config/settings_cobaltstrike.yaml --debug
+```
+
 ## Outflank Connector
 
 Ingest data from Outflank Stage1 C2 into Nemesis.

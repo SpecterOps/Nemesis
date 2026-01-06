@@ -24,7 +24,7 @@ For a general overview of the Nemesis project structure, see the [overview](over
 
 Once Nemesis is running, data first needs to be ingested into the platform. Ingestion into Nemesis can occur in multiple ways, including:
 
-* [Auto-ingesting data from C2 platforms](#nemesis-c2-connector-setup), including Mythic and Outflank C2.
+* [Auto-ingesting data from C2 platforms](#nemesis-c2-connector-setup), including Mythic, Cobalt Strike and Outflank C2.
 * [Manually uploading files on the "File Upload" page in the Nemesis Dashboard UI.](#manual-file-upload)
 * [Using the CLI tool](./cli.md) to:
     * [submit individual files or entire folders/subfolders](./cli.md#file-submission)
@@ -33,7 +33,7 @@ Once Nemesis is running, data first needs to be ingested into the platform. Inge
 
 ### Nemesis C2 Connector Setup
 
-Nemesis includes connectors for [Mythic](https://github.com/its-a-feature/Mythic) and Outflank C2 (formerly Stage1). The connectors hook into the C2 platforms and transfer data automatically into Nemesis. The connectors are located in the [CLI](https://github.com/SpecterOps/Nemesis/tree/main/projects/cli/cli/) project.
+Nemesis includes connectors for [Mythic](https://github.com/its-a-feature/Mythic), Cobalt Strike and Outflank C2 (formerly Stage1). The connectors hook into the C2 platforms and transfer data automatically into Nemesis. The connectors are located in the [CLI](https://github.com/SpecterOps/Nemesis/tree/main/projects/cli/cli/) project.
 
 See the [CLI](./cli.md) documentation for more details on configuration.
 
