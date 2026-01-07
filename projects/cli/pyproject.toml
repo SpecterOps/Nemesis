@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"
-aiohttp = "^3.11.11"
+aiohttp = "^3.13.3"
 structlog = "^25.1.0"
 requests = "^2.32.5"
 click = "^8.1.8"
