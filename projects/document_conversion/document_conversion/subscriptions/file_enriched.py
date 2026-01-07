@@ -3,6 +3,7 @@
 import fitz  # PyMuPDF
 from common.logger import get_logger
 from common.models import CloudEvent, FileEnriched
+from minio.error import S3Error
 
 logger = get_logger(__name__)
 
@@ -69,6 +70,18 @@ def is_encrypted_file(file_data: FileEnriched):
     if "Security: 1" in file_data.magic_type or "CDFV2 Encrypted" in file_data.magic_type:
         return True
 
+    # Check if file exists before attempting download
+    if not storage.check_file_exists(file_data.object_id):
+        logger.warning("File does not exist in MinIO", object_id=file_data.object_id)
+        raise S3Error(
+            code="NoSuchKey",
+            message=f"Object {file_data.object_id} does not exist",
+            resource=file_data.object_id,
+            request_id="",
+            host_id="",
+            response=None,
+        )
+
     with storage.download(file_data.object_id) as temp_file:
         if "pdf document" in file_data.magic_type.lower():
             return is_pdf_encrypted(temp_file.name)
@@ -82,8 +95,9 @@ async def file_enriched_subscription_handler(event: CloudEvent[FileEnriched]):
     """Handler for file_enriched events with semaphore-based concurrency control."""
     from ..workflow_manager import start_workflow_with_concurrency_control
 
+    file_enriched = event.data
+
     try:
-        file_enriched = event.data
         logger.debug("Received file_enriched event", object_id=file_enriched.object_id)
 
         # If the file is encrypted, skip
@@ -98,6 +112,32 @@ async def file_enriched_subscription_handler(event: CloudEvent[FileEnriched]):
         # Start workflow with semaphore control for backpressure
         await start_workflow_with_concurrency_control(file_enriched)
 
+    except S3Error as e:
+        # Handle MinIO-specific errors
+        if e.code in ["NoSuchKey", "NoSuchBucket"]:
+            # Non-retryable error: file doesn't exist in MinIO
+            logger.error(
+                "File not found in MinIO - dropping message to prevent retry loop",
+                object_id=file_enriched.object_id,
+                error_code=e.code,
+                error_message=str(e),
+            )
+            # Return success to Dapr to acknowledge and drop the message
+            # This prevents infinite retries for missing files
+            return
+        else:
+            # Retryable MinIO error (network issues, auth failures, etc.)
+            logger.exception(
+                message="Retryable MinIO error - message will be requeued",
+                object_id=file_enriched.object_id,
+                error_code=e.code,
+            )
+            raise
+
     except Exception:
-        logger.exception(message="Error handling file_enriched event")
+        # Catch-all for unexpected errors - these should be retried
+        logger.exception(
+            message="Unexpected error handling file_enriched event - message will be requeued",
+            object_id=file_enriched.object_id,
+        )
         raise
