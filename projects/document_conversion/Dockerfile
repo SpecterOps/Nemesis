@@ -68,7 +68,7 @@ ENTRYPOINT ["/bin/sh", "-c", " \
 ########################
 FROM base AS bundle
 
-RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
+RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv -vvv
 
 ########################
 # Make the final image
