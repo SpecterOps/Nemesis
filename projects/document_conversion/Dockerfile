@@ -29,7 +29,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Set JAVA_HOME for JRE
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64/jre
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # Copy only what's needed for dependency installation first (leveraging Docker cache)
 COPY ./projects/document_conversion/poetry.lock ./projects/document_conversion/pyproject.toml /src/projects/document_conversion/
@@ -98,7 +99,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64/jre \
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+ENV PATH="$JAVA_HOME/bin:$PATH" \
     LOG_LEVEL=INFO \
     UVICORN_HOST=0.0.0.0 \
     UVICORN_PORT=8000 \
