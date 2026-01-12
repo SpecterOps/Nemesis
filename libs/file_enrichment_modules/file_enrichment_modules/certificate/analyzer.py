@@ -8,6 +8,7 @@ from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from cryptography import x509
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -61,7 +62,13 @@ class CertificateAnalyzer(EnrichmentModule):
 
     def _try_decrypt_with_passwords(self, data: bytes, file_extension: str) -> dict:
         """Try to decrypt encrypted certificate/key with common passwords."""
-        decrypt_results = {"is_encrypted": False, "password_found": None, "decryption_successful": False}
+        decrypt_results = {
+            "is_encrypted": False,
+            "password_found": None,
+            "decryption_successful": False,
+            "unsupported_algorithm": False,
+            "error_details": None,
+        }
 
         # First check if the file is encrypted at all by trying to load without password
         try:
@@ -76,6 +83,12 @@ class CertificateAnalyzer(EnrichmentModule):
                 except ValueError:
                     # File is encrypted, continue with password attempts
                     decrypt_results["is_encrypted"] = True
+                except UnsupportedAlgorithm as e:
+                    # Legacy encryption algorithm detected
+                    decrypt_results["is_encrypted"] = True
+                    decrypt_results["unsupported_algorithm"] = True
+                    decrypt_results["error_details"] = f"Unsupported encryption algorithm: {str(e)}"
+                    logger.debug(f"Unsupported algorithm detected when checking encryption: {e}")
             else:
                 # Try PEM private key without password
                 try:
@@ -87,7 +100,12 @@ class CertificateAnalyzer(EnrichmentModule):
                 except (ValueError, TypeError):
                     # May be encrypted or may not be a private key, continue checking
                     pass
-        except Exception:
+                except UnsupportedAlgorithm as e:
+                    decrypt_results["unsupported_algorithm"] = True
+                    decrypt_results["error_details"] = f"Unsupported encryption algorithm: {str(e)}"
+                    logger.debug(f"Unsupported algorithm detected: {e}")
+        except Exception as e:
+            logger.debug(f"Unexpected exception during initial decryption check: {type(e).__name__}: {e}")
             pass
 
         # Try with passwords if potentially encrypted
@@ -100,25 +118,55 @@ class CertificateAnalyzer(EnrichmentModule):
                     try:
                         pkcs12.load_key_and_certificates(data, password_bytes)
                         decrypt_results.update(
-                            {"is_encrypted": True, "password_found": password, "decryption_successful": True}
+                            {
+                                "is_encrypted": True,
+                                "password_found": password,
+                                "decryption_successful": True,
+                                "error_details": None,
+                            }
                         )
+                        logger.debug(f"Successfully decrypted PFX with password: '{password}'")
                         return decrypt_results
-                    except ValueError:
+                    except ValueError as e:
+                        # Wrong password or other value error
                         decrypt_results["is_encrypted"] = True
+                        logger.debug(f"ValueError with password '{password}': {e}")
+                        continue
+                    except UnsupportedAlgorithm as e:
+                        # Unsupported encryption algorithm - mark but continue trying
+                        decrypt_results["is_encrypted"] = True
+                        decrypt_results["unsupported_algorithm"] = True
+                        if not decrypt_results["error_details"]:
+                            decrypt_results["error_details"] = f"Unsupported encryption algorithm: {str(e)}"
+                        logger.debug(f"UnsupportedAlgorithm with password '{password}': {e}")
                         continue
 
                 # Try encrypted private key
                 try:
                     serialization.load_pem_private_key(data, password_bytes)
                     decrypt_results.update(
-                        {"is_encrypted": True, "password_found": password, "decryption_successful": True}
+                        {
+                            "is_encrypted": True,
+                            "password_found": password,
+                            "decryption_successful": True,
+                            "error_details": None,
+                        }
                     )
+                    logger.debug(f"Successfully decrypted PEM private key with password: '{password}'")
                     return decrypt_results
-                except ValueError:
+                except ValueError as e:
                     decrypt_results["is_encrypted"] = True
+                    logger.debug(f"ValueError with PEM key password '{password}': {e}")
+                    continue
+                except UnsupportedAlgorithm as e:
+                    decrypt_results["unsupported_algorithm"] = True
+                    if not decrypt_results["error_details"]:
+                        decrypt_results["error_details"] = f"Unsupported encryption algorithm: {str(e)}"
+                    logger.debug(f"UnsupportedAlgorithm with PEM key password '{password}': {e}")
                     continue
 
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Unexpected exception with password '{password}': {type(e).__name__}: {e}")
                 continue
 
         return decrypt_results
@@ -210,7 +258,6 @@ class CertificateAnalyzer(EnrichmentModule):
             "signature_algorithm": cert.signature_algorithm_oid._name,
             "public_key_info": self._extract_public_key_info(cert.public_key()),
             "extensions": [],
-            "extended_key_usage": [],
         }
 
         # Extract extensions
@@ -219,8 +266,59 @@ class CertificateAnalyzer(EnrichmentModule):
 
             # Special handling for Extended Key Usage
             if isinstance(ext.value, x509.ExtendedKeyUsage):
-                ext_info["extended_key_usage_oids"] = [eku.dotted_string for eku in ext.value]
-                info["extended_key_usage"] = [eku._name for eku in ext.value]
+                eku_list = []
+                for eku in ext.value:
+                    eku_list.append({
+                        "oid": eku.dotted_string,
+                        "name": eku._name
+                    })
+                ext_info["extended_key_usages"] = eku_list
+
+            # Special handling for Subject Alternative Names
+            if isinstance(ext.value, x509.SubjectAlternativeName):
+                san_list = []
+                for san in ext.value:
+                    san_entry = {"type": type(san).__name__}
+
+                    if isinstance(san, x509.DNSName):
+                        san_entry["value"] = san.value
+                    elif isinstance(san, x509.RFC822Name):
+                        san_entry["value"] = san.value
+                    elif isinstance(san, x509.UniformResourceIdentifier):
+                        san_entry["value"] = san.value
+                    elif isinstance(san, x509.IPAddress):
+                        san_entry["value"] = str(san.value)
+                    elif isinstance(san, x509.DirectoryName):
+                        san_entry["value"] = san.value.rfc4514_string()
+                    elif isinstance(san, x509.RegisteredID):
+                        san_entry["value"] = san.value.dotted_string
+                    elif isinstance(san, x509.OtherName):
+                        san_entry["type_id"] = san.type_id.dotted_string
+                        # Handle UPN (User Principal Name) - OID 1.3.6.1.4.1.311.20.2.3
+                        if san.type_id.dotted_string == "1.3.6.1.4.1.311.20.2.3":
+                            san_entry["type"] = "UPN"
+                            try:
+                                # UPN is encoded as UTF8String in ASN.1 DER format
+                                # The value includes the tag (0x0c for UTF8String) and length
+                                # Skip the first 2 bytes (tag + length) to get the actual string
+                                value_bytes = san.value
+                                if len(value_bytes) >= 2 and value_bytes[0] == 0x0c:
+                                    # 0x0c is UTF8String tag, next byte is length
+                                    upn_value = value_bytes[2:].decode("utf-8")
+                                    san_entry["value"] = upn_value
+                                else:
+                                    # Fallback: try to decode the whole thing
+                                    san_entry["value"] = value_bytes.decode("utf-8")
+                            except Exception:
+                                san_entry["value"] = san.value.hex()
+                        else:
+                            san_entry["value"] = san.value.hex()
+                    else:
+                        san_entry["value"] = str(san)
+
+                    san_list.append(san_entry)
+
+                ext_info["subject_alternative_names"] = san_list
 
             info["extensions"].append(ext_info)
 
@@ -268,7 +366,19 @@ class CertificateAnalyzer(EnrichmentModule):
                     password = encryption_info["password_found"]
                     report_lines.append(f"  - Password found: '{password}'")
                 else:
-                    report_lines.append("  - Password cracking: FAILED (none of the common passwords worked)")
+                    if encryption_info.get("unsupported_algorithm"):
+                        report_lines.append("  - Password cracking: FAILED")
+                        report_lines.append("  - Reason: File uses legacy/unsupported encryption algorithm")
+                        if encryption_info.get("error_details"):
+                            report_lines.append(f"  - Details: {encryption_info['error_details']}")
+                        report_lines.append("  - Note: This file may have been encrypted with an older version of OpenSSL")
+                        report_lines.append("         or uses algorithms like RC2, RC4, or 3DES that are no longer supported")
+                        report_lines.append("         by modern cryptography libraries. Consider re-exporting the certificate")
+                        report_lines.append("         with a modern encryption algorithm (AES).")
+                    else:
+                        report_lines.append("  - Password cracking: FAILED (none of the common passwords worked)")
+                        if encryption_info.get("error_details"):
+                            report_lines.append(f"  - Details: {encryption_info['error_details']}")
             else:
                 report_lines.append("  - File is encrypted: NO")
                 if encryption_info["decryption_successful"]:
@@ -294,18 +404,26 @@ class CertificateAnalyzer(EnrichmentModule):
                 if cert["public_key_info"].get("curve"):
                     report_lines.append(f"    - Curve: {cert['public_key_info']['curve']}")
 
-                if cert["extended_key_usage"]:
-                    report_lines.append("    - Extended Key Usage:")
-                    for eku in cert["extended_key_usage"]:
-                        report_lines.append(f"      * {eku}")
-
                 if cert["extensions"]:
                     report_lines.append("    - Extensions:")
                     for ext in cert["extensions"]:
                         critical_text = " (CRITICAL)" if ext["critical"] else ""
                         report_lines.append(f"      * {ext['name']}{critical_text}")
-                        if ext.get("extended_key_usage_oids"):
-                            report_lines.append(f"        OIDs: {', '.join(ext['extended_key_usage_oids'])}")
+
+                        # Display Extended Key Usage details
+                        if ext.get("extended_key_usages"):
+                            for eku in ext["extended_key_usages"]:
+                                report_lines.append(f"        - {eku['name']} (OID: {eku['oid']})")
+
+                        # Display Subject Alternative Names details
+                        if ext.get("subject_alternative_names"):
+                            for san in ext["subject_alternative_names"]:
+                                san_type = san.get("type", "Unknown")
+                                san_value = san.get("value", "N/A")
+                                if san.get("type_id"):
+                                    report_lines.append(f"        - {san_type} (OID: {san['type_id']}): {san_value}")
+                                else:
+                                    report_lines.append(f"        - {san_type}: {san_value}")
 
                 report_lines.append("")
 
@@ -342,16 +460,39 @@ class CertificateAnalyzer(EnrichmentModule):
 
         return "\n".join(report_lines)
 
+    def analyze_certificate_file(self, file_path: str, file_extension: str | None = None) -> dict:
+        """
+        Analyze a certificate file and return parsed data.
+
+        This is a standalone method that can be used for testing without needing
+        the full enrichment infrastructure.
+
+        Args:
+            file_path: Path to the certificate file
+            file_extension: Optional extension override (e.g., ".pfx"). If not provided,
+                           extracted from file_path. Use this when the file_path is a
+                           temp file that doesn't preserve the original extension.
+
+        Returns:
+            Dictionary containing parsed certificate data
+        """
+        with open(file_path, "rb") as f:
+            data = f.read()
+
+        if file_extension is None:
+            file_extension = Path(file_path).suffix.lower()
+
+        return self._parse_certificate_data(data, file_extension)
+
     def _analyze_certificate(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze certificate file and generate enrichment result."""
         enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
         try:
-            with open(file_path, "rb") as f:
-                data = f.read()
-
+            # Get file extension from the original filename, not the temp file path
+            # This is important because temp files from storage don't preserve extensions
             file_extension = Path(file_enriched.file_name).suffix.lower()
-            analysis_result = self._parse_certificate_data(data, file_extension)
+            analysis_result = self.analyze_certificate_file(file_path, file_extension)
 
             enrichment_result.results = analysis_result
 
