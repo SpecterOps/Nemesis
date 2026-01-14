@@ -10,8 +10,7 @@
 **/*.pyd
 **/.Python
 
-# Poetry/uv artifacts that shouldn't be in images
-**/poetry.lock
+# uv artifacts that shouldn't be in images
 
 # Test and coverage
 **/.pytest_cache

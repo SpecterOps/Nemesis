@@ -8,7 +8,7 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install uv from official image (replaces pipx + poetry)
+# Install uv from official image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV UV_LINK_MODE=copy \

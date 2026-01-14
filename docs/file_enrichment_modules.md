@@ -7,25 +7,23 @@ To add a new module, create a new folder matching Python's [PEP8 naming conventi
 
 Create a main `analyzer.py` file with your enrichment logic. The easiest method for this (and enrichment modules are fairly small) is to find an example module, and use it as a base with a LLM to help draft your code.
 
-If your module needs additional dependencies, you have two options. Before either, first [install Poetry](https://python-poetry.org/). To prevent version issues, we recommend installing version 2.0.1 of Poetry with `pipx install poetry==2.0.1`
+If your module needs additional dependencies, you have two options. First, [install uv](https://docs.astral.sh/uv/getting-started/installation/).
 
-For the first option, you can `cd` to `projects/file_enrichment` or `libs/file_enrichment_modules/` and run `poetry add X` for the needed library.
+For the first option, you can `cd` to `projects/file_enrichment` or `libs/file_enrichment_modules/` and run `uv add X` for the needed library.
 
-Alternatively (and easier) you can create a `pyproject.yaml` in the new module module folder. An example is:
+Alternatively (and easier) you can create a `pyproject.toml` in the new module folder. An example is:
 
 ```toml
-[tool.poetry]
+[project]
 name = "module"
 version = "0.1.0"
 description = "Enriches things"
-authors = ["harmj0y <will@harmj0y.net>"]
-package-mode = false
-
-[tool.poetry.dependencies]
-python = "^3.9"
+authors = [{name = "harmj0y", email = "will@harmj0y.net"}]
+requires-python = ">=3.9"
+dependencies = []
 ```
 
-Then in this folder, run `poetry add X` to add a new library. The dynamic module loader will install the necessary dependencies in a Poetry env for just that module.
+Then in this folder, run `uv add X` to add a new library. The dynamic module loader will install the necessary dependencies in a virtual env for just that module.
 
 ## Tips / Tricks
 

@@ -70,8 +70,8 @@ cd Nemesis/projects/cli
 
 2. Install dependencies and run it:
 ```bash
-poetry install
-poetry run python -m cli
+uv sync
+uv run python -m cli
 ```
 
 # Manually Building and Using with Docker

@@ -11,37 +11,37 @@ The benchmarks use `pytest-benchmark` to measure the performance of critical fun
 ### Run all benchmarks
 
 ```bash
-poetry run pytest tests/benchmarks/ --benchmark-only
+uv run pytest tests/benchmarks/ --benchmark-only
 ```
 
 ### Run specific benchmark file
 
 ```bash
-poetry run pytest tests/benchmarks/bench_basic_analysis.py --benchmark-only
+uv run pytest tests/benchmarks/bench_basic_analysis.py --benchmark-only
 ```
 
 ### Run specific benchmark test
 
 ```bash
-poetry run pytest tests/benchmarks/bench_basic_analysis.py::TestBasicAnalysisBenchmarks::test_single_text_file_analysis --benchmark-only
+uv run pytest tests/benchmarks/bench_basic_analysis.py::TestBasicAnalysisBenchmarks::test_single_text_file_analysis --benchmark-only
 ```
 
 ### Run benchmarks with custom columns
 
 ```bash
-poetry run pytest tests/benchmarks/ --benchmark-only --benchmark-columns=min,max,mean,median
+uv run pytest tests/benchmarks/ --benchmark-only --benchmark-columns=min,max,mean,median
 ```
 
 ### Save benchmark results
 
 ```bash
-poetry run pytest tests/benchmarks/ --benchmark-only --benchmark-save=my_results
+uv run pytest tests/benchmarks/ --benchmark-only --benchmark-save=my_results
 ```
 
 ### Compare with previous results
 
 ```bash
-poetry run pytest tests/benchmarks/ --benchmark-only --benchmark-compare=my_results
+uv run pytest tests/benchmarks/ --benchmark-only --benchmark-compare=my_results
 ```
 
 ## Available Benchmarks
