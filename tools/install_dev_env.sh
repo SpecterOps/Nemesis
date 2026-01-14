@@ -8,7 +8,7 @@ BASE_DIR="$(dirname "$SCRIPT_DIR")"
 # Directories to check
 TARGET_DIRS=("$BASE_DIR/libs" "$BASE_DIR/projects")
 
-echo "🚀 Starting Poetry installation scan..."
+echo "🚀 Starting uv installation scan..."
 echo "Project root: $BASE_DIR"
 
 for dir in "${TARGET_DIRS[@]}"; do
@@ -22,7 +22,7 @@ for dir in "${TARGET_DIRS[@]}"; do
             echo ">>> Installing dependencies for: $proj_dir"
             (
                 cd "$proj_dir"
-                poetry install
+                uv sync --frozen
             )
         done
     else
@@ -31,7 +31,7 @@ for dir in "${TARGET_DIRS[@]}"; do
 done
 
 echo ""
-echo "✅ All Poetry projects processed successfully!"
+echo "✅ All uv projects processed successfully!"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🧩 VS Code environment cache cleanup recommended:"

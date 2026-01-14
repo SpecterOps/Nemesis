@@ -27,25 +27,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
 
-      - name: Setup Python virtualenv
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          python -m venv env
-          source env/bin/activate
           cd projects/web_api
-          pip install poetry
-          poetry install
+          uv sync --frozen
 
       - name: Generate API documentation
         run: |
-          source env/bin/activate
           cd projects/web_api
-          poetry run python ../../.github/scripts/generate_api_docs.py
+          uv run python ../../.github/scripts/generate_api_docs.py
 
       - name: Commit documentation changes
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -57,13 +53,11 @@ jobs:
 
       - name: Install mkdocs dependencies
         run: |
-          source env/bin/activate
-          pip install -r docs/requirements.txt
+          uv pip install --system -r docs/requirements.txt
 
       - name: Build documentation
         run: |
-          source env/bin/activate
-          mkdocs build
+          python -m mkdocs build
 
       - name: Setup Github pages
         uses: actions/configure-pages@v4

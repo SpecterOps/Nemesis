@@ -29,13 +29,13 @@ The helper scripts `./tools/submit.sh`, `./tools/monitor_folder.sh`, and `./tool
 
 If you want to manually build the docker images, see [the Nemesis CLI project's README](https://github.com/SpecterOps/Nemesis/blob/main/projects/cli/README.md).
 
-### Poetry Method (Local Usage or Development)
-To use the Nemesis CLI locally or for development, install at least Python 3.12.8 and [install Poetry](https://python-poetry.org/docs/#installation). Then, run the following:
+### Local Method (Development)
+To use the Nemesis CLI locally or for development, install at least Python 3.12.8 and [install uv](https://docs.astral.sh/uv/getting-started/installation/). Then, run the following:
 
 ```bash
 cd Nemesis/projects/cli
-poetry install
-poetry run python -m cli <command>
+uv sync
+uv run python -m cli <command>
 ```
 
 ## File Submission
@@ -79,11 +79,11 @@ The `./tools/submit.sh` script wraps the docker syntax automatically.
   --debug
 ```
 
-**Poetry :**
+**Local (uv) :**
 ```bash
-# Submit a single file w/ Poetry env
+# Submit a single file w/ local env
 cd Nemesis/projects/cli
-poetry run python -m cli submit /data/file
+uv run python -m cli submit /data/file
 ```
 
 ### Options Reference
@@ -182,12 +182,12 @@ docker run \
   --debug
 ```
 
-**Poetry :**
+**Local (uv) :**
 ```bash
-# Monitor a directory w/ Poetry env
+# Monitor a directory w/ local env
 cd Nemesis/projects/cli
-poetry install
-poetry run python -m cli monitor /path/to/directory
+uv sync
+uv run python -m cli monitor /path/to/directory
 ```
 
 ### Options Reference

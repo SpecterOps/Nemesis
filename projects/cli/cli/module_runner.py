@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
-def install_poetry_dependencies(module_path: Path):
+def install_uv_dependencies(module_path: Path):
     """Install module dependencies if pyproject.toml exists."""
     pyproject_path = module_path / "pyproject.toml"
 
@@ -18,25 +18,25 @@ def install_poetry_dependencies(module_path: Path):
         logger.info("No pyproject.toml found, skipping dependency installation")
         return True
 
-    logger.info("Installing dependencies with Poetry...")
+    logger.info("Installing dependencies with uv...")
     try:
         result = subprocess.run(
-            ["poetry", "install", "--no-interaction"], cwd=module_path, capture_output=True, text=True
+            ["uv", "sync", "--frozen"], cwd=module_path, capture_output=True, text=True
         )
         if result.returncode != 0:
-            logger.error(f"Poetry install failed: {result.stderr}")
+            logger.error(f"uv sync failed: {result.stderr}")
             return False
         logger.info("Dependencies installed successfully")
         return True
     except subprocess.CalledProcessError as e:
-        logger.error(f"Error running Poetry: {e}")
+        logger.error(f"Error running uv: {e}")
         return False
 
 
-def run_analyzer(module_path: Path, target_file: Path, use_poetry: bool = True):
+def run_analyzer(module_path: Path, target_file: Path, use_uv: bool = True):
     """Run the analyzer with the target file."""
     try:
-        command = ["poetry", "run", "python"] if use_poetry else ["python"]
+        command = ["uv", "run", "python"] if use_uv else ["python"]
         command.extend(["analyzer.py", str(target_file.absolute())])
 
         result = subprocess.run(command, cwd=module_path, capture_output=True, text=True)
@@ -64,8 +64,8 @@ def main():
         "module_path", type=str, help="Path to the module directory (e.g., ./enrichment_modules/dotnet_analyzer)"
     )
     parser.add_argument("target_file", type=str, help="Path to the file to analyze")
-    parser.add_argument("--skip-deps", action="store_true", help="Skip Poetry dependency installation")
-    parser.add_argument("--no-poetry", action="store_true", help="Run without Poetry (directly with Python)")
+    parser.add_argument("--skip-deps", action="store_true", help="Skip uv dependency installation")
+    parser.add_argument("--no-uv", action="store_true", help="Run without uv (directly with Python)")
     args = parser.parse_args()
 
     # Convert paths to Path objects and verify they exist
@@ -85,14 +85,14 @@ def main():
         logger.error(f"analyzer.py not found in module directory: {analyzer_path}")
         sys.exit(1)
 
-    # Handle Poetry installation if needed
-    if not args.no_poetry and not args.skip_deps:
-        if not install_poetry_dependencies(module_path):
+    # Handle uv installation if needed
+    if not args.no_uv and not args.skip_deps:
+        if not install_uv_dependencies(module_path):
             logger.error("Failed to install dependencies")
             sys.exit(1)
 
     # Run the analyzer
-    result = run_analyzer(module_path, target_file, use_poetry=not args.no_poetry)
+    result = run_analyzer(module_path, target_file, use_uv=not args.no_uv)
     if result:
         print(json.dumps(result, indent=2))
     else:

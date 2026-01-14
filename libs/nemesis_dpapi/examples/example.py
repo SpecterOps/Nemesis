@@ -1,6 +1,6 @@
 """Example showing DPAPI usage with eventing.
 
-To run this example: poetry run python /home/itadmin/code/Nemesis/libs/nemesis_dpapi/examples/example.py
+To run this example: uv run python /home/itadmin/code/Nemesis/libs/nemesis_dpapi/examples/example.py
 This example demonstrates the complete DPAPI workflow including:
 
 1. Event monitoring setup

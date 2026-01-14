@@ -75,7 +75,7 @@ Interactive API documentation available at `/api/docs` (Swagger UI) and `/api/re
 ### Usage
 To run locally:
 ```bash
-poetry run uvicorn web_api.main:app --reload
+uv run uvicorn web_api.main:app --reload
 ```
 
 ### Debugging

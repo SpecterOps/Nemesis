@@ -56,13 +56,13 @@ class ModuleLoader:
         self.modules: dict[str, EnrichmentModule] = {}
 
     async def _install_module_deps(self, module_path: Path):
-        """Install module dependencies using Poetry if pyproject.toml exists."""
+        """Install module dependencies using uv if pyproject.toml exists."""
         if (module_path / "pyproject.toml").exists():
             logger.info("Installing dependencies for module", module_path=module_path)
             process = await asyncio.create_subprocess_exec(
-                "poetry",
-                "install",
-                "--no-interaction",
+                "uv",
+                "sync",
+                "--frozen",
                 cwd=module_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

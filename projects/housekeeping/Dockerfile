@@ -15,7 +15,7 @@ RUN apt-get update && \
 # If dependencies change, re-copy all the dependencies
 # In the future we can be more efficient with this an only copy the lib folders
 # that this project uses
-COPY ./projects/housekeeping/poetry.lock ./projects/housekeeping/pyproject.toml /src/projects/housekeeping/
+COPY ./projects/housekeeping/uv.lock ./projects/housekeeping/pyproject.toml /src/projects/housekeeping/
 
 COPY ./libs /src/libs
 COPY ./projects/housekeeping /src/projects/housekeeping/
@@ -29,7 +29,7 @@ FROM base AS dev
 COPY --from=base /src /src
 
 WORKDIR /src/projects/housekeeping
-RUN poetry install
+RUN uv sync --frozen
 
 # Immediate output (no buffering)
 ENV PYTHONUNBUFFERED=1
@@ -40,14 +40,15 @@ ENV LOG_LEVEL=DEBUG
 
 ENV UVICORN_HOST="0.0.0.0"
 ENV UVICORN_PORT=8000
-ENV UVICORN_RELOAD_DIR="/src/"
 
 ENTRYPOINT ["/bin/sh", "-c", " \
-    poetry run uvicorn housekeeping.main:app \
+    uv run python -m uvicorn housekeeping.main:app \
     --host ${UVICORN_HOST} \
     --port ${UVICORN_PORT} \
     --reload \
-    --reload-dir ${UVICORN_RELOAD_DIR} \
+    --reload-dir /src/projects/housekeeping/housekeeping \
+    --reload-dir /src/libs \
+    --reload-include '*.py' \
 "]
 
 ########################
@@ -57,7 +58,10 @@ FROM base AS bundle
 COPY --from=base /src /src
 
 WORKDIR /src/projects/housekeeping
-RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
+RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
+    uv venv /venv --python /usr/local/bin/python3 --seed && \
+    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir /src/libs/common /src/projects/housekeeping
 
 # FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod

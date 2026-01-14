@@ -15,7 +15,7 @@ RUN apt-get update && \
 # If dependencies change, re-copy all the dependencies
 # In the future we can be more efficient with this an only copy the lib folders
 # that this project uses
-COPY ./projects/cli/poetry.lock ./projects/cli/pyproject.toml /src/projects/cli/
+COPY ./projects/cli/uv.lock ./projects/cli/pyproject.toml /src/projects/cli/
 
 COPY ./libs /src/libs
 COPY ./projects/cli /src/projects/cli/
@@ -29,7 +29,7 @@ FROM base AS dev
 COPY --from=base /src /src
 
 WORKDIR /src/projects/cli
-RUN poetry install
+RUN uv sync --frozen
 
 # Immediate output (no buffering)
 ENV PYTHONUNBUFFERED=1
@@ -38,7 +38,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 ENV LOG_LEVEL=DEBUG
 
-ENTRYPOINT ["poetry", "run", "python", "-m", "cli"]
+ENTRYPOINT ["uv", "run", "python", "-m", "cli"]
 
 ########################
 # Production
@@ -47,7 +47,10 @@ FROM base AS bundle
 COPY --from=base /src /src
 
 WORKDIR /src/projects/cli
-RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
+RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
+    uv venv /venv --python /usr/local/bin/python3 --seed && \
+    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir /src/libs/common /src/projects/cli
 
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 

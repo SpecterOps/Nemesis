@@ -10,7 +10,7 @@ RUN apt-get update && \
     g++ \
     pkg-config \
     libssl-dev \
-    libboost-all-dev \
+    libboost-dev \
     ragel \
     ccache \
     git \
@@ -42,7 +42,7 @@ ENV CARGO_INCREMENTAL=0 \
     CARGO_PROFILE_RELEASE_OPT_LEVEL=2 \
     CARGO_NET_GIT_FETCH_WITH_CLI=true \
     CARGO_HTTP_MULTIPLEXING=false \
-    CARGO_BUILD_JOBS=4 \
+    CARGO_BUILD_JOBS=8 \
     GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no"
 
 # Build dependencies for prod with optimized flags and parallel compilation

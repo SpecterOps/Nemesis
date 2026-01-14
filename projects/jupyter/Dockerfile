@@ -1,4 +1,4 @@
-FROM jupyter/datascience-notebook:latest
+FROM jupyter/scipy-notebook:latest
 
 USER root
 

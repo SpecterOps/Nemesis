@@ -68,10 +68,19 @@ All commands support basic authentication with configurable username and passwor
 cd Nemesis/projects/cli
 ```
 
-2. Install dependencies and run it:
+2. Install system dependencies required for building native packages:
 ```bash
-poetry install
-poetry run python -m cli
+# Debian/Ubuntu
+sudo apt-get install -y libleveldb-dev
+
+# macOS
+brew install leveldb
+```
+
+3. Install dependencies and run it:
+```bash
+uv sync
+uv run python -m cli
 ```
 
 # Manually Building and Using with Docker

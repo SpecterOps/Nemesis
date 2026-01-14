@@ -37,30 +37,30 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup-init.sh \
 #     rm /tmp/signature-base.tar.gz
 
 # Copy dependency files first for better caching
-# This layer will only rebuild if pyproject.toml or poetry.lock files change
-COPY ./projects/file_enrichment/poetry.lock ./projects/file_enrichment/pyproject.toml /src/projects/file_enrichment/
+# This layer will only rebuild if pyproject.toml or uv.lock files change
+COPY ./projects/file_enrichment/uv.lock ./projects/file_enrichment/pyproject.toml /src/projects/file_enrichment/
 
 # Copy all libs (needed for local path dependencies in pyproject.toml)
-# Poetry needs the full lib code to resolve path dependencies
+# uv needs the full lib code to resolve path dependencies
 COPY ./libs /src/libs
 
 WORKDIR /src/projects/file_enrichment
 
 # Install all dependencies including local libs
-# This layer is cached unless poetry.lock or lib dependencies change
-RUN poetry install --no-root
+# This layer is cached unless uv.lock or lib dependencies change
+RUN uv sync --frozen --no-install-project
 
 # Copy the project source code last
 # Changes to project code won't invalidate the dependency cache above
 COPY ./projects/file_enrichment /src/projects/file_enrichment/
 
 # Install the project itself in editable mode (fast since dependencies are already installed)
-# This ensures the project is importable and poetry run commands work
-RUN poetry install
+# This ensures the project is importable and uv run commands work
+RUN uv sync --frozen
 
 # Pre-download Presidio's spaCy model (~400MB) to avoid runtime delay
-# This downloads the en_core_web_lg model used by AnalyzerEngine
-RUN poetry run python -c "from presidio_analyzer import AnalyzerEngine; AnalyzerEngine()"
+# Install pip first (uv doesn't include it by default), then download the model
+RUN uv pip install pip && uv run python -m spacy download en_core_web_lg
 
 ########################
 # Development
@@ -69,7 +69,7 @@ FROM base AS dev
 #COPY --from=base /signature-base /signature-base
 
 WORKDIR /src/projects/file_enrichment
-# RUN poetry run python /src/libs/file_enrichment_modules/file_enrichment_modules/yara/clean_yara_rules.py \
+# RUN uv run python /src/libs/file_enrichment_modules/file_enrichment_modules/yara/clean_yara_rules.py \
 #     -i /signature-base/ \
 #     -o /src/libs/file_enrichment_modules/file_enrichment_modules/yara/signature-base.yara
 
@@ -91,16 +91,16 @@ ENV LOG_LEVEL=DEBUG
 ENV UVICORN_HOST="0.0.0.0"
 ENV UVICORN_PORT=8001
 ENV UVICORN_WORKERS=1
-ENV UVICORN_RELOAD=true
-ENV UVICORN_RELOAD_DIR="/src/"
 
 ENTRYPOINT ["/bin/sh", "-c", " \
-    poetry run uvicorn file_enrichment.controller:app \
+    uv run python -m uvicorn file_enrichment.controller:app \
     --host ${UVICORN_HOST} \
     --port ${UVICORN_PORT} \
     --workers ${UVICORN_WORKERS} \
     --reload \
-    --reload-dir ${UVICORN_RELOAD_DIR} \
+    --reload-dir /src/projects/file_enrichment/file_enrichment \
+    --reload-dir /src/libs \
+    --reload-include '*.py' \
     "]
 ########################
 # Production
@@ -108,7 +108,19 @@ ENTRYPOINT ["/bin/sh", "-c", " \
 FROM base AS bundle
 
 WORKDIR /src/projects/file_enrichment
-RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
+RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
+    uv venv /venv --python /usr/local/bin/python3 && \
+    /venv/bin/python -m ensurepip --default-pip && \
+    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir \
+        /src/libs/common \
+        /src/libs/chromium \
+        /src/libs/nemesis_dpapi \
+        /src/libs/file_linking \
+        /src/libs/file_enrichment_modules \
+        /src/projects/file_enrichment && \
+    /venv/bin/pip uninstall -y pip setuptools && \
+    find /venv -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
 # FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod

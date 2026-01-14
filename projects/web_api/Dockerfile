@@ -26,7 +26,7 @@ RUN apt-get update && \
 # If dependencies change, re-copy all the dependencies
 # In the future we can be more efficient with this an only copy the lib folders
 # that this project uses
-COPY ./projects/web_api/poetry.lock ./projects/web_api/pyproject.toml /src/projects/web_api/
+COPY ./projects/web_api/uv.lock ./projects/web_api/pyproject.toml /src/projects/web_api/
 
 COPY ./libs /src/libs
 COPY ./projects/web_api /src/projects/web_api/
@@ -40,7 +40,7 @@ FROM base AS dev
 COPY --from=base /src /src
 
 WORKDIR /src/projects/web_api
-RUN poetry install
+RUN uv sync --frozen
 
 # Immediate output (no buffering)
 ENV PYTHONUNBUFFERED=1
@@ -52,15 +52,16 @@ ENV LOG_LEVEL=DEBUG
 ENV UVICORN_HOST="0.0.0.0"
 ENV UVICORN_PORT=8000
 ENV UVICORN_WORKERS=1
-ENV UVICORN_RELOAD_DIR="/src/"
 
 ENTRYPOINT ["/bin/sh", "-c", " \
-    poetry run uvicorn web_api.main:app \
+    uv run python -m uvicorn web_api.main:app \
     --host ${UVICORN_HOST} \
     --port ${UVICORN_PORT} \
     --workers ${UVICORN_WORKERS} \
     --reload \
-    --reload-dir ${UVICORN_RELOAD_DIR} \
+    --reload-dir /src/projects/web_api/web_api \
+    --reload-dir /src/libs \
+    --reload-include '*.py' \
     "]
 
 ########################
@@ -70,7 +71,10 @@ FROM base AS bundle
 COPY --from=base /src /src
 
 WORKDIR /src/projects/web_api
-RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
+RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
+    uv venv /venv --python /usr/local/bin/python3 --seed && \
+    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir /src/libs/common /src/libs/nemesis_dpapi /src/projects/web_api
 
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
