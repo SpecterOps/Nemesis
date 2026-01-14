@@ -10,8 +10,6 @@
 **/*.pyd
 **/.Python
 
-# uv artifacts that shouldn't be in images
-
 # Test and coverage
 **/.pytest_cache
 **/.coverage
@@ -47,6 +45,7 @@ docs/
 Thumbs.db
 
 # Local environment files
+.env
 .env.local
 .env.*.local
 

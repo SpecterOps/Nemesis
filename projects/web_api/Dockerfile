@@ -73,7 +73,8 @@ COPY --from=base /src /src
 WORKDIR /src/projects/web_api
 RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
     uv venv /venv --python /usr/local/bin/python3 --seed && \
-    /venv/bin/pip install --no-cache-dir -r requirements.txt
+    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir /src/libs/common /src/libs/nemesis_dpapi /src/projects/web_api
 
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 

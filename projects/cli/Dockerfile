@@ -49,7 +49,8 @@ COPY --from=base /src /src
 WORKDIR /src/projects/cli
 RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
     uv venv /venv --python /usr/local/bin/python3 --seed && \
-    /venv/bin/pip install --no-cache-dir -r requirements.txt
+    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir /src/libs/common /src/projects/cli
 
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 

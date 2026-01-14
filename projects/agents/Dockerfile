@@ -79,7 +79,8 @@ COPY --from=base /src /src
 WORKDIR /src/projects/agents
 RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
     uv venv /venv --python /usr/local/bin/python3 --seed && \
-    /venv/bin/pip install --no-cache-dir -r requirements.txt
+    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir /src/libs/common /src/projects/agents
 
 # FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod

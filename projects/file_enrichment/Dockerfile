@@ -112,6 +112,13 @@ RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
     uv venv /venv --python /usr/local/bin/python3 && \
     /venv/bin/python -m ensurepip --default-pip && \
     /venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir \
+        /src/libs/common \
+        /src/libs/chromium \
+        /src/libs/nemesis_dpapi \
+        /src/libs/file_linking \
+        /src/libs/file_enrichment_modules \
+        /src/projects/file_enrichment && \
     /venv/bin/pip uninstall -y pip setuptools && \
     find /venv -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 

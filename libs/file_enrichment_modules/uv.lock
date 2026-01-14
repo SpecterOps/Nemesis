@@ -670,7 +670,6 @@ dependencies = [
     { name = "common" },
     { name = "dapr" },
     { name = "psycopg", extra = ["binary"] },
-    { name = "pytest-asyncio" },
     { name = "pyyaml" },
     { name = "structlog" },
 ]
@@ -681,7 +680,6 @@ requires-dist = [
     { name = "common", editable = "../common" },
     { name = "dapr", specifier = "==1.16.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.0.0,<4.0.0" },
-    { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pyyaml", specifier = ">=6.0.3,<7.0.0" },
     { name = "structlog", specifier = ">=20.0.0,<30.0.0" },
 ]
