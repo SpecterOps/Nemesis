@@ -6,13 +6,13 @@ Nemesis uses a project called [Apprise](https://github.com/caronc/apprise/) for 
 
 ## Enabling Alerting
 
-In order to enable alerting, set one or more Apprise compatible URLs to the `APPRISE_URLS` ENV variable (comma-separated for multiple URLs) before launching Nemesis. Once set, alerts on "interesting" files (e.g., parsed credentials, Nosey Parker hits, DPAPI data discovery, etc.) will be pushed to the configuered Slack webhook/channel with **Nemesis** as the bot user. These messages will contain the alert name, alert category, any additional details, a sanitized file path and a link to the [file details](#file-details) and finding details in the dashboard:
+In order to enable alerting, set one or more Apprise compatible URLs to the `APPRISE_URLS` ENV variable (comma-separated for multiple URLs) before launching Nemesis. Once set, alerts on "interesting" files (e.g., parsed credentials, Nosey Parker hits, DPAPI data discovery, etc.) will be pushed to the configuered Slack webhook/channel with **Nemesis** as the bot user. These messages will contain the alert name, alert category, any additional details, a sanitized file path and a link to the [file details](usage_guide.md#file-details) and finding details in the dashboard:
 
 ![Nemesis Slack Alerting](images/nemesis-finding-slack-alert.png)
 
 ### User Feedback
 
-Apprise allows you to route different messages to different services via a tagging system. If you want user feedback from the [File Details viewer](#file-details) to be routed for alerting, use an Apprise link with a `feedback` tag (e.g., `slack://Nemesis@T...k/#nemesis-feedback?tag=feedback`) - this will route user feedback actions to that specified channel, with regular alerts going to any configured channel without the feedback tag.
+Apprise allows you to route different messages to different services via a tagging system. If you want user feedback from the [File Details viewer](usage_guide.md#file-details) to be routed for alerting, use an Apprise link with a `feedback` tag (e.g., `slack://Nemesis@T...k/#nemesis-feedback?tag=feedback`) - this will route user feedback actions to that specified channel, with regular alerts going to any configured channel without the feedback tag.
 
 You can configure multiple Apprise URLs for alerting and user feedback (i.e., alerting to multiple services).
 

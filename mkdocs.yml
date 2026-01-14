@@ -23,6 +23,7 @@ nav:
     - chatbot.md
     - troubleshooting.md
     - yara.md
+    - Nosey Parker Rules: noseyparker_rules.md
     - Chromium Analysis: chromium.md
     - DPAPI Analysis: dpapi.md
     - Container Processing: containers.md

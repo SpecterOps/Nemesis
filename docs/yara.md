@@ -30,6 +30,6 @@ Like when adding a new rule, ensure you click the (now) green "Reload Yara Engin
 
 ### Rule Alerts
 
-Alerts for any matching rules will be shows in the [Findings](findings.md) tab. This will include the data match as well as the rule details:
+Alerts for any matching rules will be shown in the [Findings](usage_guide.md#findings) tab. This will include the data match as well as the rule details:
 
 ![Yara Rules Edit](images/nemesis-dashboard-yara-match.png)
