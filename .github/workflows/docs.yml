@@ -38,7 +38,7 @@ jobs:
 
       - name: Build documentation
         run: |
-          mkdocs build
+          python -m mkdocs build
 
       - name: Setup Github pages
         uses: actions/configure-pages@v4
