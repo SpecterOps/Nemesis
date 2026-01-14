@@ -1,0 +1,56 @@
+# Virtual environments
+**/.venv
+**/venv
+**/.virtualenv
+
+# Python cache
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.Python
+
+# Poetry/uv artifacts that shouldn't be in images
+**/poetry.lock
+
+# Test and coverage
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+**/.tox
+**/.nox
+
+# IDE and editor
+**/.idea
+**/.vscode
+**/*.swp
+**/*.swo
+*~
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Build artifacts
+**/*.egg-info
+**/dist
+**/build
+**/.eggs
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment files
+.env.local
+.env.*.local
+
+# Misc development files
+**/.mypy_cache
+**/.ruff_cache

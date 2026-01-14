@@ -33,7 +33,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # Copy only what's needed for dependency installation first (leveraging Docker cache)
-COPY ./projects/document_conversion/poetry.lock ./projects/document_conversion/pyproject.toml /src/projects/document_conversion/
+COPY ./projects/document_conversion/uv.lock ./projects/document_conversion/pyproject.toml /src/projects/document_conversion/
 WORKDIR /src/projects/document_conversion
 
 # Copy remaining files
@@ -50,17 +50,18 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     LOG_LEVEL=DEBUG \
     UVICORN_HOST="0.0.0.0" \
-    UVICORN_PORT=8000 \
-    UVICORN_RELOAD_DIR="/src/"
+    UVICORN_PORT=8000
 
-RUN poetry install
+RUN uv sync --frozen
 
 ENTRYPOINT ["/bin/sh", "-c", " \
-    poetry run uvicorn document_conversion.main:app \
+    uv run python -m uvicorn document_conversion.main:app \
     --host ${UVICORN_HOST} \
     --port ${UVICORN_PORT} \
     --reload \
-    --reload-dir ${UVICORN_RELOAD_DIR} \
+    --reload-dir /src/projects/document_conversion/document_conversion \
+    --reload-dir /src/libs \
+    --reload-include '*.py' \
 "]
 
 ########################
@@ -68,7 +69,9 @@ ENTRYPOINT ["/bin/sh", "-c", " \
 ########################
 FROM base AS bundle
 
-RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv -vvv
+RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
+    uv venv /venv --python /usr/local/bin/python3 --seed && \
+    /venv/bin/pip install --no-cache-dir -r requirements.txt
 
 ########################
 # Make the final image

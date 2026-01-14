@@ -34,7 +34,7 @@ RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin \
 # If dependencies change, re-copy all the dependencies
 # In the future we can be more efficient with this an only copy the lib folders
 # that this project uses
-COPY ./projects/agents/poetry.lock ./projects/agents/pyproject.toml /src/projects/agents/
+COPY ./projects/agents/uv.lock ./projects/agents/pyproject.toml /src/projects/agents/
 
 COPY ./libs /src/libs
 COPY ./projects/agents /src/projects/agents/
@@ -48,7 +48,7 @@ FROM base AS dev
 COPY --from=base /src /src
 
 WORKDIR /src/projects/agents
-RUN poetry install
+RUN uv sync --frozen
 
 # Immediate output (no buffering)
 ENV PYTHONUNBUFFERED=1
@@ -59,14 +59,15 @@ ENV LOG_LEVEL=DEBUG
 
 ENV UVICORN_HOST="0.0.0.0"
 ENV UVICORN_PORT=8000
-ENV UVICORN_RELOAD_DIR="/src/"
 
 ENTRYPOINT ["/bin/sh", "-c", " \
-    poetry run uvicorn agents.main:app \
+    uv run python -m uvicorn agents.main:app \
     --host ${UVICORN_HOST} \
     --port ${UVICORN_PORT} \
     --reload \
-    --reload-dir ${UVICORN_RELOAD_DIR} \
+    --reload-dir /src/projects/agents/agents \
+    --reload-dir /src/libs \
+    --reload-include '*.py' \
     "]
 
 ########################
@@ -76,7 +77,9 @@ FROM base AS bundle
 COPY --from=base /src /src
 
 WORKDIR /src/projects/agents
-RUN poetry bundle venv --python=/usr/bin/python3 --only=main /venv
+RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
+    uv venv /venv --python /usr/local/bin/python3 --seed && \
+    /venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
