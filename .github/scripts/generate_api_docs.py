@@ -109,7 +109,7 @@ def extract_openapi_spec() -> dict[str, Any]:
         return app.openapi()
     except ImportError as e:
         print(f"Error importing web_api.main: {e}")
-        print("Make sure to run: cd projects/web_api && poetry install")
+        print("Make sure to run: cd projects/web_api && uv sync")
         sys.exit(1)
     except Exception as e:
         import traceback

@@ -53,7 +53,7 @@ jobs:
 
       - name: Install mkdocs dependencies
         run: |
-          uv pip install -r docs/requirements.txt
+          uv pip install --system -r docs/requirements.txt
 
       - name: Build documentation
         run: |
