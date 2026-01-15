@@ -131,6 +131,12 @@ async def run_enrichment(
                             json.dumps([obj.model_dump() for obj in finding.data]),
                         )
 
+        # Update workflow tracking by object_id (following dotnet.py pattern)
+        await global_vars.tracking_service.update_enrichment_results_by_object_id(
+            object_id=enrichment_request.object_id,
+            success_list=[enrichment_name],
+        )
+
         return EnrichmentResponse(
             status="success",
             message=f"Completed enrichment with module '{enrichment_name}'",
@@ -141,6 +147,18 @@ async def run_enrichment(
     except HTTPException:
         raise
     except Exception as e:
+        # Track failure before re-raising
+        try:
+            await global_vars.tracking_service.update_enrichment_results_by_object_id(
+                object_id=enrichment_request.object_id,
+                failure_list=[f"{enrichment_name}:{str(e)[:100]}"],
+            )
+        except Exception:
+            logger.warning(
+                "Failed to update enrichment failure tracking",
+                object_id=enrichment_request.object_id,
+            )
+
         logger.exception(
             e,
             message="Error running enrichment module",

@@ -157,9 +157,6 @@ if [ "$ACTION" = "start" ]; then
     docker compose -f compose.base.yaml build
 
     echo "Building and starting services..."
-    # Disable BuildKit for project builds to use locally built base images
-    # BuildKit doesn't check local images before trying to pull from registry
-    export DOCKER_BUILDKIT=0
     DOCKER_CMD+=("up" "--build" "-d")
   else
     echo "Starting services..."

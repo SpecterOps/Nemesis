@@ -91,9 +91,13 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                                 logger.debug("Module completed successfully with no results", module_name=module_name)
                                 module_span.set_attribute("module.status", "success_no_results")
 
-                            # Add to success list regardless of whether it returned results
-                            # The module ran without errors, so it's a successful execution
-                            success_list.append(module_name)
+                            # Track success immediately after module completes
+                            # This ensures tracking is updated even if a later module fails
+                            await global_vars.tracking_service.update_enrichment_results(
+                                instance_id=ctx.workflow_id,
+                                success_list=[module_name],
+                            )
+                            success_list.append(module_name)  # Keep for logging
 
                         except Exception as e:
                             logger.exception(
@@ -103,7 +107,14 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                                 error=str(e),
                             )
 
-                            failure_list.append(f"{module_name}:{str(e)[:100]}")
+                            # Track failure immediately
+                            failure_msg = f"{module_name}:{str(e)[:100]}"
+                            await global_vars.tracking_service.update_enrichment_results(
+                                instance_id=ctx.workflow_id,
+                                failure_list=[failure_msg],
+                            )
+                            failure_list.append(failure_msg)  # Keep for logging
+
                             results.append((module_name, None))
                             module_span.set_attribute("module.status", "error")
                             module_span.set_attribute("module.error", str(e)[:200])
@@ -112,23 +123,12 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                 # Ensure temp_file is cleaned up
                 temp_file.__exit__(None, None, None)
 
-            # Update enrichment results in workflows table using tracking_service
-            with tracer.start_as_current_span("update_enrichment_results") as update_span:
-                instance_id = ctx.workflow_id
-                update_span.set_attribute("instance_id", instance_id)
-                update_span.set_attribute("success_count", len(success_list))
-                update_span.set_attribute("failure_count", len(failure_list))
-
-                await global_vars.tracking_service.update_enrichment_results(
-                    instance_id=instance_id, success_list=success_list, failure_list=failure_list
-                )
-
-                logger.debug(
-                    "Updated enrichment results in workflows table",
-                    instance_id=instance_id,
-                    success_count=len(success_list),
-                    failure_count=len(failure_list),
-                )
+            # Tracking is now done incrementally inside the loop above
+            logger.debug(
+                "All enrichment modules processed",
+                success_count=len(success_list),
+                failure_count=len(failure_list),
+            )
 
         except Exception as e:
             logger.exception("Error in run_enrichment_modules", object_id=object_id, error=str(e))
