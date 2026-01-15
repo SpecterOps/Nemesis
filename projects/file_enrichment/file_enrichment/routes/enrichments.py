@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import common.helpers as helpers
 import file_enrichment.global_vars as global_vars
 from common.logger import get_logger
-from common.models2.enrichments import EnrichmentRequest, EnrichmentResponse, ModulesListResponse
+from common.models.api import EnrichmentRequest, EnrichmentResponse, ModulesListResponse
 from fastapi import APIRouter, Body, HTTPException, Path
 
 if TYPE_CHECKING:

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, AlertCircle, SkipForward } from 'lucide-react';
 import Tooltip from '@/components/shared/Tooltip';
 
 const EnrichmentStatusSection = ({ objectId }) => {
@@ -14,10 +14,12 @@ const EnrichmentStatusSection = ({ objectId }) => {
         const query = {
           query: `
             query GetWorkflowData($objectId: uuid!) {
-              workflows(where: {object_id: {_eq: $objectId}}) {
+              workflows(where: {object_id: {_eq: $objectId}}, order_by: {start_time: desc}) {
                 wf_id
+                workflow_type
                 enrichments_success
                 enrichments_failure
+                enrichments_skipped
                 status
                 runtime_seconds
                 start_time
@@ -65,6 +67,28 @@ const EnrichmentStatusSection = ({ objectId }) => {
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+  };
+
+  // Format workflow type for display
+  const formatWorkflowType = (type) => {
+    if (!type) return 'Unknown';
+    return type
+      .replace(/_/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Get workflow type badge color
+  const getWorkflowTypeStyle = (type) => {
+    switch (type) {
+      case 'file_enrichment':
+        return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200';
+      case 'document_conversion':
+        return 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200';
+      default:
+        return 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200';
+    }
   };
 
   // Get status color based on workflow status
@@ -188,9 +212,11 @@ const EnrichmentStatusSection = ({ objectId }) => {
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Workflow Type</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Runtime</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Start Time</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Successful Enrichments</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Skipped Enrichments</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Failed Enrichments</th>
               </tr>
             </thead>
@@ -205,6 +231,11 @@ const EnrichmentStatusSection = ({ objectId }) => {
                       </span>
                     </div>
                   </td>
+                  <td className="px-4 py-4 text-sm">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getWorkflowTypeStyle(workflow.workflow_type)}`}>
+                      {formatWorkflowType(workflow.workflow_type)}
+                    </span>
+                  </td>
                   <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">{formatRuntime(workflow.runtime_seconds)}</td>
                   <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">{formatDate(workflow.start_time)}</td>
                   <td className="px-4 py-4">
@@ -214,6 +245,22 @@ const EnrichmentStatusSection = ({ objectId }) => {
                           <Tooltip key={enrichment} content={enrichment}>
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
                               <CheckCircle className="w-3 h-3 mr-1" />
+                              {formatEnrichmentName(enrichment)}
+                            </span>
+                          </Tooltip>
+                        ))
+                      ) : (
+                        <span className="text-gray-500 dark:text-gray-400 text-sm">None</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {workflow.enrichments_skipped && workflow.enrichments_skipped.length > 0 ? (
+                        workflow.enrichments_skipped.map((enrichment) => (
+                          <Tooltip key={enrichment} content={`Skipped: ${enrichment}`}>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
+                              <SkipForward className="w-3 h-3 mr-1" />
                               {formatEnrichmentName(enrichment)}
                             </span>
                           </Tooltip>

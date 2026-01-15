@@ -15,7 +15,7 @@ from chromium import (
     retry_decrypt_state_keys_for_masterkey,
 )
 from common.logger import get_logger
-from common.models2.dpapi import (
+from common.models.api.dpapi import (
     ChromiumAppBoundKeyCredential,
     DomainBackupKeyCredential,
     DpapiCredentialRequest,

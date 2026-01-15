@@ -37,6 +37,11 @@ async def extract_text(ctx: WorkflowActivityContext, file_input: dict) -> dict |
         file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
         if not can_extract_plaintext(file_enriched.mime_type):
+            # Track that this enrichment was skipped (unsupported mime type)
+            await global_vars.tracking_service.update_enrichment_results(
+                instance_id=ctx.workflow_id,
+                skipped_list=["extract_tika_text"],
+            )
             return None
 
         with storage.download(file_enriched.object_id) as temp_file:

@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Union
 
 import plyvel
+from cli.cobaltstrike_connector.cobaltstrike_client import Beacon, CobaltStrikeClient, Download
 from cli.nemesis_client import NemesisClient
-from cli.cobaltstrike_connector.cobaltstrike_client import Download, Beacon, CobaltStrikeClient
-from common.models2.api import FileMetadata, FileWithMetadataResponse
+from common.models.api import FileMetadata, FileWithMetadataResponse
 
 logger = logging.getLogger(__name__)
 
@@ -204,9 +204,7 @@ class CobaltStrikeDownloadProcessor:
         success = await self.cobalt_strike.download_file(download.id, str(temp_file))
 
         if not success:
-            logger.error(
-                f"Failed to download file from C2. Download ID: {download.id}. Download Path: {download.path}"
-            )
+            logger.error(f"Failed to download file from C2. Download ID: {download.id}. Download Path: {download.path}")
             return DownloadedFileInfo(temp_file, delete_after=True, success=False)
 
         return DownloadedFileInfo(temp_file, delete_after=True, success=True)

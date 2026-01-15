@@ -107,9 +107,9 @@ lazy_static! {
     };
 
     static ref CONCURRENCY_SEMAPHORE: Arc<Semaphore> = {
-        let max_concurrent_files = std::env::var("MAX_CONCURRENT_FILES")
-            .map(|s| s.parse::<usize>().unwrap_or(5))
-            .unwrap_or(5);
+        let max_concurrent_files = std::env::var("NOSEYPARKER_MAX_CONCURRENT_FILES")
+            .map(|s| s.parse::<usize>().unwrap_or(2))
+            .unwrap_or(2);
 
         info!("Setting maximum concurrent file processing to: {}", max_concurrent_files);
         Arc::new(Semaphore::new(max_concurrent_files))

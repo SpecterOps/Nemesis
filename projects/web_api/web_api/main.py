@@ -19,15 +19,30 @@ from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import BulkEnrichmentEvent, CloudEvent
 from common.models import File as FileModel
-from common.models2.api import (
+from common.models.api import (
     APIInfo,
+    ChatbotRequest,
+    CleanupRequest,
+    ContainerStatusResponse,
+    ContainerSubmissionResponse,
+    DpapiCredentialRequest,
+    EnrichmentRequest,
+    EnrichmentResponse,
+    EnrichmentsListResponse,
     ErrorResponse,
+    FailedWorkflowsResponse,
     FileMetadata,
     FileWithMetadataResponse,
     HealthResponse,
+    LLMSynthesisResponse,
+    QueuesResponse,
+    SingleQueueResponse,
+    SourceReport,
+    SourceSummary,
+    SystemReport,
+    WorkflowStatusResponse,
     YaraReloadResponse,
 )
-from common.models2.dpapi import DpapiCredentialRequest
 from common.queues import (
     FILES_BULK_ENRICHMENT_TASK_TOPIC,
     FILES_NEW_FILE_TOPIC,
@@ -46,21 +61,6 @@ from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
 from web_api.large_containers import LargeContainerProcessor
-from web_api.models.requests import ChatbotRequest, CleanupRequest, EnrichmentRequest
-from web_api.models.responses import (
-    ContainerStatusResponse,
-    ContainerSubmissionResponse,
-    EnrichmentResponse,
-    EnrichmentsListResponse,
-    FailedWorkflowsResponse,
-    LLMSynthesisResponse,
-    QueuesResponse,
-    SingleQueueResponse,
-    SourceReport,
-    SourceSummary,
-    SystemReport,
-    WorkflowStatusResponse,
-)
 from web_api.pdf_generator import generate_source_report_pdf
 from web_api.queue_monitor import WorkflowQueueMonitor
 

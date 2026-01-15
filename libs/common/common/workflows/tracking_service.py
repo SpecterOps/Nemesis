@@ -63,12 +63,13 @@ class WorkflowTrackingService:
             async with self.pool.acquire() as conn:
                 await conn.execute(
                     """
-                    INSERT INTO workflows (wf_id, object_id, filename, status, start_time)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO workflows (wf_id, object_id, filename, workflow_type, status, start_time)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     """,
                     instance_id,
                     object_id,
                     filename,
+                    self._name,  # workflow_type is the service name (file_enrichment, document_conversion)
                     WorkflowStatus.SCHEDULED,
                     datetime.now(UTC),
                 )
@@ -78,6 +79,7 @@ class WorkflowTrackingService:
                 instance_id=instance_id,
                 object_id=object_id,
                 filename=filename,
+                workflow_type=self._name,
                 status="SCHEDULED",
             )
 
@@ -151,54 +153,53 @@ class WorkflowTrackingService:
         instance_id: str,
         success_list: Optional[list[str]] = None,
         failure_list: Optional[list[str]] = None,
+        skipped_list: Optional[list[str]] = None,
     ) -> None:
-        """Update enrichment success/failure arrays by appending to existing values.
+        """Update enrichment success/failure/skipped arrays by appending to existing values.
 
         Args:
             instance_id: The workflow instance ID
             success_list: List of successful enrichment module names to append
             failure_list: List of failed enrichment module names to append
+            skipped_list: List of skipped enrichment module names to append
         """
         try:
             async with self.pool.acquire() as conn:
-                if success_list is not None and failure_list is not None:
-                    await conn.execute(
-                        """
+                # Build dynamic update based on which lists are provided
+                set_clauses = []
+                params = []
+                param_idx = 1
+
+                if success_list is not None:
+                    set_clauses.append(f"enrichments_success = enrichments_success || ${param_idx}")
+                    params.append(success_list)
+                    param_idx += 1
+
+                if failure_list is not None:
+                    set_clauses.append(f"enrichments_failure = enrichments_failure || ${param_idx}")
+                    params.append(failure_list)
+                    param_idx += 1
+
+                if skipped_list is not None:
+                    set_clauses.append(f"enrichments_skipped = enrichments_skipped || ${param_idx}")
+                    params.append(skipped_list)
+                    param_idx += 1
+
+                if set_clauses:
+                    params.append(instance_id)
+                    query = f"""
                         UPDATE workflows
-                        SET enrichments_success = enrichments_success || $1,
-                            enrichments_failure = enrichments_failure || $2
-                        WHERE wf_id = $3
-                        """,
-                        success_list,
-                        failure_list,
-                        instance_id,
-                    )
-                elif success_list is not None:
-                    await conn.execute(
-                        """
-                        UPDATE workflows
-                        SET enrichments_success = enrichments_success || $1
-                        WHERE wf_id = $2
-                        """,
-                        success_list,
-                        instance_id,
-                    )
-                elif failure_list is not None:
-                    await conn.execute(
-                        """
-                        UPDATE workflows
-                        SET enrichments_failure = enrichments_failure || $1
-                        WHERE wf_id = $2
-                        """,
-                        failure_list,
-                        instance_id,
-                    )
+                        SET {', '.join(set_clauses)}
+                        WHERE wf_id = ${param_idx}
+                    """
+                    await conn.execute(query, *params)
 
             logger.debug(
                 "Updated enrichment results",
                 instance_id=instance_id,
                 success_count=len(success_list) if success_list else 0,
                 failure_count=len(failure_list) if failure_list else 0,
+                skipped_count=len(skipped_list) if skipped_list else 0,
             )
         except Exception as e:
             logger.error(
@@ -221,8 +222,8 @@ class WorkflowTrackingService:
             async with self.pool.acquire() as conn:
                 row = await conn.fetchrow(
                     """
-                    SELECT wf_id, object_id, filename, status, runtime_seconds,
-                           enrichments_success, enrichments_failure, start_time
+                    SELECT wf_id, object_id, filename, workflow_type, status, runtime_seconds,
+                           enrichments_success, enrichments_failure, enrichments_skipped, start_time
                     FROM workflows
                     WHERE wf_id = $1
                     """,
@@ -234,10 +235,12 @@ class WorkflowTrackingService:
                         "wf_id": row["wf_id"],
                         "object_id": row["object_id"],
                         "filename": row["filename"],
+                        "workflow_type": row["workflow_type"],
                         "status": row["status"],
                         "runtime_seconds": row["runtime_seconds"],
                         "enrichments_success": row["enrichments_success"],
                         "enrichments_failure": row["enrichments_failure"],
+                        "enrichments_skipped": row["enrichments_skipped"],
                         "start_time": row["start_time"],
                     }
                 return None
@@ -257,6 +260,9 @@ class WorkflowTrackingService:
     ) -> None:
         """Update enrichment success/failure arrays by object_id (for subscription handlers).
 
+        Only updates workflows matching this service's workflow_type to avoid
+        cross-contamination between file_enrichment and document_conversion workflows.
+
         Args:
             object_id: The object_id being processed
             success_list: List of successful enrichment module names to append
@@ -270,36 +276,40 @@ class WorkflowTrackingService:
                         UPDATE workflows
                         SET enrichments_success = enrichments_success || $1,
                             enrichments_failure = enrichments_failure || $2
-                        WHERE object_id = $3
+                        WHERE object_id = $3 AND workflow_type = $4
                         """,
                         success_list,
                         failure_list,
                         object_id,
+                        self._name,
                     )
                 elif success_list is not None:
                     await conn.execute(
                         """
                         UPDATE workflows
                         SET enrichments_success = enrichments_success || $1
-                        WHERE object_id = $2
+                        WHERE object_id = $2 AND workflow_type = $3
                         """,
                         success_list,
                         object_id,
+                        self._name,
                     )
                 elif failure_list is not None:
                     await conn.execute(
                         """
                         UPDATE workflows
                         SET enrichments_failure = enrichments_failure || $1
-                        WHERE object_id = $2
+                        WHERE object_id = $2 AND workflow_type = $3
                         """,
                         failure_list,
                         object_id,
+                        self._name,
                     )
 
             logger.debug(
                 "Updated enrichment results by object_id",
                 object_id=object_id,
+                workflow_type=self._name,
                 success_count=len(success_list) if success_list else 0,
                 failure_count=len(failure_list) if failure_list else 0,
             )
@@ -307,6 +317,7 @@ class WorkflowTrackingService:
             logger.error(
                 "Failed to update enrichment results by object_id",
                 object_id=object_id,
+                workflow_type=self._name,
                 error=str(e),
             )
             raise

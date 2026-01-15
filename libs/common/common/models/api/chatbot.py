@@ -1,12 +1,6 @@
+"""API models for chatbot and cleanup operations."""
+
 from pydantic import BaseModel
-
-
-class EnrichmentRequest(BaseModel):
-    object_id: str
-
-
-class CleanupRequest(BaseModel):
-    expiration: str | None = None  # ISO datetime or "all"
 
 
 class ChatbotMessage(BaseModel):
@@ -23,3 +17,7 @@ class ChatbotRequest(BaseModel):
     history: list[ChatbotMessage] = []
     use_history: bool = True
     temperature: float = 0.7
+
+
+class CleanupRequest(BaseModel):
+    expiration: str | None = None  # ISO datetime or "all"

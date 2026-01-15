@@ -118,7 +118,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
       - RUST_LOG=warn
       - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Nosey Parker matches
-      - MAX_CONCURRENT_FILES=${NOSEYPARKER_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
+      - NOSEYPARKER_MAX_CONCURRENT_FILES=${NOSEYPARKER_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-200} # maximum file size to scan, in megabytes
       - DECOMPRESS_ZIPS=${DECOMPRESS_ZIPS:-true} # whether to decompress+scan zips
       - MAX_EXTRACT_SIZE_MB=${MAX_EXTRACT_SIZE_MB:-1000} # maximum number of megabytes to extract from ZIPs (if decompressing)
@@ -189,6 +189,7 @@ services:
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
       - ASPNETCORE_URLS=http://0.0.0.0:5000
+      - DOTNET_WORKERS=${DOTNET_WORKERS:-5}
     expose:
       - "5000"
   dotnet-service-dapr:
@@ -248,7 +249,7 @@ services:
       DAPR_GRPC_PORT: 50003
       DAPR_HTTP_PORT: 3503
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      MAX_PARALLEL_WORKFLOWS: ${ENRICHMENT_MAX_PARALLEL_WORKFLOWS:-5}
+      ENRICHMENT_WORKERS: ${ENRICHMENT_WORKERS:-5}
       MAX_WORKFLOW_EXECUTION_TIME: ${MAX_WORKFLOW_EXECUTION_TIME:-300}
       NEMESIS_MONITORING: ${NEMESIS_MONITORING:-disabled}
       NEMESIS_URL: ${NEMESIS_URL:?}
@@ -316,7 +317,7 @@ services:
       RABBITMQ_CONNECTION_STRING: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
-      MAX_PARALLEL_WORKFLOWS: ${MAX_PARALLEL_WORKFLOWS:-5}
+      ENRICHMENT_WORKERS: ${ENRICHMENT_WORKERS:-5}
     depends_on: &file-enrichment-dapr-depends-on
       file-enrichment: { condition: service_started }
       placement: { condition: service_started }
@@ -548,7 +549,7 @@ services:
       #   - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng chi_sim chi_tra jpn rus deu spa}
       # Note: each package installed will increase the image size!
       - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng}
-      - MAX_PARALLEL_WORKFLOWS=${DOCUMENTCONVERSION_WORKERS:-5}
+      - DOCUMENTCONVERSION_WORKERS=${DOCUMENTCONVERSION_WORKERS:-5}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - OMP_THREAD_LIMIT=1 # Limit the number of tesseract instances

@@ -7,16 +7,16 @@ These routes provide comprehensive reporting and analytics for files, findings, 
 from datetime import UTC, datetime
 
 from common.logger import get_logger
-from psycopg import Connection
-from psycopg.rows import TupleRow
-from psycopg_pool import ConnectionPool
-from web_api.models.responses import (
+from common.models.api import (
     RiskIndicators,
     SourceReport,
     SourceSummary,
     SystemReport,
     TopFinding,
 )
+from psycopg import Connection
+from psycopg.rows import TupleRow
+from psycopg_pool import ConnectionPool
 
 logger = get_logger(__name__)
 

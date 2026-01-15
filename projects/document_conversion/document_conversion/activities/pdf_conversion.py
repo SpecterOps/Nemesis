@@ -27,6 +27,11 @@ async def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict
         file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
         if not can_convert_to_pdf(file_enriched.file_name):
+            # Track that this enrichment was skipped (unsupported file type)
+            await global_vars.tracking_service.update_enrichment_results(
+                instance_id=ctx.workflow_id,
+                skipped_list=["convert_to_pdf"],
+            )
             return None
 
         # excel docs need to be shown in landscape

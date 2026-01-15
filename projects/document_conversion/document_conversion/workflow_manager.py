@@ -12,7 +12,7 @@ from .workflow import document_conversion_workflow
 logger = get_logger(__name__)
 
 # Configuration
-max_parallel_workflows = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 3))
+max_parallel_workflows = int(os.getenv("DOCUMENTCONVERSION_WORKERS", 5))
 max_workflow_execution_time = int(os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300))
 
 # Semaphore for controlling concurrent workflow execution

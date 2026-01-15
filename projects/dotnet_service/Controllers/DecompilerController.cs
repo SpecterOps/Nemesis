@@ -43,7 +43,7 @@ namespace ILSpyDecompilerService.Controllers
             _assemblyAnalysisService = assemblyAnalysisService;
             
             // Get max concurrent processing from environment variable, default to 5
-            var maxConcurrentProcessing = configuration.GetValue<int>("MAX_CONCURRENT_PROCESSING", 5);
+            var maxConcurrentProcessing = configuration.GetValue<int>("DOTNET_WORKERS", 5);
             _processingSemaphore = new SemaphoreSlim(maxConcurrentProcessing, maxConcurrentProcessing);
             _logger.LogInformation("Maximum concurrent processing set to: {MaxConcurrentProcessing}", maxConcurrentProcessing);
         }

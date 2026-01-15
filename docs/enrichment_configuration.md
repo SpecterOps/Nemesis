@@ -32,7 +32,7 @@ The [Document Conversion service](https://github.com/SpecterOps/Nemesis/tree/mai
 
 | ENV Variable                                | Default Value | Description                                                     |
 |---------------------------------------------|---------------|-----------------------------------------------------------------|
-| `DOCUMENTCONVERSION_MAX_PARALLEL_WORKFLOWS` | 5             | Maxmimum number of parallel conversion workflows allows         |
+| `DOCUMENTCONVERSION_WORKERS`                | 5             | Maximum number of parallel conversion workflows allowed         |
 | `MAX_WORKFLOW_EXECUTION_TIME`               | 300           | Maximum time (in seconds) workflows can run before being killed |
 | `TIKA_USE_OCR`                              | false         | Set to `true` to enable OCR support via Tessaract               |
 | `TIKA_OCR_LANGUAGES`                        | eng           | Tika/Tesseract OCR languages supported.                         |
@@ -54,7 +54,7 @@ The [Nosey Parker scanner service](https://github.com/SpecterOps/Nemesis/tree/ma
 | ENV Variable           | Default Value | Description                                                                     |
 |------------------------|---------------|---------------------------------------------------------------------------------|
 | `SNIPPET_LENGTH`       | 512           | Bytes of context length around Nosey Parker matches to pull in for findings     |
-| `MAX_CONCURRENT_FILES` | 2             | Maximum number of concurrent files to scan (raising increases resources needed) |
+| `NOSEYPARKER_MAX_CONCURRENT_FILES` | 2             | Maximum number of concurrent files to scan (raising increases resources needed) |
 | `MAX_FILE_SIZE_MB`     | 200           | Maximum file size to scan (in megabytes)                                        |
 | `DECOMPRESS_ZIPS`      | true          | Whether to decompress+scan zips                                                 |
 | `MAX_EXTRACT_SIZE_MB`  | 1000          | Maximum number of megabytes to extract from ZIPs (if decompressing)             |
@@ -104,4 +104,4 @@ The [.NET scanning service](https://github.com/SpecterOps/Nemesis/tree/main/proj
 
 | ENV Variable                | Default Value | Description                                   |
 | --------------------------- | ------------- | --------------------------------------------- |
-| `MAX_CONCURRENT_PROCESSING` | 5             | Maximum number of concurrent files to process |
+| `DOTNET_WORKERS`            | 5             | Maximum number of concurrent files to process |

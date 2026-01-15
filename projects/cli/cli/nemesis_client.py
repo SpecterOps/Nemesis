@@ -6,7 +6,7 @@ from typing import BinaryIO, Union
 
 import requests
 from cli.config import NemesisConfig
-from common.models2.api import (
+from common.models.api import (
     APIInfo,
     ErrorResponse,
     FileMetadata,

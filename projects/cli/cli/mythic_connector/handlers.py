@@ -12,7 +12,7 @@ from cli.mythic_connector.logger import get_logger
 
 # from cli.mythic_connector.nemesis import NemesisClient
 from cli.nemesis_client import NemesisClient
-from common.models2.api import FileMetadata, FileWithMetadataResponse
+from common.models.api import FileMetadata, FileWithMetadataResponse
 from mythic import mythic, mythic_classes
 
 logger = get_logger(__name__)

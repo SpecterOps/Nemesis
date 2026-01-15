@@ -4,11 +4,15 @@ import re
 from typing import Annotated, Literal, Union
 from uuid import UUID
 
-from common.logger import get_logger
 from nemesis_dpapi.types import Sid
-from pydantic import BaseModel, Discriminator, Field, Tag, field_serializer, field_validator
-
-logger = get_logger(__name__)
+from pydantic import (
+    BaseModel,
+    Discriminator,
+    Field,
+    Tag,
+    field_serializer,
+    field_validator,
+)
 
 
 class PasswordCredentialKey(BaseModel):

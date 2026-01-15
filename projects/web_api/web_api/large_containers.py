@@ -12,7 +12,7 @@ import pytsk3
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
 from common.models import File as FileModel
-from common.models2.api import FileFilters
+from common.models.api import FileFilters
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from common.storage import StorageMinio
 from dapr.clients import DaprClient

@@ -27,6 +27,11 @@ async def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dic
         file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
         if file_enriched.is_container:
+            # Track that this enrichment was skipped (container files are not processed)
+            await global_vars.tracking_service.update_enrichment_results(
+                instance_id=ctx.workflow_id,
+                skipped_list=["extract_strings"],
+            )
             return None
 
         with storage.download(file_enriched.object_id) as temp_file:

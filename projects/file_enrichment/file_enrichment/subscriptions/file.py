@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 
 # Configuration
-NUM_WORKERS = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 5))
+NUM_WORKERS = int(os.getenv("ENRICHMENT_WORKERS", 5))
 
 # Queue for file processing
 file_queue: asyncio.Queue = None

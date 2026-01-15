@@ -937,7 +937,7 @@ const FileViewer = () => {
 
     if (transform.type === 'pdf') {
       return (
-        <div className="aspect-[8.5/11] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
+        <div className="h-[800px] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
           <iframe
             src={URL.createObjectURL(new Blob([transform.content], { type: 'application/pdf' }))}
             className="w-full h-full rounded-lg"
@@ -1511,7 +1511,7 @@ const FileViewer = () => {
                         />
                       </div>
                     ) : (
-                      <div className="aspect-[8.5/11] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <div className="h-[800px] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
                         <iframe
                           src={URL.createObjectURL(new Blob([pdfContent], { type: 'application/pdf' }))}
                           className="w-full h-full rounded-lg"
