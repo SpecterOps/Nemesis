@@ -2,7 +2,7 @@
 FROM lukemathwalker/cargo-chef:latest-rust-1.86.0-slim-bookworm AS chef
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies with optimizations
 RUN apt-get update && \
     apt-get install -y \
     build-essential \
@@ -10,47 +10,292 @@ RUN apt-get update && \
     g++ \
     pkg-config \
     libssl-dev \
-    libboost-all-dev \
-    ragel && \
+    libboost-dev \
+    ragel \
+    ccache \
+    git \
+    ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+
+# Configure ccache for faster builds
+ENV CCACHE_DIR=/ccache
+ENV CC="ccache gcc"
+ENV CXX="ccache g++"
+RUN mkdir -p /ccache
 
 # Prepare recipe (cargo-chef planning phase)
 FROM chef AS planner
 COPY ./projects/noseyparker_scanner/ .
 RUN cargo chef prepare --recipe-path recipe.json
 
-# Build dependencies for dev
-FROM chef AS dev-deps
-COPY --from=planner /app/recipe.json recipe.json
-# Build dependencies for dev
-RUN cargo chef cook --recipe-path recipe.json
-
-# Build dependencies for prod
+# Build dependencies for prod with maximum optimizations
 FROM chef AS prod-deps
 COPY --from=planner /app/recipe.json recipe.json
-# Build dependencies for prod with your specified flags
-RUN cargo chef cook --locked --profile release --recipe-path recipe.json
+COPY --from=planner /app/Cargo.lock Cargo.lock
+
+# Set aggressive optimization environment variables
+ENV CARGO_INCREMENTAL=0 \
+    CARGO_TERM_COLOR=always \
+    RUST_BACKTRACE=1 \
+    CARGO_PROFILE_RELEASE_DEBUG=0 \
+    CARGO_PROFILE_RELEASE_LTO=false \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+    CARGO_PROFILE_RELEASE_OPT_LEVEL=2 \
+    CARGO_NET_GIT_FETCH_WITH_CLI=true \
+    CARGO_HTTP_MULTIPLEXING=false \
+    CARGO_BUILD_JOBS=8 \
+    GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no"
+
+# Build dependencies for prod with optimized flags and parallel compilation
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo chef cook --locked --profile release --recipe-path recipe.json
+
+# Development build target (optional, faster for testing)
+FROM chef AS dev-deps
+COPY --from=planner /app/recipe.json recipe.json
+
+ENV CARGO_INCREMENTAL=0 \
+    CARGO_TERM_COLOR=always \
+    RUST_BACKTRACE=1 \
+    CARGO_PROFILE_DEV_DEBUG=0 \
+    CARGO_BUILD_JOBS=4
+
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo chef cook --recipe-path recipe.json
 
 # Development build target
 FROM dev-deps AS dev
 COPY ./projects/noseyparker_scanner/ .
-RUN cargo build
-ENV RUST_LOG=debug
-# Use development binary
-CMD ["/app/target/debug/noseyparker-scanner", "--log-level", "debug"]
+
+ENV CARGO_INCREMENTAL=0 \
+    CARGO_PROFILE_DEV_DEBUG=0 \
+    RUST_LOG=debug
+
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build && \
+    cp target/debug/noseyparker-scanner /usr/local/bin/
+
+CMD ["noseyparker-scanner", "--log-level", "debug"]
 
 # Production build target
-FROM prod-deps AS prod
+FROM prod-deps AS build-prod
+COPY ./projects/noseyparker_scanner/ .
 
-# Slim runtime image
+# Set production build optimizations
+ENV CARGO_INCREMENTAL=0 \
+    CARGO_PROFILE_RELEASE_DEBUG=0 \
+    CARGO_PROFILE_RELEASE_LTO=false \
+    CARGO_BUILD_JOBS=4
+
+RUN --mount=type=cache,target=/ccache \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --locked --release && \
+    cp target/release/noseyparker-scanner /usr/local/bin/
+
+# Slim runtime image for production
+FROM debian:12-slim AS prod
+
+# Install minimal runtime dependencies
 RUN apt-get update && \
     apt-get install -y \
     ca-certificates \
-    libssl-dev && \
+    git && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY ./projects/noseyparker_scanner/ .
-RUN cargo build --release
+# Copy the built binary from build stage
+COPY --from=build-prod /usr/local/bin/noseyparker-scanner /usr/local/bin/noseyparker-scanner
+
+# Add GitHub Container Registry labels for linking to repository
+LABEL org.opencontainers.image.source=https://github.com/SpecterOps/Nemesis
+LABEL org.opencontainers.image.description="Nemesis Noseyparker Scanner"
+LABEL org.opencontainers.image.licenses=BSD-3-Clause
+
 ENV RUST_LOG=info
+
 # Use production binary
-CMD ["/app/target/release/noseyparker-scanner", "--log-level", "info"]
+CMD ["noseyparker-scanner", "--log-level", "info"]
+
+
+
+## builds things from scratch
+# # Use cargo-chef as prepared image with exact tag
+# FROM lukemathwalker/cargo-chef:latest-rust-1.86.0-slim-bookworm AS chef
+# WORKDIR /app
+
+# # Install build dependencies
+# RUN apt-get update && \
+#     apt-get install -y \
+#     build-essential \
+#     cmake \
+#     g++ \
+#     pkg-config \
+#     libssl-dev \
+#     libboost-all-dev \
+#     ragel && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # Prepare recipe (cargo-chef planning phase)
+# FROM chef AS planner
+# COPY ./projects/noseyparker_scanner/ .
+# RUN cargo chef prepare --recipe-path recipe.json
+
+# # Build dependencies for dev
+# FROM chef AS dev-deps
+# COPY --from=planner /app/recipe.json recipe.json
+# # Build dependencies for dev
+# RUN cargo chef cook --recipe-path recipe.json
+
+# # Build dependencies for prod
+# FROM chef AS prod-deps
+# COPY --from=planner /app/recipe.json recipe.json
+# # Build dependencies for prod with your specified flags
+# RUN cargo chef cook --locked --profile release --recipe-path recipe.json
+
+# # Development build target
+# FROM dev-deps AS dev
+# COPY ./projects/noseyparker_scanner/ .
+# RUN cargo build
+# ENV RUST_LOG=debug
+# # Use development binary
+# CMD ["/app/target/debug/noseyparker-scanner", "--log-level", "debug"]
+
+# # Production build target
+# FROM prod-deps AS prod
+
+# # Slim runtime image
+# RUN apt-get update && \
+#     apt-get install -y \
+#     ca-certificates \
+#     libssl-dev && \
+#     rm -rf /var/lib/apt/lists/*
+
+# COPY ./projects/noseyparker_scanner/ .
+# RUN cargo build --release
+# ENV RUST_LOG=info
+# # Use production binary
+# CMD ["/app/target/release/noseyparker-scanner", "--log-level", "info"]
+
+
+
+
+
+
+
+# # New Dockerfile using pre-built dependencies
+# ARG DEPS_IMAGE=harmj0y/noseyparker-scanner-deps:arm64
+# FROM ${DEPS_IMAGE} AS base
+
+# WORKDIR /app
+
+# # Copy source code (dependencies already compiled in base image)
+# COPY ./projects/noseyparker_scanner/ .
+
+# # Development build target
+# FROM base AS dev
+# RUN cargo build
+# ENV RUST_LOG=debug
+# # Use development binary
+# CMD ["/app/target/debug/noseyparker-scanner", "--log-level", "debug"]
+
+# # Production build target
+# FROM base AS prod-builder
+# RUN cargo build --release
+
+# # Production runtime image
+# FROM debian:bookworm-slim AS prod
+
+# # Install runtime dependencies
+# RUN apt-get update && \
+#     apt-get install -y \
+#     ca-certificates \
+#     libssl-dev && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # Copy only the binary from builder
+# COPY --from=prod-builder /app/target/release/noseyparker-scanner /usr/local/bin/noseyparker-scanner
+
+# ENV RUST_LOG=info
+# # Use production binary
+# CMD ["noseyparker-scanner", "--log-level", "info"]
+
+
+
+
+
+
+
+# # Multi-path Dockerfile: dev from scratch, prod from pre-built deps
+
+# ########################################
+# # Development path - build from scratch
+# ########################################
+# FROM lukemathwalker/cargo-chef:latest-rust-1.86.0-slim-bookworm AS chef
+# WORKDIR /app
+
+# # Install build dependencies
+# RUN apt-get update && \
+#     apt-get install -y \
+#     build-essential \
+#     cmake \
+#     g++ \
+#     pkg-config \
+#     libssl-dev \
+#     libboost-all-dev \
+#     ragel && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # Prepare recipe (cargo-chef planning phase)
+# FROM chef AS planner
+# COPY ./projects/noseyparker_scanner/ .
+# RUN cargo chef prepare --recipe-path recipe.json
+
+# # Build dependencies for dev from scratch
+# FROM chef AS dev-deps
+# COPY --from=planner /app/recipe.json recipe.json
+# RUN cargo chef cook --recipe-path recipe.json
+
+# # Development build target - builds everything from scratch
+# FROM dev-deps AS dev
+# COPY ./projects/noseyparker_scanner/ .
+# RUN cargo build
+# ENV RUST_LOG=debug
+# CMD ["/app/target/debug/noseyparker-scanner", "--log-level", "debug"]
+
+# ########################################
+# # Production path - use pre-built deps
+# ########################################
+# FROM harmj0y/noseyparker-scanner-deps:latest AS base
+
+# WORKDIR /app
+# # Copy source code (dependencies already compiled in base image)
+# COPY ./projects/noseyparker_scanner/ .
+
+# # Production build target using pre-compiled deps
+# FROM base AS prod-builder
+# RUN cargo build --release
+
+# # Production runtime image
+# FROM debian:bookworm-slim AS prod
+
+# # Install runtime dependencies
+# RUN apt-get update && \
+#     apt-get install -y \
+#     ca-certificates \
+#     libssl-dev && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # Copy only the binary from builder
+# COPY --from=prod-builder /app/target/release/noseyparker-scanner /usr/local/bin/noseyparker-scanner
+
+# ENV RUST_LOG=info
+# CMD ["noseyparker-scanner", "--log-level", "info"]

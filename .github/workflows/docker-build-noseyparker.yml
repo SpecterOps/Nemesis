@@ -20,13 +20,13 @@ jobs:
         include:
           - name: noseyparker-scanner
             context: .
-            dockerfile: ./projects/noseyparker_scanner/Dockerfile.new
+            dockerfile: ./projects/noseyparker_scanner/Dockerfile
             runner: ubuntu-22.04
             platform: linux/amd64
             arch: amd64
           - name: noseyparker-scanner
             context: .
-            dockerfile: ./projects/noseyparker_scanner/Dockerfile.new
+            dockerfile: ./projects/noseyparker_scanner/Dockerfile
             runner: ubuntu-22.04-arm
             platform: linux/arm64
             arch: arm64
