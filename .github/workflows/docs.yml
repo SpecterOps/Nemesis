@@ -34,11 +34,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system -r docs/requirements.txt
+          uv venv
+          uv pip install -r docs/requirements.txt
 
       - name: Build documentation
         run: |
-          python -m mkdocs build
+          uv run mkdocs build
 
       - name: Setup Github pages
         uses: actions/configure-pages@v4
