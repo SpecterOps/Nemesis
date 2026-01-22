@@ -23,6 +23,7 @@ dependencies = [
     "pymupdf>=1.26.6,<2.0.0",
     "presidio-analyzer>=2.2.358,<3.0.0",
     "spacy>=3.8.3,<4.0.0",
+    "py7zr>=0.22.0,<1.0.0",
 ]
 
 [dependency-groups]
