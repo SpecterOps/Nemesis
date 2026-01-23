@@ -2,6 +2,8 @@
 
 This skill guides the creation of new Nemesis enrichment modules from start to finish.
 
+**CRITICAL: At each user approval gate (Steps 2, 3, 4, and 8), you MUST use the `AskUserQuestion` tool to prompt for approval before proceeding to the next step. Do NOT continue past a gate until the user has explicitly approved.**
+
 ## Overview
 
 Enrichment modules analyze files and extract security-relevant information like credentials, hashes, metadata, and indicators of compromise. This skill walks through the complete process:
@@ -107,7 +109,7 @@ Based on the data to be extracted, I recommend:
 **Do you approve this output mode, or would you prefer a different approach?**
 ```
 
-**Wait for user approval before proceeding.**
+**STOP: Use `AskUserQuestion` tool with the three output mode options (Findings Mode, Parsing-Only Mode, Hybrid Mode) to get user approval before proceeding to Step 3.**
 
 ---
 
@@ -157,7 +159,7 @@ If no good library exists, we can implement manual parsing using:
 **Do you approve this library choice, or would you prefer an alternative?**
 ```
 
-**Wait for user approval before proceeding.**
+**STOP: Use `AskUserQuestion` tool to present the recommended library and alternatives to get user approval before proceeding to Step 4.**
 
 ---
 
@@ -203,7 +205,7 @@ Obtain test files for development and testing:
 **Do you approve this sample file source, or do you have an alternative?**
 ```
 
-**Wait for user approval before proceeding.**
+**STOP: Use `AskUserQuestion` tool to present the sample file options to get user approval before proceeding to Step 5.**
 
 ---
 
@@ -466,7 +468,7 @@ Once confirmed, I will:
 **Reply with the host (or press enter for localhost:7443) to proceed with integration testing.**
 ```
 
-**Wait for user confirmation before proceeding.**
+**STOP: Use `AskUserQuestion` tool to confirm Nemesis is running and get the host before proceeding with E2E testing.**
 
 ### Execute E2E Testing
 
