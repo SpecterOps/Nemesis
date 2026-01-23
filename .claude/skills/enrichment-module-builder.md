@@ -7,12 +7,13 @@ This skill guides the creation of new Nemesis enrichment modules from start to f
 Enrichment modules analyze files and extract security-relevant information like credentials, hashes, metadata, and indicators of compromise. This skill walks through the complete process:
 
 1. Problem Analysis
-2. Library Research (with user approval gate)
-3. Sample File Acquisition (with user approval gate)
-4. Detection Strategy
-5. Module Implementation
-6. Standalone Testing
-7. Integration Testing (optional)
+2. Module Output Mode (with user approval gate)
+3. Library Research (with user approval gate)
+4. Sample File Acquisition (with user approval gate)
+5. Detection Strategy
+6. Module Implementation
+7. Standalone Testing
+8. Integration Testing (optional)
 
 ## Reference Documentation
 
@@ -61,7 +62,56 @@ Gather requirements from the user:
 
 ---
 
-## Step 2: Library Research [GATE 1]
+## Step 2: Module Output Mode [GATE 1]
+
+Determine what the module should produce as output:
+
+### Output Mode Options
+
+1. **Findings Mode:** The module extracts security-relevant data and generates findings
+   - Use when: Extracting credentials, hashes, vulnerabilities, or other actionable security data
+   - Output: Findings with categories (CREDENTIAL, EXTRACTED_HASH, etc.) and severity levels
+   - Example modules: `chromium_cookies`, `gitcredentials`, `group_policy_preferences`
+
+2. **Parsing-Only Mode:** The module parses the file and stores structured data without generating findings
+   - Use when: Extracting metadata, configuration, or informational data for display/search
+   - Output: Structured results stored in the database, no findings generated
+   - Example modules: `pe` (extracts PE metadata), `office_doc` (extracts document metadata)
+
+3. **Hybrid Mode:** The module parses data AND generates findings for specific conditions
+   - Use when: Most data is informational, but certain patterns warrant findings
+   - Output: Structured results plus conditional findings
+   - Example: Parse all PE metadata, but generate finding only if unsigned or suspicious
+
+### Present to User
+
+**Format your recommendation:**
+
+```
+## Module Output Mode for {file_type} Module
+
+Based on the data to be extracted, I recommend:
+
+### Recommended: {Findings Mode | Parsing-Only Mode | Hybrid Mode}
+
+**Rationale:** {why this mode fits the use case}
+
+### What this means:
+- {description of what will be produced}
+- {how data will be stored/displayed}
+- {whether alerts will be generated}
+
+### Alternative consideration:
+{brief note on why other modes might or might not apply}
+
+**Do you approve this output mode, or would you prefer a different approach?**
+```
+
+**Wait for user approval before proceeding.**
+
+---
+
+## Step 3: Library Research [GATE 2]
 
 Search for parsing libraries before implementation:
 
@@ -111,7 +161,7 @@ If no good library exists, we can implement manual parsing using:
 
 ---
 
-## Step 3: Sample File Acquisition [GATE 2]
+## Step 4: Sample File Acquisition [GATE 3]
 
 Obtain test files for development and testing:
 
@@ -157,7 +207,7 @@ Obtain test files for development and testing:
 
 ---
 
-## Step 4: Detection Strategy
+## Step 5: Detection Strategy
 
 Determine how `should_process()` will identify target files:
 
@@ -197,7 +247,7 @@ rule {file_type}_file {
 
 ---
 
-## Step 5: Module Implementation
+## Step 6: Module Implementation
 
 Create the module structure:
 
@@ -296,7 +346,7 @@ Create `rules.yar` with detection rules.
 
 ---
 
-## Step 6: Standalone Testing
+## Step 7: Standalone Testing
 
 Create and run tests using the test harness:
 
@@ -389,24 +439,67 @@ uv run pytest tests/test_{module_name}.py -v
 
 ---
 
-## Step 7: Integration Testing (Optional)
+## Step 8: Integration Testing
 
-Test with the full Nemesis stack:
+Test with the full Nemesis stack. This step is **required** to verify the module works end-to-end.
 
-### 1. Start Development Environment
+### Option A: Automated E2E Test Script
+
+Use the provided integration test script for automated testing:
+
+```bash
+# 1. Start Nemesis dev environment (from repo root)
+./tools/nemesis-ctl.sh start dev
+
+# 2. Wait for services to be healthy (~30-60 seconds)
+#    Check with: docker compose ps
+
+# 3. Run the E2E test with your module
+cd libs/file_enrichment_modules
+uv run python tests/integration/run_e2e_test.py \
+    --module {module_name} \
+    --generate-sample \
+    --host localhost:7443
+
+# 4. Stop Nemesis when done
+./tools/nemesis-ctl.sh stop dev
+```
+
+The E2E script will:
+- Check Nemesis health
+- Generate or use a sample file
+- Submit the file via `tools/submit.sh`
+- Wait for enrichment processing
+- Query the database for results
+- Report pass/fail with details
+
+**Available modules with sample generators:** `gitcredentials`, `container`, `keytab`
+
+For other modules, provide your own sample file:
+```bash
+uv run python tests/integration/run_e2e_test.py \
+    --module {module_name} \
+    --sample-file /path/to/sample/file
+```
+
+### Option B: Manual Testing
+
+For more control or debugging:
+
+#### 1. Start Development Environment
 
 ```bash
 ./tools/nemesis-ctl.sh start dev
 ```
 
-### 2. Add Dependencies (if any)
+#### 2. Add Dependencies (if any)
 
 If your module has custom dependencies, add them to:
 `projects/file_enrichment/pyproject.toml`
 
 Wait for hot-reload (~20 seconds).
 
-### 3. Verify Module Loads
+#### 3. Verify Module Loads
 
 Check the file-enrichment container logs:
 
@@ -416,16 +509,21 @@ docker compose logs -f file-enrichment
 
 Look for: `Successfully loaded module {module_name}`
 
-### 4. Submit Test File
+#### 4. Submit Test File
+
+Use the `tools/submit.sh` wrapper script:
 
 ```bash
-cd projects/cli
-uv run python -m nemesis_cli.main submit --file /path/to/sample
+./tools/submit.sh /path/to/sample/file \
+    -h localhost:7443 \
+    -u n -p n \
+    -j test-project \
+    --debug
 ```
 
-### 5. Verify Results
+#### 5. Verify Results
 
-Query via Hasura GraphQL console or direct SQL:
+Query via Hasura GraphQL console (https://localhost:7443/console) or direct SQL:
 
 ```sql
 -- Check enrichment ran
@@ -443,12 +541,22 @@ SELECT * FROM transforms
 WHERE object_id = '{submitted_object_id}';
 ```
 
-### 6. Cleanup
+#### 6. Cleanup
 
 ```bash
 ./tools/nemesis-ctl.sh stop dev
-# If needed: ./tools/nemesis-ctl.sh clean dev
+# If needed to reset data: ./tools/nemesis-ctl.sh clean dev
 ```
+
+### Integration Test Checklist
+
+- [ ] Nemesis starts without errors
+- [ ] Module loads successfully (check file-enrichment logs)
+- [ ] File submission succeeds via `tools/submit.sh`
+- [ ] Enrichment record created in database
+- [ ] Findings created (if applicable)
+- [ ] Transforms created (if applicable)
+- [ ] No errors in file-enrichment container logs
 
 ---
 
@@ -463,7 +571,7 @@ Before considering the module complete:
 - [ ] **Tests:** Standalone tests pass
 - [ ] **Dependencies:** pyproject.toml created if needed
 - [ ] **YARA:** rules.yar created if using YARA detection
-- [ ] **Integration:** (Optional) Tested with running Nemesis
+- [ ] **Integration:** Tested with running Nemesis using E2E script or manual testing
 
 ---
 
