@@ -13,7 +13,7 @@ Enrichment modules analyze files and extract security-relevant information like 
 5. Detection Strategy
 6. Module Implementation
 7. Standalone Testing
-8. Integration Testing (optional)
+8. Integration Testing (with user approval gate) - **REQUIRED**
 
 ## Reference Documentation
 
@@ -439,130 +439,127 @@ uv run pytest tests/test_{module_name}.py -v
 
 ---
 
-## Step 8: Integration Testing
+## Step 8: Integration Testing [GATE 4]
 
-Test with the full Nemesis stack. This step is **required** to verify the module works end-to-end.
+**This step is REQUIRED.** You MUST execute the E2E integration test, not just print instructions.
 
-### Option A: Automated E2E Test Script
+### Ask User to Confirm Nemesis is Running
 
-Use the provided integration test script for automated testing:
+Before proceeding, ask the user to confirm their Nemesis instance is ready:
 
-```bash
-# 1. Start Nemesis dev environment (from repo root)
-./tools/nemesis-ctl.sh start dev
+```
+## Integration Testing Ready Check
 
-# 2. Wait for services to be healthy (~30-60 seconds)
-#    Check with: docker compose ps
+The module implementation and unit tests are complete. Now we need to run end-to-end integration testing against a live Nemesis instance.
 
-# 3. Run the E2E test with your module
-cd libs/file_enrichment_modules
-uv run python tests/integration/run_e2e_test.py \
-    --module {module_name} \
-    --generate-sample \
-    --host localhost:7443
+**Please confirm:**
+1. Is Nemesis dev environment running? (Start with: `./tools/nemesis-ctl.sh start dev`)
+2. What is the Nemesis host? (default: `localhost:7443`)
 
-# 4. Stop Nemesis when done
-./tools/nemesis-ctl.sh stop dev
+Once confirmed, I will:
+1. Verify the Nemesis instance is healthy
+2. Submit a test file to the running instance
+3. Wait for enrichment processing to complete
+4. Query the database to verify results
+5. Report the E2E test outcome
+
+**Reply with the host (or press enter for localhost:7443) to proceed with integration testing.**
 ```
 
-The E2E script will:
-- Check Nemesis health
-- Generate or use a sample file
-- Submit the file via `tools/submit.sh`
-- Wait for enrichment processing
-- Query the database for results
-- Report pass/fail with details
+**Wait for user confirmation before proceeding.**
 
-**Available modules with sample generators:** `gitcredentials`, `container`, `keytab`
+### Execute E2E Testing
 
-For other modules, provide your own sample file:
+Once the user confirms Nemesis is running, execute these steps IN ORDER:
+
+#### 1. Verify Nemesis Health
+
+Run a health check against the provided host:
+
 ```bash
-uv run python tests/integration/run_e2e_test.py \
-    --module {module_name} \
-    --sample-file /path/to/sample/file
+curl -k -s "https://{host}/api/health" | head -20
 ```
 
-### Option B: Manual Testing
+If the health check fails, inform the user and ask them to verify Nemesis is running.
 
-For more control or debugging:
+#### 2. Check Module is Loaded
 
-#### 1. Start Development Environment
+Verify the new module appears in the file-enrichment container logs:
 
 ```bash
-./tools/nemesis-ctl.sh start dev
+docker compose logs file-enrichment 2>&1 | grep -i "{module_name}" | tail -10
 ```
 
-#### 2. Add Dependencies (if any)
+Look for successful module loading. If not found, check for import errors.
 
-If your module has custom dependencies, add them to:
-`projects/file_enrichment/pyproject.toml`
+#### 3. Submit Test File
 
-Wait for hot-reload (~20 seconds).
-
-#### 3. Verify Module Loads
-
-Check the file-enrichment container logs:
+Use the test fixture file created during standalone testing. Execute the submission:
 
 ```bash
-docker compose logs -f file-enrichment
-```
-
-Look for: `Successfully loaded module {module_name}`
-
-#### 4. Submit Test File
-
-Use the `tools/submit.sh` wrapper script:
-
-```bash
-./tools/submit.sh /path/to/sample/file \
-    -h localhost:7443 \
+./tools/submit.sh {path_to_test_fixture_file} \
+    -h {host} \
     -u n -p n \
     -j test-project \
     --debug
 ```
 
-#### 5. Verify Results
+Capture the `object_id` from the submission output - you will need it to verify results.
 
-Query via Hasura GraphQL console (https://localhost:7443/console) or direct SQL:
+#### 4. Wait for Processing
 
-```sql
--- Check enrichment ran
-SELECT * FROM enrichments
-WHERE module_name = '{module_name}_analyzer'
-ORDER BY created_at DESC LIMIT 1;
-
--- Check findings
-SELECT * FROM findings
-WHERE origin_name = '{module_name}_analyzer'
-ORDER BY created_at DESC LIMIT 10;
-
--- Check transforms (use object_id from submission)
-SELECT * FROM transforms
-WHERE object_id = '{submitted_object_id}';
-```
-
-#### 6. Cleanup
+Wait for enrichment to complete (poll every 5 seconds, up to 60 seconds):
 
 ```bash
-./tools/nemesis-ctl.sh stop dev
-# If needed to reset data: ./tools/nemesis-ctl.sh clean dev
+# Check enrichment status
+docker exec -i $(docker compose ps -q postgres) psql -U postgres -d nemesis -c \
+    "SELECT module_name, status, created_at FROM enrichments WHERE object_id = '{object_id}' ORDER BY created_at DESC;"
 ```
 
-### Integration Test Checklist
+#### 5. Verify Results
 
-- [ ] Nemesis starts without errors
-- [ ] Module loads successfully (check file-enrichment logs)
-- [ ] File submission succeeds via `tools/submit.sh`
-- [ ] Enrichment record created in database
-- [ ] Findings created (if applicable)
-- [ ] Transforms created (if applicable)
-- [ ] No errors in file-enrichment container logs
+Query the database to confirm the module produced expected output:
+
+```bash
+# Check enrichment record exists
+docker exec -i $(docker compose ps -q postgres) psql -U postgres -d nemesis -c \
+    "SELECT module_name, status FROM enrichments WHERE module_name = '{module_name}_analyzer' ORDER BY created_at DESC LIMIT 1;"
+
+# Check findings were created (if applicable)
+docker exec -i $(docker compose ps -q postgres) psql -U postgres -d nemesis -c \
+    "SELECT id, category, severity, value FROM findings WHERE origin_name = '{module_name}_analyzer' ORDER BY created_at DESC LIMIT 10;"
+```
+
+#### 6. Report Results
+
+After executing the above steps, report the E2E test outcome to the user:
+
+```
+## E2E Integration Test Results
+
+### Status: {PASS | FAIL}
+
+### Verification Steps:
+- [ ] Nemesis health check: {PASS/FAIL}
+- [ ] Module loaded in file-enrichment: {PASS/FAIL}
+- [ ] File submission successful: {PASS/FAIL}
+- [ ] Enrichment record created: {PASS/FAIL}
+- [ ] Findings created (if applicable): {PASS/FAIL - count: N}
+- [ ] No errors in logs: {PASS/FAIL}
+
+### Details:
+{Summary of what was found, any errors encountered}
+
+### Object ID: {object_id}
+```
+
+If any step fails, provide troubleshooting guidance and offer to re-run after the user fixes the issue.
 
 ---
 
 ## Completion Checklist
 
-Before considering the module complete:
+Before considering the module complete, ALL items must be checked:
 
 - [ ] **Code:** analyzer.py implements EnrichmentModule protocol
 - [ ] **Detection:** should_process() correctly identifies target files
@@ -571,7 +568,9 @@ Before considering the module complete:
 - [ ] **Tests:** Standalone tests pass
 - [ ] **Dependencies:** pyproject.toml created if needed
 - [ ] **YARA:** rules.yar created if using YARA detection
-- [ ] **Integration:** Tested with running Nemesis using E2E script or manual testing
+- [ ] **Integration (REQUIRED):** E2E test executed against running Nemesis instance and PASSED
+
+**IMPORTANT:** Do NOT mark the module as complete until Step 8 E2E integration testing has been executed and passed.
 
 ---
 
