@@ -24,6 +24,7 @@ dependencies = [
     "presidio-analyzer>=2.2.358,<3.0.0",
     "spacy>=3.8.3,<4.0.0",
     "py7zr>=0.22.0,<1.0.0",
+    "libscca-python>=20240427",
 ]
 
 [dependency-groups]

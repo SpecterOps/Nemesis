@@ -9,7 +9,9 @@ FROM ${PYTHON_BASE_DEV_IMAGE} AS base
 
 RUN apt-get update && \
     apt-get install -y libmagic1 libpq5 binutils \
-    gcc g++ libc6-dev curl && \
+    gcc g++ libc6-dev curl pkg-config make \
+    autoconf automake autopoint libtool \
+    python3-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

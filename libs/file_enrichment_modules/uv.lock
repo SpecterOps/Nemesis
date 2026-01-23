@@ -724,6 +724,7 @@ dependencies = [
     { name = "dnfile" },
     { name = "file-linking" },
     { name = "impacket" },
+    { name = "libscca-python" },
     { name = "lnkparse3" },
     { name = "nemesis-dpapi" },
     { name = "plyara" },
@@ -752,6 +753,7 @@ requires-dist = [
     { name = "dnfile", specifier = ">=0.15.1,<0.16.0" },
     { name = "file-linking", editable = "../file_linking" },
     { name = "impacket", specifier = ">=0.13.0,<0.14.0" },
+    { name = "libscca-python", specifier = ">=20240427" },
     { name = "lnkparse3", specifier = ">=1.5.0,<2.0.0" },
     { name = "nemesis-dpapi", editable = "../nemesis_dpapi" },
     { name = "plyara", specifier = ">=2.2.7,<3.0.0" },
@@ -1050,6 +1052,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/14/48/2757e0453f828e33f7b41e5489976fbe7d504d513e07da53eb904030a288/ldapdomaindump-0.10.0.tar.gz", hash = "sha256:cbc66b32a7787473ffd169c5319acde46c02fdc9d444556e6448e0def91d3299", size = 19445, upload-time = "2025-04-04T07:39:08.006Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/91/5a0015375d5bcc3667f92692e9a244803b9a0e4b651b29a5682e1647669a/ldapdomaindump-0.10.0-py3-none-any.whl", hash = "sha256:3797259596df7a5e1fda98388c96b1d94196f5da5551f1af1aaeedda0c9f5a11", size = 19084, upload-time = "2025-04-04T07:39:06.655Z" },
+]
+
+[[package]]
+name = "libscca-python"
+version = "20250915"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/13/f8/98ebb7a428e096129f26c13854bc98644a251c6286dcefe74b1311250cc8/libscca-python-20250915.tar.gz", hash = "sha256:89612fa7d743b73b6b4ee8e83a9359c26bff26be51898e83f62d9e2bcdfc436d", size = 1605064, upload-time = "2025-09-15T15:28:05.026Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d0/57/c428a83cbfb3c3c1661c366d57a86df1ff499355feadcaad4e4a7ed85a4a/libscca_python-20250915-cp312-cp312-macosx_14_0_x86_64.whl", hash = "sha256:6ad48690737670aed5800b4872a5d2062119d9393ebc60bccec82e0897af60fb", size = 549745, upload-time = "2025-09-15T23:24:06.201Z" },
+    { url = "https://files.pythonhosted.org/packages/af/06/a94bb7ed737e01044ee5324b395494c6db6b7a91428cc317b85091ffad89/libscca_python-20250915-cp312-cp312-win32.whl", hash = "sha256:b749a2220572d2524da20e425ee2a0c0ab92097aade91f6bc391f8b719501cda", size = 396112, upload-time = "2025-09-15T22:11:11.576Z" },
+    { url = "https://files.pythonhosted.org/packages/09/c3/8031d1dd3c16f59a4ac02611a680e502ef9145868b289be48d152ee739dc/libscca_python-20250915-cp312-cp312-win_amd64.whl", hash = "sha256:90f7f7687ee336b029e9014cf009a94a4602d7fbacb80fa51c203d0b926515e3", size = 418051, upload-time = "2025-09-15T22:18:01.526Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/44/f9f5e5e7670cac6ebbcf9362fe3db6fdfbd7cd7c677ad6236de7f8b452b3/libscca_python-20250915-cp313-cp313-macosx_14_0_x86_64.whl", hash = "sha256:36996ea4294922db01fc37896e2308b90e260c35e3f4cd32eb386f3e321a3f39", size = 549782, upload-time = "2025-09-15T23:36:00.983Z" },
+    { url = "https://files.pythonhosted.org/packages/df/5e/3e1fbdb1886c0bd452133a3199db8612b1cdb3a3634c81293966390332f5/libscca_python-20250915-cp313-cp313-win32.whl", hash = "sha256:4c83999a1820a9b4c8ba218fce100089827b6ed9389f40f81b148358a1705b3c", size = 396100, upload-time = "2025-09-15T22:24:50.645Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/a9/a61e377fdd180080e4482e80b21b8ed58acc630ff0a765d566b142eb1eca/libscca_python-20250915-cp313-cp313-win_amd64.whl", hash = "sha256:a81f5fb915b5a94470a7a2a49b2dd2a771e4c0c414e0e84228ba9d62ba57a029", size = 418046, upload-time = "2025-09-15T22:31:31.498Z" },
 ]
 
 [[package]]
