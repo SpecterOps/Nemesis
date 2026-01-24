@@ -1,0 +1,71 @@
+name: Documentation Issue
+description: Report missing, incorrect, or unclear documentation
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve the documentation! Please describe the issue you encountered.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Documentation Area
+      description: Which area of documentation is affected?
+      options:
+        - Installation / Setup
+        - Configuration
+        - Usage / How-to
+        - API Reference
+        - Architecture / Design
+        - Enrichment Modules
+        - CLI Tool
+        - Troubleshooting
+        - Contributing
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What type of documentation issue is this?
+      options:
+        - Missing - documentation doesn't exist for this topic
+        - Incorrect - documentation contains errors
+        - Unclear - documentation is confusing or hard to follow
+        - Outdated - documentation doesn't match current behavior
+        - Incomplete - documentation exists but is missing details
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the documentation issue in detail
+      placeholder: |
+        - What were you trying to do?
+        - What documentation did you find (or not find)?
+        - What was confusing or incorrect?
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: Documentation URL
+      description: Link to the specific page if applicable
+      placeholder: "https://specterops.github.io/Nemesis/..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Improvement
+      description: If you have suggestions for how to fix or improve the documentation
+    validations:
+      required: false

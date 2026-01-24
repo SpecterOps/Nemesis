@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Slack Community
+    url: https://bloodhoundhq.slack.com/archives/C05R3P5PCPN
+    about: Join #nemesis-chat for real-time support and questions
+  - name: Documentation
+    url: https://specterops.github.io/Nemesis/
+    about: Check the documentation for setup guides and usage information
