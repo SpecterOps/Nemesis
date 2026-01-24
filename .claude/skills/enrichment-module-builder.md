@@ -476,13 +476,13 @@ Once the user confirms Nemesis is running, execute these steps IN ORDER:
 
 #### 1. Verify Nemesis Health
 
-Run a health check against the provided host:
+Run a health check against the provided host. Note: The endpoint may return 401 Unauthorized if auth is required, which still indicates Nemesis is running:
 
 ```bash
 curl -k -s "https://{host}/api/health" | head -20
 ```
 
-If the health check fails, inform the user and ask them to verify Nemesis is running.
+A response (even 401 Unauthorized) indicates Nemesis is running. If connection refused, ask the user to start Nemesis.
 
 #### 2. Check Module is Loaded
 
@@ -508,29 +508,43 @@ Use the test fixture file created during standalone testing. Execute the submiss
 
 Capture the `object_id` from the submission output - you will need it to verify results.
 
-#### 4. Wait for Processing
+#### 4. Wait for Processing and Get Object ID
 
-Wait for enrichment to complete (poll every 5 seconds, up to 60 seconds):
+Wait for enrichment to complete. First, get the object_id for the submitted file:
 
 ```bash
-# Check enrichment status
-docker exec -i $(docker compose ps -q postgres) psql -U postgres -d nemesis -c \
-    "SELECT module_name, status, created_at FROM enrichments WHERE object_id = '{object_id}' ORDER BY created_at DESC;"
+# Wait a few seconds for processing
+sleep 10
+
+# Get the object_id for the submitted file
+# IMPORTANT: Database is 'enrichment', user is 'nemesis', use container name 'nemesis-postgres-1'
+docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c \
+    "SELECT object_id, file_name FROM files_enriched WHERE file_name = '{submitted_filename}' ORDER BY timestamp DESC LIMIT 1;"
 ```
 
 #### 5. Verify Results
 
-Query the database to confirm the module produced expected output:
+Query the database to confirm the module produced expected output.
+
+**IMPORTANT Database Connection Details:**
+- Container name: `nemesis-postgres-1`
+- Database: `enrichment` (NOT `nemesis`)
+- User: `nemesis` (NOT `postgres`)
 
 ```bash
-# Check enrichment record exists
-docker exec -i $(docker compose ps -q postgres) psql -U postgres -d nemesis -c \
-    "SELECT module_name, status FROM enrichments WHERE module_name = '{module_name}_analyzer' ORDER BY created_at DESC LIMIT 1;"
+# Check enrichment record exists for the module
+docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c \
+    "SELECT module_name, created_at FROM enrichments WHERE object_id = '{object_id}' ORDER BY created_at DESC;"
 
 # Check findings were created (if applicable)
-docker exec -i $(docker compose ps -q postgres) psql -U postgres -d nemesis -c \
-    "SELECT id, category, severity, value FROM findings WHERE origin_name = '{module_name}_analyzer' ORDER BY created_at DESC LIMIT 10;"
+# Note: Use 'finding_id' not 'id', and 'finding_name' not 'value'
+docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c \
+    "SELECT finding_id, category, severity, finding_name, origin_name FROM findings WHERE origin_name = '{module_name}_analyzer' ORDER BY created_at DESC LIMIT 10;"
 ```
+
+**Schema Reference:**
+- `enrichments` table columns: `enrichment_id`, `object_id`, `module_name`, `result_data`, `created_at`, `updated_at`
+- `findings` table columns: `finding_id`, `finding_name`, `category`, `severity`, `object_id`, `origin_type`, `origin_name`, `raw_data`, `data`, `created_at`, `updated_at`, `triage_id`
 
 #### 6. Report Results
 
@@ -577,6 +591,31 @@ Before considering the module complete, ALL items must be checked:
 ---
 
 ## Troubleshooting
+
+### Database Connection Issues
+
+The most common issue is using wrong connection parameters. Use these exact values:
+
+```bash
+# Correct connection command
+docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c "YOUR_QUERY"
+
+# Common mistakes:
+# - Using $(docker compose ps -q postgres) instead of nemesis-postgres-1
+# - Using -d nemesis instead of -d enrichment
+# - Using -U postgres instead of -U nemesis
+```
+
+To list available databases:
+```bash
+docker exec nemesis-postgres-1 psql -U nemesis -l
+```
+
+To check table schemas:
+```bash
+docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c "\d enrichments"
+docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c "\d findings"
+```
 
 ### Module Not Loading
 
