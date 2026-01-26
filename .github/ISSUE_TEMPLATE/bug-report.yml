@@ -51,7 +51,7 @@ body:
     attributes:
       label: Nemesis Version
       description: What version of Nemesis are you running?
-      placeholder: "e.g., v2.0.0, main branch, commit abc123"
+      placeholder: "e.g., v2.0.0, main branch, commit abc123 - can find at the botton of the 'Settings' tab on the left"
     validations:
       required: true
 
