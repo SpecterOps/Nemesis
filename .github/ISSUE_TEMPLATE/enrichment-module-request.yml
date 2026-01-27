@@ -1,0 +1,81 @@
+name: New Enrichment Module Request
+description: Request support for a new file type or format to be processed by Nemesis
+title: "[Enrichment Module]: "
+labels: ["enrichment-module"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a new enrichment module! This helps expand Nemesis's file processing capabilities.
+
+  - type: input
+    id: file-type
+    attributes:
+      label: File Type / Format
+      description: What file type or format should Nemesis support?
+      placeholder: "e.g., KeePass database (.kdbx), Chrome cookies, Windows Event Logs (.evtx)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: data-extraction
+    attributes:
+      label: Data to Extract
+      description: What specific data or information should be extracted from this file type?
+      placeholder: |
+        Describe what valuable data can be extracted, for example:
+        - Credentials, keys, or secrets
+        - Configuration settings
+        - User activity or artifacts
+        - Network information
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Security Relevance / Use Case
+      description: How is this file type relevant to offensive security assessments?
+      placeholder: |
+        Explain the security context:
+        - Where are these files typically found?
+        - What can an attacker do with the extracted data?
+        - How does this help during an engagement?
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample-file
+    attributes:
+      label: Sample File
+      description: |
+        Attach a sample file if possible. You can drag and drop files here.
+
+        ⚠️ **SECURITY WARNING** ⚠️
+        - Only attach NON-SENSITIVE test files
+        - Do NOT upload production data, real credentials, or PII
+        - Consider creating synthetic test files with dummy data
+        - Files attached here are publicly visible
+      placeholder: Drag and drop a sample file here, or describe how to obtain one
+    validations:
+      required: false
+
+  - type: textarea
+    id: documentation
+    attributes:
+      label: Documentation / References
+      description: Links to format specifications, parsing libraries, or related resources
+      placeholder: |
+        - Format specification: https://...
+        - Existing parser library: https://...
+        - Related tools: https://...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information that might be helpful
+    validations:
+      required: false

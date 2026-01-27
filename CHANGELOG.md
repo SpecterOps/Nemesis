@@ -5,7 +5,84 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.2.1]
+
+### Added
+
+- `CLAUDE.md` project file
+- `enrichment-module-builder` skill triggered by `/new-enrichment-module` command for rapid file enrichment module development
+- `prefetch` and `ccache` enrichment modules (developed by Claude skill)
+- Proper GitHub issue templates
+
+
 ## [2.2.0]
+
+### Added
+
+- **DPAPI Auto-Decryption Pipeline**
+  - Auto-decryption of Chromium cookies, saved passwords (Login Data), and Local State files
+  - CNG/Chromekey file enrichment module with parsing and decryption
+  - Chromium ABE v3 decryption via decrypted CNG keys
+  - Retroactive decryption of Chromium data when plaintext masterkeys are submitted
+  - `nemesis_dpapi` support library with Postgres backend, Dapr pubsub integration, and v3 masterkey support
+
+- **File Linking System**
+  - Enhanced file linking with path placeholders that resolve once matching files are collected
+  - Programmatic registry hive and SYSTEM masterkey file linkings (replaces rule-based approach)
+  - File Viewer support for deleting file linkings
+  - File Browser displays collection reason and "Linked to by" fields
+
+- **Large Container Processing**
+  - Support for disk image formats and large archive processing
+  - File monitoring for containers copied to `MOUNTED_CONTAINER_PATH` with automatic extraction and processing
+  - Live-updating container tracking in dashboard ("Containers" tab)
+  - Include/exclude filters for `/containers` API with CLI and submit.sh support
+
+- **AI Agents & Triage**
+  - Expanded agent infrastructure with JWT validation, finding triage, and text translation agents
+  - Reporting summarization agent
+  - LiteLLM integration with cost limits and Arize Phoenix tracing
+  - Triage consensus scoring with confidence, explanation, and risk details
+  - UI for editing agent prompts and viewing token spend statistics
+
+- **Reporting**
+  - System-wide and per-source reporting functionality
+  - API endpoints for statistics and report PDF generation
+
+- **Frontend**
+  - Chromium page displaying history, downloads, cookies, logins, and state keys with filtering and CSV export
+  - File Browser for navigating collected files
+  - DPAPI viewer and submission pages
+  - Drag/drop folder uploads
+  - Agents page showing current agents and token spend stats
+
+- **Infrastructure/Misc**
+  - Velociraptor connector (server event YAML option)
+  - NoseyParker scanning for zip files and .git repositories
+  - Configurable alerting with enable/disable and filtering options
+  - Multi-language Tika OCR support via `TIKA_OCR_LANGUAGES` environment variable
+  - CLI `--folder` option to specify root folder path for uploads
+
+### Changed
+
+- Converted file_enrichment modules to async with shared DB connection pool and LRU caching
+- Dapr pubsub components converted to task queues for improved performance and scaling
+- Enrichment modules consolidated into single Dapr activity to reduce file download operations
+- Bumped Dapr version to 1.16.1
+- Updated Dapr state store to Postgres v2
+- Path normalization standardized at initial ingestion
+- DPAPIck3 now used for blob decryption
+- CLI `--repeat` option renamed to `--times` (or `-x`), now defaults to 1
+
+### Fixed
+
+- Race condition when NoseyParker/DotNET findings arrive after file enrichment workflow completes
+- Proper entropy handling for DPAPI blob decryption
+- Path normalization bugs and duplicate normalization removed
+- Tag search functionality
+- Strings.txt exclusion from SQLite database processing
+- Queue/workflow persistence with proper RabbitMQ queue restoration
+- Various async issues and security dependency updates
 
 
 ## [2.1.4]
