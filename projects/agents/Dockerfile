@@ -87,7 +87,7 @@ FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
 # Install runtime dependencies for psycopg and .NET
 RUN apt-get update && \
-    apt-get install -y libpq5 libicu72 && \
+    apt-get install -y libpq5 libicu76 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
