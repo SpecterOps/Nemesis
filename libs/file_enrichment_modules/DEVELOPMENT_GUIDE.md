@@ -2,6 +2,11 @@
 
 This guide covers how to create new enrichment modules for Nemesis. Enrichment modules analyze files and extract security-relevant information like credentials, hashes, metadata, and indicators of compromise.
 
+There are two ways to build a new module:
+
+- **Manual (hard mode):** Follow the sections below to understand the module structure, implement the protocol, and wire up testing yourself. Best for learning how things work under the hood.
+- **Claude Code skill (easy mode):** Run the `/new-enrichment-module` skill in Claude Code to get a guided, interactive workflow that handles scaffolding, library selection, implementation, and testing. Jump to [Quick Start with Claude Code](#quick-start-with-claude-code) to get started.
+
 ## Table of Contents
 
 1. [Module Structure](#module-structure)
@@ -117,6 +122,8 @@ class EnrichmentModule(Protocol):
         ...
 ```
 
+> **Important:** In addition to the protocol fields above, modules must set `self.workflows = ["default"]` in their `__init__` method. The workflow engine filters modules by this attribute — without it, your module will load but never execute.
+
 ---
 
 ## Detection Patterns
@@ -138,7 +145,7 @@ async def should_process(self, object_id: str, file_path: str | None = None) -> 
     return file_enriched.mime_type == "application/x-sqlite3"
 ```
 
-**Example modules:** `container` (uses `is_container()` helper), `sqlite_browser`
+**Example modules:** `container` (uses `is_container()` helper), `sqlite`
 
 ### 2. File Extension Matching
 
@@ -169,7 +176,7 @@ async def should_process(self, object_id: str, file_path: str | None = None) -> 
     ]
 ```
 
-**Example modules:** `gitcredentials`, `aws_credentials`
+**Example modules:** `gitcredentials`, `filezilla`
 
 ### 4. YARA Rule Matching
 
