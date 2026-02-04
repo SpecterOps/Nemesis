@@ -4,7 +4,7 @@ This guide covers how to create new enrichment modules for Nemesis. Enrichment m
 
 There are two ways to build a new module:
 
-- **Manual (hard mode):** Follow the sections below to understand the module structure, implement the protocol, and wire up testing yourself. Best for learning how things work under the hood.
+- **Manual:** Follow the sections below to understand the module structure, implement the protocol, and wire up testing yourself. Best for learning how things work under the hood.
 - **Claude Code skill (easy mode):** Run the `/new-enrichment-module` skill in Claude Code to get a guided, interactive workflow that handles scaffolding, library selection, implementation, and testing. Jump to [Quick Start with Claude Code](#quick-start-with-claude-code) to get started.
 
 ## Table of Contents
@@ -16,7 +16,8 @@ There are two ways to build a new module:
 5. [Finding Categories & Severity](#finding-categories--severity)
 6. [Common Patterns](#common-patterns)
 7. [Testing](#testing)
-8. [Reference Modules](#reference-modules)
+8. [Quick Start with Claude Code](#quick-start-with-claude-code)
+9. [Reference Modules](#reference-modules)
 
 ---
 
@@ -488,6 +489,65 @@ uv run python -m nemesis_cli.main submit --file /path/to/sample
 
 # Check results in Hasura or via SQL
 ```
+
+---
+
+## Quick Start with Claude Code
+
+If you have [Claude Code](https://docs.anthropic.com/en/docs/claude-code) available or another coding AI agent, the `/new-enrichment-module` skill provides a guided workflow that handles design, implementation, and testing.
+
+### Usage
+
+Launch Claude Code from the Nemesis project root and run:
+
+```
+/new-enrichment-module <description of file type to support>
+```
+
+Examples:
+
+```
+/new-enrichment-module Windows Prefetch files (.pf)
+/new-enrichment-module SSH private keys (RSA, ECDSA, Ed25519)
+/new-enrichment-module macOS Keychain database files
+/new-enrichment-module KeePass database files (.kdbx)
+```
+
+### What the Skill Does
+
+The skill walks through 8 steps, pausing at review gates for your input:
+
+| Step | What Happens | Review Gate? |
+|------|-------------|:------------:|
+| 1. Problem Analysis | Gathers requirements about target file types and data to extract | |
+| 2. Output Mode | Choose Findings, Parsing-Only, or Hybrid mode | Yes |
+| 3. Library Research | Searches for and evaluates parsing libraries | Yes |
+| 4. Sample File | Obtain or generate a test file | Yes |
+| 5. Detection Strategy | Builds `should_process()` using magic types, extensions, YARA, etc. | |
+| 6. Implementation | Creates `analyzer.py`, `pyproject.toml`, and `rules.yar` as needed | |
+| 7. Standalone Tests | Writes and runs unit tests using the test harness | |
+| 8. Integration Test | Submits the test file to a running Nemesis instance and verifies results | Yes |
+
+The review gates let you steer library choices, output format, and test file selection before the skill commits to an approach.
+
+### Prerequisites
+
+For the full workflow including integration testing (step 8), start Nemesis in development mode first:
+
+```bash
+./tools/nemesis-ctl.sh start dev
+```
+
+The skill can still scaffold and unit-test a module without Nemesis running, but the final integration test requires a live instance.
+
+### Output
+
+When complete, the skill produces a ready-to-use module at `libs/file_enrichment_modules/file_enrichment_modules/{module_name}/` with:
+
+- `analyzer.py` — Full module implementation with `should_process()` and `process()`
+- `pyproject.toml` — Created if the module needs dependencies beyond the base package
+- `rules.yar` — Created if the detection strategy uses YARA rules
+- Unit tests in `tests/` using the test harness
 
 ---
 
