@@ -20,6 +20,8 @@ After rule creation, click the (now) green "Reload Yara Engine" button to ensure
 
 If you want to change the default set of rules _without_ having to add rules on each deployment, add a new yara file to `./libs/file_enrichment_modules/yara_rules/dev/` for development or `./libs/file_enrichment_modules/yara_rules/prod/` for production.
 
+**Note:** Rule files must use a `.yar` or `.yara` extension to be loaded. Files with other extensions (e.g., `.txt`) will be ignored. The example production rules shipped in `./libs/file_enrichment_modules/yara_rules/prod/` are distributed as `.txt` files and must be renamed to `.yar` or `.yara` before they will be picked up.
+
 ### Editing Existing Rules
 
 To edit an existing rule, click the "Edit Rule" button under actions, modify the rule as wanted, and click "Save":

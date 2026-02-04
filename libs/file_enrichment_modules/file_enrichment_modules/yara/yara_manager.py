@@ -58,7 +58,7 @@ class YaraRuleManager:
             disk_sources = {}
             disk_rules = {}  # Store rule name to content mapping
 
-            # First load and parse all disk rules
+            # First load and parse all disk rules (only .yar and .yara extensions are supported)
             yara_file_paths = glob.glob(f"{YARA_RULES_FOLDER_PATH}**/*.yar*", recursive=True)
             for path in yara_file_paths:
                 logger.info("Loading yara rules from disk", path=path)

@@ -238,9 +238,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    volumes:
-      # Uncomment the following line to use custom YARA rules
-      - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
+    volumes: []
+      # Uncomment the following line to use custom YARA rules (*.yar/*.yara files)
+      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
     environment: &file-enrichment-environment
       ENABLE_PII_DETECTION: ${ENABLE_PII_DETECTION:-false}
       PII_DETECTION_THRESHOLD: ${PII_DETECTION_THRESHOLD:-0.7}
