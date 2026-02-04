@@ -5,7 +5,7 @@ from urllib.parse import ParseResult, urlparse, urlunparse
 
 # Third-party imports
 import aiohttp
-from cli.config import NemesisConfig, PasswordCredential
+from cli.config import NemesisConfig, PasswordCredential, StrictHttpUrl
 from cli.mythic_connector.config import Settings, TokenCredential
 from cli.mythic_connector.db import Database
 from cli.mythic_connector.handlers import FileHandler
@@ -65,11 +65,15 @@ class SyncService:
 
             # Authenticate
             url: ParseResult = urlparse(self.cfg.mythic.url)
+            hostname = url.hostname
+            port = url.port
+            if not hostname or port is None:
+                raise ValueError(f"Invalid Mythic URL (missing hostname or port): {self.cfg.mythic.url}")
             if isinstance(self.cfg.mythic.credential, TokenCredential):
                 self.mythic = await mythic.login(
                     apitoken=self.cfg.mythic.credential.token,
-                    server_ip=url.hostname,
-                    server_port=url.port,
+                    server_ip=hostname,
+                    server_port=port,
                     ssl=True,
                     logging_level=logging.WARNING,
                     timeout=10,
@@ -78,8 +82,8 @@ class SyncService:
                 self.mythic = await mythic.login(
                     username=self.cfg.mythic.credential.username,
                     password=self.cfg.mythic.credential.password,
-                    server_ip=url.hostname,
-                    server_port=url.port,
+                    server_ip=hostname,
+                    server_port=port,
                     ssl=True,
                     logging_level=logging.WARNING,
                     timeout=10,
@@ -97,12 +101,17 @@ class SyncService:
         """Initialize the Nemesis client and data handlers."""
 
         cfg = NemesisConfig(
-            url=urlunparse(self.cfg.nemesis.url),
+            url=StrictHttpUrl(urlunparse(self.cfg.nemesis.url)),
             credential=PasswordCredential(
                 username=self.cfg.nemesis.credential.username,
                 password=self.cfg.nemesis.credential.password,
             ),
         )
+
+        if self.mythic is None:
+            raise RuntimeError("Mythic client not initialized")
+        if self.db is None:
+            raise RuntimeError("Database not initialized")
 
         self.nemesis = NemesisClient(cfg)
         self.file_handler = FileHandler(self.mythic, self.nemesis, self.db, self.cfg)
@@ -126,6 +135,8 @@ class SyncService:
 
             # Start subscriptions
             logger.info("Starting data synchronization")
+            if self.file_handler is None:
+                raise RuntimeError("File handler not initialized")
             await self.file_handler.subscribe()
             # await asyncio.gather(self.file_handler.subscribe())
             # await asyncio.gather(self.file_handler.subscribe(), self.browser_handler.subscribe())

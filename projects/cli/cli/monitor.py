@@ -1,5 +1,6 @@
 # monitor.py
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -23,7 +24,7 @@ class NewFileHandler(FileSystemEventHandler):
         agent_id: str,
         logger: logging.Logger,
         container: bool = False,
-        source: str = None,
+        source: str | None = None,
     ):
         self.host = host
         self.username = username
@@ -37,7 +38,7 @@ class NewFileHandler(FileSystemEventHandler):
     def on_created(self, event):
         """Called when a file or directory is created"""
         if not event.is_directory:
-            file_path = Path(event.src_path)
+            file_path = Path(os.fsdecode(event.src_path))
             self.logger.info(f"New file detected: {file_path}")
 
             # Wait a moment to ensure file is fully written
@@ -63,7 +64,7 @@ class NewFileHandler(FileSystemEventHandler):
     def on_moved(self, event):
         """Called when a file or directory is moved into the monitored directory"""
         if not event.is_directory:
-            file_path = Path(event.dest_path)
+            file_path = Path(os.fsdecode(event.dest_path))
             self.logger.info(f"File moved into directory: {file_path}")
 
             # Submit the moved file
