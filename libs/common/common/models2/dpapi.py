@@ -1,7 +1,7 @@
 """DPAPI credential models for API requests."""
 
 import re
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 from uuid import UUID
 
 from common.logger import get_logger
@@ -201,15 +201,13 @@ def get_credential_type(v):
 
 
 type DpapiCredentialRequest = Annotated[
-    Union[
-        Annotated[PasswordCredentialKey, Tag("password")],
-        Annotated[NtlmHashCredentialKey, Tag("cred_key_ntlm")],
-        Annotated[Sha1CredentialKey, Tag("cred_key_sha1")],
-        Annotated[Pbkdf2StrongCredentialKey, Tag("cred_key_pbkdf2")],
-        Annotated[DomainBackupKeyCredential, Tag("domain_backup_key")],
-        Annotated[MasterKeyGuidPairList, Tag("master_key_guid_pair")],
-        Annotated[DpapiSystemCredentialRequest, Tag("dpapi_system")],
-        Annotated[ChromiumAppBoundKeyCredential, Tag("chromium_app_bound_key")],
-    ],
+    Annotated[PasswordCredentialKey, Tag("password")]
+    | Annotated[NtlmHashCredentialKey, Tag("cred_key_ntlm")]
+    | Annotated[Sha1CredentialKey, Tag("cred_key_sha1")]
+    | Annotated[Pbkdf2StrongCredentialKey, Tag("cred_key_pbkdf2")]
+    | Annotated[DomainBackupKeyCredential, Tag("domain_backup_key")]
+    | Annotated[MasterKeyGuidPairList, Tag("master_key_guid_pair")]
+    | Annotated[DpapiSystemCredentialRequest, Tag("dpapi_system")]
+    | Annotated[ChromiumAppBoundKeyCredential, Tag("chromium_app_bound_key")],
     Field(discriminator=Discriminator(get_credential_type)),
 ]

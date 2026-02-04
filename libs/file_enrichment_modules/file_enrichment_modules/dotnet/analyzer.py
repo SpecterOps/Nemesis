@@ -2,7 +2,6 @@
 import hashlib
 import json
 from pathlib import Path
-from typing import Union
 
 import dnfile
 from common.logger import get_logger
@@ -57,7 +56,7 @@ def process_resources(assembly):
     return resources
 
 
-def parse_dotnet_assembly(filename: Union[str, Path]) -> dict:
+def parse_dotnet_assembly(filename: str | Path) -> dict:
     """
     Parses a .NET assembly file and returns a dictionary of .NET specific data.
     """

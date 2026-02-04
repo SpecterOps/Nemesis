@@ -318,7 +318,7 @@ class WorkflowPurger:
                         # Collect successfully purged workflow IDs
                         purged_wf_ids = []
 
-                        for wf_id, result in zip(workflow_ids, purge_results):
+                        for wf_id, result in zip(workflow_ids, purge_results, strict=True):
                             if isinstance(result, Exception):
                                 logger.error(
                                     "Purge operation failed with exception",

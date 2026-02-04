@@ -111,7 +111,7 @@ def get_file_enriched(object_id: str) -> FileEnriched:
                     raise RuntimeError("Query returned no column descriptions")
 
                 columns = [desc[0] for desc in cur.description]
-                file_data = dict(zip(columns, result))
+                file_data = dict(zip(columns, result, strict=True))
 
                 # Transform data using shared helper
                 file_data = _transform_file_enriched_data(file_data)

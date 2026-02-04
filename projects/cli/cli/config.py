@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated, Union
+from typing import Annotated
 from urllib.parse import urlparse
 
 import yaml
@@ -63,7 +63,7 @@ class NemesisConfig(BaseConfig):
 
 class MythicConfig(BaseConfig):
     url: StrictHttpUrl
-    credential: Union[PasswordCredential, TokenCredential]
+    credential: PasswordCredential | TokenCredential
 
     @field_validator("credential")
     @classmethod

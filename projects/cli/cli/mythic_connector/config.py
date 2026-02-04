@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Union
 from urllib.parse import ParseResult, urlparse
 
 from dynaconf import Dynaconf, Validator
@@ -20,7 +19,7 @@ class TokenCredential:
 @dataclass
 class MythicConfig:
     url: str
-    credential: Union[UsernamePasswordCredential, TokenCredential]
+    credential: UsernamePasswordCredential | TokenCredential
 
     @classmethod
     def from_dict(cls, data: dict) -> "MythicConfig":

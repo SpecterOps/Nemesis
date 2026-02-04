@@ -700,7 +700,7 @@ async def get_failed():
                     failed_workflows = []
 
                     for row in cur.fetchall():
-                        workflow_dict = dict(zip(columns, row))
+                        workflow_dict = dict(zip(columns, row, strict=True))
 
                         # Convert UUID to string if present
                         if workflow_dict.get("object_id"):

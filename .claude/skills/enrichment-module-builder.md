@@ -423,6 +423,12 @@ class Test{ModuleName}Analyzer:
             # Assert on results
 ```
 
+Guidelines:
+- Test both positive(happy path) and negative(unhappy path) cases.
+  - Do this for all result types, findings, transforms, DB writes, and file uploads generated.
+- Handle edge cases and error conditions
+
+
 ### Run Tests
 
 ```bash

@@ -5,7 +5,6 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Union
 
 import plyvel
 from cli.nemesis_client import NemesisClient
@@ -107,7 +106,7 @@ class OutflankDownloadProcessor:
 
     async def upload_file(
         self,
-        file_path: Union[Path, str],
+        file_path: Path | str,
         metadata: FileMetadata,
         delete_after: bool = False,
     ) -> tuple[bool, str | None, FileWithMetadataResponse | None]:
