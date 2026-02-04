@@ -53,9 +53,9 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
             logger.warning("Chrome key not found", chrome_key_id=chrome_key_id)
             return result
 
-        record_id = row["id"]
+        _record_id = row["id"]  # noqa: F841
         source = row["source"]
-        key_masterkey_guid = row["key_masterkey_guid"]
+        _key_masterkey_guid = row["key_masterkey_guid"]  # noqa: F841
         key_bytes_enc = row["key_bytes_enc"]
         key_bytes_dec = row["key_bytes_dec"]
         key_is_decrypted = row["key_is_decrypted"]

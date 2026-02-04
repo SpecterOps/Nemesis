@@ -1,9 +1,11 @@
 # enrichment_modules/chromium_logins/analyzer.py
-import asyncio
 import csv
 import sqlite3
 import tempfile
 from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import asyncio
 
 import yara_x
 from chromium import convert_chromium_timestamp, process_chromium_logins

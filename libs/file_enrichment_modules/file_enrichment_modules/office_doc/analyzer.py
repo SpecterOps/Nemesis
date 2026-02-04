@@ -95,7 +95,7 @@ def check_encryption(file_path: str) -> tuple[bool, str | None]:
         try:
             office_file = msoffcrypto.OfficeFile(f)
             is_encrypted = office_file.is_encrypted()
-        except:
+        except Exception:
             pass
 
     if is_encrypted:
@@ -116,7 +116,7 @@ def check_rms_protected(file_path):
                 if "DRMEncryptedTransform" in file:
                     return True
 
-    except:
+    except Exception:
         pass
 
     # Try OLE approach if ZIP check failed or returned False
@@ -125,7 +125,7 @@ def check_rms_protected(file_path):
             with olefile.OleFileIO(file_path) as ole:
                 if ole.exists("\x06DataSpaces/TransformInfo/DRMEncryptedTransform"):
                     return True
-    except:
+    except Exception:
         pass
 
     return False
@@ -390,7 +390,7 @@ class OfficeAnalyzer(EnrichmentModule):
 
                 macro_text = ""
 
-                for i, macro in enumerate(macros):
+                for _i, macro in enumerate(macros):
                     stream_path = macro["stream_path"]
                     macro_text += f"'Macro: {stream_path}\n"
                     macro_text += macro["vba_code"] + "\n\n"

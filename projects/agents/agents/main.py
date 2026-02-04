@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI):
         # Initialize OpenTelemetry tracer provider first (needed for Phoenix)
         from agents.logger import get_tracer
 
-        tracer = get_tracer("agents")
+        _tracer = get_tracer("agents")  # noqa: F841
         logger.debug("OpenTelemetry tracer initialized")
 
         # Initialize ModelManager if we have a model
@@ -117,6 +117,7 @@ async def lifespan(app: FastAPI):
         # Start MCP server for chatbot
         try:
             from agents.tasks.chatbot import get_chatbot_agent
+
             chatbot_agent = get_chatbot_agent()
             await chatbot_agent.start_mcp_server()
             logger.info("MCP server started successfully")
@@ -136,6 +137,7 @@ async def lifespan(app: FastAPI):
         # Stop MCP server
         try:
             from agents.tasks.chatbot import get_chatbot_agent
+
             chatbot_agent = get_chatbot_agent()
             await chatbot_agent.stop_mcp_server()
             logger.info("MCP server stopped")
@@ -272,8 +274,6 @@ def extract_summary_from_triage_request(triage_request: TriageRequest) -> str | 
     return None
 
 
-
-
 @workflow_runtime.workflow
 def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
     """Main workflow for triaging findings."""
@@ -288,8 +288,6 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
 
         # Step 1: Extract out the finding summary
         summary = extract_summary_from_triage_request(triage_request)
-        import pprint
-        pprint.pprint(summary)
 
         if not summary:
             logger.warning(f"No summary found for finding {finding_id}")

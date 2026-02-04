@@ -183,7 +183,7 @@ class PdfParser:
         xmp_metadata_object = xmp_metadata_object.partition(b"endstream")[0]
         try:
             xml_metadata = minidom.parseString(xmp_metadata_object)
-        except:
+        except Exception:
             return ""
         values = []
         values.append(self.get_dc_value("title", xml_metadata))

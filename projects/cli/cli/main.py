@@ -3,12 +3,12 @@ import asyncio
 import sys
 
 import click
+from cli.cobaltstrike_connector.cobaltstrike_connector import run_cobaltstrike_connector
 from cli.config import load_config
 from cli.log import setup_logging
 from cli.monitor import monitor_main
 from cli.mythic_connector.mythic_connector import start
 from cli.stage1_connector.stage1_connector import run_outflank_connector
-from cli.cobaltstrike_connector.cobaltstrike_connector import run_cobaltstrike_connector
 from cli.submit import submit_main
 
 

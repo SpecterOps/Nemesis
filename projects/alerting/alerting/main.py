@@ -217,16 +217,16 @@ async def lifespan(app: FastAPI):
         await load_alert_settings()
 
         # Start alert settings subscription
-        settings_subscription_task = asyncio.create_task(handle_alert_settings_subscription())
+        _settings_subscription_task = asyncio.create_task(handle_alert_settings_subscription())  # noqa: F841
         logger.info("Started alert settings subscription handler")
 
         # Start feedback subscription
-        feedback_subscription_task = asyncio.create_task(handle_feedback_subscription())
+        _feedback_subscription_task = asyncio.create_task(handle_feedback_subscription())  # noqa: F841
         logger.info("Started feedback subscription handler")
 
         # Start triage subscription if LLM is enabled
         if llm_enabled:
-            triage_subscription_task = asyncio.create_task(handle_findings_triage_subscription())
+            _triage_subscription_task = asyncio.create_task(handle_findings_triage_subscription())  # noqa: F841
             logger.info("Started findings triage subscription handler")
 
         logger.info(f"Alert rate limiter configured with {MAX_CONCURRENT_ALERTS} concurrent alerts")

@@ -421,9 +421,6 @@ class ContainerExtractor:
                     )
                     return False
 
-            # Get the size after all checks
-            extracted_file_size = os.path.getsize(extracted_file_path)
-
             # Calculate the real path
             real_path = self.get_real_path(extracted_file_path, tmp_dir, file_enriched)
             if not real_path:

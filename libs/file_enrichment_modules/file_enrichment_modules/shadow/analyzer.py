@@ -1,5 +1,4 @@
 # enrichment_modules/shadow/analyzer.py
-import re
 import tempfile
 import textwrap
 from pathlib import Path

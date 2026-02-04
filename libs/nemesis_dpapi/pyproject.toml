@@ -3,7 +3,7 @@ name = "nemesis_dpapi"
 version = "0.1.0"
 description = ""
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.13,<3.14"
 
 dependencies = [
     "impacket>=0.13.0,<0.14.0",

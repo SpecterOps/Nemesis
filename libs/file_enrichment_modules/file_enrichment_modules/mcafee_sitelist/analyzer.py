@@ -4,7 +4,10 @@ import codecs
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import yara_x
 from common.logger import get_logger
@@ -98,7 +101,7 @@ rule Detect_McAfee_SiteList_XML {
         Adapted from https://github.com/funoverip/mcafee-sitelist-pwd-decryption/blob/master/mcafee_sitelist_pwd_decrypt.py
         Credit to funoverip
         """
-        decode_hex: Callable[[bytes], Tuple[bytes, int]] = codecs.getdecoder("hex_codec")  # type: ignore
+        decode_hex: Callable[[bytes], tuple[bytes, int]] = codecs.getdecoder("hex_codec")  # type: ignore
 
         # hardcoded XOR key
         KEY: bytes = decode_hex(b"12150F10111C1A060A1F1B1817160519")[0]
@@ -121,7 +124,7 @@ rule Detect_McAfee_SiteList_XML {
 
             try:
                 des3 = DES3.new(key, DES3.MODE_ECB, None)
-            except:
+            except (TypeError, ValueError):
                 des3 = DES3.new(key, DES3.MODE_ECB)
 
             decrypted = des3.decrypt(bytes(data))

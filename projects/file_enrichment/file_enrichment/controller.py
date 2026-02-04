@@ -207,7 +207,7 @@ def setup_workflow_purger(purger_workflow):
     # Check if the workflow is already running
     try:
         logger.info("Getting workflow purge state...")
-        instance_id = global_vars.workflow_client.schedule_new_workflow(
+        _instance_id = global_vars.workflow_client.schedule_new_workflow(  # noqa: F841
             workflow=purger_workflow,
             input=workflow_purge_interval,
             instance_id=workflow_instance_id,

@@ -92,13 +92,13 @@ The Chatbot agent powers the "Chatbot" icon in the left navigation panel. This a
 
 ## The Nemesis Web Interface
 
-### Monitoring
+### Phoenix LLM Tracing
 
-If the `--monitoring` flag is also passed to the `./tools/nemesis-ctl.sh` script, the [Arize Phoenix](https://github.com/Arize-ai/phoenix) will be deployed to allow tracking of the inputs/outputs sent to the LLM (at the /phoenix route):
+When the `--llm` flag is passed to `./tools/nemesis-ctl.sh`, [Arize Phoenix](https://github.com/Arize-ai/phoenix) is deployed (available at the /phoenix route) to allow tracking of the inputs/outputs sent to the LLM.
 
 ![Arize Phoenix Tracing](images/arize_phoenix_tracing.png)
 
-If the monitoring profile is used and Arize Phoenix is deployed, the Nemesis frontend will dynamically display links to the Phoenix interface in the Help menu as well.
+When Arize Phoenix is deployed, the Nemesis frontend will dynamically display links to the Phoenix interface in the Help menu.
 
 ![Nemesis Dynamic Help Menu](images/nemesis_dynamic_help_menu.png)
 

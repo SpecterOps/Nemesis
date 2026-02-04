@@ -20,7 +20,7 @@ def get_lnk_file_display(lnk_file, print_all=False):
     res = lnk_file.get_json(print_all)
 
     def nice_id(identifier, uppercase=False):
-        identifier = re.sub("^r_", "", identifier, 1)
+        identifier = re.sub("^r_", "", identifier, count=1)
         if uppercase or identifier.upper() == identifier:
             return identifier.upper().replace("_", " ")
         return identifier.capitalize().replace("_", " ")

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Modules Nemesis uses to enrich files"
 authors = [{name = "SpecterOps"}]
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.13,<3.14"
 
 dependencies = [
     "structlog>=25.1.0,<26.0.0",
@@ -32,6 +32,8 @@ dev = [
     "ruff>=0.9.2",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+    "pydecipher",
+    "lief>=0.16.5",
 ]
 
 [build-system]
@@ -46,6 +48,7 @@ common = { path = "../common", editable = true }
 nemesis_dpapi = { path = "../nemesis_dpapi", editable = true }
 file_linking = { path = "../file_linking", editable = true }
 chromium = { path = "../chromium", editable = true }
+pydecipher = { git = "https://github.com/HarmJ0y/pydecipher.git" }
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"

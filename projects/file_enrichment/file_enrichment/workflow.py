@@ -7,7 +7,6 @@ from common.models import File
 from common.workflows.setup import wf_runtime
 from durabletask.task import TaskFailedError
 from file_enrichment_modules.module_loader import ModuleLoader
-from file_enrichment_modules.yara.yara_manager import YaraRuleManager
 from nemesis_dpapi import DpapiManager
 
 from .activities import (
@@ -274,8 +273,12 @@ async def initialize_enrichment_modules(dpapi_manager: DpapiManager) -> list[str
     # Initialize YaraRuleManager if present
     if "yara" in module_loader.modules:
         yara_module = module_loader.modules["yara"]
-        if isinstance(yara_module, YaraRuleManager):
-            await yara_module.initialize()
+        if hasattr(yara_module, "rule_manager"):
+            # Pass asyncpg_pool to rule_manager before initializing
+            if hasattr(yara_module.rule_manager, "asyncpg_pool"):
+                yara_module.rule_manager.asyncpg_pool = global_vars.asyncpg_pool
+            if hasattr(yara_module.rule_manager, "initialize"):
+                await yara_module.rule_manager.initialize()
 
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
@@ -300,12 +303,15 @@ async def reload_yara_rules():
     """Reloads all disk/state yara rules."""
 
     logger.debug("workflow/workflow.py reloading Yara rules")
-    rule_manager = global_vars.global_module_map["yara"]
+    yara_module = global_vars.global_module_map.get("yara")
 
-    if not isinstance(rule_manager, YaraRuleManager):
-        raise ValueError(f"Yara rule manager is incorrect type. Type: {type(rule_manager)}")
+    if yara_module is None:
+        raise ValueError("Yara module not found in global_module_map")
 
-    await rule_manager.load_db_rules()
+    if not hasattr(yara_module, "rule_manager"):
+        raise ValueError(f"Yara module missing rule_manager attribute. Type: {type(yara_module)}")
+
+    await yara_module.rule_manager.load_db_rules()
 
 
 # endregion

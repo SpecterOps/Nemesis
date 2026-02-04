@@ -48,17 +48,21 @@ Nemesis is an open-source, centralized data processing platform (v2.0) that inge
 cd projects/web_api && uv sync
 ```
 
-### Linting & Formatting (Ruff)
+### Package Management
 
+For adding, upgrading, or removing packages, use the `/managing-packages` skill.
+
+### Linting & Formatting (Ruff)
+Run linting/formatting after each fix/change.
 ```bash
 # Check all Python code (configured in root pyproject.toml)
-ruff check .
+uv run ruff check . --fix
 
 # Format code
-ruff format .
+uv run ruff format .
 
 # Check specific project
-cd projects/web_api && uv run ruff check .
+cd projects/web_api && uv run ruff check . --fix
 ```
 
 ### Testing
@@ -75,7 +79,9 @@ cd projects/web_api && uv run pytest tests/test_file.py::test_function_name
 ```
 
 ### Docker Commands
+Information about building dev/prod container images can be found in the [docker compose docs](./docs/docker_compose.md).
 
+General instructions for dev docker containers/images:
 ```bash
 # Build base images first (required before building services)
 docker compose -f compose.base.yaml build
@@ -83,14 +89,17 @@ docker compose -f compose.base.yaml build
 # View logs for a service
 docker compose logs -f web-api
 
-# Rebuild and restart single service
-docker compose up -d --build web-api
+# Rebuild Dapr-enabled services (must include the -dapr sidecar)
+docker compose up -d --build file-enrichment file-enrichment-dapr
+docker compose up -d --build web-api web-api-dapr
 ```
+
+**Note:** Services using Dapr (file-enrichment, web-api, alerting, etc.) have a companion `-dapr` sidecar container. When rebuilding these services, always restart both the service and its Dapr sidecar to ensure proper communication.
 
 ## Architecture
 
 ### Tech Stack
-- **Python 3.12-3.13** with uv for dependency management
+- **Python 3.13** with uv for dependency management
 - **FastAPI** for REST services
 - **React 18 + Vite + TypeScript** for frontend
 - **PostgreSQL** for database

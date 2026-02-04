@@ -1,9 +1,13 @@
 import logging
 import os
 import sys
+import warnings
 
 import structlog
 from structlog.stdlib import ProcessorFormatter
+
+# Ignore DeprecationWarnings from third-party packages (site-packages)
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r".*site-packages.*")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 NUMERIC_LEVEL = getattr(logging, LOG_LEVEL, logging.INFO)

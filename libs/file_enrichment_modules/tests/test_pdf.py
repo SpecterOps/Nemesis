@@ -31,16 +31,17 @@ class TestParsePdfFile:
         assert result["is_linearized"] is False, "PDF should not be linearized"
         assert result["encryption_hash"] is None, "Non-encrypted PDF should have no encryption hash"
 
-        # Check metadata fields (from exiftool output)
-        assert result["title"] == "Microsoft Word - Document4", f"Expected title 'Microsoft Word - Document4', got {result['title']}"
-        assert result["producer"] == "macOS Version 12.6 (Build 21G115) Quartz PDFContext", f"Expected specific producer, got {result['producer']}"
-        assert result["creator"] == "Word", f"Expected creator 'Word', got {result['creator']}"
+        # Check metadata fields (nested in metadata dict)
+        metadata = result["metadata"]
+        assert metadata["title"] == "Microsoft Word - Document4", f"Expected title 'Microsoft Word - Document4', got {metadata['title']}"
+        assert metadata["producer"] == "macOS Version 12.6 (Build 21G115) Quartz PDFContext", f"Expected specific producer, got {metadata['producer']}"
+        assert metadata["creator"] == "Word", f"Expected creator 'Word', got {metadata['creator']}"
 
         # Check dates are properly parsed
-        assert result["created"] is not None, "Created date should not be None"
-        assert result["modified"] is not None, "Modified date should not be None"
-        assert result["created"].startswith("2023-03-24"), f"Expected creation date to start with 2023-03-24, got {result['created']}"
-        assert result["modified"].startswith("2023-03-24"), f"Expected modification date to start with 2023-03-24, got {result['modified']}"
+        assert metadata["created"] is not None, "Created date should not be None"
+        assert metadata["modified"] is not None, "Modified date should not be None"
+        assert metadata["created"].startswith("2023-03-24"), f"Expected creation date to start with 2023-03-24, got {metadata['created']}"
+        assert metadata["modified"].startswith("2023-03-24"), f"Expected modification date to start with 2023-03-24, got {metadata['modified']}"
 
         # Check page size
         assert result["page_size"] is not None, "Page size should not be None"
@@ -90,24 +91,11 @@ class TestParsePdfFile:
             f"Expected hash to start with '$pdf$', got: {result['encryption_hash'][:20]}"
         )
 
-        # Check permissions are extracted for encrypted PDFs
-        # Note: For password-protected PDFs, permissions may be 0 until decrypted
-        assert result["permissions"] is not None, "Permissions should not be None for encrypted PDF"
-        assert isinstance(result["permissions"], dict), "Permissions should be a dictionary"
-        assert "print" in result["permissions"], "Permissions should include 'print'"
-        assert "modify" in result["permissions"], "Permissions should include 'modify'"
-        assert "copy" in result["permissions"], "Permissions should include 'copy'"
-        assert "annotate" in result["permissions"], "Permissions should include 'annotate'"
-
         # Encrypted PDFs typically don't expose metadata without decryption
-        # So these fields should be None or default values
-        assert result["title"] is None, "Encrypted PDF should not expose title without decryption"
-        assert result["author"] is None, "Encrypted PDF should not expose author without decryption"
-
-        # Check no unexpected errors occurred
-        if "error" in result:
-            # Some errors during hash extraction are acceptable
-            assert "Failed to extract hash" in result["error"], f"Unexpected error: {result.get('error')}"
+        # So these fields should be None or default values in the metadata dict
+        metadata = result["metadata"]
+        assert metadata["title"] is None, "Encrypted PDF should not expose title without decryption"
+        assert metadata["author"] is None, "Encrypted PDF should not expose author without decryption"
 
     def test_parse_pdf_file_encrypted_v1_7(self):
         """Test parsing an encrypted PDF file (version 1.7)."""
@@ -134,10 +122,6 @@ class TestParsePdfFile:
         assert isinstance(result["encryption_hash"], str), "Encryption hash should be a string"
         assert len(result["encryption_hash"]) > 0, "Encryption hash should not be empty"
 
-        # Check permissions are extracted for encrypted PDFs
-        assert result["permissions"] is not None, "Permissions should not be None for encrypted PDF"
-        assert isinstance(result["permissions"], dict), "Permissions should be a dictionary"
-
     def test_parse_pdf_file_all_required_fields_present(self):
         """Test that all expected fields are present in the result, regardless of encryption status."""
         # Test with an unencrypted PDF
@@ -147,10 +131,30 @@ class TestParsePdfFile:
         result = parse_pdf_file(test_file)
 
         # All these fields should always be present in the result dictionary
-        required_fields = [
+        required_top_level_fields = [
             "is_encrypted",
             "encryption_hash",
             "num_pages",
+            "pdf_version",
+            "page_size",
+            "page_layout",
+            "page_mode",
+            "language",
+            "is_pdf_a",
+            "is_linearized",
+            "is_repaired",
+            "has_embedded_files",
+            "has_forms",
+            "permissions",
+            "page_rotation",
+            "metadata",
+        ]
+
+        for field in required_top_level_fields:
+            assert field in result, f"Required field '{field}' is missing from result"
+
+        # Check metadata sub-fields
+        required_metadata_fields = [
             "title",
             "author",
             "subject",
@@ -159,25 +163,12 @@ class TestParsePdfFile:
             "created",
             "modified",
             "keywords",
-            "pdf_version",
-            "page_size",
-            "page_layout",
-            "page_mode",
-            "language",
             "trapped",
             "encryption_method",
-            "is_pdf_a",
-            "is_linearized",
-            "is_repaired",
-            "has_embedded_files",
-            "has_javascript",
-            "has_forms",
-            "permissions",
-            "page_rotation",
         ]
 
-        for field in required_fields:
-            assert field in result, f"Required field '{field}' is missing from result"
+        for field in required_metadata_fields:
+            assert field in result["metadata"], f"Required metadata field '{field}' is missing from result"
 
     def test_parse_pdf_file_nonexistent_file(self):
         """Test that the function handles non-existent files gracefully."""
@@ -212,13 +203,6 @@ class TestParsePdfFile:
         result = parse_pdf_file(test_file)
         assert result["has_embedded_files"] is False, "Test PDF should not have embedded files"
 
-    def test_parse_pdf_file_javascript_detection(self):
-        """Test that JavaScript detection works."""
-        # Test with standard PDFs (should have no JavaScript)
-        test_file = os.path.join(FIXTURES_DIR, "pdf_test.pdf")
-        result = parse_pdf_file(test_file)
-        assert result["has_javascript"] is False, "Test PDF should not have JavaScript"
-
     def test_parse_pdf_file_forms_detection(self):
         """Test that form detection works."""
         # Test with standard PDFs (should have no forms)
@@ -251,26 +235,28 @@ class TestParsePdfFile:
         """Test that PDF dates are correctly parsed to ISO format."""
         test_file = os.path.join(FIXTURES_DIR, "pdf_test.pdf")
         result = parse_pdf_file(test_file)
+        metadata = result["metadata"]
 
         # Check created date
-        assert result["created"] is not None, "Created date should not be None"
+        assert metadata["created"] is not None, "Created date should not be None"
         # ISO format: YYYY-MM-DDTHH:MM:SS
-        assert "T" in result["created"], "Created date should be in ISO format with 'T' separator"
-        assert result["created"].startswith("2023-03-24"), "Created date should start with 2023-03-24"
+        assert "T" in metadata["created"], "Created date should be in ISO format with 'T' separator"
+        assert metadata["created"].startswith("2023-03-24"), "Created date should start with 2023-03-24"
 
         # Check modified date
-        assert result["modified"] is not None, "Modified date should not be None"
-        assert "T" in result["modified"], "Modified date should be in ISO format with 'T' separator"
-        assert result["modified"].startswith("2023-03-24"), "Modified date should start with 2023-03-24"
+        assert metadata["modified"] is not None, "Modified date should not be None"
+        assert "T" in metadata["modified"], "Modified date should be in ISO format with 'T' separator"
+        assert metadata["modified"].startswith("2023-03-24"), "Modified date should start with 2023-03-24"
 
     def test_parse_pdf_file_metadata_empty_strings_converted_to_none(self):
         """Test that empty string metadata values are converted to None."""
         # The pdf_test.pdf has empty author, subject, keywords fields
         test_file = os.path.join(FIXTURES_DIR, "pdf_test.pdf")
         result = parse_pdf_file(test_file)
+        metadata = result["metadata"]
 
         # These fields are empty strings in the PDF metadata, should be None in result
-        assert result["author"] is None, f"Empty author should be None, got {result['author']!r}"
-        assert result["subject"] is None, f"Empty subject should be None, got {result['subject']!r}"
-        assert result["keywords"] is None, f"Empty keywords should be None, got {result['keywords']!r}"
-        assert result["trapped"] is None, f"Empty trapped should be None, got {result['trapped']!r}"
+        assert metadata["author"] is None, f"Empty author should be None, got {metadata['author']!r}"
+        assert metadata["subject"] is None, f"Empty subject should be None, got {metadata['subject']!r}"
+        assert metadata["keywords"] is None, f"Empty keywords should be None, got {metadata['keywords']!r}"
+        assert metadata["trapped"] is None, f"Empty trapped should be None, got {metadata['trapped']!r}"

@@ -165,7 +165,7 @@ def parse_variant_dictionary(data: bytes) -> dict[str, Any]:
         if len(data) < 2:
             return result
 
-        version = struct.unpack("<H", data[offset : offset + 2])[0]
+        _version = struct.unpack("<H", data[offset : offset + 2])[0]  # noqa: F841
         offset += 2
 
         while offset < len(data):

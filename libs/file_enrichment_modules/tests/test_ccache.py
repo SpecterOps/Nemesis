@@ -4,8 +4,8 @@
 import os
 
 import pytest
-
 from file_enrichment_modules.ccache.analyzer import CcacheAnalyzer
+
 from tests.harness import FileEnrichedFactory, ModuleTestHarness
 
 # Path to the test ccache file in fixtures

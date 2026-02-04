@@ -165,8 +165,8 @@ def setup_phoenix_llm_tracing():
     """
     Setup Phoenix tracing ONLY for LLM calls - adds Phoenix exporter to existing tracer.
     """
+    logger = structlog.get_logger(__name__)
     if os.getenv("PHOENIX_ENABLED", "false").lower() == "true":
-        logger = structlog.get_logger(__name__)
         logger.info("Phoenix enabled, setting up LLM tracing")
 
         try:

@@ -110,18 +110,11 @@ ENTRYPOINT ["/bin/sh", "-c", " \
 FROM base AS bundle
 
 WORKDIR /src/projects/file_enrichment
-RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
-    uv venv /venv --python /usr/local/bin/python3 && \
-    /venv/bin/python -m ensurepip --default-pip && \
-    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
-    /venv/bin/pip install --no-cache-dir \
-        /src/libs/common \
-        /src/libs/chromium \
-        /src/libs/nemesis_dpapi \
-        /src/libs/file_linking \
-        /src/libs/file_enrichment_modules \
-        /src/projects/file_enrichment && \
-    /venv/bin/pip uninstall -y pip setuptools && \
+
+# Create venv directly at /venv using UV_PROJECT_ENVIRONMENT
+# This avoids needing to copy the venv or fix shebangs
+ENV UV_PROJECT_ENVIRONMENT=/venv
+RUN uv sync --frozen --no-dev --no-editable && \
     find /venv -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
 # FROM nemesis-python-base-prod AS prod

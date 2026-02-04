@@ -124,7 +124,7 @@ async def _insert_logins(
                     if password_dec_bytes:
                         password_value_dec = password_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
-                except:
+                except Exception:
                     pass
 
             # Get state key ID for key/abe encryption

@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Union
 
 import plyvel
+from cli.cobaltstrike_connector.cobaltstrike_client import Beacon, CobaltStrikeClient, Download
 from cli.nemesis_client import NemesisClient
-from cli.cobaltstrike_connector.cobaltstrike_client import Download, Beacon, CobaltStrikeClient
 from common.models2.api import FileMetadata, FileWithMetadataResponse
 
 logger = logging.getLogger(__name__)

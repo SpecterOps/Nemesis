@@ -140,7 +140,7 @@ async def _insert_cookies(
                     if value_dec_bytes:
                         value_dec = value_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
-                except:
+                except Exception:
                     pass
 
             # Get state key ID for key/abe encryption

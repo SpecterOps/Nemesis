@@ -3,7 +3,6 @@ import base64
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Callable, Tuple
 
 import yara_x
 from common.logger import get_logger
@@ -192,7 +191,7 @@ rule Detect_GPP_CPassword_XML {
         summary += "---\n\n"
 
         for cred in credentials:
-            summary += f"## Credential Entry\n"
+            summary += "## Credential Entry\n"
             summary += f"* **Username**: `{cred['username']}`\n"
             summary += f"* **Password**: `{cred['password']}`\n"
 

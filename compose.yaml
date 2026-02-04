@@ -238,9 +238,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    volumes: []
-      # # Uncomment the following line to use custom YARA rules
-      # - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
+    volumes:
+      # Uncomment the following line to use custom YARA rules
+      - ./libs/file_enrichment_modules/yara_rules/prod/:/yara_rules/:ro
     environment: &file-enrichment-environment
       ENABLE_PII_DETECTION: ${ENABLE_PII_DETECTION:-false}
       PII_DETECTION_THRESHOLD: ${PII_DETECTION_THRESHOLD:-0.7}
@@ -1083,6 +1083,7 @@ services:
       placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
       hasura: { condition: service_healthy }
+      litellm: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
     labels:
       - "traefik.enable=true"
@@ -1163,20 +1164,13 @@ services:
     healthcheck:
       test:
         [
-          "CMD",
-          "wget",
-          "--quiet",
-          "--tries=1",
-          "-O",
-          "/dev/null",
-          "--header=Authorization: Bearer sk-${LITELLM_ADMIN_PASSWORD:-admin123}",
-          "http://localhost:4000/health",
+          "CMD-SHELL",
+          "python3 -c \"import urllib.request,json; r=urllib.request.urlopen(urllib.request.Request('http://localhost:4000/health',headers={'Authorization':'Bearer sk-${LITELLM_ADMIN_PASSWORD:-admin123}'})); d=json.load(r); exit(0 if d.get('healthy_count',0)>0 and d.get('unhealthy_count',0)==0 else 1)\"",
         ]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
-      disable: true
+      start_period: 60s
     logging: *logging-config
     labels:
       - "traefik.enable=true"

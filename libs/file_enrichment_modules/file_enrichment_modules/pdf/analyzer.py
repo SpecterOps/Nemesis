@@ -1,7 +1,7 @@
 # enrichment_modules/pdf/analyzer.py
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import fitz  # PyMuPDF
 from common.logger import get_logger
@@ -14,7 +14,7 @@ from file_enrichment_modules.pdf.pdf2john import PdfParser
 logger = get_logger(__name__)
 
 
-def parse_xmp_to_structured_data(xmp_xml: Optional[str]) -> dict[str, Any]:
+def parse_xmp_to_structured_data(xmp_xml: str | None) -> dict[str, Any]:
     """
     Extract structured metadata from XMP XML.
 
@@ -126,7 +126,7 @@ def parse_xmp_to_structured_data(xmp_xml: Optional[str]) -> dict[str, Any]:
     return result
 
 
-def _get_pdf_version(doc: fitz.Document, file_path: str) -> Optional[str]:
+def _get_pdf_version(doc: fitz.Document, file_path: str) -> str | None:
     """Extract PDF version from document metadata or file header.
 
     Args:
@@ -289,7 +289,7 @@ def _detect_table_of_contents(doc: fitz.Document) -> bool:
     return False
 
 
-def _extract_xmp_metadata(doc: fitz.Document) -> Optional[dict[str, Any]]:
+def _extract_xmp_metadata(doc: fitz.Document) -> dict[str, Any] | None:
     """Extract and parse XMP metadata to structured format.
 
     Args:

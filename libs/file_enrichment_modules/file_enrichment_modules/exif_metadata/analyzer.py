@@ -96,12 +96,12 @@ def convert_exif_value(value):
         # IFDRational is a fraction type - convert to float
         try:
             return float(value)
-        except:
+        except Exception:
             return str(value)
     elif isinstance(value, bytes):
         try:
             return value.decode("utf-8", errors="ignore")
-        except:
+        except Exception:
             return str(value)
     elif isinstance(value, (tuple, list)):
         return [convert_exif_value(v) for v in value]

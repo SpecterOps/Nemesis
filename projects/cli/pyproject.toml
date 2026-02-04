@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Nemesis CLI"
 authors = [{name = "SpecterOps"}]
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.13,<3.14"
 
 dependencies = [
     "aiohttp>=3.13.3,<4.0.0",
