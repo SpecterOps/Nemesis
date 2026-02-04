@@ -29,4 +29,25 @@ echo "Running ruff format..."
 uvx ruff format .
 
 echo ""
-echo "Linting and formatting complete."
+echo "Running pyright type checking..."
+PYRIGHT_FAILED=0
+for config in $(find "$BASE_DIR/projects" "$BASE_DIR/libs" -name "pyrightconfig.json" -maxdepth 2 2>/dev/null); do
+    PROJECT_DIR="$(dirname "$config")"
+    PROJECT_NAME="$(basename "$PROJECT_DIR")"
+    echo "  Checking $PROJECT_NAME..."
+    if (cd "$PROJECT_DIR" && uv run pyright); then
+        echo "  $PROJECT_NAME: passed"
+    else
+        echo "  $PROJECT_NAME: failed"
+        PYRIGHT_FAILED=1
+    fi
+done
+
+if [ "$PYRIGHT_FAILED" -eq 1 ]; then
+    echo ""
+    echo "Pyright type checking failed."
+    exit 1
+fi
+
+echo ""
+echo "Linting, formatting, and type checking complete."

@@ -5,6 +5,7 @@ These routes provide comprehensive reporting and analytics for files, findings, 
 """
 
 from datetime import UTC, datetime
+from typing import Any
 
 from common.logger import get_logger
 from psycopg import Connection
@@ -107,7 +108,7 @@ def get_source_report_data(
         with conn.cursor() as cur:
             # Build WHERE clause for date filtering
             date_conditions = []
-            date_params = [source_name_upper]
+            date_params: list[Any] = [source_name_upper]
 
             if start_date:
                 date_conditions.append("fe.created_at >= %s")
@@ -134,6 +135,8 @@ def get_source_report_data(
                 date_params,
             )
             summary_row = cur.fetchone()
+            if not summary_row:
+                summary_row = (0, 0, 0, None, None)
 
             # File type breakdown
             cur.execute(
@@ -260,6 +263,8 @@ def get_source_report_data(
                 [source_name_upper],
             )
             chromium_row = cur.fetchone()
+            if not chromium_row:
+                chromium_row = (0, 0)
 
             # Chromium cookies
             cur.execute(
@@ -273,6 +278,8 @@ def get_source_report_data(
                 [source_name_upper],
             )
             cookies_row = cur.fetchone()
+            if not cookies_row:
+                cookies_row = (0, 0)
 
             # DPAPI masterkeys (not source-specific in current schema)
             cur.execute(
@@ -284,6 +291,8 @@ def get_source_report_data(
             """,
             )
             dpapi_row = cur.fetchone()
+            if not dpapi_row:
+                dpapi_row = (0, 0)
 
             # NoseyParker findings
             cur.execute(
@@ -295,7 +304,8 @@ def get_source_report_data(
             """,
                 date_params,
             )
-            noseyparker_count = cur.fetchone()[0]
+            noseyparker_row = cur.fetchone()
+            noseyparker_count = noseyparker_row[0] if noseyparker_row else 0
 
             # YARA matches
             cur.execute(
@@ -307,7 +317,8 @@ def get_source_report_data(
             """,
                 date_params,
             )
-            yara_count = cur.fetchone()[0]
+            yara_row = cur.fetchone()
+            yara_count = yara_row[0] if yara_row else 0
 
             # Top findings (verified true positives first, then by severity)
             cur.execute(
@@ -378,6 +389,8 @@ def get_source_report_data(
                 [source_name_upper],
             )
             workflow_row = cur.fetchone()
+            if not workflow_row:
+                workflow_row = (0, 0, 0, None, None)
 
             # Build the response
             report = SourceReport(
@@ -492,6 +505,8 @@ def get_system_report_data(
                 params,
             )
             summary_row = cur.fetchone()
+            if not summary_row:
+                summary_row = (0, 0, 0)
 
             # Findings summary
             cur.execute(
@@ -530,6 +545,8 @@ def get_system_report_data(
             """,
             )
             creds_row = cur.fetchone()
+            if not creds_row:
+                creds_row = (0, 0)
 
             # Sources list (top 50 by activity)
             cur.execute(
@@ -636,6 +653,8 @@ def get_system_report_data(
                 params,
             )
             enrichment_row = cur.fetchone()
+            if not enrichment_row:
+                enrichment_row = (0, 0, 0, None)
 
             # Determine time range
             if start_date and end_date:
