@@ -22,7 +22,7 @@ dependencies = [
     "psycopg[pool]>=3.2.9,<4.0.0",
     "olefile>=0.47,<0.48",
     "msoffcrypto-tool>=5.4.2,<6.0.0",
-    "protobuf==6.31.1",
+    "protobuf>=6.33.5,<7.0.0",
     "asyncpg>=0.30.0,<0.31.0",
     "pymupdf>=1.26.6,<2.0.0",
 ]

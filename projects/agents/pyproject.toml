@@ -31,7 +31,7 @@ dependencies = [
     "asyncpg>=0.30.0,<0.31.0",
     "psycopg>=3.2.9,<4.0.0",
     "pythonnet>=3.0.4,<4.0.0",
-    "protobuf==6.31.1",
+    "protobuf>=6.33.5,<7.0.0",
 ]
 
 [dependency-groups]
@@ -48,6 +48,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agents"]
+
+[tool.uv]
+constraint-dependencies = ["pyasn1>=0.6.2"]
 
 [tool.uv.sources]
 common = { path = "../../libs/common", editable = true }

@@ -12,7 +12,7 @@ dependencies = [
     "dapr==1.16.0",
     "pydantic>=2.10.4,<3.0.0",
     "uvicorn>=0.34.0,<0.35.0",
-    "python-multipart>=0.0.20,<0.1.0",
+    "python-multipart>=0.0.22,<0.1.0",
     "minio>=7.2.14,<8.0.0",
     "common",
     "nemesis_dpapi",
@@ -42,6 +42,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["web_api"]
+
+[tool.uv]
+constraint-dependencies = ["pyasn1>=0.6.2"]
 
 [tool.uv.sources]
 common = { path = "../../libs/common", editable = true }

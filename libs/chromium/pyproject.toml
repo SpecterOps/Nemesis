@@ -30,6 +30,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["chromium"]
 
+[tool.uv]
+constraint-dependencies = ["pyasn1>=0.6.2"]
+
 [tool.uv.sources]
 nemesis_dpapi = { path = "../nemesis_dpapi", editable = true }
 file_linking = { path = "../file_linking", editable = true }
