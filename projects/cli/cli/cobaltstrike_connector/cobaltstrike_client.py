@@ -145,6 +145,7 @@ class CobaltStrikeClient:
 
         # Create SSL context based on verify_ssl setting
         import ssl
+
         ssl_context = ssl.create_default_context()
         if not self.verify_ssl:
             ssl_context.check_hostname = False
@@ -153,7 +154,7 @@ class CobaltStrikeClient:
         self._session = aiohttp.ClientSession(
             cookie_jar=aiohttp.CookieJar(),
             connector=aiohttp.TCPConnector(ssl=ssl_context if self.verify_ssl else False),
-            timeout=timeout
+            timeout=timeout,
         )
         return self
 
@@ -187,7 +188,7 @@ class CobaltStrikeClient:
             try:
                 return await func(self, *args, **kwargs)
             except aiohttp.ClientResponseError as e:
-                if e.status in (401,403):  # Unauthorized - token might be expired
+                if e.status in (401, 403):  # Unauthorized - token might be expired
                     self.logger.info("Token appears to be expired, attempting reauthentication")
                     if await self._reauthenticate():
                         self.logger.info("Reauthentication successful, retrying original request")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import struct
-from enum import Enum, IntFlag
+from enum import IntFlag, StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 from uuid import UUID
@@ -88,7 +88,7 @@ class MasterKeyPolicy(FlagMixin, IntFlag):
     DPAPI_OWF = 0x4  # Use the DPAPI One way function of the password (SHA_1(pw))
 
 
-class MasterKeyType(str, Enum):
+class MasterKeyType(StrEnum):
     """Type of DPAPI masterkey, which determines the decryption method.
 
     This classification is based on the account type that generated the masterkey

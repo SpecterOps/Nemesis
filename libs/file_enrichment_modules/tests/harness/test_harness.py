@@ -111,15 +111,15 @@ class TestMockAsyncpgPool:
         """Test registering data and fetching it."""
         pool = MockAsyncpgPool()
 
-        pool.register_file_enriched("test-uuid", {
-            "file_name": "test.exe",
-            "size": 1024,
-        })
-
-        row = await pool.fetchrow(
-            "SELECT * FROM files_enriched WHERE object_id = $1",
-            "test-uuid"
+        pool.register_file_enriched(
+            "test-uuid",
+            {
+                "file_name": "test.exe",
+                "size": 1024,
+            },
         )
+
+        row = await pool.fetchrow("SELECT * FROM files_enriched WHERE object_id = $1", "test-uuid")
 
         assert row is not None
         assert row["file_name"] == "test.exe"
@@ -133,10 +133,7 @@ class TestMockAsyncpgPool:
         """Test that fetchrow returns None for unknown IDs."""
         pool = MockAsyncpgPool()
 
-        row = await pool.fetchrow(
-            "SELECT * FROM files_enriched WHERE object_id = $1",
-            "unknown-uuid"
-        )
+        row = await pool.fetchrow("SELECT * FROM files_enriched WHERE object_id = $1", "unknown-uuid")
 
         assert row is None
 

@@ -55,3 +55,4 @@ pydecipher = { git = "https://github.com/HarmJ0y/pydecipher.git" }
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
+addopts = "--ignore=tests/integration"

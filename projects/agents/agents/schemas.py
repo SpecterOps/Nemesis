@@ -1,10 +1,10 @@
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator
 
 
-class TriageCategory(str, Enum):
+class TriageCategory(StrEnum):
     """Triage decision categories"""
 
     TRUE_POSITIVE = "true_positive"

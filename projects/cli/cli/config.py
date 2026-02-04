@@ -91,11 +91,14 @@ class OutflankConfig(BaseConfig):
             return None
         return Path(v)
 
+
 class CobaltStrikeConfig(BaseConfig):
     url: StrictHttpUrl
     credential: PasswordCredential
     project: str = Field(description="Project name for Nemesis file uploads")
-    poll_interval_sec: Annotated[int, Field(gt=0, description="Polling interval of the Cobalt Strike API in seconds")] = 3
+    poll_interval_sec: Annotated[
+        int, Field(gt=0, description="Polling interval of the Cobalt Strike API in seconds")
+    ] = 3
 
 
 class Config(BaseConfig):

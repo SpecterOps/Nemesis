@@ -204,9 +204,7 @@ class CobaltStrikeDownloadProcessor:
         success = await self.cobalt_strike.download_file(download.id, str(temp_file))
 
         if not success:
-            logger.error(
-                f"Failed to download file from C2. Download ID: {download.id}. Download Path: {download.path}"
-            )
+            logger.error(f"Failed to download file from C2. Download ID: {download.id}. Download Path: {download.path}")
             return DownloadedFileInfo(temp_file, delete_after=True, success=False)
 
         return DownloadedFileInfo(temp_file, delete_after=True, success=True)

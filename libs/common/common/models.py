@@ -1,6 +1,6 @@
 # src/common/models.py
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
@@ -24,7 +24,7 @@ class FileObject(BaseModel):
     metadata: dict | None = None
 
 
-class FindingCategory(str, Enum):
+class FindingCategory(StrEnum):
     CREDENTIAL = "credential"
     EXTRACTED_HASH = "extracted_hash"
     EXTRACTED_DATA = "extracted_data"
@@ -35,7 +35,7 @@ class FindingCategory(str, Enum):
     INFORMATIONAL = "informational"
 
 
-class FindingOrigin(str, Enum):
+class FindingOrigin(StrEnum):
     ENRICHMENT_MODULE = "enrichment_module"
     AI_AGENT = "ai_agent"
     MANUAL = "manual"
@@ -310,11 +310,7 @@ class File(BaseModel):
             True if file has an originating_object_id and nesting_level > 0,
             False otherwise
         """
-        return (
-            self.originating_object_id is not None
-            and self.nesting_level is not None
-            and self.nesting_level > 0
-        )
+        return self.originating_object_id is not None and self.nesting_level is not None and self.nesting_level > 0
 
     def is_transform(self) -> bool:
         """
@@ -327,10 +323,7 @@ class File(BaseModel):
             True if file has an originating_object_id and nesting_level is None or 0,
             False otherwise
         """
-        return (
-            self.originating_object_id is not None
-            and (self.nesting_level is None or self.nesting_level == 0)
-        )
+        return self.originating_object_id is not None and (self.nesting_level is None or self.nesting_level == 0)
 
 
 ##########################################

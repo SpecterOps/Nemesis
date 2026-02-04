@@ -12,7 +12,6 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 from nemesis_dpapi import DpapiManager
 
 if TYPE_CHECKING:
-
     from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)

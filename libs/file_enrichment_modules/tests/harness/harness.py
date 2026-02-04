@@ -138,9 +138,7 @@ class ModuleTestHarness:
 
         # Also patch at the import site if the module imported StorageMinio
         try:
-            patches_to_apply.append(
-                patch(f"{module_name}.StorageMinio", return_value=self.storage)
-            )
+            patches_to_apply.append(patch(f"{module_name}.StorageMinio", return_value=self.storage))
         except Exception:
             pass  # Module might not have imported StorageMinio directly
 

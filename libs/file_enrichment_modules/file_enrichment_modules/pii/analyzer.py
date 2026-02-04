@@ -158,11 +158,7 @@ class PIIAnalyzer(EnrichmentModule):
                 content = content[:approx_chars]
 
             # Analyze with Presidio
-            results = analyzer.analyze(
-                text=content,
-                entities=SUPPORTED_PII_ENTITIES,
-                language='en'
-            )
+            results = analyzer.analyze(text=content, entities=SUPPORTED_PII_ENTITIES, language="en")
 
             # Filter by threshold and organize by type
             findings_by_type = {}
@@ -178,7 +174,7 @@ class PIIAnalyzer(EnrichmentModule):
                     findings_by_type[pii_type] = []
 
                 # Extract the matched value and context
-                value = content[result.start:result.end]
+                value = content[result.start : result.end]
                 length = result.end - result.start
                 context = self._get_match_context(content, result.start, length)
 

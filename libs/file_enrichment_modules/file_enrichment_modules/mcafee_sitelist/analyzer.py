@@ -24,6 +24,7 @@ logger = get_logger(__name__)
 # Credit to funoverip
 # No license
 
+
 class McAfeeSiteListParser(EnrichmentModule):
     name: str = "mcafee_sitelist_parser"
     dependencies: list[str] = []
@@ -212,12 +213,12 @@ rule Detect_McAfee_SiteList_XML {
             summary += f"## {cred['type']} - {cred['name']}\n"
             summary += f"* **Server**: `{cred['server']}`\n"
             summary += f"* **Username**: `{cred['username']}`\n"
-            if cred['domain_name']:
+            if cred["domain_name"]:
                 summary += f"* **Domain**: `{cred['domain_name']}`\n"
             summary += f"* **Password**: `{cred['password']}`\n"
-            if cred['share_name']:
+            if cred["share_name"]:
                 summary += f"* **Share**: `{cred['share_name']}`\n"
-            if cred['relative_path']:
+            if cred["relative_path"]:
                 summary += f"* **Path**: `{cred['relative_path']}`\n"
             summary += f"* **Enabled**: `{cred['enabled']}`\n\n"
 
@@ -273,12 +274,12 @@ rule Detect_McAfee_SiteList_XML {
                         display += f"Name: {cred['name']}\n"
                         display += f"Server: {cred['server']}\n"
                         display += f"Username: {cred['username']}\n"
-                        if cred['domain_name']:
+                        if cred["domain_name"]:
                             display += f"Domain: {cred['domain_name']}\n"
                         display += f"Password: {cred['password']}\n"
-                        if cred['share_name']:
+                        if cred["share_name"]:
                             display += f"Share: {cred['share_name']}\n"
-                        if cred['relative_path']:
+                        if cred["relative_path"]:
                             display += f"Path: {cred['relative_path']}\n"
                         display += f"Enabled: {cred['enabled']}\n"
                         display += f"Local: {cred['local']}\n"

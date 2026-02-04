@@ -268,10 +268,7 @@ class CertificateAnalyzer(EnrichmentModule):
             if isinstance(ext.value, x509.ExtendedKeyUsage):
                 eku_list = []
                 for eku in ext.value:
-                    eku_list.append({
-                        "oid": eku.dotted_string,
-                        "name": eku._name
-                    })
+                    eku_list.append({"oid": eku.dotted_string, "name": eku._name})
                 ext_info["extended_key_usages"] = eku_list
 
             # Special handling for Subject Alternative Names
@@ -302,7 +299,7 @@ class CertificateAnalyzer(EnrichmentModule):
                                 # The value includes the tag (0x0c for UTF8String) and length
                                 # Skip the first 2 bytes (tag + length) to get the actual string
                                 value_bytes = san.value
-                                if len(value_bytes) >= 2 and value_bytes[0] == 0x0c:
+                                if len(value_bytes) >= 2 and value_bytes[0] == 0x0C:
                                     # 0x0c is UTF8String tag, next byte is length
                                     upn_value = value_bytes[2:].decode("utf-8")
                                     san_entry["value"] = upn_value
@@ -371,9 +368,15 @@ class CertificateAnalyzer(EnrichmentModule):
                         report_lines.append("  - Reason: File uses legacy/unsupported encryption algorithm")
                         if encryption_info.get("error_details"):
                             report_lines.append(f"  - Details: {encryption_info['error_details']}")
-                        report_lines.append("  - Note: This file may have been encrypted with an older version of OpenSSL")
-                        report_lines.append("         or uses algorithms like RC2, RC4, or 3DES that are no longer supported")
-                        report_lines.append("         by modern cryptography libraries. Consider re-exporting the certificate")
+                        report_lines.append(
+                            "  - Note: This file may have been encrypted with an older version of OpenSSL"
+                        )
+                        report_lines.append(
+                            "         or uses algorithms like RC2, RC4, or 3DES that are no longer supported"
+                        )
+                        report_lines.append(
+                            "         by modern cryptography libraries. Consider re-exporting the certificate"
+                        )
                         report_lines.append("         with a modern encryption algorithm (AES).")
                     else:
                         report_lines.append("  - Password cracking: FAILED (none of the common passwords worked)")

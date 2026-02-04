@@ -33,15 +33,23 @@ class TestParsePdfFile:
 
         # Check metadata fields (nested in metadata dict)
         metadata = result["metadata"]
-        assert metadata["title"] == "Microsoft Word - Document4", f"Expected title 'Microsoft Word - Document4', got {metadata['title']}"
-        assert metadata["producer"] == "macOS Version 12.6 (Build 21G115) Quartz PDFContext", f"Expected specific producer, got {metadata['producer']}"
+        assert metadata["title"] == "Microsoft Word - Document4", (
+            f"Expected title 'Microsoft Word - Document4', got {metadata['title']}"
+        )
+        assert metadata["producer"] == "macOS Version 12.6 (Build 21G115) Quartz PDFContext", (
+            f"Expected specific producer, got {metadata['producer']}"
+        )
         assert metadata["creator"] == "Word", f"Expected creator 'Word', got {metadata['creator']}"
 
         # Check dates are properly parsed
         assert metadata["created"] is not None, "Created date should not be None"
         assert metadata["modified"] is not None, "Modified date should not be None"
-        assert metadata["created"].startswith("2023-03-24"), f"Expected creation date to start with 2023-03-24, got {metadata['created']}"
-        assert metadata["modified"].startswith("2023-03-24"), f"Expected modification date to start with 2023-03-24, got {metadata['modified']}"
+        assert metadata["created"].startswith("2023-03-24"), (
+            f"Expected creation date to start with 2023-03-24, got {metadata['created']}"
+        )
+        assert metadata["modified"].startswith("2023-03-24"), (
+            f"Expected modification date to start with 2023-03-24, got {metadata['modified']}"
+        )
 
         # Check page size
         assert result["page_size"] is not None, "Page size should not be None"

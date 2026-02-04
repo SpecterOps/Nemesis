@@ -195,13 +195,13 @@ rule Detect_GPP_CPassword_XML {
             summary += f"* **Username**: `{cred['username']}`\n"
             summary += f"* **Password**: `{cred['password']}`\n"
 
-            if cred['action']:
+            if cred["action"]:
                 summary += f"* **Action**: `{cred['action']}`\n"
-            if cred['description']:
+            if cred["description"]:
                 summary += f"* **Description**: `{cred['description']}`\n"
-            if cred['full_name']:
+            if cred["full_name"]:
                 summary += f"* **Full Name**: `{cred['full_name']}`\n"
-            if cred['changed']:
+            if cred["changed"]:
                 summary += f"* **Changed**: `{cred['changed']}`\n"
 
             summary += f"* **Never Expires**: `{cred['never_expires']}`\n"
@@ -258,13 +258,13 @@ rule Detect_GPP_CPassword_XML {
                         display += f"Username: {cred['username']}\n"
                         display += f"Password: {cred['password']}\n"
 
-                        if cred['action']:
+                        if cred["action"]:
                             display += f"Action: {cred['action']}\n"
-                        if cred['description']:
+                        if cred["description"]:
                             display += f"Description: {cred['description']}\n"
-                        if cred['full_name']:
+                        if cred["full_name"]:
                             display += f"Full Name: {cred['full_name']}\n"
-                        if cred['changed']:
+                        if cred["changed"]:
                             display += f"Changed: {cred['changed']}\n"
 
                         display += f"Never Expires: {cred['never_expires']}\n"

@@ -249,9 +249,7 @@ rule CCache_File {
 
                 finding_summary += "\n### Security Impact\n\n"
                 if has_tgt:
-                    finding_summary += (
-                        "- **TGT found:** Can be used to request service tickets for any service\n"
-                    )
+                    finding_summary += "- **TGT found:** Can be used to request service tickets for any service\n"
                     finding_summary += "- **Pass-the-ticket:** Export `KRB5CCNAME` and use with impacket tools\n"
                 else:
                     finding_summary += "- **Service tickets:** Can be used to access specific services\n"

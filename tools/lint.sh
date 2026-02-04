@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -e
+
+# Get the absolute path to the project root (one level up from the tools folder)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(dirname "$SCRIPT_DIR")"
+
+cd "$BASE_DIR"
+
+# Check that ruff is available via uvx
+if ! command -v uvx &> /dev/null; then
+    echo "Error: 'uvx' not found. Install uv first:"
+    echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+    exit 1
+fi
+
+if ! uvx ruff version &> /dev/null; then
+    echo "Error: 'ruff' could not be run via uvx."
+    echo "  Try: uvx ruff version"
+    echo "  Or install ruff directly: uv tool install ruff@latest"
+    exit 1
+fi
+
+echo "Running ruff check with --fix..."
+uvx ruff check . --fix
+
+echo ""
+echo "Running ruff format..."
+uvx ruff format .
+
+echo ""
+echo "Linting and formatting complete."

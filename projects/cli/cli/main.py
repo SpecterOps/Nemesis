@@ -104,6 +104,7 @@ def connect_mythic(config: str, debug: bool, showconfig: bool) -> None:
         click.echo(f"Unexpected error: {e}")
         raise click.Abort() from e
 
+
 @cli.command()
 @connector_options("cobaltstrike")
 def connect_cobaltstrike(config: str, debug: bool, showconfig: bool):
@@ -125,6 +126,7 @@ def connect_cobaltstrike(config: str, debug: bool, showconfig: bool):
     except Exception as e:
         logger.exception("Unhandled exception in connector", e)
         sys.exit(1)
+
 
 def get_os_user_and_host_string() -> str:
     """Get the current OS user and hostname for metadata"""

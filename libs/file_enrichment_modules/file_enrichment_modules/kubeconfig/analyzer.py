@@ -171,13 +171,9 @@ rule Detect_Kubeconfig {
 
             # Embedded certificate data (base64 encoded)
             if "client-certificate-data" in user:
-                user_info["client_certificate_data"] = self._decode_base64_data(
-                    user.get("client-certificate-data")
-                )
+                user_info["client_certificate_data"] = self._decode_base64_data(user.get("client-certificate-data"))
             if "client-key-data" in user:
-                user_info["client_key_data"] = self._decode_base64_data(
-                    user.get("client-key-data")
-                )
+                user_info["client_key_data"] = self._decode_base64_data(user.get("client-key-data"))
 
             # Token-based auth
             user_info["token"] = user.get("token")
@@ -207,9 +203,13 @@ rule Detect_Kubeconfig {
 
                 # Extract security-relevant tokens/secrets from provider config
                 sensitive_keys = [
-                    "access-token", "id-token", "refresh-token",
-                    "client-secret", "client-id", "tenant-id",
-                    "apiserver-id"
+                    "access-token",
+                    "id-token",
+                    "refresh-token",
+                    "client-secret",
+                    "client-id",
+                    "tenant-id",
+                    "apiserver-id",
                 ]
                 sensitive_config = {}
                 for key in sensitive_keys:
@@ -255,13 +255,15 @@ rule Detect_Kubeconfig {
     def _has_credentials(self, users: list[dict]) -> bool:
         """Check if any user has extractable credentials."""
         for user in users:
-            if any([
-                user.get("token"),
-                user.get("client_key_data"),
-                user.get("client_key"),
-                user.get("password"),
-                user.get("client_certificate_data"),
-            ]):
+            if any(
+                [
+                    user.get("token"),
+                    user.get("client_key_data"),
+                    user.get("client_key"),
+                    user.get("password"),
+                    user.get("client_certificate_data"),
+                ]
+            ):
                 return True
             # Check auth provider for tokens
             auth_provider = user.get("auth_provider")
@@ -300,9 +302,9 @@ rule Detect_Kubeconfig {
                 cred_types.add("impersonation")
         return list(cred_types)
 
-    def _create_finding_summary(self, clusters: list[dict], users: list[dict],
-                                 contexts: list[dict], current_context: str,
-                                 file_name: str) -> str:
+    def _create_finding_summary(
+        self, clusters: list[dict], users: list[dict], contexts: list[dict], current_context: str, file_name: str
+    ) -> str:
         """Creates a markdown summary for the kubeconfig finding."""
         summary = f"# Kubernetes Configuration Analysis - {file_name}\n\n"
 
@@ -356,7 +358,7 @@ rule Detect_Kubeconfig {
             # Exec auth
             if user.get("exec"):
                 exec_info = user["exec"]
-                args_str = ' '.join(exec_info.get('args', []))
+                args_str = " ".join(exec_info.get("args", []))
                 summary += f"* **Exec Command**: `{exec_info['command']} {args_str}`\n"
                 if exec_info.get("env"):
                     env_vars = [f"{e['name']}={e['value']}" for e in exec_info["env"] if e]
@@ -444,7 +446,10 @@ rule Detect_Kubeconfig {
 
             # Determine severity based on credential types
             severity = 5 if not has_creds else 8
-            if any(ct in cred_types for ct in ["bearer_token", "basic_auth", "access_token", "refresh_token", "client_secret"]):
+            if any(
+                ct in cred_types
+                for ct in ["bearer_token", "basic_auth", "access_token", "refresh_token", "client_secret"]
+            ):
                 severity = 9  # Direct credentials are highest severity
 
             # Create finding
@@ -532,7 +537,7 @@ rule Detect_Kubeconfig {
                     # Exec auth
                     if user.get("exec"):
                         exec_info = user["exec"]
-                        args_str = ' '.join(exec_info.get('args', []))
+                        args_str = " ".join(exec_info.get("args", []))
                         cmd = f"{exec_info['command']} {args_str}"
                         display += f"    Exec:        {cmd}\n"
                         if exec_info.get("env"):

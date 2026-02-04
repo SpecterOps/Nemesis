@@ -118,11 +118,16 @@ def submit_file(
     cmd = [
         str(submit_script),
         file_path,
-        "-h", host,
-        "-u", username,
-        "-p", password,
-        "-j", project,
-        "-a", "e2e-test-agent",
+        "-h",
+        host,
+        "-u",
+        username,
+        "-p",
+        password,
+        "-j",
+        project,
+        "-a",
+        "e2e-test-agent",
         "--debug",
     ]
 
@@ -337,9 +342,7 @@ def verify_results(results: dict, module_name: str) -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="End-to-end integration test for enrichment modules"
-    )
+    parser = argparse.ArgumentParser(description="End-to-end integration test for enrichment modules")
     parser.add_argument(
         "--module",
         required=True,
@@ -390,6 +393,7 @@ def main():
 
     # Suppress SSL warnings
     import urllib3
+
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     print("=" * 60)

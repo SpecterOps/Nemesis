@@ -78,6 +78,11 @@ cd projects/web_api && uv run pytest tests/test_specific.py
 cd projects/web_api && uv run pytest tests/test_file.py::test_function_name
 ```
 
+### Testing Guidelines
+- **Write tests for every new feature.** New functionality must include tests before it is considered complete.
+- **Cover both happy path and unhappy path cases.** Tests should verify correct behavior with valid inputs (positive cases) and proper error handling with invalid inputs, missing data, edge cases, and failure conditions (negative cases).
+- **Mock external services.** Do not make real calls to external dependencies (Dapr, Minio, PostgreSQL, RabbitMQ, etc.) in unit tests. Use mocks or fakes to isolate the code under test.
+
 ### Docker Commands
 Information about building dev/prod container images can be found in the [docker compose docs](./docs/docker_compose.md).
 
@@ -151,6 +156,8 @@ infra/              # Infrastructure configuration
 - Root `pyproject.toml`: Ruff linting config (line-length: 120, Python 3.12)
 - `.env`: Passwords, URLs, feature flags (copy from `env.example`)
 - `infra/postgres/01-schema.sql`: Database schema
+
+
 
 ### Adding Enrichment Modules
 New file enrichment modules go in `libs/file_enrichment_modules/`. Each module implements a standard interface for detecting applicable files and extracting data.
