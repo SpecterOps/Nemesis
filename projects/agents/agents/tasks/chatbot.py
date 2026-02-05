@@ -1,4 +1,5 @@
 """Chatbot agent for interactive querying of Nemesis data."""
+# pyright: reportAttributeAccessIssue=false
 
 import asyncio
 import os

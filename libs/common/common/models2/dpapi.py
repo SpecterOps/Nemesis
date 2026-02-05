@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from common.logger import get_logger
-from nemesis_dpapi.types import Sid
+from nemesis_dpapi.types import Sid  # pyright: ignore[reportMissingImports]
 from pydantic import BaseModel, Discriminator, Field, Tag, field_serializer, field_validator
 
 logger = get_logger(__name__)

@@ -52,9 +52,9 @@ class ContainerAnalyzer(EnrichmentModule):
         """Get contents of a 7z file without extraction."""
         with py7zr.SevenZipFile(file_path) as sz:
             files = []
-            for filename, info in sz.files.items():
-                # 7z files might not have size info for some files
-                size = info.uncompressed if hasattr(info, "uncompressed") else 0
+            for entry in sz.files:
+                filename = entry.filename if hasattr(entry, "filename") else str(entry)
+                size = entry.uncompressed if hasattr(entry, "uncompressed") else 0
                 files.append((filename, size))
             return files
 

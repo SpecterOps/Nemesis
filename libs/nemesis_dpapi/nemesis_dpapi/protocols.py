@@ -56,7 +56,7 @@ class DpapiManagerProtocol(Protocol):
         """
         ...
 
-    async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
+    async def get_system_credentials(self) -> list[DpapiSystemCredential]:
         """Retrieve DPAPI system credential(s)."""
         ...
 

@@ -12,6 +12,8 @@ logger = get_logger(__name__)
 @workflow_activity
 async def store_transform(ctx, activity_input):
     """Store transform data in PostgreSQL."""
+    assert global_vars.asyncpg_pool is not None, "asyncpg_pool must be initialized"
+
     try:
         object_id = activity_input["object_id"]
         transform = activity_input["transform"]

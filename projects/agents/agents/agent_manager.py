@@ -138,7 +138,7 @@ class AgentManager:
                 agent = self.get_agent_instance(agent_key)
                 if hasattr(agent, "has_prompt") and agent.has_prompt:
                     if hasattr(agent, "system_prompt"):
-                        success = prompt_manager.save_prompt(agent.name, agent.system_prompt, agent.description)
+                        success = prompt_manager.save_prompt(agent.name, agent.system_prompt, agent.description)  # pyright: ignore[reportAttributeAccessIssue]
                         if success:
                             logger.debug("Initialized prompt for agent", agent_key=agent_key)
                         else:

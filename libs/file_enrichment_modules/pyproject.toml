@@ -25,6 +25,12 @@ dependencies = [
     "spacy>=3.8.3,<4.0.0",
     "py7zr>=0.22.0,<1.0.0",
     "libscca-python>=20240427",
+    "pypykatz>=0.6.11,<0.7.0",
+    "pyarrow>=19.0.1,<20.0.0",
+    "msoffcrypto-tool>=5.4.2,<6.0.0",
+    "oletools>=0.60.2,<0.61.0",
+    "regipy>=5.2.0,<6.0.0",
+    "pillow>=11.3.0,<12.0.0",
 ]
 
 [dependency-groups]
@@ -34,6 +40,7 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pydecipher",
     "lief>=0.16.5",
+    "pyright>=1.1",
 ]
 
 [build-system]

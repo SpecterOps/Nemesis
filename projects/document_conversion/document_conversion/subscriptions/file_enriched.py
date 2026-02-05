@@ -79,7 +79,7 @@ def is_encrypted_file(file_data: FileEnriched):
             resource=file_data.object_id,
             request_id="",
             host_id="",
-            response=None,
+            response=None,  # pyright: ignore[reportArgumentType]
         )
 
     with storage.download(file_data.object_id) as temp_file:

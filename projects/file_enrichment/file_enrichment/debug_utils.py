@@ -1,4 +1,5 @@
 """Debug utilities for identifying asyncio blocking issues."""
+# pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 
 import asyncio
 import faulthandler

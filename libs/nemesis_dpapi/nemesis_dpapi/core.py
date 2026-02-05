@@ -64,19 +64,19 @@ class BaseModel(PydanticBaseModel):
 class FlagMixin:
     def has_any(self: Self, flags: Self) -> bool:
         """True if *any* bit in `flags` is set in `self`."""
-        return bool(self & flags)
+        return bool(self & flags)  # pyright: ignore[reportOperatorIssue]
 
     def has_all(self: Self, flags: Self) -> bool:
         """True if *all* bits in `flags` are set in `self`."""
-        return (self & flags) == flags
+        return (self & flags) == flags  # pyright: ignore[reportOperatorIssue]
 
     def enable(self: Self, flags: Self) -> Self:
         """Return self | flags."""
-        return self | flags
+        return self | flags  # pyright: ignore[reportOperatorIssue]
 
     def disable(self: Self, flags: Self) -> Self:
         """Return self with `flags` cleared."""
-        return self & ~flags
+        return self & ~flags  # pyright: ignore[reportOperatorIssue]
 
 
 class MasterKeyPolicy(FlagMixin, IntFlag):

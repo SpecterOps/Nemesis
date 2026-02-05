@@ -57,6 +57,7 @@ async def process_chromium_local_state(
             with open(temp_file.name, encoding="utf-8") as f:
                 content = f.read()
 
+    assert asyncpg_pool is not None, "asyncpg_pool is required for Local State processing"
     state_key_data = await _insert_state_keys(file_enriched, username, browser, content, asyncpg_pool, dpapi_manager)
 
     logger.debug("Completed processing Chromium Local State", object_id=object_id)

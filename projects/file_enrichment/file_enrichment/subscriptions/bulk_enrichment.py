@@ -31,6 +31,7 @@ async def bulk_enrichment_subscription_handler(event: CloudEvent[BulkEnrichmentE
         )
 
         # This will block if we're at max capacity, providing natural backpressure
+        assert global_vars.workflow_manager is not None
         await global_vars.workflow_manager.run_single_enrichment_workflow(workflow_input)
 
     except Exception:

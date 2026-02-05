@@ -52,7 +52,7 @@ class ModelManager:
         if not cls._model:
             try:
                 cls._model = OpenAIModel(
-                    model_name=cls._model_name,
+                    model_name=cls._model_name,  # pyright: ignore[reportArgumentType]
                     provider=OpenAIProvider(
                         base_url=cls._base_url, api_key=cls._token, http_client=create_rate_limit_client()
                     ),

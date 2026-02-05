@@ -1,7 +1,7 @@
 # Graciously taken from here (no license): https://github.com/GoatSwitch/GoatSwitch-backend/blob/3eae2aac38bb04140cb01b56b2288318b4c220d9/tools/gs_common/gs_common/tracing/utils.py#L23
 import contextvars
 
-from dapr.ext.grpc import InvokeMethodRequest
+from dapr.ext.grpc import InvokeMethodRequest  # pyright: ignore[reportMissingImports]
 
 # Context variable for trace_id
 current_trace_id = contextvars.ContextVar("current_trace_id", default=None)

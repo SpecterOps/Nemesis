@@ -109,6 +109,7 @@ class WorkflowManager:
                         logger.warning(f"Could not terminate workflow {wf_id}: {e}")
 
                     # Update database status using tracking service
+                    assert global_vars.tracking_service is not None
                     await global_vars.tracking_service.update_status(
                         wf_id,
                         WorkflowStatus.TIMEOUT,
@@ -152,6 +153,7 @@ class WorkflowManager:
 
             try:
                 # Start tracking workflow in database
+                assert global_vars.tracking_service is not None
                 instance_id = await global_vars.tracking_service.register_workflow(
                     object_id=object_id,
                     filename=base_filename,
@@ -215,6 +217,7 @@ class WorkflowManager:
                 span.set_attribute("workflow.object_id", object_id)
 
                 # Start tracking workflow in database
+                assert global_vars.tracking_service is not None
                 instance_id = await global_vars.tracking_service.register_workflow(
                     object_id=object_id,
                     filename=filename,

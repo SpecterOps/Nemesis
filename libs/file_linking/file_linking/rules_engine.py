@@ -230,10 +230,11 @@ class FileLinkingEngine:
 
                 # Convert placeholder to regex and try to match
                 pattern = self.placeholder_resolver._convert_placeholder_to_regex(placeholder_path)
-                if pattern and pattern.match(real_path):
+                match = pattern.match(real_path) if pattern else None
+                if match:
                     # This real path matches an existing placeholder
                     resolved_path = self.placeholder_resolver._replace_placeholders_with_captures(
-                        placeholder_path, pattern.match(real_path)
+                        placeholder_path, match
                     )
 
                     logger.info(

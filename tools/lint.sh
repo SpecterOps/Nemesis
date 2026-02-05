@@ -7,6 +7,12 @@ BASE_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$BASE_DIR"
 
+# Deactivate any active virtual environment so it doesn't interfere
+if [ -n "$VIRTUAL_ENV" ]; then
+    PATH="$(echo "$PATH" | tr ':' '\n' | grep -Fv "$VIRTUAL_ENV" | paste -sd ':')"
+    unset VIRTUAL_ENV
+fi
+
 # Check that ruff is available via uvx
 if ! command -v uvx &> /dev/null; then
     echo "Error: 'uvx' not found. Install uv first:"
@@ -27,6 +33,21 @@ uvx ruff check . --fix
 echo ""
 echo "Running ruff format..."
 uvx ruff format .
+
+# Check that pyright is available in at least one project
+PYRIGHT_FOUND=0
+for config in $(find "$BASE_DIR/projects" "$BASE_DIR/libs" -name "pyrightconfig.json" -maxdepth 2 2>/dev/null); do
+    PROJECT_DIR="$(dirname "$config")"
+    if (cd "$PROJECT_DIR" && uv run pyright --version &> /dev/null); then
+        PYRIGHT_FOUND=1
+        break
+    fi
+done
+if [ "$PYRIGHT_FOUND" -eq 0 ]; then
+    echo "Error: 'pyright' not found in any project's dev dependencies."
+    echo "  Add pyright to your project's [dependency-groups] dev and run: uv sync"
+    exit 1
+fi
 
 echo ""
 echo "Running pyright type checking..."

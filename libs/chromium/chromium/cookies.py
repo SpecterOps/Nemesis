@@ -56,6 +56,7 @@ async def process_chromium_cookies(
         logger.warning("File is not a valid SQLite3 database", object_id=object_id, file_path=file_enriched.path)
         return
 
+    assert asyncpg_pool is not None, "asyncpg_pool is required for cookie processing"
     await _insert_cookies(file_enriched, username, browser, db_path, dpapi_manager, asyncpg_pool)
 
     logger.debug("Completed processing Chromium Cookies", object_id=object_id)
@@ -83,6 +84,7 @@ async def _insert_cookies(
     asyncpg_pool: asyncpg.Pool | None = None,
 ) -> None:
     """Extract cookies from Cookies database and insert into chromium.cookies table."""
+    assert asyncpg_pool is not None, "asyncpg_pool is required"
     try:
         # Read from SQLite
         with sqlite3.connect(db_path) as conn:
@@ -272,9 +274,8 @@ async def _insert_cookies(
 
         logger.info("Inserted cookies into database", count=len(cookies_data))
 
-    except Exception as e:
+    except Exception:
         logger.exception(
-            e,
             "Error processing Cookies",
             object_id=file_enriched.object_id,
             file_path=file_enriched.path,

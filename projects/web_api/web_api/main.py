@@ -300,7 +300,7 @@ async def upload_file(
         submission_id = await submit_file(file_model)
 
         logger.info("File metadata submitted", submission_id=str(submission_id), object_id=object_id)
-        return FileWithMetadataResponse(object_id=object_id, submission_id=submission_id)
+        return FileWithMetadataResponse(object_id=uuid.UUID(object_id), submission_id=submission_id)
 
     except Exception as e:
         logger.exception(message="Error processing file upload")

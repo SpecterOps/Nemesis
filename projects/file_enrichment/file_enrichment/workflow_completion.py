@@ -24,6 +24,7 @@ async def publish_workflow_completion(instance_id, completed=True):
 
     from . import global_vars
 
+    assert global_vars.asyncpg_pool is not None
     try:
         async with global_vars.asyncpg_pool.acquire() as conn:
             # Get workflow data with a single optimized JOIN query

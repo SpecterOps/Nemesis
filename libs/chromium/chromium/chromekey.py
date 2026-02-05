@@ -4,7 +4,10 @@ from uuid import UUID
 
 import asyncpg
 from common.logger import get_logger
-from file_enrichment_modules.cng_file.cng_parser import check_bcrypt_key_blob, extract_final_key_material
+from file_enrichment_modules.cng_file.cng_parser import (  # pyright: ignore[reportMissingImports]
+    check_bcrypt_key_blob,
+    extract_final_key_material,
+)
 from nemesis_dpapi import Blob, DpapiManager, MasterKeyNotDecryptedError, MasterKeyNotFoundError
 
 from .local_state import retry_decrypt_state_keys_for_chromekey
@@ -34,7 +37,7 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
             "state_keys_result": dict (optional, if decryption succeeded)
         }
     """
-    result = {"decrypted": False}
+    result: dict[str, bool | dict] = {"decrypted": False}
     cng_key_blob_entropy = b"xT5rZW5qVVbrvpuA\x00"
 
     # Fetch the chrome_key record

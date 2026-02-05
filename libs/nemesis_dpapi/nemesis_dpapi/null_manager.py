@@ -47,7 +47,7 @@ class NullDpapiManager(DpapiManagerProtocol):
         """Retrieve masterkey(s) with optional filtering (always returns empty list)."""
         return []
 
-    async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
+    async def get_system_credentials(self) -> list[DpapiSystemCredential]:
         """Retrieve DPAPI system credential(s) (always returns empty list)."""
         return []
 

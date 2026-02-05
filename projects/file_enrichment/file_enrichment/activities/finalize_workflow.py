@@ -20,6 +20,7 @@ async def finalize_workflow_success(ctx: WorkflowActivityContext, activity_input
     """
     instance_id = ctx.workflow_id
 
+    assert global_vars.tracking_service is not None
     try:
         logger.info(
             "Finalizing workflow as completed",
@@ -49,6 +50,7 @@ async def finalize_workflow_failure(ctx: WorkflowActivityContext, activity_input
     instance_id = ctx.workflow_id
     error_message = activity_input.get("error_message", "Unknown error")
 
+    assert global_vars.tracking_service is not None
     try:
         logger.error(
             "Finalizing workflow as failed",

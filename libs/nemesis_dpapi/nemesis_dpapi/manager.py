@@ -268,21 +268,14 @@ class DpapiManager(DpapiManagerProtocol):
         await self._dpapi_system_cred_repo.upsert_credential(cred)
         await self._publisher.publish_event(NewDpapiSystemCredentialEvent(credential=cred))
 
-    async def get_system_credentials(self, guid: UUID | None = None) -> list[DpapiSystemCredential]:
-        """Retrieve DPAPI system credential(s).
-
-        Args:
-            guid: Optional specific credential GUID to retrieve. If provided, returns a list with one credential or empty list.
+    async def get_system_credentials(self) -> list[DpapiSystemCredential]:
+        """Retrieve all DPAPI system credentials.
 
         Returns:
             A list of DpapiSystemCredential objects (empty list if no matches)
         """
         if not self._initialized:
             await self._initialize_storage()
-
-        if guid is not None:
-            credential = await self._dpapi_system_cred_repo.get_credential(guid)
-            return [credential] if credential else []
 
         return await self._dpapi_system_cred_repo.get_all_credentials()
 

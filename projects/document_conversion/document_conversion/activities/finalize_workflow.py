@@ -16,6 +16,7 @@ async def update_workflow_status_to_running(ctx: WorkflowActivityContext, activi
     Args:
         activity_input: Dict (currently unused, but kept for consistency)
     """
+    assert global_vars.tracking_service is not None, "tracking_service must be initialized"
     instance_id = ctx.workflow_id
 
     logger.info(
@@ -46,6 +47,7 @@ async def finalize_workflow_success(ctx: WorkflowActivityContext, activity_input
     Args:
         activity_input: Dict (unused, kept for consistency)
     """
+    assert global_vars.tracking_service is not None, "tracking_service must be initialized"
     instance_id = ctx.workflow_id
 
     try:
@@ -74,6 +76,7 @@ async def finalize_workflow_failure(ctx: WorkflowActivityContext, activity_input
         activity_input: Dict containing:
             - error_message: The error message
     """
+    assert global_vars.tracking_service is not None, "tracking_service must be initialized"
     instance_id = ctx.workflow_id
     error_message = activity_input.get("error_message", "Unknown error")
 

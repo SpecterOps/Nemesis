@@ -20,6 +20,7 @@ dev = [
     "ruff>=0.9.2",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+    "pyright>=1.1",
 ]
 
 [build-system]

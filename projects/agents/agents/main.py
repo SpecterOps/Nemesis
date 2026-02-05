@@ -35,7 +35,7 @@ configure_logging()
 logger = structlog.get_logger(module=__name__)
 
 db_pool = None
-workflow_client: DaprWorkflowClient = None
+workflow_client: DaprWorkflowClient | None = None
 
 litellm_model = "default"
 
@@ -301,7 +301,7 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
             )
 
             yield ctx.call_activity(
-                insert_triage_result,
+                insert_triage_result,  # pyright: ignore[reportArgumentType]
                 input={
                     "finding_id": finding_id,
                     "triage_result": result.model_dump(),
@@ -315,7 +315,7 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
         #         If we hit this number of the same triage values for the same file, all future findings get that value
         consensus_threshold = int(os.getenv("TRIAGE_CONSENSUS_THRESHOLD", 3))
         consensus = yield ctx.call_activity(
-            check_consensus_activity,
+            check_consensus_activity,  # pyright: ignore[reportArgumentType]
             input={
                 "object_id": object_id,
                 "threshold": consensus_threshold,
@@ -338,7 +338,7 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
             )
 
             yield ctx.call_activity(
-                insert_triage_result,
+                insert_triage_result,  # pyright: ignore[reportArgumentType]
                 input={
                     "finding_id": finding_id,
                     "triage_result": result.model_dump(),
@@ -378,7 +378,8 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
             )
 
             yield ctx.call_activity(
-                insert_triage_result, input={"finding_id": finding_id, "triage_result": result.model_dump()}
+                insert_triage_result,  # pyright: ignore[reportArgumentType]
+                input={"finding_id": finding_id, "triage_result": result.model_dump()},
             )
             return
 
@@ -464,6 +465,7 @@ async def handle_findings_subscription():
                             )
 
                             instance_id = f"agents-triage-{finding_id}"
+                            assert workflow_client is not None
                             workflow_client.schedule_new_workflow(
                                 workflow=finding_triage_workflow,
                                 instance_id=instance_id,
@@ -569,7 +571,7 @@ async def _run_summarization_task(object_id: str):
     """Background task for text summarization."""
     try:
         mock_ctx = type("MockContext", (), {})()
-        result = await asyncio.to_thread(summarize_text, mock_ctx, {"object_id": object_id})
+        result = await asyncio.to_thread(summarize_text, mock_ctx, {"object_id": object_id})  # pyright: ignore[reportArgumentType]
         logger.info("Text summarization completed", object_id=object_id, success=result.get("success"))
     except Exception:
         logger.exception(message="Error in background text summarization", object_id=object_id)
@@ -605,7 +607,7 @@ async def run_credential_analysis(request: dict):
         mock_ctx = type("MockContext", (), {})()
 
         # Run in background task - don't wait for completion
-        asyncio.create_task(asyncio.to_thread(analyze_credentials, mock_ctx, {"object_id": object_id}))
+        asyncio.create_task(asyncio.to_thread(analyze_credentials, mock_ctx, {"object_id": object_id}))  # pyright: ignore[reportArgumentType]
 
         return {"success": True, "message": "Credential analysis started in background"}
 
@@ -626,7 +628,7 @@ async def run_dotnet_analysis(request: dict):
         mock_ctx = type("MockContext", (), {})()
 
         # Run in background task - don't wait for completion
-        asyncio.create_task(asyncio.to_thread(analyze_dotnet_assembly, mock_ctx, {"object_id": object_id}))
+        asyncio.create_task(asyncio.to_thread(analyze_dotnet_assembly, mock_ctx, {"object_id": object_id}))  # pyright: ignore[reportArgumentType]
 
         return {"success": True, "message": ".NET analysis started in background"}
 
@@ -650,7 +652,7 @@ async def run_translation(request: dict):
 
         # Run in background task - don't wait for completion
         asyncio.create_task(
-            asyncio.to_thread(translate_text, mock_ctx, {"object_id": object_id, "target_language": target_language})
+            asyncio.to_thread(translate_text, mock_ctx, {"object_id": object_id, "target_language": target_language})  # pyright: ignore[reportArgumentType]
         )
 
         return {"success": True, "message": f"Translation to {target_language} started in background"}
@@ -678,7 +680,7 @@ def run_report_generator(request: dict):
         from agents.tasks.reporting_agent import generate_report
 
         result = generate_report(
-            mock_ctx,
+            mock_ctx,  # pyright: ignore[reportArgumentType]
             {
                 "report_data": report_data,
                 "report_type": report_type,

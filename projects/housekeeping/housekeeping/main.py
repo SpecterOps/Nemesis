@@ -411,7 +411,7 @@ async def delete_expired_containers(expiration_date: datetime | None = None) -> 
 def _log_cleanup_result(result, success_msg: str, error_msg: str, round_num: int):
     """Helper function to log cleanup operation results."""
     if isinstance(result, Exception):
-        logger.exception(result, message=error_msg)
+        logger.exception(str(result), message=error_msg)
     elif result:
         logger.info(success_msg, round=round_num)
     else:

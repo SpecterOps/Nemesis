@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportReturnType=false
 """Main test harness for enrichment module testing."""
 
 import os

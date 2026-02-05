@@ -224,7 +224,7 @@ async def store_dotnet_results(
                     origin_name="dotnet_service",
                     object_id=object_id,
                     severity=8,
-                    raw_data=sanitize_for_jsonb(analysis.model_dump()),
+                    raw_data=sanitize_for_jsonb(analysis.model_dump()),  # pyright: ignore[reportArgumentType]
                     data=[display_data],
                 )
 
@@ -234,6 +234,8 @@ async def store_dotnet_results(
         enrichment_result.findings = findings_list
 
         # Store in database
+        assert global_vars.asyncpg_pool is not None
+        assert global_vars.tracking_service is not None
         async with global_vars.asyncpg_pool.acquire() as conn:
             async with conn.transaction():
                 # Update workflow success status first

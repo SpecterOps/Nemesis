@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# pyright: reportCallIssue=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 
 # Pulled from https://github.com/truongkma/ctf-tools/blob/74dc2d959b7305bb859721cfa7af83ca3973a1c8/John/run/pdf2john.py
 # Copyright (c) 2013 Shane Quigley, < shane at softwareontheside.info >

@@ -58,6 +58,7 @@ async def process_chromium_logins(
         )
         return
 
+    assert asyncpg_pool is not None, "asyncpg_pool is required for login processing"
     await _insert_logins(file_enriched, username, browser, db_path, dpapi_manager, asyncpg_pool)
 
     logger.debug("Completed processing Chromium Login Data", object_id=object_id)
@@ -72,6 +73,7 @@ async def _insert_logins(
     asyncpg_pool: asyncpg.Pool | None = None,
 ) -> None:
     """Extract logins from Login Data database and insert into chromium.logins table using asyncpg."""
+    assert asyncpg_pool is not None, "asyncpg_pool is required"
     try:
         # Read from SQLite
         with sqlite3.connect(db_path) as conn:
