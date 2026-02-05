@@ -447,14 +447,18 @@ const FileViewer = () => {
                     );
 
                     newTransforms.forEach(transform => {
-                      setTransformData(prev => ({
-                        ...prev,
-                        [transform.transform_object_id]: {
-                          content: null,
-                          type: transform.metadata.display_type_in_dashboard,
-                          fileName: transform.metadata.file_name
-                        }
-                      }));
+                      setTransformData(prev => {
+                        const existing = prev[transform.transform_object_id];
+                        if (existing?.content) return prev; // Don't overwrite fetched content
+                        return {
+                          ...prev,
+                          [transform.transform_object_id]: {
+                            content: null,
+                            type: transform.metadata.display_type_in_dashboard,
+                            fileName: transform.metadata.file_name
+                          }
+                        };
+                      });
                     });
                   }
                 } catch (err) {
@@ -730,6 +734,9 @@ const FileViewer = () => {
           ...prev,
           [tabId]: { ...prev[tabId], content }
         }));
+      } else {
+        console.error(`Failed to fetch transform content: ${response.status}`);
+        transformFetchedRef.current[tabId] = false; // Allow retry
       }
     } catch (err) {
       console.error('Error fetching transform content:', err);
@@ -1011,9 +1018,24 @@ const FileViewer = () => {
     if (!transform) return null;
 
     if (!transform.content) {
-      return transformsLoading[tabId]
-        ? <LoadingState message="Loading content..." />
-        : <LoadingState message="Loading content..." />;
+      if (transformsLoading[tabId]) {
+        return <LoadingState message="Loading content..." />;
+      }
+      // Loading finished but content is null — show retry
+      return (
+        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <p className="mb-3">Failed to load content</p>
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            onClick={() => {
+              transformFetchedRef.current[tabId] = false;
+              fetchTransformContent(tabId);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
     }
 
     if (transform.type === 'pdf') {
