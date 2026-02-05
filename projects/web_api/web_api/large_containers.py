@@ -95,9 +95,9 @@ class BaseContainerExtractor:
         self.storage = storage
         self.dapr_client = dapr_client
         self.progress_tracker = progress_tracker
-        self.container_id = None
-        self.file_metadata = None
-        self.file_filter = None
+        self.container_id: str | None = None
+        self.file_metadata: dict[str, Any] | None = None
+        self.file_filter = FilePathFilter()
         self.filter_stats = {"files_processed": 0, "files_skipped_by_filter": 0, "files_skipped_by_error": 0}
 
     def set_container_info(self, container_id: str, file_metadata: dict[str, Any]):
@@ -152,6 +152,8 @@ class BaseContainerExtractor:
 
     def publish_file_message(self, temp_file_path: str, object_id: str, real_path: str):
         """Publish file message to the message bus"""
+        if self.file_metadata is None or self.container_id is None:
+            raise RuntimeError("container_id and file_metadata must be set via set_container_info before publishing")
         file_message = FileModel(
             object_id=object_id,
             agent_id=self.file_metadata["agent_id"],
@@ -275,14 +277,16 @@ class FilePathFilter:
 
         normalized_path = self.normalize_path(file_path)
 
-        has_include_patterns = self.filters.include and len(self.filters.include) > 0
-        has_exclude_patterns = self.filters.exclude and len(self.filters.exclude) > 0
+        include_patterns = self.filters.include or []
+        exclude_patterns = self.filters.exclude or []
+        has_include_patterns = len(include_patterns) > 0
+        has_exclude_patterns = len(exclude_patterns) > 0
 
         # Check if file matches include patterns
         include_match = False
         if has_include_patterns:
             if self.filters.pattern_type == "glob":
-                include_match = self._matches_glob_patterns(normalized_path, self.filters.include)
+                include_match = self._matches_glob_patterns(normalized_path, include_patterns)
             else:  # regex
                 include_match = self._matches_regex_patterns(normalized_path, self.compiled_regex_include_patterns)
 
@@ -290,7 +294,7 @@ class FilePathFilter:
         exclude_match = False
         if has_exclude_patterns:
             if self.filters.pattern_type == "glob":
-                exclude_match = self._matches_glob_patterns(normalized_path, self.filters.exclude)
+                exclude_match = self._matches_glob_patterns(normalized_path, exclude_patterns)
             else:  # regex
                 exclude_match = self._matches_regex_patterns(normalized_path, self.compiled_regex_exclude_patterns)
 
@@ -366,6 +370,8 @@ class ZipContainerExtractor(BaseContainerExtractor):
 
     def extract_and_process(self, container_file_path: Path) -> int:
         """Extract ZIP file and process each file individually with filtering"""
+        if self.file_metadata is None:
+            raise RuntimeError("file_metadata must be set via set_container_info before extraction")
         processed_count = 0
 
         try:
@@ -517,6 +523,8 @@ class DDImageContainerExtractor(BaseContainerExtractor):
 
     def extract_and_process(self, container_file_path: Path) -> int:
         """Extract DD image and process each file individually with filtering"""
+        if self.file_metadata is None:
+            raise RuntimeError("file_metadata must be set via set_container_info before extraction")
         processed_count = 0
 
         try:
@@ -545,6 +553,9 @@ class DDImageContainerExtractor(BaseContainerExtractor):
 
     def _process_filesystem(self, fs_info: pytsk3.FS_Info, img_info: pytsk3.Img_Info) -> int:
         """Process files from a parsed filesystem"""
+        if self.file_metadata is None:
+            raise RuntimeError("file_metadata must be set via set_container_info before processing")
+        file_metadata = self.file_metadata
         processed_count = 0
 
         def process_directory(directory, path=""):
@@ -608,7 +619,7 @@ class DDImageContainerExtractor(BaseContainerExtractor):
                                 object_id = self.storage.upload_file(temp_extracted.name)
 
                                 # Calculate real path
-                                base_dir = os.path.dirname(self.file_metadata["path"])
+                                base_dir = os.path.dirname(file_metadata["path"])
                                 real_path = os.path.join(base_dir, file_path).removeprefix(MOUNTED_CONTAINER_PATH)
 
                                 # Publish file message

@@ -228,8 +228,8 @@ def parse_office_ole_file(file_path: str) -> dict[str, Any]:
 
             # Handle dates
             try:
-                parsed_data["created"] = meta.create_time.isoformat() if meta.create_time else None
-                parsed_data["modified"] = meta.last_saved_time.isoformat() if meta.last_saved_time else None
+                parsed_data["created"] = meta.create_time.isoformat() if meta.create_time else None  # pyright: ignore[reportAttributeAccessIssue]
+                parsed_data["modified"] = meta.last_saved_time.isoformat() if meta.last_saved_time else None  # pyright: ignore[reportAttributeAccessIssue]
             except AttributeError:
                 pass
 
@@ -295,7 +295,7 @@ def parse_office_new_file(file_path: str) -> dict[str, Any]:
 
             for field, (tag, type_converter) in metadata_fields.items():
                 try:
-                    value = doc.getElementsByTagName(tag)[0].childNodes[0].data
+                    value = doc.getElementsByTagName(tag)[0].childNodes[0].data  # pyright: ignore[reportAttributeAccessIssue]
                     parsed_data[field] = type_converter(value) if value else None
                 except (IndexError, AttributeError):
                     continue
@@ -303,7 +303,7 @@ def parse_office_new_file(file_path: str) -> dict[str, Any]:
             # Handle dates
             for date_field, tag in [("created", "dcterms:created"), ("modified", "dcterms:modified")]:
                 try:
-                    date_string = doc.getElementsByTagName(tag)[0].childNodes[0].data
+                    date_string = doc.getElementsByTagName(tag)[0].childNodes[0].data  # pyright: ignore[reportAttributeAccessIssue]
                     dt = datetime.datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%Sz")
                     parsed_data[date_field] = dt.isoformat()
                 except (IndexError, AttributeError, ValueError):

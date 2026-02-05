@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from typing import Any
 
 import aiohttp
 import common.helpers as helpers
@@ -89,7 +90,7 @@ async def publish_alerts_for_findings(
 
     # Build SQL query with origin filters
     where_clauses = ["object_id = $1"]
-    params = [object_id]
+    params: list[Any] = [object_id]
 
     if origin_include:
         where_clauses.append("origin_name = ANY($2)")
@@ -105,6 +106,7 @@ async def publish_alerts_for_findings(
     """
 
     # Fetch findings from the database for this object_id
+    assert global_vars.asyncpg_pool is not None
     async with global_vars.asyncpg_pool.acquire() as conn:
         findings = await conn.fetch(query, *params)
 

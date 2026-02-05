@@ -16,6 +16,7 @@ from dapr.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import FastAPI, HTTPException
 from gql import Client, gql
+from gql.client import SyncClientSession
 from gql.transport.requests import RequestsHTTPTransport
 from gql.transport.websockets import WebsocketsTransport
 from pydantic import BaseModel
@@ -154,6 +155,7 @@ async def load_alert_settings():
         )
 
         with Client(transport=transport, fetch_schema_from_transport=False) as session:
+            assert isinstance(session, SyncClientSession)
             # Try to fetch existing settings
             result = session.execute(QUERY_SETTINGS)
             settings_list = result.get("alert_settings", [])

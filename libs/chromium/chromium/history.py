@@ -39,6 +39,7 @@ async def process_chromium_history(
             db_path = temp_file.name
 
     # Process both tables
+    assert asyncpg_pool is not None, "asyncpg_pool is required for history processing"
     await _insert_history_urls(object_id, file_enriched, username, browser, db_path, asyncpg_pool)
     await _insert_history_downloads(object_id, file_enriched, username, browser, db_path, asyncpg_pool)
 

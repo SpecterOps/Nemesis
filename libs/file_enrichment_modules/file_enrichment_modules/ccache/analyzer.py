@@ -138,13 +138,13 @@ rule CCache_File {
             ccache = CCache.loadFile(file_path)
 
             # Extract principal
-            principal = ccache.principal.prettyPrint().decode("utf-8") if ccache.principal else "Unknown"
+            principal = ccache.principal.prettyPrint().decode("utf-8") if ccache.principal else "Unknown"  # pyright: ignore[reportOptionalMemberAccess]
 
             # Parse all credentials
             credentials = []
             unexpired_credentials = []
 
-            for cred in ccache.credentials:
+            for cred in ccache.credentials:  # pyright: ignore[reportOptionalMemberAccess]
                 # Extract credential details
                 client = cred["client"].prettyPrint().decode("utf-8") if cred["client"] else "Unknown"
                 server = cred["server"].prettyPrint().decode("utf-8") if cred["server"] else "Unknown"

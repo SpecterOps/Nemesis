@@ -11,7 +11,7 @@ from uuid import UUID
 from common.queues import DPAPI_EVENTS_TOPIC, DPAPI_PUBSUB
 from dapr.aio.clients import DaprClient
 from dapr.clients.grpc._response import TopicEventResponse, TopicEventResponseStatus
-from dapr.clients.grpc.subscription import SubscriptionMessage
+from dapr.clients.grpc.subscription import SubscriptionMessage  # pyright: ignore[reportPrivateImportUsage]
 from pydantic import Field, field_validator, model_validator
 
 from nemesis_dpapi.core import BaseModel
@@ -209,7 +209,7 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
         close_fn = await self._dapr_client.subscribe_with_handler(
             pubsub_name=DPAPI_PUBSUB,
             topic=DPAPI_EVENTS_TOPIC,
-            handler_fn=self.process_message,
+            handler_fn=self.process_message,  # pyright: ignore[reportArgumentType]
             # dead_letter_topic="TOPIC_A_DEAD",
         )
 

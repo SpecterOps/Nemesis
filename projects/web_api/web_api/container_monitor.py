@@ -235,12 +235,12 @@ class ContainerFileHandler(FileSystemEventHandler):
     def on_created(self, event):
         """Called when a file is created"""
         if not event.is_directory:
-            self._handle_file(Path(event.src_path))
+            self._handle_file(Path(os.fsdecode(event.src_path)))
 
     def on_moved(self, event):
         """Called when a file is moved into the monitored directory"""
         if not event.is_directory:
-            self._handle_file(Path(event.dest_path))
+            self._handle_file(Path(os.fsdecode(event.dest_path)))
 
     def _handle_file(self, file_path: Path):
         """Handle a new or moved file"""

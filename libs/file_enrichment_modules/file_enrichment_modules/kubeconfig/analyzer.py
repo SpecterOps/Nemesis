@@ -303,7 +303,7 @@ rule Detect_Kubeconfig {
         return list(cred_types)
 
     def _create_finding_summary(
-        self, clusters: list[dict], users: list[dict], contexts: list[dict], current_context: str, file_name: str
+        self, clusters: list[dict], users: list[dict], contexts: list[dict], current_context: str | None, file_name: str
     ) -> str:
         """Creates a markdown summary for the kubeconfig finding."""
         summary = f"# Kubernetes Configuration Analysis - {file_name}\n\n"

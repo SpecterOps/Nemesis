@@ -14,8 +14,8 @@ import colorlog
 import requests
 import urllib3
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 from tqdm import tqdm
+from urllib3.util.retry import Retry
 
 # Disable SSL warnings for the submit functionality
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

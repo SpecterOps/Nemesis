@@ -21,6 +21,9 @@ async def publish_file_message(ctx: WorkflowActivityContext, activity_input: dic
 
         file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
+        assert transform.object_id is not None, "transform.object_id must not be None"
+        assert transform.metadata is not None, "transform.metadata must not be None"
+
         new_file = File(
             object_id=transform.object_id,
             originating_object_id=file_enriched.object_id,

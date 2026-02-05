@@ -163,7 +163,7 @@ def _extract_basic_metadata(doc: fitz.Document) -> dict[str, Any]:
     Returns:
         Dictionary with title, author, subject, creator, producer, keywords, trapped
     """
-    metadata = {
+    metadata: dict[str, str | None] = {
         "title": None,
         "author": None,
         "subject": None,

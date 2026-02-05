@@ -275,10 +275,10 @@ async def initialize_enrichment_modules(dpapi_manager: DpapiManager) -> list[str
         yara_module = module_loader.modules["yara"]
         if hasattr(yara_module, "rule_manager"):
             # Pass asyncpg_pool to rule_manager before initializing
-            if hasattr(yara_module.rule_manager, "asyncpg_pool"):
-                yara_module.rule_manager.asyncpg_pool = global_vars.asyncpg_pool
-            if hasattr(yara_module.rule_manager, "initialize"):
-                await yara_module.rule_manager.initialize()
+            if hasattr(yara_module.rule_manager, "asyncpg_pool"):  # pyright: ignore[reportAttributeAccessIssue]
+                yara_module.rule_manager.asyncpg_pool = global_vars.asyncpg_pool  # pyright: ignore[reportAttributeAccessIssue]
+            if hasattr(yara_module.rule_manager, "initialize"):  # pyright: ignore[reportAttributeAccessIssue]
+                await yara_module.rule_manager.initialize()  # pyright: ignore[reportAttributeAccessIssue]
 
     # Build dependency graph from filtered modules
     graph = build_dependency_graph(available_modules)
@@ -311,7 +311,7 @@ async def reload_yara_rules():
     if not hasattr(yara_module, "rule_manager"):
         raise ValueError(f"Yara module missing rule_manager attribute. Type: {type(yara_module)}")
 
-    await yara_module.rule_manager.load_db_rules()
+    await yara_module.rule_manager.load_db_rules()  # pyright: ignore[reportAttributeAccessIssue]
 
 
 # endregion

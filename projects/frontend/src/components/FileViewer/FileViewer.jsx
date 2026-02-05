@@ -12,9 +12,11 @@ import { useUser } from '@/contexts/UserContext';
 import { cachedFetch } from '@/utils/fileCache';
 import { createClient } from 'graphql-ws';
 import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileText, Image } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { LoadingState } from '@/components/shared/LoadingSpinner';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import CsvViewer from './CsvViewer';
+import { useLazyFileContent } from './useLazyFileContent';
 import EnrichmentStatusSection from './EnrichmentStatusSection';
 import FileDetailsSection from './FileDetailsSection';
 import { getMonacoLanguage } from './languageMap';
@@ -25,7 +27,7 @@ import SQLiteViewer from './SQLiteViewer';
 import ZipFileViewer from './ZipFileViewer';
 
 
-const MAX_VIEW_SIZE = 1024 * 1024; // 1MB text display limit
+const MAX_VIEW_SIZE = 10 * 1024 * 1024; // 10MB preview/display limit
 const MAX_RENDERABLE_VIEW_SIZE = 100 * 1024 * 1024; // 100MB limit for sqlite/zip/etc.
 
 const recordedViews = new Map();
@@ -243,7 +245,6 @@ const FileViewer = () => {
   const location = useLocation();
   const { isDark } = useTheme();
   const [fileData, setFileData] = useState(null);
-  const [fileContent, setFileContent] = useState(null);
   const [pdfContent, setPdfContent] = useState(null);
   const [transformContents, setTransformContents] = useState({});
   const [textContent, setTextContent] = useState(null);
@@ -274,6 +275,14 @@ const FileViewer = () => {
   const previousFileId = location.state?.previousFileId;
 
   const [detectedEncoding, setDetectedEncoding] = useState('utf-8');
+
+  const {
+    previewContent, fullFileContent, previewError, fullFileError,
+    isPreviewLoading, isFullFileLoading, fetchPreviewContent, fetchFullFile,
+    setPreviewContent, setFullFileContent, reset: resetLazyContent
+  } = useLazyFileContent(objectId, fileData);
+
+  const initialTabSet = useRef(false);
 
   const recordFileView = async (objectId) => {
     // Check global map first
@@ -437,19 +446,19 @@ const FileViewer = () => {
                       !transformData[transform.transform_object_id]
                     );
 
-                    newTransforms.forEach(async (transform) => {
-                      const response = await cachedFetch(`/api/files/${transform.transform_object_id}`);
-                      if (response.ok) {
-                        const content = await response.arrayBuffer();
-                        setTransformData(prev => ({
+                    newTransforms.forEach(transform => {
+                      setTransformData(prev => {
+                        const existing = prev[transform.transform_object_id];
+                        if (existing?.content) return prev; // Don't overwrite fetched content
+                        return {
                           ...prev,
                           [transform.transform_object_id]: {
-                            content,
+                            content: null,
                             type: transform.metadata.display_type_in_dashboard,
                             fileName: transform.metadata.file_name
                           }
-                        }));
-                      }
+                        };
+                      });
                     });
                   }
                 } catch (err) {
@@ -542,7 +551,7 @@ const FileViewer = () => {
       displayableImageTypes.mimeTypes.has(mimeType);
   };
 
-  const hasPreviewableImage = Boolean(fileContent && isDisplayableImage(fileData?.file_name, fileData?.mime_type));
+  const hasPreviewableImage = Boolean(fileData && isDisplayableImage(fileData.file_name, fileData.mime_type));
   const hasPreviewableContent = Boolean(pdfContent || hasPreviewableImage || (fileData && fileData.mime_type === 'application/pdf'));
 
   // helper to get the file view tabs available
@@ -555,12 +564,12 @@ const FileViewer = () => {
     }
 
     // Add ZIP explorer if file is a ZIP
-    if (fileData && isZipFile(fileData.file_name, fileData.mime_type) && fileContent) {
+    if (fileData && isZipFile(fileData.file_name, fileData.mime_type)) {
       tabs.push({ id: 'zip-explorer', type: 'zip', label: 'ZIP Explorer', icon: Archive });
     }
 
     // add SQLite explorer if it's a sqlite file
-    if (fileData && isSqliteFile(fileData.file_name, fileData.mime_type) && fileContent) {
+    if (fileData && isSqliteFile(fileData.file_name, fileData.mime_type)) {
       tabs.push({ id: 'sqlite-explorer', type: 'sqlite', label: 'SQLite Explorer', icon: Database });
     }
 
@@ -700,15 +709,121 @@ const FileViewer = () => {
   // Start with hex as fallback
   const [activeTab, setActiveTab] = useState('hex');
 
-  // Update this useEffect in your FileViewer.jsx component
+  const [transformsLoading, setTransformsLoading] = useState({});
+  const transformFetchedRef = useRef({});
+  const transformFullFetchedRef = useRef({});
+  const [enrichmentExpanded, setEnrichmentExpanded] = useState({});
+
+  const fetchTransformContent = useCallback(async (tabId) => {
+    if (transformFetchedRef.current[tabId]) return;
+    const transform = transformData[tabId];
+    if (!transform || transform.content) return;
+
+    transformFetchedRef.current[tabId] = true;
+    setTransformsLoading(prev => ({ ...prev, [tabId]: true }));
+
+    const textBasedTypes = ['monaco', 'markdown', 'csv'];
+    const isTextBased = textBasedTypes.includes(transform.type) || transform.type === 'csv';
+    const url = isTextBased
+      ? `/api/files/${tabId}?length=${MAX_VIEW_SIZE}`
+      : `/api/files/${tabId}`;
+
+    try {
+      const response = await cachedFetch(url);
+      if (response.ok) {
+        const content = await response.arrayBuffer();
+        setTransformData(prev => ({
+          ...prev,
+          [tabId]: { ...prev[tabId], content }
+        }));
+      } else {
+        console.error(`Failed to fetch transform content: ${response.status}`);
+        transformFetchedRef.current[tabId] = false; // Allow retry
+      }
+    } catch (err) {
+      console.error('Error fetching transform content:', err);
+      transformFetchedRef.current[tabId] = false; // Allow retry
+    } finally {
+      setTransformsLoading(prev => ({ ...prev, [tabId]: false }));
+    }
+  }, [transformData]);
+
+  const fetchFullTransformContent = useCallback(async (tabId) => {
+    if (transformFullFetchedRef.current[tabId]) return;
+    transformFullFetchedRef.current[tabId] = true;
+    setTransformsLoading(prev => ({ ...prev, [tabId]: true }));
+
+    try {
+      const response = await cachedFetch(`/api/files/${tabId}`);
+      if (response.ok) {
+        const content = await response.arrayBuffer();
+        setTransformData(prev => ({
+          ...prev,
+          [tabId]: { ...prev[tabId], content }
+        }));
+      } else {
+        console.error(`Failed to fetch full transform content: ${response.status}`);
+        transformFullFetchedRef.current[tabId] = false;
+      }
+    } catch (err) {
+      console.error('Error fetching full transform content:', err);
+      transformFullFetchedRef.current[tabId] = false;
+    } finally {
+      setTransformsLoading(prev => ({ ...prev, [tabId]: false }));
+    }
+  }, []);
+
+  const handleTabChange = useCallback((tabId) => {
+    setActiveTab(tabId);
+    if (['zip-explorer', 'sqlite-explorer'].includes(tabId) && !fullFileContent && !isFullFileLoading) {
+      fetchFullFile();
+    }
+    if (tabId === 'preview' && !fullFileContent && !isFullFileLoading &&
+      fileData && isDisplayableImage(fileData.file_name, fileData.mime_type)) {
+      fetchFullFile();
+    }
+    // Hex tab — fetch preview content (first 10MB) on activation
+    if (tabId === 'hex' && !previewContent && !isPreviewLoading) {
+      fetchPreviewContent();
+    }
+    // Transform tabs — fetch content on activation
+    if (transformData[tabId] && !transformData[tabId].content && !transformsLoading[tabId]) {
+      fetchTransformContent(tabId);
+    }
+  }, [fullFileContent, isFullFileLoading, fileData, fetchFullFile, previewContent, isPreviewLoading, fetchPreviewContent, transformData, transformsLoading, fetchTransformContent]);
+
+  // Handler to disable truncation and show full file content in the text view
+  const handleShowFullContent = useCallback(async () => {
+    if (fullFileContent) {
+      // Already have full content, just re-decode
+      const decoder = new TextDecoder(detectedEncoding);
+      setTextContent(decoder.decode(fullFileContent));
+      setIsContentTruncated(false);
+      return;
+    }
+    // Need to fetch full file first
+    await fetchFullFile();
+  }, [fullFileContent, detectedEncoding, fetchFullFile]);
+
+  // When fullFileContent becomes available after handleShowFullContent triggered a fetch,
+  // update textContent if it was truncated
+  useEffect(() => {
+    if (fullFileContent && isContentTruncated && fileData?.is_plaintext) {
+      const decoder = new TextDecoder(detectedEncoding);
+      setTextContent(decoder.decode(fullFileContent));
+      setIsContentTruncated(false);
+    }
+  }, [fullFileContent, isContentTruncated, detectedEncoding, fileData]);
 
   // Set the initial tab based on transform metadata and fallback order
   useEffect(() => {
+    if (initialTabSet.current) return;
     if (fileData || pdfContent) {
       const tabs = getAvailableTabs();
 
-      // First check if the file is a ZIP file and we have content for it
-      if (fileData && isZipFile(fileData.file_name, fileData.mime_type) && fileContent) {
+      // First check if the file is a ZIP file
+      if (fileData && isZipFile(fileData.file_name, fileData.mime_type)) {
+        initialTabSet.current = true;
         setActiveTab('zip-explorer');
         return;
       }
@@ -719,6 +834,7 @@ const FileViewer = () => {
           transform.metadata?.file_name && transform.metadata.file_name.endsWith('.zip')
         );
         if (zipTransform) {
+          initialTabSet.current = true;
           setActiveTab(zipTransform.transform_object_id);
           return;
         }
@@ -730,6 +846,7 @@ const FileViewer = () => {
           isDisplayableTransform(transform) && transform.type === 'converted_pdf'
         );
         if (pdfTransform) {
+          initialTabSet.current = true;
           setActiveTab(pdfTransform.transform_object_id);
           return;
         }
@@ -739,6 +856,7 @@ const FileViewer = () => {
           isDisplayableTransform(transform) && transform.metadata?.default_display === true
         );
         if (defaultTransform) {
+          initialTabSet.current = true;
           setActiveTab(defaultTransform.transform_object_id);
           return;
         }
@@ -746,13 +864,38 @@ const FileViewer = () => {
 
       // Then follow fallback order: Preview -> Text -> Hex
       if (hasPreviewableContent) {
+        initialTabSet.current = true;
         setActiveTab('preview');
       } else if (tabs.find(tab => tab.id === 'text')) {
+        initialTabSet.current = true;
         setActiveTab('text');
       }
+      initialTabSet.current = true;
       // If no other conditions met, it will stay as 'hex'
     }
-  }, [fileData, pdfContent, hasPreviewableContent, fileContent]);
+  }, [fileData, pdfContent, hasPreviewableContent]);
+
+  // Trigger lazy fetch for auto-selected tabs (ZIP, SQLite, image preview, hex).
+  // Only runs after initial tab selection to avoid eagerly fetching for the
+  // default 'hex' tab before a better tab has been chosen.
+  useEffect(() => {
+    if (!fileData || !initialTabSet.current) return;
+    if (['zip-explorer', 'sqlite-explorer'].includes(activeTab) && !fullFileContent && !isFullFileLoading) {
+      fetchFullFile();
+    }
+    if (activeTab === 'preview' && !fullFileContent && !isFullFileLoading &&
+      isDisplayableImage(fileData.file_name, fileData.mime_type)) {
+      fetchFullFile();
+    }
+    // Hex tab — fetch preview content (first 10MB) on activation
+    if (activeTab === 'hex' && !previewContent && !isPreviewLoading) {
+      fetchPreviewContent();
+    }
+    // Auto-selected transform tabs (e.g. converted_pdf)
+    if (transformData[activeTab] && !transformData[activeTab].content && !transformsLoading[activeTab]) {
+      fetchTransformContent(activeTab);
+    }
+  }, [activeTab, fileData, transformData]);
 
   // left arrow to go back
   useEffect(() => {
@@ -862,17 +1005,24 @@ const FileViewer = () => {
         setFileData(file);
         setCurrentLanguage(getMonacoLanguage(file.file_name, file.mime_type));
 
-        // If file is under size limit, fetch the file content content
-
+        // Fetch file content conditionally based on file type
         if (file.size <= MAX_RENDERABLE_VIEW_SIZE) {
-          const contentResponse = await cachedFetch(`/api/files/${file.object_id}`);
-          if (contentResponse.ok) {
-            const buffer = await contentResponse.arrayBuffer();
-
-            if (file.mime_type === 'application/pdf') {
+          if (file.mime_type === 'application/pdf') {
+            // PDF: fetch full file immediately for preview
+            const contentResponse = await cachedFetch(`/api/files/${file.object_id}`);
+            if (contentResponse.ok) {
+              const buffer = await contentResponse.arrayBuffer();
               setPdfContent(buffer);
-            } else {
-              setFileContent(buffer);
+            }
+          } else if (file.is_plaintext) {
+            // Plaintext: fetch 1MB preview for text tab
+            const previewUrl = file.size > MAX_VIEW_SIZE
+              ? `/api/files/${file.object_id}?length=${MAX_VIEW_SIZE}`
+              : `/api/files/${file.object_id}`;
+            const contentResponse = await cachedFetch(previewUrl);
+            if (contentResponse.ok) {
+              const buffer = await contentResponse.arrayBuffer();
+              setPreviewContent(buffer);
 
               // Detect encoding from BOM
               const detected = detectEncodingFromBOM(buffer);
@@ -881,43 +1031,30 @@ const FileViewer = () => {
               // Decode content with detected encoding
               const decoder = new TextDecoder(detected);
               setTextContent(decoder.decode(buffer.slice(0, MAX_VIEW_SIZE)));
-              setIsContentTruncated(buffer.byteLength > MAX_VIEW_SIZE);
+              setIsContentTruncated(file.size > MAX_VIEW_SIZE);
+
+              // If file fits in 1MB, it's also the full content
+              if (file.size <= MAX_VIEW_SIZE) {
+                setFullFileContent(buffer);
+              }
             }
           }
+          // Binary files: hex tab will lazy-fetch preview on activation
         }
 
-        // Handle transforms - fetch in parallel
+        // Store transform metadata without fetching content — content is
+        // lazy-loaded when the user clicks the tab.
         if (file.transforms) {
-          const transformPromises = file.transforms
-            .filter(isDisplayableTransform)
-            .map(async (transform) => {
-              const response = await cachedFetch(`/api/files/${transform.transform_object_id}`);
-              if (response.ok) {
-                const content = await response.arrayBuffer();
-                return {
-                  id: transform.transform_object_id,
-                  content,
-                  type: transform.metadata.display_type_in_dashboard,
-                  fileName: transform.metadata.file_name
-                };
-              }
-              return null;
-            });
-
-          const transformResults = await Promise.all(transformPromises);
-
-          // Update state with all transforms at once
           const newTransformData = {};
-          transformResults.forEach(result => {
-            if (result) {
-              newTransformData[result.id] = {
-                content: result.content,
-                type: result.type,
-                fileName: result.fileName
+          file.transforms
+            .filter(isDisplayableTransform)
+            .forEach(transform => {
+              newTransformData[transform.transform_object_id] = {
+                content: null,
+                type: transform.metadata.display_type_in_dashboard,
+                fileName: transform.metadata.file_name
               };
-            }
-          });
-
+            });
           setTransformData(newTransformData);
         }
       } catch (err) {
@@ -935,6 +1072,27 @@ const FileViewer = () => {
     const transform = transformData[tabId];
     if (!transform) return null;
 
+    if (!transform.content) {
+      if (transformsLoading[tabId]) {
+        return <LoadingState message="Loading content..." />;
+      }
+      // Loading finished but content is null — show retry
+      return (
+        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <p className="mb-3">Failed to load content</p>
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            onClick={() => {
+              transformFetchedRef.current[tabId] = false;
+              fetchTransformContent(tabId);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
     if (transform.type === 'pdf') {
       return (
         <div className="aspect-[8.5/11] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
@@ -948,11 +1106,15 @@ const FileViewer = () => {
 
     if (transform.type === 'monaco') {
       const content = new TextDecoder().decode(transform.content.slice(0, MAX_VIEW_SIZE));
+      const isTruncated = transform.content.byteLength >= MAX_VIEW_SIZE && !transformFullFetchedRef.current[tabId];
       return (
         <MonacoContentViewer
           content={content}
           language={getMonacoLanguage(transform.fileName)}
           onLanguageChange={setCurrentLanguage}
+          isTruncated={isTruncated}
+          onShowFullContent={() => fetchFullTransformContent(tabId)}
+          isLoadingFullContent={!!transformsLoading[tabId]}
         />
       );
     }
@@ -982,12 +1144,18 @@ const FileViewer = () => {
 
     if (transform.type === 'json') {
       const content = new TextDecoder().decode(transform.content);
+      const isTruncated = transform.content.byteLength >= MAX_VIEW_SIZE && !transformFullFetchedRef.current[tabId];
+      let parsed;
+      try { parsed = JSON.stringify(JSON.parse(content), null, 2); } catch { parsed = content; }
       return (
         <MonacoContentViewer
-          content={JSON.stringify(JSON.parse(content), null, 2)}
+          content={parsed}
           language="json"
           onLanguageChange={() => { }}
           showLanguageSelect={false}
+          isTruncated={isTruncated}
+          onShowFullContent={() => fetchFullTransformContent(tabId)}
+          isLoadingFullContent={!!transformsLoading[tabId]}
         />
       );
     }
@@ -1011,14 +1179,151 @@ const FileViewer = () => {
     if (!enrichment || !enrichment.result_data) return null;
 
     const jsonContent = JSON.stringify(enrichment.result_data, null, 2);
+    const isTruncated = jsonContent.length > MAX_VIEW_SIZE && !enrichmentExpanded[tabId];
+    const displayContent = isTruncated ? jsonContent.slice(0, MAX_VIEW_SIZE) : jsonContent;
     return (
       <MonacoContentViewer
-        content={jsonContent}
+        content={displayContent}
         language="json"
         onLanguageChange={() => { }}
         showLanguageSelect={false}
+        isTruncated={isTruncated}
+        onShowFullContent={() => setEnrichmentExpanded(prev => ({ ...prev, [tabId]: true }))}
       />
     );
+  };
+
+  // Helper for the common loading → error → content pattern used by tabs that load full files
+  const renderFullFileContent = (loadingMsg, renderContent) => {
+    if (isFullFileLoading) return <LoadingState message={loadingMsg} />;
+    if (fullFileError) {
+      return (
+        <div className="p-4 text-center">
+          <p className="text-red-500 mb-2">Error loading file: {fullFileError}</p>
+          <button onClick={fetchFullFile} className="text-blue-500 hover:underline">Retry</button>
+        </div>
+      );
+    }
+    if (fullFileContent) return renderContent();
+    return <LoadingState message={loadingMsg} />;
+  };
+
+  // Helper to get text content for text/csv tabs
+  const getTextContent = (fallback = 'No text content available') => {
+    return textContent || (fileData?.is_plaintext && previewContent
+      ? new TextDecoder().decode(previewContent.slice(0, MAX_VIEW_SIZE))
+      : fallback);
+  };
+
+  // Per-tab-type render functions — keeps the main render clean
+  const renderPreviewTab = () => {
+    if (hasPreviewableImage) {
+      return renderFullFileContent('Loading image...', () => (
+        <div className="w-full flex justify-center bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+          <img
+            src={URL.createObjectURL(new Blob([fullFileContent], { type: fileData.mime_type }))}
+            alt={fileData.file_name}
+            className="max-w-full max-h-[800px] object-contain"
+          />
+        </div>
+      ));
+    }
+    return (
+      <div className="aspect-[8.5/11] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
+        <iframe
+          src={URL.createObjectURL(new Blob([pdfContent], { type: 'application/pdf' }))}
+          className="w-full h-full rounded-lg"
+        />
+      </div>
+    );
+  };
+
+  const renderZipTab = () => renderFullFileContent('Loading ZIP file...', () => (
+    <div className="h-[600px]">
+      <ZipFileViewer fileBuffer={fullFileContent} fileName={fileData.file_name} />
+    </div>
+  ));
+
+  const renderSqliteTab = () => renderFullFileContent('Loading SQLite database...', () => (
+    <div className="h-[600px]">
+      <SQLiteViewer fileBuffer={fullFileContent} fileName={fileData.file_name} />
+    </div>
+  ));
+
+  const renderTextTab = () => {
+    if (fileData?.mime_type === 'application/json') {
+      let content;
+      try {
+        content = JSON.stringify(JSON.parse(getTextContent('{}') || '{}'), null, 2);
+      } catch {
+        content = getTextContent('Invalid JSON');
+      }
+      return (
+        <MonacoContentViewer
+          content={content}
+          language="json"
+          onLanguageChange={() => { }}
+          showLanguageSelect={false}
+          isTruncated={isContentTruncated}
+          onShowFullContent={handleShowFullContent}
+          isLoadingFullContent={isFullFileLoading}
+        />
+      );
+    }
+    if (fileData?.mime_type === 'text/csv' || fileData?.file_name.endsWith('.csv')) {
+      return <CsvViewer content={getTextContent('No CSV content available')} />;
+    }
+    return (
+      <MonacoContentViewer
+        content={getTextContent()}
+        language={currentLanguage}
+        onLanguageChange={setCurrentLanguage}
+        isTruncated={isContentTruncated}
+        onShowFullContent={handleShowFullContent}
+        isLoadingFullContent={isFullFileLoading}
+      />
+    );
+  };
+
+  const renderHexTab = () => {
+    if (isPreviewLoading) return <LoadingState message="Loading hex view..." />;
+    if (previewError) {
+      return (
+        <div className="p-4 text-center">
+          <p className="text-red-500 mb-2">Error loading hex view: {previewError}</p>
+          <button onClick={fetchPreviewContent} className="text-blue-500 hover:underline">Retry</button>
+        </div>
+      );
+    }
+    if (previewContent || fullFileContent) {
+      return (
+        <MonacoContentViewer
+          content={createHexView(fullFileContent || previewContent)}
+          language="plaintext"
+          onLanguageChange={() => { }}
+          showLanguageSelect={false}
+          isTruncated={fileData?.size > MAX_VIEW_SIZE && !fullFileContent}
+          onShowFullContent={fetchFullFile}
+          isLoadingFullContent={isFullFileLoading}
+        />
+      );
+    }
+    return <LoadingState message="Loading hex view..." />;
+  };
+
+  const renderTabContent = (tab) => {
+    switch (tab.id) {
+      case 'preview': return renderPreviewTab();
+      case 'zip-explorer': return renderZipTab();
+      case 'sqlite-explorer': return renderSqliteTab();
+      case 'sccm-log': return <SCCMLogViewer fileContent={textContent} fileName={fileData.file_name} />;
+      case 'csv-explorer': return <CsvViewer content={getTextContent('No CSV content available')} />;
+      case 'text': return renderTextTab();
+      case 'hex': return renderHexTab();
+      default:
+        if (tab.type === 'enrichment') return renderEnrichmentContent(tab.id);
+        return renderTransformContent(tab.id);
+    }
   };
 
   // <- to go back, tab to scroll to file data area or cycle tabs if already in view, f to jump to findings
@@ -1044,7 +1349,7 @@ const FileViewer = () => {
               const tabs = getAvailableTabs();
               const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
               const nextIndex = (currentIndex + 1) % tabs.length;
-              setActiveTab(tabs[nextIndex].id);
+              handleTabChange(tabs[nextIndex].id);
             } else {
               // If not in view, scroll to it
               fileContentRef.current.scrollIntoView({
@@ -1376,9 +1681,9 @@ const FileViewer = () => {
                 <EncodingSelector
                   initialEncoding={detectedEncoding}
                   onEncodingChange={(encoding) => {
-                    if (fileContent) {
+                    if (previewContent) {
                       const decoder = new TextDecoder(encoding);
-                      setTextContent(decoder.decode(fileContent.slice(0, MAX_VIEW_SIZE)));
+                      setTextContent(decoder.decode(previewContent.slice(0, MAX_VIEW_SIZE)));
                     }
                   }}
                 />
@@ -1392,11 +1697,6 @@ const FileViewer = () => {
               >
                 Findings: {fileData.findingsByObjectId_aggregate?.aggregate?.count || 0}
               </button>
-              {fileData?.size > 10 * 1024 * 1024 && (
-                <span className="text-yellow-600 dark:text-yellow-400 text-sm">
-                  File is too large to view directly. Maximum size is 10MB.
-                </span>
-              )}
               {shouldShowContainerAnalysisButton() && (
                 <button
                   onClick={handleContainerAnalysis}
@@ -1440,10 +1740,9 @@ const FileViewer = () => {
             </div>
           </CardHeader>
           <CardContent className="pt-1">
-            {isContentTruncated && renderContentTruncationAlert()}
             <Tabs
               value={activeTab}
-              onValueChange={setActiveTab}
+              onValueChange={handleTabChange}
               className="w-full"
             >
               <TabsList className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-10">
@@ -1501,94 +1800,7 @@ const FileViewer = () => {
               {/* Render tab content */}
               {getAvailableTabs().map(tab => (
                 <TabsContent key={tab.id} value={tab.id} className="mt-2">
-                  {tab.id === 'preview' ? (
-                    hasPreviewableImage ? (
-                      <div className="w-full flex justify-center bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
-                        <img
-                          src={URL.createObjectURL(new Blob([fileContent], { type: fileData.mime_type }))}
-                          alt={fileData.file_name}
-                          className="max-w-full max-h-[800px] object-contain"
-                        />
-                      </div>
-                    ) : (
-                      <div className="aspect-[8.5/11] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
-                        <iframe
-                          src={URL.createObjectURL(new Blob([pdfContent], { type: 'application/pdf' }))}
-                          className="w-full h-full rounded-lg"
-                        />
-                      </div>
-                    )
-                  ) : tab.id === 'zip-explorer' ? (
-                    <div className="h-[600px]">
-                      <ZipFileViewer
-                        fileBuffer={fileContent}
-                        fileName={fileData.file_name}
-                      />
-                    </div>
-                  ) : tab.id === 'sccm-log' ? (
-                    <SCCMLogViewer
-                      fileContent={textContent}
-                      fileName={fileData.file_name}
-                    />
-                  ) : tab.id === 'sqlite-explorer' ? (
-                    <div className="h-[600px]">
-                      <SQLiteViewer
-                        fileBuffer={fileContent}
-                        fileName={fileData.file_name}
-                      />
-                    </div>
-                  ) : tab.id === 'csv-explorer' ? (
-                    <CsvViewer
-                      content={textContent || (fileData?.is_plaintext && fileContent ?
-                        new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
-                        'No CSV content available')}
-                    />
-                  ) : tab.id === 'text' ? (
-                    fileData?.mime_type === 'application/json' ? (
-                      <MonacoContentViewer
-                        content={(() => {
-                          try {
-                            const jsonContent = textContent || (fileData?.is_plaintext && fileContent ?
-                              new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
-                              '{}');
-                            return JSON.stringify(JSON.parse(jsonContent || '{}'), null, 2);
-                          } catch (e) {
-                            return textContent || (fileData?.is_plaintext && fileContent ?
-                              new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
-                              'Invalid JSON');
-                          }
-                        })()}
-                        language="json"
-                        onLanguageChange={() => { }}
-                        showLanguageSelect={false}
-                      />
-                    ) : fileData?.mime_type === 'text/csv' || fileData?.file_name.endsWith('.csv') ? (
-                      <CsvViewer
-                        content={textContent || (fileData?.is_plaintext && fileContent ?
-                          new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
-                          'No CSV content available')}
-                      />
-                    ) : (
-                      <MonacoContentViewer
-                        content={textContent || (fileData?.is_plaintext && fileContent ?
-                          new TextDecoder().decode(fileContent.slice(0, MAX_VIEW_SIZE)) :
-                          'No text content available')}
-                        language={currentLanguage}
-                        onLanguageChange={setCurrentLanguage}
-                      />
-                    )
-                  ) : tab.id === 'hex' ? (
-                    <MonacoContentViewer
-                      content={fileContent ? createHexView(fileContent) : 'File content not available or too large'}
-                      language="plaintext"
-                      onLanguageChange={() => { }}
-                      showLanguageSelect={false}
-                    />
-                  ) : tab.type === 'enrichment' ? (
-                    renderEnrichmentContent(tab.id)
-                  ) : (
-                    renderTransformContent(tab.id)
-                  )}
+                  {renderTabContent(tab)}
                 </TabsContent>
               ))}
             </Tabs>

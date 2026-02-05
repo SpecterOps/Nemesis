@@ -159,8 +159,8 @@ class MockStorageMinio:
         Returns:
             UUID assigned to the uploaded file
         """
-        file_uuid = str(uuid.uuid4())
-        self._upload_paths[file_uuid] = file_path
+        file_uuid = uuid.uuid4()
+        self._upload_paths[str(file_uuid)] = file_path
         return file_uuid
 
     def upload(self, data: bytes) -> uuid.UUID:
@@ -172,8 +172,8 @@ class MockStorageMinio:
         Returns:
             UUID assigned to the uploaded data
         """
-        file_uuid = str(uuid.uuid4())
-        self._uploaded_files[file_uuid] = data
+        file_uuid = uuid.uuid4()
+        self._uploaded_files[str(file_uuid)] = data
         return file_uuid
 
     def check_file_exists(self, object_name: str) -> bool:

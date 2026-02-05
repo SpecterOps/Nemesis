@@ -208,6 +208,7 @@ class NoseyParkerOutput(BaseModel):
             # Try to construct with just the required fields
             return cls(
                 object_id=data.get("object_id", ""),
+                workflow_id=data.get("workflow_id", ""),
                 scan_result=ScanResults(
                     scan_duration_ms=data.get("scan_result", {}).get("scan_duration_ms", 0),
                     bytes_scanned=data.get("scan_result", {}).get("bytes_scanned", 0),
@@ -249,7 +250,7 @@ class SingleEnrichmentWorkflowInput(BaseModel):
 #
 ##########################################
 class File(BaseModel):
-    model_config = ConfigDict(
+    model_config = ConfigDict(  # pyright: ignore[reportCallIssue]
         exclude_none=True,
         exclude_unset=True,
     )
@@ -292,6 +293,8 @@ class File(BaseModel):
         Returns:
             File instance ready for submission
         """
+        assert metadata.timestamp is not None, "FileMetadata.timestamp must not be None"
+        assert metadata.expiration is not None, "FileMetadata.expiration must not be None"
         return cls(
             object_id=object_id,
             agent_id=metadata.agent_id,

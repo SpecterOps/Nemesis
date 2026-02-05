@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false, reportCallIssue=false
 # enrichment_modules/pe_analyzer/analzyer.py
 import os
 import shutil

@@ -66,7 +66,7 @@ def estimate_container_size(path: str) -> int:
                 return total_size
         elif py7zr.is_7zfile(path):
             with py7zr.SevenZipFile(path) as f:
-                return f.archiveinfo().uncompressed
+                return f.archiveinfo().uncompressed  # pyright: ignore[reportReturnType]
         elif tarfile.is_tarfile(path):
             return estimate_uncompressed_gz_size(path)
         else:
@@ -291,7 +291,7 @@ class ContainerExtractor:
         storage,
         dapr_client: DaprClient,
         extracted_archive_size_limit: int = 1_073_741_824,  # 1GB default
-        allowed_extensions: set = None,  # Optional whitelist of allowed file extensions
+        allowed_extensions: set | None = None,  # Optional whitelist of allowed file extensions
     ):
         """Initialize the ContainerProcessor with its dependencies.
 

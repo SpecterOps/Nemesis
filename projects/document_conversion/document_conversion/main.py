@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI):
         stack.push_async_callback(global_vars.asyncpg_pool.close)
 
         wf_runtime.start()
-        stack.push_async_callback(wf_runtime.shutdown)
+        stack.callback(wf_runtime.shutdown)
 
         global_vars.workflow_client = DaprWorkflowClient(
             logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),

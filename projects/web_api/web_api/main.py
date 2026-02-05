@@ -300,7 +300,7 @@ async def upload_file(
         submission_id = await submit_file(file_model)
 
         logger.info("File metadata submitted", submission_id=str(submission_id), object_id=object_id)
-        return FileWithMetadataResponse(object_id=object_id, submission_id=submission_id)
+        return FileWithMetadataResponse(object_id=uuid.UUID(object_id), submission_id=submission_id)
 
     except Exception as e:
         logger.exception(message="Error processing file upload")
@@ -318,6 +318,8 @@ async def download_file(
     object_id: str = Path(..., description="Unique identifier of the file to download"),
     raw: bool = Query(False, description="Whether to return the file in raw format"),
     name: str = Query("", description="Custom filename for the downloaded file"),
+    offset: int = Query(0, ge=0, description="Byte offset to start reading from"),
+    length: int = Query(0, ge=0, description="Number of bytes to read (0 = entire file)"),
 ):
     try:
         if not storage.check_file_exists(object_id):
@@ -331,7 +333,17 @@ async def download_file(
         if not file_data.size:
             raise HTTPException(status_code=404, detail=f"File data for {object_id} has no size information")
 
-        if file_data.size > DOWNLOAD_SIZE_LIMIT_MB * 1024 * 1024:
+        if offset >= file_data.size:
+            raise HTTPException(status_code=400, detail=f"Offset {offset} is beyond file size {file_data.size}")
+
+        # For range requests, check the effective size instead of total file size
+        is_range_request = offset > 0 or length > 0
+        if is_range_request:
+            effective_size = min(length, file_data.size - offset) if length > 0 else (file_data.size - offset)
+        else:
+            effective_size = file_data.size
+
+        if effective_size > DOWNLOAD_SIZE_LIMIT_MB * 1024 * 1024:
             raise HTTPException(
                 status_code=400,
                 detail=f"File too large to download directly. Maximum size is {DOWNLOAD_SIZE_LIMIT_MB}MB.",
@@ -349,10 +361,17 @@ async def download_file(
         else:
             headers["Content-Disposition"] = f'attachment; filename="{object_id}"'
 
+        if is_range_request:
+            data = await asyncio.to_thread(storage.download_bytes, object_id, offset, length)
+            headers["Content-Length"] = str(len(data))
+            return Response(content=data, headers=headers, media_type=headers["Content-Type"])
+
         return StreamingResponse(
             storage.download_stream(object_id), headers=headers, media_type=headers["Content-Type"]
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(message="Error downloading file")
         raise HTTPException(status_code=500, detail=str(e)) from e

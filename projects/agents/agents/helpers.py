@@ -84,7 +84,7 @@ async def get_litellm_token():
             return None
 
     except Exception as e:
-        logger.error(e, message="Error initializing LiteLLM connection")
+        logger.error("Error initializing LiteLLM connection", error=str(e))
         return None
 
 
