@@ -748,9 +748,6 @@ const FileViewer = () => {
 
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
-    if (tabId === 'hex' && !previewContent && !isPreviewLoading) {
-      fetchPreviewContent();
-    }
     if (['zip-explorer', 'sqlite-explorer'].includes(tabId) && !fullFileContent && !isFullFileLoading) {
       fetchFullFile();
     }
@@ -762,7 +759,7 @@ const FileViewer = () => {
     if (transformData[tabId] && !transformData[tabId].content && !transformsLoading[tabId]) {
       fetchTransformContent(tabId);
     }
-  }, [previewContent, isPreviewLoading, fullFileContent, isFullFileLoading, fileData, fetchPreviewContent, fetchFullFile, transformData, transformsLoading, fetchTransformContent]);
+  }, [fullFileContent, isFullFileLoading, fileData, fetchFullFile, transformData, transformsLoading, fetchTransformContent]);
 
   // Set the initial tab based on transform metadata and fallback order
   useEffect(() => {
@@ -1714,27 +1711,31 @@ const FileViewer = () => {
                       />
                     )
                   ) : tab.id === 'hex' ? (
-                    isPreviewLoading ? (
+                    isFullFileLoading ? (
                       <LoadingState message="Loading hex view..." />
-                    ) : previewError ? (
+                    ) : fullFileError ? (
                       <div className="p-4 text-center">
-                        <p className="text-red-500 mb-2">Error loading hex view: {previewError}</p>
-                        <button onClick={fetchPreviewContent} className="text-blue-500 hover:underline">Retry</button>
+                        <p className="text-red-500 mb-2">Error loading hex view: {fullFileError}</p>
+                        <button onClick={fetchFullFile} className="text-blue-500 hover:underline">Retry</button>
                       </div>
-                    ) : previewContent ? (
+                    ) : fullFileContent ? (
                       <MonacoContentViewer
-                        content={createHexView(previewContent)}
+                        content={createHexView(fullFileContent)}
                         language="plaintext"
                         onLanguageChange={() => { }}
                         showLanguageSelect={false}
                       />
                     ) : (
-                      <MonacoContentViewer
-                        content="File content not available or too large"
-                        language="plaintext"
-                        onLanguageChange={() => { }}
-                        showLanguageSelect={false}
-                      />
+                      <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                        <p className="mb-1">File size: {fileData?.size ? (fileData.size / (1024 * 1024)).toFixed(2) + ' MB' : 'unknown'}</p>
+                        <p className="mb-3 text-sm">Large hex views may be slow to render</p>
+                        <button
+                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                          onClick={fetchFullFile}
+                        >
+                          Load Hex View
+                        </button>
+                      </div>
                     )
                   ) : tab.type === 'enrichment' ? (
                     renderEnrichmentContent(tab.id)
