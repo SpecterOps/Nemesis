@@ -3,6 +3,10 @@
  * Works with authenticated requests and self-signed certificates
  */
 
+const isDev = import.meta.env.DEV;
+const log = (...args) => isDev && console.log(...args);
+const warn = (...args) => isDev && console.warn(...args);
+
 class FileCache {
   constructor() {
     this.cache = new Map();
@@ -40,7 +44,7 @@ class FileCache {
     }
 
     if (!this.isValid(entry)) {
-      console.log('[FileCache] Cache expired:', key);
+      log('[FileCache] Cache expired:', key);
       this.cache.delete(key);
       return null;
     }
@@ -75,7 +79,7 @@ class FileCache {
 
     // Don't cache if too large
     if (fileSize > this.maxFileSize) {
-      console.log('[FileCache] File too large to cache:', key, `(${fileSize} bytes)`);
+      log('[FileCache] File too large to cache:', key, `(${fileSize} bytes)`);
       return;
     }
 
@@ -90,7 +94,7 @@ class FileCache {
     };
 
     this.cache.set(key, entry);
-    console.log('[FileCache] Cached:', key, `(${fileSize} bytes)`);
+    log('[FileCache] Cached:', key, `(${fileSize} bytes)`);
 
     // Enforce size limit
     this.enforceSizeLimit();
@@ -104,7 +108,7 @@ class FileCache {
       // Get first (oldest) entry
       const firstKey = this.cache.keys().next().value;
       this.cache.delete(firstKey);
-      console.log('[FileCache] Pruned oldest entry:', firstKey);
+      log('[FileCache] Pruned oldest entry:', firstKey);
     }
   }
 
@@ -113,7 +117,7 @@ class FileCache {
    */
   clear() {
     this.cache.clear();
-    console.log('[FileCache] Cache cleared');
+    log('[FileCache] Cache cleared');
   }
 
   /**
@@ -169,7 +173,7 @@ export async function cachedFetch(url, options = {}) {
 
   // Check if there's already a pending request for this URL
   if (fileCache.pendingRequests.has(cacheKey)) {
-    console.log('[FileCache] Deduplicating request:', cacheKey);
+    log('[FileCache] Deduplicating request:', cacheKey);
     // Wait for the pending request to complete
     await fileCache.pendingRequests.get(cacheKey);
     // Get a fresh copy from cache (each caller gets their own Response object)
@@ -178,12 +182,12 @@ export async function cachedFetch(url, options = {}) {
       return cached;
     }
     // If not in cache (caching may have failed), fallback to direct fetch
-    console.warn('[FileCache] Deduplicated request cache miss, falling back to direct fetch:', cacheKey);
+    warn('[FileCache] Deduplicated request cache miss, falling back to direct fetch:', cacheKey);
     return fetch(url, options);
   }
 
   // Fetch from network
-  console.log('[FileCache] Fetching from network:', cacheKey);
+  log('[FileCache] Fetching from network:', cacheKey);
 
   const fetchPromise = (async () => {
     const response = await fetch(url, options);
@@ -206,8 +210,8 @@ export async function cachedFetch(url, options = {}) {
       // Get from cache so we return a fresh Response object
       const cached = await fileCache.get(url);
       if (!cached) {
-        console.warn('[FileCache] Cache miss after successful fetch, falling back to direct fetch:', cacheKey);
-        console.log('[FileCache] Cache contents:', Array.from(fileCache.cache.keys()));
+        warn('[FileCache] Cache miss after successful fetch, falling back to direct fetch:', cacheKey);
+        log('[FileCache] Cache contents:', Array.from(fileCache.cache.keys()));
         // Fallback to direct fetch if caching failed
         return fetch(url, options);
       }
