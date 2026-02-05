@@ -21,7 +21,7 @@ class FileCache {
    */
   getCacheKey(url) {
     const urlObj = new URL(url, window.location.origin);
-    return urlObj.pathname; // Use pathname as key (e.g., "/api/files/abc-123")
+    return urlObj.pathname + urlObj.search; // Include query string to differentiate range requests
   }
 
   /**
