@@ -182,3 +182,7 @@ projects/frontend/public/env.js
 *.swo
 *.swn
 *~
+
+# Playwright
+.playwright-mcp
+*.png
