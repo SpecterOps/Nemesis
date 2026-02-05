@@ -34,6 +34,13 @@ const Tooltip = ({ children, content, position = 'top' }) => {
 };
 
 const Modal = ({ isOpen, onClose, children }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -41,6 +48,13 @@ const Modal = ({ isOpen, onClose, children }) => {
       <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={onClose}></div>
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white dark:bg-dark-secondary rounded-lg shadow-xl max-w-4xl w-full h-[80vh] overflow-hidden">
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 z-10 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+          </button>
           {children}
         </div>
       </div>
@@ -76,7 +90,7 @@ const YaraRulesManager = () => {
   // Set source to username when creating a new rule
   useEffect(() => {
     if (isNewRule && username) {
-      setNewRuleSource(username);
+      setNewRuleSource(`Created manually by ${username}`);
     }
   }, [isNewRule, username]);
 
@@ -199,6 +213,10 @@ const YaraRulesManager = () => {
     }
   };
 
+  // Derive duplicate-name check for the Create dialog
+  const extractedRuleName = isNewRule ? extractRuleName(editedContent) : null;
+  const isDuplicateName = extractedRuleName ? rules.some(r => r.name === extractedRuleName) : false;
+
   // Handle creating new rules
   const createRule = async () => {
     try {
@@ -207,10 +225,8 @@ const YaraRulesManager = () => {
         throw new Error('No valid rule name found in content');
       }
 
-      // Check if rule name exists
-      const existingRule = rules.find(r => r.name === ruleName);
-      if (existingRule) {
-        throw new Error('Rule name already exists');
+      if (rules.some(r => r.name === ruleName)) {
+        throw new Error(`A rule named "${ruleName}" already exists. Change the rule name to create a new rule.`);
       }
 
       const mutation = {
@@ -511,12 +527,12 @@ const YaraRulesManager = () => {
             <table className="min-w-full table-fixed">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800">
-                  <th className="w-20 px-6 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Status</th>
-                  <th className="w-48 px-6 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Name</th>
-                  <th className="w-96 px-6 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Source</th>
-                  <th className="w-40 px-6 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Created</th>
-                  <th className="w-40 px-6 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Updated</th>
-                  <th className="w-24 px-6 py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Actions</th>
+                  <th className="w-16 px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Name</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Source</th>
+                  <th className="w-36 px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Created</th>
+                  <th className="w-36 px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Updated</th>
+                  <th className="w-16 px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -534,7 +550,7 @@ const YaraRulesManager = () => {
                       key={rule.name}
                       className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-1.5">
                         <button
                           onClick={() => toggleRuleEnabled(rule)}
                           className={`p-1 rounded-full ${rule.enabled
@@ -545,34 +561,32 @@ const YaraRulesManager = () => {
                           {rule.enabled ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
                         </button>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 max-w-md truncate whitespace-normal break-words">
+                      <td className="px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 truncate">
                         {rule.name}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      <td className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 truncate">
                         {rule.source}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      <td className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                         {new Date(rule.created_at).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      <td className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                         {new Date(rule.updated_at).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex space-x-2">
-                          <Tooltip content="Edit Rule">
-                            <button
-                              onClick={() => {
-                                setSelectedRule(rule);
-                                setEditedContent(rule.content);
-                                setIsEditorOpen(true);
-                                setIsNewRule(false);
-                              }}
-                              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                            >
-                              <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                            </button>
-                          </Tooltip>
-                        </div>
+                      <td className="px-3 py-1.5">
+                        <Tooltip content="Edit Rule">
+                          <button
+                            onClick={() => {
+                              setSelectedRule(rule);
+                              setEditedContent(rule.content);
+                              setIsEditorOpen(true);
+                              setIsNewRule(false);
+                            }}
+                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                          >
+                            <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          </button>
+                        </Tooltip>
                       </td>
                     </tr>
                   ))
@@ -619,7 +633,7 @@ const YaraRulesManager = () => {
                     value={newRuleSource}
                     onChange={(e) => setNewRuleSource(e.target.value)}
                     className="w-full border dark:border-gray-700 rounded-md px-3 py-2 dark:bg-gray-800 dark:text-gray-100"
-                    placeholder="Enter rule source"
+                    placeholder="Rule source or origin"
                   />
                 </div>
               </div>
@@ -642,33 +656,46 @@ const YaraRulesManager = () => {
             </div>
           </div>
 
-          <div className="px-6 py-4 border-t dark:border-gray-700 flex justify-end space-x-2">
-            <button
-              onClick={() => {
-                setIsEditorOpen(false);
-                setSelectedRule(null);
-                setEditedContent('');
-                setIsNewRule(false);
-                setNewRuleSource('');
-              }}
-              className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                if (isNewRule) {
-                  createRule();
-                } else {
-                  updateRule(selectedRule, editedContent);
+          <div className="px-6 py-4 border-t dark:border-gray-700 flex items-center justify-between">
+            {isNewRule && isDuplicateName ? (
+              <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-400">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm">A rule named "{extractedRuleName}" already exists. Change the rule name to create a new rule.</span>
+              </div>
+            ) : (
+              <div />
+            )}
+            <div className="flex space-x-2">
+              <button
+                onClick={() => {
+                  setIsEditorOpen(false);
+                  setSelectedRule(null);
+                  setEditedContent('');
+                  setIsNewRule(false);
+                  setNewRuleSource('');
+                }}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (isNewRule) {
+                    createRule();
+                  } else {
+                    updateRule(selectedRule, editedContent);
+                  }
+                }}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isNewRule
+                  ? (!newRuleSource || !editedContent || !extractRuleName(editedContent) || isDuplicateName)
+                  : (editedContent === selectedRule?.content)
                 }
-              }}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={isNewRule && (!newRuleSource || !editedContent || !extractRuleName(editedContent))}
-            >
-              <Save className="w-4 h-4" />
-              <span>{isNewRule ? 'Create' : 'Save'}</span>
-            </button>
+              >
+                <Save className="w-4 h-4" />
+                <span>{isNewRule ? 'Create' : 'Save'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </Modal>
