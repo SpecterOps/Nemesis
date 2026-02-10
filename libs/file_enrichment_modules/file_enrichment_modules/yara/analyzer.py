@@ -67,7 +67,7 @@ class YaraScanner(EnrichmentModule):
         """Always returns True as Yara scanning should run on all files."""
         return True
 
-    def _analyze_yara(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+    async def _analyze_yara(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze file using Yara rules and generate enrichment result.
 
         Args:
@@ -84,7 +84,7 @@ class YaraScanner(EnrichmentModule):
 
         yara_matches = []
         for rule in scan_results:
-            rule_text = self.rule_manager.get_rule_content(rule.identifier)
+            rule_text = await self.rule_manager.get_rule_content(rule.identifier)
             yara_match = {"rule_name": rule.identifier, "rule_string_matches": [], "rule_text": rule_text}
 
             # Add metadata if available
@@ -128,7 +128,7 @@ class YaraScanner(EnrichmentModule):
                                             string_match_instance["matched_data_text"] = matched_data.decode(
                                                 "unicode_escape"
                                             )
-                                        except:
+                                        except Exception:
                                             # If both decodings fail, use hex format
                                             string_match_instance["matched_data_hex"] = format_hex_like_xxd(
                                                 matched_data
@@ -190,10 +190,10 @@ class YaraScanner(EnrichmentModule):
 
             # Use provided file_path if available, otherwise download
             if file_path:
-                return self._analyze_yara(file_path, file_enriched)
+                return await self._analyze_yara(file_path, file_enriched)
             else:
                 with self.storage.download(file_enriched.object_id) as temp_file:
-                    return self._analyze_yara(temp_file.name, file_enriched)
+                    return await self._analyze_yara(temp_file.name, file_enriched)
 
         except Exception:
             logger.exception(message="Error in process()")

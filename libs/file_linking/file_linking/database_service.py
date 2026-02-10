@@ -4,7 +4,7 @@ Database service layer for file linking system.
 Handles all database operations for file_listings and file_linkings tables.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 import asyncpg
 from common.logger import get_logger
@@ -12,7 +12,7 @@ from common.logger import get_logger
 logger = get_logger(__name__)
 
 
-class FileListingStatus(str, Enum):
+class FileListingStatus(StrEnum):
     NEEDS_TO_BE_COLLECTED = "needs_to_be_collected"
     NOT_EXISTS = "not_exists"
     COLLECTED = "collected"

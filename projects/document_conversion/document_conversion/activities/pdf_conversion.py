@@ -20,6 +20,9 @@ storage = StorageMinio()
 @workflow_activity
 async def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict | None:
     """Convert file to PDF using Gotenberg."""
+    assert global_vars.gotenberg_url is not None, "gotenberg_url must be initialized"
+    assert global_vars.tracking_service is not None, "tracking_service must be initialized"
+
     object_id = file_input.get("object_id")
     result = None
 

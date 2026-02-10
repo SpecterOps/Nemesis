@@ -82,6 +82,7 @@ async def run_enrichment(
         # Process the file
         result = await module.process(enrichment_request.object_id)
 
+        assert global_vars.asyncpg_pool is not None
         if result:
             # Store enrichment result in database
             async with global_vars.asyncpg_pool.acquire() as conn:
@@ -132,6 +133,7 @@ async def run_enrichment(
                         )
 
         # Update workflow tracking by object_id (following dotnet.py pattern)
+        assert global_vars.tracking_service is not None
         await global_vars.tracking_service.update_enrichment_results_by_object_id(
             object_id=enrichment_request.object_id,
             success_list=[enrichment_name],
@@ -149,6 +151,7 @@ async def run_enrichment(
     except Exception as e:
         # Track failure before re-raising
         try:
+            assert global_vars.tracking_service is not None
             await global_vars.tracking_service.update_enrichment_results_by_object_id(
                 object_id=enrichment_request.object_id,
                 failure_list=[f"{enrichment_name}:{str(e)[:100]}"],
@@ -160,9 +163,9 @@ async def run_enrichment(
             )
 
         logger.exception(
-            e,
             message="Error running enrichment module",
             enrichment_name=enrichment_name,
             object_id=enrichment_request.object_id,
+            error=str(e),
         )
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e

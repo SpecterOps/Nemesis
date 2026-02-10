@@ -90,7 +90,7 @@ class ModuleLoader:
 
         # Load the module
         try:
-            mod_name = f"{__package__}.{module_dir.name}"
+            mod_name = f"{__package__}.{module_dir.name}.analyzer"
             spec = importlib.util.spec_from_file_location(mod_name, module_path)
             if not spec:
                 raise Exception(f"Could not load module. Module Name: {mod_name}.  Path: {module_path}")

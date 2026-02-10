@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# pyright: reportOptionalMemberAccess=false, reportAttributeAccessIssue=false, reportCallIssue=false, reportArgumentType=false, reportMissingImports=false, reportUndefinedVariable=false, reportUnboundVariable=false
 
 # olefile (formerly OleFileIO_PL) version 0.42 2015-01-25
 #
@@ -3379,8 +3380,7 @@ def process_file(filename, hashcat_format=True):
             return 2
 
         if workbookStream is None:
-            sys.stderr.write("%s : Error opening stream, %s\n" % filename)
-            (filename, stream)
+            sys.stderr.write("%s : Error opening stream, %s\n" % (filename, stream))
             return 3
 
         try:

@@ -1,7 +1,7 @@
 # enrichment_modules/pdf/analyzer.py
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 import fitz  # PyMuPDF
 from common.logger import get_logger
@@ -14,7 +14,7 @@ from file_enrichment_modules.pdf.pdf2john import PdfParser
 logger = get_logger(__name__)
 
 
-def parse_xmp_to_structured_data(xmp_xml: Optional[str]) -> dict[str, Any]:
+def parse_xmp_to_structured_data(xmp_xml: str | None) -> dict[str, Any]:
     """
     Extract structured metadata from XMP XML.
 
@@ -65,27 +65,27 @@ def parse_xmp_to_structured_data(xmp_xml: Optional[str]) -> dict[str, Any]:
         # Count unique namespaces
         unique_namespaces = set()
         for elem in root.iter():
-            if '}' in elem.tag:
-                namespace = elem.tag.split('}')[0][1:]
+            if "}" in elem.tag:
+                namespace = elem.tag.split("}")[0][1:]
                 unique_namespaces.add(namespace)
         result["namespace_count"] = len(unique_namespaces)
 
         # Extract text content from key elements
         field_map = {
-            'DocumentID': 'document_id',
-            'InstanceID': 'instance_id',
-            'OriginalDocumentID': 'original_document_id',
-            'CreatorTool': 'creator_tool',
-            'Producer': 'producer',
-            'CreateDate': 'create_date',
-            'ModifyDate': 'modify_date',
-            'MetadataDate': 'metadata_date',
-            'Trapped': 'trapped',
-            'RenditionClass': 'rendition_class',
+            "DocumentID": "document_id",
+            "InstanceID": "instance_id",
+            "OriginalDocumentID": "original_document_id",
+            "CreatorTool": "creator_tool",
+            "Producer": "producer",
+            "CreateDate": "create_date",
+            "ModifyDate": "modify_date",
+            "MetadataDate": "metadata_date",
+            "Trapped": "trapped",
+            "RenditionClass": "rendition_class",
         }
 
         for elem in root.iter():
-            tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+            tag_name = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
 
             # Extract text values
             if tag_name in field_map and elem.text and elem.text.strip():
@@ -94,28 +94,28 @@ def parse_xmp_to_structured_data(xmp_xml: Optional[str]) -> dict[str, Any]:
                     result[result_key] = elem.text.strip()
 
             # Extract format (might be in dc:format element)
-            if tag_name == 'format' and elem.text and elem.text.strip():
-                if elem.text.strip() == 'application/pdf':
+            if tag_name == "format" and elem.text and elem.text.strip():
+                if elem.text.strip() == "application/pdf":
                     result["format"] = elem.text.strip()
 
         # Count history events
-        history_events = [e for e in root.iter() if e.tag.endswith('action')]
+        history_events = [e for e in root.iter() if e.tag.endswith("action")]
         result["history_event_count"] = len(history_events)
 
         # Count manifest items
-        manifest_items = [e for e in root.iter() if e.tag.endswith('documentID') and e.text]
-        result["manifest_item_count"] = len([m for m in manifest_items if m.text and m.text.startswith('xmp.')])
+        manifest_items = [e for e in root.iter() if e.tag.endswith("documentID") and e.text]
+        result["manifest_item_count"] = len([m for m in manifest_items if m.text and m.text.startswith("xmp.")])
 
         # Count fonts
-        font_names = [e for e in root.iter() if e.tag.endswith('fontName')]
+        font_names = [e for e in root.iter() if e.tag.endswith("fontName")]
         result["font_count"] = len(font_names)
 
         # Count color swatches
-        swatches = [e for e in root.iter() if e.tag.endswith('swatchName')]
+        swatches = [e for e in root.iter() if e.tag.endswith("swatchName")]
         result["color_swatch_count"] = len(swatches)
 
         # Count embedded images
-        images = [e for e in root.iter() if e.tag.endswith('image') and e.text]
+        images = [e for e in root.iter() if e.tag.endswith("image") and e.text]
         result["embedded_image_count"] = len([img for img in images if img.text and len(img.text) > 100])
 
     except ET.ParseError:
@@ -126,7 +126,7 @@ def parse_xmp_to_structured_data(xmp_xml: Optional[str]) -> dict[str, Any]:
     return result
 
 
-def _get_pdf_version(doc: fitz.Document, file_path: str) -> Optional[str]:
+def _get_pdf_version(doc: fitz.Document, file_path: str) -> str | None:
     """Extract PDF version from document metadata or file header.
 
     Args:
@@ -144,10 +144,10 @@ def _get_pdf_version(doc: fitz.Document, file_path: str) -> Optional[str]:
                 return format_str.split(" ")[1]
 
         # For encrypted PDFs, metadata may be None, so read version from file header
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             header = f.read(20)
-            if header.startswith(b'%PDF-'):
-                return header[5:8].decode('ascii')
+            if header.startswith(b"%PDF-"):
+                return header[5:8].decode("ascii")
     except Exception as e:
         logger.debug(f"Could not extract PDF version: {e}")
 
@@ -163,7 +163,7 @@ def _extract_basic_metadata(doc: fitz.Document) -> dict[str, Any]:
     Returns:
         Dictionary with title, author, subject, creator, producer, keywords, trapped
     """
-    metadata = {
+    metadata: dict[str, str | None] = {
         "title": None,
         "author": None,
         "subject": None,
@@ -237,18 +237,12 @@ def _extract_page_info(doc: fitz.Document) -> dict[str, Any]:
         if doc.page_count > 0:
             first_page = doc[0]
             rect = first_page.rect
-            page_info["page_size"] = {
-                "width": round(rect.width, 2),
-                "height": round(rect.height, 2),
-                "unit": "points"
-            }
+            page_info["page_size"] = {"width": round(rect.width, 2), "height": round(rect.height, 2), "unit": "points"}
             page_info["page_rotation"] = first_page.rotation
     except Exception as e:
         logger.debug(f"Error extracting page info: {e}")
 
     return page_info
-
-
 
 
 def _detect_pdf_a(doc: fitz.Document) -> bool:
@@ -289,7 +283,7 @@ def _detect_table_of_contents(doc: fitz.Document) -> bool:
     return False
 
 
-def _extract_xmp_metadata(doc: fitz.Document) -> Optional[dict[str, Any]]:
+def _extract_xmp_metadata(doc: fitz.Document) -> dict[str, Any] | None:
     """Extract and parse XMP metadata to structured format.
 
     Args:
@@ -347,15 +341,17 @@ def _extract_embedded_files(doc: fitz.Document) -> list[dict[str, Any]]:
             for i, name in enumerate(embfile_names):
                 try:
                     info = doc.embfile_info(i)
-                    embedded_files.append({
-                        "name": name,
-                        "filename": info.get("filename"),
-                        "ufilename": info.get("ufilename"),
-                        "description": info.get("desc"),
-                        "size": info.get("size"),
-                        "creation_date": info.get("creationDate"),
-                        "modification_date": info.get("modDate"),
-                    })
+                    embedded_files.append(
+                        {
+                            "name": name,
+                            "filename": info.get("filename"),
+                            "ufilename": info.get("ufilename"),
+                            "description": info.get("desc"),
+                            "size": info.get("size"),
+                            "creation_date": info.get("creationDate"),
+                            "modification_date": info.get("modDate"),
+                        }
+                    )
                 except Exception:
                     # If we can't get info, at least record the name
                     embedded_files.append({"name": name})
@@ -465,7 +461,7 @@ def parse_pdf_file(file_path: str) -> dict[str, Any]:
             "keywords": None,
             "trapped": None,
             "encryption_method": None,
-        }
+        },
     }
 
     try:

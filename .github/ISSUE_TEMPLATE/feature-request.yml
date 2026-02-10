@@ -1,0 +1,59 @@
+name: Feature Request
+description: Request a new feature or enhancement (not for new enrichment modules)
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature! For requests to support new file types, please use the "New Enrichment Module Request" template instead.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Feature Summary
+      description: A brief description of the feature you'd like
+      placeholder: "e.g., Add ability to export findings to CSV"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Use Case
+      description: What problem does this feature solve? How would you use it?
+      placeholder: |
+        Describe the problem or use case:
+        - What are you trying to accomplish?
+        - What limitations are you hitting?
+        - How would this improve your workflow?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: If you have ideas on how this could be implemented, describe them here
+      placeholder: |
+        Describe your ideal solution:
+        - How would the feature work?
+        - What would the interface look like?
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information, mockups, or examples that might be helpful
+    validations:
+      required: false

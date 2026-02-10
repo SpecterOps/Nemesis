@@ -1,0 +1,9 @@
+{
+  "pythonVersion": "3.13",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "basic",
+  "include": ["housekeeping"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "reportMissingTypeStubs": false
+}

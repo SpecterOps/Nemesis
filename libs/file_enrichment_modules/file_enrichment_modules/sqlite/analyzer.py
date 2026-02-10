@@ -72,7 +72,9 @@ def format_sqlite_data(database_data: dict) -> str:
             continue
 
         # Show schema with column types
-        schema_with_types = [f"{col} ({type_})" for col, type_ in zip(data["schema"], data["column_types"])]
+        schema_with_types = [
+            f"{col} ({type_})" for col, type_ in zip(data["schema"], data["column_types"], strict=True)
+        ]
         output.append(f"Schema: {', '.join(schema_with_types)}")
 
         output.append("Data:")

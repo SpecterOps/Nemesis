@@ -97,7 +97,7 @@ class AutoDecryptionObserver(DpapiObserver):
             # self._create_task(self._decrypt_with_user_credentials(masterkey)),  # TODO
         ]
 
-        result = await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _handle_new_sytem_credential(self, event: NewDpapiSystemCredentialEvent) -> None:
         """Handle a new DPAPI_SYSTEM credential by attempting to decrypt existing encrypted masterkeys."""

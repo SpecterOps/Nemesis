@@ -1,0 +1,6 @@
+YARA rule files in this directory must use a .yar or .yara extension to be
+loaded by the engine. The example rules are distributed as .txt files and
+must be renamed before they will be picked up.
+
+You must also uncomment the volume mount in compose.yaml for the
+file-enrichment service to mount this directory into the container.

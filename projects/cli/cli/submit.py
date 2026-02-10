@@ -14,8 +14,8 @@ import colorlog
 import requests
 import urllib3
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 from tqdm import tqdm
+from urllib3.util.retry import Retry
 
 # Disable SSL warnings for the submit functionality
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -688,7 +688,7 @@ def upload_file(
         except requests.exceptions.HTTPError as e:
             # Handle HTTP errors (like 500) separately to include response body in debug mode
             error_msg = f"Upload failed: {file_path} - {str(e)}"
-            if logger.isEnabledFor(logging.DEBUG) and hasattr(e, 'response') and e.response is not None:
+            if logger.isEnabledFor(logging.DEBUG) and hasattr(e, "response") and e.response is not None:
                 try:
                     response_body = e.response.text
                     if response_body:

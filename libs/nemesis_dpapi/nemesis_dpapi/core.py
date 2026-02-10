@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import struct
-from enum import Enum, IntFlag
+from enum import IntFlag, StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 from uuid import UUID
@@ -64,19 +64,19 @@ class BaseModel(PydanticBaseModel):
 class FlagMixin:
     def has_any(self: Self, flags: Self) -> bool:
         """True if *any* bit in `flags` is set in `self`."""
-        return bool(self & flags)
+        return bool(self & flags)  # pyright: ignore[reportOperatorIssue]
 
     def has_all(self: Self, flags: Self) -> bool:
         """True if *all* bits in `flags` are set in `self`."""
-        return (self & flags) == flags
+        return (self & flags) == flags  # pyright: ignore[reportOperatorIssue]
 
     def enable(self: Self, flags: Self) -> Self:
         """Return self | flags."""
-        return self | flags
+        return self | flags  # pyright: ignore[reportOperatorIssue]
 
     def disable(self: Self, flags: Self) -> Self:
         """Return self with `flags` cleared."""
-        return self & ~flags
+        return self & ~flags  # pyright: ignore[reportOperatorIssue]
 
 
 class MasterKeyPolicy(FlagMixin, IntFlag):
@@ -88,7 +88,7 @@ class MasterKeyPolicy(FlagMixin, IntFlag):
     DPAPI_OWF = 0x4  # Use the DPAPI One way function of the password (SHA_1(pw))
 
 
-class MasterKeyType(str, Enum):
+class MasterKeyType(StrEnum):
     """Type of DPAPI masterkey, which determines the decryption method.
 
     This classification is based on the account type that generated the masterkey

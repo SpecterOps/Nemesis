@@ -21,12 +21,12 @@ Example claude_desktop_config.json:
 ```
 """
 
-import sys
-import json
 import base64
+import json
 import ssl
-import urllib.request
+import sys
 import urllib.error
+import urllib.request
 from typing import Any
 
 # Configuration
@@ -36,8 +36,8 @@ PASSWORD = "n"
 
 # Create basic auth header
 auth_string = f"{USERNAME}:{PASSWORD}"
-auth_bytes = auth_string.encode('ascii')
-auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+auth_bytes = auth_string.encode("ascii")
+auth_b64 = base64.b64encode(auth_bytes).decode("ascii")
 
 # Create SSL context that doesn't verify certificates (for self-signed certs)
 ssl_context = ssl.create_default_context()
@@ -54,19 +54,19 @@ def forward_message(message: dict[str, Any]) -> dict[str, Any] | None:
     """Forward a message to the MCP HTTP endpoint and return the response."""
     try:
         # Prepare the request
-        data = json.dumps(message).encode('utf-8')
+        data = json.dumps(message).encode("utf-8")
         req = urllib.request.Request(
             MCP_URL,
             data=data,
             headers={
-                'Authorization': f'Basic {auth_b64}',
-                'Content-Type': 'application/json',
-            }
+                "Authorization": f"Basic {auth_b64}",
+                "Content-Type": "application/json",
+            },
         )
 
         # Make the request
         with urllib.request.urlopen(req, context=ssl_context, timeout=30) as response:
-            response_data = response.read().decode('utf-8')
+            response_data = response.read().decode("utf-8")
             return json.loads(response_data)
 
     except urllib.error.HTTPError as e:
@@ -74,40 +74,28 @@ def forward_message(message: dict[str, Any]) -> dict[str, Any] | None:
         return {
             "jsonrpc": "2.0",
             "id": message.get("id"),
-            "error": {
-                "code": -32603,
-                "message": f"HTTP {e.code}: {e.reason}"
-            }
+            "error": {"code": -32603, "message": f"HTTP {e.code}: {e.reason}"},
         }
     except urllib.error.URLError as e:
         log_error(f"URL error: {e.reason}")
         return {
             "jsonrpc": "2.0",
             "id": message.get("id"),
-            "error": {
-                "code": -32603,
-                "message": f"Connection error: {str(e.reason)}"
-            }
+            "error": {"code": -32603, "message": f"Connection error: {str(e.reason)}"},
         }
     except json.JSONDecodeError as e:
         log_error(f"Failed to decode response: {e}")
         return {
             "jsonrpc": "2.0",
             "id": message.get("id"),
-            "error": {
-                "code": -32603,
-                "message": f"Invalid JSON response: {str(e)}"
-            }
+            "error": {"code": -32603, "message": f"Invalid JSON response: {str(e)}"},
         }
     except Exception as e:
         log_error(f"Unexpected error: {e}")
         return {
             "jsonrpc": "2.0",
             "id": message.get("id"),
-            "error": {
-                "code": -32603,
-                "message": f"Bridge error: {str(e)}"
-            }
+            "error": {"code": -32603, "message": f"Bridge error: {str(e)}"},
         }
 
 
@@ -146,10 +134,7 @@ def main():
                 error_response = {
                     "jsonrpc": "2.0",
                     "id": None,
-                    "error": {
-                        "code": -32700,
-                        "message": f"Parse error: {str(e)}"
-                    }
+                    "error": {"code": -32700, "message": f"Parse error: {str(e)}"},
                 }
                 print(json.dumps(error_response), flush=True)
 

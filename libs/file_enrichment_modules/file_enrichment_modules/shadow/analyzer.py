@@ -1,5 +1,4 @@
 # enrichment_modules/shadow/analyzer.py
-import re
 import tempfile
 import textwrap
 from pathlib import Path
@@ -125,9 +124,9 @@ rule shadow_file
             summary += f"* **Username**: `{cred['username']}`\n"
             summary += f"* **Password Hash**: `{cred['password_hash']}`\n"
 
-            if cred.get('last_changed'):
+            if cred.get("last_changed"):
                 summary += f"* **Last Changed**: {cred['last_changed']} days since epoch\n"
-            if cred.get('max_days'):
+            if cred.get("max_days"):
                 summary += f"* **Max Password Age**: {cred['max_days']} days\n"
 
             summary += "\n"
@@ -186,13 +185,13 @@ rule shadow_file
                         yaml_output.append(f"   username: {cred['username']}")
                         yaml_output.append(f"   password_hash: {cred['password_hash']}")
 
-                        if cred.get('last_changed'):
+                        if cred.get("last_changed"):
                             yaml_output.append(f"   last_changed: {cred['last_changed']} days since epoch")
-                        if cred.get('min_days'):
+                        if cred.get("min_days"):
                             yaml_output.append(f"   min_days: {cred['min_days']}")
-                        if cred.get('max_days'):
+                        if cred.get("max_days"):
                             yaml_output.append(f"   max_days: {cred['max_days']}")
-                        if cred.get('warn_days'):
+                        if cred.get("warn_days"):
                             yaml_output.append(f"   warn_days: {cred['warn_days']}")
 
                         yaml_output.append("")  # Add empty line between users

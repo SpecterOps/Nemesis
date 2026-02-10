@@ -1,11 +1,12 @@
 import { useTheme } from '@/components/ThemeProvider';
+import Tooltip from '@/components/shared/Tooltip';
 import Editor from "@monaco-editor/react";
 import React, { useEffect, useRef, useState } from 'react';
 
-const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguageSelect = true }) => {
+const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguageSelect = true, isTruncated = false, onShowFullContent, isLoadingFullContent = false }) => {
   const { isDark } = useTheme();
   const editorRef = useRef(null);
-  const [wordWrapEnabled, setWordWrapEnabled] = useState(true);
+  const [wordWrapEnabled, setWordWrapEnabled] = useState(false);
 
   const availableLanguages = [
     'abap', 'apex', 'azcli', 'bat', 'bicep', 'cameligo', 'clojure', 'coffeescript',
@@ -89,6 +90,28 @@ const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguage
             </label>
           </div>
 
+          {/* Content size selector - only when content is truncated */}
+          {isTruncated && onShowFullContent && (
+            <Tooltip content="Content is truncated to 10 MB for performance. Showing the full file may cause the UI to freeze or crash for very large files.">
+              <select
+                value="truncated"
+                disabled={isLoadingFullContent}
+                onChange={(e) => { if (e.target.value === 'full') onShowFullContent(); }}
+                className="px-3 py-1 border dark:border-gray-700 rounded-md text-sm
+                         bg-white dark:bg-gray-800
+                         text-gray-900 dark:text-gray-100
+                         focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400
+                         focus:border-blue-500 dark:focus:border-blue-400
+                         transition-colors"
+              >
+                <option value="truncated">
+                  {isLoadingFullContent ? 'Loading full file...' : 'Truncated (10 MB)'}
+                </option>
+                <option value="full">Full File (may freeze UI)</option>
+              </select>
+            </Tooltip>
+          )}
+
           {/* Language selector */}
           {showLanguageSelect && (
             <select
@@ -113,6 +136,14 @@ const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguage
             </select>
           )}
         </div>
+        {isLoadingFullContent && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm">
+            <div className="flex flex-col items-center space-y-3">
+              <div className="animate-spin h-8 w-8 border-4 border-blue-500 dark:border-blue-400 rounded-full border-t-transparent"></div>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Loading full file...</span>
+            </div>
+          </div>
+        )}
         <Editor
           height="100%"
           language={language}

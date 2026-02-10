@@ -171,6 +171,8 @@ Download a file by its object ID with optional raw format and custom filename
 - `object_id` (string, **required**): Unique identifier of the file to download
 - `raw` (boolean, optional): Whether to return the file in raw format
 - `name` (string, optional): Custom filename for the downloaded file
+- `offset` (integer, optional): Byte offset to start reading from
+- `length` (integer, optional): Number of bytes to read (0 = entire file)
 
 **Returns:** 200 on success
 

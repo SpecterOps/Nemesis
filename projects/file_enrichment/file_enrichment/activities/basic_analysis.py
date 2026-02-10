@@ -37,6 +37,7 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict) -> N
         instance_id=instance_id,
     )
 
+    assert global_vars.tracking_service is not None
     try:
         await global_vars.tracking_service.update_status(
             instance_id=instance_id,
@@ -113,6 +114,7 @@ async def save_file_enriched_to_db(file_enriched: dict) -> None:
     Args:
         file_enriched: Dictionary containing all file enrichment data
     """
+    assert global_vars.asyncpg_pool is not None
     try:
         async with global_vars.asyncpg_pool.acquire() as conn:
             # Convert field names to match database schema

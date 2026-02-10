@@ -93,6 +93,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
 
                             # Track success immediately after module completes
                             # This ensures tracking is updated even if a later module fails
+                            assert global_vars.tracking_service is not None
                             await global_vars.tracking_service.update_enrichment_results(
                                 instance_id=ctx.workflow_id,
                                 success_list=[module_name],
@@ -109,6 +110,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
 
                             # Track failure immediately
                             failure_msg = f"{module_name}:{str(e)[:100]}"
+                            assert global_vars.tracking_service is not None
                             await global_vars.tracking_service.update_enrichment_results(
                                 instance_id=ctx.workflow_id,
                                 failure_list=[failure_msg],
@@ -175,6 +177,7 @@ async def execute_enrichment_module(object_id: str, temp_file_path: str, module_
 
 async def store_enrichment_results(object_id: str, module_name: str, result: EnrichmentResult):
     """Store enrichment results, transforms, and findings in the database."""
+    assert global_vars.asyncpg_pool is not None
     async with global_vars.asyncpg_pool.acquire() as conn:
         async with conn.transaction():
             # Store enrichment

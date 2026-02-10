@@ -148,7 +148,7 @@ class StorageMinio:
             # For other errors, raise the exception
             raise
 
-    def upload_uploadfile(self, file: UploadFile) -> uuid.UUID:
+    def upload_uploadfile(self, file: UploadFile) -> str:
         # uploads an UploadFile post directly from FastAPI
         try:
             logger.debug(f"Uploading UploadFile {file.filename} to storage")
@@ -180,7 +180,7 @@ class StorageMinio:
             logger.exception(bucket_name=self.bucket_name)
             raise
 
-    def upload_file(self, file_path: str) -> uuid.UUID:
+    def upload_file(self, file_path: str) -> str:
         try:
             logger.debug("Uploading file to storage", file_path=file_path)
             file_uuid = f"{uuid.uuid4()}"
@@ -194,7 +194,7 @@ class StorageMinio:
             logger.exception(file_path=file_path, bucket_name=self.bucket_name)
             raise
 
-    def upload(self, data: bytes) -> uuid.UUID:
+    def upload(self, data: bytes) -> str:
         try:
             logger.debug(f"Uploading {len(data)} bytes to storage")
             file_uuid = f"{uuid.uuid4()}"
@@ -255,13 +255,13 @@ class StorageMinio:
         try:
             files = self.minio_client.list_objects(self.bucket_name, recursive=True)
             for file in files:
-                self.minio_client.remove_object(self.bucket_name, file.object_name)
+                if file.object_name is not None:
+                    self.minio_client.remove_object(self.bucket_name, file.object_name)
             self.minio_client.remove_bucket(self.bucket_name)
             return True
-        except Exception as e:
+        except Exception:
             logger.exception(
-                e,
-                message="Failed to delete files from bucket",
+                "Failed to delete files from bucket",
                 bucket_name=self.bucket_name,
             )
             raise

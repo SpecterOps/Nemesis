@@ -9,7 +9,7 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "test_files")
 
 def get_analyzer():
     """Helper to create a CertificateAnalyzer instance without Dapr dependency."""
-    with patch('file_enrichment_modules.certificate.analyzer.StorageMinio'):
+    with patch("file_enrichment_modules.certificate.analyzer.StorageMinio"):
         return CertificateAnalyzer()
 
 
@@ -292,7 +292,9 @@ class TestCertificateAnalyzer:
         # The PFX file is encrypted with password "password"
         assert enc_info["is_encrypted"] is True, "PFX file should be encrypted"
         assert enc_info["decryption_successful"] is True, "Decryption should succeed with common password"
-        assert enc_info["password_found"] == "password", f"Expected password 'password', got {enc_info['password_found']}"
+        assert enc_info["password_found"] == "password", (
+            f"Expected password 'password', got {enc_info['password_found']}"
+        )
 
         # Verify certificate was extracted
         assert "certificates" in result, "Result should contain certificates"
@@ -379,7 +381,9 @@ class TestCertificateAnalyzer:
         # Windows-exported PFX with AES encryption should decrypt
         assert enc_info["is_encrypted"] is True, "PFX file should be encrypted"
         assert enc_info["decryption_successful"] is True, "Decryption should succeed"
-        assert enc_info["password_found"] == "password", f"Expected password 'password', got {enc_info['password_found']}"
+        assert enc_info["password_found"] == "password", (
+            f"Expected password 'password', got {enc_info['password_found']}"
+        )
 
         # Verify certificate was extracted
         assert "certificates" in result, "Result should contain certificates"
@@ -437,7 +441,9 @@ class TestCertificateAnalyzer:
         # Windows-exported PFX with TripleDES encryption should decrypt
         assert enc_info["is_encrypted"] is True, "PFX file should be encrypted"
         assert enc_info["decryption_successful"] is True, "Decryption should succeed"
-        assert enc_info["password_found"] == "password", f"Expected password 'password', got {enc_info['password_found']}"
+        assert enc_info["password_found"] == "password", (
+            f"Expected password 'password', got {enc_info['password_found']}"
+        )
 
         # Verify certificate was extracted
         assert "certificates" in result, "Result should contain certificates"

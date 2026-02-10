@@ -3,7 +3,7 @@ name = "nemesis_dpapi"
 version = "0.1.0"
 description = ""
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.13,<3.14"
 
 dependencies = [
     "impacket>=0.13.0,<0.14.0",
@@ -23,6 +23,7 @@ dev = [
     "pytest-asyncio>=0.25.0",
     "pytest-cov>=6.3.0",
     "pytest-benchmark>=5.1.0",
+    "pyright>=1.1",
 ]
 
 [build-system]
@@ -31,6 +32,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nemesis_dpapi"]
+
+[tool.uv]
+constraint-dependencies = ["pyasn1>=0.6.2"]
 
 [tool.uv.sources]
 common = { path = "../common", editable = true }

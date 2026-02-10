@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated, Union
+from typing import Annotated
 from urllib.parse import urlparse
 
 import yaml
@@ -63,7 +63,7 @@ class NemesisConfig(BaseConfig):
 
 class MythicConfig(BaseConfig):
     url: StrictHttpUrl
-    credential: Union[PasswordCredential, TokenCredential]
+    credential: PasswordCredential | TokenCredential
 
     @field_validator("credential")
     @classmethod
@@ -91,11 +91,14 @@ class OutflankConfig(BaseConfig):
             return None
         return Path(v)
 
+
 class CobaltStrikeConfig(BaseConfig):
     url: StrictHttpUrl
     credential: PasswordCredential
     project: str = Field(description="Project name for Nemesis file uploads")
-    poll_interval_sec: Annotated[int, Field(gt=0, description="Polling interval of the Cobalt Strike API in seconds")] = 3
+    poll_interval_sec: Annotated[
+        int, Field(gt=0, description="Polling interval of the Cobalt Strike API in seconds")
+    ] = 3
 
 
 class Config(BaseConfig):

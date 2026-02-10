@@ -3,14 +3,10 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, ParamSpec, TypeVar
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
-
-# Type variables for the decorator
-T = TypeVar("T")
-P = ParamSpec("P")
 
 
 @dataclass
@@ -145,6 +141,7 @@ class CobaltStrikeClient:
 
         # Create SSL context based on verify_ssl setting
         import ssl
+
         ssl_context = ssl.create_default_context()
         if not self.verify_ssl:
             ssl_context.check_hostname = False
@@ -153,7 +150,7 @@ class CobaltStrikeClient:
         self._session = aiohttp.ClientSession(
             cookie_jar=aiohttp.CookieJar(),
             connector=aiohttp.TCPConnector(ssl=ssl_context if self.verify_ssl else False),
-            timeout=timeout
+            timeout=timeout,
         )
         return self
 
@@ -177,17 +174,18 @@ class CobaltStrikeClient:
         self.logger.info("Attempting reauthentication")
         return await self.authenticate(self._stored_credentials["username"], self._stored_credentials["password"])
 
-    def requires_auth(func: Callable[P, T]) -> Callable[P, T]:
+    @staticmethod
+    def requires_auth(func: Callable[..., Any]) -> Callable[..., Any]:
         """
         Decorator that handles token expiration and reauthentication.
         """
 
         @functools.wraps(func)
-        async def wrapper(self: "CobaltStrikeClient", *args: P.args, **kwargs: P.kwargs) -> T:
+        async def wrapper(self: "CobaltStrikeClient", *args: Any, **kwargs: Any) -> Any:
             try:
                 return await func(self, *args, **kwargs)
             except aiohttp.ClientResponseError as e:
-                if e.status in (401,403):  # Unauthorized - token might be expired
+                if e.status in (401, 403):  # Unauthorized - token might be expired
                     self.logger.info("Token appears to be expired, attempting reauthentication")
                     if await self._reauthenticate():
                         self.logger.info("Reauthentication successful, retrying original request")
@@ -260,6 +258,7 @@ class CobaltStrikeClient:
                     return beacons
                 self.logger.error(f"Failed to get beacons, status code: {response.status}")
                 response.raise_for_status()
+                raise  # unreachable, but clarifies control flow for type checker
         except Exception as e:
             self.logger.error(f"Error getting beacons: {str(e)}")
             raise
@@ -282,6 +281,7 @@ class CobaltStrikeClient:
 
                 self.logger.error(f"Failed to get downloads, status code: {response.status}")
                 response.raise_for_status()
+                raise  # unreachable, but clarifies control flow for type checker
         except Exception as e:
             self.logger.error(f"Error getting downloads: {str(e)}")
             raise

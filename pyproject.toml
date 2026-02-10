@@ -28,7 +28,7 @@ exclude = [
 
 line-length = 120
 indent-width = 4
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 fixable = ["ALL"]
@@ -47,8 +47,8 @@ select = [
     "C",     # flake8-comprehensions
     "B",     # flake8-bugbear
     "UP",    # pyupgrade
-    "NPY",   # numpydoc
-    "A",     # flake8-annotations
+    "NPY",   # numpy-specific rules
+    "A",     # flake8-builtins
     "TC001", # Move application-only imports into TYPE_CHECKING block
     "TC002", # Move third-party imports into TYPE_CHECKING block
     "TC003", # Move standard library imports into TYPE_CHECKING block
@@ -56,12 +56,9 @@ select = [
 ignore = [
     "E501",  # line too long, handled by black
     "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
+    "C901",  # cyclomatic complexity. TODO: enable later
     "W191",  # indentation contains tabs
     "F722",  # syntax error in forward annotation
-    "UP007", # X | Y syntax while we're still supporting 3.9
-    "UP038", # isinstance() X | Y instance ^
-    "B905",  # zip() without strict (isn't supported in 3.9)
 ]
 
 [tool.ruff.format]
@@ -69,3 +66,8 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+
+# TODO: Enable this later and address problems
+#[tool.ruff.lint.mccabe]
+#max-complexity = 20

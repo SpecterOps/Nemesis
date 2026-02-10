@@ -2,7 +2,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO, Union
+from typing import BinaryIO
 
 import requests
 from cli.config import NemesisConfig
@@ -132,7 +132,7 @@ class NemesisClient:
             if need_cleanup and file_stream is not None:
                 file_stream.close()
 
-    def get_health(self) -> Union[HealthResponse, ErrorResponse] | None:
+    def get_health(self) -> HealthResponse | ErrorResponse | None:
         """Get API health status.
 
         Returns:
@@ -150,7 +150,7 @@ class NemesisClient:
             logger.error(f"Error getting health status: {e}")
             return None
 
-    def get_api_info(self) -> Union[APIInfo, ErrorResponse] | None:
+    def get_api_info(self) -> APIInfo | ErrorResponse | None:
         """Get API information.
 
         Returns:
@@ -168,7 +168,7 @@ class NemesisClient:
             logger.error(f"Error getting API info: {e}")
             return None
 
-    def reload_yara_rules(self) -> Union[YaraReloadResponse, ErrorResponse] | None:
+    def reload_yara_rules(self) -> YaraReloadResponse | ErrorResponse | None:
         """Reload Yara rules.
 
         Returns:

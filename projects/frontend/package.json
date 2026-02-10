@@ -33,6 +33,9 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7"
   },
+  "overrides": {
+    "lodash": ">=4.17.23"
+  },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.48",

@@ -3,9 +3,11 @@
 import asyncio
 import json
 import os
+from typing import Any
 
 import aiohttp
 import common.helpers as helpers
+from async_lru import alru_cache
 from common.logger import get_logger
 from common.models import Alert
 from common.queues import ALERTING_NEW_ALERT_TOPIC, ALERTING_PUBSUB
@@ -65,17 +67,12 @@ async def check_llm_enabled():
     return False
 
 
-# Cache LLM status to avoid repeated checks
-_llm_enabled_cache = None
-
-
+@alru_cache(maxsize=1)
 async def is_llm_enabled():
     """Get cached LLM status, checking on first call."""
-    global _llm_enabled_cache
-    if _llm_enabled_cache is None:
-        _llm_enabled_cache = await check_llm_enabled()
-        logger.info(f"LLM functionality: {'enabled' if _llm_enabled_cache else 'disabled'}")
-    return _llm_enabled_cache
+    result = await check_llm_enabled()
+    logger.info(f"LLM functionality: {'enabled' if result else 'disabled'}")
+    return result
 
 
 async def publish_alerts_for_findings(
@@ -93,7 +90,7 @@ async def publish_alerts_for_findings(
 
     # Build SQL query with origin filters
     where_clauses = ["object_id = $1"]
-    params = [object_id]
+    params: list[Any] = [object_id]
 
     if origin_include:
         where_clauses.append("origin_name = ANY($2)")
@@ -109,6 +106,7 @@ async def publish_alerts_for_findings(
     """
 
     # Fetch findings from the database for this object_id
+    assert global_vars.asyncpg_pool is not None
     async with global_vars.asyncpg_pool.acquire() as conn:
         findings = await conn.fetch(query, *params)
 

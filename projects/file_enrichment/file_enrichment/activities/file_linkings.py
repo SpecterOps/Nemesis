@@ -21,6 +21,7 @@ async def check_file_linkings(ctx: WorkflowActivityContext, activity_input):
 
     file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 
+    assert global_vars.file_linking_engine is not None
     try:
         linkings_created = await global_vars.file_linking_engine.apply_linking_rules(file_enriched)
 

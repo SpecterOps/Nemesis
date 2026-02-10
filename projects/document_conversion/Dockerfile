@@ -9,7 +9,7 @@ ARG TIKA_VERSION="3.2.3"
 # Install dependencies including multiple Tesseract language packs
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        openjdk-21-jre-headless \
+        openjdk-17-jre-headless \
         wget \
         tesseract-ocr \
         libpq-dev \
@@ -29,7 +29,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Set JAVA_HOME for JRE
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # Copy only what's needed for dependency installation first (leveraging Docker cache)
@@ -85,7 +85,7 @@ ARG TIKA_OCR_LANGUAGES="eng"
 # Install dependencies in a single RUN command to reduce layers
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        openjdk-21-jre-headless \
+        openjdk-17-jre-headless \
         wget \
         tesseract-ocr \
         libpq-dev \
@@ -103,7 +103,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH="$JAVA_HOME/bin:$PATH" \
     LOG_LEVEL=INFO \
     UVICORN_HOST=0.0.0.0 \

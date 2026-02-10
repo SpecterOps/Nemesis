@@ -3,7 +3,7 @@ name = "file_enrichment"
 version = "0.1.0"
 description = "The file enrichment workflow pipeline"
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.13,<3.14"
 
 dependencies = [
     "fastapi>=0.121.0,<0.122.0",
@@ -38,7 +38,7 @@ dependencies = [
     "dapr-ext-workflow==1.16.0",
     "dapr==1.16.0",
     "durabletask-dapr==0.2.0a8",
-    "protobuf==6.31.1",
+    "protobuf>=6.33.5,<7.0.0",
     "pillow>=11.3.0,<12.0.0",
     "opentelemetry-api>=1.38.0,<2.0.0",
     "opentelemetry-sdk>=1.38.0,<2.0.0",
@@ -47,6 +47,7 @@ dependencies = [
     "httpx>=0.28.1,<0.29.0",
     "pydecipher",
     "oscrypto",
+    "async-lru>=2.1.0",
 ]
 
 [dependency-groups]
@@ -55,6 +56,7 @@ dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "watchfiles>=1.0.0",
+    "pyright>=1.1",
 ]
 
 [build-system]

@@ -3,13 +3,13 @@ import asyncio
 import logging
 
 import urllib3
-from cli.config import Config, CobaltStrikeConfig
-from cli.log import setup_logging
-from cli.nemesis_client import NemesisClient
 from cli.cobaltstrike_connector.cache import ImplantCache
+from cli.cobaltstrike_connector.cobaltstrike_client import CobaltStrikeClient
 from cli.cobaltstrike_connector.download_monitor import CobaltStrikeDownloadMonitor
 from cli.cobaltstrike_connector.download_processor import CobaltStrikeDownloadProcessor
-from cli.cobaltstrike_connector.cobaltstrike_client import CobaltStrikeClient
+from cli.config import CobaltStrikeConfig, Config
+from cli.log import setup_logging
+from cli.nemesis_client import NemesisClient
 
 setup_logging()
 

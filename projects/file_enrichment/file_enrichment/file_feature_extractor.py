@@ -1166,7 +1166,10 @@ class FileFeatureExtractor:
                 "avg_lifespan_days": statistics.mean(times["lifespans"]) / 86400,  # Convert seconds to days
                 "std_lifespan_days": statistics.stdev(times["lifespans"]) / 86400 if len(times["lifespans"]) > 1 else 0,
                 "median_update_interval_days": statistics.median(
-                    [(b - a).days for a, b in zip(sorted(times["modified"])[:-1], sorted(times["modified"])[1:])]
+                    [
+                        (b - a).days
+                        for a, b in zip(sorted(times["modified"])[:-1], sorted(times["modified"])[1:], strict=True)
+                    ]
                 )
                 if len(times["modified"]) > 1
                 else 0,

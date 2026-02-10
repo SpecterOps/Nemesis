@@ -91,6 +91,32 @@
               "title": "Name"
             },
             "description": "Custom filename for the downloaded file"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Byte offset to start reading from",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Byte offset to start reading from"
+          },
+          {
+            "name": "length",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of bytes to read (0 = entire file)",
+              "default": 0,
+              "title": "Length"
+            },
+            "description": "Number of bytes to read (0 = entire file)"
           }
         ],
         "responses": {

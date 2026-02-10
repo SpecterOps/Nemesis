@@ -797,7 +797,7 @@ linked_files:
         from unittest.mock import AsyncMock
 
         # Placeholder from source-1
-        placeholder_path = "/C:/Users/<WINDOWS_USERNAME>/AppData/file.txt"
+        _placeholder_path = "/C:/Users/<WINDOWS_USERNAME>/AppData/file.txt"  # noqa: F841
         engine.db_service.get_placeholder_entries = AsyncMock(
             return_value=[]  # No placeholders for source-2
         )

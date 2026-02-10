@@ -23,6 +23,9 @@ workflow_lock = asyncio.Lock()  # For synchronizing access to active_workflows
 
 async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
     """Start a workflow using semaphore for backpressure control."""
+    assert global_vars.tracking_service is not None, "tracking_service must be initialized"
+    assert global_vars.workflow_client is not None, "workflow_client must be initialized"
+
     # Acquire semaphore - this will block if we're at max capacity
     # This provides natural backpressure to the Dapr pub/sub system
     await workflow_semaphore.acquire()
@@ -71,6 +74,7 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
 
 async def monitor_workflow_completion(instance_id: str):
     """Monitor a workflow until completion and release semaphore."""
+    assert global_vars.workflow_client is not None, "workflow_client must be initialized"
     try:
         # Poll for workflow completion
         start_time = asyncio.get_event_loop().time()

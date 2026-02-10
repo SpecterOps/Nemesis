@@ -1,7 +1,6 @@
 # src/workflow/workflow_tracking_service.py
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Optional
 from uuid import uuid4
 
 import asyncpg
@@ -47,7 +46,7 @@ class WorkflowTrackingService:
         instance_uuid = uuid4().hex
         return f"{self._name}.{instance_uuid}.{object_id}"
 
-    async def register_workflow(self, object_id: str, filename: Optional[str] = None) -> str:
+    async def register_workflow(self, object_id: str, filename: str | None = None) -> str:
         """Create initial workflow record with SCHEDULED status.
 
         Args:
@@ -97,7 +96,7 @@ class WorkflowTrackingService:
         self,
         instance_id: str,
         status: WorkflowStatus,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> None:
         """Update workflow status and optionally error information.
 
@@ -151,9 +150,9 @@ class WorkflowTrackingService:
     async def update_enrichment_results(
         self,
         instance_id: str,
-        success_list: Optional[list[str]] = None,
-        failure_list: Optional[list[str]] = None,
-        skipped_list: Optional[list[str]] = None,
+        success_list: list[str] | None = None,
+        failure_list: list[str] | None = None,
+        skipped_list: list[str] | None = None,
     ) -> None:
         """Update enrichment success/failure/skipped arrays by appending to existing values.
 
@@ -209,7 +208,7 @@ class WorkflowTrackingService:
             )
             raise
 
-    async def get_workflow_status(self, instance_id: str) -> Optional[dict]:
+    async def get_workflow_status(self, instance_id: str) -> dict | None:
         """Query current workflow state from database.
 
         Args:
@@ -255,8 +254,8 @@ class WorkflowTrackingService:
     async def update_enrichment_results_by_object_id(
         self,
         object_id: str,
-        success_list: Optional[list[str]] = None,
-        failure_list: Optional[list[str]] = None,
+        success_list: list[str] | None = None,
+        failure_list: list[str] | None = None,
     ) -> None:
         """Update enrichment success/failure arrays by object_id (for subscription handlers).
 

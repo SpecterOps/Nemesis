@@ -20,7 +20,7 @@ def get_lnk_file_display(lnk_file, print_all=False):
     res = lnk_file.get_json(print_all)
 
     def nice_id(identifier, uppercase=False):
-        identifier = re.sub("^r_", "", identifier, 1)
+        identifier = re.sub("^r_", "", identifier, count=1)
         if uppercase or identifier.upper() == identifier:
             return identifier.upper().replace("_", " ")
         return identifier.capitalize().replace("_", " ")
@@ -46,12 +46,12 @@ def get_lnk_file_display(lnk_file, print_all=False):
     res_json = make_keys_nice(res, uppercase=True)
 
     # insert placeholders for empty lines
-    res_json = {"EMPTY_LINE_PLACEHOLDER" + k: v for k, v in res_json.items()}
+    res_json = {"EMPTY_LINE_PLACEHOLDER" + k: v for k, v in res_json.items()}  # pyright: ignore[reportAttributeAccessIssue]
 
     # remove header key
     new_res_json = res_json["EMPTY_LINE_PLACEHOLDERHEADER"]
     res_json.pop("EMPTY_LINE_PLACEHOLDERHEADER")
-    new_res_json.update(res_json)
+    new_res_json.update(res_json)  # pyright: ignore[reportAttributeAccessIssue]
 
     res_yaml = yaml.dump(new_res_json, indent=3, sort_keys=False, width=132, allow_unicode=True)
 
@@ -105,7 +105,7 @@ class LnkParser(EnrichmentModule):
             with open(file_path, "rb") as f:
                 lnk = LnkParse3.lnk_file(f)
 
-            enrichment_result.results = convert_datetime(lnk.get_json())
+            enrichment_result.results = convert_datetime(lnk.get_json())  # pyright: ignore[reportAttributeAccessIssue]
 
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
                 display = get_lnk_file_display(lnk)

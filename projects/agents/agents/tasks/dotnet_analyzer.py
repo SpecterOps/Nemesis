@@ -40,8 +40,8 @@ import clr  # type: ignore [import-untyped] # noqa: E402
 lib_dir = Path(__file__).parent.parent / "lib"
 sys.path.append(str(lib_dir))
 
-clr.AddReference("ICSharpCode.Decompiler")
-clr.AddReference("Mono.Cecil")
+clr.AddReference("ICSharpCode.Decompiler")  # pyright: ignore[reportAttributeAccessIssue]
+clr.AddReference("Mono.Cecil")  # pyright: ignore[reportAttributeAccessIssue]
 
 from ICSharpCode.Decompiler import (  # type: ignore [import-not-found] # noqa: E402
     DecompilerSettings,

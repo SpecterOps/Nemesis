@@ -3,12 +3,12 @@ import asyncio
 import sys
 
 import click
+from cli.cobaltstrike_connector.cobaltstrike_connector import run_cobaltstrike_connector
 from cli.config import load_config
 from cli.log import setup_logging
 from cli.monitor import monitor_main
 from cli.mythic_connector.mythic_connector import start
 from cli.stage1_connector.stage1_connector import run_outflank_connector
-from cli.cobaltstrike_connector.cobaltstrike_connector import run_cobaltstrike_connector
 from cli.submit import submit_main
 
 
@@ -104,6 +104,7 @@ def connect_mythic(config: str, debug: bool, showconfig: bool) -> None:
         click.echo(f"Unexpected error: {e}")
         raise click.Abort() from e
 
+
 @cli.command()
 @connector_options("cobaltstrike")
 def connect_cobaltstrike(config: str, debug: bool, showconfig: bool):
@@ -125,6 +126,7 @@ def connect_cobaltstrike(config: str, debug: bool, showconfig: bool):
     except Exception as e:
         logger.exception("Unhandled exception in connector", e)
         sys.exit(1)
+
 
 def get_os_user_and_host_string() -> str:
     """Get the current OS user and hostname for metadata"""

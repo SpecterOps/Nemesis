@@ -1,0 +1,9 @@
+{
+  "pythonVersion": "3.13",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "basic",
+  "include": ["nemesis_dpapi"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "reportMissingTypeStubs": false
+}

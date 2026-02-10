@@ -57,6 +57,7 @@ async def process_chromium_local_state(
             with open(temp_file.name, encoding="utf-8") as f:
                 content = f.read()
 
+    assert asyncpg_pool is not None, "asyncpg_pool is required for Local State processing"
     state_key_data = await _insert_state_keys(file_enriched, username, browser, content, asyncpg_pool, dpapi_manager)
 
     logger.debug("Completed processing Chromium Local State", object_id=object_id)
@@ -489,16 +490,16 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
             logger.warning("State key not found", state_key_id=state_key_id)
             return result
 
-        record_id = row["id"]
+        _record_id = row["id"]  # noqa: F841
         source = row["source"]
         username = row["username"]
         browser = row["browser"]
-        key_masterkey_guid = row["key_masterkey_guid"]
+        _key_masterkey_guid = row["key_masterkey_guid"]  # noqa: F841
         key_bytes_enc = row["key_bytes_enc"]
         key_bytes_dec = row["key_bytes_dec"]
         key_is_decrypted = row["key_is_decrypted"]
         app_bound_key_enc = row["app_bound_key_enc"]
-        app_bound_key_system_masterkey_guid = row["app_bound_key_system_masterkey_guid"]
+        _app_bound_key_system_masterkey_guid = row["app_bound_key_system_masterkey_guid"]  # noqa: F841
         app_bound_key_user_masterkey_guid = row["app_bound_key_user_masterkey_guid"]
         app_bound_key_system_dec = row["app_bound_key_system_dec"]
         app_bound_key_user_dec = row["app_bound_key_user_dec"]
@@ -880,7 +881,7 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
             username = row["username"]
             browser = row["browser"]
             app_bound_key_user_dec = row["app_bound_key_user_dec"]
-            user_masterkey_guid = row["app_bound_key_user_masterkey_guid"]
+            _user_masterkey_guid = row["app_bound_key_user_masterkey_guid"]  # noqa: F841
 
             result["state_keys_attempted"] += 1
 

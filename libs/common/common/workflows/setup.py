@@ -14,7 +14,7 @@ wf_runtime: wf.WorkflowRuntime = wf.WorkflowRuntime(
 )
 
 logger = get_logger(__name__)
-workflow_loop: asyncio.AbstractEventLoop = None
+workflow_loop: asyncio.AbstractEventLoop | None = None
 
 
 def set_workflow_runtime_loop(loop: asyncio.AbstractEventLoop) -> None:
@@ -44,7 +44,7 @@ def workflow_activity(fn: Callable | None = None, *, name: str | None = None) ->
         # if settings.pytest_running:
         #     return func
 
-        @wf_runtime.activity(name=name)
+        @wf_runtime.activity(name=name)  # pyright: ignore[reportCallIssue]
         @wraps(func)
         def wrapped_fn(*args, **kwargs) -> Any:  # type: ignore
             logger.debug(f"Executing activity: {name or func.__name__}")

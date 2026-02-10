@@ -20,9 +20,7 @@ def install_uv_dependencies(module_path: Path):
 
     logger.info("Installing dependencies with uv...")
     try:
-        result = subprocess.run(
-            ["uv", "sync", "--frozen"], cwd=module_path, capture_output=True, text=True
-        )
+        result = subprocess.run(["uv", "sync", "--frozen"], cwd=module_path, capture_output=True, text=True)
         if result.returncode != 0:
             logger.error(f"uv sync failed: {result.stderr}")
             return False

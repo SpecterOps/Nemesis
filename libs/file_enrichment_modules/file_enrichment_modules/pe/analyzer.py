@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false, reportCallIssue=false
 # enrichment_modules/pe_analyzer/analzyer.py
 import os
 import shutil
@@ -516,7 +517,9 @@ rule python_packed_executable
                 os.unlink(zip_path)
             return None
 
-    async def _try_python_unpack(self, file_path: str, file_enriched, enrichment_result: EnrichmentResult | None) -> EnrichmentResult | None:
+    async def _try_python_unpack(
+        self, file_path: str, file_enriched, enrichment_result: EnrichmentResult | None
+    ) -> EnrichmentResult | None:
         """Attempt to unpack Python-packed PE and add transform if successful."""
         import json
 

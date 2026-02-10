@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# pyright: reportCallIssue=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 
 # Pulled from https://github.com/truongkma/ctf-tools/blob/74dc2d959b7305bb859721cfa7af83ca3973a1c8/John/run/pdf2john.py
 # Copyright (c) 2013 Shane Quigley, < shane at softwareontheside.info >
@@ -183,7 +184,7 @@ class PdfParser:
         xmp_metadata_object = xmp_metadata_object.partition(b"endstream")[0]
         try:
             xml_metadata = minidom.parseString(xmp_metadata_object)
-        except:
+        except Exception:
             return ""
         values = []
         values.append(self.get_dc_value("title", xml_metadata))

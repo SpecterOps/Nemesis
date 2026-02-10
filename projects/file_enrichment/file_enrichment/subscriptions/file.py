@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 NUM_WORKERS = int(os.getenv("ENRICHMENT_WORKERS", 5))
 
 # Queue for file processing
-file_queue: asyncio.Queue = None
+file_queue: asyncio.Queue | None = None
 worker_tasks: list[asyncio.Task] = []
 
 
@@ -23,6 +23,7 @@ async def worker(worker_id: int):
     """Worker task that continuously processes files from the queue"""
     logger.info(f"Worker {worker_id} started")
 
+    assert file_queue is not None
     while True:
         try:
             # Get the next file from the queue
@@ -33,6 +34,7 @@ async def worker(worker_id: int):
 
                 # Save file and run workflow
                 await save_file_message(file)
+                assert global_vars.workflow_manager is not None
                 await global_vars.workflow_manager.run_workflow(file)
 
                 logger.debug(f"Worker {worker_id} completed file", object_id=file.object_id)
@@ -97,6 +99,7 @@ async def file_subscription_handler(event: CloudEvent[File]):
     """Handler for incoming file events"""
     file = event.data
 
+    assert file_queue is not None
     try:
         # Try to add file to the queue
         # put() will block until a worker is available (queue has space)
@@ -145,6 +148,7 @@ async def save_file_message(file: File):
             updated_at = CURRENT_TIMESTAMP;
         """
 
+        assert global_vars.asyncpg_pool is not None
         async with global_vars.asyncpg_pool.acquire() as conn:
             await conn.execute(
                 query,

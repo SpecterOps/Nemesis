@@ -33,6 +33,8 @@ async def extract_text(ctx: WorkflowActivityContext, file_input: dict) -> dict |
     object_id = file_input.get("object_id")
     result = None
 
+    assert global_vars.tracking_service is not None, "tracking_service must be initialized"
+
     try:
         file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
 

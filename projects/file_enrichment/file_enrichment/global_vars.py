@@ -27,14 +27,14 @@ gotenberg_url = f"http://localhost:{_dapr_port}/v1.0/invoke/gotenberg/method/for
 nemesis_url = os.getenv("NEMESIS_URL", "http://localhost/")
 nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_url
 
-asyncpg_pool: asyncpg.Pool = None  # Connection pool for database operations
+asyncpg_pool: asyncpg.Pool | None = None  # Connection pool for database operations
 
 # Note: file_linking_engine is initialized after asyncpg_pool is created
 # See initialization code that sets this up with the pool
-file_linking_engine: FileLinkingEngine = None
+file_linking_engine: FileLinkingEngine | None = None
 
 module_execution_order: list[str] = []
-workflow_manager: WorkflowManager = None
-tracking_service: WorkflowTrackingService = None  # Workflow tracking service for monitoring workflow state
+workflow_manager: WorkflowManager | None = None
+tracking_service: WorkflowTrackingService | None = None  # Workflow tracking service for monitoring workflow state
 
 max_workflow_execution_time = int(os.getenv("MAX_WORKFLOW_EXECUTION_TIME", 300))

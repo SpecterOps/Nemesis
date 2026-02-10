@@ -209,6 +209,7 @@ async def store_noseyparker_results(
         pool (asyncpg.Pool): Database connection pool
     """
     try:
+        assert global_vars.tracking_service is not None
         if not matches:
             logger.debug("No matches found, nothing to store", object_id=object_id)
             await global_vars.tracking_service.update_enrichment_results(
@@ -266,7 +267,7 @@ async def store_noseyparker_results(
                 origin_name="noseyparker",
                 object_id=object_id,
                 severity=severity,
-                raw_data=sanitize_for_jsonb({"match": match.model_dump() if hasattr(match, "model_dump") else match}),
+                raw_data=sanitize_for_jsonb({"match": match.model_dump() if hasattr(match, "model_dump") else match}),  # pyright: ignore[reportArgumentType]
                 data=[display_data],
             )
 
@@ -276,6 +277,7 @@ async def store_noseyparker_results(
         enrichment_result.findings = findings_list
 
         # Store in database
+        assert global_vars.asyncpg_pool is not None
         async with global_vars.asyncpg_pool.acquire() as conn:
             async with conn.transaction():
                 # Store main enrichment result

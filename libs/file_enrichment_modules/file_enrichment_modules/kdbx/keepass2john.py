@@ -230,7 +230,7 @@ def process_keyfile_v2(keyfile_path):
                     decoded = base64.b64decode(data_elem.text)
                     result += bytes_to_hex(decoded)
                     return result
-            except:
+            except Exception:
                 pass  # Fall through to other methods
 
         if len(keyfile_data) == 32:

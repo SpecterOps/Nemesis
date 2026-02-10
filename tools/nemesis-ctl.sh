@@ -128,6 +128,11 @@ fi
 
 if [ "$LLM" = "true" ]; then
   DOCKER_CMD+=("--profile" "llm")
+  if [ -n "${PHOENIX_ENABLED:-}" ] && [ "$PHOENIX_ENABLED" != "true" ] && [ "$PHOENIX_ENABLED" != "false" ]; then
+    echo "Error: PHOENIX_ENABLED must be 'true' or 'false', got '$PHOENIX_ENABLED'." >&2
+    exit 1
+  fi
+  CMD_PREFIX+=("PHOENIX_ENABLED=${PHOENIX_ENABLED:-true}")
 fi
 
 # 2. Handle Environment-specific files

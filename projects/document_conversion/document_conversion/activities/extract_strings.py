@@ -21,6 +21,8 @@ storage = StorageMinio()
 async def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dict | None:
     """Runs "strings" on a binary to extract strings."""
 
+    assert global_vars.tracking_service is not None, "tracking_service must be initialized"
+
     object_id = file_input.get("object_id")
 
     try:
@@ -113,6 +115,7 @@ async def extract_all_strings(filename: str, output_file, min_len: int = 5):
         )
 
         # Stream output line by line and filter as we go
+        assert process.stdout is not None, "stdout must not be None when PIPE is used"
         while True:
             line = await process.stdout.readline()
             if not line:

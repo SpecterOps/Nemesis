@@ -295,7 +295,7 @@ def is_valid_text(data: bytes) -> bool:
 
 
 def byte_xor(ba1, ba2):
-    return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
+    return bytes([_a ^ _b for _a, _b in zip(ba1, ba2, strict=False)])
 
 
 def parse_abe_blob(abe_data: bytes, chromekey: bytes | None = None) -> dict | None:

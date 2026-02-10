@@ -3,8 +3,8 @@ import logging
 from asyncio import Queue
 
 from cli.cobaltstrike_connector.cache import ImplantCache
-from cli.cobaltstrike_connector.download_processor import CobaltStrikeDownloadProcessor
 from cli.cobaltstrike_connector.cobaltstrike_client import CobaltStrikeClient
+from cli.cobaltstrike_connector.download_processor import CobaltStrikeDownloadProcessor
 
 logger = logging.getLogger(__name__)
 

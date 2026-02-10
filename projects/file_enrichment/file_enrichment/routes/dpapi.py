@@ -73,6 +73,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
             masterkey_type = masterkeys[0].masterkey_type.value if masterkeys else None
 
             # Try to decrypt chrome_keys with this masterkey
+            assert global_vars.asyncpg_pool is not None
             chrome_key_result = await retry_decrypt_chrome_keys_for_masterkey(
                 evnt.masterkey_guid,
                 self.dpapi_manager,
@@ -361,6 +362,7 @@ async def _handle_chromium_app_bound_key(dpapi_manager: DpapiManager, request: C
         try_username = username if attempt == 0 else f"{username}{attempt}"
 
         try:
+            assert global_vars.asyncpg_pool is not None
             async with global_vars.asyncpg_pool.acquire() as conn:
                 # Insert into chromium.state_keys
                 await conn.execute(
@@ -409,6 +411,7 @@ async def _handle_chromium_app_bound_key(dpapi_manager: DpapiManager, request: C
             )
 
             # Finally, try to decrypt chromium cookies and logins with newly submitted key
+            assert global_vars.asyncpg_pool is not None
             chromium_data_result = await retry_decrypt_chromium_data(
                 UUID(int=0), dpapi_manager, global_vars.asyncpg_pool
             )

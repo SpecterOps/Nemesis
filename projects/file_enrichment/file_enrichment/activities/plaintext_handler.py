@@ -51,6 +51,7 @@ async def index_plaintext_content(object_id: str, file_obj: io.TextIOWrapper, ma
     """Used to index plaintext content with byte-based chunking to avoid tsvector limits"""
     logger.debug(f"indexing plaintext for {object_id}")
 
+    assert global_vars.asyncpg_pool is not None
     async with global_vars.asyncpg_pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute("DELETE FROM plaintext_content WHERE object_id = $1", object_id)

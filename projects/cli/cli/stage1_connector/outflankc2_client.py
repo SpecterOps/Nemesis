@@ -3,14 +3,10 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, ParamSpec, TypeVar
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
-
-# Type variables for the decorator
-T = TypeVar("T")
-P = ParamSpec("P")
 
 
 @dataclass
@@ -136,13 +132,14 @@ class OutflankC2Client:
         self.logger.info("Attempting reauthentication")
         return await self.authenticate(self._stored_credentials["username"], self._stored_credentials["join_key"])
 
-    def requires_auth(func: Callable[P, T]) -> Callable[P, T]:
+    @staticmethod
+    def requires_auth(func: Callable[..., Any]) -> Callable[..., Any]:
         """
         Decorator that handles token expiration and reauthentication.
         """
 
         @functools.wraps(func)
-        async def wrapper(self: "OutflankC2Client", *args: P.args, **kwargs: P.kwargs) -> T:
+        async def wrapper(self: "OutflankC2Client", *args: Any, **kwargs: Any) -> Any:
             try:
                 return await func(self, *args, **kwargs)
             except aiohttp.ClientResponseError as e:
@@ -205,6 +202,8 @@ class OutflankC2Client:
     @requires_auth
     async def get_current_user(self) -> str | None:
         """Get the currently authenticated username."""
+        if not self._session:
+            raise RuntimeError("Client session not established")
         if not self._access_token:
             self.logger.warning("No access token available")
             return None
@@ -238,6 +237,7 @@ class OutflankC2Client:
                     return data
                 self.logger.error(f"Failed to get project info, status code: {response.status}")
                 response.raise_for_status()
+                raise  # unreachable, but clarifies control flow for type checker
         except Exception as e:
             self.logger.error(f"Error getting project info: {str(e)}")
             raise
@@ -259,6 +259,7 @@ class OutflankC2Client:
                     return implants
                 self.logger.error(f"Failed to get implants, status code: {response.status}")
                 response.raise_for_status()
+                raise  # unreachable, but clarifies control flow for type checker
         except Exception as e:
             self.logger.error(f"Error getting implants: {str(e)}")
             raise
@@ -281,6 +282,7 @@ class OutflankC2Client:
 
                 self.logger.error(f"Failed to get downloads, status code: {response.status}")
                 response.raise_for_status()
+                raise  # unreachable, but clarifies control flow for type checker
         except Exception as e:
             self.logger.error(f"Error getting downloads: {str(e)}")
             raise

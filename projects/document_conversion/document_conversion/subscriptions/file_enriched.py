@@ -26,7 +26,7 @@ def check_office_encryption(file_path: str):
         try:
             office_file = msoffcrypto.OfficeFile(f)
             return office_file.is_encrypted()
-        except:
+        except Exception:
             return False
 
 
@@ -45,7 +45,7 @@ def check_rms_protected(file_path: str):
                 if "DRMEncryptedTransform" in file:
                     return True
 
-    except:
+    except Exception:
         pass
 
     # Try OLE approach if ZIP check failed or returned False
@@ -55,7 +55,7 @@ def check_rms_protected(file_path: str):
             if ole.exists("\x06DataSpaces/TransformInfo/DRMEncryptedTransform"):
                 return True
             ole.close()
-    except:
+    except Exception:
         pass
 
     return False
@@ -79,7 +79,7 @@ def is_encrypted_file(file_data: FileEnriched):
             resource=file_data.object_id,
             request_id="",
             host_id="",
-            response=None,
+            response=None,  # pyright: ignore[reportArgumentType]
         )
 
     with storage.download(file_data.object_id) as temp_file:

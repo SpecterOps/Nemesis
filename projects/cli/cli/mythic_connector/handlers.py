@@ -170,7 +170,7 @@ class FileHandler:
             # Download and process file
             # file_bytes = await mythic.download_file(mythic=self.mythic, file_uuid=agent_file_id)
 
-            def upload_to_nemesis(file_path: str) -> None:
+            async def upload_to_nemesis(file_path: str) -> None:
                 """Callback to upload the downloaded file to Nemesis."""
 
                 self._total_files_count += 1
