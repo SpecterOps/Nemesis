@@ -83,7 +83,12 @@ services:
       - ./projects/frontend/vite.config.js:/app/vite.config.js:ro
       - ./version.json:/version.json:ro
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.routers.frontend.middlewares=auth"
 
   jupyter:
     image: !reset null

@@ -1,0 +1,8 @@
+# Disables basic auth by redefining the 'auth' middleware as a no-op headers middleware.
+# Used when DISABLE_AUTH=true is set in .env.
+services:
+  traefik:
+    labels: !override
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.auth.headers.customrequestheaders.X-Forwarded-Auth=disabled"
+      - "traefik.http.routers.dashboard.tls=true"

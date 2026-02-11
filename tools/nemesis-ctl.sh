@@ -110,6 +110,9 @@ if [ "$ACTION" = "start" ]; then
     echo "Then, review and customize the variables within it before running this script again." >&2
     exit 1
   fi
+
+  # Read DISABLE_AUTH from .env (strip quotes, ignore comments/blanks)
+  DISABLE_AUTH="$(grep -E '^DISABLE_AUTH=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"'"'" || true)"
 fi
 
 # --- Build Command ---
@@ -143,9 +146,17 @@ if [ "$ENVIRONMENT" = "prod" ]; then
     DOCKER_CMD+=("-f" "compose.prod.build.yaml")
   fi
 else
+  # Explicitly specify compose files for dev so additional overlays layer correctly.
+  DOCKER_CMD+=("-f" "compose.yaml" "-f" "compose.override.yaml")
   # Always build in dev environment to catch local changes.
   # This only affects the `start` action, as validated earlier.
   BUILD=true
+fi
+
+# 2b. Optionally disable basic auth
+if [ "${DISABLE_AUTH:-}" = "true" ]; then
+  echo "WARNING: Basic authentication is DISABLED (DISABLE_AUTH=true in .env)"
+  DOCKER_CMD+=("-f" "compose.noauth.yaml")
 fi
 
 # 3. Handle Action
