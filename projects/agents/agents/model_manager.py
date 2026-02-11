@@ -3,7 +3,7 @@
 import structlog
 from agents.helpers import create_rate_limit_client
 from agents.logger import setup_phoenix_llm_tracing
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 logger = structlog.get_logger(__name__)
@@ -12,7 +12,7 @@ logger = structlog.get_logger(__name__)
 class ModelManager:
     """Singleton manager for LLM model instances used across all activities."""
 
-    _model: OpenAIModel | None = None
+    _model: OpenAIChatModel | None = None
     _token: str | None = None
     _model_name: str | None = None
     _base_url: str = "http://litellm:4000/"
@@ -38,21 +38,21 @@ class ModelManager:
         logger.info(f"ModelManager initialized with model: {model_name}", phoenix_enabled=cls._instrumentation_enabled)
 
     @classmethod
-    def get_model(cls) -> OpenAIModel | None:
+    def get_model(cls) -> OpenAIChatModel | None:
         """
         Get the shared model instance, creating it if necessary.
 
         Returns:
-            OpenAIModel instance or None if not initialized
+            OpenAIChatModel instance or None if not initialized
         """
-        if not cls._token:
+        if not cls._token or not cls._model_name:
             logger.warning("ModelManager not initialized - no token available")
             return None
 
         if not cls._model:
             try:
-                cls._model = OpenAIModel(
-                    model_name=cls._model_name,  # pyright: ignore[reportArgumentType]
+                cls._model = OpenAIChatModel(
+                    model_name=cls._model_name,
                     provider=OpenAIProvider(
                         base_url=cls._base_url, api_key=cls._token, http_client=create_rate_limit_client()
                     ),
