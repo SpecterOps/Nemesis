@@ -1,9 +1,40 @@
 # Containers
 
-Nemesis has the ability to process the files extracted/carved from various container formats _without_ saving the container itself to the internal datalake. This is useful the the following situations:
+Nemesis has the ability to process the files extracted/carved from various container formats _without_ saving the container itself to the internal datalake. This is useful in the following situations:
 
 - When you want to process a large number of files without doubling the storage (storing .zip + extracted files)
 - When you want to process large "containers" like forensic disk images
+
+## Supported Container Formats
+
+### ZIP Archives
+
+Standard `.zip` files. Nemesis detects these by file extension or by inspecting file content (falling back to content detection for unknown extensions).
+
+### Disk Images
+
+Disk images are parsed using [The Sleuth Kit](https://www.sleuthkit.org/sleuthkit/) (via [pytsk3](https://pypi.org/project/pytsk3/)), which supports a wide range of forensic image formats, filesystems, and partition schemes.
+
+**Supported image formats:**
+
+| Extension(s) | Format |
+|---|---|
+| `.dd`, `.raw`, `.img`, `.image`, `.bin` | Raw disk images |
+| `.dmg` | macOS disk images |
+| `.e01`, `.ex01` | EnCase / Expert Witness Format |
+| `.l01`, `.lx01` | EnCase Logical Evidence |
+| `.ewf` | Expert Witness Format (generic) |
+| `.s01` | Segmented EnCase images |
+
+The Sleuth Kit also supports **VHD**, **VMDK**, and **AFF** image formats, though Nemesis currently only auto-detects the extensions listed above. Files with other extensions will fall back to ZIP content detection.
+
+**Supported filesystems within disk images:**
+
+NTFS, FAT (FAT12/FAT16/FAT32), ExFAT, EXT2, EXT3, EXT4, HFS, APFS, UFS 1, UFS 2, ISO 9660, and YAFFS2.
+
+**Supported partition/volume schemes:**
+
+DOS/MBR partitions, GPT disks, BSD disk labels, Mac partitions, and Sun VTOC (Volume Table of Contents).
 
 ## Submitting Containers
 

@@ -179,64 +179,62 @@ const HelpPage = () => {
           </CardHeader>
           <CardContent className="grid gap-1">
             {services.map((service) => (
-              <div key={service.path}>
-                <a
-                  href={service.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block cursor-pointer"
-                >
-                  <div className="p-2 pt-1 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                          {service.title}
-                        </h3>
-                        <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-900 dark:text-gray-300">
-                          {service.path}
-                        </code>
-                      </div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {service.description}
-                      </p>
-                      {service.credential && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          <span className="font-medium">Credential: </span>
-                          <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono text-gray-900 dark:text-gray-300">
-                            {service.credential}
-                          </code>
-                        </p>
-                      )}
-                      {service.subpages && (
-                        <div className="mt-3 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-                          {service.subpages.map((doc) => (
-                            <a
-                              key={doc.path}
-                              href={doc.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block mt-2 group"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
-                                    {doc.title}
-                                  </h4>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    {doc.description}
-                                  </p>
-                                </div>
-                                <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-900 dark:text-gray-300">
-                                  {doc.path}
-                                </code>
-                              </div>
-                            </a>
-                          ))}
-                        </div>
-                      )}
+              <div key={service.path} className="p-2 pt-1 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                <div className="space-y-2">
+                  <a
+                    href={service.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-gray-900 dark:text-white">
+                        {service.title}
+                      </h3>
+                      <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-900 dark:text-gray-300">
+                        {service.path}
+                      </code>
                     </div>
-                  </div>
-                </a>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {service.description}
+                    </p>
+                    {service.credential && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <span className="font-medium">Credential: </span>
+                        <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono text-gray-900 dark:text-gray-300">
+                          {service.credential}
+                        </code>
+                      </p>
+                    )}
+                  </a>
+                  {service.subpages && (
+                    <div className="mt-3 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
+                      {service.subpages.map((doc) => (
+                        <a
+                          key={doc.path}
+                          href={doc.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block mt-2 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
+                                {doc.title}
+                              </h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {doc.description}
+                              </p>
+                            </div>
+                            <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-900 dark:text-gray-300">
+                              {doc.path}
+                            </code>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </CardContent>
