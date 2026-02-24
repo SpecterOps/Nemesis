@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `CLAUDE.md` project file
-- `enrichment-module-builder` skill triggered by `/new-enrichment-module` command for rapid file enrichment module development
-- `prefetch` and `ccache` enrichment modules (developed by Claude skill)
+- `CLAUDE.md` and `AGENTS.md` project files
+- `enrichment-module-builder` Claude Code skill triggered by `/new-enrichment-module` command for rapid file enrichment module development
+- `enrichment-module-builder` Codex Code skill triggered by `$enrichment-module-builder` command for rapid file enrichment module development
+- `prefetch` and `ccache` enrichment modules (developed by skills)
 - Proper GitHub issue templates
 
 
