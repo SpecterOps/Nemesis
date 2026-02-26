@@ -34,10 +34,15 @@ func main() {
 		"output_topic", cfg.OutputTopic,
 		"max_concurrent_files", cfg.MaxConcurrentFiles,
 		"custom_rules_dir", cfg.CustomRulesDir,
+		"enable_validation", cfg.EnableValidation,
+		"validation_workers", cfg.ValidationWorkers,
 	)
 
 	// Load Titus builtin rules + custom rules, creating a Titus scanner
-	titusScanner, ruleCount, err := rules.LoadAllRules(cfg.CustomRulesDir)
+	titusScanner, ruleCount, err := rules.LoadAllRules(cfg.CustomRulesDir, rules.ValidationConfig{
+		EnableValidation:  cfg.EnableValidation,
+		ValidationWorkers: cfg.ValidationWorkers,
+	})
 	if err != nil {
 		slog.Error("Failed to load rules", "error", err)
 		os.Exit(1)

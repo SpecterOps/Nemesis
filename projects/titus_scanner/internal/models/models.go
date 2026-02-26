@@ -63,8 +63,11 @@ type ScanStats struct {
 
 // ValidationInfo contains the result of validating a matched secret.
 type ValidationInfo struct {
-	IsValid bool   `json:"is_valid"`
-	Message string `json:"message,omitempty"`
+	Status      string            `json:"status"`                 // "valid", "invalid", "undetermined"
+	Confidence  float64           `json:"confidence"`
+	Message     string            `json:"message,omitempty"`
+	ValidatedAt string            `json:"validated_at,omitempty"` // ISO 8601
+	Details     map[string]string `json:"details,omitempty"`
 }
 
 // DaprSubscription is the response format for GET /dapr/subscribe.

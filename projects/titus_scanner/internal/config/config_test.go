@@ -11,6 +11,7 @@ func TestLoadDefaults(t *testing.T) {
 		"EXTRACT_ARCHIVES", "EXTRACT_MAX_TOTAL_SIZE_MB",
 		"EXTRACT_MAX_FILE_SIZE_MB", "EXTRACT_MAX_DEPTH",
 		"MAX_FILE_SIZE_MB", "SNIPPET_LENGTH",
+		"ENABLE_VALIDATION", "VALIDATION_WORKERS",
 	}
 	for _, v := range envVars {
 		os.Unsetenv(v)
@@ -35,6 +36,12 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.SnippetLength != 512 {
 		t.Errorf("SnippetLength default = %d, want 512", cfg.SnippetLength)
+	}
+	if cfg.EnableValidation != false {
+		t.Errorf("EnableValidation default = %v, want false", cfg.EnableValidation)
+	}
+	if cfg.ValidationWorkers != 4 {
+		t.Errorf("ValidationWorkers default = %d, want 4", cfg.ValidationWorkers)
 	}
 }
 
@@ -63,6 +70,24 @@ func TestLoadNewEnvVars(t *testing.T) {
 	}
 	if cfg.ExtractMaxDepth != 3 {
 		t.Errorf("ExtractMaxDepth = %d, want 3", cfg.ExtractMaxDepth)
+	}
+}
+
+func TestLoadValidationConfig(t *testing.T) {
+	os.Setenv("ENABLE_VALIDATION", "true")
+	os.Setenv("VALIDATION_WORKERS", "8")
+	defer func() {
+		os.Unsetenv("ENABLE_VALIDATION")
+		os.Unsetenv("VALIDATION_WORKERS")
+	}()
+
+	cfg := Load()
+
+	if cfg.EnableValidation != true {
+		t.Errorf("EnableValidation = %v, want true", cfg.EnableValidation)
+	}
+	if cfg.ValidationWorkers != 8 {
+		t.Errorf("ValidationWorkers = %d, want 8", cfg.ValidationWorkers)
 	}
 }
 

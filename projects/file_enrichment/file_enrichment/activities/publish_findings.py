@@ -152,15 +152,25 @@ async def publish_alerts_for_findings(
                     separator = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
 
                     rule_message = ""
+                    validation_message = ""
                     try:
-                        if finding_name == "titus_match" and raw_data:
+                        if raw_data and finding_name.startswith("titus_"):
                             if "match" in raw_data and "rule_name" in raw_data["match"]:
                                 rule_name = raw_data["match"]["rule_name"]
                                 rule_message = f"- *Rule name:* {rule_name}\n"
+                            if "match" in raw_data and raw_data["match"].get("validation_result"):
+                                vr = raw_data["match"]["validation_result"]
+                                status = vr.get("status", "undetermined")
+                                status_label = {
+                                    "valid": "CONFIRMED ACTIVE",
+                                    "invalid": "INACTIVE",
+                                    "undetermined": "UNVERIFIED",
+                                }.get(status, "UNVERIFIED")
+                                validation_message = f"- *Validation:* {status_label}\n"
                     except (json.JSONDecodeError, KeyError) as e:
-                        logger.warning("Error processing raw_data for titus_match", error=str(e))
+                        logger.warning("Error processing raw_data for titus finding", error=str(e))
 
-                    body = f"{finding_message}{rule_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
+                    body = f"{finding_message}{rule_message}{validation_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
 
                     alert = Alert(
                         title=finding_name,

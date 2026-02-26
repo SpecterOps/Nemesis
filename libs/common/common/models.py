@@ -160,8 +160,15 @@ class MatchLocation(BaseModel):
 
 
 class ValidationResult(BaseModel):
-    is_valid: bool
+    status: str = "undetermined"  # "valid", "invalid", "undetermined"
+    confidence: float = 0.0
     message: str | None = None
+    validated_at: str | None = None
+    details: dict[str, str] | None = None
+
+    @property
+    def is_valid(self) -> bool:
+        return self.status == "valid"
 
 
 class MatchInfo(BaseModel):

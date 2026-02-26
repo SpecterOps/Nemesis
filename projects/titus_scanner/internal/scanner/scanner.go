@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/praetorian-inc/titus"
 	"github.com/praetorian-inc/titus/pkg/enum"
+	"github.com/praetorian-inc/titus/pkg/types"
 	"github.com/specterops/nemesis/titus-scanner/internal/models"
 )
 
@@ -385,6 +387,8 @@ func (s *Scanner) scanBytes(data []byte, filePath *string, gitCommit *models.Git
 			FilePath: filePath,
 		}
 
+		mi.ValidationResult = convertValidationResult(tm.ValidationResult)
+
 		if gitCommit != nil {
 			commitCopy := *gitCommit
 			mi.GitCommit = &commitCopy
@@ -394,6 +398,22 @@ func (s *Scanner) scanBytes(data []byte, filePath *string, gitCommit *models.Git
 	}
 
 	return matches
+}
+
+// convertValidationResult converts a Titus library ValidationResult to our
+// internal ValidationInfo model. Returns nil when the input is nil (validation
+// disabled or no result available).
+func convertValidationResult(vr *types.ValidationResult) *models.ValidationInfo {
+	if vr == nil {
+		return nil
+	}
+	return &models.ValidationInfo{
+		Status:      string(vr.Status),
+		Confidence:  vr.Confidence,
+		Message:     vr.Message,
+		ValidatedAt: vr.ValidatedAt.Format(time.RFC3339),
+		Details:     vr.Details,
+	}
 }
 
 // extractZipToDir safely extracts a ZIP archive to the destination directory.

@@ -2,6 +2,9 @@ package scanner
 
 import (
 	"testing"
+	"time"
+
+	"github.com/praetorian-inc/titus/pkg/types"
 )
 
 func TestGetExtension(t *testing.T) {
@@ -172,4 +175,86 @@ func TestIsZipArchive(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConvertValidationResult(t *testing.T) {
+	t.Run("nil input returns nil", func(t *testing.T) {
+		got := convertValidationResult(nil)
+		if got != nil {
+			t.Errorf("convertValidationResult(nil) = %v, want nil", got)
+		}
+	})
+
+	t.Run("valid result with all fields", func(t *testing.T) {
+		ts := time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)
+		input := &types.ValidationResult{
+			Status:      types.StatusValid,
+			Confidence:  0.95,
+			Message:     "Token is active",
+			ValidatedAt: ts,
+			Details: map[string]string{
+				"account_id": "123456789",
+				"username":   "testuser",
+			},
+		}
+
+		got := convertValidationResult(input)
+		if got == nil {
+			t.Fatal("convertValidationResult returned nil for non-nil input")
+		}
+		if got.Status != "valid" {
+			t.Errorf("Status = %q, want %q", got.Status, "valid")
+		}
+		if got.Confidence != 0.95 {
+			t.Errorf("Confidence = %f, want 0.95", got.Confidence)
+		}
+		if got.Message != "Token is active" {
+			t.Errorf("Message = %q, want %q", got.Message, "Token is active")
+		}
+		if got.ValidatedAt != "2025-06-15T10:30:00Z" {
+			t.Errorf("ValidatedAt = %q, want %q", got.ValidatedAt, "2025-06-15T10:30:00Z")
+		}
+		if len(got.Details) != 2 {
+			t.Errorf("Details length = %d, want 2", len(got.Details))
+		}
+		if got.Details["account_id"] != "123456789" {
+			t.Errorf("Details[account_id] = %q, want %q", got.Details["account_id"], "123456789")
+		}
+	})
+
+	t.Run("invalid status", func(t *testing.T) {
+		input := &types.ValidationResult{
+			Status:      types.StatusInvalid,
+			Confidence:  1.0,
+			Message:     "Token expired",
+			ValidatedAt: time.Now(),
+		}
+
+		got := convertValidationResult(input)
+		if got == nil {
+			t.Fatal("convertValidationResult returned nil for non-nil input")
+		}
+		if got.Status != "invalid" {
+			t.Errorf("Status = %q, want %q", got.Status, "invalid")
+		}
+	})
+
+	t.Run("undetermined status", func(t *testing.T) {
+		input := &types.ValidationResult{
+			Status:      types.StatusUndetermined,
+			Confidence:  0.0,
+			ValidatedAt: time.Now(),
+		}
+
+		got := convertValidationResult(input)
+		if got == nil {
+			t.Fatal("convertValidationResult returned nil for non-nil input")
+		}
+		if got.Status != "undetermined" {
+			t.Errorf("Status = %q, want %q", got.Status, "undetermined")
+		}
+		if got.Confidence != 0.0 {
+			t.Errorf("Confidence = %f, want 0.0", got.Confidence)
+		}
+	})
 }

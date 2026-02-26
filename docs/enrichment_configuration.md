@@ -61,6 +61,7 @@ The [Titus scanner service](https://github.com/SpecterOps/Nemesis/tree/main/proj
 | `EXTRACT_MAX_TOTAL_SIZE_MB`| 1000          | Total extraction budget per archive (in megabytes)                                   |
 | `EXTRACT_MAX_DEPTH`        | 2             | Maximum nesting depth for recursive archives                                         |
 | `ENABLE_VALIDATION`        | false         | Whether to enable credential validation                                              |
+| `VALIDATION_WORKERS`       | 4             | Concurrent validation workers (only used when validation enabled)                    |
 
 **Supported archive formats:** `.zip`, `.jar`, `.war`, `.ear`, `.apk`, `.ipa`, `.xpi`, `.crx`, `.tar`, `.tar.gz`/`.tgz`, `.7z`. Document formats (xlsx, docx, pdf, etc.) are intentionally excluded — Nemesis handles those via the document_conversion service.
 
@@ -99,6 +100,28 @@ rules:
 ```
 
 If you want to add additional rules, just modify [rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner/custom_rules/rules.yaml) with the new rule (or add a new rules.yaml) and restart the titus-scanner container.
+
+### Secret Validation
+
+Titus supports live validation of detected secrets against their source APIs (e.g., checking if an AWS key is active via STS, testing a GitHub token, etc.). This is **opt-in** and disabled by default because validation makes outbound network calls to third-party services.
+
+To enable secret validation:
+
+```bash
+export ENABLE_VALIDATION=true
+```
+
+When enabled, each detected secret is validated and assigned one of three outcomes:
+
+| Status | Label | Description |
+|---|---|---|
+| `valid` | CONFIRMED ACTIVE | The secret was verified as active against the target service |
+| `invalid` | INACTIVE | The secret was tested and confirmed to be expired or revoked |
+| `undetermined` | UNVERIFIED | Validation could not determine the secret's status |
+
+Confirmed active secrets are escalated to severity 9 (from the default 7), while inactive secrets have their severity reduced. The `VALIDATION_WORKERS` variable controls the number of concurrent validation goroutines (default: 4).
+
+Titus supports validation for 100+ secret types, including: AWS access keys, GitHub tokens, GitLab tokens, Slack tokens, Stripe API keys, PostgreSQL connection strings, Twilio credentials, SendGrid API keys, and many more. See the [Titus documentation](https://github.com/praetorian-inc/titus) for the full list.
 
 
 ## .NET Service

@@ -30,10 +30,17 @@ type RulesFile struct {
 	Rules []RuleDefinition `yaml:"rules"`
 }
 
+// ValidationConfig controls whether the Titus scanner performs live secret
+// validation (e.g. checking if an AWS key is active via STS).
+type ValidationConfig struct {
+	EnableValidation  bool
+	ValidationWorkers int
+}
+
 // LoadAllRules loads the Titus builtin rules (459+) and merges them with any
 // custom rules found in the given directory. Returns a fully configured
 // titus.Scanner ready to scan content.
-func LoadAllRules(customRulesDir string) (*titus.Scanner, int, error) {
+func LoadAllRules(customRulesDir string, valCfg ValidationConfig) (*titus.Scanner, int, error) {
 	// Load builtin rules from the Titus library
 	loader := rule.NewLoader()
 	builtinRules, err := loader.LoadBuiltinRules()
@@ -56,8 +63,18 @@ func LoadAllRules(customRulesDir string) (*titus.Scanner, int, error) {
 	totalCount := len(allRules)
 	slog.Info("Total rules loaded", "builtin", len(builtinRules), "custom", len(customRules), "total", totalCount)
 
+	// Build scanner options
+	opts := []titus.Option{titus.WithRules(allRules)}
+	if valCfg.EnableValidation {
+		opts = append(opts, titus.WithValidation())
+		if valCfg.ValidationWorkers > 0 {
+			opts = append(opts, titus.WithValidationWorkers(valCfg.ValidationWorkers))
+		}
+		slog.Info("Secret validation enabled", "workers", valCfg.ValidationWorkers)
+	}
+
 	// Create a Titus scanner with all rules
-	scanner, err := titus.NewScanner(titus.WithRules(allRules))
+	scanner, err := titus.NewScanner(opts...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create Titus scanner: %w", err)
 	}

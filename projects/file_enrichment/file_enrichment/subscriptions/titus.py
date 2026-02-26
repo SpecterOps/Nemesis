@@ -177,6 +177,26 @@ def create_finding_summary(match_info):
     summary += f"{match_info.snippet}\n"
     summary += "```\n"
 
+    # Add validation result if available
+    if match_info.validation_result:
+        vr = match_info.validation_result
+        status_label = {
+            "valid": "CONFIRMED ACTIVE",
+            "invalid": "INACTIVE",
+            "undetermined": "UNVERIFIED",
+        }.get(vr.status, "UNVERIFIED")
+
+        summary += "\n### Validation Result\n\n"
+        summary += f"* **Status**: {status_label}\n"
+        if vr.confidence > 0:
+            summary += f"* **Confidence**: {vr.confidence:.0%}\n"
+        if vr.message:
+            summary += f"* **Message**: {vr.message}\n"
+        if vr.details:
+            summary += "\n**Details**:\n\n"
+            for key, value in vr.details.items():
+                summary += f"  - {key}: {value}\n"
+
     # Check if this is a JWT
     if match_info.rule_type == "secret" and "json web token" in match_info.rule_name.lower():
         jwt_token = match_info.matched_content.strip()
@@ -258,6 +278,15 @@ async def store_titus_results(
             severity = 7  # Default severity
             if match.rule_type == "secret" and "generic secret" in match.rule_name.lower():
                 severity = 4
+
+            # Adjust severity based on validation status
+            if match.validation_result:
+                if match.validation_result.status == "valid":
+                    severity = 9
+                    if match.rule_type == "secret" and "generic secret" in match.rule_name.lower():
+                        severity = 7
+                elif match.validation_result.status == "invalid":
+                    severity = max(severity - 3, 2)
 
             # Create the finding with sanitized raw_data
             finding = Finding(
