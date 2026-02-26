@@ -4,7 +4,7 @@
 ALERTING_PUBSUB = "alerting"
 ALERTING_NEW_ALERT_TOPIC = "new_alert"
 
-DOCUMENT_CONVERSION_PUBSUB = "document_conversion"
+DOCUMENT_CONVERSION_PUBSUB = "document-conversion"
 DOCUMENT_CONVERSION_INPUT_TOPIC = "document_conversion_input"
 DOCUMENT_CONVERSION_OUTPUT_TOPIC = "document_conversion_output"
 
@@ -24,5 +24,5 @@ TITUS_PUBSUB = "titus"
 TITUS_INPUT_TOPIC = "titus_input"
 TITUS_OUTPUT_TOPIC = "titus_output"
 
-WORKFLOW_MONITOR_PUBSUB = "workflow_monitor"
+WORKFLOW_MONITOR_PUBSUB = "workflow-monitor"
 WORKFLOW_MONITOR_COMPLETED_TOPIC = "workflow_completed"
