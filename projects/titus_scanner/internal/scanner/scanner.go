@@ -377,6 +377,7 @@ func (s *Scanner) scanBytes(data []byte, filePath *string, gitCommit *models.Git
 
 		mi := models.MatchInfo{
 			RuleName:       tm.RuleName,
+			RuleID:         tm.RuleID,
 			RuleType:       ruleType,
 			MatchedContent: string(tm.Snippet.Matching),
 			Location: models.MatchLocation{

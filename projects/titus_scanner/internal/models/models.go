@@ -28,6 +28,7 @@ type ScanResults struct {
 // MatchInfo describes a single secret match found during scanning.
 type MatchInfo struct {
 	RuleName         string          `json:"rule_name"`
+	RuleID           string          `json:"rule_id"`
 	RuleType         string          `json:"rule_type"`
 	MatchedContent   string          `json:"matched_content"`
 	Location         MatchLocation   `json:"location"`

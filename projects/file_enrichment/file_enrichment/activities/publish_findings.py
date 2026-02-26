@@ -157,7 +157,9 @@ async def publish_alerts_for_findings(
                         if raw_data and finding_name.startswith("titus_"):
                             if "match" in raw_data and "rule_name" in raw_data["match"]:
                                 rule_name = raw_data["match"]["rule_name"]
-                                rule_message = f"- *Rule name:* {rule_name}\n"
+                                rule_id = raw_data["match"].get("rule_id", "")
+                                rule_id_suffix = f" (`{rule_id}`)" if rule_id else ""
+                                rule_message = f"- *Rule name:* {rule_name}{rule_id_suffix}\n"
                             if "match" in raw_data and raw_data["match"].get("validation_result"):
                                 vr = raw_data["match"]["validation_result"]
                                 status = vr.get("status", "undetermined")

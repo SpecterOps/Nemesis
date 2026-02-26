@@ -109,6 +109,36 @@ class TestSeverityAdjustment:
         assert self._compute_severity("Generic Secret", "secret", vr) == 4
 
 
+class TestFindingSummaryRuleID:
+    """Test that rule_id appears in finding summaries."""
+
+    @staticmethod
+    def _make_match(rule_id: str | None = None) -> MatchInfo:
+        return MatchInfo(
+            rule_name="AWS Access Key",
+            rule_id=rule_id,
+            rule_type="secret",
+            matched_content="AKIA1234567890ABCDEF",
+            location=MatchLocation(line=10, column=5),
+            snippet="aws_key = AKIA1234567890ABCDEF",
+        )
+
+    def test_rule_id_in_summary(self):
+        match = self._make_match(rule_id="np.aws.1")
+        summary = create_finding_summary(match)
+        assert "**Rule ID**: `np.aws.1`" in summary
+
+    def test_no_rule_id_when_none(self):
+        match = self._make_match(rule_id=None)
+        summary = create_finding_summary(match)
+        assert "Rule ID" not in summary
+
+    def test_no_rule_id_when_empty(self):
+        match = self._make_match(rule_id="")
+        summary = create_finding_summary(match)
+        assert "Rule ID" not in summary
+
+
 class TestFindingSummaryValidation:
     """Test that validation results appear in finding summaries."""
 

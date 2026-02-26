@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all configuration values for the titus-scanner service.
@@ -23,6 +24,7 @@ type Config struct {
 	SnippetLength         int
 	EnableValidation      bool
 	ValidationWorkers     int
+	DisabledRules         []string
 	CustomRulesDir        string
 
 	// MinIO configuration
@@ -55,6 +57,7 @@ func Load() *Config {
 		SnippetLength:      getEnvInt("SNIPPET_LENGTH", 512),
 		EnableValidation:   getEnvBool("ENABLE_VALIDATION", false),
 		ValidationWorkers:  getEnvInt("VALIDATION_WORKERS", 4),
+		DisabledRules:      getEnvStringSlice("DISABLED_RULES"),
 		CustomRulesDir:     getEnv("CUSTOM_RULES_DIR", "/opt/titus"),
 		MinioEndpoint:      getEnv("MINIO_ENDPOINT", "http://minio:9000"),
 		MinioBucket:        getEnv("MINIO_BUCKET", "files"),
@@ -87,6 +90,24 @@ func getEnvInt(key string, defaultVal int) int {
 		return defaultVal
 	}
 	return n
+}
+
+// getEnvStringSlice returns a slice of strings from a comma-separated environment
+// variable. Returns nil if the variable is not set or empty.
+func getEnvStringSlice(key string) []string {
+	val := os.Getenv(key)
+	if val == "" {
+		return nil
+	}
+	parts := strings.Split(val, ",")
+	var result []string
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 // getEnvBool returns the boolean value of the environment variable named by key,

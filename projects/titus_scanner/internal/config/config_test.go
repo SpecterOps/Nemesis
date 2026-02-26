@@ -12,6 +12,7 @@ func TestLoadDefaults(t *testing.T) {
 		"EXTRACT_MAX_FILE_SIZE_MB", "EXTRACT_MAX_DEPTH",
 		"MAX_FILE_SIZE_MB", "SNIPPET_LENGTH",
 		"ENABLE_VALIDATION", "VALIDATION_WORKERS",
+		"DISABLED_RULES",
 	}
 	for _, v := range envVars {
 		os.Unsetenv(v)
@@ -42,6 +43,53 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.ValidationWorkers != 4 {
 		t.Errorf("ValidationWorkers default = %d, want 4", cfg.ValidationWorkers)
+	}
+	if cfg.DisabledRules != nil {
+		t.Errorf("DisabledRules default = %v, want nil", cfg.DisabledRules)
+	}
+}
+
+func TestLoadDisabledRules(t *testing.T) {
+	tests := []struct {
+		name   string
+		envVal string
+		want   []string
+	}{
+		{"empty env", "", nil},
+		{"single value", "np.linkedin.3", []string{"np.linkedin.3"}},
+		{"multiple values", "np.linkedin.3,np.generic.1", []string{"np.linkedin.3", "np.generic.1"}},
+		{"with spaces", " np.linkedin.3 , np.generic.1 ", []string{"np.linkedin.3", "np.generic.1"}},
+		{"trailing comma", "np.linkedin.3,", []string{"np.linkedin.3"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envVal == "" {
+				os.Unsetenv("DISABLED_RULES")
+			} else {
+				os.Setenv("DISABLED_RULES", tt.envVal)
+				defer os.Unsetenv("DISABLED_RULES")
+			}
+
+			got := getEnvStringSlice("DISABLED_RULES")
+
+			if tt.want == nil {
+				if got != nil {
+					t.Errorf("getEnvStringSlice() = %v, want nil", got)
+				}
+				return
+			}
+
+			if len(got) != len(tt.want) {
+				t.Errorf("getEnvStringSlice() = %v, want %v", got, tt.want)
+				return
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("getEnvStringSlice()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
 	}
 }
 

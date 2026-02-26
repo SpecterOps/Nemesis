@@ -173,6 +173,7 @@ class ValidationResult(BaseModel):
 
 class MatchInfo(BaseModel):
     rule_name: str
+    rule_id: str | None = None
     rule_type: str
     matched_content: str
     location: MatchLocation

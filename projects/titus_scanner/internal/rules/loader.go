@@ -38,9 +38,10 @@ type ValidationConfig struct {
 }
 
 // LoadAllRules loads the Titus builtin rules (459+) and merges them with any
-// custom rules found in the given directory. Returns a fully configured
-// titus.Scanner ready to scan content.
-func LoadAllRules(customRulesDir string, valCfg ValidationConfig) (*titus.Scanner, int, error) {
+// custom rules found in the given directory. Rules whose IDs appear in
+// disabledRules are excluded before the scanner is created. Returns a fully
+// configured titus.Scanner ready to scan content.
+func LoadAllRules(customRulesDir string, valCfg ValidationConfig, disabledRules []string) (*titus.Scanner, int, error) {
 	// Load builtin rules from the Titus library
 	loader := rule.NewLoader()
 	builtinRules, err := loader.LoadBuiltinRules()
@@ -59,6 +60,24 @@ func LoadAllRules(customRulesDir string, valCfg ValidationConfig) (*titus.Scanne
 	allRules := make([]*types.Rule, 0, len(builtinRules)+len(customRules))
 	allRules = append(allRules, builtinRules...)
 	allRules = append(allRules, customRules...)
+
+	// Filter out disabled rules
+	if len(disabledRules) > 0 {
+		disabled := make(map[string]bool, len(disabledRules))
+		for _, id := range disabledRules {
+			disabled[id] = true
+		}
+		filtered := make([]*types.Rule, 0, len(allRules))
+		for _, r := range allRules {
+			if disabled[r.ID] {
+				slog.Info("Disabled rule", "id", r.ID, "name", r.Name)
+				continue
+			}
+			filtered = append(filtered, r)
+		}
+		slog.Info("Disabled rules", "count", len(allRules)-len(filtered), "remaining", len(filtered))
+		allRules = filtered
+	}
 
 	totalCount := len(allRules)
 	slog.Info("Total rules loaded", "builtin", len(builtinRules), "custom", len(customRules), "total", totalCount)

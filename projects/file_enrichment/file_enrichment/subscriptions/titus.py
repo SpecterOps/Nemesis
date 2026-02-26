@@ -148,6 +148,8 @@ def create_finding_summary(match_info):
     summary += "### Metadata\n"
     summary += f"* **Finding ID**: {finding_id}\n"
     summary += f"* **Rule Type**: {match_info.rule_type}\n"
+    if match_info.rule_id:
+        summary += f"* **Rule ID**: `{match_info.rule_id}`\n"
 
     # Add file path if available
     if match_info.file_path:

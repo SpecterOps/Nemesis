@@ -62,6 +62,7 @@ The [Titus scanner service](https://github.com/SpecterOps/Nemesis/tree/main/proj
 | `EXTRACT_MAX_DEPTH`        | 2             | Maximum nesting depth for recursive archives                                         |
 | `ENABLE_VALIDATION`        | false         | Whether to enable credential validation                                              |
 | `VALIDATION_WORKERS`       | 4             | Concurrent validation workers (only used when validation enabled)                    |
+| `DISABLED_RULES`           | (none)        | Comma-separated Titus rule IDs to exclude (e.g. `np.linkedin.3,np.generic.1`)        |
 
 **Supported archive formats:** `.zip`, `.jar`, `.war`, `.ear`, `.apk`, `.ipa`, `.xpi`, `.crx`, `.tar`, `.tar.gz`/`.tgz`, `.7z`. Document formats (xlsx, docx, pdf, etc.) are intentionally excluded — Nemesis handles those via the document_conversion service.
 
