@@ -14,14 +14,16 @@ type Config struct {
 	OutputTopic string
 
 	// Scanner configuration
-	MaxConcurrentFiles int
-	MaxFileSizeMB      int
-	DecompressZips     bool
-	MaxExtractSizeMB   int
-	SnippetLength      int
-	EnableValidation   bool
-	ValidationWorkers  int
-	CustomRulesDir     string
+	MaxConcurrentFiles    int
+	MaxFileSizeMB         int
+	ExtractArchives       bool
+	ExtractMaxTotalSizeMB int
+	ExtractMaxFileSizeMB  int
+	ExtractMaxDepth       int
+	SnippetLength         int
+	EnableValidation      bool
+	ValidationWorkers     int
+	CustomRulesDir        string
 
 	// MinIO configuration
 	MinioEndpoint  string
@@ -44,10 +46,12 @@ func Load() *Config {
 		PubsubName:         getEnv("PUBSUB_NAME", "titus"),
 		InputTopic:         getEnv("INPUT_TOPIC", "titus_input"),
 		OutputTopic:        getEnv("OUTPUT_TOPIC", "titus_output"),
-		MaxConcurrentFiles: getEnvInt("MAX_CONCURRENT_FILES", 2),
-		MaxFileSizeMB:      getEnvInt("MAX_FILE_SIZE_MB", 200),
-		DecompressZips:     getEnvBool("DECOMPRESS_ZIPS", false),
-		MaxExtractSizeMB:   getEnvInt("MAX_EXTRACT_SIZE_MB", 1000),
+		MaxConcurrentFiles:    getEnvInt("MAX_CONCURRENT_FILES", 2),
+		MaxFileSizeMB:         getEnvInt("MAX_FILE_SIZE_MB", 200),
+		ExtractArchives:       getEnvBool("EXTRACT_ARCHIVES", false),
+		ExtractMaxTotalSizeMB: getEnvInt("EXTRACT_MAX_TOTAL_SIZE_MB", 1000),
+		ExtractMaxFileSizeMB:  getEnvInt("EXTRACT_MAX_FILE_SIZE_MB", 10),
+		ExtractMaxDepth:       getEnvInt("EXTRACT_MAX_DEPTH", 5),
 		SnippetLength:      getEnvInt("SNIPPET_LENGTH", 512),
 		EnableValidation:   getEnvBool("ENABLE_VALIDATION", false),
 		ValidationWorkers:  getEnvInt("VALIDATION_WORKERS", 4),

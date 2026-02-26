@@ -37,7 +37,7 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
                     await index_plaintext_content(f"{object_id}", text_file)
 
     # Submit the file to Titus
-    titus_input = TitusInput(object_id=object_id, workflow_id=ctx.workflow_id)
+    titus_input = TitusInput(object_id=object_id, workflow_id=ctx.workflow_id, original_path=file_enriched.path or "")
     async with DaprClient() as client:
         await client.publish_event(
             pubsub_name=TITUS_PUBSUB,

@@ -3,8 +3,9 @@ package models
 // TitusInput represents the incoming event from the Dapr pub/sub topic.
 // It identifies a file in MinIO to be scanned for secrets.
 type TitusInput struct {
-	ObjectID   string `json:"object_id"`
-	WorkflowID string `json:"workflow_id"`
+	ObjectID     string `json:"object_id"`
+	WorkflowID   string `json:"workflow_id"`
+	OriginalPath string `json:"original_path"`
 }
 
 // TitusOutput represents the result published back to the Dapr output topic.
@@ -85,5 +86,5 @@ type ScanResult struct {
 	BytesScanned int64
 	Matches      []MatchInfo
 	Stats        ScanStats
-	ScanType     string // "regular", "zip", "git_repo"
+	ScanType     string // "regular", "archive", "git_repo", "error"
 }

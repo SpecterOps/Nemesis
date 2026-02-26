@@ -46,10 +46,12 @@ func main() {
 
 	// Initialize the scanner with the Titus scanner engine
 	sc := scanner.New(titusScanner, scanner.Options{
-		SnippetLength:    cfg.SnippetLength,
-		MaxFileSizeMB:    cfg.MaxFileSizeMB,
-		DecompressZips:   cfg.DecompressZips,
-		MaxExtractSizeMB: cfg.MaxExtractSizeMB,
+		SnippetLength:         cfg.SnippetLength,
+		MaxFileSizeMB:         cfg.MaxFileSizeMB,
+		ExtractArchives:       cfg.ExtractArchives,
+		ExtractMaxFileSizeMB:  cfg.ExtractMaxFileSizeMB,
+		ExtractMaxTotalSizeMB: cfg.ExtractMaxTotalSizeMB,
+		ExtractMaxDepth:       cfg.ExtractMaxDepth,
 	})
 	defer sc.Close()
 

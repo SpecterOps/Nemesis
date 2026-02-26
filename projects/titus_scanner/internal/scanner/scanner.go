@@ -9,18 +9,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/praetorian-inc/titus"
+	"github.com/praetorian-inc/titus/pkg/enum"
 	"github.com/specterops/nemesis/titus-scanner/internal/models"
 )
 
 // Options configures the scanning behavior.
 type Options struct {
-	SnippetLength    int
-	MaxFileSizeMB    int
-	DecompressZips   bool
-	MaxExtractSizeMB int
+	SnippetLength         int
+	MaxFileSizeMB         int
+	ExtractArchives       bool
+	ExtractMaxFileSizeMB  int
+	ExtractMaxTotalSizeMB int
+	ExtractMaxDepth       int
 }
 
 // Scanner applies secret-detection rules to file content using the Titus library.
@@ -56,21 +58,89 @@ func (s *Scanner) RuleCount() int {
 	return 0
 }
 
-// ScanFile scans the file at the given path, detecting whether it is a regular
-// file, a ZIP archive, or a ZIP containing a git repository.
-func (s *Scanner) ScanFile(ctx context.Context, filePath string) (*models.ScanResult, error) {
-	// Check if it is a ZIP file
-	if s.opts.DecompressZips && isZipFile(filePath) {
-		slog.Info("Detected ZIP file, extracting for scanning", "path", filePath)
-		return s.scanZip(ctx, filePath)
-	}
-
-	// Regular file scan
-	return s.scanRegularFile(ctx, filePath)
+// archiveExtensions maps file extensions to whether they are supported archive formats.
+// Document formats (xlsx, docx, pptx, pdf, etc.) are intentionally excluded
+// because Nemesis handles those via the document_conversion service.
+var archiveExtensions = map[string]bool{
+	".zip":    true,
+	".jar":    true,
+	".war":    true,
+	".ear":    true,
+	".apk":    true,
+	".ipa":    true,
+	".xpi":    true,
+	".crx":    true,
+	".tar":    true,
+	".tar.gz": true,
+	".tgz":    true,
+	".7z":     true,
 }
 
-// scanRegularFile reads a file and scans its content with the Titus scanner.
-func (s *Scanner) scanRegularFile(ctx context.Context, filePath string) (*models.ScanResult, error) {
+// getExtension returns the file extension, with special handling for .tar.gz.
+func getExtension(path string) string {
+	lower := strings.ToLower(path)
+	if strings.HasSuffix(lower, ".tar.gz") {
+		return ".tar.gz"
+	}
+	return strings.ToLower(filepath.Ext(path))
+}
+
+// detectArchiveType determines if a file is a supported archive format.
+// It checks the original path extension first, then falls back to magic byte detection.
+// Returns the archive extension (e.g. ".zip", ".tar.gz") or empty string if not an archive.
+func detectArchiveType(originalPath string, data []byte) string {
+	// First try extension-based detection from the original path
+	if originalPath != "" {
+		ext := getExtension(originalPath)
+		if archiveExtensions[ext] {
+			return ext
+		}
+	}
+
+	// Fall back to magic byte detection
+	if len(data) < 4 {
+		return ""
+	}
+
+	// ZIP magic: PK\x03\x04
+	if data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04 {
+		return ".zip"
+	}
+
+	// 7z magic: 7z\xBC\xAF\x27\x1C
+	if len(data) >= 6 && data[0] == 0x37 && data[1] == 0x7A && data[2] == 0xBC &&
+		data[3] == 0xAF && data[4] == 0x27 && data[5] == 0x1C {
+		return ".7z"
+	}
+
+	// Gzip magic: \x1F\x8B (used for .tar.gz / .tgz)
+	if data[0] == 0x1F && data[1] == 0x8B {
+		return ".tar.gz"
+	}
+
+	// TAR magic: "ustar" at offset 257
+	if len(data) > 262 {
+		if string(data[257:262]) == "ustar" {
+			return ".tar"
+		}
+	}
+
+	return ""
+}
+
+// isZipArchive checks if the data starts with a ZIP magic number.
+func isZipArchive(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	return (data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04) ||
+		(data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x05 && data[3] == 0x06) ||
+		(data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x07 && data[3] == 0x08)
+}
+
+// ScanFile scans the file at the given path, detecting whether it is a regular
+// file, an archive, or contains a git repository.
+func (s *Scanner) ScanFile(ctx context.Context, filePath string, originalPath string) (*models.ScanResult, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
@@ -84,6 +154,30 @@ func (s *Scanner) scanRegularFile(ctx context.Context, filePath string) (*models
 		return nil, fmt.Errorf("file size %d exceeds limit %d bytes", fileSize, maxBytes)
 	}
 
+	// Check for archive extraction
+	if s.opts.ExtractArchives {
+		archiveExt := detectArchiveType(originalPath, data)
+		if archiveExt != "" {
+			slog.Info("Detected archive file, extracting for scanning",
+				"path", filePath,
+				"original_path", originalPath,
+				"archive_type", archiveExt,
+			)
+
+			// For ZIP-based archives, first check for git-repo-in-ZIP
+			if isZipArchive(data) {
+				gitResult, err := s.tryGitRepoInZip(ctx, filePath, data)
+				if err == nil && gitResult != nil {
+					return gitResult, nil
+				}
+				// Not a git repo or error checking — fall through to archive scan
+			}
+
+			return s.scanArchive(ctx, archiveExt, data)
+		}
+	}
+
+	// Regular file scan
 	matches := s.scanBytes(data, nil, nil)
 
 	return &models.ScanResult{
@@ -100,126 +194,75 @@ func (s *Scanner) scanRegularFile(ctx context.Context, filePath string) (*models
 	}, nil
 }
 
-// scanZip extracts a ZIP archive to a temporary directory and scans its contents.
-// If the archive contains a .git directory, it performs a git-aware scan.
-func (s *Scanner) scanZip(ctx context.Context, zipPath string) (*models.ScanResult, error) {
-	// Create temp directory for extraction
-	tmpDir, err := os.MkdirTemp("", "titus-extract-*")
+// tryGitRepoInZip extracts a ZIP to a temp directory and checks if it contains
+// a git repository. Returns (result, nil) if a git repo was found and scanned,
+// or (nil, nil) if no git repo was found.
+func (s *Scanner) tryGitRepoInZip(ctx context.Context, filePath string, data []byte) (*models.ScanResult, error) {
+	tmpDir, err := os.MkdirTemp("", "titus-git-check-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Extract the ZIP
-	if err := s.extractZip(zipPath, tmpDir); err != nil {
-		return nil, fmt.Errorf("failed to extract zip: %w", err)
+	if err := s.extractZipToDir(filePath, tmpDir); err != nil {
+		return nil, fmt.Errorf("failed to extract zip for git check: %w", err)
 	}
 
-	// Check if extracted content contains a git repository
 	gitDir := findGitDir(tmpDir)
-	if gitDir != "" {
-		slog.Info("Found git repository in ZIP archive", "git_dir", gitDir)
-		return s.scanGitRepo(ctx, filepath.Dir(gitDir))
+	if gitDir == "" {
+		return nil, nil // No git repo found
 	}
 
-	// No git repo - scan all extracted files
-	slog.Info("Scanning extracted ZIP contents as regular files", "dir", tmpDir)
-	return s.scanDirectory(ctx, tmpDir)
+	slog.Info("Found git repository in ZIP archive", "git_dir", gitDir)
+	return s.scanGitRepo(ctx, filepath.Dir(gitDir))
 }
 
-// scanDirectory walks a directory tree and scans all regular files.
-func (s *Scanner) scanDirectory(ctx context.Context, dirPath string) (*models.ScanResult, error) {
+// scanArchive uses the Titus library's enum.ExtractText to extract archive contents
+// and scan each extracted file for secrets.
+func (s *Scanner) scanArchive(ctx context.Context, archiveExt string, data []byte) (*models.ScanResult, error) {
+	limits := enum.ExtractionLimits{
+		MaxSize:  int64(s.opts.ExtractMaxFileSizeMB) * 1024 * 1024,
+		MaxTotal: int64(s.opts.ExtractMaxTotalSizeMB) * 1024 * 1024,
+		MaxDepth: s.opts.ExtractMaxDepth,
+	}
+
+	// ExtractText dispatches by file extension, so we pass "archive<ext>"
+	extracted, err := enum.ExtractText("archive"+archiveExt, data, limits)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract archive: %w", err)
+	}
+
 	var (
-		mu                sync.Mutex
 		allMatches        []models.MatchInfo
-		totalBytesSeen    int64
 		totalBytesScanned int64
-		blobsSeen         int64
 		blobsScanned      int64
 	)
 
-	maxBytes := int64(s.opts.MaxExtractSizeMB) * 1024 * 1024
-	var totalExtracted int64
-
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			slog.Warn("Error walking directory", "path", path, "error", walkErr)
-			return nil // Continue walking
-		}
-
-		// Skip directories
-		if info.IsDir() {
-			return nil
-		}
-
-		// Check context cancellation
+	for _, entry := range extracted {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		default:
 		}
 
-		fileSize := info.Size()
-		mu.Lock()
-		totalExtracted += fileSize
-		blobsSeen++
-		totalBytesSeen += fileSize
-		mu.Unlock()
-
-		// Enforce total extraction size limit
-		if totalExtracted > maxBytes {
-			slog.Warn("Total extracted size exceeds limit, stopping scan",
-				"total_extracted", totalExtracted,
-				"limit", maxBytes,
-			)
-			return filepath.SkipAll
-		}
-
-		// Skip files larger than the per-file size limit
-		maxFileBytes := int64(s.opts.MaxFileSizeMB) * 1024 * 1024
-		if fileSize > maxFileBytes {
-			slog.Debug("Skipping file exceeding size limit",
-				"path", path,
-				"size", fileSize,
-				"limit", maxFileBytes,
-			)
-			return nil
-		}
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			slog.Warn("Failed to read file", "path", path, "error", err)
-			return nil
-		}
-
-		// Compute relative path for the match info
-		relPath, _ := filepath.Rel(dirPath, path)
-		matches := s.scanBytes(data, &relPath, nil)
-
-		mu.Lock()
+		entryName := entry.Name
+		matches := s.scanBytes(entry.Content, &entryName, nil)
 		allMatches = append(allMatches, matches...)
-		totalBytesScanned += int64(len(data))
+		totalBytesScanned += int64(len(entry.Content))
 		blobsScanned++
-		mu.Unlock()
-
-		return nil
-	})
-
-	if err != nil && err != filepath.SkipAll {
-		return nil, fmt.Errorf("error walking directory %s: %w", dirPath, err)
 	}
 
 	return &models.ScanResult{
 		BytesScanned: totalBytesScanned,
 		Matches:      allMatches,
 		Stats: models.ScanStats{
-			BlobsSeen:    blobsSeen,
+			BlobsSeen:    blobsScanned,
 			BlobsScanned: blobsScanned,
-			BytesSeen:    totalBytesSeen,
+			BytesSeen:    int64(len(data)),
 			BytesScanned: totalBytesScanned,
 			MatchesFound: len(allMatches),
 		},
-		ScanType: "zip",
+		ScanType: "archive",
 	}, nil
 }
 
@@ -234,7 +277,7 @@ func (s *Scanner) scanGitRepo(ctx context.Context, repoPath string) (*models.Sca
 		blobsScanned      int64
 	)
 
-	maxBytes := int64(s.opts.MaxExtractSizeMB) * 1024 * 1024
+	maxBytes := int64(s.opts.ExtractMaxTotalSizeMB) * 1024 * 1024
 	var totalScanned int64
 
 	// Walk the work tree (all files, including untracked)
@@ -264,7 +307,7 @@ func (s *Scanner) scanGitRepo(ctx context.Context, repoPath string) (*models.Sca
 			return filepath.SkipAll
 		}
 
-		maxFileBytes := int64(s.opts.MaxFileSizeMB) * 1024 * 1024
+		maxFileBytes := int64(s.opts.ExtractMaxFileSizeMB) * 1024 * 1024
 		if fileSize > maxFileBytes {
 			return nil
 		}
@@ -353,16 +396,17 @@ func (s *Scanner) scanBytes(data []byte, filePath *string, gitCommit *models.Git
 	return matches
 }
 
-// extractZip safely extracts a ZIP archive to the destination directory.
+// extractZipToDir safely extracts a ZIP archive to the destination directory.
 // It enforces a maximum total extraction size and guards against zip-slip attacks.
-func (s *Scanner) extractZip(zipPath, destDir string) error {
+// This is used only for the git-repo-in-ZIP detection path.
+func (s *Scanner) extractZipToDir(zipPath, destDir string) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return fmt.Errorf("failed to open zip file: %w", err)
 	}
 	defer r.Close()
 
-	maxBytes := int64(s.opts.MaxExtractSizeMB) * 1024 * 1024
+	maxBytes := int64(s.opts.ExtractMaxTotalSizeMB) * 1024 * 1024
 	var totalExtracted int64
 
 	for _, f := range r.File {
@@ -421,26 +465,6 @@ func extractZipEntry(f *zip.File, destPath string) error {
 	}
 
 	return nil
-}
-
-// isZipFile checks if a file has a ZIP magic number header.
-func isZipFile(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-
-	var buf [4]byte
-	n, err := f.Read(buf[:])
-	if err != nil || n < 4 {
-		return false
-	}
-
-	// ZIP file signatures
-	return (buf[0] == 0x50 && buf[1] == 0x4B && buf[2] == 0x03 && buf[3] == 0x04) ||
-		(buf[0] == 0x50 && buf[1] == 0x4B && buf[2] == 0x05 && buf[3] == 0x06) ||
-		(buf[0] == 0x50 && buf[1] == 0x4B && buf[2] == 0x07 && buf[3] == 0x08)
 }
 
 // findGitDir recursively searches for a .git directory within the given root.

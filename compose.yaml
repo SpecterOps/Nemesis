@@ -119,8 +119,10 @@ services:
       - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Titus matches
       - MAX_CONCURRENT_FILES=${TITUS_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-200} # maximum file size to scan, in megabytes
-      - DECOMPRESS_ZIPS=${DECOMPRESS_ZIPS:-true} # whether to decompress+scan zips
-      - MAX_EXTRACT_SIZE_MB=${MAX_EXTRACT_SIZE_MB:-1000} # maximum number of megabytes to extract from ZIPs (if decompressing)
+      - EXTRACT_ARCHIVES=${EXTRACT_ARCHIVES:-true} # extract+scan archive contents (zip, jar, war, ear, apk, tar, tar.gz, 7z)
+      - EXTRACT_MAX_FILE_SIZE_MB=${EXTRACT_MAX_FILE_SIZE_MB:-10} # max per-file size within archives (MB)
+      - EXTRACT_MAX_TOTAL_SIZE_MB=${EXTRACT_MAX_TOTAL_SIZE_MB:-1000} # total extraction budget per archive (MB)
+      - EXTRACT_MAX_DEPTH=${EXTRACT_MAX_DEPTH:-2} # max nesting depth for recursive archives
       - PUBSUB_NAME=titus # Name of the Dapr pubsub resource
       - OUTPUT_TOPIC=titus_output # Name of the output topic in Dapr
       - ENABLE_VALIDATION=${ENABLE_VALIDATION:-false} # whether to enable credential validation

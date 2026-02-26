@@ -51,14 +51,18 @@ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
 
 The [Titus scanner service](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
 
-| ENV Variable           | Default Value | Description                                                                     |
-|------------------------|---------------|---------------------------------------------------------------------------------|
-| `SNIPPET_LENGTH`       | 512           | Bytes of context length around Titus matches to pull in for findings            |
-| `MAX_CONCURRENT_FILES` | 2             | Maximum number of concurrent files to scan (raising increases resources needed) |
-| `MAX_FILE_SIZE_MB`     | 200           | Maximum file size to scan (in megabytes)                                        |
-| `DECOMPRESS_ZIPS`      | true          | Whether to decompress+scan zips                                                 |
-| `MAX_EXTRACT_SIZE_MB`  | 1000          | Maximum number of megabytes to extract from ZIPs (if decompressing)             |
-| `ENABLE_VALIDATION`    | false         | Whether to enable credential validation                                         |
+| ENV Variable               | Default Value | Description                                                                          |
+|----------------------------|---------------|--------------------------------------------------------------------------------------|
+| `SNIPPET_LENGTH`           | 512           | Bytes of context length around Titus matches to pull in for findings                 |
+| `MAX_CONCURRENT_FILES`     | 2             | Maximum number of concurrent files to scan (raising increases resources needed)      |
+| `MAX_FILE_SIZE_MB`         | 200           | Maximum file size to scan (in megabytes)                                             |
+| `EXTRACT_ARCHIVES`         | true          | Extract+scan archive contents (zip, jar, war, ear, apk, tar, tar.gz, 7z)            |
+| `EXTRACT_MAX_FILE_SIZE_MB` | 10            | Maximum per-file size within archives (in megabytes)                                 |
+| `EXTRACT_MAX_TOTAL_SIZE_MB`| 1000          | Total extraction budget per archive (in megabytes)                                   |
+| `EXTRACT_MAX_DEPTH`        | 2             | Maximum nesting depth for recursive archives                                         |
+| `ENABLE_VALIDATION`        | false         | Whether to enable credential validation                                              |
+
+**Supported archive formats:** `.zip`, `.jar`, `.war`, `.ear`, `.apk`, `.ipa`, `.xpi`, `.crx`, `.tar`, `.tar.gz`/`.tgz`, `.7z`. Document formats (xlsx, docx, pdf, etc.) are intentionally excluded — Nemesis handles those via the document_conversion service.
 
 ### Custom Rules
 

@@ -188,12 +188,13 @@ class ScanResults(BaseModel):
     bytes_scanned: int
     matches: list[MatchInfo]
     stats: ScanStats
-    scan_type: str = "regular"  # "regular", "zip", "git_repo"
+    scan_type: str = "regular"  # "regular", "archive", "git_repo"
 
 
 class TitusInput(BaseModel):
     object_id: str
     workflow_id: str
+    original_path: str = ""
 
 
 class TitusOutput(BaseModel):

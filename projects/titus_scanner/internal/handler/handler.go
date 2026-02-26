@@ -111,7 +111,7 @@ func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) {
 	)
 
 	// Scan the file
-	result, err := h.scanner.ScanFile(ctx, tmpPath)
+	result, err := h.scanner.ScanFile(ctx, tmpPath, input.OriginalPath)
 	if err != nil {
 		slog.Error("Failed to scan file",
 			"object_id", input.ObjectID,
