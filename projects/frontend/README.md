@@ -18,7 +18,7 @@ This service delivers a comprehensive dashboard for security analysts to upload,
 ### Security Analysis
 - **Findings dashboard**: Centralized view of security findings with triage capabilities
 - **YARA rule management**: Create, edit, and manage YARA rules for malware detection
-- **NoseyParker integration**: View secret scanning results and potential credential exposures
+- **Titus integration**: View secret scanning results and potential credential exposures
 - **Alert system**: Real-time notifications for critical security findings
 
 ### Search and Investigation

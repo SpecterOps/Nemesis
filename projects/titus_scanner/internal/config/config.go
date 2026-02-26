@@ -1,0 +1,103 @@
+package config
+
+import (
+	"os"
+	"strconv"
+)
+
+// Config holds all configuration values for the titus-scanner service.
+// Values are loaded from environment variables with sensible defaults.
+type Config struct {
+	// Dapr pub/sub configuration
+	PubsubName  string
+	InputTopic  string
+	OutputTopic string
+
+	// Scanner configuration
+	MaxConcurrentFiles int
+	MaxFileSizeMB      int
+	DecompressZips     bool
+	MaxExtractSizeMB   int
+	SnippetLength      int
+	EnableValidation   bool
+	ValidationWorkers  int
+	CustomRulesDir     string
+
+	// MinIO configuration
+	MinioEndpoint  string
+	MinioBucket    string
+	MinioAccessKey string
+	MinioSecretKey string
+
+	// Server configuration
+	AppPort  string
+	LogLevel string
+
+	// Dapr HTTP port (for publishing events)
+	DaprHTTPPort string
+}
+
+// Load reads configuration from environment variables, applying defaults
+// where values are not set.
+func Load() *Config {
+	return &Config{
+		PubsubName:         getEnv("PUBSUB_NAME", "titus"),
+		InputTopic:         getEnv("INPUT_TOPIC", "titus_input"),
+		OutputTopic:        getEnv("OUTPUT_TOPIC", "titus_output"),
+		MaxConcurrentFiles: getEnvInt("MAX_CONCURRENT_FILES", 2),
+		MaxFileSizeMB:      getEnvInt("MAX_FILE_SIZE_MB", 200),
+		DecompressZips:     getEnvBool("DECOMPRESS_ZIPS", false),
+		MaxExtractSizeMB:   getEnvInt("MAX_EXTRACT_SIZE_MB", 1000),
+		SnippetLength:      getEnvInt("SNIPPET_LENGTH", 512),
+		EnableValidation:   getEnvBool("ENABLE_VALIDATION", false),
+		ValidationWorkers:  getEnvInt("VALIDATION_WORKERS", 4),
+		CustomRulesDir:     getEnv("CUSTOM_RULES_DIR", "/opt/titus"),
+		MinioEndpoint:      getEnv("MINIO_ENDPOINT", "http://minio:9000"),
+		MinioBucket:        getEnv("MINIO_BUCKET", "files"),
+		MinioAccessKey:     getEnv("MINIO_ACCESS_KEY", ""),
+		MinioSecretKey:     getEnv("MINIO_SECRET_KEY", ""),
+		AppPort:            getEnv("APP_PORT", "8080"),
+		LogLevel:           getEnv("LOG_LEVEL", "info"),
+		DaprHTTPPort:       getEnv("DAPR_HTTP_PORT", "3500"),
+	}
+}
+
+// getEnv returns the value of the environment variable named by key,
+// or defaultVal if the variable is not set or is empty.
+func getEnv(key, defaultVal string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return defaultVal
+}
+
+// getEnvInt returns the integer value of the environment variable named by key,
+// or defaultVal if the variable is not set, empty, or not a valid integer.
+func getEnvInt(key string, defaultVal int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return defaultVal
+	}
+	return n
+}
+
+// getEnvBool returns the boolean value of the environment variable named by key,
+// or defaultVal if the variable is not set or empty.
+// Truthy values: "true", "1", "yes" (case-insensitive).
+// All other non-empty values are treated as false.
+func getEnvBool(key string, defaultVal bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	switch val {
+	case "true", "True", "TRUE", "1", "yes", "Yes", "YES":
+		return true
+	default:
+		return false
+	}
+}

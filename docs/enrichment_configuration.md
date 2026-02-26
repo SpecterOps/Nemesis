@@ -45,25 +45,26 @@ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
 
 **NOTE:** due to Docker's ENV variable substitution, setting `TIKA_USE_OCR=false` will be interpreted as true - either removing `TIKA_USE_OCR` from an .env file or setting `TIKA_USE_OCR=""` will disable OCR (the default). Enabling OCR significantly increases CPU as it will OCR standalone images as well as all images embedded in documents.
 
-## Nosey Parker
+## Titus
 
 ### ENV Variables
 
-The [Nosey Parker scanner service](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
+The [Titus scanner service](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
 
 | ENV Variable           | Default Value | Description                                                                     |
 |------------------------|---------------|---------------------------------------------------------------------------------|
-| `SNIPPET_LENGTH`       | 512           | Bytes of context length around Nosey Parker matches to pull in for findings     |
+| `SNIPPET_LENGTH`       | 512           | Bytes of context length around Titus matches to pull in for findings            |
 | `MAX_CONCURRENT_FILES` | 2             | Maximum number of concurrent files to scan (raising increases resources needed) |
 | `MAX_FILE_SIZE_MB`     | 200           | Maximum file size to scan (in megabytes)                                        |
 | `DECOMPRESS_ZIPS`      | true          | Whether to decompress+scan zips                                                 |
 | `MAX_EXTRACT_SIZE_MB`  | 1000          | Maximum number of megabytes to extract from ZIPs (if decompressing)             |
+| `ENABLE_VALIDATION`    | false         | Whether to enable credential validation                                         |
 
 ### Custom Rules
 
-Nemesis uses [Nosey Parker](https://github.com/praetorian-inc/noseyparker) wrapped through [an customized Dapr pub/sub scanner implementation](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner).
+Nemesis uses [Titus](https://github.com/praetorian-inc/titus) wrapped through [a customized Dapr pub/sub scanner implementation](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner).
 
-There are a number of custom rules that are specified at [projects/noseyparker_scanner/custom_rules/rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner/custom_rules/rules.yaml).
+There are a number of custom rules that are specified at [projects/titus_scanner/custom_rules/rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner/custom_rules/rules.yaml).
 
 ```yaml
 rules:
@@ -93,7 +94,7 @@ rules:
 ...
 ```
 
-If you want to add additional rules, just modify [rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner/custom_rules/rules.yaml) with the new rule (or add a new rules.yaml) and restart the noseyparker-scanner container.
+If you want to add additional rules, just modify [rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner/custom_rules/rules.yaml) with the new rule (or add a new rules.yaml) and restart the titus-scanner container.
 
 
 ## .NET Service

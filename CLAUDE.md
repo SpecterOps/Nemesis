@@ -127,7 +127,7 @@ projects/           # Microservices
 ├── agents/         # AI-powered alert triage
 ├── jupyter/        # Jupyter notebook service
 ├── dotnet_service/ # .NET assembly analysis service
-├── noseyparker_scanner/ # Secret scanning with NoseyParker
+├── titus_scanner/  # Secret scanning with Titus
 ├── velociraptor_connector/ # Velociraptor integration
 └── ...
 

@@ -294,18 +294,18 @@ def get_source_report_data(
             if not dpapi_row:
                 dpapi_row = (0, 0)
 
-            # NoseyParker findings
+            # Titus findings
             cur.execute(
                 f"""
                 SELECT COUNT(*)
                 FROM files_enriched fe
                 JOIN findings f ON fe.object_id = f.object_id
-                WHERE UPPER(fe.source) = %s AND f.origin_name = 'noseyparker' AND {date_where}
+                WHERE UPPER(fe.source) = %s AND f.origin_name = 'titus' AND {date_where}
             """,
                 date_params,
             )
-            noseyparker_row = cur.fetchone()
-            noseyparker_count = noseyparker_row[0] if noseyparker_row else 0
+            titus_row = cur.fetchone()
+            titus_count = titus_row[0] if titus_row else 0
 
             # YARA matches
             cur.execute(
@@ -418,7 +418,7 @@ def get_source_report_data(
                         "chromium_cookies_decrypted": cookies_row[1] or 0,
                         "dpapi_masterkeys": dpapi_row[0] or 0,
                         "dpapi_masterkeys_decrypted": dpapi_row[1] or 0,
-                        "noseyparker_findings": noseyparker_count,
+                        "titus_findings": titus_count,
                     },
                     sensitive_data={
                         "yara_matches": yara_count,

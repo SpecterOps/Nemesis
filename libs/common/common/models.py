@@ -141,7 +141,7 @@ class DotNetOutput(BaseModel):
 
 ##########################################
 #
-# NoseyParker Models
+# Titus Models
 #
 ##########################################
 
@@ -159,6 +159,11 @@ class MatchLocation(BaseModel):
     column: int
 
 
+class ValidationResult(BaseModel):
+    is_valid: bool
+    message: str | None = None
+
+
 class MatchInfo(BaseModel):
     rule_name: str
     rule_type: str
@@ -167,6 +172,7 @@ class MatchInfo(BaseModel):
     snippet: str
     file_path: str | None = None
     git_commit: GitCommitInfo | None = None
+    validation_result: ValidationResult | None = None
 
 
 class ScanStats(BaseModel):
@@ -185,12 +191,12 @@ class ScanResults(BaseModel):
     scan_type: str = "regular"  # "regular", "zip", "git_repo"
 
 
-class NoseyParkerInput(BaseModel):
+class TitusInput(BaseModel):
     object_id: str
     workflow_id: str
 
 
-class NoseyParkerOutput(BaseModel):
+class TitusOutput(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     object_id: str
@@ -204,7 +210,7 @@ class NoseyParkerOutput(BaseModel):
         try:
             return cls(**data)
         except Exception as e:
-            logger.warning(f"Error creating NoseyParkerOutput from dict: {e}")
+            logger.warning(f"Error creating TitusOutput from dict: {e}")
             # Try to construct with just the required fields
             return cls(
                 object_id=data.get("object_id", ""),

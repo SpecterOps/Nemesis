@@ -153,12 +153,12 @@ async def publish_alerts_for_findings(
 
                     rule_message = ""
                     try:
-                        if finding_name == "noseyparker_match" and raw_data:
+                        if finding_name == "titus_match" and raw_data:
                             if "match" in raw_data and "rule_name" in raw_data["match"]:
                                 rule_name = raw_data["match"]["rule_name"]
                                 rule_message = f"- *Rule name:* {rule_name}\n"
                     except (json.JSONDecodeError, KeyError) as e:
-                        logger.warning("Error processing raw_data for noseyparker_match", error=str(e))
+                        logger.warning("Error processing raw_data for titus_match", error=str(e))
 
                     body = f"{finding_message}{rule_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
 
@@ -185,10 +185,10 @@ async def publish_findings_alerts(ctx: WorkflowActivityContext, object_id: str):
     Workflow activity to publish alerts for findings, excluding async service origins.
 
     This is called at the end of the main enrichment workflow and handles findings
-    from synchronous enrichment modules. Async services (dotnet, noseyparker) handle
+    from synchronous enrichment modules. Async services (dotnet, titus) handle
     their own alerting when their results arrive.
     """
     logger.info("Executing activity: publish_findings_alerts", object_id=object_id)
 
     # Exclude async service origins to prevent double-alerting
-    await publish_alerts_for_findings(object_id=object_id, origin_exclude=["dotnet_service", "noseyparker"])
+    await publish_alerts_for_findings(object_id=object_id, origin_exclude=["dotnet_service", "titus"])
