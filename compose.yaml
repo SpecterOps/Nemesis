@@ -117,7 +117,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
       - LOG_LEVEL=info
       - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Titus matches
-      - MAX_CONCURRENT_FILES=${TITUS_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
+      - MAX_CONCURRENT_FILES=${TITUS_MAX_CONCURRENT_FILES:-5} # maximum number of concurrent files to scan
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-200} # maximum file size to scan, in megabytes
       - EXTRACT_ARCHIVES=${EXTRACT_ARCHIVES:-true} # extract+scan archive contents (zip, jar, war, ear, apk, tar, tar.gz, 7z)
       - EXTRACT_MAX_FILE_SIZE_MB=${EXTRACT_MAX_FILE_SIZE_MB:-10} # max per-file size within archives (MB)
@@ -125,7 +125,7 @@ services:
       - EXTRACT_MAX_DEPTH=${EXTRACT_MAX_DEPTH:-2} # max nesting depth for recursive archives
       - ENABLE_VALIDATION=${ENABLE_VALIDATION:-false} # whether to enable credential validation
       - VALIDATION_WORKERS=${VALIDATION_WORKERS:-4} # concurrent validation workers
-      # - DISABLED_RULES=${DISABLED_RULES:-} # comma-separated rule IDs to disable (e.g. np.linkedin.3,np.generic.1,np.http.2, etc.)
+      - DISABLED_RULES=${DISABLED_RULES:-np.s3.1,np.s3.2,np.linkedin.3} # comma-separated rule IDs to disable (np.s3.x have backtracking-prone patterns that timeout on large files, np.linkedin.3 has a lot of false positives)
       - PUBSUB_NAME=titus # Name of the Dapr pubsub resource
       - OUTPUT_TOPIC=titus_output # Name of the output topic in Dapr
     volumes:
@@ -133,7 +133,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1"
+          cpus: "2"
   titus-scanner-dapr:
     image: "daprio/daprd:1.16.9"
     command:

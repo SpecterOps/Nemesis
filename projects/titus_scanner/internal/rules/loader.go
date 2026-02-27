@@ -42,11 +42,28 @@ type ValidationConfig struct {
 // disabledRules are excluded before the scanner is created. Returns a fully
 // configured titus.Scanner ready to scan content.
 func LoadAllRules(customRulesDir string, valCfg ValidationConfig, disabledRules []string) (*titus.Scanner, int, error) {
+	allRules, err := LoadRules(customRulesDir, disabledRules)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	scanner, err := CreateScanner(allRules, valCfg)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return scanner, len(allRules), nil
+}
+
+// LoadRules loads all builtin and custom rules, filtering out disabled ones.
+// Returns the merged rule set without creating a scanner, so callers can
+// create multiple scanner instances from the same rules (e.g. for a pool).
+func LoadRules(customRulesDir string, disabledRules []string) ([]*types.Rule, error) {
 	// Load builtin rules from the Titus library
 	loader := rule.NewLoader()
 	builtinRules, err := loader.LoadBuiltinRules()
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to load Titus builtin rules: %w", err)
+		return nil, fmt.Errorf("failed to load Titus builtin rules: %w", err)
 	}
 	slog.Info("Loaded Titus builtin rules", "count", len(builtinRules))
 
@@ -79,10 +96,12 @@ func LoadAllRules(customRulesDir string, valCfg ValidationConfig, disabledRules 
 		allRules = filtered
 	}
 
-	totalCount := len(allRules)
-	slog.Info("Total rules loaded", "builtin", len(builtinRules), "custom", len(customRules), "total", totalCount)
+	slog.Info("Total rules loaded", "builtin", len(builtinRules), "custom", len(customRules), "total", len(allRules))
+	return allRules, nil
+}
 
-	// Build scanner options
+// CreateScanner builds a titus.Scanner from a rule set and validation config.
+func CreateScanner(allRules []*types.Rule, valCfg ValidationConfig) (*titus.Scanner, error) {
 	opts := []titus.Option{titus.WithRules(allRules)}
 	if valCfg.EnableValidation {
 		opts = append(opts, titus.WithValidation())
@@ -92,13 +111,12 @@ func LoadAllRules(customRulesDir string, valCfg ValidationConfig, disabledRules 
 		slog.Info("Secret validation enabled", "workers", valCfg.ValidationWorkers)
 	}
 
-	// Create a Titus scanner with all rules
 	scanner, err := titus.NewScanner(opts...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create Titus scanner: %w", err)
+		return nil, fmt.Errorf("failed to create Titus scanner: %w", err)
 	}
 
-	return scanner, totalCount, nil
+	return scanner, nil
 }
 
 // loadCustomRulesFromDirectory walks the given directory for .yaml and .yml files,

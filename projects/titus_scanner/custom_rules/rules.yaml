@@ -20,7 +20,7 @@ rules:
   # TODO: should the MSSQL hashes also include lower case?
   - name: MSSQL 2000 Hash
     id: custom.mssql2000
-    pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(0x0100[0-9aA-Z]{88})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
+    pattern: '(?:^|[^0-9a-zA-Z])(0x0100[0-9aA-Z]{88})(?:[^0-9a-zA-Z]|$)'
     references:
       - https://passlib.readthedocs.io/en/stable/lib/passlib.hash.mssql2000.html#format-algorithm
       - https://hashcat.net/wiki/doku.php?id=example_hashes
@@ -30,7 +30,7 @@ rules:
 
   - name: MSSQL 2012/2014 Hash
     id: custom.mssql2012.2014
-    pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(0x0200[0-9aA-Z]{136})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
+    pattern: '(?:^|[^0-9a-zA-Z])(0x0200[0-9aA-Z]{136})(?:[^0-9a-zA-Z]|$)'
     references:
       - https://hashcat.net/forum/thread-1474.html
       - https://hashcat.net/wiki/doku.php?id=example_hashes
@@ -40,7 +40,7 @@ rules:
 
   - name: CISCO-IOS Type 8 Hash
     id: custom.cisco.type8
-    pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(\$8\$[0-9a-zA-Z\./]{14}\$[0-9a-zA-Z\./]{43})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
+    pattern: '(?:^|[^0-9a-zA-Z])(\$8\$[0-9a-zA-Z\./]{14}\$[0-9a-zA-Z\./]{43})(?:[^0-9a-zA-Z]|$)'
     references:
       - https://foss.heptapod.net/python-libs/passlib/-/issues/87
       - https://hashcat.net/wiki/doku.php?id=example_hashes
@@ -50,7 +50,7 @@ rules:
 
   - name: CISCO-IOS Type 9 Hash
     id: custom.cisco.type9
-    pattern: '(?:(?:.*[^0-9a-zA-Z]+)|(?:\A|\r|\n|\r\n))(\$9\$[0-9a-zA-Z\./]{14}\$[0-9a-zA-Z\./]{43})(?:(?:[^0-9a-zA-Z]+.*)|(?:\z|\r|\n|\r\n))'
+    pattern: '(?:^|[^0-9a-zA-Z])(\$9\$[0-9a-zA-Z\./]{14}\$[0-9a-zA-Z\./]{43})(?:[^0-9a-zA-Z]|$)'
     references:
       - https://foss.heptapod.net/python-libs/passlib/-/issues/87
       - https://hashcat.net/wiki/doku.php?id=example_hashes

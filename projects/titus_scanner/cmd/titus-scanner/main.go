@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/praetorian-inc/titus"
 	"github.com/specterops/nemesis/titus-scanner/internal/config"
 	"github.com/specterops/nemesis/titus-scanner/internal/handler"
 	minioclient "github.com/specterops/nemesis/titus-scanner/internal/minio"
@@ -39,27 +40,39 @@ func main() {
 		"disabled_rules", cfg.DisabledRules,
 	)
 
-	// Load Titus builtin rules + custom rules, creating a Titus scanner
-	titusScanner, ruleCount, err := rules.LoadAllRules(cfg.CustomRulesDir, rules.ValidationConfig{
-		EnableValidation:  cfg.EnableValidation,
-		ValidationWorkers: cfg.ValidationWorkers,
-	}, cfg.DisabledRules)
+	// Load all rules (builtin + custom, minus disabled)
+	allRules, err := rules.LoadRules(cfg.CustomRulesDir, cfg.DisabledRules)
 	if err != nil {
 		slog.Error("Failed to load rules", "error", err)
 		os.Exit(1)
 	}
+	ruleCount := len(allRules)
 	slog.Info("Loaded rules", "count", ruleCount)
 
-	// Initialize the scanner with the Titus scanner engine
-	sc := scanner.New(titusScanner, scanner.Options{
+	// Create a pool of scanner instances — one per concurrent slot.
+	// The Titus PortableRegexpMatcher is NOT safe for concurrent use,
+	// so each goroutine must get its own scanner instance.
+	valCfg := rules.ValidationConfig{
+		EnableValidation:  cfg.EnableValidation,
+		ValidationWorkers: cfg.ValidationWorkers,
+	}
+	scannerOpts := scanner.Options{
 		SnippetLength:         cfg.SnippetLength,
 		MaxFileSizeMB:         cfg.MaxFileSizeMB,
 		ExtractArchives:       cfg.ExtractArchives,
 		ExtractMaxFileSizeMB:  cfg.ExtractMaxFileSizeMB,
 		ExtractMaxTotalSizeMB: cfg.ExtractMaxTotalSizeMB,
 		ExtractMaxDepth:       cfg.ExtractMaxDepth,
+	}
+	scannerPool, err := scanner.NewPool(cfg.MaxConcurrentFiles, scannerOpts, func() (*titus.Scanner, error) {
+		return rules.CreateScanner(allRules, valCfg)
 	})
-	defer sc.Close()
+	if err != nil {
+		slog.Error("Failed to create scanner pool", "error", err)
+		os.Exit(1)
+	}
+	defer scannerPool.Close()
+	slog.Info("Scanner pool initialized", "size", scannerPool.Size())
 
 	// Initialize MinIO client
 	mc, err := minioclient.New(minioclient.Options{
@@ -75,7 +88,7 @@ func main() {
 	slog.Info("MinIO client initialized", "endpoint", cfg.MinioEndpoint, "bucket", cfg.MinioBucket)
 
 	// Create the HTTP handler
-	h := handler.New(cfg, sc, mc)
+	h := handler.New(cfg, scannerPool, mc)
 
 	// Set up HTTP routes
 	mux := http.NewServeMux()

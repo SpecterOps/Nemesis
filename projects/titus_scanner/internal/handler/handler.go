@@ -18,20 +18,17 @@ import (
 
 // Handler processes incoming Dapr pub/sub events for secret scanning.
 type Handler struct {
-	cfg     *config.Config
-	scanner *scanner.Scanner
-	minio   *minioclient.Client
-	sem     chan struct{} // semaphore to limit concurrent processing
+	cfg         *config.Config
+	scannerPool *scanner.Pool
+	minio       *minioclient.Client
 }
 
-// New creates a new Handler with the given configuration, scanner, and MinIO client.
-// It initializes a semaphore channel to enforce the maximum concurrent file limit.
-func New(cfg *config.Config, sc *scanner.Scanner, mc *minioclient.Client) *Handler {
+// New creates a new Handler with the given configuration, scanner pool, and MinIO client.
+func New(cfg *config.Config, pool *scanner.Pool, mc *minioclient.Client) *Handler {
 	return &Handler{
-		cfg:     cfg,
-		scanner: sc,
-		minio:   mc,
-		sem:     make(chan struct{}, cfg.MaxConcurrentFiles),
+		cfg:         cfg,
+		scannerPool: pool,
+		minio:       mc,
 	}
 }
 
@@ -60,21 +57,11 @@ func (h *Handler) HandleEvent(w http.ResponseWriter, r *http.Request) {
 		"workflow_id", input.WorkflowID,
 	)
 
-	// Acquire semaphore slot (non-blocking check, then block)
-	select {
-	case h.sem <- struct{}{}:
-		// Acquired immediately
-	default:
-		slog.Info("All processing slots busy, waiting for availability",
-			"object_id", input.ObjectID,
-			"max_concurrent", h.cfg.MaxConcurrentFiles,
-		)
-		h.sem <- struct{}{}
-	}
-
-	// Process asynchronously so we return 200 to Dapr quickly
+	// Process asynchronously so we return 200 to Dapr quickly.
+	// The scanner pool handles concurrency limiting internally — Pool.ScanFile
+	// blocks until a scanner instance is available, so at most pool.Size()
+	// scans run in parallel, each on its own thread-safe scanner instance.
 	go func() {
-		defer func() { <-h.sem }()
 		h.processEvent(context.Background(), input)
 	}()
 
@@ -110,8 +97,9 @@ func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) {
 		"temp_path", tmpPath,
 	)
 
-	// Scan the file
-	result, err := h.scanner.ScanFile(ctx, tmpPath, input.OriginalPath)
+	// Scan the file — Pool.ScanFile acquires a dedicated scanner instance,
+	// blocking if all instances are busy, ensuring thread-safe scanning.
+	result, err := h.scannerPool.ScanFile(ctx, tmpPath, input.OriginalPath)
 	if err != nil {
 		slog.Error("Failed to scan file",
 			"object_id", input.ObjectID,
