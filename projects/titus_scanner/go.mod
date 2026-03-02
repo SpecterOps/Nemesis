@@ -8,6 +8,10 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+// Fork with parallelized Vectorscan regexp2 confirmation + content-based dedup
+// See: https://github.com/HarmJ0y/titus/commit/6a244b6
+replace github.com/praetorian-inc/titus => github.com/HarmJ0y/titus v0.0.0-20260302002819-6a244b67ff31
+
 require (
 	dario.cat/mergo v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0 // indirect

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,6 +22,10 @@ type Handler struct {
 	cfg         *config.Config
 	scannerPool *scanner.Pool
 	minio       *minioclient.Client
+	// sem limits the number of concurrent processEvent goroutines.
+	// This prevents unbounded goroutine growth (which caused OOM) while
+	// still returning 200 to Dapr quickly (which prevents RabbitMQ timeouts).
+	sem chan struct{}
 }
 
 // New creates a new Handler with the given configuration, scanner pool, and MinIO client.
@@ -29,6 +34,7 @@ func New(cfg *config.Config, pool *scanner.Pool, mc *minioclient.Client) *Handle
 		cfg:         cfg,
 		scannerPool: pool,
 		minio:       mc,
+		sem:         make(chan struct{}, pool.Size()),
 	}
 }
 
@@ -57,15 +63,20 @@ func (h *Handler) HandleEvent(w http.ResponseWriter, r *http.Request) {
 		"workflow_id", input.WorkflowID,
 	)
 
-	// Process asynchronously so we return 200 to Dapr quickly.
-	// The scanner pool handles concurrency limiting internally — Pool.ScanFile
-	// blocks until a scanner instance is available, so at most pool.Size()
-	// scans run in parallel, each on its own thread-safe scanner instance.
+	// Process asynchronously so we return 200 to Dapr quickly. This is
+	// required because synchronous processing causes RabbitMQ channel
+	// timeouts on long scans, leading to message redelivery loops.
+	//
+	// The semaphore (sized to pool.Size()) bounds the number of in-flight
+	// goroutines, preventing the OOM that unbounded goroutines caused.
+	// When the semaphore is full, new goroutines block on sem acquisition
+	// (not on HTTP response), so Dapr still gets its 200 immediately.
 	go func() {
+		h.sem <- struct{}{} // Acquire semaphore slot (blocks if full)
+		defer func() { <-h.sem }()
 		h.processEvent(context.Background(), input)
 	}()
 
-	// Return success to Dapr immediately
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -153,6 +164,12 @@ func (h *Handler) publishResult(ctx context.Context, output models.TitusOutput) 
 		return fmt.Errorf("failed to marshal output: %w", err)
 	}
 
+	slog.Info("Publishing scan result",
+		"object_id", output.ObjectID,
+		"payload_bytes", len(data),
+		"match_count", len(output.ScanResult.Matches),
+	)
+
 	url := fmt.Sprintf("http://localhost:%s/v1.0/publish/%s/%s",
 		h.cfg.DaprHTTPPort,
 		h.cfg.PubsubName,
@@ -173,7 +190,8 @@ func (h *Handler) publishResult(ctx context.Context, output models.TitusOutput) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("Dapr publish returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("Dapr publish returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil

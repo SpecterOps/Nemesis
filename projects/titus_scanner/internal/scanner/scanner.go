@@ -21,6 +21,7 @@ import (
 type Options struct {
 	SnippetLength         int
 	MaxFileSizeMB         int
+	MaxMatchesPerFile     int
 	ExtractArchives       bool
 	ExtractMaxFileSizeMB  int
 	ExtractMaxTotalSizeMB int
@@ -352,25 +353,87 @@ func (s *Scanner) scanGitRepo(ctx context.Context, repoPath string) (*models.Sca
 // scanBytes runs the Titus scanner against the given byte slice and converts
 // matches to our output format. filePath and gitCommit are optional metadata.
 func (s *Scanner) scanBytes(data []byte, filePath *string, gitCommit *models.GitCommitInfo) []models.MatchInfo {
+	scanStart := time.Now()
 	titusMatches, err := s.titusScanner.ScanBytes(data)
+	scanDuration := time.Since(scanStart)
 	if err != nil {
 		slog.Warn("Titus scan error", "error", err)
 		return nil
 	}
+	slog.Info("Titus ScanBytes completed",
+		"raw_matches", len(titusMatches),
+		"scan_ms", scanDuration.Milliseconds(),
+	)
+
+	// Content-based deduplication: the Vectorscan engine deduplicates by byte
+	// offset (location), so the same secret value at different positions counts
+	// as separate matches (~2000+ for dense files). The portable regexp2 engine
+	// deduplicates by content (ruleID + matched value), matching NoseyParker's
+	// behavior (~29 matches). We apply content-based dedup here so both engines
+	// produce comparable output.
+	rawCount := len(titusMatches)
+	seen := make(map[string]bool, len(titusMatches))
+	deduped := make([]*types.Match, 0, len(titusMatches))
+	for _, tm := range titusMatches {
+		// Use FindingID (content-based key computed by Titus library) for dedup.
+		// Falls back to RuleID + matched content if FindingID is empty.
+		key := tm.FindingID
+		if key == "" {
+			key = tm.RuleID + "\x00" + string(tm.Snippet.Matching)
+		}
+		if !seen[key] {
+			seen[key] = true
+			deduped = append(deduped, tm)
+		}
+	}
+	titusMatches = deduped
+
+	if rawCount != len(titusMatches) {
+		slog.Info("Content-based deduplication reduced matches",
+			"raw", rawCount,
+			"unique", len(titusMatches),
+		)
+	}
+
+	maxMatches := s.opts.MaxMatchesPerFile
+	if maxMatches <= 0 {
+		maxMatches = 100
+	}
+
+	if len(titusMatches) > maxMatches {
+		slog.Warn("Match count exceeds limit, truncating",
+			"total_matches", len(titusMatches),
+			"limit", maxMatches,
+		)
+		titusMatches = titusMatches[:maxMatches]
+	}
+
+	// Build line index once, then binary-search for each match (O(N + M*logN)
+	// instead of O(N*M) where N=file size and M=match count).
+	idx := buildLineIndex(data)
 
 	matches := make([]models.MatchInfo, 0, len(titusMatches))
 
 	for _, tm := range titusMatches {
-		// Extract snippet from the Titus match
+		// Extract snippet — truncate Matching to avoid multi-MB payloads.
+		// Hyperscan can report byte ranges spanning large regions of the file.
+		matchedContent := string(tm.Snippet.Matching)
+		if len(matchedContent) > s.opts.SnippetLength {
+			matchedContent = matchedContent[:s.opts.SnippetLength]
+		}
+
 		snippet := fmt.Sprintf("%s[%s]%s",
 			string(tm.Snippet.Before),
-			string(tm.Snippet.Matching),
+			matchedContent,
 			string(tm.Snippet.After),
 		)
+		if len(snippet) > s.opts.SnippetLength*3 {
+			snippet = snippet[:s.opts.SnippetLength*3]
+		}
 
 		// Titus only populates Offset (byte positions), not Source (line/column).
 		// Compute line/column from the byte offset in the original content.
-		line, col := computeLineColumn(data, int(tm.Location.Offset.Start))
+		line, col := idx.lineColumn(int(tm.Location.Offset.Start))
 
 		// Derive rule type from rule ID prefix
 		ruleType := "secret"
@@ -379,7 +442,7 @@ func (s *Scanner) scanBytes(data []byte, filePath *string, gitCommit *models.Git
 			RuleName:       tm.RuleName,
 			RuleID:         tm.RuleID,
 			RuleType:       ruleType,
-			MatchedContent: string(tm.Snippet.Matching),
+			MatchedContent: matchedContent,
 			Location: models.MatchLocation{
 				Line:   line,
 				Column: col,
@@ -505,23 +568,41 @@ func findGitDir(root string) string {
 	return result
 }
 
-// computeLineColumn computes the 1-based line and column number for a byte
-// offset within the given data.
-func computeLineColumn(data []byte, offset int) (line, column int) {
-	if offset > len(data) {
-		offset = len(data)
-	}
+// lineIndex precomputes newline positions for fast offset-to-line lookups.
+type lineIndex struct {
+	// newlines[i] is the byte offset of the i-th newline character.
+	newlines []int
+}
 
-	line = 1
-	lastNewline := -1
-
-	for i := 0; i < offset; i++ {
-		if data[i] == '\n' {
-			line++
-			lastNewline = i
+// buildLineIndex scans data once and records all newline positions.
+func buildLineIndex(data []byte) *lineIndex {
+	idx := &lineIndex{}
+	for i, b := range data {
+		if b == '\n' {
+			idx.newlines = append(idx.newlines, i)
 		}
 	}
+	return idx
+}
 
-	column = offset - lastNewline
+// lineColumn returns the 1-based line and column for a byte offset
+// using binary search over the precomputed newline positions.
+func (idx *lineIndex) lineColumn(offset int) (line, column int) {
+	// Binary search: find how many newlines occur before offset.
+	lo, hi := 0, len(idx.newlines)
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if idx.newlines[mid] < offset {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	line = lo + 1 // 1-based
+	if lo == 0 {
+		column = offset + 1 // no newline before this offset
+	} else {
+		column = offset - idx.newlines[lo-1]
+	}
 	return line, column
 }

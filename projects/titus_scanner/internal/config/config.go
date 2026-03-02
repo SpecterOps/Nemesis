@@ -17,6 +17,7 @@ type Config struct {
 	// Scanner configuration
 	MaxConcurrentFiles    int
 	MaxFileSizeMB         int
+	MaxMatchesPerFile     int
 	ExtractArchives       bool
 	ExtractMaxTotalSizeMB int
 	ExtractMaxFileSizeMB  int
@@ -50,6 +51,7 @@ func Load() *Config {
 		OutputTopic:        getEnv("OUTPUT_TOPIC", "titus_output"),
 		MaxConcurrentFiles:    getEnvInt("MAX_CONCURRENT_FILES", 2),
 		MaxFileSizeMB:         getEnvInt("MAX_FILE_SIZE_MB", 200),
+		MaxMatchesPerFile:     getEnvInt("MAX_MATCHES_PER_FILE", 500),
 		ExtractArchives:       getEnvBool("EXTRACT_ARCHIVES", false),
 		ExtractMaxTotalSizeMB: getEnvInt("EXTRACT_MAX_TOTAL_SIZE_MB", 1000),
 		ExtractMaxFileSizeMB:  getEnvInt("EXTRACT_MAX_FILE_SIZE_MB", 10),

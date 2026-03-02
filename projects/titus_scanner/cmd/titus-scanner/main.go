@@ -34,6 +34,7 @@ func main() {
 		"input_topic", cfg.InputTopic,
 		"output_topic", cfg.OutputTopic,
 		"max_concurrent_files", cfg.MaxConcurrentFiles,
+		"max_matches_per_file", cfg.MaxMatchesPerFile,
 		"custom_rules_dir", cfg.CustomRulesDir,
 		"enable_validation", cfg.EnableValidation,
 		"validation_workers", cfg.ValidationWorkers,
@@ -59,6 +60,7 @@ func main() {
 	scannerOpts := scanner.Options{
 		SnippetLength:         cfg.SnippetLength,
 		MaxFileSizeMB:         cfg.MaxFileSizeMB,
+		MaxMatchesPerFile:     cfg.MaxMatchesPerFile,
 		ExtractArchives:       cfg.ExtractArchives,
 		ExtractMaxFileSizeMB:  cfg.ExtractMaxFileSizeMB,
 		ExtractMaxTotalSizeMB: cfg.ExtractMaxTotalSizeMB,

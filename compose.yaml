@@ -117,8 +117,10 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
       - LOG_LEVEL=info
       - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Titus matches
-      - MAX_CONCURRENT_FILES=${TITUS_MAX_CONCURRENT_FILES:-5} # maximum number of concurrent files to scan
+      - MAX_CONCURRENT_FILES=${TITUS_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
+      - MAX_MATCHES_PER_FILE=${MAX_MATCHES_PER_FILE:-100} # safety cap on matches per file
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-200} # maximum file size to scan, in megabytes
+      - GOMEMLIMIT=1500MiB # soft memory limit for Go GC to be aggressive before kernel OOM kills us
       - EXTRACT_ARCHIVES=${EXTRACT_ARCHIVES:-true} # extract+scan archive contents (zip, jar, war, ear, apk, tar, tar.gz, 7z)
       - EXTRACT_MAX_FILE_SIZE_MB=${EXTRACT_MAX_FILE_SIZE_MB:-10} # max per-file size within archives (MB)
       - EXTRACT_MAX_TOTAL_SIZE_MB=${EXTRACT_MAX_TOTAL_SIZE_MB:-1000} # total extraction budget per archive (MB)
@@ -133,7 +135,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2"
+          cpus: "1"
+          memory: 2G
   titus-scanner-dapr:
     image: "daprio/daprd:1.16.9"
     command:
@@ -158,7 +161,7 @@ services:
         "--config",
         "/dapr/configuration/config.yaml",
         "--app-max-concurrency",
-        "1",
+        "${TITUS_MAX_CONCURRENT_FILES:-2}",
         "--enable-metrics",
         "--dapr-graceful-shutdown-seconds",
         "5",
