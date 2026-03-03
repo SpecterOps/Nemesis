@@ -1,4 +1,4 @@
-"""Handler for Nosey Parker output subscription events."""
+"""Handler for Titus output subscription events."""
 
 import base64
 import json
@@ -19,27 +19,27 @@ from common.models import (
     FindingCategory,
     FindingOrigin,
     MatchInfo,
-    NoseyParkerOutput,
     ScanStats,
+    TitusOutput,
 )
 from file_enrichment.activities.publish_findings import publish_alerts_for_findings
 
 logger = get_logger(__name__)
 
 
-async def noseyparker_subscription_handler(event: CloudEvent[NoseyParkerOutput]):
-    """Handler for incoming Nosey Parker scan results"""
-    nosey_output = event.data
+async def titus_subscription_handler(event: CloudEvent[TitusOutput]):
+    """Handler for incoming Titus scan results"""
+    titus_output = event.data
 
     try:
-        object_id = nosey_output.object_id
-        workflow_id = nosey_output.workflow_id
-        matches = nosey_output.scan_result.matches
-        stats = nosey_output.scan_result.stats
+        object_id = titus_output.object_id
+        workflow_id = titus_output.workflow_id
+        matches = titus_output.scan_result.matches
+        stats = titus_output.scan_result.stats
 
         logger.debug(f"Found {len(matches)} matches for object {object_id}")
 
-        await store_noseyparker_results(
+        await store_titus_results(
             object_id=object_id,
             workflow_id=workflow_id,
             matches=matches,
@@ -47,7 +47,7 @@ async def noseyparker_subscription_handler(event: CloudEvent[NoseyParkerOutput])
         )
 
     except Exception:
-        logger.exception(message="Error processing Nosey Parker output event")
+        logger.exception(message="Error processing Titus output event")
         raise
 
 
@@ -133,10 +133,10 @@ def format_commit_date(commit_date_str):
 
 def create_finding_summary(match_info):
     """
-    Creates a markdown summary of a single NoseyParker finding.
+    Creates a markdown summary of a single Titus finding.
 
     Args:
-        match_info (MatchInfo): The match information from NoseyParker
+        match_info (MatchInfo): The match information from Titus
 
     Returns:
         str: A markdown formatted summary of the finding
@@ -148,6 +148,8 @@ def create_finding_summary(match_info):
     summary += "### Metadata\n"
     summary += f"* **Finding ID**: {finding_id}\n"
     summary += f"* **Rule Type**: {match_info.rule_type}\n"
+    if match_info.rule_id:
+        summary += f"* **Rule ID**: `{match_info.rule_id}`\n"
 
     # Add file path if available
     if match_info.file_path:
@@ -177,6 +179,26 @@ def create_finding_summary(match_info):
     summary += f"{match_info.snippet}\n"
     summary += "```\n"
 
+    # Add validation result if available
+    if match_info.validation_result:
+        vr = match_info.validation_result
+        status_label = {
+            "valid": "CONFIRMED ACTIVE",
+            "invalid": "INACTIVE",
+            "undetermined": "UNVERIFIED",
+        }.get(vr.status, "UNVERIFIED")
+
+        summary += "\n### Validation Result\n\n"
+        summary += f"* **Status**: {status_label}\n"
+        if vr.confidence > 0:
+            summary += f"* **Confidence**: {vr.confidence:.0%}\n"
+        if vr.message:
+            summary += f"* **Message**: {vr.message}\n"
+        if vr.details:
+            summary += "\n**Details**:\n\n"
+            for key, value in vr.details.items():
+                summary += f"  - {key}: {value}\n"
+
     # Check if this is a JWT
     if match_info.rule_type == "secret" and "json web token" in match_info.rule_name.lower():
         jwt_token = match_info.matched_content.strip()
@@ -193,18 +215,18 @@ def create_finding_summary(match_info):
     return summary
 
 
-async def store_noseyparker_results(
+async def store_titus_results(
     object_id: str,
     workflow_id: str,
     matches: list[MatchInfo],
     scan_stats: ScanStats,
 ):
     """
-    Store Nosey Parker results in the database, including creating findings.
+    Store Titus results in the database, including creating findings.
 
     Args:
         object_id (str): The object ID of the file that was scanned
-        matches (List[MatchInfo]): List of match information from Nosey Parker
+        matches (List[MatchInfo]): List of match information from Titus
         scan_stats (dict, optional): Statistics about the scan
         pool (asyncpg.Pool): Database connection pool
     """
@@ -214,12 +236,12 @@ async def store_noseyparker_results(
             logger.debug("No matches found, nothing to store", object_id=object_id)
             await global_vars.tracking_service.update_enrichment_results(
                 instance_id=workflow_id,
-                success_list=["noseyparker"],
+                success_list=["titus"],
             )
             return
 
         # Create an enrichment result to store
-        enrichment_result = EnrichmentResult(module_name="noseyparker")
+        enrichment_result = EnrichmentResult(module_name="titus")
         enrichment_result.results = {
             "matches": [
                 sanitize_for_jsonb(match.model_dump() if hasattr(match, "model_dump") else match) for match in matches
@@ -245,13 +267,13 @@ async def store_noseyparker_results(
                     )
                     continue
 
-            # Generate summary for the finding (create_finding_summary should also be updated as shown above)
+            # Generate summary for the finding
             summary_markdown = create_finding_summary(match)
 
             # Create display data
             display_data = FileObject(
                 type="finding_summary",
-                metadata={"summary": sanitize_for_jsonb(summary_markdown)},  # Sanitize the summary too
+                metadata={"summary": sanitize_for_jsonb(summary_markdown)},
             )
 
             # Determine severity based on rule type and name
@@ -259,12 +281,21 @@ async def store_noseyparker_results(
             if match.rule_type == "secret" and "generic secret" in match.rule_name.lower():
                 severity = 4
 
+            # Adjust severity based on validation status
+            if match.validation_result:
+                if match.validation_result.status == "valid":
+                    severity = 9
+                    if match.rule_type == "secret" and "generic secret" in match.rule_name.lower():
+                        severity = 7
+                elif match.validation_result.status == "invalid":
+                    severity = max(severity - 3, 2)
+
             # Create the finding with sanitized raw_data
             finding = Finding(
                 category=FindingCategory.CREDENTIAL,
-                finding_name=f"noseyparker_{match.rule_type if hasattr(match, 'rule_type') else 'match'}",
+                finding_name=f"titus_{match.rule_type if hasattr(match, 'rule_type') else 'match'}",
                 origin_type=FindingOrigin.ENRICHMENT_MODULE,
-                origin_name="noseyparker",
+                origin_name="titus",
                 object_id=object_id,
                 severity=severity,
                 raw_data=sanitize_for_jsonb({"match": match.model_dump() if hasattr(match, "model_dump") else match}),  # pyright: ignore[reportArgumentType]
@@ -288,7 +319,7 @@ async def store_noseyparker_results(
                     VALUES ($1, $2, $3)
                     """,
                     object_id,
-                    "noseyparker",
+                    "titus",
                     results_escaped,
                 )
 
@@ -325,17 +356,17 @@ async def store_noseyparker_results(
         # Update workflow enrichment status
         await global_vars.tracking_service.update_enrichment_results(
             instance_id=workflow_id,
-            success_list=["noseyparker"],
+            success_list=["titus"],
         )
 
-        logger.info("Successfully stored NoseyParker results", object_id=object_id, match_count=len(matches))
+        logger.info("Successfully stored Titus results", object_id=object_id, match_count=len(matches))
 
-        # Publish alerts for noseyparker findings (only for this origin)
+        # Publish alerts for titus findings (only for this origin)
         if findings_list:
-            await publish_alerts_for_findings(object_id=object_id, origin_include=["noseyparker"])
+            await publish_alerts_for_findings(object_id=object_id, origin_include=["titus"])
 
         return enrichment_result
 
     except Exception:
-        logger.exception(message="Error storing NoseyParker results", object_id=object_id)
+        logger.exception(message="Error storing Titus results", object_id=object_id)
         return None

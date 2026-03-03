@@ -1,7 +1,7 @@
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
-const NoseyParkerViewer = () => {
+const TitusViewer = () => {
   const [findings, setFindings] = useState([]);
   const [expandedFindings, setExpandedFindings] = useState({});
   const [dismissedFindings, setDismissedFindings] = useState({});
@@ -9,15 +9,15 @@ const NoseyParkerViewer = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchNoseyParkerResults();
+    fetchTitusResults();
   }, []);
 
-  const fetchNoseyParkerResults = async () => {
+  const fetchTitusResults = async () => {
     try {
       const query = {
         query: `
-          query FetchNoseyParkerResults {
-            files_enriched(where: {processors: {_has_key: "noseyparker"}}) {
+          query FetchTitusResults {
+            files_enriched(where: {processors: {_has_key: "titus"}}) {
               object_id
               file_name
               path
@@ -51,9 +51,9 @@ const NoseyParkerViewer = () => {
       const allFindings = new Map();
 
       files_enriched.forEach(file => {
-        const noseyParkerResults = file.processors?.noseyparker?.analysis?.results || [];
+        const titusResults = file.processors?.titus?.analysis?.results || [];
 
-        noseyParkerResults.forEach(result => {
+        titusResults.forEach(result => {
           if (!result || !result.finding_id) return;
 
           const finding = allFindings.get(result.finding_id) || {
@@ -90,7 +90,7 @@ const NoseyParkerViewer = () => {
 
       setFindings(processedFindings);
     } catch (err) {
-      console.error('Error fetching NoseyParker results:', err);
+      console.error('Error fetching Titus results:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -125,7 +125,7 @@ const NoseyParkerViewer = () => {
         <div className="flex items-start">
           <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 mr-2 flex-shrink-0" />
           <div>
-            <h3 className="font-medium text-red-800 dark:text-red-300">Error loading NoseyParker results</h3>
+            <h3 className="font-medium text-red-800 dark:text-red-300">Error loading Titus results</h3>
             <p className="text-red-700 dark:text-red-400 mt-1 text-sm">{error}</p>
           </div>
         </div>
@@ -138,7 +138,7 @@ const NoseyParkerViewer = () => {
       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 transition-colors">
         <div className="flex items-center">
           <AlertTriangle className="w-5 h-5 text-yellow-500 dark:text-yellow-400 mr-2" />
-          <p className="text-yellow-700 dark:text-yellow-300">No NoseyParker findings detected in the scanned files.</p>
+          <p className="text-yellow-700 dark:text-yellow-300">No Titus findings detected in the scanned files.</p>
         </div>
       </div>
     );
@@ -223,4 +223,4 @@ const NoseyParkerViewer = () => {
   );
 };
 
-export default NoseyParkerViewer;
+export default TitusViewer;

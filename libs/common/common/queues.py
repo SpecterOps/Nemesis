@@ -20,9 +20,9 @@ FILES_NEW_FILE_TOPIC = "new_file"  # Emitted when a new file is uploaded
 FILES_FILE_ENRICHED_TOPIC = "file_enriched"  # Emitted when a file is finished being enriched
 FILES_BULK_ENRICHMENT_TASK_TOPIC = "bulk_enrichment_task"
 
-NOSEYPARKER_PUBSUB = "noseyparker"
-NOSEYPARKER_INPUT_TOPIC = "noseyparker_input"
-NOSEYPARKER_OUTPUT_TOPIC = "noseyparker_output"
+TITUS_PUBSUB = "titus"
+TITUS_INPUT_TOPIC = "titus_input"
+TITUS_OUTPUT_TOPIC = "titus_output"
 
 WORKFLOW_MONITOR_PUBSUB = "workflow_monitor"
 WORKFLOW_MONITOR_COMPLETED_TOPIC = "workflow_completed"

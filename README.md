@@ -46,6 +46,7 @@ Blog Posts:
 
 | Title                                                                                                                                                            | Nemesis Version | Date         |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------ |
+| [*Nemesis 2.2*](https://specterops.io/blog/2026/02/25/nemesis-2-2/)                                                                                              | v2.2            | Feb 25, 2025 |
 | [*Nemesis 2.0*](https://specterops.io/blog/2025/08/05/nemesis-2-0/)                                                                                              | v2.0            | Aug 5, 2025  |
 | [*Nemesis 1.0.0*](https://posts.specterops.io/nemesis-1-0-0-8c6b745dc7c5)                                                                                        | v1.0            | Apr 25, 2024 |
 | [*Summoning RAGnarok With Your Nemesis*](https://posts.specterops.io/summoning-ragnarok-with-your-nemesis-7c4f0577c93b)                                          | v1.0            | Mar 13, 2024 |

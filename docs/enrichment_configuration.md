@@ -45,25 +45,32 @@ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
 
 **NOTE:** due to Docker's ENV variable substitution, setting `TIKA_USE_OCR=false` will be interpreted as true - either removing `TIKA_USE_OCR` from an .env file or setting `TIKA_USE_OCR=""` will disable OCR (the default). Enabling OCR significantly increases CPU as it will OCR standalone images as well as all images embedded in documents.
 
-## Nosey Parker
+## Titus
 
 ### ENV Variables
 
-The [Nosey Parker scanner service](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
+The [Titus scanner service](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner) has several ENV variables variable that can be passed through from the environment launching Nemesis, or modified in [compose.yaml](https://github.com/SpecterOps/Nemesis/blob/main/compose.yaml):
 
-| ENV Variable           | Default Value | Description                                                                     |
-|------------------------|---------------|---------------------------------------------------------------------------------|
-| `SNIPPET_LENGTH`       | 512           | Bytes of context length around Nosey Parker matches to pull in for findings     |
-| `MAX_CONCURRENT_FILES` | 2             | Maximum number of concurrent files to scan (raising increases resources needed) |
-| `MAX_FILE_SIZE_MB`     | 200           | Maximum file size to scan (in megabytes)                                        |
-| `DECOMPRESS_ZIPS`      | true          | Whether to decompress+scan zips                                                 |
-| `MAX_EXTRACT_SIZE_MB`  | 1000          | Maximum number of megabytes to extract from ZIPs (if decompressing)             |
+| ENV Variable               | Default Value | Description                                                                          |
+|----------------------------|---------------|--------------------------------------------------------------------------------------|
+| `SNIPPET_LENGTH`           | 512           | Bytes of context length around Titus matches to pull in for findings                 |
+| `MAX_CONCURRENT_FILES`     | 2             | Maximum number of concurrent files to scan (raising increases resources needed)      |
+| `MAX_FILE_SIZE_MB`         | 200           | Maximum file size to scan (in megabytes)                                             |
+| `EXTRACT_ARCHIVES`         | true          | Extract+scan archive contents (zip, jar, war, ear, apk, tar, tar.gz, 7z)            |
+| `EXTRACT_MAX_FILE_SIZE_MB` | 10            | Maximum per-file size within archives (in megabytes)                                 |
+| `EXTRACT_MAX_TOTAL_SIZE_MB`| 1000          | Total extraction budget per archive (in megabytes)                                   |
+| `EXTRACT_MAX_DEPTH`        | 2             | Maximum nesting depth for recursive archives                                         |
+| `ENABLE_VALIDATION`        | false         | Whether to enable credential validation                                              |
+| `VALIDATION_WORKERS`       | 4             | Concurrent validation workers (only used when validation enabled)                    |
+| `DISABLED_RULES`           | (none)        | Comma-separated Titus rule IDs to exclude (e.g. `np.linkedin.3,np.generic.1`)        |
+
+**Supported archive formats:** `.zip`, `.jar`, `.war`, `.ear`, `.apk`, `.ipa`, `.xpi`, `.crx`, `.tar`, `.tar.gz`/`.tgz`, `.7z`. Document formats (xlsx, docx, pdf, etc.) are intentionally excluded — Nemesis handles those via the document_conversion service.
 
 ### Custom Rules
 
-Nemesis uses [Nosey Parker](https://github.com/praetorian-inc/noseyparker) wrapped through [an customized Dapr pub/sub scanner implementation](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner).
+Nemesis uses [Titus](https://github.com/praetorian-inc/titus) wrapped through [a customized Dapr pub/sub scanner implementation](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner).
 
-There are a number of custom rules that are specified at [projects/noseyparker_scanner/custom_rules/rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner/custom_rules/rules.yaml).
+There are a number of custom rules that are specified at [projects/titus_scanner/custom_rules/rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner/custom_rules/rules.yaml).
 
 ```yaml
 rules:
@@ -93,7 +100,29 @@ rules:
 ...
 ```
 
-If you want to add additional rules, just modify [rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner/custom_rules/rules.yaml) with the new rule (or add a new rules.yaml) and restart the noseyparker-scanner container.
+If you want to add additional rules, just modify [rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner/custom_rules/rules.yaml) with the new rule (or add a new rules.yaml) and restart the titus-scanner container.
+
+### Secret Validation
+
+Titus supports live validation of detected secrets against their source APIs (e.g., checking if an AWS key is active via STS, testing a GitHub token, etc.). This is **opt-in** and disabled by default because validation makes outbound network calls to third-party services.
+
+To enable secret validation:
+
+```bash
+export ENABLE_VALIDATION=true
+```
+
+When enabled, each detected secret is validated and assigned one of three outcomes:
+
+| Status | Label | Description |
+|---|---|---|
+| `valid` | CONFIRMED ACTIVE | The secret was verified as active against the target service |
+| `invalid` | INACTIVE | The secret was tested and confirmed to be expired or revoked |
+| `undetermined` | UNVERIFIED | Validation could not determine the secret's status |
+
+Confirmed active secrets are escalated to severity 9 (from the default 7), while inactive secrets have their severity reduced. The `VALIDATION_WORKERS` variable controls the number of concurrent validation goroutines (default: 4).
+
+Titus supports validation for 100+ secret types, including: AWS access keys, GitHub tokens, GitLab tokens, Slack tokens, Stripe API keys, PostgreSQL connection strings, Twilio credentials, SendGrid API keys, and many more. See the [Titus documentation](https://github.com/praetorian-inc/titus) for the full list.
 
 
 ## .NET Service

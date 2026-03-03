@@ -1,8 +1,8 @@
-## Adding Nosey Parker Rules
+## Adding Titus Rules
 
-Nemesis uses [Nosey Parker](https://github.com/praetorian-inc/noseyparker) wrapped through [an customized Dapr pub/sub scanner implementation](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner).
+Nemesis uses [Titus](https://github.com/praetorian-inc/titus) wrapped through [a customized Dapr pub/sub scanner implementation](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner).
 
-There are a number of custom rules that are specified at [projects/noseyparker_scanner/custom_rules/rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner/custom_rules/rules.yaml).
+There are a number of custom rules that are specified at [projects/titus_scanner/custom_rules/rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner/custom_rules/rules.yaml).
 
 ```yaml
 rules:
@@ -32,4 +32,4 @@ rules:
 ...
 ```
 
-If you want to add additional rules, just modify [rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/noseyparker_scanner/custom_rules/rules.yaml) with the new rule (or add a new rules.yaml) and restart the noseyparker-scanner container.
+If you want to add additional rules, just modify [rules.yaml](https://github.com/SpecterOps/Nemesis/tree/main/projects/titus_scanner/custom_rules/rules.yaml) with the new rule (or add a new rules.yaml) and restart the titus-scanner container.

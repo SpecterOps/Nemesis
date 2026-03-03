@@ -52,7 +52,7 @@ services:
       - "traefik.http.routers.web-api.tls=true"
       - "traefik.http.routers.web-api.middlewares=auth"
   web-api-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
@@ -104,49 +104,56 @@ services:
       rabbitmq: { condition: service_healthy }
     network_mode: "service:web-api"
 
-  noseyparker-scanner:
-    image: ghcr.io/specterops/nemesis/noseyparker-scanner:latest
+  titus-scanner:
+    image: ghcr.io/specterops/nemesis/titus-scanner:latest
     depends_on:
       minio: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     environment:
-      - DAPR_GRPC_PORT=50013
-      - DAPR_PORT=3513
+      - DAPR_HTTP_PORT=3513
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?}
       - MINIO_BUCKET=files
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
-      - RUST_LOG=warn
-      - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Nosey Parker matches
-      - MAX_CONCURRENT_FILES=${NOSEYPARKER_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
+      - LOG_LEVEL=info
+      - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Titus matches
+      - MAX_CONCURRENT_FILES=${TITUS_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
+      - MAX_MATCHES_PER_FILE=${MAX_MATCHES_PER_FILE:-100} # safety cap on matches per file
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-200} # maximum file size to scan, in megabytes
-      - DECOMPRESS_ZIPS=${DECOMPRESS_ZIPS:-true} # whether to decompress+scan zips
-      - MAX_EXTRACT_SIZE_MB=${MAX_EXTRACT_SIZE_MB:-1000} # maximum number of megabytes to extract from ZIPs (if decompressing)
-      - PUBSUB_NAME=noseyparker # Name of the Dapr pubsub resource
-      - OUTPUT_TOPIC=noseyparker_output # Name of the output topic in Dapr
+      - GOMEMLIMIT=1500MiB # soft memory limit for Go GC to be aggressive before kernel OOM kills us
+      - EXTRACT_ARCHIVES=${EXTRACT_ARCHIVES:-true} # extract+scan archive contents (zip, jar, war, ear, apk, tar, tar.gz, 7z)
+      - EXTRACT_MAX_FILE_SIZE_MB=${EXTRACT_MAX_FILE_SIZE_MB:-10} # max per-file size within archives (MB)
+      - EXTRACT_MAX_TOTAL_SIZE_MB=${EXTRACT_MAX_TOTAL_SIZE_MB:-1000} # total extraction budget per archive (MB)
+      - EXTRACT_MAX_DEPTH=${EXTRACT_MAX_DEPTH:-2} # max nesting depth for recursive archives
+      - ENABLE_VALIDATION=${ENABLE_VALIDATION:-false} # whether to enable credential validation
+      - VALIDATION_WORKERS=${VALIDATION_WORKERS:-4} # concurrent validation workers
+      - DISABLED_RULES=${DISABLED_RULES:-np.s3.1,np.s3.2,np.linkedin.3,kingfisher.jira.1} # comma-separated rule IDs to disable (np.s3.x have backtracking-prone patterns that timeout on large files, np.linkedin.3 / kingfisher.jira.1 have a lot of false positives)
+      - PUBSUB_NAME=titus # Name of the Dapr pubsub resource
+      - OUTPUT_TOPIC=titus_output # Name of the output topic in Dapr
+      - BULK_MAX_MESSAGES=${BULK_MAX_MESSAGES:-100} # max messages per bulk subscribe batch
+      - BULK_MAX_AWAIT_DURATION_MS=${BULK_MAX_AWAIT_DURATION_MS:-1000} # max wait before delivering partial batch (ms)
     volumes:
-      - ./projects/noseyparker_scanner/custom_rules/:/opt/noseyparker:ro
+      - ./projects/titus_scanner/custom_rules/:/opt/titus:ro
     deploy:
       resources:
         limits:
           cpus: "1"
-  noseyparker-scanner-dapr:
-    image: "daprio/daprd:1.16.2"
+          memory: 2G
+  titus-scanner-dapr:
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
         "--max-body-size",
         "1Gi",
         "--app-id",
-        "noseyparker-scanner",
+        "titus-scanner",
         "--app-port",
-        "50042",
+        "8080",
         "--app-protocol",
-        "grpc",
+        "http",
         "--dapr-http-port",
         "3513",
-        "--dapr-grpc-port",
-        "50013",
         "--placement-host-address",
         "placement:50006",
         "--resources-path",
@@ -164,11 +171,11 @@ services:
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     volumes:
-      - ./infra/dapr/components/pubsub/noseyparker.yaml:/dapr/components/noseyparker.yaml:ro
+      - ./infra/dapr/components/pubsub/titus.yaml:/dapr/components/titus.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
-    depends_on: [noseyparker-scanner, placement]
-    network_mode: "service:noseyparker-scanner"
+    depends_on: [titus-scanner, placement]
+    network_mode: "service:titus-scanner"
 
   dotnet-service:
     image: ghcr.io/specterops/nemesis/dotnet-service:latest
@@ -192,7 +199,7 @@ services:
     expose:
       - "5000"
   dotnet-service-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
@@ -267,7 +274,7 @@ services:
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   file-enrichment-dapr: &file-enrichment-dapr-template
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
@@ -301,7 +308,7 @@ services:
       - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
       - ./infra/dapr/components/pubsub/dpapi.yaml:/dapr/components/dpapi.yaml:ro
       - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
-      - ./infra/dapr/components/pubsub/noseyparker.yaml:/dapr/components/noseyparker.yaml:ro
+      - ./infra/dapr/components/pubsub/titus.yaml:/dapr/components/titus.yaml:ro
       - ./infra/dapr/components/pubsub/workflow_monitor.yaml:/dapr/components/workflow_monitor.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
@@ -428,7 +435,7 @@ services:
       retries: 5
       start_period: 20s
   alerting-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
@@ -485,7 +492,7 @@ services:
       rabbitmq: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
   housekeeping-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
@@ -567,7 +574,7 @@ services:
         limits:
           cpus: "2"
   document-conversion-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
@@ -619,7 +626,8 @@ services:
     network_mode: "service:document-conversion"
 
   gotenberg:
-    image: gotenberg/gotenberg:8.21.1
+    #image: gotenberg/gotenberg:8.21.1
+    image: gotenberg/gotenberg:8.27.0
     command:
       [
         "gotenberg",
@@ -635,7 +643,7 @@ services:
       timeout: 10s
       retries: 3
   gotenberg-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
@@ -707,7 +715,8 @@ services:
     restart: "no"
 
   rabbitmq:
-    image: rabbitmq:4.2.0-management
+    # image: rabbitmq:4.2.0-management
+    image: rabbitmq:4.2.4-management
     hostname: rabbitmq-node # have to do this for persistence reasons
     environment:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?}
@@ -750,8 +759,8 @@ services:
         "-c",
         "tcp_keepalives_count=3",
       ]
-    ports:
-      - "${POSTGRES_EXTERNAL_PORT:-}5432"
+    # ports:
+    #   - "${POSTGRES_EXTERNAL_PORT:-}5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-enrichment}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
@@ -776,7 +785,8 @@ services:
       postgres: { condition: service_healthy }
 
   hasura:
-    image: hasura/graphql-engine:v2.48.6.cli-migrations-v2
+    #image: hasura/graphql-engine:v2.48.6.cli-migrations-v2
+    image: hasura/graphql-engine:v2.48.12.cli-migrations-v2
     depends_on:
       postgres: { condition: service_healthy }
     environment:
@@ -803,7 +813,8 @@ services:
       - "traefik.http.routers.hasura.tls=true"
 
   traefik:
-    image: traefik:v3.6.1
+    # image: traefik:v3.6.1
+    image: traefik:v3.6.9
     command:
       - "--api.insecure=true"
       # - "--log.level=DEBUG"
@@ -833,7 +844,7 @@ services:
       - ./infra/traefik/config:/config:ro
 
   placement:
-    image: "daprio/dapr:1.16.2"
+    image: "daprio/dapr:1.16.9"
     command:
       [
         "./placement",
@@ -860,7 +871,7 @@ services:
     restart: "no"
 
   scheduler:
-    image: "daprio/dapr:1.16.2"
+    image: "daprio/scheduler:1.16.9"
     command:
       [
         "./scheduler",
@@ -891,7 +902,8 @@ services:
 
   jaeger:
     profiles: ["monitoring"]
-    image: jaegertracing/jaeger:2.11.0 # v2.x image
+    # image: jaegertracing/jaeger:2.11.0 # v2.x image
+    image: jaegertracing/jaeger:2.15.1
     user: "0:0"
     deploy:
       resources:
@@ -926,7 +938,8 @@ services:
 
   loki:
     profiles: ["monitoring"]
-    image: grafana/loki:3.3.2
+    # image: grafana/loki:3.3.2
+    image: grafana/loki:3.5.11
     command:
       ["-config.file=/etc/loki/local-config.yaml", "-config.expand-env=true"]
     environment:
@@ -946,7 +959,8 @@ services:
 
   promtail:
     profiles: ["monitoring"]
-    image: grafana/promtail:3.3.2
+    # image: grafana/promtail:3.3.2
+    image: grafana/promtail:3.5.11
     user: "0:0"
     volumes:
       - ./infra/promtail:/etc/promtail:ro
@@ -958,7 +972,8 @@ services:
 
   grafana:
     profiles: ["monitoring"]
-    image: grafana/grafana:11.4.0
+    # image: grafana/grafana:11.4.0
+    image: grafana/grafana:12.3.4
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Editor
@@ -986,7 +1001,8 @@ services:
 
   prometheus:
     profiles: ["monitoring"]
-    image: prom/prometheus:v3.1.0
+    # image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.10.0
     volumes:
       - ./infra/prometheus:/etc/prometheus:ro
       - prometheus_data:/prometheus
@@ -1094,7 +1110,7 @@ services:
       - "traefik.http.routers.mcp.middlewares=auth"
   agents-dapr:
     profiles: ["llm"]
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.16.9"
     command:
       [
         "./daprd",
@@ -1144,7 +1160,8 @@ services:
 
   litellm:
     profiles: ["llm"]
-    image: ghcr.io/berriai/litellm:v1.74.0-stable
+    # image: ghcr.io/berriai/litellm:v1.74.0-stable
+    image: ghcr.io/berriai/litellm:v1.81.12-stable.1
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
       - STORE_MODEL_IN_DB=True
@@ -1181,7 +1198,8 @@ services:
 
   phoenix:
     profiles: ["llm"]
-    image: arizephoenix/phoenix:11.24.1
+    # image: arizephoenix/phoenix:11.24.1
+    image: arizephoenix/phoenix:13.3.0
     environment:
       - PHOENIX_WORKING_DIR=/data
       - PHOENIX_HOST_ROOT_PATH=/phoenix

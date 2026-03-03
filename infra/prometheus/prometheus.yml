@@ -85,10 +85,10 @@ scrape_configs:
     static_configs:
       - targets: ['web-api:9090']
 
-  - job_name: 'nemesis-noseyparker-scanner'
+  - job_name: 'nemesis-titus-scanner'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['noseyparker-scanner:9090']
+      - targets: ['titus-scanner:9090']
 
   - job_name: 'nemesis-dotnet-service'
     metrics_path: '/metrics'

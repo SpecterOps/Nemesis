@@ -99,9 +99,9 @@ grep -rli "{package}" projects/*/pyproject.toml libs/*/pyproject.toml 2>/dev/nul
 
 The manifest is `projects/frontend/package-lock.json`. Check `projects/frontend/package.json` for the package to determine direct vs transitive.
 
-### Rust (cargo) alerts
+### Go (go) alerts
 
-The manifest is `projects/noseyparker_scanner/Cargo.lock`. Provide guidance only — NoseyParker builds from an upstream project, so Cargo dependency updates may require upstream changes or a container rebuild.
+The manifest is `projects/titus_scanner/go.sum`. Update with `cd projects/titus_scanner && go get {package}@latest && go mod tidy`.
 
 ### Python project paths reference
 
@@ -177,15 +177,13 @@ Add an override in `projects/frontend/package.json` (existing pattern — see `l
 
 Then `npm install`.
 
-### Rust
-
-Provide instructions:
+### Go
 
 ```bash
-cd projects/noseyparker_scanner && cargo update {package}
+cd projects/titus_scanner && go get {package}@latest && go mod tidy
 ```
 
-Note that the NoseyParker container may need rebuilding: `docker compose -f compose.base.yaml build noseyparker`
+Note that the Titus container may need rebuilding: `docker compose build titus-scanner`
 
 ---
 

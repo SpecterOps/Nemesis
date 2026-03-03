@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: noseyparker
+  name: titus
 spec:
   type: pubsub.rabbitmq
   version: v1
@@ -11,7 +11,7 @@ spec:
         name: RABBITMQ_CONNECTION_STRING
         key: RABBITMQ_CONNECTION_STRING
     - name: consumerID
-      value: noseyparker        # Fixed consumerID means messages will be load balanced across all consumers (NOT broadcast). Results in a single RabbitMQ queue.
+      value: titus        # Fixed consumerID means messages will be load balanced across all consumers (NOT broadcast). Results in a single RabbitMQ queue.
     - name: durable
       value: true
     - name: deletedWhenUnused    # Ensure the queue remains if the workers all die (controls RabbitMQ auto-delete)

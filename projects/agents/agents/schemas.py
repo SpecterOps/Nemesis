@@ -52,18 +52,18 @@ class TriageRequest(BaseModel):
         return severity_int
 
 
-class NoseyParkerLocation(BaseModel):
-    """Schema for location information in Nosey Parker findings"""
+class TitusLocation(BaseModel):
+    """Schema for location information in Titus findings"""
 
     line: int = Field(..., description="Line number where the match was found")
     column: int = Field(..., description="Column number where the match was found")
 
 
-class NoseyParkerMatch(BaseModel):
-    """Schema for a Nosey Parker match"""
+class TitusMatch(BaseModel):
+    """Schema for a Titus match"""
 
     snippet: str = Field(..., description="Portion of text around where the match was found")
-    location: NoseyParkerLocation = Field(..., description="Location of the match in the file")
+    location: TitusLocation = Field(..., description="Location of the match in the file")
     file_path: str | None = Field(None, description="Path to the file containing the match")
     rule_name: str = Field(..., description="Name of the detection rule that triggered")
     rule_type: str = Field(..., description="Type/category of the detection rule")
@@ -71,10 +71,10 @@ class NoseyParkerMatch(BaseModel):
     matched_content: str = Field(..., description="The actual content that matched the rule")
 
 
-class NoseyParkerData(BaseModel):
-    """Schema for Nosey Parker finding data"""
+class TitusData(BaseModel):
+    """Schema for Titus finding data"""
 
-    match: NoseyParkerMatch = Field(..., description="Match information from Nosey Parker")
+    match: TitusMatch = Field(..., description="Match information from Titus")
 
 
 class ValidateRequest(BaseModel):

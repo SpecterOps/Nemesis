@@ -216,8 +216,8 @@ const StatsOverview = () => {
                 count
               }
             }
-            noseyparker_findings: findings_aggregate(
-              where: { origin_name: { _eq: "noseyparker" } }
+            titus_findings: findings_aggregate(
+              where: { origin_name: { _eq: "titus" } }
             ) {
               aggregate {
                 count
@@ -284,7 +284,7 @@ const StatsOverview = () => {
         throw new Error(result.errors[0].message);
       }
 
-      const noseyParkerCount = result.data.noseyparker_findings.aggregate.count;
+      const titusCount = result.data.titus_findings.aggregate.count;
       const yaraCount = result.data.yara_findings.aggregate.count;
 
       // Process latest triage entries to get counts by value
@@ -300,7 +300,7 @@ const StatsOverview = () => {
         containersProcessed: result.data.containers_processed.aggregate.count,
         unviewedFiles: result.data.unviewed_files.aggregate.count,
         totalFindings: result.data.findings_aggregate.aggregate.count,
-        noseyParkerMatches: noseyParkerCount,
+        titusMatches: titusCount,
         yaraMatches: yaraCount,
         enabledYaraRules: result.data.yara_rules_aggregate.aggregate.count,
         untriagedFindings: result.data.untriaged_findings.aggregate.count,
@@ -801,8 +801,8 @@ const StatsOverview = () => {
               tooltip="Total findings across all categories"
             />
             <StatCard
-              title="NoseyParker Matches"
-              value={stats?.noseyParkerMatches ?? 0}
+              title="Titus Matches"
+              value={stats?.titusMatches ?? 0}
               icon={Search}
               isLoading={isLoading}
               onClick={() => handleNavigation('/findings')}
@@ -905,7 +905,7 @@ const StatsOverview = () => {
                 const queueDisplayConfig = [
                   { topic: 'new_file', displayName: 'Files Queued for Processing' },
                   { topic: 'document_conversion_input', displayName: 'Document Conversion' },
-                  { topic: 'noseyparker_input', displayName: 'NoseyParker' },
+                  { topic: 'titus_input', displayName: 'Titus' },
                   { topic: 'dotnet_input', displayName: 'Dotnet Analysis' },
                   { topic: 'bulk_enrichment_task', displayName: 'Bulk Enrichment Tasks' },
                 ];

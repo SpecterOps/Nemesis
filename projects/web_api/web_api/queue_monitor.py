@@ -21,8 +21,8 @@ class WorkflowQueueMonitor:
         "new_alert": "alerting-new_alert",
         "dotnet_input": "dotnet-dotnet_input",
         "dotnet_output": "dotnet-dotnet_output",
-        "noseyparker_input": "noseyparker-noseyparker_input",
-        "noseyparker_output": "noseyparker-noseyparker_output",
+        "titus_input": "titus-titus_input",
+        "titus_output": "titus-titus_output",
     }
     DEFAULT_TOPICS = list(TOPIC_TO_QUEUE_MAPPING.keys())
 
