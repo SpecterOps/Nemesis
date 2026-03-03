@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
-import { ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, ArrowUpDown, Download } from 'lucide-react';
 
-const CsvViewer = ({ content }) => {
+const CsvViewer = ({ content, fileName }) => {
     const [csvData, setCsvData] = useState([]);
     const [originalData, setOriginalData] = useState([]);
     const [error, setError] = useState(null);
@@ -139,8 +139,32 @@ const CsvViewer = ({ content }) => {
     const headers = csvData[0];
     const rows = csvData.slice(1);
 
+    const handleDownload = () => {
+        const blob = new Blob([content], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName || 'download.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     return (
-        <div className="p-4 bg-white dark:bg-gray-900 rounded-lg overflow-auto max-h-[80vh]">
+        <div className="bg-white dark:bg-gray-900 rounded-lg overflow-auto max-h-[80vh]">
+            {fileName && (
+                <div className="flex justify-end px-4 pt-3 pb-1">
+                    <button
+                        onClick={handleDownload}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                    >
+                        <Download className="w-3.5 h-3.5" />
+                        Download CSV
+                    </button>
+                </div>
+            )}
+            <div className="p-4">
             <table className="w-full border-collapse">
                 <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
                     <tr>
@@ -197,6 +221,7 @@ const CsvViewer = ({ content }) => {
                     ))}
                 </tbody>
             </table>
+            </div>
         </div>
     );
 };

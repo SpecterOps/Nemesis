@@ -11,9 +11,10 @@ import csv
 import hashlib
 import json
 import os
+import re
 import tempfile
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import evtx as evtx_lib
 from common.logger import get_logger
@@ -52,6 +53,11 @@ SYSTEM_EVENT_IDS = {
     "7045",  # New service installed
     "7040",  # Service start type changed
     "7036",  # Service state changed
+    "12",  # Kernel boot (Microsoft-Windows-Kernel-General)
+    "13",  # Kernel shutdown
+    "1",  # Awake from sleep (Microsoft-Windows-Power-Troubleshooter)
+    "42",  # Sleep
+    "6008",  # Unexpected/unclean shutdown
 }
 
 POWERSHELL_EVENT_IDS = {
@@ -88,6 +94,25 @@ MAX_SCRIPT_BLOCK_FILES = 100
 MIN_SCRIPT_BLOCK_SIZE = 100
 # Cap on events stored per event ID in the summary (avoids huge result JSON)
 MAX_EVENTS_PER_ID = 50
+# Number of days back from the most recent event to include in the power timeline
+POWER_TIMELINE_DAYS = 15
+
+# Noise user/SID filter for scheduled task user contexts and service accounts
+_NOISE_USER_CONTEXT_RE = re.compile(
+    r"^(SYSTEM|LOCAL SERVICE|NETWORK SERVICE|UMFD-\d+|DWM-\d+|ANONYMOUS LOGON)$",
+    re.IGNORECASE,
+)
+_NOISE_SIDS = {"S-1-5-18"}  # SYSTEM
+_NOISE_USER_STRINGS = {"NT AUTHORITY\\SYSTEM", "NT AUTHORITY/SYSTEM"}
+
+# Power event ID → human-readable label
+POWER_EVENT_LABELS = {
+    "12": "Startup",
+    "13": "Shutdown",
+    "1": "Awake",
+    "42": "Sleep",
+    "6008": "Unclean Shutdown",
+}
 
 
 def _normalize_event_id(eid_raw) -> str:
@@ -109,6 +134,19 @@ def _safe_str(val) -> str:
     if val is None:
         return ""
     return str(val).strip()
+
+
+def _is_noise_user(user: str, sid: str = "") -> bool:
+    """Return True if the user/SID should be filtered out as noise (system accounts)."""
+    if sid and sid in _NOISE_SIDS:
+        return True
+    if not user:
+        return True
+    if user in _NOISE_USER_STRINGS:
+        return True
+    # Strip domain prefix for regex match (e.g. "NT AUTHORITY\SYSTEM" → already handled above)
+    bare = user.split("\\")[-1].split("/")[-1]
+    return bool(_NOISE_USER_CONTEXT_RE.match(bare))
 
 
 class EVTXAnalyzer(EnrichmentModule):
@@ -166,6 +204,9 @@ class EVTXAnalyzer(EnrichmentModule):
         task_events: list[dict] = []
         log_cleared_events: list[dict] = []
         ntlm_events: list[dict] = []
+        kerberos_tgt_events: list[dict] = []
+        kerberos_st_events: list[dict] = []
+        power_events: list[dict] = []
 
         # Script block reassembly: script_block_id -> list of (msg_num, text)
         script_blocks: dict[str, dict] = {}  # id -> {total, chunks: {num: text}, path: str, time: str}
@@ -304,12 +345,49 @@ class EVTXAnalyzer(EnrichmentModule):
                             }
                         )
 
+                elif eid == "4768":  # Kerberos TGT request
+                    if len(kerberos_tgt_events) < MAX_EVENTS_PER_ID:
+                        kerberos_tgt_events.append(
+                            {
+                                "time": timestamp,
+                                "client_name": _safe_str(edata.get("TargetUserName")),
+                                "client_domain": _safe_str(edata.get("TargetDomainName")),
+                                "service_name": _safe_str(edata.get("ServiceName")),
+                                "ip_address": _safe_str(edata.get("IpAddress")),
+                                "ticket_options": _safe_str(edata.get("TicketOptions")),
+                                "result_code": _safe_str(edata.get("Status")),
+                            }
+                        )
+
+                elif eid == "4769":  # Kerberos service ticket request
+                    if len(kerberos_st_events) < MAX_EVENTS_PER_ID:
+                        kerberos_st_events.append(
+                            {
+                                "time": timestamp,
+                                "client_name": _safe_str(edata.get("TargetUserName")),
+                                "client_domain": _safe_str(edata.get("TargetDomainName")),
+                                "service_name": _safe_str(edata.get("ServiceName")),
+                                "ip_address": _safe_str(edata.get("IpAddress")),
+                                "ticket_options": _safe_str(edata.get("TicketOptions")),
+                                "result_code": _safe_str(edata.get("FailureCode")),
+                            }
+                        )
+
                 elif eid == "1102":  # Audit log cleared
                     log_cleared_events.append(
                         {
                             "time": timestamp,
                             "subject_user": _safe_str(edata.get("SubjectUserName")),
                             "subject_domain": _safe_str(edata.get("SubjectDomainName")),
+                        }
+                    )
+
+                elif eid in ("1", "12", "13", "42", "6008"):  # Power/boot/shutdown events
+                    power_events.append(
+                        {
+                            "time": timestamp,
+                            "event_id": eid,
+                            "description": POWER_EVENT_LABELS.get(eid, eid),
                         }
                     )
 
@@ -377,12 +455,16 @@ class EVTXAnalyzer(EnrichmentModule):
             "task_events": task_events,
             "log_cleared_events": log_cleared_events,
             "ntlm_events": ntlm_events,
+            "kerberos_tgt_events": kerberos_tgt_events,
+            "kerberos_st_events": kerberos_st_events,
+            "power_events": power_events,
             "script_blocks": script_blocks,
         }
 
     def _reassemble_script_blocks(self, script_blocks: dict) -> list[dict]:
-        """Reassemble multi-chunk 4104 script blocks into complete scripts."""
+        """Reassemble multi-chunk 4104 script blocks into complete scripts, deduped by content hash."""
         complete = []
+        seen_hashes: set[str] = set()
         for script_id, info in script_blocks.items():
             chunks = info["chunks"]
             total = info["total"]
@@ -392,6 +474,10 @@ class EVTXAnalyzer(EnrichmentModule):
             full_text = "".join(chunks[i] for i in sorted(chunks.keys()))
             if len(full_text) < MIN_SCRIPT_BLOCK_SIZE:
                 continue
+            text_hash = hashlib.sha256(full_text.encode()).hexdigest()
+            if text_hash in seen_hashes:
+                continue
+            seen_hashes.add(text_hash)
             complete.append(
                 {
                     "id": script_id,
@@ -402,7 +488,7 @@ class EVTXAnalyzer(EnrichmentModule):
             )
         return complete
 
-    def _build_summary_markdown(self, file_name: str, parsed: dict) -> str:
+    def _build_summary_markdown(self, file_name: str, parsed: dict, script_blocks_extracted: int = 0) -> str:
         """Build a human-readable markdown summary of the EVTX analysis."""
         timestamps = parsed["timestamps"]
         first_ts = timestamps[0] if timestamps else "unknown"
@@ -420,13 +506,9 @@ class EVTXAnalyzer(EnrichmentModule):
             f"- **Unique computers:** {', '.join(sorted(parsed['unique_computers'])) or 'none'}",
             f"- **Unique accounts:** {', '.join(sorted(parsed['unique_accounts'])[:20]) or 'none'}",
             f"- **Unique IPs/workstations:** {', '.join(sorted(parsed['unique_ips'])[:20]) or 'none'}",
-            "",
-            "## Event ID Counts",
-            "| Event ID | Count |",
-            "|----------|-------|",
         ]
-        for eid, cnt in sorted(event_counts.items(), key=lambda x: -x[1])[:30]:
-            lines.append(f"| {eid} | {cnt:,} |")
+        if script_blocks_extracted:
+            lines.append(f"- **Unique PowerShell scripts carved:** {script_blocks_extracted}")
 
         def fmt_time(ts):
             if not ts:
@@ -436,11 +518,6 @@ class EVTXAnalyzer(EnrichmentModule):
             except Exception:
                 return ts
 
-        if parsed["log_cleared_events"]:
-            lines += ["", "## ⚠️ Audit Log Cleared", "| Time | User |", "|------|------|"]
-            for e in parsed["log_cleared_events"]:
-                lines.append(f"| {fmt_time(e['time'])} | {e['subject_user']}\\{e['subject_domain']} |")
-
         if parsed["service_install_events"]:
             lines += [
                 "",
@@ -449,7 +526,9 @@ class EVTXAnalyzer(EnrichmentModule):
                 "|------|------|------------|---------|",
             ]
             for e in parsed["service_install_events"]:
-                lines.append(f"| {fmt_time(e['time'])} | {e['service_name']} | {e['image_path']} | {e['account']} |")
+                account = e["account"]
+                display_account = "" if _is_noise_user(account) else account
+                lines.append(f"| {fmt_time(e['time'])} | {e['service_name']} | {e['image_path']} | {display_account} |")
 
         if parsed["account_change_events"]:
             lines += [
@@ -472,10 +551,18 @@ class EVTXAnalyzer(EnrichmentModule):
             task_registered = sum(1 for e in parsed["task_events"] if e["event_id"] == "106")
             task_deleted = sum(1 for e in parsed["task_events"] if e["event_id"] == "141")
             task_updated = sum(1 for e in parsed["task_events"] if e["event_id"] == "140")
+            # Collect filtered unique user contexts
+            seen_users: set[str] = set()
+            for e in parsed["task_events"]:
+                uc = e.get("user_context", "")
+                if uc and not _is_noise_user(uc):
+                    seen_users.add(uc)
+            user_list = ", ".join(sorted(seen_users)) if seen_users else "none"
             lines += [
                 "",
                 "## Scheduled Task Changes",
                 f"- {task_registered} registered, {task_deleted} deleted, {task_updated} updated",
+                f"- Unique user contexts (filtered): {user_list}",
                 "- Full task list available as downloadable CSV transform",
             ]
 
@@ -504,6 +591,133 @@ class EVTXAnalyzer(EnrichmentModule):
                 f"- {len(parsed['process_creation_events'])} process creation event(s) recorded",
                 "- Full details available as downloadable CSV transform",
             ]
+
+        # --- System: Power/Boot/Shutdown Timeline ---
+        if parsed.get("power_events"):
+            # Only show events within the last POWER_TIMELINE_DAYS days of the log
+            ref_ts = timestamps[-1] if timestamps else None
+            if ref_ts:
+                try:
+                    ref_dt = datetime.fromisoformat(ref_ts.replace("Z", "+00:00"))
+                    cutoff_dt = ref_dt - timedelta(days=POWER_TIMELINE_DAYS)
+                    recent_power = []
+                    for e in parsed["power_events"]:
+                        try:
+                            e_dt = datetime.fromisoformat(e["time"].replace("Z", "+00:00"))
+                            if e_dt >= cutoff_dt:
+                                recent_power.append(e)
+                        except Exception:
+                            pass
+                except Exception:
+                    recent_power = parsed["power_events"]
+            else:
+                recent_power = parsed["power_events"]
+
+            if recent_power:
+                lines += [
+                    "",
+                    "## System Power Timeline",
+                    "| Time | Event |",
+                    "|------|-------|",
+                ]
+                for e in sorted(recent_power, key=lambda x: x["time"] or ""):
+                    lines.append(f"| {fmt_time(e['time'])} | {e['description']} ({e['event_id']}) |")
+
+        # --- Security: Authentication Summary ---
+        inbound_logons = [
+            e
+            for e in parsed.get("logon_events", [])
+            if e.get("ip_address") and e["ip_address"] not in ("-", "::1", "127.0.0.1", "")
+        ]
+        outbound_4648 = parsed.get("explicit_logon_events", [])
+        outbound_ntlm = [e for e in parsed.get("ntlm_events", []) if e.get("workstation")]
+        outbound_tgt = parsed.get("kerberos_tgt_events", [])
+        outbound_st = parsed.get("kerberos_st_events", [])
+
+        has_auth_data = inbound_logons or outbound_4648 or outbound_ntlm or outbound_tgt or outbound_st
+        if has_auth_data:
+            lines += ["", "## Authentication Summary"]
+
+            if inbound_logons:
+                # Group by (user, domain, ip, auth_package)
+                inbound_counts: dict[tuple, int] = defaultdict(int)
+                for e in inbound_logons:
+                    key = (
+                        e.get("target_user", ""),
+                        e.get("target_domain", ""),
+                        e.get("ip_address") or e.get("workstation", ""),
+                        e.get("auth_package", ""),
+                    )
+                    inbound_counts[key] += 1
+
+                lines += [
+                    "",
+                    "### Inbound Authentication",
+                    "| User | Domain | Source IP/Host | Auth Package | Count |",
+                    "|------|--------|----------------|--------------|-------|",
+                ]
+                for (user, domain, src, pkg), cnt in sorted(inbound_counts.items(), key=lambda x: -x[1])[:20]:
+                    lines.append(f"| {user} | {domain} | {src} | {pkg} | {cnt} |")
+
+            _local_targets = {"localhost", "127.0.0.1", "::1", "-", ""}
+
+            def _is_local_target(target: str) -> bool:
+                return target.lower() in _local_targets
+
+            outbound_rows: list[tuple[str, str, str, str]] = []
+            for e in outbound_tgt[:20]:
+                target = e.get("service_name", "")
+                if _is_local_target(target):
+                    continue
+                outbound_rows.append(
+                    (
+                        "Kerberos TGT",
+                        e.get("client_name", ""),
+                        target,
+                        f"domain={e.get('client_domain', '')} ip={e.get('ip_address', '')} code={e.get('result_code', '')}",
+                    )
+                )
+            for e in outbound_st[:20]:
+                target = e.get("service_name", "")
+                if _is_local_target(target):
+                    continue
+                outbound_rows.append(
+                    (
+                        "Kerberos ST",
+                        e.get("client_name", ""),
+                        target,
+                        f"domain={e.get('client_domain', '')} ip={e.get('ip_address', '')} code={e.get('result_code', '')}",
+                    )
+                )
+            for e in outbound_ntlm[:20]:
+                target = e.get("workstation", "")
+                if _is_local_target(target):
+                    continue
+                status = e.get("error_code", "")
+                result_label = "success" if status in ("0x0", "", "0") else f"failed ({status})"
+                outbound_rows.append(("NTLM", e.get("target_user", ""), target, result_label))
+            for e in outbound_4648[:20]:
+                target = e.get("target_server", "") or e.get("ip_address", "")
+                if _is_local_target(target):
+                    continue
+                outbound_rows.append(
+                    (
+                        "Explicit Creds",
+                        e.get("subject_user", ""),
+                        target,
+                        f"via {e.get('process', '')}",
+                    )
+                )
+
+            if outbound_rows:
+                lines += [
+                    "",
+                    "### Outbound Authentication",
+                    "| Type | User | Target | Details |",
+                    "|------|------|--------|---------|",
+                ]
+                for row in outbound_rows[:20]:
+                    lines.append(f"| {row[0]} | {row[1]} | {row[2]} | {row[3]} |")
 
         return "\n".join(lines)
 
@@ -539,7 +753,7 @@ class EVTXAnalyzer(EnrichmentModule):
         }
 
         # --- Markdown summary transform ---
-        md = self._build_summary_markdown(file_enriched.file_name, parsed)
+        md = self._build_summary_markdown(file_enriched.file_name, parsed, len(script_block_data))
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".md", delete=False) as tmp:
             tmp.write(md)
             tmp.flush()
@@ -641,7 +855,8 @@ class EVTXAnalyzer(EnrichmentModule):
                     object_id=str(group_csv_id),
                     metadata={
                         "file_name": f"{file_enriched.file_name}_group_changes.csv",
-                        "offer_as_download": True,
+                        "display_type_in_dashboard": "csv",
+                        "display_title": "Group Changes",
                     },
                 )
             )
@@ -723,7 +938,8 @@ class EVTXAnalyzer(EnrichmentModule):
                     object_id=str(acct_csv_id),
                     metadata={
                         "file_name": f"{file_enriched.file_name}_account_changes.csv",
-                        "offer_as_download": True,
+                        "display_type_in_dashboard": "csv",
+                        "display_title": "Account Changes",
                     },
                 )
             )
@@ -775,7 +991,8 @@ class EVTXAnalyzer(EnrichmentModule):
                     object_id=str(task_csv_id),
                     metadata={
                         "file_name": f"{file_enriched.file_name}_task_changes.csv",
-                        "offer_as_download": True,
+                        "display_type_in_dashboard": "csv",
+                        "display_title": "Task Changes",
                     },
                 )
             )
@@ -837,7 +1054,8 @@ class EVTXAnalyzer(EnrichmentModule):
                     object_id=str(explicit_csv_id),
                     metadata={
                         "file_name": f"{file_enriched.file_name}_explicit_credential_use.csv",
-                        "offer_as_download": True,
+                        "display_type_in_dashboard": "csv",
+                        "display_title": "Explicit Credential Use",
                     },
                 )
             )
@@ -888,7 +1106,8 @@ class EVTXAnalyzer(EnrichmentModule):
                     object_id=str(proc_csv_id),
                     metadata={
                         "file_name": f"{file_enriched.file_name}_process_creation.csv",
-                        "offer_as_download": True,
+                        "display_type_in_dashboard": "csv",
+                        "display_title": "Process Creation",
                     },
                 )
             )
@@ -902,18 +1121,11 @@ class EVTXAnalyzer(EnrichmentModule):
             from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
             from dapr.aio.clients import DaprClient
 
-            seen_hashes: set[str] = set()
             async with DaprClient() as dapr_client:
                 for sb in script_block_data[:MAX_SCRIPT_BLOCK_FILES]:
                     text = sb["text"]
                     ps_path = sb["path"]
                     script_id = sb["id"]
-
-                    text_hash = hashlib.sha256(text.encode()).hexdigest()
-                    if text_hash in seen_hashes:
-                        # logger.info(message="Skipping duplicate script block", script_id=script_id, hash=text_hash[:16])
-                        continue
-                    seen_hashes.add(text_hash)
 
                     # Derive child filename from the original script path if available
                     if ps_path:
@@ -961,7 +1173,7 @@ class EVTXAnalyzer(EnrichmentModule):
                     origin_type=FindingOrigin.ENRICHMENT_MODULE,
                     origin_name=self.name,
                     object_id=file_enriched.object_id,
-                    severity=4,
+                    severity=1,
                     raw_data={"script_block_count": resubmitted_count},
                     data=[
                         FileObject(
