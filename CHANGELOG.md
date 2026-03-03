@@ -6,10 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.2.2]
 
+### Added
+
+- `evtx` Windows Event Log parsing module
+
 ### Changed
 
 - `noseyparker_scanner` Rust project replaced with Golang `titus_scanner` project based on Praetorian's new Titus scanner
-
+  - can enable/disable validation, add custom rules, and optionally disable specific built-in (noisy) rules
 
 ## [2.2.1]
 
