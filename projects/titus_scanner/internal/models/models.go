@@ -79,9 +79,51 @@ type DaprSubscription struct {
 	Route      string `json:"route"`
 }
 
+// BulkSubscribeConfig configures Dapr bulk subscribe behavior.
+type BulkSubscribeConfig struct {
+	Enabled            bool `json:"enabled"`
+	MaxMessagesCount   int  `json:"maxMessagesCount"`
+	MaxAwaitDurationMs int  `json:"maxAwaitDurationMs"`
+}
+
+// DaprBulkSubscription extends DaprSubscription with bulk subscribe config
+// for the GET /dapr/subscribe response.
+type DaprBulkSubscription struct {
+	PubsubName    string              `json:"pubsubname"`
+	Topic         string              `json:"topic"`
+	Route         string              `json:"route"`
+	BulkSubscribe BulkSubscribeConfig `json:"bulkSubscribe"`
+}
+
 // DaprEvent wraps the CloudEvent envelope that Dapr sends for pub/sub messages.
+// In bulk mode, each entry's "event" field is a full CloudEvent; we only bind "data".
 type DaprEvent struct {
 	Data TitusInput `json:"data"`
+}
+
+// BulkMessageEntry is one entry in the bulk message payload from Dapr.
+type BulkMessageEntry struct {
+	EntryID     string    `json:"entryId"`
+	Event       DaprEvent `json:"event"`
+	ContentType string    `json:"contentType"`
+}
+
+// BulkMessagePayload is the top-level JSON body Dapr sends for bulk subscribe.
+type BulkMessagePayload struct {
+	ID      string             `json:"id"`
+	Entries []BulkMessageEntry `json:"entries"`
+	Topic   string             `json:"topic"`
+}
+
+// BulkEntryStatus is a per-entry status in the bulk response.
+type BulkEntryStatus struct {
+	EntryID string `json:"entryId"`
+	Status  string `json:"status"` // "SUCCESS", "RETRY", "DROP"
+}
+
+// BulkResponse is returned to Dapr after processing a bulk batch.
+type BulkResponse struct {
+	Statuses []BulkEntryStatus `json:"statuses"`
 }
 
 // ScanResult holds the results of scanning a file or archive.

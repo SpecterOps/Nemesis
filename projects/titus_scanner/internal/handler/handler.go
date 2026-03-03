@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/specterops/nemesis/titus-scanner/internal/config"
@@ -17,15 +18,28 @@ import (
 	"github.com/specterops/nemesis/titus-scanner/internal/scanner"
 )
 
-// Handler processes incoming Dapr pub/sub events for secret scanning.
+// fileDownloader abstracts file downloads for testing.
+type fileDownloader interface {
+	Download(ctx context.Context, objectID string, maxSizeBytes int64) (string, int64, error)
+}
+
+// fileScanner abstracts file scanning for testing.
+type fileScanner interface {
+	ScanFile(ctx context.Context, filePath, originalPath string) (*models.ScanResult, error)
+	Size() int
+}
+
+// Compile-time interface checks.
+var (
+	_ fileDownloader = (*minioclient.Client)(nil)
+	_ fileScanner    = (*scanner.Pool)(nil)
+)
+
+// Handler processes incoming Dapr bulk pub/sub events for secret scanning.
 type Handler struct {
 	cfg         *config.Config
-	scannerPool *scanner.Pool
-	minio       *minioclient.Client
-	// sem limits the number of concurrent processEvent goroutines.
-	// This prevents unbounded goroutine growth (which caused OOM) while
-	// still returning 200 to Dapr quickly (which prevents RabbitMQ timeouts).
-	sem chan struct{}
+	scannerPool fileScanner
+	minio       fileDownloader
 }
 
 // New creates a new Handler with the given configuration, scanner pool, and MinIO client.
@@ -34,55 +48,133 @@ func New(cfg *config.Config, pool *scanner.Pool, mc *minioclient.Client) *Handle
 		cfg:         cfg,
 		scannerPool: pool,
 		minio:       mc,
-		sem:         make(chan struct{}, pool.Size()),
 	}
 }
 
-// HandleEvent is the HTTP handler for POST /titus_input.
-// It receives a Dapr CloudEvent, downloads the referenced file from MinIO,
-// scans it for secrets, and publishes the results to the output topic.
-func (h *Handler) HandleEvent(w http.ResponseWriter, r *http.Request) {
-	// Parse the incoming Dapr event
-	var event models.DaprEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		slog.Error("Failed to decode event body", "error", err)
-		// Return 200 so Dapr does not retry malformed messages
-		w.WriteHeader(http.StatusOK)
+// newHandler creates a Handler with interface dependencies (used in tests).
+func newHandler(cfg *config.Config, pool fileScanner, mc fileDownloader) *Handler {
+	return &Handler{
+		cfg:         cfg,
+		scannerPool: pool,
+		minio:       mc,
+	}
+}
+
+// HandleBulkEvent is the HTTP handler for POST /titus_input with Dapr bulk subscribe.
+// It receives a batch of entries, processes them in parallel (bounded by the scanner
+// pool size), and returns per-entry statuses so Dapr knows which succeeded/failed.
+func (h *Handler) HandleBulkEvent(w http.ResponseWriter, r *http.Request) {
+	var payload models.BulkMessagePayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		slog.Error("Failed to decode bulk event body", "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(models.BulkResponse{Statuses: []models.BulkEntryStatus{}})
 		return
 	}
 
-	input := event.Data
-	if input.ObjectID == "" {
-		slog.Warn("Received event with empty object_id, skipping")
-		w.WriteHeader(http.StatusOK)
+	entries := payload.Entries
+	entryCount := len(entries)
+	slog.Info("Received bulk event", "batch_id", payload.ID, "entry_count", entryCount)
+
+	if entryCount == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(models.BulkResponse{Statuses: []models.BulkEntryStatus{}})
 		return
 	}
 
-	slog.Info("Received scan event",
-		"object_id", input.ObjectID,
-		"workflow_id", input.WorkflowID,
+	statuses := make([]models.BulkEntryStatus, entryCount)
+	seen := make(map[string]bool, entryCount)
+
+	// Semaphore to bound concurrent goroutines to the scanner pool size.
+	sem := make(chan struct{}, h.scannerPool.Size())
+	var wg sync.WaitGroup
+
+	for i, entry := range entries {
+		// Validate entryId
+		if entry.EntryID == "" {
+			slog.Warn("Bulk entry has empty entryId, dropping", "index", i)
+			statuses[i] = models.BulkEntryStatus{EntryID: "", Status: "DROP"}
+			continue
+		}
+
+		// Deduplicate by entryId
+		if seen[entry.EntryID] {
+			slog.Warn("Duplicate entryId in batch, dropping",
+				"entry_id", entry.EntryID,
+			)
+			statuses[i] = models.BulkEntryStatus{EntryID: entry.EntryID, Status: "DROP"}
+			continue
+		}
+		seen[entry.EntryID] = true
+
+		// Validate object_id
+		if entry.Event.Data.ObjectID == "" {
+			slog.Warn("Bulk entry has empty object_id, dropping",
+				"entry_id", entry.EntryID,
+			)
+			statuses[i] = models.BulkEntryStatus{EntryID: entry.EntryID, Status: "DROP"}
+			continue
+		}
+
+		wg.Add(1)
+		go func(idx int, e models.BulkMessageEntry) {
+			defer wg.Done()
+			defer func() {
+				if rec := recover(); rec != nil {
+					slog.Error("Panic in processEvent, marking RETRY",
+						"entry_id", e.EntryID,
+						"object_id", e.Event.Data.ObjectID,
+						"panic", rec,
+					)
+					statuses[idx] = models.BulkEntryStatus{EntryID: e.EntryID, Status: "RETRY"}
+				}
+			}()
+
+			sem <- struct{}{}        // Acquire semaphore slot (blocks if full)
+			defer func() { <-sem }() // Release semaphore slot
+
+			err := h.processEvent(r.Context(), e.Event.Data)
+			if err != nil {
+				statuses[idx] = models.BulkEntryStatus{EntryID: e.EntryID, Status: "RETRY"}
+			} else {
+				statuses[idx] = models.BulkEntryStatus{EntryID: e.EntryID, Status: "SUCCESS"}
+			}
+		}(i, entry)
+	}
+
+	wg.Wait()
+
+	// Log batch summary
+	var successes, retries, drops int
+	for _, s := range statuses {
+		switch s.Status {
+		case "SUCCESS":
+			successes++
+		case "RETRY":
+			retries++
+		case "DROP":
+			drops++
+		}
+	}
+	slog.Info("Bulk batch complete",
+		"batch_id", payload.ID,
+		"total", entryCount,
+		"successes", successes,
+		"retries", retries,
+		"drops", drops,
 	)
 
-	// Process asynchronously so we return 200 to Dapr quickly. This is
-	// required because synchronous processing causes RabbitMQ channel
-	// timeouts on long scans, leading to message redelivery loops.
-	//
-	// The semaphore (sized to pool.Size()) bounds the number of in-flight
-	// goroutines, preventing the OOM that unbounded goroutines caused.
-	// When the semaphore is full, new goroutines block on sem acquisition
-	// (not on HTTP response), so Dapr still gets its 200 immediately.
-	go func() {
-		h.sem <- struct{}{} // Acquire semaphore slot (blocks if full)
-		defer func() { <-h.sem }()
-		h.processEvent(context.Background(), input)
-	}()
-
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(models.BulkResponse{Statuses: statuses}); err != nil {
+		slog.Error("Failed to encode bulk response", "error", err)
+	}
 }
 
 // processEvent handles the full lifecycle of scanning a single file:
-// download, scan, and publish results.
-func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) {
+// download, scan, and publish results. Returns an error for transient failures
+// that should be retried (MinIO download, Dapr publish). Scan failures are
+// permanent — an empty result is published and nil is returned.
+func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) error {
 	startTime := time.Now()
 
 	slog.Info("Processing scan request",
@@ -98,7 +190,7 @@ func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) {
 			"error", err,
 		)
 		h.publishEmptyResult(input, startTime, err.Error())
-		return
+		return fmt.Errorf("minio download failed: %w", err)
 	}
 	defer cleanupTempFile(tmpPath)
 
@@ -117,7 +209,9 @@ func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) {
 			"error", err,
 		)
 		h.publishEmptyResult(input, startTime, err.Error())
-		return
+		// Scan errors are typically permanent (corrupt file, unsupported format).
+		// Publish empty result so the workflow can proceed; don't retry.
+		return nil
 	}
 
 	duration := time.Since(startTime)
@@ -149,12 +243,14 @@ func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) {
 			"object_id", input.ObjectID,
 			"error", err,
 		)
-	} else {
-		slog.Info("Published scan result to output topic",
-			"object_id", input.ObjectID,
-			"topic", h.cfg.OutputTopic,
-		)
+		return fmt.Errorf("publish failed: %w", err)
 	}
+
+	slog.Info("Published scan result to output topic",
+		"object_id", input.ObjectID,
+		"topic", h.cfg.OutputTopic,
+	)
+	return nil
 }
 
 // publishResult sends the scan output to the Dapr pub/sub output topic.

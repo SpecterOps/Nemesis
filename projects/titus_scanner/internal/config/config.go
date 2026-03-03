@@ -34,6 +34,10 @@ type Config struct {
 	MinioAccessKey string
 	MinioSecretKey string
 
+	// Bulk subscribe configuration
+	BulkMaxMessages        int
+	BulkMaxAwaitDurationMs int
+
 	// Server configuration
 	AppPort  string
 	LogLevel string
@@ -60,7 +64,9 @@ func Load() *Config {
 		EnableValidation:   getEnvBool("ENABLE_VALIDATION", false),
 		ValidationWorkers:  getEnvInt("VALIDATION_WORKERS", 4),
 		DisabledRules:      getEnvStringSlice("DISABLED_RULES"),
-		CustomRulesDir:     getEnv("CUSTOM_RULES_DIR", "/opt/titus"),
+		CustomRulesDir:        getEnv("CUSTOM_RULES_DIR", "/opt/titus"),
+		BulkMaxMessages:        max(1, getEnvInt("BULK_MAX_MESSAGES", 100)),
+		BulkMaxAwaitDurationMs: max(1, getEnvInt("BULK_MAX_AWAIT_DURATION_MS", 1000)),
 		MinioEndpoint:      getEnv("MINIO_ENDPOINT", "http://minio:9000"),
 		MinioBucket:        getEnv("MINIO_BUCKET", "files"),
 		MinioAccessKey:     getEnv("MINIO_ACCESS_KEY", ""),

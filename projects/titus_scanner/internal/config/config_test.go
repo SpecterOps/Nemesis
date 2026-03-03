@@ -139,6 +139,56 @@ func TestLoadValidationConfig(t *testing.T) {
 	}
 }
 
+func TestLoadBulkDefaults(t *testing.T) {
+	os.Unsetenv("BULK_MAX_MESSAGES")
+	os.Unsetenv("BULK_MAX_AWAIT_DURATION_MS")
+
+	cfg := Load()
+
+	if cfg.BulkMaxMessages != 100 {
+		t.Errorf("BulkMaxMessages default = %d, want 100", cfg.BulkMaxMessages)
+	}
+	if cfg.BulkMaxAwaitDurationMs != 1000 {
+		t.Errorf("BulkMaxAwaitDurationMs default = %d, want 1000", cfg.BulkMaxAwaitDurationMs)
+	}
+}
+
+func TestLoadBulkOverrides(t *testing.T) {
+	os.Setenv("BULK_MAX_MESSAGES", "50")
+	os.Setenv("BULK_MAX_AWAIT_DURATION_MS", "2000")
+	defer func() {
+		os.Unsetenv("BULK_MAX_MESSAGES")
+		os.Unsetenv("BULK_MAX_AWAIT_DURATION_MS")
+	}()
+
+	cfg := Load()
+
+	if cfg.BulkMaxMessages != 50 {
+		t.Errorf("BulkMaxMessages = %d, want 50", cfg.BulkMaxMessages)
+	}
+	if cfg.BulkMaxAwaitDurationMs != 2000 {
+		t.Errorf("BulkMaxAwaitDurationMs = %d, want 2000", cfg.BulkMaxAwaitDurationMs)
+	}
+}
+
+func TestLoadBulkClampsToMin(t *testing.T) {
+	os.Setenv("BULK_MAX_MESSAGES", "0")
+	os.Setenv("BULK_MAX_AWAIT_DURATION_MS", "-5")
+	defer func() {
+		os.Unsetenv("BULK_MAX_MESSAGES")
+		os.Unsetenv("BULK_MAX_AWAIT_DURATION_MS")
+	}()
+
+	cfg := Load()
+
+	if cfg.BulkMaxMessages < 1 {
+		t.Errorf("BulkMaxMessages = %d, want >= 1", cfg.BulkMaxMessages)
+	}
+	if cfg.BulkMaxAwaitDurationMs < 1 {
+		t.Errorf("BulkMaxAwaitDurationMs = %d, want >= 1", cfg.BulkMaxAwaitDurationMs)
+	}
+}
+
 func TestGetEnvBool(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -39,6 +39,8 @@ func main() {
 		"enable_validation", cfg.EnableValidation,
 		"validation_workers", cfg.ValidationWorkers,
 		"disabled_rules", cfg.DisabledRules,
+		"bulk_max_messages", cfg.BulkMaxMessages,
+		"bulk_max_await_duration_ms", cfg.BulkMaxAwaitDurationMs,
 	)
 
 	// Load all rules (builtin + custom, minus disabled)
@@ -96,12 +98,18 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Dapr subscription endpoint - tells Dapr which topics we subscribe to
+	// with bulk subscribe enabled for batch processing.
 	mux.HandleFunc("GET /dapr/subscribe", func(w http.ResponseWriter, r *http.Request) {
-		subscriptions := []models.DaprSubscription{
+		subscriptions := []models.DaprBulkSubscription{
 			{
 				PubsubName: cfg.PubsubName,
 				Topic:      cfg.InputTopic,
 				Route:      "/" + cfg.InputTopic,
+				BulkSubscribe: models.BulkSubscribeConfig{
+					Enabled:            true,
+					MaxMessagesCount:   cfg.BulkMaxMessages,
+					MaxAwaitDurationMs: cfg.BulkMaxAwaitDurationMs,
+				},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -111,8 +119,8 @@ func main() {
 		}
 	})
 
-	// Event handler endpoint - receives events from Dapr pub/sub
-	mux.HandleFunc("POST /"+cfg.InputTopic, h.HandleEvent)
+	// Bulk event handler endpoint - receives batched events from Dapr pub/sub
+	mux.HandleFunc("POST /"+cfg.InputTopic, h.HandleBulkEvent)
 
 	// Health check endpoint
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

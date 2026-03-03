@@ -130,6 +130,8 @@ services:
       - DISABLED_RULES=${DISABLED_RULES:-np.s3.1,np.s3.2,np.linkedin.3} # comma-separated rule IDs to disable (np.s3.x have backtracking-prone patterns that timeout on large files, np.linkedin.3 has a lot of false positives)
       - PUBSUB_NAME=titus # Name of the Dapr pubsub resource
       - OUTPUT_TOPIC=titus_output # Name of the output topic in Dapr
+      - BULK_MAX_MESSAGES=${BULK_MAX_MESSAGES:-100} # max messages per bulk subscribe batch
+      - BULK_MAX_AWAIT_DURATION_MS=${BULK_MAX_AWAIT_DURATION_MS:-1000} # max wait before delivering partial batch (ms)
     volumes:
       - ./projects/titus_scanner/custom_rules/:/opt/titus:ro
     deploy:
@@ -161,7 +163,7 @@ services:
         "--config",
         "/dapr/configuration/config.yaml",
         "--app-max-concurrency",
-        "${TITUS_MAX_CONCURRENT_FILES:-2}",
+        "1",
         "--enable-metrics",
         "--dapr-graceful-shutdown-seconds",
         "5",
