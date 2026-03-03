@@ -8,6 +8,7 @@ Parses EVTX files and extracts:
 """
 
 import csv
+import hashlib
 import json
 import os
 import tempfile
@@ -901,11 +902,18 @@ class EVTXAnalyzer(EnrichmentModule):
             from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
             from dapr.aio.clients import DaprClient
 
+            seen_hashes: set[str] = set()
             async with DaprClient() as dapr_client:
                 for sb in script_block_data[:MAX_SCRIPT_BLOCK_FILES]:
                     text = sb["text"]
                     ps_path = sb["path"]
                     script_id = sb["id"]
+
+                    text_hash = hashlib.sha256(text.encode()).hexdigest()
+                    if text_hash in seen_hashes:
+                        # logger.info(message="Skipping duplicate script block", script_id=script_id, hash=text_hash[:16])
+                        continue
+                    seen_hashes.add(text_hash)
 
                     # Derive child filename from the original script path if available
                     if ps_path:
