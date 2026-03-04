@@ -144,7 +144,7 @@ jobs:
             type=gha,scope=${{ matrix.service.name }}-${{ env.ARCH }}-${{ github.ref_name }}
             type=gha,scope=${{ matrix.service.name }}-${{ env.ARCH }}-main
           cache-to: |
-            type=gha,mode=max,scope=${{ matrix.service.name }}-${{ env.ARCH }}-${{ github.ref_name }}
+            type=gha,mode=min,scope=${{ matrix.service.name }}-${{ env.ARCH }}-${{ github.ref_name }}
 
   # Create multi-arch manifest
   create-manifest:
