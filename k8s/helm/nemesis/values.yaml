@@ -1,0 +1,399 @@
+# Nemesis Helm Chart - values.yaml
+
+namespace: nemesis
+nameOverride: ""
+fullnameOverride: ""
+
+# ============================================
+# Global image settings
+# ============================================
+global:
+  imageRegistry: "ghcr.io/specterops/nemesis"
+  imagePullPolicy: IfNotPresent
+  # Set to k3d registry for local dev builds:
+  # imageRegistry: "k3d-nemesis-registry.localhost:5111"
+
+# ============================================
+# Credentials
+# ============================================
+credentials:
+  postgres:
+    user: nemesis
+    password: Qwerty12345
+  rabbitmq:
+    user: nemesis
+    password: Qwerty12345
+  minio:
+    user: nemesis
+    password: Qwerty12345
+  hasura:
+    adminSecret: pass456
+  # Basic auth users for Traefik (htpasswd format)
+  # Default: n:n
+  basicAuthUsers: "n:$apr1$bcQYJ0ci$QLOjnsYcpoauiEZ5VcXBi/"
+
+# ============================================
+# Nemesis settings
+# ============================================
+nemesis:
+  url: "https://localhost:7443/"
+  port: 7443
+  logLevel: INFO
+  defaultExpirationDays: 100
+
+# ============================================
+# Optional stacks (deferred — templates not yet created)
+# ============================================
+monitoring:
+  enabled: false
+llm:
+  enabled: false
+jupyter:
+  enabled: false
+
+# ============================================
+# PostgreSQL
+# ============================================
+postgres:
+  image:
+    repository: postgres
+    tag: "18.1"
+  # User/password sourced from credentials.postgres above — these are for non-secret config only
+  database: enrichment
+  port: "5432"
+  parameters: "sslmode=disable"
+  args:
+    maxConnections: "300"
+    sharedBuffers: "1GB"
+    sharedPreloadLibraries: "pg_stat_statements"
+  storage:
+    size: 20Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+# ============================================
+# RabbitMQ
+# ============================================
+rabbitmq:
+  image:
+    repository: rabbitmq
+    tag: "4.2.0-management"
+  # User/password sourced from credentials.rabbitmq above
+  hostname: rabbitmq-node
+  storage:
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# ============================================
+# MinIO
+# ============================================
+minio:
+  image:
+    repository: minio/minio
+    tag: "RELEASE.2025-09-07T16-13-09Z"
+  mcImage:
+    repository: minio/mc
+    tag: "RELEASE.2025-08-13T08-35-41Z"
+  buckets:
+    - files
+    - loki-data
+  storage:
+    size: 50Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# ============================================
+# Hasura
+# ============================================
+hasura:
+  image:
+    repository: hasura/graphql-engine
+    tag: "v2.48.6.cli-migrations-v2"
+  logLevel: warn
+  enableConsole: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# ============================================
+# Traefik / Ingress
+# ============================================
+ingress:
+  enabled: true
+  host: ""  # Empty = match all hosts
+  tls:
+    enabled: true
+    # TLS cert/key are stored in nemesis-tls-secret
+    secretName: nemesis-tls-secret
+
+# ============================================
+# Dapr
+# ============================================
+dapr:
+  sidecarImage: "daprio/daprd:1.16.9"
+  logLevel: warn
+  # Pubsub prefetch counts (per component)
+  pubsub:
+    files:
+      prefetchCount: "100"
+    alerting:
+      prefetchCount: "25"
+    documentConversion:
+      prefetchCount: "50"
+    dotnet:
+      prefetchCount: "25"
+    dpapi:
+      prefetchCount: "25"
+    titus:
+      prefetchCount: "100"
+    workflowMonitor:
+      prefetchCount: "25"
+
+# ============================================
+# Application Services
+# ============================================
+
+webApi:
+  image:
+    registry: ""
+    repository: web-api
+    tag: latest
+  replicas: 1
+  port: 8000
+  dapr:
+    appId: web-api
+    config: dapr-config
+  env:
+    defaultExpirationDays: "100"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+fileEnrichment:
+  image:
+    registry: ""
+    repository: file-enrichment
+    tag: latest
+  replicas: 1
+  port: 8001
+  dapr:
+    appId: file-enrichment
+    config: file-enrichment-config
+    logLevel: warn
+  env:
+    enablePiiDetection: "false"
+    piiDetectionThreshold: "0.7"
+    maxParallelWorkflows: "5"
+    maxWorkflowExecutionTime: "300"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+documentConversion:
+  image:
+    registry: ""
+    repository: document-conversion
+    tag: latest
+  replicas: 1
+  port: 8000
+  dapr:
+    appId: document-conversion
+    config: document-conversion-config
+  env:
+    tikaConfig: /tika-config.xml
+    tikaOcrLanguages: eng
+    tikaUseOcr: false
+    maxParallelWorkflows: "5"
+    maxWorkflowExecutionTime: "300"
+    ompThreadLimit: "1"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+titusScanner:
+  image:
+    registry: ""
+    repository: titus-scanner
+    tag: latest
+  replicas: 1
+  port: 8080
+  dapr:
+    appId: titus-scanner
+    config: dapr-config
+    maxConcurrency: "1"
+  env:
+    logLevel: info
+    snippetLength: "512"
+    maxConcurrentFiles: "2"
+    maxMatchesPerFile: "100"
+    maxFileSizeMb: "200"
+    goMemLimit: "1500MiB"
+    extractArchives: "true"
+    extractMaxFileSizeMb: "10"
+    extractMaxTotalSizeMb: "1000"
+    extractMaxDepth: "2"
+    enableValidation: "false"
+    validationWorkers: "4"
+    disabledRules: "np.s3.1,np.s3.2,np.linkedin.3,kingfisher.jira.1"
+    pubsubName: titus
+    outputTopic: titus_output
+    bulkMaxMessages: "100"
+    bulkMaxAwaitDurationMs: "1000"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+dotnetService:
+  image:
+    registry: ""
+    repository: dotnet-service
+    tag: latest
+  replicas: 1
+  port: 5000
+  dapr:
+    appId: dotnet-service
+    config: dapr-config
+    maxConcurrency: "1"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+alerting:
+  image:
+    registry: ""
+    repository: alerting
+    tag: latest
+  replicas: 1
+  port: 8000
+  dapr:
+    appId: alerting
+    config: dapr-config
+  env:
+    appriseUrls: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+housekeeping:
+  image:
+    registry: ""
+    repository: housekeeping
+    tag: latest
+  replicas: 1
+  dapr:
+    appId: housekeeping
+    config: dapr-config
+  env:
+    cleanupSchedule: "*/3 * * * *"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+gotenberg:
+  image:
+    repository: gotenberg/gotenberg
+    tag: "8.21.1"
+  replicas: 1
+  port: 3000
+  env:
+    apiTimeout: "180s"
+    libreofficeRestartAfter: "5"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+frontend:
+  image:
+    registry: ""
+    repository: frontend
+    tag: latest
+  replicas: 1
+  port: 3000
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ============================================
+# KEDA Autoscaling
+# ============================================
+autoscaling:
+  enabled: true
+
+  fileEnrichment:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    cooldownPeriod: 300
+    pollingInterval: 15
+    queueLength: "10"
+    # Dapr creates queues as: {consumerID}-{topic}
+    # Verify queue names with: kubectl exec rabbitmq-0 -n nemesis -- rabbitmqctl list_queues
+    queueName: "files-new_file"
+
+  documentConversion:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    cooldownPeriod: 300
+    pollingInterval: 15
+    queueLength: "5"
+    queueName: "files-document_conversion_input"

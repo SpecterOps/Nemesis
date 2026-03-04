@@ -161,3 +161,29 @@ infra/              # Infrastructure configuration
 
 ### Adding Enrichment Modules
 New file enrichment modules go in `libs/file_enrichment_modules/`. Each module implements a standard interface for detecting applicable files and extracting data.
+
+### Kubernetes (k3d) Deployment
+
+See [k8s/README.md](./k8s/README.md) and [docs/kubernetes.md](./docs/kubernetes.md) for full documentation.
+
+```bash
+# Setup cluster (k3d + Traefik + Dapr + KEDA via Helm)
+./k8s/scripts/setup-cluster.sh
+
+# Deploy with pre-built images
+./k8s/scripts/deploy.sh install
+
+# Build locally and deploy
+./k8s/scripts/deploy.sh install --build
+
+# Check status
+./k8s/scripts/deploy.sh status
+
+# Verify deployment
+./k8s/scripts/verify.sh
+
+# Teardown
+./k8s/scripts/teardown-cluster.sh
+```
+
+Helm chart is at `k8s/helm/nemesis/`. Configuration in `values.yaml`.

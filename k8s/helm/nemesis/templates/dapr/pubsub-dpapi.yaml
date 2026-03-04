@@ -1,0 +1,39 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: dpapi
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  type: pubsub.rabbitmq
+  version: v1
+  metadata:
+    - name: connectionString
+      secretKeyRef:
+        name: RABBITMQ_CONNECTION_STRING
+        key: RABBITMQ_CONNECTION_STRING
+    - name: consumerID
+      value: dpapi
+    - name: durable
+      value: "true"
+    - name: deletedWhenUnused
+      value: "false"
+    - name: autoAck
+      value: "false"
+    - name: deliveryMode
+      value: "2"
+    - name: publisherConfirm
+      value: "true"
+    - name: requeueInFailure
+      value: "true"
+    - name: enableDeadLetter
+      value: "true"
+    - name: maxPriority
+      value: "3"
+    - name: prefetchCount
+      value: {{ .Values.dapr.pubsub.dpapi.prefetchCount | quote }}
+auth:
+  secretStore: nemesis-secret-store
+scopes:
+  - file-enrichment

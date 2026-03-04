@@ -1,0 +1,67 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nemesis-ingress
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - websecure
+  {{- $hostMatch := "" }}
+  {{- if .Values.ingress.host }}
+  {{- $hostMatch = printf "Host(`%s`) && " .Values.ingress.host }}
+  {{- end }}
+  routes:
+    # Frontend (root)
+    - match: {{ $hostMatch }}PathPrefix(`/`)
+      kind: Rule
+      priority: 1
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: frontend
+          port: {{ .Values.frontend.port }}
+
+    # Web API
+    - match: {{ $hostMatch }}PathPrefix(`/api`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: web-api
+          port: {{ .Values.webApi.port }}
+
+    # Hasura GraphQL
+    - match: {{ $hostMatch }}PathPrefix(`/hasura`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+        - name: nemesis-strip-hasura
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: hasura
+          port: 8080
+
+    # RabbitMQ Management
+    - match: {{ $hostMatch }}PathPrefix(`/rabbitmq`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: rabbitmq
+          port: 15672
+
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+{{- end }}

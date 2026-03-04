@@ -1,0 +1,32 @@
+{{/*
+RBAC for Dapr sidecar to read Kubernetes secrets via secretstores.kubernetes.
+The Dapr sidecar runs under the default ServiceAccount in the nemesis namespace.
+*/}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dapr-secret-reader
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dapr-secret-reader
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dapr-secret-reader
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: {{ include "nemesis.namespace" . }}

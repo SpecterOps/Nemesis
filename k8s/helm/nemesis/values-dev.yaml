@@ -1,0 +1,7 @@
+# Development overrides — use with: helm upgrade --install nemesis . -f values.yaml -f values-dev.yaml
+global:
+  imageRegistry: "k3d-nemesis-registry.localhost:5111"
+  imagePullPolicy: Always
+
+nemesis:
+  logLevel: DEBUG

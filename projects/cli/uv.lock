@@ -337,6 +337,7 @@ dependencies = [
     { name = "dapr-ext-workflow" },
     { name = "fastapi" },
     { name = "minio" },
+    { name = "prometheus-client" },
     { name = "psycopg", extra = ["pool"] },
     { name = "pydantic" },
     { name = "structlog" },
@@ -350,6 +351,7 @@ requires-dist = [
     { name = "dapr-ext-workflow", specifier = ">=1.16.0,<2.0.0" },
     { name = "fastapi", specifier = ">=0.121.0,<0.122.0" },
     { name = "minio", specifier = ">=7.2.14,<8.0.0" },
+    { name = "prometheus-client", specifier = ">=0.22.0,<1.0.0" },
     { name = "psycopg", extras = ["pool"], specifier = ">=3.2.9,<4.0.0" },
     { name = "pydantic", specifier = ">=2.10.5,<3.0.0" },
     { name = "structlog", specifier = ">=25.1.0,<26.0.0" },
@@ -703,6 +705,15 @@ name = "plyvel-ci"
 version = "1.5.1"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f6/15/2dd89d1ec81ea44a41e6f35ad1a8a7789e7345831646daf03c6501172396/plyvel-ci-1.5.1.tar.gz", hash = "sha256:c28d861c56911ae70f481864016301e2d526c6c923f6aa9aa3cdf2c053457e29", size = 36869 }
+
+[[package]]
+name = "prometheus-client"
+version = "0.24.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/58/a794d23feb6b00fc0c72787d7e87d872a6730dd9ed7c7b3e954637d8f280/prometheus_client-0.24.1.tar.gz", hash = "sha256:7e0ced7fbbd40f7b84962d5d2ab6f17ef88a72504dcf7c0b40737b43b2a461f9", size = 85616 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/c3/24a2f845e3917201628ecaba4f18bab4d18a337834c1df2a159ee9d22a42/prometheus_client-0.24.1-py3-none-any.whl", hash = "sha256:150db128af71a5c2482b36e588fc8a6b95e498750da4b17065947c16070f4055", size = 64057 },
+]
 
 [[package]]
 name = "propcache"

@@ -1,0 +1,6 @@
+# hasura/metadata/functions.yaml
+- function:
+    schema: public
+    name: search_documents
+  configuration:
+    exposed_as: query

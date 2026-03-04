@@ -186,6 +186,33 @@ Repo-local Codex skills live under `.codex/skills/`.
 ## Commit Guidelines
 - Match existing commit style: short, imperative subjects like `fix docs`, `bump deps`, `linting, lint+test scripts`; optional issue/PR refs (for example `(#100)`).
 
+### Kubernetes (k3d) Deployment
+
+See [k8s/README.md](./k8s/README.md) and [docs/kubernetes.md](./docs/kubernetes.md) for full documentation.
+
+```bash
+# Setup cluster (k3d + Traefik + Dapr + KEDA via Helm)
+./k8s/scripts/setup-cluster.sh
+
+# Deploy with pre-built images
+./k8s/scripts/deploy.sh install
+
+# Build locally and deploy
+./k8s/scripts/deploy.sh install --build
+
+# Check status
+./k8s/scripts/deploy.sh status
+
+# Verify deployment
+./k8s/scripts/verify.sh
+
+# Teardown
+./k8s/scripts/teardown-cluster.sh
+```
+
+Helm chart is at `k8s/helm/nemesis/`. Configuration in `values.yaml`. KEDA autoscales `file-enrichment` and `document-conversion` based on RabbitMQ queue depth.
+
 ## Configuration Tips
 - Do not commit secrets; keep `.env` local and derive it from `env.example`.
 - When changing runtime topology, update related `compose*.yaml` and `infra/*` files in the same commit.
+- For k8s changes, update the Helm chart under `k8s/helm/nemesis/` and test with `./k8s/scripts/deploy.sh install --dry-run`.
