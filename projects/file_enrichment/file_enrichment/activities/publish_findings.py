@@ -132,6 +132,8 @@ async def publish_alerts_for_findings(
                     severity = finding["severity"]
                     origin_name = finding["origin_name"]
                     raw_data = finding["raw_data"]
+                    if isinstance(raw_data, str):
+                        raw_data = json.loads(raw_data)
 
                     # If LLM is enabled and this category will be triaged, skip immediate alert
                     if llm_enabled and category not in LLM_EXCLUDED_CATEGORIES:
@@ -169,7 +171,7 @@ async def publish_alerts_for_findings(
                                     "undetermined": "UNVERIFIED",
                                 }.get(status, "UNVERIFIED")
                                 validation_message = f"- *Validation:* {status_label}\n"
-                    except (json.JSONDecodeError, KeyError) as e:
+                    except (json.JSONDecodeError, KeyError, TypeError) as e:
                         logger.warning("Error processing raw_data for titus finding", error=str(e))
 
                     body = f"{finding_message}{rule_message}{validation_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"

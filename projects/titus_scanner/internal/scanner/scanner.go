@@ -2,6 +2,8 @@ package scanner
 
 import (
 	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -88,6 +90,19 @@ func getExtension(path string) string {
 	return strings.ToLower(filepath.Ext(path))
 }
 
+// isTarInGzip decompresses the beginning of a gzip stream and checks whether
+// it contains a tar archive by looking for the "ustar" magic at offset 257.
+func isTarInGzip(data []byte) bool {
+	r, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return false
+	}
+	defer r.Close()
+	header := make([]byte, 263)
+	n, _ := io.ReadFull(r, header)
+	return n > 262 && string(header[257:262]) == "ustar"
+}
+
 // detectArchiveType determines if a file is a supported archive format.
 // It checks the original path extension first, then falls back to magic byte detection.
 // Returns the archive extension (e.g. ".zip", ".tar.gz") or empty string if not an archive.
@@ -116,9 +131,12 @@ func detectArchiveType(originalPath string, data []byte) string {
 		return ".7z"
 	}
 
-	// Gzip magic: \x1F\x8B (used for .tar.gz / .tgz)
+	// Gzip magic: \x1F\x8B — only classify as .tar.gz if the gzip stream contains a tar archive
 	if data[0] == 0x1F && data[1] == 0x8B {
-		return ".tar.gz"
+		if isTarInGzip(data) {
+			return ".tar.gz"
+		}
+		return ""
 	}
 
 	// TAR magic: "ustar" at offset 257

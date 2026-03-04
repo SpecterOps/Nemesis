@@ -378,9 +378,9 @@ async def handle_feedback_subscription():
                     alert = Alert(title="Nemesis Feedback", body=body, tag="feedback", service="feedback")
 
                     # Use the send_alert function but handle the result specifically for feedback
-                    success = await send_alert_with_retries(alert)
+                    result = await send_alert_with_retries(alert)
 
-                    if success:
+                    if result == "sent":
                         # Mark alert as sent in database
                         try:
                             await session.execute(
@@ -388,7 +388,7 @@ async def handle_feedback_subscription():
                             )
                         except Exception as e:
                             logger.error("Failed to update alert_sent status", error=str(e))
-                    else:
+                    elif result == "failed":
                         logger.error("Failed to send feedback notification through Apprise after retries")
 
         except Exception:
@@ -647,7 +647,7 @@ def should_filter_alert(alert: Alert) -> tuple[bool, str]:
     return False, "Alert passes all filters"
 
 
-async def send_alert_with_retries(alert):
+async def send_alert_with_retries(alert) -> str:
     """
     Send an alert with retry logic, respecting the semaphore limit.
 
@@ -655,19 +655,19 @@ async def send_alert_with_retries(alert):
         alert: The Alert object to send
 
     Returns:
-        bool: True if the alert was successfully sent, False otherwise
+        str: "sent" if successfully sent, "filtered" if filtered out, "failed" if delivery failed
     """
 
     if not is_initialized:
         logger.error("Apprise services not yet initialized")
-        return False
+        return "failed"
 
     # Check if alert should be filtered
     should_filter, reason = should_filter_alert(alert)
 
     if should_filter:
         logger.info(f"Alert filtered: {reason}", alert_title=alert.title)
-        return False
+        return "filtered"
 
     # Prepare the alert parameters
     title = alert.title
@@ -689,7 +689,7 @@ async def send_alert_with_retries(alert):
                 success = await apobj.async_notify(**kwargs)
                 if success:
                     logger.info(f"Alert sent successfully: {title}")
-                    return True
+                    return "sent"
 
                 retry_count += 1
                 logger.warning(f"Failed to send alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})", title=title)
@@ -702,7 +702,7 @@ async def send_alert_with_retries(alert):
                 await asyncio.sleep(RETRY_DELAY_SECONDS)
 
     logger.error(f"Failed to send alert after {MAX_ALERT_RETRIES} retries", title=title)
-    return False
+    return "failed"
 
 
 @dapr_app.subscribe(pubsub=ALERTING_PUBSUB, topic=ALERTING_NEW_ALERT_TOPIC)
@@ -716,9 +716,9 @@ async def handle_alert(event: CloudEvent[Alert]):
             alert.title = "Nemesis Alert"
 
         # Process the alert through our rate-limited handler
-        success = await send_alert_with_retries(alert)
+        result = await send_alert_with_retries(alert)
 
-        if not success:
+        if result == "failed":
             logger.error("Alert could not be delivered after maximum retries", alert_title=alert.title)
 
         return {}

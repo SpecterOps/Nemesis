@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"bytes"
+	"compress/gzip"
 	"testing"
 	"time"
 
@@ -108,8 +110,22 @@ func TestDetectArchiveType_MagicBytes(t *testing.T) {
 			".7z",
 		},
 		{
-			"gzip magic",
+			"plain gzip magic (not tar)",
 			[]byte{0x1F, 0x8B, 0x08, 0x00},
+			"",
+		},
+		{
+			"gzip containing tar",
+			func() []byte {
+				// Build a minimal tar header inside a gzip stream
+				tarHeader := make([]byte, 512)
+				copy(tarHeader[257:262], "ustar")
+				var buf bytes.Buffer
+				w := gzip.NewWriter(&buf)
+				w.Write(tarHeader)
+				w.Close()
+				return buf.Bytes()
+			}(),
 			".tar.gz",
 		},
 		{
@@ -257,4 +273,66 @@ func TestConvertValidationResult(t *testing.T) {
 			t.Errorf("Confidence = %f, want 0.0", got.Confidence)
 		}
 	})
+}
+
+func TestIsTarInGzip(t *testing.T) {
+	t.Run("valid tar.gz", func(t *testing.T) {
+		tarHeader := make([]byte, 512)
+		copy(tarHeader[257:262], "ustar")
+		var buf bytes.Buffer
+		w := gzip.NewWriter(&buf)
+		w.Write(tarHeader)
+		w.Close()
+		if !isTarInGzip(buf.Bytes()) {
+			t.Error("isTarInGzip returned false for valid tar.gz data")
+		}
+	})
+
+	t.Run("plain gzip (not tar)", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := gzip.NewWriter(&buf)
+		w.Write([]byte("this is just plain text, not a tar archive"))
+		w.Close()
+		if isTarInGzip(buf.Bytes()) {
+			t.Error("isTarInGzip returned true for plain gzip data")
+		}
+	})
+
+	t.Run("invalid gzip data", func(t *testing.T) {
+		if isTarInGzip([]byte{0x1F, 0x8B, 0xFF, 0xFF}) {
+			t.Error("isTarInGzip returned true for invalid gzip data")
+		}
+	})
+
+	t.Run("empty data", func(t *testing.T) {
+		if isTarInGzip([]byte{}) {
+			t.Error("isTarInGzip returned true for empty data")
+		}
+	})
+}
+
+func TestDetectArchiveType_PlainGzipFiles(t *testing.T) {
+	// Regression test: plain .gz files (e.g. .kmap.gz, .psf.gz) should NOT
+	// be classified as .tar.gz archives.
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"small text", "hello world"},
+		{"binary-like", string([]byte{0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE})},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := gzip.NewWriter(&buf)
+			w.Write([]byte(tt.content))
+			w.Close()
+
+			got := detectArchiveType("", buf.Bytes())
+			if got != "" {
+				t.Errorf("detectArchiveType for plain gzip = %q, want empty string", got)
+			}
+		})
+	}
 }
