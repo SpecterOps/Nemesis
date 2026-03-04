@@ -117,6 +117,10 @@ ENV UV_PROJECT_ENVIRONMENT=/venv
 RUN uv sync --frozen --no-dev --no-editable && \
     find /venv -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
+# Pre-download Presidio's spaCy model into the prod venv
+# Must happen after uv sync creates /venv, otherwise the model is lost
+RUN uv pip install --python /venv/bin/python pip && /venv/bin/python -m spacy download en_core_web_lg
+
 # FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
