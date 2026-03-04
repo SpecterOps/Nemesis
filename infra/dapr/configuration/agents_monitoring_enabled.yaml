@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: agentsConfig
+  name: agents-config
 spec:
   # workflow:
   #   maxConcurrentWorkflowInvocations: 1
