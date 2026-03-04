@@ -71,7 +71,7 @@ Namespace
 PostgreSQL connection string
 */}}
 {{- define "nemesis.postgresConnectionString" -}}
-postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}
+postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@pgbouncer:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}
 {{- end }}
 
 {{/*
@@ -96,6 +96,10 @@ dapr.io/metrics-port: {{ .metricsPort | default "9090" | quote }}
 dapr.io/graceful-shutdown-seconds: "5"
 dapr.io/log-level: {{ .logLevel | default "info" | quote }}
 dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+dapr.io/sidecar-cpu-request: {{ .sidecarCpuRequest | default "50m" | quote }}
+dapr.io/sidecar-memory-request: {{ .sidecarMemoryRequest | default "64Mi" | quote }}
+dapr.io/sidecar-cpu-limit: {{ .sidecarCpuLimit | default "300m" | quote }}
+dapr.io/sidecar-memory-limit: {{ .sidecarMemoryLimit | default "256Mi" | quote }}
 {{- if .maxConcurrency }}
 dapr.io/app-max-concurrency: {{ .maxConcurrency | quote }}
 {{- end }}
@@ -116,7 +120,7 @@ Common environment variables for services that need DB access
       name: nemesis-secrets
       key: POSTGRES_PASSWORD
 - name: POSTGRES_HOST
-  value: "postgres"
+  value: "pgbouncer"
 - name: POSTGRES_PORT
   value: {{ .Values.postgres.port | quote }}
 - name: POSTGRES_DB
@@ -197,11 +201,21 @@ Usage: {{ include "nemesis.waitForRabbitmq" . | nindent 8 }}
 {{- end }}
 
 {{/*
-Init containers that wait for both PostgreSQL and RabbitMQ.
+Init container that waits for PgBouncer to be ready.
+Usage: {{ include "nemesis.waitForPgbouncer" . | nindent 8 }}
+*/}}
+{{- define "nemesis.waitForPgbouncer" -}}
+- name: wait-for-pgbouncer
+  image: busybox:1.37
+  command: ['sh', '-c', 'until nc -z pgbouncer 5432; do echo "Waiting for PgBouncer..."; sleep 2; done']
+{{- end }}
+
+{{/*
+Init containers that wait for PgBouncer and RabbitMQ.
 Usage: include in pod spec under initContainers
 */}}
 {{- define "nemesis.waitForInfra" -}}
-{{- include "nemesis.waitForPostgres" . }}
+{{- include "nemesis.waitForPgbouncer" . }}
 {{ include "nemesis.waitForRabbitmq" . }}
 {{- end }}
 

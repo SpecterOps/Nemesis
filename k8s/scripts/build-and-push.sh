@@ -124,4 +124,21 @@ if [[ "$PARALLEL" == "true" ]]; then
     wait
 fi
 
+# Mirror external images into the local registry so k3d nodes can pull them.
+# These are third-party images referenced in values.yaml that aren't built from source.
+EXTERNAL_IMAGES=(
+    "public.ecr.aws/bitnami/pgbouncer:1.25.1:pgbouncer"
+)
+
+if [[ ${#SELECTED_SERVICES[@]} -eq 0 ]]; then
+    for entry in "${EXTERNAL_IMAGES[@]}"; do
+        IFS=: read -r source_repo source_tag local_name <<< "$entry"
+        local_tag="${REGISTRY}/${local_name}:${source_tag}"
+        log "Mirroring ${source_repo}:${source_tag} -> ${local_tag}"
+        docker pull "${source_repo}:${source_tag}"
+        docker tag "${source_repo}:${source_tag}" "${local_tag}"
+        docker push "${local_tag}"
+    done
+fi
+
 log "Built and pushed $build_count images to $REGISTRY"

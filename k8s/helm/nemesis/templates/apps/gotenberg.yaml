@@ -7,7 +7,9 @@ metadata:
     {{- include "nemesis.labels" . | nindent 4 }}
     {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 4 }}
 spec:
+  {{- if not (and .Values.autoscaling.enabled .Values.autoscaling.gotenberg.enabled) }}
   replicas: {{ .Values.gotenberg.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 6 }}
@@ -18,6 +20,10 @@ spec:
       annotations:
         {{- include "nemesis.daprAnnotations" (dict "appId" "gotenberg" "appPort" (toString .Values.gotenberg.port) "config" "dapr-config") | nindent 8 }}
     spec:
+      # Match the 180s API timeout (gotenberg.env.apiTimeout in values.yaml,
+      # httpx client in document_conversion/activities/pdf_conversion.py) so
+      # in-flight LibreOffice conversions finish before KEDA scale-down kills the pod.
+      terminationGracePeriodSeconds: 180
       containers:
         - name: gotenberg
           image: "{{ .Values.gotenberg.image.repository }}:{{ .Values.gotenberg.image.tag }}"

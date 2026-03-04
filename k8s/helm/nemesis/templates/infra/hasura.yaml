@@ -54,9 +54,9 @@ spec:
                   name: nemesis-secrets
                   key: POSTGRES_PASSWORD
             - name: HASURA_GRAPHQL_DATABASE_URL
-              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}"
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@pgbouncer:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}"
             - name: HASURA_GRAPHQL_METADATA_DATABASE_URL
-              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}"
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@pgbouncer:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}"
             - name: HASURA_GRAPHQL_ENABLE_CONSOLE
               value: {{ .Values.hasura.enableConsole | quote }}
             - name: HASURA_GRAPHQL_ADMIN_SECRET

@@ -84,22 +84,34 @@ To build and deploy from source using the k3d local registry:
 | Secrets | `.env` file + `secretstores.local.env` | K8s Secrets + `secretstores.kubernetes` |
 | Reverse proxy | Traefik container with Docker provider | Traefik with IngressRoute CRDs |
 | Autoscaling | Manual `docker compose up --scale` | KEDA ScaledObjects on RabbitMQ queue depth |
+| Connection pooling | Per-service pools only | PgBouncer (transaction mode) between services and PostgreSQL |
 | Service discovery | Docker DNS | K8s Service DNS |
 
 ### KEDA Autoscaling
 
-KEDA monitors RabbitMQ queue depth and scales these services:
+KEDA monitors RabbitMQ queue depth and CPU utilization to scale services:
 
-| Service | Queue | Threshold | Min | Max | Cooldown |
-|---------|-------|-----------|-----|-----|----------|
-| file-enrichment | `files-new_file` | 10 messages | 1 | 5 | 300s |
-| document-conversion | `files-document_conversion_input` | 5 messages | 1 | 5 | 300s |
-| titus-scanner | `titus-titus_input` | 10 messages | 1 | 5 | 300s |
-| dotnet-service | `dotnet-dotnet_input` | 5 messages | 1 | 3 | 300s |
+| Service | Trigger | Threshold | Min | Max | Cooldown |
+|---------|---------|-----------|-----|-----|----------|
+| file-enrichment | Queue: `files-new_file` | 10 messages | 1 | 5 | 60s |
+| document-conversion | Queue: `files-document_conversion_input` | 5 messages | 1 | 5 | 60s |
+| titus-scanner | Queue: `titus-titus_input` | 10 messages | 1 | 5 | 60s |
+| dotnet-service | Queue: `dotnet-dotnet_input` | 5 messages | 1 | 3 | 60s |
+| gotenberg | CPU utilization | 70% | 1 | 3 | 120s |
 
 All thresholds are configurable in `values.yaml` under `autoscaling`.
 
-> **Note:** Queue names are created by Dapr as `{consumerID}-{topic}`. The default values assume standard Dapr queue naming. Verify actual queue names in RabbitMQ management UI after first deployment and update `values.yaml` if different.
+> **Note:** Queue names are created by Dapr as `{consumerID}-{topic}`. The default values assume standard Dapr queue naming. Verify actual queue names in RabbitMQ management UI after first deployment and update `values.yaml` if different. Gotenberg uses CPU-based scaling (not queue-based) since it receives synchronous HTTP requests rather than consuming from a queue.
+
+### PgBouncer Connection Pooling
+
+PgBouncer sits between all services (including Dapr sidecars) and PostgreSQL, multiplexing hundreds of client connections onto a small pool of real database connections. This prevents connection exhaustion during KEDA autoscaling when many pod replicas open connections simultaneously.
+
+- **Pool mode:** transaction — connections are returned to the pool after each transaction
+- **Max client connections:** 2000 (configurable in `values.yaml`)
+- **Default pool size:** 60 real PostgreSQL connections
+
+All services connect to `pgbouncer:5432` instead of `postgres:5432`. The `postgres` service remains unchanged and is only accessed by PgBouncer directly.
 
 ### Helm Chart Structure
 

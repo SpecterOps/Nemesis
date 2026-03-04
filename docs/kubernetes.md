@@ -102,6 +102,7 @@ Options:
 | Secrets | `.env` file + `secretstores.local.env` | K8s Secrets + `secretstores.kubernetes` |
 | Reverse proxy | Traefik container with Docker provider | Traefik with IngressRoute CRDs |
 | Autoscaling | Manual `docker compose up --scale` | KEDA ScaledObjects on RabbitMQ queue depth |
+| Connection pooling | Per-service pools only | PgBouncer (transaction mode) between services and PostgreSQL |
 | Service discovery | Docker DNS | K8s Service DNS |
 
 ### What the Setup Script Installs
@@ -116,19 +117,30 @@ All versions are pinned for reproducibility.
 
 ### KEDA Autoscaling
 
-KEDA monitors RabbitMQ queue depth and scales these services automatically:
+KEDA monitors RabbitMQ queue depth and CPU utilization to scale services automatically:
 
-| Service | Queue | Threshold | Min | Max | Cooldown |
-|---------|-------|-----------|-----|-----|----------|
-| file-enrichment | `files-new_file` | 10 messages | 1 | 5 | 300s |
-| document-conversion | `files-document_conversion_input` | 5 messages | 1 | 5 | 300s |
-| titus-scanner | `titus-titus_input` | 10 messages | 1 | 5 | 300s |
-| dotnet-service | `dotnet-dotnet_input` | 5 messages | 1 | 3 | 300s |
+| Service | Trigger | Threshold | Min | Max | Cooldown |
+|---------|---------|-----------|-----|-----|----------|
+| file-enrichment | Queue: `files-new_file` | 10 messages | 1 | 5 | 60s |
+| document-conversion | Queue: `files-document_conversion_input` | 5 messages | 1 | 5 | 60s |
+| titus-scanner | Queue: `titus-titus_input` | 10 messages | 1 | 5 | 60s |
+| dotnet-service | Queue: `dotnet-dotnet_input` | 5 messages | 1 | 3 | 60s |
+| gotenberg | CPU utilization | 70% | 1 | 3 | 120s |
 
 All thresholds are configurable in `values.yaml` under `autoscaling`.
 
 !!! tip
-    Queue names are created by Dapr as `{consumerID}-{topic}`. Verify actual queue names in the RabbitMQ management UI after first deployment and update `values.yaml` if they differ.
+    Queue names are created by Dapr as `{consumerID}-{topic}`. Verify actual queue names in the RabbitMQ management UI after first deployment and update `values.yaml` if they differ. Gotenberg uses CPU-based scaling (not queue-based) since it receives synchronous HTTP requests rather than consuming from a queue.
+
+### PgBouncer Connection Pooling
+
+PgBouncer sits between all services (including Dapr sidecars) and PostgreSQL, multiplexing hundreds of client connections onto a small pool of real database connections. This prevents connection exhaustion during KEDA autoscaling when many pod replicas open connections simultaneously.
+
+- **Pool mode:** transaction — connections are returned to the pool after each transaction
+- **Max client connections:** 500 (configurable in `values.yaml`)
+- **Default pool size:** 20 real PostgreSQL connections
+
+All services connect to `pgbouncer:5432` instead of `postgres:5432`. The `postgres` service remains unchanged and is only accessed by PgBouncer directly.
 
 ### Helm Chart Structure
 
@@ -200,17 +212,30 @@ All configuration is in `k8s/helm/nemesis/values.yaml`. Key sections:
 | `autoscaling.*` | KEDA scaling thresholds and limits |
 | `fileEnrichment.*` | File enrichment replicas, resources, env vars |
 | `postgres.*` | Database image, storage, max connections |
+| `pgbouncer.*` | Connection pooling image, pool size, max client connections |
 | `rabbitmq.*` | Message queue image, storage |
 | `minio.*` | Object storage image, buckets, storage |
 
 ### PostgreSQL Connection Tuning
 
-The default `max_connections` is set to 300 to accommodate autoscaling. Connection pools are configurable per service via environment variables:
+All services connect through **PgBouncer** in transaction pooling mode, which multiplexes many client connections onto a small pool of real PostgreSQL connections. This prevents connection exhaustion during autoscaling.
 
-- `DB_POOL_MAX_SIZE` (default: 20) — maximum connections per pod
-- `DB_POOL_MIN_SIZE` (default: 2) — minimum idle connections per pod
+Key settings (configurable in `values.yaml` under `pgbouncer`):
 
-With KEDA scaling file-enrichment to 5 replicas, this means 5 x 20 = 100 application connections at peak, well within the 300 limit.
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `maxClientConn` | 2000 | Max simultaneous client connections PgBouncer accepts |
+| `defaultPoolSize` | 60 | Real PostgreSQL connections per database |
+| `minPoolSize` | 20 | Minimum idle PostgreSQL connections maintained |
+| `reservePoolSize` | 15 | Extra connections when pool is exhausted |
+| `poolMode` | transaction | Return connections to pool after each transaction |
+
+Per-service pool settings are still configurable via environment variables:
+
+- `DB_POOL_MAX_SIZE` (default: 20) — maximum connections per pod (to PgBouncer)
+- `DB_POOL_MIN_SIZE` (default: 2) — minimum idle connections per pod (to PgBouncer)
+
+With KEDA scaling to 5+ replicas across multiple services, PgBouncer keeps real PostgreSQL connections at ~60-75, well within the 300 `max_connections` limit.
 
 ## Deferred Features
 
@@ -254,6 +279,8 @@ Update queue names in the `autoscaling.*` section of `values.yaml` if names diff
 
 If you see `FATAL: sorry, too many clients already` in PostgreSQL logs:
 
-1. Check current connections: `kubectl exec deployment/postgres -n nemesis -- psql -U nemesis -d enrichment -c "SELECT count(*) FROM pg_stat_activity;"`
-2. Check pool stats: port-forward to file-enrichment and hit `/system/pool-stats`
-3. Reduce per-pod pool size via `DB_POOL_MAX_SIZE` env var, or increase `postgres.maxConnections` in `values.yaml`
+1. Check PgBouncer stats: `kubectl exec deployment/pgbouncer -n nemesis -- env PGPASSWORD=Qwerty12345 psql -U nemesis -h 127.0.0.1 -p 5432 pgbouncer -c "SHOW POOLS;"`
+2. Check PostgreSQL connections: `kubectl exec deployment/postgres -n nemesis -- psql -U nemesis -d enrichment -c "SELECT count(*) FROM pg_stat_activity;"`
+3. Check per-service pool stats: port-forward to file-enrichment and hit `/system/pool-stats`
+4. Tune PgBouncer: increase `pgbouncer.defaultPoolSize` in `values.yaml` (adds more real PostgreSQL connections)
+5. Tune per-pod pools: reduce `DB_POOL_MAX_SIZE` env var to lower client connections to PgBouncer

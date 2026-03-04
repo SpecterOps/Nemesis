@@ -78,6 +78,30 @@ postgres:
       memory: 2Gi
 
 # ============================================
+# PgBouncer (connection pooling)
+# ============================================
+pgbouncer:
+  image:
+    # Upstream: public.ecr.aws/bitnami/pgbouncer:1.25.1
+    # build-and-push.sh mirrors this to the k3d local registry automatically.
+    repository: pgbouncer
+    tag: "1.25.1"
+  replicas: 1
+  port: 5432
+  poolMode: transaction
+  maxClientConn: 2000
+  defaultPoolSize: 60
+  minPoolSize: 20
+  reservePoolSize: 15
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ============================================
 # RabbitMQ
 # ============================================
 rabbitmq:
@@ -375,6 +399,22 @@ frontend:
 # ============================================
 # KEDA Autoscaling
 # ============================================
+# Common config values (per service):
+#   enabled          - Enable/disable autoscaling for this service
+#   minReplicas      - Minimum replica count (never scales below this)
+#   maxReplicas      - Maximum replica count (never scales above this)
+#   cooldownPeriod   - Seconds after last trigger before KEDA allows 0→1 scale-up
+#                      (not relevant when minReplicas >= 1)
+#   pollingInterval  - How often KEDA checks the trigger source (seconds)
+#
+# Queue-based services (file-enrichment, document-conversion, titus-scanner, dotnet-service):
+#   queueLength      - Messages per replica before scaling up
+#   queueName        - RabbitMQ queue name (Dapr creates as {consumerID}-{topic})
+#
+# CPU-based services (gotenberg):
+#   cpuThreshold           - Scale up when avg CPU exceeds this % of requests.cpu
+#   scaleUpStabilization   - Seconds CPU must stay above threshold before adding a replica
+#   scaleDownStabilization - Seconds CPU must stay below threshold before removing a replica
 autoscaling:
   enabled: true
 
@@ -382,7 +422,7 @@ autoscaling:
     enabled: true
     minReplicas: 1
     maxReplicas: 5
-    cooldownPeriod: 300
+    cooldownPeriod: 60
     pollingInterval: 15
     queueLength: "10"
     # Dapr creates queues as: {consumerID}-{topic}
@@ -393,7 +433,7 @@ autoscaling:
     enabled: true
     minReplicas: 1
     maxReplicas: 5
-    cooldownPeriod: 300
+    cooldownPeriod: 60
     pollingInterval: 15
     queueLength: "5"
     queueName: "files-document_conversion_input"
@@ -402,7 +442,7 @@ autoscaling:
     enabled: true
     minReplicas: 1
     maxReplicas: 5
-    cooldownPeriod: 300
+    cooldownPeriod: 60
     pollingInterval: 15
     queueLength: "10"
     queueName: "titus-titus_input"
@@ -411,7 +451,26 @@ autoscaling:
     enabled: true
     minReplicas: 1
     maxReplicas: 3
-    cooldownPeriod: 300
+    cooldownPeriod: 60
     pollingInterval: 15
     queueLength: "5"
     queueName: "dotnet-dotnet_input"
+
+  # Gotenberg uses CPU-based scaling (not queue-based) since it receives
+  # synchronous HTTP requests for LibreOffice PDF conversions.
+  gotenberg:
+    enabled: true
+    minReplicas: 1
+    # Keep conservative — Gotenberg is memory-heavy (LibreOffice per replica)
+    maxReplicas: 3
+    # Seconds after last scale event before KEDA allows 0→1 scale-up (not
+    # relevant when minReplicas >= 1, but required by the ScaledObject spec)
+    cooldownPeriod: 120
+    # How often KEDA polls the metrics API (seconds)
+    pollingInterval: 15
+    # Scale up when average CPU exceeds this % of the pod's requests.cpu (100m)
+    cpuThreshold: "70"
+    # Seconds CPU must stay above threshold before adding a replica (filters spikes)
+    scaleUpStabilization: 30
+    # Seconds CPU must stay below threshold before removing a replica
+    scaleDownStabilization: 30
