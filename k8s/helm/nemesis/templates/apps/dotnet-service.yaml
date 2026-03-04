@@ -7,7 +7,9 @@ metadata:
     {{- include "nemesis.labels" . | nindent 4 }}
     {{- include "nemesis.selectorLabels" (dict "name" "dotnet-service" "context" .) | nindent 4 }}
 spec:
+  {{- if not (and .Values.autoscaling.enabled .Values.autoscaling.dotnetService.enabled) }}
   replicas: {{ .Values.dotnetService.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "nemesis.selectorLabels" (dict "name" "dotnet-service" "context" .) | nindent 6 }}

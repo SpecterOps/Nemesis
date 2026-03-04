@@ -397,3 +397,21 @@ autoscaling:
     pollingInterval: 15
     queueLength: "5"
     queueName: "files-document_conversion_input"
+
+  titusScanner:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    cooldownPeriod: 300
+    pollingInterval: 15
+    queueLength: "10"
+    queueName: "titus-titus_input"
+
+  dotnetService:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    cooldownPeriod: 300
+    pollingInterval: 15
+    queueLength: "5"
+    queueName: "dotnet-dotnet_input"

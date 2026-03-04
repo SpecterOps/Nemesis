@@ -7,7 +7,9 @@ metadata:
     {{- include "nemesis.labels" . | nindent 4 }}
     {{- include "nemesis.selectorLabels" (dict "name" "titus-scanner" "context" .) | nindent 4 }}
 spec:
+  {{- if not (and .Values.autoscaling.enabled .Values.autoscaling.titusScanner.enabled) }}
   replicas: {{ .Values.titusScanner.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "nemesis.selectorLabels" (dict "name" "titus-scanner" "context" .) | nindent 6 }}

@@ -122,6 +122,8 @@ KEDA monitors RabbitMQ queue depth and scales these services automatically:
 |---------|-------|-----------|-----|-----|----------|
 | file-enrichment | `files-new_file` | 10 messages | 1 | 5 | 300s |
 | document-conversion | `files-document_conversion_input` | 5 messages | 1 | 5 | 300s |
+| titus-scanner | `titus-titus_input` | 10 messages | 1 | 5 | 300s |
+| dotnet-service | `dotnet-dotnet_input` | 5 messages | 1 | 3 | 300s |
 
 All thresholds are configurable in `values.yaml` under `autoscaling`.
 
@@ -246,7 +248,7 @@ Verify queue names match what Dapr created:
 kubectl port-forward svc/rabbitmq 15672:15672 -n nemesis
 # Open http://localhost:15672 and check queue names
 ```
-Update `autoscaling.fileEnrichment.queueName` / `autoscaling.documentConversion.queueName` in `values.yaml` if names differ.
+Update queue names in the `autoscaling.*` section of `values.yaml` if names differ.
 
 ### Connection pool exhaustion
 
