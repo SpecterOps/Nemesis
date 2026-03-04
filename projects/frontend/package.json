@@ -34,7 +34,8 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "overrides": {
-    "lodash": ">=4.17.23"
+    "lodash": ">=4.17.23",
+    "rollup": ">=4.59.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
