@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Checkout source code for this repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           scan-type: 'repo'
           scan-ref: './'
