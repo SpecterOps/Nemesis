@@ -3,7 +3,7 @@ import os
 import asyncpg
 import dapr.ext.workflow as wf
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from common.workflows.tracking_service import WorkflowTrackingService
 from dapr.ext.workflow.logger.options import LoggerOptions
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -18,7 +18,7 @@ workflow_client = wf.DaprWorkflowClient(
 )
 
 activity_functions = {}
-storage = StorageMinio()
+storage = StorageS3()
 global_module_map: dict[str, EnrichmentModule] = {}  # Enrichment modules loaded at initialization
 
 _dapr_port = os.getenv("DAPR_HTTP_PORT", 3500)

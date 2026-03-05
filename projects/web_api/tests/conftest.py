@@ -1,7 +1,7 @@
 """Shared test fixtures for web_api tests.
 
 Patches are applied at module level to prevent web_api.main from connecting
-to real services (Dapr, MinIO, PostgreSQL) during import.
+to real services (Dapr, S3 storage, PostgreSQL) during import.
 """
 
 from contextlib import asynccontextmanager
@@ -11,7 +11,7 @@ import pytest
 
 # --- Module-level patches ---
 # These must be applied BEFORE web_api.main is imported, because it
-# instantiates StorageMinio() and LargeContainerProcessor() at module scope,
+# instantiates StorageS3() and LargeContainerProcessor() at module scope,
 # both of which use DaprClient to fetch secrets.
 
 

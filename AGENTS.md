@@ -109,7 +109,7 @@ docker compose up -d --build web-api web-api-dapr
 
 - **Write tests for every new feature.** New functionality must include tests before it is considered complete.
 - **Cover both happy path and unhappy path cases.** Tests should verify correct behavior with valid inputs (positive cases) and proper error handling with invalid inputs, missing data, edge cases, and failure conditions (negative cases).
-- **Mock external services.** Do not make real calls to external dependencies (Dapr, Minio, PostgreSQL, RabbitMQ, etc.) in unit tests. Use mocks or fakes to isolate the code under test.
+- **Mock external services.** Do not make real calls to external dependencies (Dapr, SeaweedFS, PostgreSQL, RabbitMQ, etc.) in unit tests. Use mocks or fakes to isolate the code under test.
 
 ## Architecture
 
@@ -120,7 +120,7 @@ docker compose up -d --build web-api web-api-dapr
 - **PostgreSQL** for database
 - **Dapr** for pub/sub, workflows, secrets, and service invocation
 - **RabbitMQ** for message queue
-- **Minio** for object storage
+- **SeaweedFS** for object storage
 - **Traefik** for reverse proxy
 
 ### Directory Structure
@@ -156,7 +156,7 @@ infra/              # Infrastructure configuration
 ```
 
 ### Data Flow
-1. Files uploaded via **web_api** or **cli** → stored in **Minio**
+1. Files uploaded via **web_api** or **cli** → stored in **SeaweedFS**
 2. **file_enrichment** receives file events via Dapr pub/sub
 3. Dapr workflow orchestrates enrichment modules in parallel
 4. Results written to **PostgreSQL**, findings published for alerting

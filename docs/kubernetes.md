@@ -144,7 +144,7 @@ Options:
 ./k8s/scripts/deploy.sh install \
   --set credentials.postgres.password=StrongPass \
   --set credentials.rabbitmq.password=StrongPass \
-  --set credentials.minio.password=StrongPass
+  --set credentials.s3.secretKey=StrongPass
 
 # Disable autoscaling
 ./k8s/scripts/deploy.sh install --set autoscaling.enabled=false
@@ -233,7 +233,7 @@ k8s/helm/nemesis/
     ├── secrets.yaml
     ├── configmap-*.yaml
     ├── dapr/                # Dapr CRDs (secretstore, statestore, pubsub, configs)
-    ├── infra/               # PostgreSQL, RabbitMQ, MinIO, Hasura
+    ├── infra/               # PostgreSQL, RabbitMQ, SeaweedFS, Hasura
     ├── apps/                # Application deployments + services
     ├── ingress/             # Traefik IngressRoute + middleware
     ├── keda/                # KEDA ScaledObjects + TriggerAuthentication
@@ -274,14 +274,14 @@ All configuration is in `k8s/helm/nemesis/values.yaml`. Key sections:
 
 | Section | Description |
 |---------|-------------|
-| `credentials.*` | PostgreSQL, RabbitMQ, MinIO, Hasura passwords |
+| `credentials.*` | PostgreSQL, RabbitMQ, S3 (SeaweedFS), Hasura passwords |
 | `nemesis.*` | URL, log level, expiration defaults |
 | `autoscaling.*` | KEDA scaling thresholds and limits |
 | `fileEnrichment.*` | File enrichment replicas, resources, env vars |
 | `postgres.*` | Database image, storage, max connections |
 | `pgbouncer.*` | Connection pooling image, pool size, max client connections |
 | `rabbitmq.*` | Message queue image, storage |
-| `minio.*` | Object storage image, buckets, storage |
+| `seaweedfs.*` | Object storage (SeaweedFS) image, buckets, storage |
 
 ### PostgreSQL Connection Tuning
 
@@ -318,11 +318,11 @@ The `values.yaml` toggles exist but no templates are generated yet.
 
 ### Pods stuck in `CrashLoopBackOff`
 
-Check infrastructure first — app pods depend on PostgreSQL, RabbitMQ, and MinIO:
+Check infrastructure first — app pods depend on PostgreSQL, RabbitMQ, and SeaweedFS:
 ```bash
 kubectl logs deployment/postgres -n nemesis
 kubectl logs statefulset/rabbitmq -n nemesis
-kubectl logs statefulset/minio -n nemesis
+kubectl logs statefulset/seaweedfs -n nemesis
 ```
 
 ### Dapr sidecar not injecting

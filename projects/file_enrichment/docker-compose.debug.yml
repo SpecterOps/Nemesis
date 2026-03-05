@@ -55,10 +55,10 @@ services:
       - "3503:3503" # Sidecar HTTP port
       - "50003:50003" # Sidecar GRPC port (Dapr Worfklows depends on it)
 
-  # Open up Minio so file-enrichment being debugged can access it
-  minio:
+  # Open up SeaweedFS so file-enrichment being debugged can access it
+  seaweedfs:
     ports:
-      - "9000:9000"
+      - "8333:8333"
 
   otel-collector:
     ports:

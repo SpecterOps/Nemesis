@@ -14,13 +14,13 @@ binaryData:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-dashboard-minio
+  name: grafana-dashboard-seaweedfs
   namespace: {{ include "nemesis.namespace" . }}
   labels:
     {{- include "nemesis.labels" . | nindent 4 }}
 binaryData:
-  minio.json: |-
-    {{ .Files.Get "files/grafana-dashboards/minio.json" | b64enc }}
+  seaweedfs.json: |-
+    {{ .Files.Get "files/grafana-dashboards/seaweedfs.json" | b64enc }}
 ---
 apiVersion: v1
 kind: ConfigMap

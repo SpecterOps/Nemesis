@@ -44,7 +44,7 @@ services:
       - "3500:3500" # Sidecar HTTP port
       - "50001:50001" # Sidecar GRPC port (Dapr Worfklows depends on it)
 
-  # Open up Minio so web-api being debugged can access it
-  minio:
+  # Open up SeaweedFS so web-api being debugged can access it
+  seaweedfs:
     ports:
-      - "9000:9000"
+      - "8333:8333"

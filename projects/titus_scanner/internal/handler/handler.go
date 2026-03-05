@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/specterops/nemesis/titus-scanner/internal/config"
-	minioclient "github.com/specterops/nemesis/titus-scanner/internal/minio"
+	s3client "github.com/specterops/nemesis/titus-scanner/internal/s3client"
 	"github.com/specterops/nemesis/titus-scanner/internal/models"
 	"github.com/specterops/nemesis/titus-scanner/internal/scanner"
 )
@@ -31,7 +31,7 @@ type fileScanner interface {
 
 // Compile-time interface checks.
 var (
-	_ fileDownloader = (*minioclient.Client)(nil)
+	_ fileDownloader = (*s3client.Client)(nil)
 	_ fileScanner    = (*scanner.Pool)(nil)
 )
 
@@ -39,15 +39,15 @@ var (
 type Handler struct {
 	cfg         *config.Config
 	scannerPool fileScanner
-	minio       fileDownloader
+	storage     fileDownloader
 }
 
-// New creates a new Handler with the given configuration, scanner pool, and MinIO client.
-func New(cfg *config.Config, pool *scanner.Pool, mc *minioclient.Client) *Handler {
+// New creates a new Handler with the given configuration, scanner pool, and S3 client.
+func New(cfg *config.Config, pool *scanner.Pool, mc *s3client.Client) *Handler {
 	return &Handler{
 		cfg:         cfg,
 		scannerPool: pool,
-		minio:       mc,
+		storage:     mc,
 	}
 }
 
@@ -56,7 +56,7 @@ func newHandler(cfg *config.Config, pool fileScanner, mc fileDownloader) *Handle
 	return &Handler{
 		cfg:         cfg,
 		scannerPool: pool,
-		minio:       mc,
+		storage:     mc,
 	}
 }
 
@@ -172,7 +172,7 @@ func (h *Handler) HandleBulkEvent(w http.ResponseWriter, r *http.Request) {
 
 // processEvent handles the full lifecycle of scanning a single file:
 // download, scan, and publish results. Returns an error for transient failures
-// that should be retried (MinIO download, Dapr publish). Scan failures are
+// that should be retried (S3 download, Dapr publish). Scan failures are
 // permanent — an empty result is published and nil is returned.
 func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) error {
 	startTime := time.Now()
@@ -182,19 +182,19 @@ func (h *Handler) processEvent(ctx context.Context, input models.TitusInput) err
 		"workflow_id", input.WorkflowID,
 	)
 
-	// Download the file from MinIO to a temporary location
-	tmpPath, fileSize, err := h.minio.Download(ctx, input.ObjectID, int64(h.cfg.MaxFileSizeMB)*1024*1024)
+	// Download the file from S3 storage to a temporary location
+	tmpPath, fileSize, err := h.storage.Download(ctx, input.ObjectID, int64(h.cfg.MaxFileSizeMB)*1024*1024)
 	if err != nil {
-		slog.Error("Failed to download file from MinIO",
+		slog.Error("Failed to download file from storage",
 			"object_id", input.ObjectID,
 			"error", err,
 		)
 		h.publishEmptyResult(input, startTime, err.Error())
-		return fmt.Errorf("minio download failed: %w", err)
+		return fmt.Errorf("s3 download failed: %w", err)
 	}
 	defer cleanupTempFile(tmpPath)
 
-	slog.Info("Downloaded file from MinIO",
+	slog.Info("Downloaded file from storage",
 		"object_id", input.ObjectID,
 		"file_size", fileSize,
 		"temp_path", tmpPath,

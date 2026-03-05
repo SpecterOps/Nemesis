@@ -63,9 +63,9 @@ def check_rms_protected(file_path: str):
 
 def is_encrypted_file(file_data: FileEnriched):
     """Uses the magic type to determine if the file is encrypted"""
-    from common.storage import StorageMinio
+    from common.storage import StorageS3
 
-    storage = StorageMinio()
+    storage = StorageS3()
 
     if "Security: 1" in file_data.magic_type or "CDFV2 Encrypted" in file_data.magic_type:
         return True

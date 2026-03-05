@@ -11,7 +11,7 @@ This service serves as the main entry point for external interactions with the N
 ### File Management
 - **File upload**: Multi-part form uploads with metadata validation
 - **File download**: Streaming downloads with size limits and custom filenames
-- **Storage integration**: Direct integration with Minio object storage
+- **Storage integration**: Direct integration with SeaweedFS S3-compatible object storage
 - **Metadata handling**: JSON-based file metadata processing and validation
 
 ### Workflow Operations
@@ -60,7 +60,7 @@ This service serves as the main entry point for external interactions with the N
 ## Integration
 
 - **Dapr**: Service-to-service communication and pub/sub messaging
-- **Minio**: Object storage for file management
+- **SeaweedFS**: S3-compatible object storage for file management
 - **File Enrichment Service**: Forwards enrichment requests and monitoring
 - **Frontend**: Serves API requests from the web interface
 
@@ -90,7 +90,7 @@ cd Nemesis
 docker compose up -f compose.yaml -f compose.override.yaml -f ./projects/web_api/docker-compose.debug.yml
 ```
 
-This exposes Minio's port so the `web_api` can upload files outside the cluster. In addition, it isolates the `web_api` instance deployed by `docker compose` and informs its sidecar about the debugged `web_api` instance that's running in VS Code.
+This exposes the S3 storage port so the `web_api` can upload files outside the cluster. In addition, it isolates the `web_api` instance deployed by `docker compose` and informs its sidecar about the debugged `web_api` instance that's running in VS Code.
 
 ### Docker Images
 1. If the base images haven't been built yet, do that first:

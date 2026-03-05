@@ -73,7 +73,7 @@ check_keda() {
 
 check_services() {
     echo "=== Services ==="
-    local expected_services=(postgres rabbitmq minio hasura web-api file-enrichment document-conversion frontend gotenberg)
+    local expected_services=(postgres rabbitmq seaweedfs hasura web-api file-enrichment document-conversion frontend gotenberg)
 
     for svc in "${expected_services[@]}"; do
         if kubectl get svc "$svc" -n "$NAMESPACE" &>/dev/null; then

@@ -28,11 +28,11 @@ type Config struct {
 	DisabledRules         []string
 	CustomRulesDir        string
 
-	// MinIO configuration
-	MinioEndpoint  string
-	MinioBucket    string
-	MinioAccessKey string
-	MinioSecretKey string
+	// S3-compatible storage configuration
+	S3Endpoint  string
+	S3Bucket    string
+	S3AccessKey string
+	S3SecretKey string
 
 	// Bulk subscribe configuration
 	BulkMaxMessages        int
@@ -67,10 +67,10 @@ func Load() *Config {
 		CustomRulesDir:        getEnv("CUSTOM_RULES_DIR", "/opt/titus"),
 		BulkMaxMessages:        max(1, getEnvInt("BULK_MAX_MESSAGES", 100)),
 		BulkMaxAwaitDurationMs: max(1, getEnvInt("BULK_MAX_AWAIT_DURATION_MS", 1000)),
-		MinioEndpoint:      getEnv("MINIO_ENDPOINT", "http://minio:9000"),
-		MinioBucket:        getEnv("MINIO_BUCKET", "files"),
-		MinioAccessKey:     getEnv("MINIO_ACCESS_KEY", ""),
-		MinioSecretKey:     getEnv("MINIO_SECRET_KEY", ""),
+		S3Endpoint:      getEnv("S3_ENDPOINT", "http://seaweedfs:8333"),
+		S3Bucket:        getEnv("S3_BUCKET", "files"),
+		S3AccessKey:     getEnv("S3_ACCESS_KEY", ""),
+		S3SecretKey:     getEnv("S3_SECRET_KEY", ""),
 		AppPort:            getEnv("APP_PORT", "8080"),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		DaprHTTPPort:       getEnv("DAPR_HTTP_PORT", "3500"),

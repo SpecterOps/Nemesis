@@ -41,7 +41,7 @@ spec:
             - name: NEMESIS_URL
               value: {{ .Values.nemesis.url | quote }}
             {{- include "nemesis.postgresEnv" . | nindent 12 }}
-            {{- include "nemesis.minioEnv" . | nindent 12 }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
             {{- include "nemesis.rabbitmqEnv" . | nindent 12 }}
             - name: HASURA_ADMIN_SECRET
               valueFrom:

@@ -14,7 +14,7 @@
         //         "--reload"
         //     ],
         //     "env": {
-        //         "MINIO_ENDPOINT": "localhost:9000"
+        //         "S3_ENDPOINT": "localhost:8333"
         //     },
         //     "jinja": true
         // }

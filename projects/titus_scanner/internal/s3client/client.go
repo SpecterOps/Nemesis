@@ -1,4 +1,4 @@
-package minio
+package s3client
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// Options holds configuration for connecting to MinIO.
+// Options holds configuration for connecting to S3-compatible storage.
 type Options struct {
 	Endpoint  string
 	AccessKey string
@@ -21,13 +21,13 @@ type Options struct {
 	Bucket    string
 }
 
-// Client wraps a MinIO client with the configured bucket name.
+// Client wraps an S3-compatible client with the configured bucket name.
 type Client struct {
 	client *minio.Client
 	bucket string
 }
 
-// New creates a new MinIO client wrapper. The endpoint may include an http(s) scheme;
+// New creates a new S3 client wrapper. The endpoint may include an http(s) scheme;
 // if so, the scheme is parsed to determine whether to use SSL.
 func New(opts Options) (*Client, error) {
 	endpoint := opts.Endpoint
@@ -53,7 +53,7 @@ func New(opts Options) (*Client, error) {
 		Secure: useSSL,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create MinIO client: %w", err)
+		return nil, fmt.Errorf("failed to create S3 client: %w", err)
 	}
 
 	return &Client{
@@ -62,7 +62,7 @@ func New(opts Options) (*Client, error) {
 	}, nil
 }
 
-// Download retrieves the object identified by objectID from MinIO and writes it
+// Download retrieves the object identified by objectID from S3 storage and writes it
 // to a temporary file. It first checks the object size against maxSizeBytes.
 // Returns the path to the temporary file, the object size in bytes, and any error.
 // The caller is responsible for removing the temporary file when done.

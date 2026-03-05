@@ -15,7 +15,7 @@ builder.Services.AddControllers().AddDapr();
 builder.Services.AddControllers().AddNewtonsoftJson();
 
 // Add our custom services
-builder.Services.AddSingleton<MinioService>();
+builder.Services.AddSingleton<S3StorageService>();
 builder.Services.AddSingleton<DecompilerEngine>();
 builder.Services.AddSingleton<AssemblyAnalysisService>();
 

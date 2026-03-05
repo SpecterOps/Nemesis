@@ -15,7 +15,7 @@ import (
 	"github.com/praetorian-inc/titus"
 	"github.com/specterops/nemesis/titus-scanner/internal/config"
 	"github.com/specterops/nemesis/titus-scanner/internal/handler"
-	minioclient "github.com/specterops/nemesis/titus-scanner/internal/minio"
+	s3client "github.com/specterops/nemesis/titus-scanner/internal/s3client"
 	"github.com/specterops/nemesis/titus-scanner/internal/models"
 	"github.com/specterops/nemesis/titus-scanner/internal/rules"
 	"github.com/specterops/nemesis/titus-scanner/internal/scanner"
@@ -78,18 +78,18 @@ func main() {
 	defer scannerPool.Close()
 	slog.Info("Scanner pool initialized", "size", scannerPool.Size())
 
-	// Initialize MinIO client
-	mc, err := minioclient.New(minioclient.Options{
-		Endpoint:  cfg.MinioEndpoint,
-		AccessKey: cfg.MinioAccessKey,
-		SecretKey: cfg.MinioSecretKey,
-		Bucket:    cfg.MinioBucket,
+	// Initialize S3 storage client
+	mc, err := s3client.New(s3client.Options{
+		Endpoint:  cfg.S3Endpoint,
+		AccessKey: cfg.S3AccessKey,
+		SecretKey: cfg.S3SecretKey,
+		Bucket:    cfg.S3Bucket,
 	})
 	if err != nil {
-		slog.Error("Failed to initialize MinIO client", "error", err)
+		slog.Error("Failed to initialize S3 client", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("MinIO client initialized", "endpoint", cfg.MinioEndpoint, "bucket", cfg.MinioBucket)
+	slog.Info("S3 client initialized", "endpoint", cfg.S3Endpoint, "bucket", cfg.S3Bucket)
 
 	// Create the HTTP handler
 	h := handler.New(cfg, scannerPool, mc)

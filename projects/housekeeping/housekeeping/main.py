@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 # Global variables
 scheduler = AsyncIOScheduler()
 is_initialized = False
-storage = StorageMinio()
+storage = StorageS3()
 background_tasks = set()
 db_pool = None
 

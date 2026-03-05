@@ -4,12 +4,12 @@ A microservice for the Nemesis platform that handles the automated cleanup of ex
 
 ## Purpose
 
-This service periodically checks for files and database entries that have passed their expiration date and removes them from both the Minio storage and the database tables. This helps maintain system performance and ensures compliance with data retention policies.
+This service periodically checks for files and database entries that have passed their expiration date and removes them from both the SeaweedFS storage and the database tables. This helps maintain system performance and ensures compliance with data retention policies.
 
 ## Features
 
 - Scheduled daily cleanup of expired data (configurable)
-- Handles deletion of files from Minio storage
+- Handles deletion of files from SeaweedFS storage
 - Cleans up related database entries
 - Supports manual triggering of cleanup jobs
 - Maintains proper logging of cleanup activities

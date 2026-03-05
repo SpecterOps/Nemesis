@@ -23,9 +23,9 @@ credentials:
   rabbitmq:
     user: nemesis
     password: Qwerty12345
-  minio:
-    user: nemesis
-    password: Qwerty12345
+  s3:
+    accessKey: nemesis
+    secretKey: Qwerty12345
   hasura:
     adminSecret: pass456
   # Basic auth users for Traefik (htpasswd format)
@@ -330,15 +330,12 @@ rabbitmq:
       memory: 2Gi
 
 # ============================================
-# MinIO
+# SeaweedFS (S3-compatible object storage)
 # ============================================
-minio:
+seaweedfs:
   image:
-    repository: minio/minio
-    tag: "RELEASE.2025-09-07T16-13-09Z"
-  mcImage:
-    repository: minio/mc
-    tag: "RELEASE.2025-08-13T08-35-41Z"
+    repository: chrislusf/seaweedfs
+    tag: "4.15"
   buckets:
     - files
     - loki-data

@@ -1,4 +1,4 @@
-"""Mock StorageMinio implementation for standalone testing."""
+"""Mock StorageS3 implementation for standalone testing."""
 
 import os
 import shutil
@@ -6,14 +6,14 @@ import tempfile
 import uuid
 
 
-class MockStorageMinio:
-    """Mock implementation of StorageMinio for testing without Minio.
+class MockStorageS3:
+    """Mock implementation of StorageS3 for testing without S3 storage.
 
-    Provides the same interface as the real StorageMinio but stores files
+    Provides the same interface as the real StorageS3 but stores files
     locally in a temporary directory.
 
     Usage:
-        storage = MockStorageMinio()
+        storage = MockStorageS3()
 
         # Register a local file to be downloadable by object_id
         storage.register_file("uuid-1234", "/path/to/local/file.bin")
@@ -254,3 +254,7 @@ class MockStorageMinio:
         self._registered_files.clear()
         self._uploaded_files.clear()
         self._upload_paths.clear()
+
+
+# Backward-compatibility alias
+MockStorageMinio = MockStorageS3
