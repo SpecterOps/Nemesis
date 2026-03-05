@@ -81,19 +81,26 @@ k3s runs natively on the host — suited for VMs, bare-metal servers, and produc
 ./k8s/scripts/teardown-cluster-k3s.sh --keep-k3s
 ```
 
-## Building Locally (k3d only)
+## Building Locally
 
-Local image builds require the k3d local registry. This does not apply to k3s deployments, which pull images directly from ghcr.io.
+The `--build` flag auto-detects the cluster type and uses the appropriate method:
+
+- **k3d**: Builds images and pushes to the k3d local registry
+- **k3s**: Builds images and loads them into k3s containerd via `k3s ctr images import`
+
+Both require Docker to build images.
 
 ```bash
-# Build all images and push to k3d registry
-./k8s/scripts/build-and-push-k3d.sh
-
-# Deploy using local images
+# Deploy using locally built images (auto-detects k3d or k3s)
 ./k8s/scripts/deploy.sh install --build
 
-# Or build specific services only
+# Or build images separately:
+./k8s/scripts/build-and-push-k3d.sh           # k3d: push to local registry
+./k8s/scripts/build-and-load-k3s.sh           # k3s: load into containerd
+
+# Build specific services only
 ./k8s/scripts/build-and-push-k3d.sh web-api frontend
+./k8s/scripts/build-and-load-k3s.sh web-api frontend
 ```
 
 ## Deploy Script Usage
@@ -107,7 +114,7 @@ Local image builds require the k3d local registry. This does not apply to k3s de
 #   status        Show deployment status
 
 # Options:
-#   --build        Build images locally before deploying (k3d only)
+#   --build        Build images locally before deploying (k3d or k3s)
 #   --monitoring   Enable monitoring stack
 #   --jupyter      Enable Jupyter stack
 #   --llm          Enable LLM stack
@@ -117,7 +124,7 @@ Local image builds require the k3d local registry. This does not apply to k3s de
 
 # Examples:
 ./k8s/scripts/deploy.sh install                              # ghcr.io images
-./k8s/scripts/deploy.sh install --build                      # local build (k3d only)
+./k8s/scripts/deploy.sh install --build                      # local build (k3d or k3s)
 ./k8s/scripts/deploy.sh install --set credentials.postgres.password=MySecret
 ./k8s/scripts/deploy.sh install --dry-run                    # preview only
 ./k8s/scripts/deploy.sh uninstall                            # remove
@@ -144,7 +151,7 @@ Local image builds require the k3d local registry. This does not apply to k3s de
 |--------|-----|-----|
 | Runtime | k3s inside Docker containers | Native on host |
 | Docker required | Yes | No (uses containerd) |
-| Local image builds | Via k3d local registry | N/A — pull from ghcr.io |
+| Local image builds | Via k3d local registry | Via `k3s ctr images import` |
 | Traefik service type | NodePort (mapped via k3d port) | LoadBalancer (built-in ServiceLB/Klipper) |
 | Default HTTPS port | 7443 | 7443 |
 | Best for | Local dev, CI | VMs, bare-metal, production-like |
@@ -181,7 +188,8 @@ All services connect to `pgbouncer:5432` instead of `postgres:5432`. The `postgr
 k8s/helm/nemesis/
 ├── Chart.yaml
 ├── values.yaml              # All configuration
-├── values-dev.yaml           # Local registry overrides
+├── values-dev.yaml           # Local registry overrides (k3d)
+├── values-dev-k3s.yaml       # Local image overrides (k3s)
 ├── files/                   # Static files (SQL, configs)
 └── templates/
     ├── _helpers.tpl

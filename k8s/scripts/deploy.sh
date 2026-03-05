@@ -29,7 +29,7 @@ Actions:
   status        Show deployment status
 
 Options:
-  --build        Build and push images before deploying (uses k3d local registry)
+  --build        Build images locally before deploying (auto-detects k3d or k3s)
   --monitoring   Enable monitoring stack (Prometheus, Grafana, Loki, Jaeger, etc.)
   --jupyter      Enable Jupyter notebook stack
   --llm          Enable LLM stack (LiteLLM, Phoenix, Agents)
@@ -40,7 +40,7 @@ Options:
 
 Examples:
   $0 install                     # Deploy using ghcr.io images
-  $0 install --build             # Build locally, push to k3d registry, deploy
+  $0 install --build             # Build locally (k3d registry or k3s ctr import)
   $0 install --monitoring        # Deploy with monitoring enabled
   $0 uninstall                   # Remove deployment
   $0 status                      # Check pod/service status
@@ -86,16 +86,24 @@ do_install() {
 
     log "Deploying Nemesis to namespace: $NAMESPACE"
 
-    # Build images if requested (requires k3d local registry)
+    # Build images if requested (auto-detects k3d or k3s)
     if [[ "$BUILD" == "true" ]]; then
         local registry="${REGISTRY:-k3d-nemesis-registry.localhost:5111}"
-        if ! curl -sf "http://${registry}/v2/" &>/dev/null; then
-            error "--build requires a k3d cluster with a local registry at ${registry}"
-            error "Use setup-cluster-k3d.sh to create a k3d cluster, or deploy without --build to pull from ghcr.io."
+        if curl -sf "http://${registry}/v2/" &>/dev/null; then
+            BUILD_TARGET="k3d"
+            log "Detected k3d registry at ${registry}"
+            log "Building and pushing images to k3d registry..."
+            "${SCRIPT_DIR}/build-and-push-k3d.sh"
+        elif command -v k3s &>/dev/null; then
+            BUILD_TARGET="k3s"
+            log "Detected k3s cluster"
+            log "Building images and loading into k3s containerd..."
+            "${SCRIPT_DIR}/build-and-load-k3s.sh"
+        else
+            error "--build requires either a k3d cluster with a local registry or a k3s installation."
+            error "Use setup-cluster-k3d.sh or setup-cluster-k3s.sh first, or deploy without --build to pull from ghcr.io."
             exit 1
         fi
-        log "Building and pushing images to k3d registry..."
-        "${SCRIPT_DIR}/build-and-push-k3d.sh"
     fi
 
     # Build helm command
@@ -105,9 +113,13 @@ do_install() {
         -f "${CHART_DIR}/values.yaml"
     )
 
-    # Use dev values (local registry) when building locally
+    # Use dev values (local registry/containerd) when building locally
     if [[ "$BUILD" == "true" ]]; then
-        HELM_CMD+=(-f "${CHART_DIR}/values-dev.yaml")
+        if [[ "${BUILD_TARGET:-k3d}" == "k3s" ]]; then
+            HELM_CMD+=(-f "${CHART_DIR}/values-dev-k3s.yaml")
+        else
+            HELM_CMD+=(-f "${CHART_DIR}/values-dev.yaml")
+        fi
     fi
 
     # Optional stack toggles

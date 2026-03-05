@@ -5,8 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_ROOT="$(dirname "$K8S_DIR")"
 
-REGISTRY="${REGISTRY:-k3d-nemesis-registry.localhost:5111}"
-
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -34,12 +32,11 @@ SERVICES=(
 
 usage() {
     cat <<EOF
-Build and push Nemesis images to the k3d local registry.
+Build Nemesis images and load them into k3s containerd.
 
 Usage: $0 [options] [service...]
 
 Options:
-  --registry REGISTRY  Registry to push to (default: $REGISTRY)
   --parallel           Build images in parallel
   -h, --help           Show this help
 
@@ -56,7 +53,6 @@ SELECTED_SERVICES=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --registry) REGISTRY="$2"; shift 2 ;;
         --parallel) PARALLEL=true; shift ;;
         -h|--help) usage ;;
         *)
@@ -65,6 +61,18 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Verify k3s is available
+if ! command -v k3s &>/dev/null; then
+    error "k3s is not installed. Run setup-cluster-k3s.sh first."
+    exit 1
+fi
+
+# Verify docker is available (needed to build images)
+if ! command -v docker &>/dev/null; then
+    error "docker is required to build images. Install Docker to use --build with k3s."
+    exit 1
+fi
 
 cd "$REPO_ROOT"
 
@@ -77,11 +85,17 @@ if [[ -f "$REPO_ROOT/tools/generate-version.sh" ]]; then
     "$REPO_ROOT/tools/generate-version.sh" "$REPO_ROOT/version.json" "k8s-local"
 fi
 
+import_image() {
+    local tag="$1"
+    log "Importing $tag into k3s containerd..."
+    docker save "$tag" | sudo k3s ctr images import -
+}
+
 build_service() {
     local name="$1"
     local dockerfile="$2"
     local context="$3"
-    local tag="${REGISTRY}/${name}:latest"
+    local tag="docker.io/nemesis/${name}:latest"
 
     if [[ ! -f "$dockerfile" ]]; then
         warn "Dockerfile not found at $dockerfile, skipping $name"
@@ -91,8 +105,7 @@ build_service() {
     log "Building $name -> $tag"
     docker build -t "$tag" -f "$dockerfile" "$context"
 
-    log "Pushing $name"
-    docker push "$tag"
+    import_image "$tag"
 }
 
 build_count=0
@@ -126,21 +139,18 @@ if [[ "$PARALLEL" == "true" ]]; then
     wait
 fi
 
-# Mirror external images into the local registry so k3d nodes can pull them.
+# Import external images into k3s containerd.
 # These are third-party images referenced in values.yaml that aren't built from source.
 EXTERNAL_IMAGES=(
-    "public.ecr.aws/bitnami/pgbouncer:1.25.1:pgbouncer"
+    "public.ecr.aws/bitnami/pgbouncer:1.25.1"
 )
 
 if [[ ${#SELECTED_SERVICES[@]} -eq 0 ]]; then
-    for entry in "${EXTERNAL_IMAGES[@]}"; do
-        IFS=: read -r source_repo source_tag local_name <<< "$entry"
-        local_tag="${REGISTRY}/${local_name}:${source_tag}"
-        log "Mirroring ${source_repo}:${source_tag} -> ${local_tag}"
-        docker pull "${source_repo}:${source_tag}"
-        docker tag "${source_repo}:${source_tag}" "${local_tag}"
-        docker push "${local_tag}"
+    for image in "${EXTERNAL_IMAGES[@]}"; do
+        log "Pulling ${image}..."
+        docker pull "${image}"
+        import_image "${image}"
     done
 fi
 
-log "Built and pushed $build_count images to $REGISTRY"
+log "Built and loaded $build_count images into k3s containerd"

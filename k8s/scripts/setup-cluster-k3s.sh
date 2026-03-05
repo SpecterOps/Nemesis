@@ -231,14 +231,15 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Deploy Nemesis:         ./k8s/scripts/deploy.sh install"
+    echo "     Or build from source:   ./k8s/scripts/deploy.sh install --build"
     echo "  2. Verify deployment:      ./k8s/scripts/verify.sh"
     echo ""
     echo "Cluster info:"
     echo "  Runtime: k3s"
     echo "  HTTPS:   https://localhost:${HTTPS_PORT}"
     echo ""
-    echo "Note: k3s pulls images directly. Use ghcr.io images (default) or"
-    echo "      pre-load images with 'k3s ctr images import'."
+    echo "Note: --build requires Docker to build images, which are then loaded"
+    echo "      into k3s containerd via 'k3s ctr images import'."
 }
 
 main "$@"
