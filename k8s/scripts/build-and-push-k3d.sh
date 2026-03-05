@@ -28,6 +28,8 @@ SERVICES=(
     "alerting:projects/alerting/Dockerfile:."
     "housekeeping:projects/housekeeping/Dockerfile:."
     "frontend:projects/frontend/Dockerfile:projects/frontend"
+    "agents:projects/agents/Dockerfile:."
+    "jupyter:projects/jupyter/Dockerfile:."
 )
 
 usage() {

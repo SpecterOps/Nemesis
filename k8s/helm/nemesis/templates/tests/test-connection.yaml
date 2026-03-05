@@ -40,6 +40,20 @@ spec:
           check "Gotenberg"           gotenberg           {{ .Values.gotenberg.port }}
           check "Frontend"            frontend            {{ .Values.frontend.port }}
 
+          {{- if .Values.monitoring.enabled }}
+          check "Prometheus"          prometheus           {{ .Values.monitoring.prometheus.port }}
+          check "Grafana"             grafana              {{ .Values.monitoring.grafana.port }}
+          check "Loki"                loki                 {{ .Values.monitoring.loki.port }}
+          check "Jaeger"              jaeger               {{ .Values.monitoring.jaeger.port }}
+          {{- end }}
+          {{- if .Values.jupyter.enabled }}
+          check "Jupyter"             jupyter              {{ .Values.jupyter.port }}
+          {{- end }}
+          {{- if .Values.llm.enabled }}
+          check "LiteLLM"             litellm              {{ .Values.llm.litellm.port }}
+          check "Phoenix"             phoenix              {{ .Values.llm.phoenix.port }}
+          {{- end }}
+
           echo ""
           if [ "$FAIL" -gt 0 ]; then
             echo "RESULT: $FAIL service(s) unreachable"

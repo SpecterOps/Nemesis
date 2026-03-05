@@ -108,7 +108,9 @@ Local image builds require the k3d local registry. This does not apply to k3s de
 
 # Options:
 #   --build        Build images locally before deploying (k3d only)
-#   --monitoring   Enable monitoring (deferred — flag only)
+#   --monitoring   Enable monitoring stack
+#   --jupyter      Enable Jupyter stack
+#   --llm          Enable LLM stack
 #   --dry-run      Render templates without deploying
 #   --values FILE  Additional Helm values file
 #   --set KEY=VAL  Override a specific value
@@ -191,6 +193,9 @@ k8s/helm/nemesis/
     ├── apps/                # Application deployments + services
     ├── ingress/             # Traefik IngressRoute + middleware
     ├── keda/                # KEDA ScaledObjects + TriggerAuthentication
+    ├── monitoring/          # Prometheus, Grafana, Loki, Jaeger, etc. (optional)
+    ├── jupyter/             # Jupyter notebook (optional)
+    ├── llm/                 # LiteLLM, Phoenix, Agents (optional)
     └── tests/               # Helm test pod
 ```
 
@@ -235,14 +240,36 @@ helm test nemesis -n nemesis
 ./k8s/scripts/deploy.sh install --values my-values.yaml
 ```
 
-## Deferred Features
+## Optional Stacks
 
-The following will be added in future updates:
-- **Monitoring stack** (Grafana, Prometheus, Jaeger, Loki) — toggle: `monitoring.enabled`
-- **LLM stack** (LiteLLM, Phoenix, Agents) — toggle: `llm.enabled`
-- **Jupyter** — toggle: `jupyter.enabled`
+Enable optional stacks with deploy flags:
 
-The `values.yaml` toggles exist but no templates are generated yet.
+```bash
+# Enable monitoring (Prometheus, Grafana, Loki, Jaeger, OTEL Collector, etc.)
+./k8s/scripts/deploy.sh install --monitoring
+
+# Enable Jupyter notebooks
+./k8s/scripts/deploy.sh install --jupyter
+
+# Enable LLM stack (LiteLLM, Phoenix, Agents)
+./k8s/scripts/deploy.sh install --llm
+
+# Enable everything
+./k8s/scripts/deploy.sh install --monitoring --jupyter --llm
+```
+
+When monitoring is enabled, dashboards are available at:
+- `/grafana` — Grafana dashboards (Traefik, MinIO, Node Exporter)
+- `/prometheus` — Prometheus metrics
+- `/jaeger` — Jaeger distributed tracing
+
+When LLM is enabled:
+- `/llm` — LiteLLM proxy admin UI
+- `/phoenix` — Phoenix LLM observability
+- `/mcp` — Agents MCP endpoint
+
+When Jupyter is enabled:
+- `/jupyter` — Jupyter notebooks
 
 ## Troubleshooting
 

@@ -1,0 +1,113 @@
+{{- if .Values.llm.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  config.yml: |
+    model_list:
+      - model_name: default
+        litellm_params:
+          model: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
+          aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
+          aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
+          aws_region_name: "us-east-1"
+
+    general_settings:
+      database_connection_pool_limit: 30
+      database_connection_timeout: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "litellm" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "litellm" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "litellm" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: litellm
+          image: "{{ .Values.llm.litellm.image.repository }}:{{ .Values.llm.litellm.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "--config"
+            - "/app/config.yml"
+          ports:
+            - containerPort: 4000
+              name: http
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/litellm"
+            - name: STORE_MODEL_IN_DB
+              value: {{ .Values.llm.litellm.env.storeModelInDb | quote }}
+            - name: AWS_ACCESS_KEY_ID
+              value: {{ .Values.llm.litellm.env.awsAccessKeyId | quote }}
+            - name: AWS_SECRET_ACCESS_KEY
+              value: {{ .Values.llm.litellm.env.awsSecretAccessKey | quote }}
+            - name: AWS_REGION_NAME
+              value: {{ .Values.llm.litellm.env.awsRegionName | quote }}
+            - name: LITELLM_MASTER_KEY
+              value: "sk-{{ .Values.llm.litellm.env.litellmAdminPassword }}"
+            - name: LITELLM_SALT_KEY
+              value: "sk-{{ .Values.llm.litellm.env.litellmAdminPassword }}"
+            - name: SERVER_ROOT_PATH
+              value: "/llm"
+            - name: PROXY_BASE_URL
+              value: {{ .Values.nemesis.url | quote }}
+            - name: UI_BASE_PATH
+              value: "/llm/ui"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yml
+              subPath: config.yml
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.llm.litellm.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: litellm-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "litellm" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "litellm" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.llm.litellm.port }}
+      targetPort: http
+      name: http
+{{- end }}

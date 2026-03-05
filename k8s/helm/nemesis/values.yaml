@@ -42,14 +42,221 @@ nemesis:
   defaultExpirationDays: 100
 
 # ============================================
-# Optional stacks (deferred — templates not yet created)
+# Monitoring Stack
 # ============================================
 monitoring:
   enabled: false
+
+  prometheus:
+    image:
+      repository: prom/prometheus
+      tag: "v3.10.0"
+    port: 9090
+    storage:
+      size: 10Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+  grafana:
+    image:
+      repository: grafana/grafana
+      tag: "12.3.4"
+    port: 3000
+    storage:
+      size: 5Gi
+      storageClass: ""
+    env:
+      anonymousEnabled: "true"
+      anonymousOrgRole: "Editor"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  loki:
+    image:
+      repository: grafana/loki
+      tag: "3.5.11"
+    port: 3100
+    storage:
+      size: 10Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+  promtail:
+    image:
+      repository: grafana/promtail
+      tag: "3.5.11"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  jaeger:
+    image:
+      repository: jaegertracing/jaeger
+      tag: "2.15.1"
+    port: 16686
+    storage:
+      size: 10Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+  otelCollector:
+    image:
+      repository: otel/opentelemetry-collector
+      tag: "0.139.0"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  nodeExporter:
+    image:
+      repository: prom/node-exporter
+      tag: "v1.10.2"
+    port: 9100
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  postgresExporter:
+    image:
+      repository: prometheuscommunity/postgres-exporter
+      tag: "v0.18.1"
+    port: 9187
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# ============================================
+# LLM Stack
+# ============================================
 llm:
   enabled: false
+
+  agents:
+    image:
+      registry: ""
+      repository: agents
+      tag: latest
+    replicas: 1
+    appPort: 8000
+    mcpPort: 5000
+    dapr:
+      appId: agents
+      config: agents-config
+    env:
+      workflowRuntimeLogLevel: WARNING
+      workflowClientLogLevel: WARNING
+      litellmAdminPassword: admin123
+      maxBudget: "100"
+      budgetDuration: 30d
+      dotnetAnalysisRunRequestLimit: "25"
+      dotnetAnalysisRunTokensLimit: "1000000"
+      triageConsensusThreshold: "3"
+      mcpMaxResults: "100"
+      chatbotDbPassword: chatbot_pass_change_me
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  litellm:
+    image:
+      repository: ghcr.io/berriai/litellm
+      tag: "v1.81.12-stable.1"
+    port: 4000
+    env:
+      storeModelInDb: "True"
+      awsAccessKeyId: ""
+      awsSecretAccessKey: ""
+      awsRegionName: us-east-1
+      litellmAdminPassword: admin123
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+  phoenix:
+    image:
+      repository: arizephoenix/phoenix
+      tag: "13.3.0"
+    port: 6006
+    storage:
+      size: 5Gi
+      storageClass: ""
+    env:
+      retentionPolicyDays: "100"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+# ============================================
+# Jupyter Stack
+# ============================================
 jupyter:
   enabled: false
+  image:
+    registry: ""
+    repository: jupyter
+    tag: latest
+  replicas: 1
+  port: 8888
+  env:
+    jupyterPassword: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
 
 # ============================================
 # PostgreSQL

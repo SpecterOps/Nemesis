@@ -30,9 +30,9 @@ Actions:
 
 Options:
   --build        Build and push images before deploying (uses k3d local registry)
-  --monitoring   Enable monitoring stack (deferred — sets values only)
-  --jupyter      Enable Jupyter stack (deferred — sets values only)
-  --llm          Enable LLM stack (deferred — sets values only)
+  --monitoring   Enable monitoring stack (Prometheus, Grafana, Loki, Jaeger, etc.)
+  --jupyter      Enable Jupyter notebook stack
+  --llm          Enable LLM stack (LiteLLM, Phoenix, Agents)
   --values FILE  Additional values file
   --set KEY=VAL  Override a specific value
   --dry-run      Render templates without deploying
@@ -110,17 +110,14 @@ do_install() {
         HELM_CMD+=(-f "${CHART_DIR}/values-dev.yaml")
     fi
 
-    # Optional stack toggles (templates not yet implemented — values are set for future use)
+    # Optional stack toggles
     if [[ "$MONITORING" == "true" ]]; then
-        warn "Monitoring stack templates are not yet implemented. Setting value only."
         HELM_CMD+=(--set "monitoring.enabled=true")
     fi
     if [[ "$JUPYTER" == "true" ]]; then
-        warn "Jupyter stack templates are not yet implemented. Setting value only."
         HELM_CMD+=(--set "jupyter.enabled=true")
     fi
     if [[ "$LLM" == "true" ]]; then
-        warn "LLM stack templates are not yet implemented. Setting value only."
         HELM_CMD+=(--set "llm.enabled=true")
     fi
 

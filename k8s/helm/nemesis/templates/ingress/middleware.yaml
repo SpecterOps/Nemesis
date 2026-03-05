@@ -33,4 +33,18 @@ spec:
   stripPrefix:
     prefixes:
       - /hasura
+{{- if .Values.llm.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-strip-phoenix
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /phoenix
+{{- end }}
 {{- end }}
