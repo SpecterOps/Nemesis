@@ -481,7 +481,7 @@ services:
     image: ghcr.io/specterops/nemesis/housekeeping:latest
     environment:
       - APP_ID=housekeeping
-      - CLEANUP_SCHEDULE=*/3 * * * * # Every 3 minutes
+      - CLEANUP_SCHEDULE=*/5 * * * * # Every 5 minutes
       - DAPR_GRPC_PORT=50011
       - DAPR_HTTP_PORT=3510
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -694,7 +694,7 @@ services:
       - seaweedfs_data:/data
       - ./infra/seaweedfs/entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/entrypoint.sh"]
-    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.port=9333 -volume.port=8080 -metricsPort=9324 -dir=/data
+    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.port=9333 -volume.port=8080 -volume.max=0 -metricsPort=9324 -dir=/data
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8333/status"]
       interval: 30s

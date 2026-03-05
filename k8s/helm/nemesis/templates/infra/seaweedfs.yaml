@@ -76,6 +76,7 @@ spec:
             - -s3.config=/etc/seaweedfs/s3.json
             - -master.port=9333
             - -volume.port=8080
+            - -volume.max=0
             - -metricsPort=9324
             - -dir=/data
           ports:

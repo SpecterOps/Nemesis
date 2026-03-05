@@ -454,7 +454,7 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
                 all_object_ids = list(set(expired_object_ids + transform_object_ids))
                 deleted_count = storage.delete_objects(all_object_ids)
                 logger.info(
-                    "Deleted objects from Minio", count=deleted_count, total=len(all_object_ids), round=round_num
+                    "Deleted objects from data lake", count=deleted_count, total=len(all_object_ids), round=round_num
                 )
 
             # Run database deletions in parallel
