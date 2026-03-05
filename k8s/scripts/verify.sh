@@ -12,9 +12,9 @@ PASS=0
 FAIL=0
 WARN=0
 
-pass()  { echo -e "  ${GREEN}PASS${NC} $*"; ((PASS++)); }
-fail()  { echo -e "  ${RED}FAIL${NC} $*"; ((FAIL++)); }
-warn_() { echo -e "  ${YELLOW}WARN${NC} $*"; ((WARN++)); }
+pass()  { echo -e "  ${GREEN}PASS${NC} $*"; ((PASS++)) || true; }
+fail()  { echo -e "  ${RED}FAIL${NC} $*"; ((FAIL++)) || true; }
+warn_() { echo -e "  ${YELLOW}WARN${NC} $*"; ((WARN++)) || true; }
 
 check_pods() {
     echo "=== Pod Status ==="

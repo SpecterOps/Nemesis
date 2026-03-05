@@ -1,0 +1,21 @@
+name: Image Version Sync
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "compose*.yaml"
+      - "k8s/helm/nemesis/values.yaml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "compose*.yaml"
+      - "k8s/helm/nemesis/values.yaml"
+
+jobs:
+  check:
+    name: Check compose ↔ Helm image tags
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./k8s/scripts/check-image-sync.sh

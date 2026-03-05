@@ -78,18 +78,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 do_install() {
-    # Verify namespace exists (created by setup-cluster.sh)
+    # Verify namespace exists (created by setup-cluster-k3d.sh or setup-cluster-k3s.sh)
     if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
-        error "Namespace '$NAMESPACE' does not exist. Run setup-cluster.sh first."
+        error "Namespace '$NAMESPACE' does not exist. Run setup-cluster-k3d.sh or setup-cluster-k3s.sh first."
         exit 1
     fi
 
     log "Deploying Nemesis to namespace: $NAMESPACE"
 
-    # Build images if requested
+    # Build images if requested (requires k3d local registry)
     if [[ "$BUILD" == "true" ]]; then
+        local registry="${REGISTRY:-k3d-nemesis-registry.localhost:5111}"
+        if ! curl -sf "http://${registry}/v2/" &>/dev/null; then
+            error "--build requires a k3d cluster with a local registry at ${registry}"
+            error "Use setup-cluster-k3d.sh to create a k3d cluster, or deploy without --build to pull from ghcr.io."
+            exit 1
+        fi
         log "Building and pushing images to k3d registry..."
-        "${SCRIPT_DIR}/build-and-push.sh"
+        "${SCRIPT_DIR}/build-and-push-k3d.sh"
     fi
 
     # Build helm command

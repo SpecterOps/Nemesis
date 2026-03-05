@@ -1,12 +1,14 @@
-# Nemesis on Kubernetes (k3d)
+# Nemesis on Kubernetes
 
-Deploy Nemesis to a lightweight Kubernetes cluster using [k3d](https://k3d.io/) (k3s-in-Docker), with Dapr operator-managed sidecars and KEDA event-driven autoscaling.
+Deploy Nemesis to a lightweight Kubernetes cluster using either [k3d](https://k3d.io/) (k3s-in-Docker) or native [k3s](https://k3s.io/), with Dapr operator-managed sidecars and KEDA event-driven autoscaling.
 
 > **Note:** Docker Compose remains the primary development environment. Kubernetes deployment is additive and intended for production-like environments and autoscaling testing.
 
-## Prerequisites
+## Quick Start (k3d)
 
-Install the following tools:
+k3d runs k3s inside Docker containers — ideal for local development and testing.
+
+### Prerequisites
 
 | Tool | Install |
 |------|---------|
@@ -15,13 +17,11 @@ Install the following tools:
 | [Helm](https://helm.sh/) | `curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \| bash` |
 | Docker | Must be running |
 
-> **Note:** Dapr and KEDA are installed automatically via Helm by the setup script — no separate CLI tools are needed.
-
-## Quick Start
+### Setup
 
 ```bash
 # 1. Create cluster with Dapr + KEDA
-./k8s/scripts/setup-cluster.sh
+./k8s/scripts/setup-cluster-k3d.sh
 
 # 2. Deploy using pre-built images from ghcr.io
 ./k8s/scripts/deploy.sh install
@@ -32,19 +32,68 @@ Install the following tools:
 # Access Nemesis at https://localhost:7443 (default user: n / password: n)
 ```
 
-## Building Locally
+### Teardown
 
-To build and deploy from source using the k3d local registry:
+```bash
+# Delete cluster (preserves registry for rebuilds)
+./k8s/scripts/teardown-cluster-k3d.sh
+
+# Delete cluster AND registry
+./k8s/scripts/teardown-cluster-k3d.sh --registry
+```
+
+## Quick Start (k3s)
+
+k3s runs natively on the host — suited for VMs, bare-metal servers, and production-like environments where Docker is not available or desired.
+
+### Prerequisites
+
+| Tool | Install |
+|------|---------|
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | See docs |
+| [Helm](https://helm.sh/) | `curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \| bash` |
+| curl | System package manager |
+
+> **Note:** Docker is **not** required. k3s uses containerd directly.
+
+### Setup
+
+```bash
+# 1. Install k3s and configure Traefik, Dapr, KEDA
+./k8s/scripts/setup-cluster-k3s.sh
+
+# 2. Deploy using pre-built images from ghcr.io
+./k8s/scripts/deploy.sh install
+
+# 3. Verify everything is running
+./k8s/scripts/verify.sh
+
+# Access Nemesis at https://localhost:7443 (default user: n / password: n)
+```
+
+### Teardown
+
+```bash
+# Remove everything including k3s
+./k8s/scripts/teardown-cluster-k3s.sh
+
+# Remove only Nemesis and Helm releases, keep k3s running
+./k8s/scripts/teardown-cluster-k3s.sh --keep-k3s
+```
+
+## Building Locally (k3d only)
+
+Local image builds require the k3d local registry. This does not apply to k3s deployments, which pull images directly from ghcr.io.
 
 ```bash
 # Build all images and push to k3d registry
-./k8s/scripts/build-and-push.sh
+./k8s/scripts/build-and-push-k3d.sh
 
 # Deploy using local images
 ./k8s/scripts/deploy.sh install --build
 
 # Or build specific services only
-./k8s/scripts/build-and-push.sh web-api frontend
+./k8s/scripts/build-and-push-k3d.sh web-api frontend
 ```
 
 ## Deploy Script Usage
@@ -58,7 +107,7 @@ To build and deploy from source using the k3d local registry:
 #   status        Show deployment status
 
 # Options:
-#   --build        Build images locally before deploying
+#   --build        Build images locally before deploying (k3d only)
 #   --monitoring   Enable monitoring (deferred — flag only)
 #   --dry-run      Render templates without deploying
 #   --values FILE  Additional Helm values file
@@ -66,7 +115,7 @@ To build and deploy from source using the k3d local registry:
 
 # Examples:
 ./k8s/scripts/deploy.sh install                              # ghcr.io images
-./k8s/scripts/deploy.sh install --build                      # local build
+./k8s/scripts/deploy.sh install --build                      # local build (k3d only)
 ./k8s/scripts/deploy.sh install --set credentials.postgres.password=MySecret
 ./k8s/scripts/deploy.sh install --dry-run                    # preview only
 ./k8s/scripts/deploy.sh uninstall                            # remove
@@ -86,6 +135,17 @@ To build and deploy from source using the k3d local registry:
 | Autoscaling | Manual `docker compose up --scale` | KEDA ScaledObjects on RabbitMQ queue depth |
 | Connection pooling | Per-service pools only | PgBouncer (transaction mode) between services and PostgreSQL |
 | Service discovery | Docker DNS | K8s Service DNS |
+
+### k3d vs k3s
+
+| Aspect | k3d | k3s |
+|--------|-----|-----|
+| Runtime | k3s inside Docker containers | Native on host |
+| Docker required | Yes | No (uses containerd) |
+| Local image builds | Via k3d local registry | N/A — pull from ghcr.io |
+| Traefik service type | NodePort (mapped via k3d port) | LoadBalancer (built-in ServiceLB/Klipper) |
+| Default HTTPS port | 7443 | 7443 |
+| Best for | Local dev, CI | VMs, bare-metal, production-like |
 
 ### KEDA Autoscaling
 
@@ -173,16 +233,6 @@ helm test nemesis -n nemesis
 
 # Custom values file
 ./k8s/scripts/deploy.sh install --values my-values.yaml
-```
-
-### Teardown
-
-```bash
-# Delete cluster (preserves registry for rebuilds)
-./k8s/scripts/teardown-cluster.sh
-
-# Delete cluster AND registry
-./k8s/scripts/teardown-cluster.sh --registry
 ```
 
 ## Deferred Features

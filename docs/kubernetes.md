@@ -1,11 +1,17 @@
-# Kubernetes Deployment (k3d)
+# Kubernetes Deployment
 
-Deploy Nemesis to a lightweight Kubernetes cluster using [k3d](https://k3d.io/) (k3s-in-Docker), with Dapr operator-managed sidecars and KEDA event-driven autoscaling.
+Deploy Nemesis to a lightweight Kubernetes cluster using either [k3d](https://k3d.io/) (k3s-in-Docker) or native [k3s](https://k3s.io/), with Dapr operator-managed sidecars and KEDA event-driven autoscaling.
 
 !!! note
     Docker Compose remains the primary development environment. Kubernetes deployment is additive and intended for production-like environments and autoscaling testing. See the [quickstart guide](quickstart.md) for Docker Compose setup.
 
-## Prerequisites
+**System requirements** are the same as Docker Compose (4 cores, 12+ GB RAM, 100 GB disk).
+
+## Quick Start (k3d)
+
+k3d runs k3s inside Docker containers — ideal for local development and testing.
+
+### Prerequisites
 
 | Tool | Install |
 |------|---------|
@@ -16,13 +22,11 @@ Deploy Nemesis to a lightweight Kubernetes cluster using [k3d](https://k3d.io/) 
 
 Dapr and KEDA are installed automatically via Helm by the setup script.
 
-**System requirements** are the same as Docker Compose (4 cores, 12+ GB RAM, 100 GB disk).
-
-## Quick Start
+### Setup
 
 ```bash
 # 1. Create cluster with Traefik, Dapr, and KEDA
-./k8s/scripts/setup-cluster.sh
+./k8s/scripts/setup-cluster-k3d.sh
 
 # 2. Deploy using pre-built images from ghcr.io
 ./k8s/scripts/deploy.sh install
@@ -33,20 +37,74 @@ Dapr and KEDA are installed automatically via Helm by the setup script.
 # Access Nemesis at https://localhost:7443 (default user: n / password: n)
 ```
 
-## Building Locally
+### Teardown
+
+```bash
+# Delete cluster (preserves registry for faster rebuilds)
+./k8s/scripts/teardown-cluster-k3d.sh
+
+# Delete cluster AND registry
+./k8s/scripts/teardown-cluster-k3d.sh --registry
+```
+
+## Quick Start (k3s)
+
+k3s runs natively on the host — suited for VMs, bare-metal servers, and production-like environments where Docker is not available or desired.
+
+### Prerequisites
+
+| Tool | Install |
+|------|---------|
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | See docs |
+| [Helm](https://helm.sh/) | `curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \| bash` |
+| curl | System package manager |
+
+Docker is **not** required. k3s uses containerd directly.
+
+Dapr and KEDA are installed automatically via Helm by the setup script.
+
+### Setup
+
+```bash
+# 1. Install k3s and configure Traefik, Dapr, KEDA
+./k8s/scripts/setup-cluster-k3s.sh
+
+# 2. Deploy using pre-built images from ghcr.io
+./k8s/scripts/deploy.sh install
+
+# 3. Verify everything is running
+./k8s/scripts/verify.sh
+
+# Access Nemesis at https://localhost:7443 (default user: n / password: n)
+```
+
+### Teardown
+
+```bash
+# Remove everything including k3s
+./k8s/scripts/teardown-cluster-k3s.sh
+
+# Remove only Nemesis and Helm releases, keep k3s running
+./k8s/scripts/teardown-cluster-k3s.sh --keep-k3s
+```
+
+## Building Locally (k3d only)
 
 To build and deploy from source using the k3d local registry:
 
 ```bash
 # Build all images and push to k3d registry
-./k8s/scripts/build-and-push.sh
+./k8s/scripts/build-and-push-k3d.sh
 
 # Deploy using local images
 ./k8s/scripts/deploy.sh install --build
 
 # Or build specific services only
-./k8s/scripts/build-and-push.sh web-api frontend
+./k8s/scripts/build-and-push-k3d.sh web-api frontend
 ```
+
+!!! note
+    The `--build` flag on `deploy.sh` requires a k3d cluster with a local registry. k3s deployments pull images directly from ghcr.io.
 
 ## Deploy Script
 
@@ -59,7 +117,7 @@ Actions:
   status        Show deployment status
 
 Options:
-  --build        Build images locally before deploying
+  --build        Build images locally before deploying (k3d only)
   --monitoring   Enable monitoring (deferred)
   --dry-run      Render templates without deploying
   --values FILE  Additional Helm values file
@@ -72,7 +130,7 @@ Options:
 # Deploy with ghcr.io images
 ./k8s/scripts/deploy.sh install
 
-# Deploy with locally built images
+# Deploy with locally built images (k3d only)
 ./k8s/scripts/deploy.sh install --build
 
 # Override credentials
@@ -105,15 +163,26 @@ Options:
 | Connection pooling | Per-service pools only | PgBouncer (transaction mode) between services and PostgreSQL |
 | Service discovery | Docker DNS | K8s Service DNS |
 
-### What the Setup Script Installs
+### What the Setup Scripts Install
 
-The `setup-cluster.sh` script creates a k3d cluster and installs:
+Both `setup-cluster-k3d.sh` and `setup-cluster-k3s.sh` install the same Helm components:
 
 - **Traefik** (Helm chart v34.3.0) — reverse proxy with TLS termination
 - **Dapr** (Helm chart v1.16.9) — sidecar injection, pub/sub, workflows, secrets
 - **KEDA** (Helm chart v2.16.1) — event-driven autoscaling from RabbitMQ queue depth
 
 All versions are pinned for reproducibility.
+
+### k3d vs k3s
+
+| Aspect | k3d | k3s |
+|--------|-----|-----|
+| Runtime | k3s inside Docker containers | Native on host |
+| Docker required | Yes | No (uses containerd) |
+| Local image builds | Via k3d local registry | N/A — pull from ghcr.io |
+| Traefik service type | NodePort (mapped via k3d port) | LoadBalancer (built-in ServiceLB/Klipper) |
+| Default HTTPS port | 7443 | 7443 |
+| Best for | Local dev, CI | VMs, bare-metal, production-like |
 
 ### KEDA Autoscaling
 
@@ -189,16 +258,6 @@ kubectl logs -f deployment/file-enrichment -c daprd -n nemesis  # Dapr sidecar
 
 ```bash
 helm test nemesis -n nemesis
-```
-
-### Teardown
-
-```bash
-# Delete cluster (preserves registry for faster rebuilds)
-./k8s/scripts/teardown-cluster.sh
-
-# Delete cluster AND registry
-./k8s/scripts/teardown-cluster.sh --registry
 ```
 
 ## Configuration

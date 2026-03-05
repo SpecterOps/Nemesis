@@ -5,10 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_ROOT="$(dirname "$K8S_DIR")"
 
-CLUSTER_NAME="${CLUSTER_NAME:-nemesis}"
-REGISTRY_NAME="k3d-nemesis-registry.localhost"
-REGISTRY_PORT="${REGISTRY_PORT:-5111}"
-K3D_AGENTS="${K3D_AGENTS:-2}"
 HTTPS_PORT="${HTTPS_PORT:-7443}"
 
 RED='\033[0;31m'
@@ -23,7 +19,7 @@ error() { echo -e "${RED}[-]${NC} $*" >&2; }
 check_prerequisites() {
     local missing=()
 
-    for cmd in k3d kubectl helm; do
+    for cmd in curl kubectl helm; do
         if ! command -v "$cmd" &>/dev/null; then
             missing+=("$cmd")
         fi
@@ -33,46 +29,72 @@ check_prerequisites() {
         error "Missing required tools: ${missing[*]}"
         echo ""
         echo "Install instructions:"
-        echo "  k3d:    curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash"
+        echo "  curl:    apt install curl / yum install curl"
         echo "  kubectl: https://kubernetes.io/docs/tasks/tools/"
-        echo "  helm:   curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
+        echo "  helm:    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
         exit 1
     fi
 
     log "All prerequisites found"
 }
 
-create_registry() {
-    if k3d registry list 2>/dev/null | grep -q "$REGISTRY_NAME"; then
-        warn "Registry $REGISTRY_NAME already exists, skipping"
-    else
-        log "Creating local registry: $REGISTRY_NAME:$REGISTRY_PORT"
-        k3d registry create nemesis-registry.localhost --port "$REGISTRY_PORT"
-    fi
-
-    # Ensure the registry hostname resolves (required for docker push)
-    if ! grep -q "$REGISTRY_NAME" /etc/hosts 2>/dev/null; then
-        log "Adding $REGISTRY_NAME to /etc/hosts (requires sudo)"
-        echo "127.0.0.1 $REGISTRY_NAME" | sudo tee -a /etc/hosts >/dev/null
-    fi
-}
-
-create_cluster() {
-    if k3d cluster list 2>/dev/null | grep -q "$CLUSTER_NAME"; then
-        warn "Cluster $CLUSTER_NAME already exists, skipping"
+install_k3s() {
+    if command -v k3s &>/dev/null && k3s kubectl get nodes &>/dev/null 2>&1; then
+        warn "k3s is already installed and running, skipping installation"
         return
     fi
 
-    log "Creating k3d cluster: $CLUSTER_NAME (agents: $K3D_AGENTS, HTTPS port: $HTTPS_PORT)"
-    k3d cluster create "$CLUSTER_NAME" \
-        --port "${HTTPS_PORT}:443@loadbalancer" \
-        --agents "$K3D_AGENTS" \
-        --registry-use "$REGISTRY_NAME:$REGISTRY_PORT" \
-        --k3s-arg "--disable=traefik@server:0" \
-        --wait
+    log "Installing k3s (disabling built-in Traefik)..."
+    curl -sfL https://get.k3s.io | sh -s - --disable=traefik
 
-    log "Waiting for cluster to be ready..."
+    log "k3s installed"
+}
+
+configure_kubeconfig() {
+    log "Configuring kubeconfig..."
+
+    # Wait for k3s kubeconfig to appear
+    local retries=0
+    while [[ ! -f /etc/rancher/k3s/k3s.yaml ]] && [[ $retries -lt 30 ]]; do
+        sleep 1
+        ((retries++))
+    done
+
+    if [[ ! -f /etc/rancher/k3s/k3s.yaml ]]; then
+        error "k3s kubeconfig not found at /etc/rancher/k3s/k3s.yaml after 30s"
+        exit 1
+    fi
+
+    mkdir -p "$HOME/.kube"
+
+    # Back up existing kubeconfig if present
+    if [[ -f "$HOME/.kube/config" ]]; then
+        warn "Backing up existing kubeconfig to $HOME/.kube/config.bak"
+        cp "$HOME/.kube/config" "$HOME/.kube/config.bak"
+    fi
+
+    sudo cp /etc/rancher/k3s/k3s.yaml "$HOME/.kube/config"
+    sudo chown "$(id -u):$(id -g)" "$HOME/.kube/config"
+    chmod 600 "$HOME/.kube/config"
+
+    log "Kubeconfig configured at $HOME/.kube/config"
+}
+
+wait_for_node() {
+    log "Waiting for k3s node to register..."
+    local retries=0
+    while ! kubectl get nodes &>/dev/null || [[ $(kubectl get nodes --no-headers 2>/dev/null | wc -l) -eq 0 ]]; do
+        if [[ $retries -ge 30 ]]; then
+            error "No nodes registered after 30s"
+            exit 1
+        fi
+        sleep 1
+        ((retries++))
+    done
+
+    log "Node registered, waiting for Ready status..."
     kubectl wait --for=condition=Ready nodes --all --timeout=120s
+    log "Node is ready"
 }
 
 install_traefik() {
@@ -85,13 +107,14 @@ install_traefik() {
         return
     fi
 
+    # k3s has built-in ServiceLB (Klipper), so we use LoadBalancer service type
     helm install traefik traefik/traefik \
         --namespace kube-system \
         --version 34.3.0 \
-        --set "ports.websecure.nodePort=30443" \
+        --set "service.type=LoadBalancer" \
         --set "ports.websecure.expose.default=true" \
-        --set "ports.web.redirections.entryPoint.to=websecure" \
-        --set "ports.web.redirections.entryPoint.scheme=https" \
+        --set "ports.websecure.exposedPort=7443" \
+        --set "ports.web.expose.default=false" \
         --set "ingressRoute.dashboard.enabled=false" \
         --set "providers.kubernetesIngress.enabled=true" \
         --set "providers.kubernetesCRD.enabled=true" \
@@ -189,13 +212,14 @@ create_tls_secret() {
 
 main() {
     echo "============================================"
-    echo "  Nemesis K8s Cluster Setup"
+    echo "  Nemesis K8s Cluster Setup (k3s)"
     echo "============================================"
     echo ""
 
     check_prerequisites
-    create_registry
-    create_cluster
+    install_k3s
+    configure_kubeconfig
+    wait_for_node
     install_traefik
     install_dapr
     install_keda
@@ -206,14 +230,15 @@ main() {
     log "Setup complete!"
     echo ""
     echo "Next steps:"
-    echo "  1. Build and push images:  ./k8s/scripts/build-and-push.sh"
-    echo "  2. Deploy Nemesis:         ./k8s/scripts/deploy.sh"
-    echo "  3. Verify deployment:      ./k8s/scripts/verify.sh"
+    echo "  1. Deploy Nemesis:         ./k8s/scripts/deploy.sh install"
+    echo "  2. Verify deployment:      ./k8s/scripts/verify.sh"
     echo ""
     echo "Cluster info:"
-    echo "  Name:     $CLUSTER_NAME"
-    echo "  Registry: $REGISTRY_NAME:$REGISTRY_PORT"
-    echo "  HTTPS:    https://localhost:$HTTPS_PORT"
+    echo "  Runtime: k3s"
+    echo "  HTTPS:   https://localhost:${HTTPS_PORT}"
+    echo ""
+    echo "Note: k3s pulls images directly. Use ghcr.io images (default) or"
+    echo "      pre-load images with 'k3s ctr images import'."
 }
 
 main "$@"

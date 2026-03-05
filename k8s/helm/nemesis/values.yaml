@@ -82,8 +82,9 @@ postgres:
 # ============================================
 pgbouncer:
   image:
-    # Upstream: public.ecr.aws/bitnami/pgbouncer:1.25.1
-    # build-and-push.sh mirrors this to the k3d local registry automatically.
+    # Use upstream ECR directly. build-and-push-k3d.sh mirrors this to the
+    # k3d local registry; values-dev.yaml overrides the registry accordingly.
+    registry: "public.ecr.aws/bitnami"
     repository: pgbouncer
     tag: "1.25.1"
   replicas: 1
