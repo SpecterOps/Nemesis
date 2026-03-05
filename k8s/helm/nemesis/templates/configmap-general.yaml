@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nemesis-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  NEMESIS_URL: {{ .Values.nemesis.url | quote }}
+  LOG_LEVEL: {{ .Values.nemesis.logLevel | quote }}
+  DEFAULT_EXPIRATION_DAYS: {{ .Values.nemesis.defaultExpirationDays | quote }}
+  NEMESIS_MONITORING: {{ ternary "enabled" "disabled" .Values.monitoring.enabled | quote }}

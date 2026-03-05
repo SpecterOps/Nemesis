@@ -3,7 +3,7 @@ import os
 from contextlib import AsyncExitStack, asynccontextmanager
 
 import file_enrichment.global_vars as global_vars
-from common.db import create_connection_pool
+from common.db import create_connection_pool, pool_stats_logger
 from common.logger import get_logger
 from common.queues import (
     DOTNET_OUTPUT_TOPIC,
@@ -154,6 +154,10 @@ async def lifespan(app: FastAPI):
             )
             cleanup_dapr_workflow_state_task = asyncio.create_task(purger.run())
 
+            pool_stats_logger_task = asyncio.create_task(
+                pool_stats_logger(global_vars.asyncpg_pool, logger, interval=30)
+            )
+
             # Start file processing workers
             start_workers()
             logger.info("Started file processing workers")
@@ -179,6 +183,7 @@ async def lifespan(app: FastAPI):
             await cancel_task(background_dpapi_task, "masterkey watcher task")
             await cancel_task(postgres_notify_listener_task, "PostgreSQL NOTIFY listener")
             await cancel_task(cleanup_dapr_workflow_state_task, "Dapr workflow state purger")
+            await cancel_task(pool_stats_logger_task, "DB pool stats logger")
 
             # Terminate the workflow purger monitor
             # terminate_workflow_safe("workflow-purger-monitor", "workflow purger monitor")

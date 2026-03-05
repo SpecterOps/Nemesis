@@ -1,0 +1,12 @@
+# Development overrides — use with: helm upgrade --install nemesis . -f values.yaml -f values-dev.yaml
+global:
+  imageRegistry: "k3d-nemesis-registry.localhost:5111"
+  imagePullPolicy: Always
+
+# Override pgbouncer to use the k3d local registry (mirrored by build-and-push-k3d.sh)
+pgbouncer:
+  image:
+    registry: "k3d-nemesis-registry.localhost:5111"
+
+nemesis:
+  logLevel: DEBUG

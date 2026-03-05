@@ -1,0 +1,5 @@
+{{/*
+Namespace is created by setup-cluster.sh with the dapr.io/inject=true label.
+Helm's --create-namespace flag also handles creation during deploy.sh.
+This file is intentionally empty to avoid conflicts.
+*/}}

@@ -1,0 +1,117 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hasura-metadata
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  databases.yaml: |
+{{ .Files.Get "files/databases.yaml" | indent 4 }}
+  functions.yaml: |
+{{ .Files.Get "files/functions.yaml" | indent 4 }}
+  tables.yaml: |
+{{ .Files.Get "files/tables.yaml" | indent 4 }}
+  version.yaml: |
+{{ .Files.Get "files/version.yaml" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hasura
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "hasura" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "hasura" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "hasura" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: hasura
+          image: "{{ .Values.hasura.image.repository }}:{{ .Values.hasura.image.tag }}"
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: HASURA_GRAPHQL_DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@pgbouncer:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}"
+            - name: HASURA_GRAPHQL_METADATA_DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@pgbouncer:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}"
+            - name: HASURA_GRAPHQL_ENABLE_CONSOLE
+              value: {{ .Values.hasura.enableConsole | quote }}
+            - name: HASURA_GRAPHQL_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: HASURA_ADMIN_SECRET
+            - name: HASURA_GRAPHQL_BASE_PATH
+              value: "/hasura"
+            - name: HASURA_GRAPHQL_METADATA_DIR
+              value: /hasura-metadata
+            - name: HASURA_GRAPHQL_LOG_LEVEL
+              value: {{ .Values.hasura.logLevel | quote }}
+            - name: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
+              value: "anonymous"
+            - name: HASURA_GRAPHQL_ENABLE_METADATA_SYNC
+              value: "true"
+            - name: HASURA_GRAPHQL_ENABLE_TELEMETRY
+              value: "false"
+            - name: HASURA_GRAPHQL_ENABLED_LOG_TYPES
+              value: "startup, http-log, webhook-log, websocket-log, query-log"
+          volumeMounts:
+            - name: metadata
+              mountPath: /hasura-metadata
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.hasura.resources | nindent 12 }}
+      volumes:
+        - name: metadata
+          configMap:
+            name: hasura-metadata
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hasura
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "hasura" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "hasura" "context" .) | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http

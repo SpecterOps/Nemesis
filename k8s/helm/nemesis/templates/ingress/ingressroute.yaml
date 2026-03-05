@@ -1,0 +1,152 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nemesis-ingress
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    - websecure
+  {{- $hostMatch := "" }}
+  {{- if .Values.ingress.host }}
+  {{- $hostMatch = printf "Host(`%s`) && " .Values.ingress.host }}
+  {{- end }}
+  routes:
+    # Frontend (root)
+    - match: {{ $hostMatch }}PathPrefix(`/`)
+      kind: Rule
+      priority: 1
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: frontend
+          port: {{ .Values.frontend.port }}
+
+    # Web API
+    - match: {{ $hostMatch }}PathPrefix(`/api`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: web-api
+          port: {{ .Values.webApi.port }}
+
+    # Hasura GraphQL
+    - match: {{ $hostMatch }}PathPrefix(`/hasura`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+        - name: nemesis-strip-hasura
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: hasura
+          port: 8080
+
+    # RabbitMQ Management
+    - match: {{ $hostMatch }}PathPrefix(`/rabbitmq`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: rabbitmq
+          port: 15672
+
+    {{- if .Values.monitoring.enabled }}
+    # Grafana
+    - match: {{ $hostMatch }}PathPrefix(`/grafana`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: grafana
+          port: {{ .Values.monitoring.grafana.port }}
+
+    # Prometheus
+    - match: {{ $hostMatch }}PathPrefix(`/prometheus`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: prometheus
+          port: {{ .Values.monitoring.prometheus.port }}
+
+    # Jaeger
+    - match: {{ $hostMatch }}PathPrefix(`/jaeger`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: jaeger
+          port: {{ .Values.monitoring.jaeger.port }}
+    {{- end }}
+
+    {{- if .Values.jupyter.enabled }}
+    # Jupyter
+    - match: {{ $hostMatch }}PathPrefix(`/jupyter`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: jupyter
+          port: {{ .Values.jupyter.port }}
+    {{- end }}
+
+    {{- if .Values.llm.enabled }}
+    # LiteLLM
+    - match: {{ $hostMatch }}PathPrefix(`/llm`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: litellm
+          port: {{ .Values.llm.litellm.port }}
+
+    # Phoenix
+    - match: {{ $hostMatch }}PathPrefix(`/phoenix`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+        - name: nemesis-strip-phoenix
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: phoenix
+          port: {{ .Values.llm.phoenix.port }}
+
+    # MCP (Agents)
+    - match: {{ $hostMatch }}PathPrefix(`/mcp`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: agents
+          port: {{ .Values.llm.agents.mcpPort }}
+    {{- end }}
+
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+{{- end }}

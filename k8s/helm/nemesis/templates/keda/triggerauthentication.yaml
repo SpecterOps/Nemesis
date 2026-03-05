@@ -1,0 +1,14 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: rabbitmq-trigger-auth
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: nemesis-secrets
+      key: RABBITMQ_CONNECTION_STRING
+{{- end }}

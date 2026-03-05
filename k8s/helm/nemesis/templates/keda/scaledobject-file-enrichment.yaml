@@ -1,0 +1,25 @@
+{{- if and .Values.autoscaling.enabled .Values.autoscaling.fileEnrichment.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: file-enrichment-scaler
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: file-enrichment
+  minReplicaCount: {{ .Values.autoscaling.fileEnrichment.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.fileEnrichment.maxReplicas }}
+  cooldownPeriod: {{ .Values.autoscaling.fileEnrichment.cooldownPeriod }}
+  pollingInterval: {{ .Values.autoscaling.fileEnrichment.pollingInterval }}
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: {{ .Values.autoscaling.fileEnrichment.queueName | quote }}
+        mode: QueueLength
+        value: {{ .Values.autoscaling.fileEnrichment.queueLength | quote }}
+      authenticationRef:
+        name: rabbitmq-trigger-auth
+{{- end }}

@@ -1,0 +1,164 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    extensions:
+      jaeger_storage:
+        backends:
+          badger_store:
+            badger:
+              directories:
+                keys: /badger/keys
+                values: /badger/values
+              ephemeral: false
+      jaeger_query:
+        storage:
+          traces: badger_store
+        base-path: /jaeger
+      healthcheckv2:
+        http:
+          endpoint: "0.0.0.0:13133"
+          path: /status
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+
+    processors:
+      memory_limiter:
+        limit_percentage: 75
+        spike_limit_percentage: 20
+        check_interval: 1s
+      batch:
+        timeout: 5s
+        send_batch_size: 2048
+        send_batch_max_size: 4096
+
+    exporters:
+      jaeger_storage_exporter:
+        trace_storage: badger_store
+
+    service:
+      extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [jaeger_storage_exporter]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jaeger-data
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.monitoring.jaeger.storage.storageClass }}
+  storageClassName: {{ .Values.monitoring.jaeger.storage.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.jaeger.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "jaeger" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "jaeger" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "jaeger" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+      containers:
+        - name: jaeger
+          image: "{{ .Values.monitoring.jaeger.image.repository }}:{{ .Values.monitoring.jaeger.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "--config"
+            - "/etc/jaeger/config.yaml"
+          env:
+            - name: QUERY_BASE_PATH
+              value: "/jaeger"
+            - name: GOGC
+              value: "80"
+          ports:
+            - containerPort: 16686
+              name: query
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 13133
+              name: health
+          volumeMounts:
+            - name: config
+              mountPath: /etc/jaeger
+            - name: data
+              mountPath: /badger
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.monitoring.jaeger.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: jaeger-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: jaeger-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "jaeger" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "jaeger" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.monitoring.jaeger.port }}
+      targetPort: query
+      name: query
+    - port: 4317
+      targetPort: otlp-grpc
+      name: otlp-grpc
+{{- end }}

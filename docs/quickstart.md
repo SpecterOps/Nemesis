@@ -98,6 +98,16 @@ Click on the "Help" button on the bottom left to view the additionally exposed N
 
 ![Nemesis services](images/nemesis-dashboard-services.png)
 
+### Alternative: Kubernetes (k3d) Deployment
+
+For production-like environments with autoscaling, Nemesis can also be deployed to a local Kubernetes cluster using k3d. This provides KEDA-driven autoscaling, Dapr operator-managed sidecars, and Helm-based configuration. See the [Kubernetes deployment guide](kubernetes.md) for full instructions.
+
+```bash
+./k8s/scripts/setup-cluster.sh       # Create cluster with Traefik, Dapr, KEDA
+./k8s/scripts/deploy.sh install      # Deploy Nemesis
+./k8s/scripts/verify.sh              # Verify deployment
+```
+
 ### Step 7: Shutting Nemesis Down
 
 To shutdown Nemesis, use the `nemesis-ctl.sh` script's `stop` or `clean` commands ***with the same arguments you used to start it***. For example, if you started it with monitoring, jupyter, or LLM support enabled, then run the following:

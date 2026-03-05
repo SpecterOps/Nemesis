@@ -1,0 +1,25 @@
+{{- if and .Values.autoscaling.enabled .Values.autoscaling.dotnetService.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: dotnet-service-scaler
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: dotnet-service
+  minReplicaCount: {{ .Values.autoscaling.dotnetService.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.dotnetService.maxReplicas }}
+  cooldownPeriod: {{ .Values.autoscaling.dotnetService.cooldownPeriod }}
+  pollingInterval: {{ .Values.autoscaling.dotnetService.pollingInterval }}
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: {{ .Values.autoscaling.dotnetService.queueName | quote }}
+        mode: QueueLength
+        value: {{ .Values.autoscaling.dotnetService.queueLength | quote }}
+      authenticationRef:
+        name: rabbitmq-trigger-auth
+{{- end }}

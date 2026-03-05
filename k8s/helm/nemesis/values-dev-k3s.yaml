@@ -1,0 +1,11 @@
+# Development overrides for k3s — use with: helm upgrade --install nemesis . -f values.yaml -f values-dev-k3s.yaml
+# Images are pre-loaded into k3s containerd via build-and-load-k3s.sh, so no registry pull is needed.
+global:
+  imageRegistry: "docker.io/nemesis"
+  imagePullPolicy: Never
+
+# pgbouncer: no override needed — the image is imported into containerd with its
+# original ECR tag (public.ecr.aws/bitnami/pgbouncer:1.25.1) which matches values.yaml.
+
+nemesis:
+  logLevel: DEBUG

@@ -1,0 +1,95 @@
+{{- if .Values.llm.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: phoenix-data
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.llm.phoenix.storage.storageClass }}
+  storageClassName: {{ .Values.llm.phoenix.storage.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.llm.phoenix.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phoenix
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "phoenix" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "phoenix" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "phoenix" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: phoenix
+          image: "{{ .Values.llm.phoenix.image.repository }}:{{ .Values.llm.phoenix.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 6006
+              name: http
+          env:
+            - name: PHOENIX_WORKING_DIR
+              value: "/data"
+            - name: PHOENIX_HOST_ROOT_PATH
+              value: "/phoenix"
+            - name: PHOENIX_SQL_DATABASE_URL
+              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/phoenix"
+            - name: PHOENIX_DEFAULT_RETENTION_POLICY_DAYS
+              value: {{ .Values.llm.phoenix.env.retentionPolicyDays | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.llm.phoenix.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: phoenix-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phoenix
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "phoenix" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "phoenix" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.llm.phoenix.port }}
+      targetPort: http
+      name: http
+{{- end }}

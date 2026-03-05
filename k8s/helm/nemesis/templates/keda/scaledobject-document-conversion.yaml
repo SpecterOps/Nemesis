@@ -1,0 +1,25 @@
+{{- if and .Values.autoscaling.enabled .Values.autoscaling.documentConversion.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: document-conversion-scaler
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: document-conversion
+  minReplicaCount: {{ .Values.autoscaling.documentConversion.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.documentConversion.maxReplicas }}
+  cooldownPeriod: {{ .Values.autoscaling.documentConversion.cooldownPeriod }}
+  pollingInterval: {{ .Values.autoscaling.documentConversion.pollingInterval }}
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: {{ .Values.autoscaling.documentConversion.queueName | quote }}
+        mode: QueueLength
+        value: {{ .Values.autoscaling.documentConversion.queueLength | quote }}
+      authenticationRef:
+        name: rabbitmq-trigger-auth
+{{- end }}

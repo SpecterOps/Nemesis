@@ -1,0 +1,32 @@
+{{- if and .Values.autoscaling.enabled .Values.autoscaling.gotenberg.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: gotenberg-scaler
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: gotenberg
+  minReplicaCount: {{ .Values.autoscaling.gotenberg.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.gotenberg.maxReplicas }}
+  cooldownPeriod: {{ .Values.autoscaling.gotenberg.cooldownPeriod }}
+  pollingInterval: {{ .Values.autoscaling.gotenberg.pollingInterval }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: {{ .Values.autoscaling.gotenberg.scaleUpStabilization }}
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: {{ .Values.autoscaling.gotenberg.scaleDownStabilization }}
+  triggers:
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: {{ .Values.autoscaling.gotenberg.cpuThreshold | quote }}
+{{- end }}

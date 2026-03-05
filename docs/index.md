@@ -31,7 +31,7 @@ Nemesis 2.0 is built on [Docker](https://www.docker.com/) with heavy [Dapr integ
 _Note: the previous Nemesis 1.0.1 code base has been preserved [as a branch](https://github.com/SpecterOps/Nemesis/tree/nemesis-1.0.1)_
 
 ## Setup / Installation
-Follow the [quickstart guide](quickstart.md).
+Follow the [quickstart guide](quickstart.md) for Docker Compose deployment, or the [Kubernetes (k3d) guide](kubernetes.md) for production-like environments with autoscaling.
 
 
 ## Usage
