@@ -144,7 +144,7 @@ Common environment variables for services that need S3-compatible storage access
       name: nemesis-secrets
       key: S3_SECRET_KEY
 - name: S3_ENDPOINT
-  value: "http://seaweedfs:8333"
+  value: "seaweedfs:8333"
 - name: S3_BUCKET
   value: "files"
 {{- end }}
