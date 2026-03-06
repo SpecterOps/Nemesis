@@ -1,0 +1,19 @@
+# Overrides llm/dapr-config-agents.yaml when monitoring+llm are both enabled — adds tracing.
+# Only applied when both --monitoring and --llm flags are used.
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: agents-config
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  metric:
+    enabled: true
+  tracing:
+    expandParams: true
+    samplingRate: "1"
+    otel:
+      protocol: grpc
+      endpointAddress: "otel-collector:4317"
+      isSecure: false

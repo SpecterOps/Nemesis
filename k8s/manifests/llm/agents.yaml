@@ -1,0 +1,170 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agents
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: agents
+spec:
+  replicas: ${AGENTS_REPLICAS}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agents
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agents
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "agents"
+        dapr.io/app-port: "${AGENTS_APP_PORT}"
+        dapr.io/config: "agents-config"
+        dapr.io/http-max-request-size: "300"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        dapr.io/graceful-shutdown-seconds: "5"
+        dapr.io/log-level: "info"
+        dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+        dapr.io/sidecar-cpu-request: "50m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "300m"
+        dapr.io/sidecar-memory-limit: "256Mi"
+    spec:
+      containers:
+        - name: agents
+          image: "${IMAGE_REGISTRY}/agents:${AGENTS_IMAGE_TAG}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: ${AGENTS_APP_PORT}
+              name: http
+            - containerPort: ${AGENTS_MCP_PORT}
+              name: mcp
+          env:
+            - name: APP_ID
+              value: "agents"
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: "${LOG_LEVEL}"
+            - name: NEMESIS_URL
+              value: "${NEMESIS_URL}"
+            - name: WORKFLOW_RUNTIME_LOG_LEVEL
+              value: "${AGENTS_WORKFLOW_RUNTIME_LOG_LEVEL}"
+            - name: WORKFLOW_CLIENT_LOG_LEVEL
+              value: "${AGENTS_WORKFLOW_CLIENT_LOG_LEVEL}"
+            - name: LITELLM_ADMIN_KEY
+              value: "sk-${AGENTS_LITELLM_ADMIN_PASSWORD}"
+            - name: MAX_BUDGET
+              value: "${AGENTS_MAX_BUDGET}"
+            - name: BUDGET_DURATION
+              value: "${AGENTS_BUDGET_DURATION}"
+            - name: DOTNET_ANALYSIS_RUN_REQUEST_LIMIT
+              value: "${AGENTS_DOTNET_ANALYSIS_RUN_REQUEST_LIMIT}"
+            - name: DOTNET_ANALYSIS_RUN_TOKENS_LIMIT
+              value: "${AGENTS_DOTNET_ANALYSIS_RUN_TOKENS_LIMIT}"
+            - name: TRIAGE_CONSENSUS_THRESHOLD
+              value: "${AGENTS_TRIAGE_CONSENSUS_THRESHOLD}"
+            - name: MCP_MAX_RESULTS
+              value: "${AGENTS_MCP_MAX_RESULTS}"
+            - name: CHATBOT_DB_PASSWORD
+              value: "${CHATBOT_DB_PASSWORD}"
+            - name: PHOENIX_ENABLED
+              value: "true"
+            - name: PHOENIX_ENDPOINT
+              value: "http://phoenix:6006/v1/traces"
+            - name: PHOENIX_SQL_DATABASE_URL
+              value: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/phoenix"
+            - name: NEMESIS_MONITORING
+              value: "${NEMESIS_MONITORING}"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_HOST
+              value: "pgbouncer"
+            - name: POSTGRES_PORT
+              value: "${POSTGRES_PORT}"
+            - name: POSTGRES_DB
+              value: "${POSTGRES_DB}"
+            - name: POSTGRES_PARAMETERS
+              value: "${POSTGRES_PARAMETERS}"
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+            - name: S3_ENDPOINT
+              value: "seaweedfs:8333"
+            - name: S3_BUCKET
+              value: "files"
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: RABBITMQ_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_CONNECTION_STRING
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 40
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${AGENTS_CPU_REQUEST}
+              memory: ${AGENTS_MEMORY_REQUEST}
+            limits:
+              cpu: "${AGENTS_CPU_LIMIT}"
+              memory: ${AGENTS_MEMORY_LIMIT}
+      volumes:
+        - name: dapr-secrets
+          secret:
+            secretName: nemesis-dapr-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agents
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: agents
+spec:
+  selector:
+    app.kubernetes.io/name: agents
+  ports:
+    - port: ${AGENTS_APP_PORT}
+      targetPort: http
+      name: http
+    - port: ${AGENTS_MCP_PORT}
+      targetPort: mcp
+      name: mcp

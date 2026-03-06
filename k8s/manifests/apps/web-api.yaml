@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-api
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: web-api
+spec:
+  replicas: ${WEB_API_REPLICAS}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web-api
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "web-api"
+        dapr.io/app-port: "${WEB_API_PORT}"
+        dapr.io/config: "dapr-config"
+        dapr.io/http-max-request-size: "1024"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        dapr.io/graceful-shutdown-seconds: "5"
+        dapr.io/log-level: "info"
+        dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+        dapr.io/sidecar-cpu-request: "50m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "300m"
+        dapr.io/sidecar-memory-limit: "256Mi"
+    spec:
+      initContainers:
+        - name: wait-for-pgbouncer
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z pgbouncer 5432; do echo "Waiting for PgBouncer..."; sleep 2; done']
+        - name: wait-for-rabbitmq
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z rabbitmq 5672; do echo "Waiting for RabbitMQ..."; sleep 2; done']
+      containers:
+        - name: web-api
+          image: "${IMAGE_REGISTRY}/web-api:${WEB_API_IMAGE_TAG}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: ${WEB_API_PORT}
+              name: http
+          env:
+            - name: APP_ID
+              value: "web-api"
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: "${LOG_LEVEL}"
+            - name: DEFAULT_EXPIRATION_DAYS
+              value: "${DEFAULT_EXPIRATION_DAYS}"
+            - name: NEMESIS_URL
+              value: "${NEMESIS_URL}"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_HOST
+              value: "pgbouncer"
+            - name: POSTGRES_PORT
+              value: "${POSTGRES_PORT}"
+            - name: POSTGRES_DB
+              value: "${POSTGRES_DB}"
+            - name: POSTGRES_PARAMETERS
+              value: "${POSTGRES_PARAMETERS}"
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+            - name: S3_ENDPOINT
+              value: "seaweedfs:8333"
+            - name: S3_BUCKET
+              value: "files"
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: RABBITMQ_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_CONNECTION_STRING
+            - name: HASURA_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: HASURA_ADMIN_SECRET
+          readinessProbe:
+            httpGet:
+              path: /system/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /system/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${WEB_API_CPU_REQUEST}
+              memory: ${WEB_API_MEMORY_REQUEST}
+            limits:
+              cpu: "${WEB_API_CPU_LIMIT}"
+              memory: ${WEB_API_MEMORY_LIMIT}
+      volumes:
+        - name: dapr-secrets
+          secret:
+            secretName: nemesis-dapr-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-api
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: web-api
+spec:
+  selector:
+    app.kubernetes.io/name: web-api
+  ports:
+    - port: ${WEB_API_PORT}
+      targetPort: http
+      name: http

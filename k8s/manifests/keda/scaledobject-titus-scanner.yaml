@@ -1,0 +1,23 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: titus-scanner-scaler
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  scaleTargetRef:
+    name: titus-scanner
+  minReplicaCount: ${KEDA_TITUS_SCANNER_MIN_REPLICAS}
+  maxReplicaCount: ${KEDA_TITUS_SCANNER_MAX_REPLICAS}
+  cooldownPeriod: ${KEDA_TITUS_SCANNER_COOLDOWN}
+  pollingInterval: ${KEDA_TITUS_SCANNER_POLLING}
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: "${KEDA_TITUS_SCANNER_QUEUE_NAME}"
+        mode: QueueLength
+        value: "${KEDA_TITUS_SCANNER_QUEUE_LENGTH}"
+      authenticationRef:
+        name: rabbitmq-trigger-auth

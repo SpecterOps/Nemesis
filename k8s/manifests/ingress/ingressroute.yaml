@@ -1,0 +1,59 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nemesis-ingress
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # Frontend (root)
+    - match: PathPrefix(`/`)
+      kind: Rule
+      priority: 1
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: ${NAMESPACE}
+      services:
+        - name: frontend
+          port: ${FRONTEND_PORT}
+
+    # Web API
+    - match: PathPrefix(`/api`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: ${NAMESPACE}
+      services:
+        - name: web-api
+          port: ${WEB_API_PORT}
+
+    # Hasura GraphQL
+    - match: PathPrefix(`/hasura`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: ${NAMESPACE}
+        - name: nemesis-strip-hasura
+          namespace: ${NAMESPACE}
+      services:
+        - name: hasura
+          port: 8080
+
+    # RabbitMQ Management
+    - match: PathPrefix(`/rabbitmq`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: ${NAMESPACE}
+      services:
+        - name: rabbitmq
+          port: 15672
+
+  tls:
+    secretName: ${TLS_SECRET_NAME}

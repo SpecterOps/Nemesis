@@ -382,7 +382,7 @@ ingress:
 # Dapr
 # ============================================
 dapr:
-  sidecarImage: "daprio/daprd:1.16.9"
+  sidecarImage: "daprio/daprd:1.17.0"
   logLevel: warn
   # Pubsub prefetch counts (per component)
   pubsub:

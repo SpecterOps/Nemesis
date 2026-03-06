@@ -1,0 +1,60 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-strip-phoenix
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  stripPrefix:
+    prefixes:
+      - /phoenix
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nemesis-llm-ingress
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # LiteLLM
+    - match: PathPrefix(`/llm`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: ${NAMESPACE}
+      services:
+        - name: litellm
+          port: ${LITELLM_PORT}
+
+    # Phoenix
+    - match: PathPrefix(`/phoenix`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: ${NAMESPACE}
+        - name: nemesis-strip-phoenix
+          namespace: ${NAMESPACE}
+      services:
+        - name: phoenix
+          port: ${PHOENIX_PORT}
+
+    # MCP (Agents)
+    - match: PathPrefix(`/mcp`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: nemesis-basic-auth
+          namespace: ${NAMESPACE}
+      services:
+        - name: agents
+          port: ${AGENTS_MCP_PORT}
+
+  tls:
+    secretName: ${TLS_SECRET_NAME}

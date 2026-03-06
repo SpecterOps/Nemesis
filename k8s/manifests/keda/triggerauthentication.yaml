@@ -1,0 +1,12 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: rabbitmq-trigger-auth
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  secretTargetRef:
+    - parameter: host
+      name: nemesis-secrets
+      key: RABBITMQ_CONNECTION_STRING

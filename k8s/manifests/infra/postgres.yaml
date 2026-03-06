@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: ${POSTGRES_STORAGE_SIZE}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: postgres
+          image: "${POSTGRES_IMAGE}"
+          args:
+            - "-c"
+            - "max_connections=${POSTGRES_MAX_CONNECTIONS}"
+            - "-c"
+            - "shared_buffers=${POSTGRES_SHARED_BUFFERS}"
+            - "-c"
+            - "shared_preload_libraries=${POSTGRES_SHARED_PRELOAD_LIBRARIES}"
+            - "-c"
+            - "pg_stat_statements.track=all"
+            - "-c"
+            - "tcp_keepalives_idle=5"
+            - "-c"
+            - "tcp_keepalives_interval=2"
+            - "-c"
+            - "tcp_keepalives_count=3"
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: "${POSTGRES_DB}"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - ${POSTGRES_USER}
+                - -d
+                - ${POSTGRES_DB}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - ${POSTGRES_USER}
+                - -d
+                - ${POSTGRES_DB}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: ${POSTGRES_CPU_REQUEST}
+              memory: ${POSTGRES_MEMORY_REQUEST}
+            limits:
+              cpu: "${POSTGRES_CPU_LIMIT}"
+              memory: ${POSTGRES_MEMORY_LIMIT}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: init-scripts
+          configMap:
+            name: postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - port: 5432
+      targetPort: postgres
+      name: postgres

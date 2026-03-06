@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: postgres-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-exporter
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: postgres-exporter
+          image: "${POSTGRES_EXPORTER_IMAGE}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: DATA_SOURCE_NAME
+              value: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}?${POSTGRES_PARAMETERS}"
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${POSTGRES_EXPORTER_CPU_REQUEST}
+              memory: ${POSTGRES_EXPORTER_MEMORY_REQUEST}
+            limits:
+              cpu: ${POSTGRES_EXPORTER_CPU_LIMIT}
+              memory: ${POSTGRES_EXPORTER_MEMORY_LIMIT}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-exporter
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: postgres-exporter
+spec:
+  selector:
+    app.kubernetes.io/name: postgres-exporter
+  ports:
+    - port: ${POSTGRES_EXPORTER_PORT}
+      targetPort: metrics
+      name: metrics

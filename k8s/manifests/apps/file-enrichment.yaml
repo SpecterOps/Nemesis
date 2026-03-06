@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-enrichment
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: file-enrichment
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: file-enrichment
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: file-enrichment
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "file-enrichment"
+        dapr.io/app-port: "${FILE_ENRICHMENT_PORT}"
+        dapr.io/config: "file-enrichment-config"
+        dapr.io/http-max-request-size: "1024"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        dapr.io/graceful-shutdown-seconds: "5"
+        dapr.io/log-level: "${FILE_ENRICHMENT_DAPR_LOG_LEVEL}"
+        dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+        dapr.io/sidecar-cpu-request: "50m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "300m"
+        dapr.io/sidecar-memory-limit: "256Mi"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "${FILE_ENRICHMENT_PORT}"
+        prometheus.io/path: "/metrics"
+    spec:
+      initContainers:
+        - name: wait-for-pgbouncer
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z pgbouncer 5432; do echo "Waiting for PgBouncer..."; sleep 2; done']
+        - name: wait-for-rabbitmq
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z rabbitmq 5672; do echo "Waiting for RabbitMQ..."; sleep 2; done']
+      containers:
+        - name: file-enrichment
+          image: "${IMAGE_REGISTRY}/file-enrichment:${FILE_ENRICHMENT_IMAGE_TAG}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: ${FILE_ENRICHMENT_PORT}
+              name: http
+          env:
+            - name: APP_ID
+              value: "file-enrichment"
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: "${LOG_LEVEL}"
+            - name: DAPR_LOG_LEVEL
+              value: "${FILE_ENRICHMENT_DAPR_LOG_LEVEL}"
+            - name: NEMESIS_URL
+              value: "${NEMESIS_URL}"
+            - name: ENABLE_PII_DETECTION
+              value: "${FILE_ENRICHMENT_ENABLE_PII}"
+            - name: PII_DETECTION_THRESHOLD
+              value: "${FILE_ENRICHMENT_PII_THRESHOLD}"
+            - name: MAX_PARALLEL_WORKFLOWS
+              value: "${FILE_ENRICHMENT_MAX_PARALLEL_WORKFLOWS}"
+            - name: MAX_WORKFLOW_EXECUTION_TIME
+              value: "${FILE_ENRICHMENT_MAX_WORKFLOW_EXECUTION_TIME}"
+            - name: NEMESIS_MONITORING
+              value: "${NEMESIS_MONITORING}"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_HOST
+              value: "pgbouncer"
+            - name: POSTGRES_PORT
+              value: "${POSTGRES_PORT}"
+            - name: POSTGRES_DB
+              value: "${POSTGRES_DB}"
+            - name: POSTGRES_PARAMETERS
+              value: "${POSTGRES_PARAMETERS}"
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+            - name: S3_ENDPOINT
+              value: "seaweedfs:8333"
+            - name: S3_BUCKET
+              value: "files"
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: RABBITMQ_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_CONNECTION_STRING
+            - name: HASURA_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: HASURA_ADMIN_SECRET
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${FILE_ENRICHMENT_CPU_REQUEST}
+              memory: ${FILE_ENRICHMENT_MEMORY_REQUEST}
+            limits:
+              cpu: "${FILE_ENRICHMENT_CPU_LIMIT}"
+              memory: ${FILE_ENRICHMENT_MEMORY_LIMIT}
+      volumes:
+        - name: dapr-secrets
+          secret:
+            secretName: nemesis-dapr-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: file-enrichment
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: file-enrichment
+spec:
+  selector:
+    app.kubernetes.io/name: file-enrichment
+  ports:
+    - port: ${FILE_ENRICHMENT_PORT}
+      targetPort: http
+      name: http

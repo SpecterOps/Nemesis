@@ -1,0 +1,33 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-basic-auth
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  basicAuth:
+    secret: nemesis-basic-auth-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nemesis-basic-auth-secret
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+type: Opaque
+stringData:
+  users: "${BASIC_AUTH_USERS}"
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-strip-hasura
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  stripPrefix:
+    prefixes:
+      - /hasura

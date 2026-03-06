@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: rabbitmq
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rabbitmq
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      hostname: ${RABBITMQ_HOSTNAME}
+      containers:
+        - name: rabbitmq
+          image: "${RABBITMQ_IMAGE}"
+          ports:
+            - containerPort: 5672
+              name: amqp
+            - containerPort: 15672
+              name: management
+            - containerPort: 15692
+              name: prometheus
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
+              value: "-rabbitmq_management path_prefix \"/rabbitmq\""
+            - name: RABBITMQ_NODENAME
+              value: "rabbit@localhost"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            - name: config
+              mountPath: /etc/rabbitmq/rabbitmq.conf
+              subPath: rabbitmq.conf
+            - name: config
+              mountPath: /etc/rabbitmq/enabled_plugins
+              subPath: enabled_plugins
+          readinessProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - check_port_connectivity
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - check_port_connectivity
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: ${RABBITMQ_CPU_REQUEST}
+              memory: ${RABBITMQ_MEMORY_REQUEST}
+            limits:
+              cpu: "${RABBITMQ_CPU_LIMIT}"
+              memory: ${RABBITMQ_MEMORY_LIMIT}
+      volumes:
+        - name: config
+          configMap:
+            name: rabbitmq-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${RABBITMQ_STORAGE_SIZE}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: rabbitmq
+spec:
+  selector:
+    app.kubernetes.io/name: rabbitmq
+  ports:
+    - port: 5672
+      targetPort: amqp
+      name: amqp
+    - port: 15672
+      targetPort: management
+      name: management
+    - port: 15692
+      targetPort: prometheus
+      name: prometheus

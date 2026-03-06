@@ -1,0 +1,26 @@
+# Overrides dapr/config-general.yaml when monitoring is enabled — adds tracing.
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: dapr-config
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  metric:
+    enabled: true
+    http:
+      increasedCardinality: false
+  tracing:
+    expandParams: true
+    samplingRate: "1"
+    otel:
+      protocol: grpc
+      endpointAddress: "otel-collector:4317"
+      isSecure: false
+  httpPipeline:
+    handlers:
+      - name: maximum-request-size
+        type: middleware.http.requestsize
+        properties:
+          maxBodySize: "300MB"

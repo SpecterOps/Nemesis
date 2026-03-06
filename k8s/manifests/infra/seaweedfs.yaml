@@ -1,0 +1,196 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seaweedfs-data
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: ${SEAWEEDFS_STORAGE_SIZE}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seaweedfs-entrypoint
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+data:
+  entrypoint.sh: |
+    #!/bin/sh
+    cat > /etc/seaweedfs/s3.json <<EOF
+    {
+      "identities": [
+        {
+          "name": "admin",
+          "credentials": [
+            {
+              "accessKey": "${S3_ACCESS_KEY}",
+              "secretKey": "${S3_SECRET_KEY}"
+            }
+          ],
+          "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+        }
+      ]
+    }
+    EOF
+    exec weed "$@"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: seaweedfs
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: seaweedfs
+spec:
+  serviceName: seaweedfs
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: seaweedfs
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: seaweedfs
+          image: "${SEAWEEDFS_IMAGE}"
+          command: ["/entrypoint.sh"]
+          args:
+            - server
+            - -s3
+            - -s3.port=8333
+            - -s3.config=/etc/seaweedfs/s3.json
+            - -master.port=9333
+            - -volume.port=8080
+            - -volume.max=0
+            - -metricsPort=9324
+            - -dir=/data
+          ports:
+            - containerPort: 8333
+              name: s3
+            - containerPort: 9333
+              name: master
+            - containerPort: 9324
+              name: metrics
+          env:
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: entrypoint
+              mountPath: /entrypoint.sh
+              subPath: entrypoint.sh
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: s3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: s3
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: ${SEAWEEDFS_CPU_REQUEST}
+              memory: ${SEAWEEDFS_MEMORY_REQUEST}
+            limits:
+              cpu: "${SEAWEEDFS_CPU_LIMIT}"
+              memory: ${SEAWEEDFS_MEMORY_LIMIT}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: seaweedfs-data
+        - name: entrypoint
+          configMap:
+            name: seaweedfs-entrypoint
+            defaultMode: 0755
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: seaweedfs
+spec:
+  selector:
+    app.kubernetes.io/name: seaweedfs
+  ports:
+    - port: 8333
+      targetPort: s3
+      name: s3
+    - port: 9333
+      targetPort: master
+      name: master
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seaweedfs-init
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: seaweedfs-init
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seaweedfs-init
+          image: amazon/aws-cli:2.27.28
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for SeaweedFS to be ready..."
+              until aws --endpoint-url http://seaweedfs:8333 s3 ls 2>/dev/null; do
+                echo "SeaweedFS not ready, retrying in 3s..."
+                sleep 3
+              done
+              echo "SeaweedFS is ready."
+              for bucket in ${SEAWEEDFS_BUCKETS}; do
+                aws --endpoint-url http://seaweedfs:8333 s3 mb s3://$bucket --region us-east-1 2>/dev/null || true
+                echo "Bucket '$bucket' ensured."
+              done
+              echo "SeaweedFS initialization complete."
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"

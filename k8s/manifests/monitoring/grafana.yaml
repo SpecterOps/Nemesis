@@ -1,0 +1,189 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: prometheus
+        type: prometheus
+        url: http://prometheus:9090/prometheus/
+        isDefault: true
+        editable: true
+  loki.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        url: http://loki:3100
+        jsonData:
+          maxLines: 1000
+  postgres.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Postgres
+        type: postgres
+        url: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}?${POSTGRES_PARAMETERS}
+        jsonData:
+          maxOpenConns: 100
+          maxIdleConns: 100
+          connMaxLifetime: 14400
+          postgresVersion: 1000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+data:
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: 'Default'
+        orgId: 1
+        folder: ''
+        folderUid: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /etc/grafana/provisioning/dashboards
+          foldersFromFilesStructure: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: ${GRAFANA_STORAGE_SIZE}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: grafana
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+      containers:
+        - name: grafana
+          image: "${GRAFANA_IMAGE}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "${GRAFANA_ANONYMOUS_ENABLED}"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "${GRAFANA_ANONYMOUS_ORG_ROLE}"
+            - name: GF_SERVER_DOMAIN
+              value: "${NEMESIS_URL}"
+            - name: GF_SERVER_ROOT_URL
+              value: "${NEMESIS_URL}grafana"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+            - name: POSTGRES_CONNECTION_STRING
+              value: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}?${POSTGRES_PARAMETERS}"
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml
+              subPath: dashboards.yml
+            - name: dashboard-traefik
+              mountPath: /etc/grafana/provisioning/dashboards/traefik.json
+              subPath: traefik.json
+            - name: dashboard-seaweedfs
+              mountPath: /etc/grafana/provisioning/dashboards/seaweedfs.json
+              subPath: seaweedfs.json
+            - name: dashboard-node-exporter
+              mountPath: /etc/grafana/provisioning/dashboards/node_exporter_full.json
+              subPath: node_exporter_full.json
+            - name: data
+              mountPath: /var/lib/grafana
+          readinessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${GRAFANA_CPU_REQUEST}
+              memory: ${GRAFANA_MEMORY_REQUEST}
+            limits:
+              cpu: ${GRAFANA_CPU_LIMIT}
+              memory: ${GRAFANA_MEMORY_LIMIT}
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboard-traefik
+          configMap:
+            name: grafana-dashboard-traefik
+        - name: dashboard-seaweedfs
+          configMap:
+            name: grafana-dashboard-seaweedfs
+        - name: dashboard-node-exporter
+          configMap:
+            name: grafana-dashboard-node-exporter
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: grafana
+spec:
+  selector:
+    app.kubernetes.io/name: grafana
+  ports:
+    - port: ${GRAFANA_PORT}
+      targetPort: http
+      name: http

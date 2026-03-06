@@ -1,0 +1,23 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: document-conversion-scaler
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  scaleTargetRef:
+    name: document-conversion
+  minReplicaCount: ${KEDA_DOCUMENT_CONVERSION_MIN_REPLICAS}
+  maxReplicaCount: ${KEDA_DOCUMENT_CONVERSION_MAX_REPLICAS}
+  cooldownPeriod: ${KEDA_DOCUMENT_CONVERSION_COOLDOWN}
+  pollingInterval: ${KEDA_DOCUMENT_CONVERSION_POLLING}
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: "${KEDA_DOCUMENT_CONVERSION_QUEUE_NAME}"
+        mode: QueueLength
+        value: "${KEDA_DOCUMENT_CONVERSION_QUEUE_LENGTH}"
+      authenticationRef:
+        name: rabbitmq-trigger-auth

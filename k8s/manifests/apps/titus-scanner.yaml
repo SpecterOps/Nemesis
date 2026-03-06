@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titus-scanner
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: titus-scanner
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: titus-scanner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: titus-scanner
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "titus-scanner"
+        dapr.io/app-port: "${TITUS_SCANNER_PORT}"
+        dapr.io/config: "dapr-config"
+        dapr.io/http-max-request-size: "300"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        dapr.io/graceful-shutdown-seconds: "5"
+        dapr.io/log-level: "info"
+        dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+        dapr.io/sidecar-cpu-request: "50m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "300m"
+        dapr.io/sidecar-memory-limit: "256Mi"
+        dapr.io/app-max-concurrency: "${TITUS_SCANNER_DAPR_MAX_CONCURRENCY}"
+    spec:
+      containers:
+        - name: titus-scanner
+          image: "${IMAGE_REGISTRY}/titus-scanner:${TITUS_SCANNER_IMAGE_TAG}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: ${TITUS_SCANNER_PORT}
+              name: http
+          env:
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: "${TITUS_LOG_LEVEL}"
+            - name: SNIPPET_LENGTH
+              value: "${TITUS_SNIPPET_LENGTH}"
+            - name: MAX_CONCURRENT_FILES
+              value: "${TITUS_MAX_CONCURRENT_FILES}"
+            - name: MAX_MATCHES_PER_FILE
+              value: "${TITUS_MAX_MATCHES_PER_FILE}"
+            - name: MAX_FILE_SIZE_MB
+              value: "${TITUS_MAX_FILE_SIZE_MB}"
+            - name: GOMEMLIMIT
+              value: "${TITUS_GOMEMLIMIT}"
+            - name: EXTRACT_ARCHIVES
+              value: "${TITUS_EXTRACT_ARCHIVES}"
+            - name: EXTRACT_MAX_FILE_SIZE_MB
+              value: "${TITUS_EXTRACT_MAX_FILE_SIZE_MB}"
+            - name: EXTRACT_MAX_TOTAL_SIZE_MB
+              value: "${TITUS_EXTRACT_MAX_TOTAL_SIZE_MB}"
+            - name: EXTRACT_MAX_DEPTH
+              value: "${TITUS_EXTRACT_MAX_DEPTH}"
+            - name: ENABLE_VALIDATION
+              value: "${TITUS_ENABLE_VALIDATION}"
+            - name: VALIDATION_WORKERS
+              value: "${TITUS_VALIDATION_WORKERS}"
+            - name: DISABLED_RULES
+              value: "${TITUS_DISABLED_RULES}"
+            - name: PUBSUB_NAME
+              value: "${TITUS_PUBSUB_NAME}"
+            - name: OUTPUT_TOPIC
+              value: "${TITUS_OUTPUT_TOPIC}"
+            - name: BULK_MAX_MESSAGES
+              value: "${TITUS_BULK_MAX_MESSAGES}"
+            - name: BULK_MAX_AWAIT_DURATION_MS
+              value: "${TITUS_BULK_MAX_AWAIT_DURATION_MS}"
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+            - name: S3_ENDPOINT
+              value: "seaweedfs:8333"
+            - name: S3_BUCKET
+              value: "files"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${TITUS_SCANNER_CPU_REQUEST}
+              memory: ${TITUS_SCANNER_MEMORY_REQUEST}
+            limits:
+              cpu: "${TITUS_SCANNER_CPU_LIMIT}"
+              memory: ${TITUS_SCANNER_MEMORY_LIMIT}
+      volumes:
+        - name: dapr-secrets
+          secret:
+            secretName: nemesis-dapr-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: titus-scanner
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: titus-scanner
+spec:
+  selector:
+    app.kubernetes.io/name: titus-scanner
+  ports:
+    - port: ${TITUS_SCANNER_PORT}
+      targetPort: http
+      name: http

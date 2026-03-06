@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dotnet-service
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: dotnet-service
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dotnet-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dotnet-service
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "dotnet-service"
+        dapr.io/app-port: "${DOTNET_SERVICE_PORT}"
+        dapr.io/config: "dapr-config"
+        dapr.io/http-max-request-size: "300"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        dapr.io/graceful-shutdown-seconds: "5"
+        dapr.io/log-level: "info"
+        dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+        dapr.io/sidecar-cpu-request: "50m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "300m"
+        dapr.io/sidecar-memory-limit: "256Mi"
+        dapr.io/app-max-concurrency: "${DOTNET_SERVICE_DAPR_MAX_CONCURRENCY}"
+    spec:
+      containers:
+        - name: dotnet-service
+          image: "${IMAGE_REGISTRY}/dotnet-service:${DOTNET_SERVICE_IMAGE_TAG}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: ${DOTNET_SERVICE_PORT}
+              name: http
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:${DOTNET_SERVICE_PORT}"
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+            - name: S3_ENDPOINT
+              value: "seaweedfs:8333"
+            - name: S3_BUCKET
+              value: "files"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${DOTNET_SERVICE_CPU_REQUEST}
+              memory: ${DOTNET_SERVICE_MEMORY_REQUEST}
+            limits:
+              cpu: "${DOTNET_SERVICE_CPU_LIMIT}"
+              memory: ${DOTNET_SERVICE_MEMORY_LIMIT}
+      volumes:
+        - name: dapr-secrets
+          secret:
+            secretName: nemesis-dapr-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dotnet-service
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: dotnet-service
+spec:
+  selector:
+    app.kubernetes.io/name: dotnet-service
+  ports:
+    - port: ${DOTNET_SERVICE_PORT}
+      targetPort: http
+      name: http

@@ -1,0 +1,10 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: agents-config
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  metric:
+    enabled: true

@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alerting
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: alerting
+spec:
+  replicas: ${ALERTING_REPLICAS}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alerting
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alerting
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "alerting"
+        dapr.io/app-port: "${ALERTING_PORT}"
+        dapr.io/config: "dapr-config"
+        dapr.io/http-max-request-size: "300"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        dapr.io/graceful-shutdown-seconds: "5"
+        dapr.io/log-level: "info"
+        dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+        dapr.io/sidecar-cpu-request: "50m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "300m"
+        dapr.io/sidecar-memory-limit: "256Mi"
+    spec:
+      initContainers:
+        - name: wait-for-pgbouncer
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z pgbouncer 5432; do echo "Waiting for PgBouncer..."; sleep 2; done']
+        - name: wait-for-rabbitmq
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z rabbitmq 5672; do echo "Waiting for RabbitMQ..."; sleep 2; done']
+      containers:
+        - name: alerting
+          image: "${IMAGE_REGISTRY}/alerting:${ALERTING_IMAGE_TAG}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: ${ALERTING_PORT}
+              name: http
+          env:
+            - name: APP_ID
+              value: "alerting"
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: "${LOG_LEVEL}"
+            - name: NEMESIS_URL
+              value: "${NEMESIS_URL}"
+            - name: APPRISE_URLS
+              value: "${APPRISE_URLS}"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_HOST
+              value: "pgbouncer"
+            - name: POSTGRES_PORT
+              value: "${POSTGRES_PORT}"
+            - name: POSTGRES_DB
+              value: "${POSTGRES_DB}"
+            - name: POSTGRES_PARAMETERS
+              value: "${POSTGRES_PARAMETERS}"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${ALERTING_CPU_REQUEST}
+              memory: ${ALERTING_MEMORY_REQUEST}
+            limits:
+              cpu: ${ALERTING_CPU_LIMIT}
+              memory: ${ALERTING_MEMORY_LIMIT}
+      volumes:
+        - name: dapr-secrets
+          secret:
+            secretName: nemesis-dapr-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alerting
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: alerting
+spec:
+  selector:
+    app.kubernetes.io/name: alerting
+  ports:
+    - port: ${ALERTING_PORT}
+      targetPort: http
+      name: http

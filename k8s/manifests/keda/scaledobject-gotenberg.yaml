@@ -1,0 +1,30 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: gotenberg-scaler
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  scaleTargetRef:
+    name: gotenberg
+  minReplicaCount: ${KEDA_GOTENBERG_MIN_REPLICAS}
+  maxReplicaCount: ${KEDA_GOTENBERG_MAX_REPLICAS}
+  cooldownPeriod: ${KEDA_GOTENBERG_COOLDOWN}
+  pollingInterval: ${KEDA_GOTENBERG_POLLING}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: ${KEDA_GOTENBERG_SCALE_UP_STABILIZATION}
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: ${KEDA_GOTENBERG_SCALE_DOWN_STABILIZATION}
+  triggers:
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "${KEDA_GOTENBERG_CPU_THRESHOLD}"

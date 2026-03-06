@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gotenberg
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: gotenberg
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gotenberg
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gotenberg
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "gotenberg"
+        dapr.io/app-port: "${GOTENBERG_PORT}"
+        dapr.io/config: "dapr-config"
+        dapr.io/http-max-request-size: "300"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        dapr.io/graceful-shutdown-seconds: "5"
+        dapr.io/log-level: "info"
+        dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+        dapr.io/sidecar-cpu-request: "50m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "300m"
+        dapr.io/sidecar-memory-limit: "256Mi"
+    spec:
+      terminationGracePeriodSeconds: 180
+      containers:
+        - name: gotenberg
+          image: "${GOTENBERG_IMAGE}"
+          command:
+            - gotenberg
+            - --api-timeout=${GOTENBERG_API_TIMEOUT}
+            - --libreoffice-restart-after=${GOTENBERG_LIBREOFFICE_RESTART_AFTER}
+            - --libreoffice-auto-start=true
+            - --prometheus-collect-interval=10s
+          env:
+            - name: DISABLE_GOOGLE_CHROME
+              value: "1"
+          ports:
+            - containerPort: ${GOTENBERG_PORT}
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${GOTENBERG_CPU_REQUEST}
+              memory: ${GOTENBERG_MEMORY_REQUEST}
+            limits:
+              cpu: "${GOTENBERG_CPU_LIMIT}"
+              memory: ${GOTENBERG_MEMORY_LIMIT}
+      volumes:
+        - name: dapr-secrets
+          secret:
+            secretName: nemesis-dapr-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gotenberg
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: gotenberg
+spec:
+  selector:
+    app.kubernetes.io/name: gotenberg
+  ports:
+    - port: ${GOTENBERG_PORT}
+      targetPort: http
+      name: http

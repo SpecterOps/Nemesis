@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: frontend
+spec:
+  replicas: ${FRONTEND_REPLICAS}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: frontend
+          image: "${IMAGE_REGISTRY}/frontend:${FRONTEND_IMAGE_TAG}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: ${FRONTEND_PORT}
+              name: http
+          env:
+            - name: HASURA_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: HASURA_ADMIN_SECRET
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${FRONTEND_CPU_REQUEST}
+              memory: ${FRONTEND_MEMORY_REQUEST}
+            limits:
+              cpu: ${FRONTEND_CPU_LIMIT}
+              memory: ${FRONTEND_MEMORY_LIMIT}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - port: ${FRONTEND_PORT}
+      targetPort: http
+      name: http

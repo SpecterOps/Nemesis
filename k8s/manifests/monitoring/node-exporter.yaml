@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-exporter
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: "${NODE_EXPORTER_IMAGE}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          args:
+            - "--path.procfs=/host/proc"
+            - "--path.rootfs=/rootfs"
+            - "--path.sysfs=/host/sys"
+            - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+          ports:
+            - containerPort: 9100
+              name: metrics
+              hostPort: 9100
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: rootfs
+              mountPath: /rootfs
+              readOnly: true
+          resources:
+            requests:
+              cpu: ${NODE_EXPORTER_CPU_REQUEST}
+              memory: ${NODE_EXPORTER_MEMORY_REQUEST}
+            limits:
+              cpu: ${NODE_EXPORTER_CPU_LIMIT}
+              memory: ${NODE_EXPORTER_MEMORY_LIMIT}
+      tolerations:
+        - operator: Exists
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: rootfs
+          hostPath:
+            path: /
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: node-exporter
+spec:
+  selector:
+    app.kubernetes.io/name: node-exporter
+  ports:
+    - port: ${NODE_EXPORTER_PORT}
+      targetPort: metrics
+      name: metrics

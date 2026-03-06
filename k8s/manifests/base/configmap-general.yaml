@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nemesis-config
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+data:
+  NEMESIS_URL: "${NEMESIS_URL}"
+  LOG_LEVEL: "${LOG_LEVEL}"
+  DEFAULT_EXPIRATION_DAYS: "${DEFAULT_EXPIRATION_DAYS}"
+  NEMESIS_MONITORING: "${NEMESIS_MONITORING}"

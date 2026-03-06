@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: pgbouncer
+spec:
+  replicas: ${PGBOUNCER_REPLICAS}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pgbouncer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pgbouncer
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z postgres 5432; do echo "Waiting for PostgreSQL..."; sleep 2; done']
+      containers:
+        - name: pgbouncer
+          image: "${PGBOUNCER_IMAGE}"
+          ports:
+            - containerPort: ${PGBOUNCER_PORT}
+              name: pgbouncer
+          env:
+            - name: POSTGRESQL_HOST
+              value: "postgres"
+            - name: POSTGRESQL_PORT
+              value: "${POSTGRES_PORT}"
+            - name: POSTGRESQL_DATABASE
+              value: "${POSTGRES_DB}"
+            - name: POSTGRESQL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGBOUNCER_PORT
+              value: "${PGBOUNCER_PORT}"
+            - name: PGBOUNCER_DATABASE
+              value: "${POSTGRES_DB}"
+            - name: PGBOUNCER_POOL_MODE
+              value: "${PGBOUNCER_POOL_MODE}"
+            - name: PGBOUNCER_MAX_CLIENT_CONN
+              value: "${PGBOUNCER_MAX_CLIENT_CONN}"
+            - name: PGBOUNCER_DEFAULT_POOL_SIZE
+              value: "${PGBOUNCER_DEFAULT_POOL_SIZE}"
+            - name: PGBOUNCER_MIN_POOL_SIZE
+              value: "${PGBOUNCER_MIN_POOL_SIZE}"
+            - name: PGBOUNCER_RESERVE_POOL_SIZE
+              value: "${PGBOUNCER_RESERVE_POOL_SIZE}"
+            - name: PGBOUNCER_INIT_MAX_SLEEP
+              value: "10"
+          readinessProbe:
+            tcpSocket:
+              port: pgbouncer
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: pgbouncer
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${PGBOUNCER_CPU_REQUEST}
+              memory: ${PGBOUNCER_MEMORY_REQUEST}
+            limits:
+              cpu: ${PGBOUNCER_CPU_LIMIT}
+              memory: ${PGBOUNCER_MEMORY_LIMIT}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: pgbouncer
+spec:
+  selector:
+    app.kubernetes.io/name: pgbouncer
+  ports:
+    - port: 5432
+      targetPort: pgbouncer
+      name: pgbouncer

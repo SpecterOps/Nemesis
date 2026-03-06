@@ -1,0 +1,178 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+data:
+  local-config.yaml: |
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+      log_level: info
+
+    common:
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: inmemory
+      replication_factor: 1
+      path_prefix: /loki
+
+    schema_config:
+      configs:
+        - from: "2020-10-24"
+          store: tsdb
+          object_store: s3
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    storage_config:
+      filesystem:
+        directory: /loki/chunks
+      tsdb_shipper:
+        active_index_directory: /loki/tsdb-index
+        cache_location: /loki/tsdb-cache
+      aws:
+        endpoint: http://seaweedfs:8333
+        bucketnames: loki-data
+        access_key_id: ${S3_ACCESS_KEY}
+        secret_access_key: ${S3_SECRET_KEY}
+        s3forcepathstyle: true
+        insecure: true
+
+    limits_config:
+      retention_period: 168h
+      ingestion_rate_mb: 50
+      ingestion_burst_size_mb: 100
+
+    chunk_store_config:
+      chunk_cache_config:
+        embedded_cache:
+          enabled: true
+          max_size_mb: 500
+
+    query_range:
+      results_cache:
+        cache:
+          embedded_cache:
+            enabled: true
+            max_size_mb: 100
+
+    compactor:
+      working_directory: /loki/compactor
+      compaction_interval: 10m
+      retention_enabled: true
+      retention_delete_delay: 2h
+
+    analytics:
+      reporting_enabled: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: ${LOKI_STORAGE_SIZE}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: loki
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: loki
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: loki
+          image: "${LOKI_IMAGE}"
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          args:
+            - "-config.file=/etc/loki/local-config.yaml"
+            - "-config.expand-env=true"
+          ports:
+            - containerPort: 3100
+              name: http
+          env:
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+            - name: data
+              mountPath: /loki
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: ${LOKI_CPU_REQUEST}
+              memory: ${LOKI_MEMORY_REQUEST}
+            limits:
+              cpu: "${LOKI_CPU_LIMIT}"
+              memory: ${LOKI_MEMORY_LIMIT}
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: loki-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+    app.kubernetes.io/name: loki
+spec:
+  selector:
+    app.kubernetes.io/name: loki
+  ports:
+    - port: ${LOKI_PORT}
+      targetPort: http
+      name: http

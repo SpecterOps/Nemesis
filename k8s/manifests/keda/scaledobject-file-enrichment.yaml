@@ -1,0 +1,23 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: file-enrichment-scaler
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: nemesis
+spec:
+  scaleTargetRef:
+    name: file-enrichment
+  minReplicaCount: ${KEDA_FILE_ENRICHMENT_MIN_REPLICAS}
+  maxReplicaCount: ${KEDA_FILE_ENRICHMENT_MAX_REPLICAS}
+  cooldownPeriod: ${KEDA_FILE_ENRICHMENT_COOLDOWN}
+  pollingInterval: ${KEDA_FILE_ENRICHMENT_POLLING}
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: "${KEDA_FILE_ENRICHMENT_QUEUE_NAME}"
+        mode: QueueLength
+        value: "${KEDA_FILE_ENRICHMENT_QUEUE_LENGTH}"
+      authenticationRef:
+        name: rabbitmq-trigger-auth
