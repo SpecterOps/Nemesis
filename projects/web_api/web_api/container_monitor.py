@@ -451,7 +451,8 @@ class ContainerMonitor:
         # Stop file system observer
         if self.observer:
             self.observer.stop()
-            self.observer.join()
+            if self.observer.is_alive():
+                self.observer.join()
             self.observer = None
 
         # Wait for processing thread to finish
