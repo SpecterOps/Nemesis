@@ -32,7 +32,7 @@ spec:
           check "PostgreSQL"          postgres            5432
           check "RabbitMQ AMQP"       rabbitmq            5672
           check "RabbitMQ Management" rabbitmq            15672
-          check "MinIO API"           minio               9000
+          check "SeaweedFS S3"        seaweedfs           8333
           check "Hasura"              hasura              8080
           check "Web API"             web-api             {{ .Values.webApi.port }}
           check "File Enrichment"     file-enrichment     {{ .Values.fileEnrichment.port }}

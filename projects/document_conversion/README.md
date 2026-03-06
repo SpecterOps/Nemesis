@@ -35,7 +35,7 @@ The service integrates with external components:
 
 - **Apache Tika**: Java-based text extraction engine
 - **Gotenberg**: Document to PDF conversion service via HTTP API
-- **Minio**: Object storage for input files and generated outputs
+- **SeaweedFS**: S3-compatible object storage for input files and generated outputs
 - **PostgreSQL**: Workflow state and transform metadata storage
 
 ## Workflow Behavior

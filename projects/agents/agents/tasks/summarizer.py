@@ -12,7 +12,7 @@ from agents.prompt_manager import PromptManager
 from agents.schemas import SummaryResponse
 from common.db import get_postgres_connection_str
 from common.state_helpers import get_file_enriched
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
@@ -32,7 +32,7 @@ class TextSummarizer(BaseAgent):
         self.has_prompt = True
         self.llm_temperature = 0.3
         self.system_prompt = """You are a document summarization assistant. Create a concise but thorough summary of the provided text. Focus on key points and main ideas. Include section headers to organize the summary. Use markdown formatting."""
-        self.storage = StorageMinio()
+        self.storage = StorageS3()
         self.postgres_connection_url = get_postgres_connection_str()
 
     def _get_text_content(self, object_id: str) -> str:

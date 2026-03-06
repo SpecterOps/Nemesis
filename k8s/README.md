@@ -197,7 +197,7 @@ k8s/helm/nemesis/
     ├── secrets.yaml
     ├── configmap-*.yaml
     ├── dapr/                # Dapr CRDs (secretstore, statestore, pubsub, configs)
-    ├── infra/               # PostgreSQL, RabbitMQ, MinIO, Hasura
+    ├── infra/               # PostgreSQL, RabbitMQ, SeaweedFS, Hasura
     ├── apps/                # Application deployments + services
     ├── ingress/             # Traefik IngressRoute + middleware
     ├── keda/                # KEDA ScaledObjects + TriggerAuthentication
@@ -239,7 +239,7 @@ helm test nemesis -n nemesis
 ./k8s/scripts/deploy.sh install \
   --set credentials.postgres.password=StrongPass \
   --set credentials.rabbitmq.password=StrongPass \
-  --set credentials.minio.password=StrongPass
+  --set credentials.s3.secretKey=StrongPass
 
 # Disable autoscaling
 ./k8s/scripts/deploy.sh install --set autoscaling.enabled=false
@@ -267,7 +267,7 @@ Enable optional stacks with deploy flags:
 ```
 
 When monitoring is enabled, dashboards are available at:
-- `/grafana` — Grafana dashboards (Traefik, MinIO, Node Exporter)
+- `/grafana` — Grafana dashboards (Traefik, SeaweedFS, Node Exporter)
 - `/prometheus` — Prometheus metrics
 - `/jaeger` — Jaeger distributed tracing
 
@@ -282,7 +282,7 @@ When Jupyter is enabled:
 ## Troubleshooting
 
 ### Pods stuck in `CrashLoopBackOff`
-Check if infrastructure is ready first — app pods depend on PostgreSQL, RabbitMQ, and MinIO:
+Check if infrastructure is ready first — app pods depend on PostgreSQL, RabbitMQ, and SeaweedFS:
 ```bash
 kubectl logs deployment/postgres -n nemesis
 kubectl logs deployment/rabbitmq -n nemesis

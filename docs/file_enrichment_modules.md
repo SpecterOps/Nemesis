@@ -49,8 +49,8 @@ class MyAnalyzer(EnrichmentModule):
     dependencies: list[str] = []
 
     def __init__(self):
-        from common.storage import StorageMinio
-        self.storage = StorageMinio()
+        from common.storage import StorageS3
+        self.storage = StorageS3()
         self.asyncpg_pool = None  # Injected at runtime
         self.workflows = ["default"]
 

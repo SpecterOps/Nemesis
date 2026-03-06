@@ -130,32 +130,22 @@ Common environment variables for services that need DB access
 {{- end }}
 
 {{/*
-Common environment variables for services that need MinIO access
+Common environment variables for services that need S3-compatible storage access
 */}}
-{{- define "nemesis.minioEnv" -}}
-- name: MINIO_ROOT_USER
+{{- define "nemesis.s3Env" -}}
+- name: S3_ACCESS_KEY
   valueFrom:
     secretKeyRef:
       name: nemesis-secrets
-      key: MINIO_ROOT_USER
-- name: MINIO_ROOT_PASSWORD
+      key: S3_ACCESS_KEY
+- name: S3_SECRET_KEY
   valueFrom:
     secretKeyRef:
       name: nemesis-secrets
-      key: MINIO_ROOT_PASSWORD
-- name: MINIO_ACCESS_KEY
-  valueFrom:
-    secretKeyRef:
-      name: nemesis-secrets
-      key: MINIO_ROOT_USER
-- name: MINIO_SECRET_KEY
-  valueFrom:
-    secretKeyRef:
-      name: nemesis-secrets
-      key: MINIO_ROOT_PASSWORD
-- name: MINIO_ENDPOINT
-  value: "http://minio:9000"
-- name: MINIO_BUCKET
+      key: S3_SECRET_KEY
+- name: S3_ENDPOINT
+  value: "seaweedfs:8333"
+- name: S3_BUCKET
   value: "files"
 {{- end }}
 

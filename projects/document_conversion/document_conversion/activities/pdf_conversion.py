@@ -8,13 +8,13 @@ from common.helpers import can_convert_to_pdf
 from common.logger import get_logger
 from common.models import Transform
 from common.state_helpers import get_file_enriched_async
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from common.workflows.setup import workflow_activity
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 logger = get_logger(__name__)
 
-storage = StorageMinio()
+storage = StorageS3()
 
 
 @workflow_activity

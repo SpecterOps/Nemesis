@@ -64,7 +64,7 @@ spec:
               value: {{ .Values.titusScanner.env.bulkMaxMessages | quote }}
             - name: BULK_MAX_AWAIT_DURATION_MS
               value: {{ .Values.titusScanner.env.bulkMaxAwaitDurationMs | quote }}
-            {{- include "nemesis.minioEnv" . | nindent 12 }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /health

@@ -130,9 +130,9 @@ spec:
             - name: dashboard-traefik
               mountPath: /etc/grafana/provisioning/dashboards/traefik.json
               subPath: traefik.json
-            - name: dashboard-minio
-              mountPath: /etc/grafana/provisioning/dashboards/minio.json
-              subPath: minio.json
+            - name: dashboard-seaweedfs
+              mountPath: /etc/grafana/provisioning/dashboards/seaweedfs.json
+              subPath: seaweedfs.json
             - name: dashboard-node-exporter
               mountPath: /etc/grafana/provisioning/dashboards/node_exporter_full.json
               subPath: node_exporter_full.json
@@ -162,9 +162,9 @@ spec:
         - name: dashboard-traefik
           configMap:
             name: grafana-dashboard-traefik
-        - name: dashboard-minio
+        - name: dashboard-seaweedfs
           configMap:
-            name: grafana-dashboard-minio
+            name: grafana-dashboard-seaweedfs
         - name: dashboard-node-exporter
           configMap:
             name: grafana-dashboard-node-exporter

@@ -87,8 +87,7 @@ echo ""
 
 check "PostgreSQL"  "postgres:"              "^postgres:"
 check "RabbitMQ"    "rabbitmq:"              "^rabbitmq:"
-check "MinIO"       "minio/minio:"           "^minio:"
-check "MinIO MC"    "minio/mc:"              "mcImage:"
+check "SeaweedFS"   "chrislusf/seaweedfs:"   "^seaweedfs:"
 check "Hasura"      "hasura/graphql-engine:"  "^hasura:"
 check "Gotenberg"   "gotenberg/gotenberg:"    "^gotenberg:"
 check_dapr

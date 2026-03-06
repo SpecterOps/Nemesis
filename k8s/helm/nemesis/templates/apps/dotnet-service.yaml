@@ -34,7 +34,7 @@ spec:
               value: "50001"
             - name: DAPR_HTTP_PORT
               value: "3500"
-            {{- include "nemesis.minioEnv" . | nindent 12 }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /health

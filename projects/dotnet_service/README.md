@@ -2,7 +2,7 @@
 
 Provides decompilation capabilities using the ILSpy decompiler engine as well as deserialization analysis with functionality pulled from InspectAssembly.
 
-Integrates directly with Dapr's pub/sub and Minio to cut down on process creates via Python.
+Integrates directly with Dapr's pub/sub and SeaweedFS (S3-compatible object storage) to cut down on process creates via Python.
 
 Original [ILSpy code](https://github.com/icsharpcode/ILSpy/tree/master/ICSharpCode.ILSpyCmd) was adapted (MIT license).
 
@@ -12,10 +12,10 @@ Original [InspectAssembly code](https://github.com/matterpreter/OffensiveCSharp/
 ## Features
 
 - Listens for decompilation requests via Dapr pub/sub
-- Downloads .NET assemblies from Minio object storage
+- Downloads .NET assemblies from SeaweedFS object storage
 - Decompiles assemblies using the ILSpy decompiler engine natively
 - Compresses output to ZIP files
-- Uploads results back to Minio
+- Uploads results back to SeaweedFS
 - Analyzes the original assembly using InspectAssembly
 - Publishes decompilation + analysis results via Dapr pub/sub
 
@@ -23,7 +23,7 @@ Original [InspectAssembly code](https://github.com/matterpreter/OffensiveCSharp/
 
 The following environment variables are required:
 
-- `MINIO_ENDPOINT` - Minio server endpoint (e.g., `http://minio:9000`)
-- `MINIO_ACCESS_KEY` - Minio access key
-- `MINIO_SECRET_KEY` - Minio secret key
-- `MINIO_BUCKET` - Minio bucket name (e.g., `files`)
+- `S3_ENDPOINT` - S3-compatible storage endpoint (e.g., `http://seaweedfs:8333`)
+- `S3_ACCESS_KEY` - S3 access key
+- `S3_SECRET_KEY` - S3 secret key
+- `S3_BUCKET` - S3 bucket name (e.g., `files`)

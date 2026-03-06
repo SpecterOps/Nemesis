@@ -14,7 +14,7 @@ Under load, monitor CPU usage (e.g. with `top`/`htop` or the "Node Exporter" Gra
 ## RAM
 Under load, monitor RAM usage (e.g. with `top`/`htop`, `free -h`, or the "Node Exporter" Grafana dashboard if monitoring is enabled in Nemesis). Ensure that all memory is not being used; otherwise, you will need to increase RAM.
 
-Note that Nemesis will buffer/cache memory if it can. Minio in particular will use any available RAM to cache file data in RAM. This memory is reclaimable, and therefore is still useable by other services/applications. We recommend having at least 1Gb of cache memory available. More may improve performance, but for the most part Nemesis is CPU bound, not RAM bound. You can apply [docker compose memory limits](https://docs.docker.com/reference/compose-file/deploy/#resources) to specific services if you want to constrain how much RAM minio consumes.
+Note that Nemesis will buffer/cache memory if it can. SeaweedFS in particular will use any available RAM to cache file data in RAM. This memory is reclaimable, and therefore is still useable by other services/applications. We recommend having at least 1Gb of cache memory available. More may improve performance, but for the most part Nemesis is CPU bound, not RAM bound. You can apply [docker compose memory limits](https://docs.docker.com/reference/compose-file/deploy/#resources) to specific services if you want to constrain how much RAM SeaweedFS consumes.
 
 ## Disk
 The requirements will vary widely here depending on your workload size. A general rule of thumb is 3x the size of all the files being uploaded. Use SSDs if possible.

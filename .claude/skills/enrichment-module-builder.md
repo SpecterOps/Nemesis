@@ -268,7 +268,7 @@ Use this template, adapting based on the reference module that matches your patt
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched_async
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
@@ -279,7 +279,7 @@ class {ModuleName}Analyzer(EnrichmentModule):
     dependencies: list[str] = []
 
     def __init__(self):
-        self.storage = StorageMinio()
+        self.storage = StorageS3()
         self.asyncpg_pool = None
         self.workflows = ["default"]
 

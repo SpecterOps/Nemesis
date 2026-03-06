@@ -78,7 +78,7 @@ spec:
               value: "disabled"
             {{- end }}
             {{- include "nemesis.postgresEnv" . | nindent 12 }}
-            {{- include "nemesis.minioEnv" . | nindent 12 }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
             {{- include "nemesis.rabbitmqEnv" . | nindent 12 }}
           readinessProbe:
             httpGet:

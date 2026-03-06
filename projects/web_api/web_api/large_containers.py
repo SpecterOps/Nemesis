@@ -14,7 +14,7 @@ from common.logger import get_logger
 from common.models import File as FileModel
 from common.models2.api import FileFilters
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from dapr.clients import DaprClient
 from fastapi import HTTPException
 
@@ -91,7 +91,7 @@ class ContainerProgress:
 class BaseContainerExtractor:
     """Base class for container extractors"""
 
-    def __init__(self, storage: StorageMinio, dapr_client: DaprClient, progress_tracker: ContainerProgress):
+    def __init__(self, storage: StorageS3, dapr_client: DaprClient, progress_tracker: ContainerProgress):
         self.storage = storage
         self.dapr_client = dapr_client
         self.progress_tracker = progress_tracker
@@ -651,7 +651,7 @@ class LargeContainerProcessor:
     """Main processor for large container files"""
 
     def __init__(self):
-        self.storage = StorageMinio()
+        self.storage = StorageS3()
         self.progress_tracker = ContainerProgress()
         self.extractors = {
             ContainerType.ZIP: ZipContainerExtractor,

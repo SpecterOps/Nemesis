@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 # Global variables
 scheduler = AsyncIOScheduler()
 is_initialized = False
-storage = StorageMinio()
+storage = StorageS3()
 background_tasks = set()
 db_pool = None
 
@@ -454,7 +454,7 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
                 all_object_ids = list(set(expired_object_ids + transform_object_ids))
                 deleted_count = storage.delete_objects(all_object_ids)
                 logger.info(
-                    "Deleted objects from Minio", count=deleted_count, total=len(all_object_ids), round=round_num
+                    "Deleted objects from data lake", count=deleted_count, total=len(all_object_ids), round=round_num
                 )
 
             # Run database deletions in parallel

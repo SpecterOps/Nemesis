@@ -26,7 +26,7 @@
                 "ENVIRONMENT": "dev",
                 "LOG_LEVEL": "debug",
                 "MAX_PARALLEL_WORKFLOWS": "1",
-                "MINIO_ENDPOINT": "localhost:9000",
+                "S3_ENDPOINT": "localhost:8333",
                 "POSTGRES_HOST": "localhost",
                 "WORKFLOW_RUNTIME_LOG_LEVEL": "INFO",
                 "WORKFLOW_CLIENT_LOG_LEVEL": "DEBUG",

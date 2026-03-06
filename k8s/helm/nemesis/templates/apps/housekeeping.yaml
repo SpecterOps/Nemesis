@@ -36,7 +36,7 @@ spec:
             - name: CLEANUP_SCHEDULE
               value: {{ .Values.housekeeping.env.cleanupSchedule | quote }}
             {{- include "nemesis.postgresEnv" . | nindent 12 }}
-            {{- include "nemesis.minioEnv" . | nindent 12 }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
           resources:
             {{- toYaml .Values.housekeeping.resources | nindent 12 }}
       volumes:
