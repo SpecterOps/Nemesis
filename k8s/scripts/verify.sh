@@ -50,10 +50,10 @@ check_dapr_components() {
     # Check configurations
     local configs
     configs=$(kubectl get configurations.dapr.io -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
-    if [[ "$configs" -ge 4 ]]; then
-        pass "Found $configs Dapr configurations (expected >= 4)"
+    if [[ "$configs" -ge 3 ]]; then
+        pass "Found $configs Dapr configurations (expected >= 3: 1 general + 2 service-specific)"
     else
-        fail "Found only $configs Dapr configurations (expected >= 4)"
+        fail "Found only $configs Dapr configurations (expected >= 3)"
     fi
     echo ""
 }
@@ -132,7 +132,7 @@ main() {
     check_health_endpoints
 
     echo "============================================"
-    echo "  Results: ${GREEN}$PASS passed${NC}, ${RED}$FAIL failed${NC}, ${YELLOW}$WARN warnings${NC}"
+    echo -e "  Results: ${GREEN}$PASS passed${NC}, ${RED}$FAIL failed${NC}, ${YELLOW}$WARN warnings${NC}"
     echo "============================================"
 
     if [[ $FAIL -gt 0 ]]; then
