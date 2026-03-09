@@ -130,7 +130,7 @@ class FileHandler:
                     temp_file.write(chunk)
                 temp_file.flush()
 
-            download_callback(path)
+            await download_callback(path)
         finally:
             os.remove(path)
 
