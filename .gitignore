@@ -1,6 +1,8 @@
 .DS_STORE
 version.json
 
+k8s/helm/nemesis/values-eks.yaml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -184,6 +184,205 @@ EOF
     log "EBS CSI driver installed with gp3 StorageClass"
 }
 
+install_efs_csi_driver() {
+    log "Installing EFS CSI driver..."
+
+    local account_id
+    account_id=$(aws sts get-caller-identity --query Account --output text)
+
+    # Create IAM service account for EFS CSI driver
+    local role_name="AmazonEKS_EFS_CSI_DriverRole_${CLUSTER_NAME}"
+    if aws iam get-role --role-name "$role_name" &>/dev/null; then
+        warn "IAM role '${role_name}' already exists, skipping service account creation"
+    else
+        log "Creating IAM service account for EFS CSI driver..."
+        eksctl create iamserviceaccount \
+            --cluster "$CLUSTER_NAME" \
+            --region "$AWS_REGION" \
+            --namespace kube-system \
+            --name efs-csi-controller-sa \
+            --role-name "$role_name" \
+            --attach-policy-arn "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy" \
+            --approve
+    fi
+
+    # Install or update the EFS CSI addon
+    if aws eks describe-addon --cluster-name "$CLUSTER_NAME" --addon-name aws-efs-csi-driver --region "$AWS_REGION" &>/dev/null; then
+        warn "EFS CSI driver addon already installed, skipping"
+    else
+        log "Installing EFS CSI driver addon..."
+        local role_arn="arn:aws:iam::${account_id}:role/AmazonEKS_EFS_CSI_DriverRole_${CLUSTER_NAME}"
+        aws eks create-addon \
+            --cluster-name "$CLUSTER_NAME" \
+            --addon-name aws-efs-csi-driver \
+            --region "$AWS_REGION" \
+            --service-account-role-arn "$role_arn" \
+            --resolve-conflicts OVERWRITE
+
+        log "Waiting for EFS CSI driver to become active..."
+        local addon_status=""
+        local addon_retries=0
+        local addon_max_retries=60  # 60 * 10s = 10 minutes
+        while [[ "$addon_status" != "ACTIVE" ]]; do
+            addon_status=$(aws eks describe-addon \
+                --cluster-name "$CLUSTER_NAME" \
+                --addon-name aws-efs-csi-driver \
+                --region "$AWS_REGION" \
+                --query 'addon.status' --output text 2>/dev/null || echo "UNKNOWN")
+
+            if [[ "$addon_status" == "ACTIVE" ]]; then
+                break
+            elif [[ "$addon_status" == "CREATE_FAILED" || "$addon_status" == "DEGRADED" ]]; then
+                error "EFS CSI driver addon failed with status: ${addon_status}"
+                error "Check: aws eks describe-addon --cluster-name ${CLUSTER_NAME} --addon-name aws-efs-csi-driver --region ${AWS_REGION}"
+                exit 1
+            fi
+
+            if [[ $addon_retries -ge $addon_max_retries ]]; then
+                error "EFS CSI driver addon did not become active after 10 minutes (status: ${addon_status})"
+                exit 1
+            fi
+
+            sleep 10
+            ((addon_retries++))
+        done
+    fi
+
+    # Discover VPC and subnets from the EKS cluster
+    log "Discovering VPC and subnet configuration..."
+    local cluster_info
+    cluster_info=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" --output json)
+
+    local vpc_id
+    vpc_id=$(echo "$cluster_info" | grep -o '"vpcId": "[^"]*"' | head -1 | cut -d'"' -f4)
+    log "VPC: ${vpc_id}"
+
+    local cluster_sg
+    cluster_sg=$(echo "$cluster_info" | grep -o '"clusterSecurityGroupId": "[^"]*"' | head -1 | cut -d'"' -f4)
+    log "Cluster security group: ${cluster_sg}"
+
+    local subnet_ids
+    subnet_ids=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" \
+        --query 'cluster.resourcesVpcConfig.subnetIds' --output text)
+
+    # Create security group for EFS
+    local efs_sg_name="efs-${CLUSTER_NAME}"
+    local efs_sg_id=""
+    efs_sg_id=$(aws ec2 describe-security-groups \
+        --filters "Name=group-name,Values=${efs_sg_name}" "Name=vpc-id,Values=${vpc_id}" \
+        --query 'SecurityGroups[0].GroupId' --output text --region "$AWS_REGION" 2>/dev/null || echo "None")
+
+    if [[ "$efs_sg_id" != "None" && -n "$efs_sg_id" ]]; then
+        warn "Security group '${efs_sg_name}' already exists: ${efs_sg_id}"
+    else
+        log "Creating security group '${efs_sg_name}'..."
+        efs_sg_id=$(aws ec2 create-security-group \
+            --group-name "$efs_sg_name" \
+            --description "EFS access for Nemesis EKS cluster ${CLUSTER_NAME}" \
+            --vpc-id "$vpc_id" \
+            --region "$AWS_REGION" \
+            --query 'GroupId' --output text)
+
+        aws ec2 authorize-security-group-ingress \
+            --group-id "$efs_sg_id" \
+            --protocol tcp \
+            --port 2049 \
+            --source-group "$cluster_sg" \
+            --region "$AWS_REGION"
+
+        aws ec2 create-tags \
+            --resources "$efs_sg_id" \
+            --tags "Key=kubernetes.io/cluster/${CLUSTER_NAME},Value=owned" "Key=Name,Value=${efs_sg_name}" \
+            --region "$AWS_REGION"
+
+        log "Created security group: ${efs_sg_id}"
+    fi
+
+    # Create EFS filesystem
+    local existing_efs
+    existing_efs=$(aws efs describe-file-systems --region "$AWS_REGION" \
+        --query "FileSystems[?Tags[?Key=='kubernetes.io/cluster/${CLUSTER_NAME}' && Value=='owned']].FileSystemId" \
+        --output text 2>/dev/null || echo "")
+
+    if [[ -n "$existing_efs" && "$existing_efs" != "None" ]]; then
+        warn "EFS filesystem already exists: ${existing_efs}"
+        EFS_FILE_SYSTEM_ID="$existing_efs"
+    else
+        log "Creating EFS filesystem..."
+        EFS_FILE_SYSTEM_ID=$(aws efs create-file-system \
+            --encrypted \
+            --performance-mode generalPurpose \
+            --throughput-mode bursting \
+            --tags "Key=Name,Value=nemesis-${CLUSTER_NAME}" "Key=kubernetes.io/cluster/${CLUSTER_NAME},Value=owned" \
+            --region "$AWS_REGION" \
+            --query 'FileSystemId' --output text)
+
+        log "Created EFS filesystem: ${EFS_FILE_SYSTEM_ID}"
+
+        # Wait for filesystem to become available
+        log "Waiting for EFS filesystem to become available..."
+        local efs_status=""
+        local efs_retries=0
+        while [[ "$efs_status" != "available" ]]; do
+            efs_status=$(aws efs describe-file-systems \
+                --file-system-id "$EFS_FILE_SYSTEM_ID" \
+                --region "$AWS_REGION" \
+                --query 'FileSystems[0].LifeCycleState' --output text 2>/dev/null || echo "unknown")
+
+            if [[ "$efs_status" == "available" ]]; then
+                break
+            fi
+
+            if [[ $efs_retries -ge 30 ]]; then
+                error "EFS filesystem did not become available after 5 minutes"
+                exit 1
+            fi
+
+            sleep 10
+            ((efs_retries++))
+        done
+    fi
+
+    # Create mount targets (one per subnet)
+    log "Creating EFS mount targets..."
+    for subnet_id in $subnet_ids; do
+        if aws efs create-mount-target \
+            --file-system-id "$EFS_FILE_SYSTEM_ID" \
+            --subnet-id "$subnet_id" \
+            --security-groups "$efs_sg_id" \
+            --region "$AWS_REGION" &>/dev/null; then
+            log "  Created mount target in subnet ${subnet_id}"
+        else
+            warn "  Mount target in subnet ${subnet_id} already exists or AZ conflict (OK)"
+        fi
+    done
+
+    # Wait for mount targets to become available
+    log "Waiting for mount targets to become available..."
+    local mt_retries=0
+    while true; do
+        local mt_states
+        mt_states=$(aws efs describe-mount-targets \
+            --file-system-id "$EFS_FILE_SYSTEM_ID" \
+            --region "$AWS_REGION" \
+            --query 'MountTargets[].LifeCycleState' --output text 2>/dev/null || echo "")
+
+        if [[ -n "$mt_states" ]] && ! echo "$mt_states" | grep -q "creating"; then
+            break
+        fi
+
+        if [[ $mt_retries -ge 30 ]]; then
+            warn "Some mount targets still not available after 5 minutes, continuing anyway"
+            break
+        fi
+
+        sleep 10
+        ((mt_retries++))
+    done
+
+    log "EFS CSI driver installed with filesystem ${EFS_FILE_SYSTEM_ID}"
+}
+
 install_traefik() {
     log "Installing Traefik via Helm..."
     helm repo add traefik https://traefik.github.io/charts 2>/dev/null || true
@@ -507,6 +706,14 @@ llm:
 # Generated credentials (do not use defaults for internet-facing deployments)
 credentials:
   basicAuthUsers: "${GENERATED_BASIC_AUTH}"
+
+# Mounted containers (EFS-backed shared filesystem for large file processing)
+mountedContainers:
+  enabled: true
+  storage:
+    size: 100Gi
+    storageClass: efs-sc
+    efsFileSystemId: "${EFS_FILE_SYSTEM_ID}"
 EOF
 
     log "Wrote ${values_file}"
@@ -521,6 +728,7 @@ main() {
     check_prerequisites
     create_cluster
     install_ebs_csi_driver
+    install_efs_csi_driver
     install_traefik
     install_dapr
     install_keda

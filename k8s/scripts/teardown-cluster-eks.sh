@@ -101,6 +101,71 @@ if [[ "$KEEP_CLUSTER" == "true" ]]; then
     exit 0
 fi
 
+# Clean up EFS resources (filesystem, mount targets, security group, IAM)
+log "Cleaning up EFS resources..."
+efs_fs_id=$(aws efs describe-file-systems --region "$AWS_REGION" \
+    --query "FileSystems[?Tags[?Key=='kubernetes.io/cluster/${CLUSTER_NAME}' && Value=='owned']].FileSystemId" \
+    --output text 2>/dev/null || echo "")
+
+if [[ -n "$efs_fs_id" && "$efs_fs_id" != "None" ]]; then
+    # Delete mount targets first
+    log "Deleting EFS mount targets for ${efs_fs_id}..."
+    mount_target_ids=$(aws efs describe-mount-targets \
+        --file-system-id "$efs_fs_id" \
+        --region "$AWS_REGION" \
+        --query 'MountTargets[].MountTargetId' --output text 2>/dev/null || echo "")
+
+    for mt_id in $mount_target_ids; do
+        log "  Deleting mount target ${mt_id}..."
+        aws efs delete-mount-target --mount-target-id "$mt_id" --region "$AWS_REGION" 2>/dev/null || true
+    done
+
+    # Wait for mount targets to be fully deleted
+    if [[ -n "$mount_target_ids" ]]; then
+        log "Waiting for mount targets to be deleted..."
+        mt_retries=0
+        while true; do
+            mt_count=$(aws efs describe-mount-targets \
+                --file-system-id "$efs_fs_id" \
+                --region "$AWS_REGION" \
+                --query 'length(MountTargets)' --output text 2>/dev/null || echo "0")
+
+            if [[ "$mt_count" == "0" ]]; then
+                break
+            fi
+
+            if [[ $mt_retries -ge 30 ]]; then
+                warn "Mount targets still present after 5 minutes, continuing anyway"
+                break
+            fi
+
+            sleep 10
+            ((mt_retries++))
+        done
+    fi
+
+    # Delete the EFS filesystem
+    log "Deleting EFS filesystem ${efs_fs_id}..."
+    aws efs delete-file-system --file-system-id "$efs_fs_id" --region "$AWS_REGION" 2>/dev/null \
+        || warn "Could not delete EFS filesystem ${efs_fs_id}"
+else
+    warn "No EFS filesystem found for cluster ${CLUSTER_NAME}"
+fi
+
+# Delete EFS security group
+efs_sg_name="efs-${CLUSTER_NAME}"
+efs_sg_id=$(aws ec2 describe-security-groups \
+    --filters "Name=group-name,Values=${efs_sg_name}" \
+    --query 'SecurityGroups[0].GroupId' --output text --region "$AWS_REGION" 2>/dev/null || echo "None")
+
+if [[ "$efs_sg_id" != "None" && -n "$efs_sg_id" ]]; then
+    log "Deleting EFS security group ${efs_sg_name} (${efs_sg_id})..."
+    aws ec2 delete-security-group --group-id "$efs_sg_id" --region "$AWS_REGION" 2>/dev/null \
+        || warn "Could not delete EFS security group (may still have dependencies)"
+else
+    warn "EFS security group '${efs_sg_name}' not found"
+fi
+
 # Delete PVCs before cluster deletion so the EBS CSI driver can clean up the underlying EBS volumes.
 # If we skip this, the volumes become orphaned since the CSI controller is gone by the time
 # eksctl deletes the cluster.
@@ -120,6 +185,14 @@ eksctl delete iamserviceaccount \
     --namespace kube-system \
     --name ebs-csi-controller-sa \
     2>/dev/null || warn "EBS CSI IAM service account not found or already deleted"
+
+log "Cleaning up IAM service account for EFS CSI driver..."
+eksctl delete iamserviceaccount \
+    --cluster "$CLUSTER_NAME" \
+    --region "$AWS_REGION" \
+    --namespace kube-system \
+    --name efs-csi-controller-sa \
+    2>/dev/null || warn "EFS CSI IAM service account not found or already deleted"
 
 log "Cleaning up IAM service account for Cluster Autoscaler..."
 eksctl delete iamserviceaccount \
@@ -157,6 +230,10 @@ echo "  aws ec2 describe-volumes --region ${AWS_REGION} \\"
 echo "    --filters Name=tag-key,Values=kubernetes.io/cluster/${CLUSTER_NAME} \\"
 echo "    --query 'Volumes[].{ID:VolumeId,State:State,Size:Size}' --output table"
 echo ""
+echo "  # Check for orphaned EFS filesystems"
+echo "  aws efs describe-file-systems --region ${AWS_REGION} \\"
+echo "    --query \"FileSystems[?Tags[?Key=='kubernetes.io/cluster/${CLUSTER_NAME}']].{ID:FileSystemId,State:LifeCycleState,Name:Name}\" --output table"
+echo ""
 echo "  # Check for orphaned load balancers"
 echo "  aws elbv2 describe-load-balancers --region ${AWS_REGION} \\"
 echo "    --query 'LoadBalancers[?contains(LoadBalancerName, \`${CLUSTER_NAME}\`)].{Name:LoadBalancerName,DNS:DNSName}' --output table"
@@ -164,3 +241,4 @@ echo ""
 echo "  # Check CloudFormation stacks"
 echo "  aws cloudformation list-stacks --region ${AWS_REGION} \\"
 echo "    --query \"StackSummaries[?contains(StackName, \\\`${CLUSTER_NAME}\\\`) && StackStatus!=\\\`DELETE_COMPLETE\\\`].{Name:StackName,Status:StackStatus}\" --output table"
+echo ""

@@ -405,6 +405,17 @@ dapr:
 # Application Services
 # ============================================
 
+# ============================================
+# Mounted Containers (large file processing)
+# ============================================
+mountedContainers:
+  enabled: false
+  cleanupAfterProcessing: true  # delete source files after processing (false = move to completed/)
+  storage:
+    size: 100Gi        # formality — EFS is elastic
+    storageClass: "efs-sc"
+    efsFileSystemId: "" # populated by setup-cluster-eks.sh into values-eks.yaml
+
 webApi:
   image:
     registry: ""

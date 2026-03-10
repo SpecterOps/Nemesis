@@ -15,7 +15,7 @@ Deploy Nemesis to [Amazon EKS](https://aws.amazon.com/eks/) (Elastic Kubernetes 
 | Runtime | k3s inside Docker | Native on host | AWS-managed Kubernetes |
 | Infrastructure | Local | VM / bare-metal | AWS cloud |
 | Cost | Free | Free | ~$300+/month |
-| Storage | Local disk | Local disk | EBS (gp3) volumes |
+| Storage | Local disk | Local disk | EBS (gp3) + EFS (elastic) |
 | Load balancer | Docker port mapping | ServiceLB (Klipper) | AWS NLB |
 | Node scaling | Manual | Manual | Managed node groups (auto) |
 | Best for | Local dev, CI | VMs, production-like | Cloud production, team use |
@@ -56,6 +56,7 @@ eksctl needs permissions to create CloudFormation stacks, EC2 instances, EKS clu
       "Action": [
         "eks:*",
         "ec2:*",
+        "elasticfilesystem:*",
         "iam:CreateRole",
         "iam:DeleteRole",
         "iam:AttachRolePolicy",
@@ -127,7 +128,7 @@ You should see your account ID, user ARN, and user ID.
 ## Quick Start
 
 ```bash
-# 1. Create EKS cluster with EBS CSI, Traefik, Dapr, KEDA
+# 1. Create EKS cluster with EBS CSI, EFS CSI, Traefik, Dapr, KEDA
 ./k8s/scripts/setup-cluster-eks.sh
 
 # 2. Update values-eks.yaml with the NLB hostname printed by the setup script if you didn't select to regenerate values-eks.yaml
@@ -343,6 +344,92 @@ The setup script uses `gp3` volumes, which are newer and cheaper than `gp2`:
 
 The script removes the default annotation from `gp2` (if present) so that `gp3` is used for all PVCs.
 
+### EFS CSI Driver (Mounted Containers)
+
+The setup script automatically installs the [Amazon EFS CSI driver](https://docs.aws.amazon.com/eks/latest/userguide/efs-csi.html) and creates an encrypted EFS filesystem for large file processing (disk images, ZIPs, etc.).
+
+**What it does:** Nemesis's `container_monitor` (in the web-api service) watches a `/mounted-containers` directory for large files and processes them. On Docker Compose this is a simple bind mount. On EKS, the setup script provisions an AWS EFS filesystem that:
+
+- Supports `ReadWriteMany` so multiple pods can access it simultaneously
+- Can be mounted from outside the cluster (operators copying large files via NFS or a bastion host)
+- Is elastic (no pre-provisioned size needed, you only pay for what you store)
+- Is encrypted at rest
+
+**This is automatically enabled** when you run `setup-cluster-eks.sh`. The script creates the EFS filesystem, mount targets in each subnet, a security group allowing NFS access from cluster nodes, and writes the configuration to `values-eks.yaml`.
+
+!!! note
+    k3d and k3s deployments are unaffected. The `mountedContainers` feature is disabled by default in `values.yaml` and only enabled in the generated `values-eks.yaml`.
+
+#### How to Use
+
+After deploying to EKS, the `/mounted-containers` directory is mounted inside the web-api pod. To copy files for processing:
+
+**Option 1: kubectl cp (simplest)**
+
+```bash
+# Copy a file into the mounted-containers volume
+kubectl cp /path/to/disk-image.vmdk web-api-<pod-id>:/mounted-containers/ -n nemesis
+```
+
+**Option 2: Mount EFS on a bastion host**
+
+Mount the EFS filesystem on an EC2 instance in the same VPC using the NFS protocol:
+
+```bash
+# Get the EFS filesystem ID from values-eks.yaml
+grep efsFileSystemId k8s/helm/nemesis/values-eks.yaml
+
+# On the bastion host (install amazon-efs-utils first):
+sudo mount -t efs <fs-id>:/ /mnt/efs
+
+# Copy files
+cp /path/to/disk-image.vmdk /mnt/efs/
+```
+
+The `container_monitor` will automatically detect new files and begin processing them.
+
+#### Cleanup Behavior
+
+By default, source files are **deleted** from EFS after successful processing (`cleanupAfterProcessing: true`). This prevents large files from accumulating on the elastic filesystem and driving up EFS costs.
+
+To keep source files for forensic reference or re-processing, set `cleanupAfterProcessing: false` in your values file:
+
+```yaml
+mountedContainers:
+  enabled: true
+  cleanupAfterProcessing: false  # move to completed/ instead of deleting
+```
+
+When disabled, processed files are moved to a `completed/` subdirectory within the mounted volume instead of being deleted. You are responsible for manually cleaning up `completed/` to manage EFS storage costs.
+
+#### Verifying EFS is Working
+
+```bash
+# Check the PVC is bound
+kubectl get pvc mounted-containers -n nemesis
+
+# Check the volume is mounted in web-api
+kubectl exec deployment/web-api -n nemesis -- df -h /mounted-containers
+
+# Check container_monitor logs
+kubectl logs deployment/web-api -n nemesis | grep -i "container_monitor\|mounted"
+```
+
+#### Disabling Mounted Containers
+
+If you don't need large file processing, you can disable it by editing `values-eks.yaml` before deploying:
+
+```yaml
+mountedContainers:
+  enabled: false
+```
+
+Or remove the `mountedContainers` section entirely. When disabled, no PVC is created, no volumeMount is added to web-api, and the container_monitor gracefully skips startup.
+
+#### EFS Costs
+
+EFS pricing is pay-per-use (~$0.30/GB/month for Standard storage class in us-east-1). There is no minimum or pre-provisioned size. An empty filesystem costs nothing. See [EFS Pricing](https://aws.amazon.com/efs/pricing/) for details.
+
 ## Cost Management
 
 ### Estimated Monthly Costs
@@ -352,6 +439,7 @@ The script removes the default annotation from `gp2` (if present) so that `gp3` 
 | EKS control plane | ~$73 |
 | 1x m7i.xlarge node (default) | ~$147 |
 | EBS storage (80 Gi gp3) | ~$6 |
+| EFS (mounted containers) | ~$0 (pay per GB stored) |
 | Network Load Balancer | ~$18 base + data |
 | **Total (1 node)** | **~$244/month** |
 
@@ -392,6 +480,10 @@ After teardown, verify no AWS resources remain:
 aws ec2 describe-volumes --region us-east-1 \
   --filters Name=tag-key,Values=kubernetes.io/cluster/nemesis \
   --query 'Volumes[].{ID:VolumeId,State:State,Size:Size}' --output table
+
+# Check for orphaned EFS filesystems
+aws efs describe-file-systems --region us-east-1 \
+  --query "FileSystems[?Tags[?Key=='kubernetes.io/cluster/nemesis']].{ID:FileSystemId,State:LifeCycleState,Name:Name}" --output table
 
 # Check for orphaned load balancers
 aws elbv2 describe-load-balancers --region us-east-1 \
@@ -448,7 +540,31 @@ kubectl get nodes
 kubectl describe node <node-name>
 ```
 
-### PVCs stuck in Pending
+### Mounted-containers PVC stuck in Pending
+
+The `mounted-containers` PVC uses the EFS CSI driver (not EBS). If it's stuck in Pending:
+
+```bash
+# Check if the EFS CSI driver pods are running
+kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-efs-csi-driver
+
+# Check the EFS CSI driver addon status
+aws eks describe-addon --cluster-name nemesis --addon-name aws-efs-csi-driver --region us-east-1
+
+# Check the efs-sc StorageClass exists and has the correct fileSystemId
+kubectl get storageclass efs-sc -o yaml
+
+# Verify EFS mount targets are available
+aws efs describe-mount-targets --file-system-id <fs-id> --region us-east-1
+```
+
+Common causes:
+
+- **EFS CSI driver not installed**: Re-run `setup-cluster-eks.sh` (it's idempotent)
+- **Security group misconfigured**: The `efs-<cluster-name>` security group must allow TCP 2049 from the cluster security group
+- **Mount targets not ready**: Mount targets take 1-2 minutes to become available after creation
+
+### EBS PVCs stuck in Pending
 
 Almost always caused by a missing or broken EBS CSI driver:
 
@@ -456,17 +572,16 @@ Almost always caused by a missing or broken EBS CSI driver:
 # Check if the EBS CSI driver pods are running
 kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-ebs-csi-driver
 
-# Check the CSI driver addon status
+# Check the EBS CSI driver addon status
 aws eks describe-addon --cluster-name nemesis --addon-name aws-ebs-csi-driver --region us-east-1
 
 # Check the gp3 StorageClass exists
 kubectl get storageclass
 ```
 
-If the driver is missing, re-run the setup script or install manually:
+If the driver is missing, re-run the setup script (it's idempotent):
 
 ```bash
-# The setup script is idempotent — safe to re-run
 ./k8s/scripts/setup-cluster-eks.sh
 ```
 
