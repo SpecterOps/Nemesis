@@ -70,6 +70,7 @@ data:
       compaction_interval: 10m
       retention_enabled: true
       retention_delete_delay: 2h
+      delete_request_store: filesystem
 
     analytics:
       reporting_enabled: false
@@ -113,6 +114,10 @@ spec:
       annotations:
         dapr.io/enabled: "false"
     spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       containers:
         - name: loki
           image: "{{ .Values.monitoring.loki.image.repository }}:{{ .Values.monitoring.loki.image.tag }}"

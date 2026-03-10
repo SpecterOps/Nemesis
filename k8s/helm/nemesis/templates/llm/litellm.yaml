@@ -15,6 +15,7 @@ data:
           model: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
           aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
           aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
+          aws_session_token: os.environ/AWS_SESSION_TOKEN
           aws_region_name: "us-east-1"
 
     general_settings:
@@ -53,7 +54,7 @@ spec:
               name: http
           env:
             - name: DATABASE_URL
-              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/litellm"
+              value: "postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/litellm"
             - name: STORE_MODEL_IN_DB
               value: {{ .Values.llm.litellm.env.storeModelInDb | quote }}
             - name: AWS_ACCESS_KEY_ID
@@ -62,6 +63,8 @@ spec:
               value: {{ .Values.llm.litellm.env.awsSecretAccessKey | quote }}
             - name: AWS_REGION_NAME
               value: {{ .Values.llm.litellm.env.awsRegionName | quote }}
+            - name: AWS_SESSION_TOKEN
+              value: {{ .Values.llm.litellm.env.awsSessionToken | quote }}
             - name: LITELLM_MASTER_KEY
               value: "sk-{{ .Values.llm.litellm.env.litellmAdminPassword }}"
             - name: LITELLM_SALT_KEY
@@ -78,13 +81,13 @@ spec:
               subPath: config.yml
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/liveliness
               port: http
             initialDelaySeconds: 30
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/liveliness
               port: http
             initialDelaySeconds: 60
             periodSeconds: 15

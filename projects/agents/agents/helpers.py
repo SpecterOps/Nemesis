@@ -6,7 +6,7 @@ from common.logger import get_logger
 from gql import gql
 from httpx import AsyncClient, HTTPStatusError
 from pydantic_ai.retries import AsyncTenacityTransport, wait_retry_after
-from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = get_logger(__name__)
 
@@ -30,15 +30,15 @@ def create_rate_limit_client():
                 raise
 
     transport = AsyncTenacityTransport(
-        controller=AsyncRetrying(
-            retry=retry_if_exception_type(HTTPStatusError),
-            wait=wait_retry_after(
+        config={
+            "retry": retry_if_exception_type(HTTPStatusError),
+            "wait": wait_retry_after(
                 fallback_strategy=wait_exponential(multiplier=1, max=60),
                 max_wait=300,  # Don't wait more than 5 minutes
             ),
-            stop=stop_after_attempt(10),
-            reraise=True,
-        ),
+            "stop": stop_after_attempt(10),
+            "reraise": True,
+        },
         validate_response=validator,
     )
 

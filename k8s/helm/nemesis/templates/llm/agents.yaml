@@ -65,7 +65,7 @@ spec:
             - name: PHOENIX_ENDPOINT
               value: "http://phoenix:6006/v1/traces"
             - name: PHOENIX_SQL_DATABASE_URL
-              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/phoenix"
+              value: "postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/phoenix"
             {{- if .Values.monitoring.enabled }}
             - name: NEMESIS_MONITORING
               value: "enabled"
@@ -80,6 +80,8 @@ spec:
             {{- include "nemesis.postgresEnv" . | nindent 12 }}
             {{- include "nemesis.s3Env" . | nindent 12 }}
             {{- include "nemesis.rabbitmqEnv" . | nindent 12 }}
+          volumeMounts:
+            {{- include "nemesis.daprSecretsVolumeMount" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /healthz
@@ -94,6 +96,8 @@ spec:
             periodSeconds: 15
           resources:
             {{- toYaml .Values.llm.agents.resources | nindent 12 }}
+      volumes:
+        {{- include "nemesis.daprSecretsVolume" . | nindent 8 }}
 ---
 apiVersion: v1
 kind: Service
