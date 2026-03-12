@@ -15,6 +15,7 @@ outflank:
     credential:
       username: "nemesis_bot"
       password: "outflank_password"
+    agent_id: "stage1"
 
     # Optional:
     #   When set, stage1 downloads are retrieved from disk instead of stage1's API.

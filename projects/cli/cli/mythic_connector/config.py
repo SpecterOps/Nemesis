@@ -20,6 +20,7 @@ class TokenCredential:
 class MythicConfig:
     url: str
     credential: UsernamePasswordCredential | TokenCredential
+    agent_id: str
 
     @classmethod
     def from_dict(cls, data: dict) -> "MythicConfig":
@@ -33,7 +34,7 @@ class MythicConfig:
         else:
             credential = UsernamePasswordCredential(username=cred_data["username"], password=cred_data["password"])
 
-        return cls(url=url_value, credential=credential)
+        return cls(url=url_value, credential=credential, agent_id=data.get("agent_id", "mythic"))
 
 
 @dataclass
@@ -129,6 +130,7 @@ VALIDATORS = [
     Validator(
         "mythic.credential.password", must_exist=False, when=Validator("mythic.credential.token", must_exist=True)
     ),
+    Validator("mythic.agent_id", default="mythic", is_type_of=str),
     # Nemesis validators
     Validator("nemesis.url", must_exist=True),
     Validator("nemesis.credential", must_exist=True),

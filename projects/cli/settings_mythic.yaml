@@ -2,6 +2,7 @@ project: "ASSESS-TEST"
 
 mythic:
   url: "https://mythic.local:7443"
+  agent_id: "mythic"
 
   # Password auth
   credential:
