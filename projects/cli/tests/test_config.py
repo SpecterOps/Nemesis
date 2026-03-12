@@ -129,6 +129,7 @@ class TestMythicConfig:
             credential=PasswordCredential(username="mythic_admin", password="pass"),
         )
         assert isinstance(cfg.credential, PasswordCredential)
+        assert cfg.agent_id == "mythic"
 
     def test_create_with_token_credential(self):
         cfg = MythicConfig(
@@ -136,6 +137,7 @@ class TestMythicConfig:
             credential=TokenCredential(token="my-api-token"),
         )
         assert isinstance(cfg.credential, TokenCredential)
+        assert cfg.agent_id == "mythic"
 
     def test_validate_credential_from_dict_token(self):
         """Test that the field_validator correctly handles dict input with token."""
@@ -155,6 +157,13 @@ class TestMythicConfig:
         assert isinstance(cfg.credential, PasswordCredential)
         assert cfg.credential.username == "admin"
 
+    def test_custom_agent_id(self):
+        cfg = MythicConfig(
+            url=StrictHttpUrl("https://mythic.local:7443"),
+            credential={"username": "admin", "password": "secret"},
+            agent_id="mythic-initial",
+        )
+        assert cfg.agent_id == "mythic-initial"
 
 # --- OutflankConfig ---
 
@@ -165,6 +174,7 @@ class TestOutflankConfig:
             url=StrictHttpUrl("https://outflank.local"),
             credential=PasswordCredential(username="u", password="p"),
         )
+        assert cfg.agent_id == "stage1"
         assert cfg.downloads_dir_path is None
         assert cfg.poll_interval_sec == 3
 
@@ -195,6 +205,7 @@ class TestCobaltStrikeConfig:
             credential=PasswordCredential(username="u", password="p"),
             project="assessment-1",
         )
+        assert cfg.agent_id == "Cobalt Strike"
         assert cfg.project == "assessment-1"
         assert cfg.poll_interval_sec == 3
 
@@ -313,6 +324,7 @@ class TestSettingsCobaltstrike:
         assert str(cs.url) == "https://cobaltstrike.example.com:50443"
         assert cs.credential.username == "nemesis_bot"
         assert cs.credential.password == "cobaltstrike_password"
+        assert cs.agent_id == "Cobalt Strike"
         assert cs.project == "my-assessment"
         assert cs.poll_interval_sec == 3
 
@@ -347,6 +359,7 @@ class TestSettingsOutflank:
         assert str(of.url) == "https://stage1.example.com"
         assert of.credential.username == "nemesis_bot"
         assert of.credential.password == "outflank_password"
+        assert of.agent_id == "stage1"
         assert of.downloads_dir_path is None
         assert of.poll_interval_sec == 3  # default
 

@@ -15,5 +15,6 @@ cobaltstrike:
     credential:
       username: "nemesis_bot"
       password: "cobaltstrike_password"
+    agent_id: "Cobalt Strike"
     project: "my-assessment"
     poll_interval_sec: 3

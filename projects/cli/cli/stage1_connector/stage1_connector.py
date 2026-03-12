@@ -84,6 +84,7 @@ async def setup_outflank_monitor(outflank_config: OutflankConfig, config: Config
                 config.cache_db_path,
                 nemesis_client,
                 project["name"],
+                agent_id=outflank_config.agent_id,
                 outflank_downloads_dir_path=outflank_config.downloads_dir_path,
             )
         else:
@@ -92,6 +93,7 @@ async def setup_outflank_monitor(outflank_config: OutflankConfig, config: Config
                 config.cache_db_path,
                 nemesis_client,
                 project["name"],
+                agent_id=outflank_config.agent_id,
                 outflank=outflank_client,
             )
 
