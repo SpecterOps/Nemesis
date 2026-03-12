@@ -69,7 +69,7 @@ class FileHandler:
             Formatted metadata dictionary
         """
         return {
-            "agent_id": file_meta["task"]["callback"]["agent_callback_id"],
+            "agent_id": self.cfg.mythic.agent_id,
             "agent_type": "mythic",
             "automated": True,
             "data_type": "file_data",
@@ -178,7 +178,7 @@ class FileHandler:
                 source = f"host://{file_meta.get('host', 'unknown')}"
 
                 metadata = FileMetadata(
-                    agent_id="mythic",
+                    agent_id=self.cfg.mythic.agent_id,
                     source=source,
                     project=self.cfg.project,
                     timestamp=datetime.now(UTC),
