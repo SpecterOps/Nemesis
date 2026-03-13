@@ -114,11 +114,11 @@ fi
 
 # --- Build Command ---
 declare -a DOCKER_CMD=("docker" "compose")
-declare -a CMD_PREFIX=()
+declare -a ENV_VARS=()
 
 # 1. Handle Profiles and associated Environment Variables
 if [ "$MONITORING" = "true" ]; then
-  CMD_PREFIX=( "env" "NEMESIS_MONITORING=enabled" )
+  ENV_VARS+=("NEMESIS_MONITORING=enabled")
   DOCKER_CMD+=("--profile" "monitoring")
 fi
 
@@ -132,7 +132,7 @@ if [ "$LLM" = "true" ]; then
     echo "Error: PHOENIX_ENABLED must be 'true' or 'false', got '$PHOENIX_ENABLED'." >&2
     exit 1
   fi
-  CMD_PREFIX+=("PHOENIX_ENABLED=${PHOENIX_ENABLED:-true}")
+  ENV_VARS+=("PHOENIX_ENABLED=${PHOENIX_ENABLED:-true}")
 fi
 
 # 2. Handle Environment-specific files
@@ -182,11 +182,11 @@ fi
 echo
 echo "Running command:"
 
-# Determine the final command outside the subshell
-if [ ${#CMD_PREFIX[@]} -eq 0 ]; then
-  FINAL_CMD=("${DOCKER_CMD[@]}")
+# Build final command with environment variables if needed
+if [ ${#ENV_VARS[@]} -gt 0 ]; then
+  FINAL_CMD=("env" "${ENV_VARS[@]}" "${DOCKER_CMD[@]}")
 else
-  FINAL_CMD=("${CMD_PREFIX[@]}" "${DOCKER_CMD[@]}")
+  FINAL_CMD=("${DOCKER_CMD[@]}")
 fi
 
 (
