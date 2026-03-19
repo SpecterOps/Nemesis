@@ -2,11 +2,14 @@ name: Build and Publish Service Docker Images
 
 on:
   push:
-    # # To run on every push to main
-    # branches: [ "main" ]
+    # To run on every push to main
+    branches: [ "main" ]
+    paths:
+      - 'libs/**'
+      - 'projects/**'
 
-    # To run when release tags are created:
-    tags: [ "v*.*.*" ]
+    # # To run when release tags are created:
+    # tags: [ "v*.*.*" ]
   workflow_dispatch: # For manual triggering
 
 env:
