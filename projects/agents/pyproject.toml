@@ -32,6 +32,7 @@ dependencies = [
     "psycopg>=3.2.9,<4.0.0",
     "pythonnet>=3.0.4,<4.0.0",
     "protobuf>=6.33.5,<7.0.0",
+    "pyasn1>=0.6.3",
 ]
 
 [dependency-groups]

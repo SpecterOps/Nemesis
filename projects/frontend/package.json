@@ -35,7 +35,8 @@
   },
   "overrides": {
     "lodash": ">=4.17.23",
-    "rollup": ">=4.59.0"
+    "rollup": ">=4.59.0",
+    "dompurify": ">=3.3.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

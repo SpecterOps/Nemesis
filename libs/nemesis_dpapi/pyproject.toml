@@ -14,6 +14,7 @@ dependencies = [
     "dpapick3>=0.7.1,<0.8.0",
     "dapr==1.16.0",
     "common",
+    "pyasn1>=0.6.3",
 ]
 
 [dependency-groups]

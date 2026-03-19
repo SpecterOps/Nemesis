@@ -27,6 +27,7 @@ dependencies = [
     "jinja2>=3.1.6,<4.0.0",
     "markdown>=3.9,<4.0",
     "httpx>=0.28.1,<0.29.0",
+    "pyasn1>=0.6.3",
 ]
 
 [dependency-groups]
