@@ -5,8 +5,8 @@ import json
 
 from common.helpers import create_text_reader
 from common.logger import get_logger
-from common.models import NoseyParkerInput
-from common.queues import NOSEYPARKER_INPUT_TOPIC, NOSEYPARKER_PUBSUB
+from common.models import TitusInput
+from common.queues import TITUS_INPUT_TOPIC, TITUS_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
 from dapr.aio.clients import DaprClient
@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input):
     """
     Activity to index a file's contents if it's plaintext and
-    send a pub/sub message to NoseyParker
+    send a pub/sub message to Titus
     """
     object_id = activity_input["object_id"]
 
@@ -36,13 +36,13 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
                 with create_text_reader(binary_file) as text_file:
                     await index_plaintext_content(f"{object_id}", text_file)
 
-    # Submit the file to NoseyParker
-    nosey_parker_input = NoseyParkerInput(object_id=object_id, workflow_id=ctx.workflow_id)
+    # Submit the file to Titus
+    titus_input = TitusInput(object_id=object_id, workflow_id=ctx.workflow_id, original_path=file_enriched.path or "")
     async with DaprClient() as client:
         await client.publish_event(
-            pubsub_name=NOSEYPARKER_PUBSUB,
-            topic_name=NOSEYPARKER_INPUT_TOPIC,
-            data=json.dumps(nosey_parker_input.model_dump()),
+            pubsub_name=TITUS_PUBSUB,
+            topic_name=TITUS_INPUT_TOPIC,
+            data=json.dumps(titus_input.model_dump()),
             data_content_type="application/json",
         )
 

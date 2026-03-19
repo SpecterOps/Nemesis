@@ -1,0 +1,14 @@
+apiVersion: v2
+name: nemesis
+description: Nemesis - Centralized data processing platform for offensive security assessments
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
+keywords:
+  - nemesis
+  - security
+  - offensive
+  - file-enrichment
+home: https://github.com/SpecterOps/Nemesis
+maintainers:
+  - name: SpecterOps

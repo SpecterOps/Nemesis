@@ -214,6 +214,7 @@ dependencies = [
     { name = "dapr-ext-workflow" },
     { name = "fastapi" },
     { name = "minio" },
+    { name = "prometheus-client" },
     { name = "psycopg", extra = ["pool"] },
     { name = "pydantic" },
     { name = "structlog" },
@@ -235,6 +236,7 @@ requires-dist = [
     { name = "dapr-ext-workflow", specifier = ">=1.16.0,<2.0.0" },
     { name = "fastapi", specifier = ">=0.121.0,<0.122.0" },
     { name = "minio", specifier = ">=7.2.14,<8.0.0" },
+    { name = "prometheus-client", specifier = ">=0.22.0,<1.0.0" },
     { name = "psycopg", extras = ["pool"], specifier = ">=3.2.9,<4.0.0" },
     { name = "pydantic", specifier = ">=2.10.5,<3.0.0" },
     { name = "structlog", specifier = ">=25.1.0,<26.0.0" },
@@ -499,6 +501,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538 },
+]
+
+[[package]]
+name = "prometheus-client"
+version = "0.24.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/58/a794d23feb6b00fc0c72787d7e87d872a6730dd9ed7c7b3e954637d8f280/prometheus_client-0.24.1.tar.gz", hash = "sha256:7e0ced7fbbd40f7b84962d5d2ab6f17ef88a72504dcf7c0b40737b43b2a461f9", size = 85616 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/c3/24a2f845e3917201628ecaba4f18bab4d18a337834c1df2a159ee9d22a42/prometheus_client-0.24.1-py3-none-any.whl", hash = "sha256:150db128af71a5c2482b36e588fc8a6b95e498750da4b17065947c16070f4055", size = 64057 },
 ]
 
 [[package]]

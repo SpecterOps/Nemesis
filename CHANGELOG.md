@@ -4,14 +4,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3]
+
+### Changed
+
+- Replaced Minio (as it's deprecated) with SeaweedFS for backend storage.
+
+## [2.2.2]
+
+### Added
+
+- `evtx` Windows Event Log parsing module
+
+### Changed
+
+- `noseyparker_scanner` Rust project replaced with Golang `titus_scanner` project based on Praetorian's new Titus scanner
+  - can enable/disable validation, add custom rules, and optionally disable specific built-in (noisy) rules
 
 ## [2.2.1]
 
 ### Added
 
-- `CLAUDE.md` project file
-- `enrichment-module-builder` skill triggered by `/new-enrichment-module` command for rapid file enrichment module development
-- `prefetch` and `ccache` enrichment modules (developed by Claude skill)
+- `CLAUDE.md` and `AGENTS.md` project files
+- `enrichment-module-builder` Claude Code skill triggered by `/new-enrichment-module` command for rapid file enrichment module development
+- `enrichment-module-builder` Codex Code skill triggered by `$enrichment-module-builder` command for rapid file enrichment module development
+- `prefetch` and `ccache` enrichment modules (developed by skills)
 - Proper GitHub issue templates
 
 

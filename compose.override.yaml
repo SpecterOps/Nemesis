@@ -23,14 +23,14 @@ services:
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
 
-  noseyparker-scanner:
+  titus-scanner:
     image: !reset null
     build:
       context: .
-      dockerfile: ./projects/noseyparker_scanner/Dockerfile
+      dockerfile: ./projects/titus_scanner/Dockerfile
       target: dev
     environment:
-      - RUST_LOG=debug
+      - LOG_LEVEL=debug
 
   dotnet-service:
     image: !reset null

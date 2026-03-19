@@ -6,6 +6,7 @@ There are two ways to build a new module:
 
 - **Manual:** Follow the sections below to understand the module structure, implement the protocol, and wire up testing yourself. Best for learning how things work under the hood.
 - **Claude Code skill (easy mode):** Run the `/new-enrichment-module` skill in Claude Code to get a guided, interactive workflow that handles scaffolding, library selection, implementation, and testing. Jump to [Quick Start with Claude Code](#quick-start-with-claude-code) to get started.
+- **Codex skill (easy mode):** Run the `$enrichment-module-builder` skill from the repo root to get a guided, interactive workflow that handles scaffolding, library selection, implementation, and testing. Jump to [Quick Start with Codex](#quick-start-with-codex) to get started.
 
 ## Table of Contents
 
@@ -17,13 +18,16 @@ There are two ways to build a new module:
 6. [Common Patterns](#common-patterns)
 7. [Testing](#testing)
 8. [Quick Start with Claude Code](#quick-start-with-claude-code)
-9. [Reference Modules](#reference-modules)
+9. [Quick Start with Codex](#quick-start-with-codex)
+10. [Reference Modules](#reference-modules)
 
 ---
 
 ## Module Structure
 
-Each enrichment module lives in its own directory under `libs/file_enrichment_modules/file_enrichment_modules/`:
+Each enrichment module lives in its own directory under `libs/file_enrichment_modules/file_enrichment_modules/`. The folder name should follow Python's [PEP8 naming conventions](https://peps.python.org/pep-0008/#package-and-module-names):
+
+> Modules should have short, all-lowercase names. Underscores can be used in the module name if it improves readability. Python packages should also have short, all-lowercase names, although the use of underscores is discouraged.
 
 ```
 libs/file_enrichment_modules/file_enrichment_modules/{module_name}/
@@ -64,7 +68,11 @@ def create_enrichment_module() -> EnrichmentModule:
 
 ### Optional: pyproject.toml
 
-If your module needs dependencies not in the base `file_enrichment_modules`, create a `pyproject.toml`:
+If your module needs dependencies not in the base `file_enrichment_modules`, you have two options. First, [install uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+**Option 1:** `cd` to `projects/file_enrichment` or `libs/file_enrichment_modules/` and run `uv add X` for the needed library.
+
+**Option 2 (easier):** Create a `pyproject.toml` in the new module folder:
 
 ```toml
 [project]
@@ -80,7 +88,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 ```
 
-Dependencies are automatically installed when the module loads.
+Then in this folder, run `uv add X` to add a new library. The dynamic module loader will install the necessary dependencies in a virtual env for just that module.
 
 ---
 
@@ -303,7 +311,29 @@ result.findings.append(finding)
 
 ### 3. Transforms
 
-Derived files uploaded to storage:
+Derived files uploaded to storage. Transforms require a `type` (used as a title for display) and an `object_id` to reference the data to display.
+
+#### Transform Metadata Reference
+
+| Metadata Field            | Type         | Description                                                            |
+| ------------------------- | ------------ | ---------------------------------------------------------------------- |
+| file_name                 | string       | Name of the file (i.e., for downloads)                                 |
+| display_type_in_dashboard | display_type | How to display in the dashboard                                        |
+| display_title             | string       | Title to display for the transform in the dashboard                    |
+| default_display           | bool         | `true` to set this transform as the default display                    |
+| offer_as_download         | bool         | If set to `true` offered as a download tab, downloading as `file_name` |
+
+#### Display Types
+
+| Value    | Description                                                                                           |
+| -------- | ----------------------------------------------------------------------------------------------------- |
+| monaco   | Display in a Monaco editor, using the extension from `file_name` to help determine the language type. |
+| pdf      | Render as a PDF                                                                                       |
+| image    | Render as an image                                                                                    |
+| markdown | Render as markdown                                                                                    |
+| null     | Don't display content                                                                                 |
+
+#### Basic Transform Example
 
 ```python
 from common.models import Transform
@@ -327,6 +357,46 @@ transform = Transform(
 )
 
 result.transforms.append(transform)
+```
+
+#### Setting a Text File as Default Display
+
+From `file_enrichment_modules/sqlite/analyzer.py`:
+
+```python
+with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as tmp_display_file:
+    display = format_sqlite_data(database_data)
+    tmp_display_file.write(display)
+    tmp_display_file.flush()
+
+    object_id = self.storage.upload_file(tmp_display_file.name)
+
+    displayable_parsed = Transform(
+        type="displayable_parsed",
+        object_id=f"{object_id}",
+        metadata={
+            "file_name": f"{file_enriched.file_name}.txt",
+            "display_type_in_dashboard": "monaco",
+            "default_display": True
+        },
+    )
+enrichment_result.transforms = [displayable_parsed]
+```
+
+#### Offering a File for Download
+
+From `file_enrichment_modules/dotnet/analyzer.py`:
+
+```python
+decompilation = Transform(
+    type = "decompilation",
+    object_id = service_results["decompilation"]["object_id"],
+    metadata = {
+        "file_name" : f"{file_enriched.file_name}.zip",
+        "offer_as_download" : True
+    }
+)
+enrichment_result.transforms = [decompilation]
 ```
 
 ---
@@ -511,6 +581,65 @@ Examples:
 /new-enrichment-module SSH private keys (RSA, ECDSA, Ed25519)
 /new-enrichment-module macOS Keychain database files
 /new-enrichment-module KeePass database files (.kdbx)
+```
+
+### What the Skill Does
+
+The skill walks through 8 steps, pausing at review gates for your input:
+
+| Step | What Happens | Review Gate? |
+|------|-------------|:------------:|
+| 1. Problem Analysis | Gathers requirements about target file types and data to extract | |
+| 2. Output Mode | Choose Findings, Parsing-Only, or Hybrid mode | Yes |
+| 3. Library Research | Searches for and evaluates parsing libraries | Yes |
+| 4. Sample File | Obtain or generate a test file | Yes |
+| 5. Detection Strategy | Builds `should_process()` using magic types, extensions, YARA, etc. | |
+| 6. Implementation | Creates `analyzer.py`, `pyproject.toml`, and `rules.yar` as needed | |
+| 7. Standalone Tests | Writes and runs unit tests using the test harness | |
+| 8. Integration Test | Submits the test file to a running Nemesis instance and verifies results | Yes |
+
+The review gates let you steer library choices, output format, and test file selection before the skill commits to an approach.
+
+### Prerequisites
+
+For the full workflow including integration testing (step 8), start Nemesis in development mode first:
+
+```bash
+./tools/nemesis-ctl.sh start dev
+```
+
+The skill can still scaffold and unit-test a module without Nemesis running, but the final integration test requires a live instance.
+
+### Output
+
+When complete, the skill produces a ready-to-use module at `libs/file_enrichment_modules/file_enrichment_modules/{module_name}/` with:
+
+- `analyzer.py` — Full module implementation with `should_process()` and `process()`
+- `pyproject.toml` — Created if the module needs dependencies beyond the base package
+- `rules.yar` — Created if the detection strategy uses YARA rules
+- Unit tests in `tests/` using the test harness
+
+---
+
+## Quick Start with Codex
+
+If you are using [Codex](https://openai.com/codex/) in this repository, the `$enrichment-module-builder` skill provides a guided workflow that handles design, implementation, and testing.
+
+### Usage
+
+Launch Codex from the Nemesis project root and run:
+
+```
+$enrichment-module-builder <description of file type to support>
+```
+
+Examples:
+
+```
+$enrichment-module-builder Windows Prefetch files (.pf)
+$enrichment-module-builder SSH private keys (RSA, ECDSA, Ed25519)
+$enrichment-module-builder macOS Keychain database files
+$enrichment-module-builder KeePass database files (.kdbx)
 ```
 
 ### What the Skill Does

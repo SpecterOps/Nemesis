@@ -26,10 +26,11 @@ from .workflows import (
     GitCommitInfo,
     MatchInfo,
     MatchLocation,
-    NoseyParkerInput,
-    NoseyParkerOutput,
     ScanResults,
     ScanStats,
+    TitusInput,
+    TitusOutput,
+    ValidationResult,
     WorkflowResponse,
     WorkflowStatus,
 )
@@ -54,14 +55,15 @@ __all__ = [
     "DotNetMethodInfo",
     "DotNetAssemblyAnalysis",
     "DotNetOutput",
-    # NoseyParker models
+    # Titus models
     "GitCommitInfo",
     "MatchLocation",
+    "ValidationResult",
     "MatchInfo",
     "ScanStats",
     "ScanResults",
-    "NoseyParkerInput",
-    "NoseyParkerOutput",
+    "TitusInput",
+    "TitusOutput",
     # Dapr helpers
     "WorkflowResponse",
     "WorkflowStatus",

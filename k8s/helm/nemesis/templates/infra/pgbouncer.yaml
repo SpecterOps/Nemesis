@@ -1,0 +1,121 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  pgbouncer.ini: |
+    [databases]
+    {{ .Values.postgres.database }} = host=postgres port={{ .Values.postgres.port }} dbname={{ .Values.postgres.database }}
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = {{ .Values.pgbouncer.port }}
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = {{ .Values.pgbouncer.poolMode }}
+    max_client_conn = {{ .Values.pgbouncer.maxClientConn }}
+    default_pool_size = {{ .Values.pgbouncer.defaultPoolSize }}
+    min_pool_size = {{ .Values.pgbouncer.minPoolSize }}
+    reserve_pool_size = {{ .Values.pgbouncer.reservePoolSize }}
+    reserve_pool_timeout = 3
+    server_idle_timeout = 300
+    log_connections = 0
+    log_disconnections = 0
+    log_pooler_errors = 1
+    stats_period = 60
+    admin_users = {{ .Values.credentials.postgres.user }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "pgbouncer" "context" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.pgbouncer.replicas }}
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "pgbouncer" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "pgbouncer" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+        checksum/config: {{ printf "%s-%d-%d-%d-%d" .Values.pgbouncer.poolMode (int .Values.pgbouncer.maxClientConn) (int .Values.pgbouncer.defaultPoolSize) (int .Values.pgbouncer.minPoolSize) (int .Values.pgbouncer.reservePoolSize) | sha256sum }}
+    spec:
+      initContainers:
+        {{- include "nemesis.waitForPostgres" . | nindent 8 }}
+      containers:
+        - name: pgbouncer
+          image: {{ include "nemesis.image" (dict "image" .Values.pgbouncer.image "context" .) }}
+          ports:
+            - containerPort: {{ .Values.pgbouncer.port }}
+              name: pgbouncer
+          env:
+            - name: POSTGRESQL_HOST
+              value: "postgres"
+            - name: POSTGRESQL_PORT
+              value: {{ .Values.postgres.port | quote }}
+            - name: POSTGRESQL_DATABASE
+              value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRESQL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGBOUNCER_PORT
+              value: {{ .Values.pgbouncer.port | quote }}
+            - name: PGBOUNCER_DATABASE
+              value: {{ .Values.postgres.database | quote }}
+            - name: PGBOUNCER_POOL_MODE
+              value: {{ .Values.pgbouncer.poolMode | quote }}
+            - name: PGBOUNCER_MAX_CLIENT_CONN
+              value: {{ .Values.pgbouncer.maxClientConn | quote }}
+            - name: PGBOUNCER_DEFAULT_POOL_SIZE
+              value: {{ .Values.pgbouncer.defaultPoolSize | quote }}
+            - name: PGBOUNCER_MIN_POOL_SIZE
+              value: {{ .Values.pgbouncer.minPoolSize | quote }}
+            - name: PGBOUNCER_RESERVE_POOL_SIZE
+              value: {{ .Values.pgbouncer.reservePoolSize | quote }}
+            - name: PGBOUNCER_INIT_MAX_SLEEP
+              value: "10"
+          readinessProbe:
+            tcpSocket:
+              port: pgbouncer
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: pgbouncer
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.pgbouncer.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "pgbouncer" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "pgbouncer" "context" .) | nindent 4 }}
+  ports:
+    - port: 5432
+      targetPort: pgbouncer
+      name: pgbouncer

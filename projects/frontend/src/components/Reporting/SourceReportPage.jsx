@@ -312,10 +312,10 @@ const SourceReportPage = () => {
       <DashboardSection title="Credential Exposure">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <StatCard
-            title="NoseyParker Findings"
-            value={report.risk_indicators.credentials.noseyparker_findings}
+            title="Titus Findings"
+            value={report.risk_indicators.credentials.titus_findings}
             icon={Search}
-            className={report.risk_indicators.credentials.noseyparker_findings > 0 ? 'border-2 border-red-500' : ''}
+            className={report.risk_indicators.credentials.titus_findings > 0 ? 'border-2 border-red-500' : ''}
           />
           <StatCard
             title="YARA Matches"

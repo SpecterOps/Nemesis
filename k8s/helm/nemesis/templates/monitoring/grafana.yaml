@@ -1,0 +1,190 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: prometheus
+        type: prometheus
+        url: http://prometheus:9090/prometheus/
+        isDefault: true
+        editable: true
+  loki.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        url: http://loki:3100
+        jsonData:
+          maxLines: 1000
+  postgres.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Postgres
+        type: postgres
+        url: postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}
+        jsonData:
+          maxOpenConns: 100
+          maxIdleConns: 100
+          connMaxLifetime: 14400
+          postgresVersion: 1000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: 'Default'
+        orgId: 1
+        folder: ''
+        folderUid: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /etc/grafana/provisioning/dashboards
+          foldersFromFilesStructure: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.monitoring.grafana.storage.storageClass }}
+  storageClassName: {{ .Values.monitoring.grafana.storage.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.grafana.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "grafana" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "grafana" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "grafana" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+      containers:
+        - name: grafana
+          image: "{{ .Values.monitoring.grafana.image.repository }}:{{ .Values.monitoring.grafana.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: {{ .Values.monitoring.grafana.env.anonymousEnabled | quote }}
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: {{ .Values.monitoring.grafana.env.anonymousOrgRole | quote }}
+            - name: GF_SERVER_DOMAIN
+              value: {{ .Values.nemesis.url | quote }}
+            - name: GF_SERVER_ROOT_URL
+              value: "{{ .Values.nemesis.url }}grafana"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+            - name: POSTGRES_CONNECTION_STRING
+              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}"
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml
+              subPath: dashboards.yml
+            - name: dashboard-traefik
+              mountPath: /etc/grafana/provisioning/dashboards/traefik.json
+              subPath: traefik.json
+            - name: dashboard-seaweedfs
+              mountPath: /etc/grafana/provisioning/dashboards/seaweedfs.json
+              subPath: seaweedfs.json
+            - name: dashboard-node-exporter
+              mountPath: /etc/grafana/provisioning/dashboards/node_exporter_full.json
+              subPath: node_exporter_full.json
+            - name: data
+              mountPath: /var/lib/grafana
+          readinessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.monitoring.grafana.resources | nindent 12 }}
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboard-traefik
+          configMap:
+            name: grafana-dashboard-traefik
+        - name: dashboard-seaweedfs
+          configMap:
+            name: grafana-dashboard-seaweedfs
+        - name: dashboard-node-exporter
+          configMap:
+            name: grafana-dashboard-node-exporter
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "grafana" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "grafana" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.monitoring.grafana.port }}
+      targetPort: http
+      name: http
+{{- end }}

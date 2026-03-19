@@ -1,0 +1,50 @@
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-basic-auth
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  basicAuth:
+    secret: nemesis-basic-auth-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nemesis-basic-auth-secret
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  users: {{ .Values.credentials.basicAuthUsers | quote }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-strip-hasura
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /hasura
+{{- if .Values.llm.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-strip-phoenix
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /phoenix
+{{- end }}
+{{- end }}

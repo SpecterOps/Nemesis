@@ -20,9 +20,9 @@ def extract_openapi_spec() -> dict[str, Any]:
     try:
         # Set minimal environment variables to avoid database connection issues
         os.environ.setdefault("POSTGRES_CONNECTION_URI", "postgresql://test:test@localhost/test")
-        os.environ.setdefault("MINIO_ROOT_USER", "test")
-        os.environ.setdefault("MINIO_ROOT_PASSWORD", "test")
-        os.environ.setdefault("MINIO_SERVER", "localhost:9000")
+        os.environ.setdefault("S3_ACCESS_KEY", "test")
+        os.environ.setdefault("S3_SECRET_KEY", "test")
+        os.environ.setdefault("S3_ENDPOINT", "localhost:9000")
         os.environ.setdefault("BUCKET_NAME", "test")
 
         # Mock Dapr dependencies to avoid connection issues
@@ -87,9 +87,9 @@ def extract_openapi_spec() -> dict[str, Any]:
                 "POSTGRES_PORT": "5432",
                 "POSTGRES_DB": "test",
                 "POSTGRES_PARAMETERS": "sslmode=disable",
-                "MINIO_ROOT_USER": "test",
-                "MINIO_ROOT_PASSWORD": "test",
-                "MINIO_SERVER": "localhost:9000",
+                "S3_ACCESS_KEY": "test",
+                "S3_SECRET_KEY": "test",
+                "S3_ENDPOINT": "localhost:9000",
                 "BUCKET_NAME": "test",
             }
             mock_response.secret = {key: secrets_map.get(key, "test")}

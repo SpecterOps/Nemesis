@@ -13,7 +13,7 @@ from agents.schemas import CredentialAnalysisResponse, CredentialWithContext
 from common.db import get_postgres_connection_str
 from common.models import FileObject, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
@@ -55,7 +55,7 @@ Analyze the following document and extract any credentials or passwords you find
 2. The surrounding textual context (2-3 lines before and after the credential to show where it was found)
 
 Return your findings as a structured list. If no credentials are found, return an empty list."""
-        self.storage = StorageMinio()
+        self.storage = StorageS3()
         self.postgres_connection_url = get_postgres_connection_str()
 
     def _get_text_content(self, object_id: str) -> str:

@@ -1,3 +1,4 @@
+import os
 import tempfile
 import uuid
 from io import BytesIO
@@ -13,26 +14,25 @@ from .logger import get_logger
 logger = get_logger(__name__)
 
 
-class StorageMinio:
+class StorageS3:
     def __init__(
         self,
         bucket_name: str = "files",
         data_download_dir: str = "/tmp/",
     ) -> None:
-        # endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000"),
-        endpoint = "minio:9000"
+        endpoint = os.getenv("S3_ENDPOINT", "seaweedfs:8333")
 
         with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="MINIO_ROOT_USER")
-            minio_root_user = secret.secret["MINIO_ROOT_USER"]
+            secret = client.get_secret(store_name="nemesis-secret-store", key="S3_ACCESS_KEY")
+            access_key = secret.secret["S3_ACCESS_KEY"]
 
-            secret = client.get_secret(store_name="nemesis-secret-store", key="MINIO_ROOT_PASSWORD")
-            minio_root_password = secret.secret["MINIO_ROOT_PASSWORD"]
+            secret = client.get_secret(store_name="nemesis-secret-store", key="S3_SECRET_KEY")
+            secret_key = secret.secret["S3_SECRET_KEY"]
 
         self.minio_client = Minio(
             endpoint,
-            access_key=f"{minio_root_user}",
-            secret_key=f"{minio_root_password}",
+            access_key=access_key,
+            secret_key=secret_key,
             secure=False,
             http_client=PoolManager(
                 maxsize=30,
@@ -210,7 +210,7 @@ class StorageMinio:
             raise
 
     def delete_object(self, object_id: str) -> bool:
-        """Delete a single object from Minio storage.
+        """Delete a single object from S3 storage.
 
         Args:
             object_id (str): The ID of the object to delete
@@ -220,14 +220,14 @@ class StorageMinio:
         """
         try:
             self.minio_client.remove_object(self.bucket_name, object_id)
-            logger.debug("Deleted object from Minio", object_id=object_id, bucket=self.bucket_name)
+            logger.debug("Deleted object from storage", object_id=object_id, bucket=self.bucket_name)
             return True
         except Exception:
-            logger.exception(message="Failed to delete object from Minio", object_id=object_id)
+            logger.exception(message="Failed to delete object from storage", object_id=object_id)
             return False
 
     def delete_objects(self, object_ids: list[str]) -> int:
-        """Delete multiple objects from Minio storage.
+        """Delete multiple objects from S3 storage.
 
         Args:
             object_ids (List[str]): List of object IDs to delete
@@ -243,11 +243,7 @@ class StorageMinio:
 
     def delete_all_files(self) -> bool:
         """
-        Deletes all of the files in a bucket.
-
-        For Minio, because we recreate the bucket with the expiration policy on
-        bucket creation, we want to delete the bucket here as well so the next
-        upload creates everything correctly.
+        Deletes all of the files in a bucket and removes the bucket itself.
         """
 
         logger.debug("Deleting all files from bucket", bucket_name=self.bucket_name)
@@ -265,3 +261,7 @@ class StorageMinio:
                 bucket_name=self.bucket_name,
             )
             raise
+
+
+# Backward-compatibility alias
+StorageMinio = StorageS3

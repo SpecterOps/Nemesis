@@ -1164,7 +1164,7 @@ const FileViewer = () => {
       const content = new TextDecoder().decode(transform.content);
       return (
         <div className="bg-gray-50 dark:bg-gray-900 rounded-lg">
-          <CsvViewer content={content} />
+          <CsvViewer content={content} fileName={transform.fileName} />
         </div>
       );
     }

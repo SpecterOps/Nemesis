@@ -1,4 +1,4 @@
-# Workflow models (DotNet, NoseyParker, Dapr helpers)
+# Workflow models (DotNet, Titus, Dapr helpers)
 import json
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -80,7 +80,7 @@ class DotNetOutput(BaseModel):
 
 ##########################################
 #
-# NoseyParker Models
+# Titus Models
 #
 ##########################################
 
@@ -98,14 +98,28 @@ class MatchLocation(BaseModel):
     column: int
 
 
+class ValidationResult(BaseModel):
+    status: str = "undetermined"  # "valid", "invalid", "undetermined"
+    confidence: float = 0.0
+    message: str | None = None
+    validated_at: str | None = None
+    details: dict[str, str] | None = None
+
+    @property
+    def is_valid(self) -> bool:
+        return self.status == "valid"
+
+
 class MatchInfo(BaseModel):
     rule_name: str
+    rule_id: str | None = None
     rule_type: str
     matched_content: str
     location: MatchLocation
     snippet: str
     file_path: str | None = None
     git_commit: GitCommitInfo | None = None
+    validation_result: ValidationResult | None = None
 
 
 class ScanStats(BaseModel):
@@ -121,28 +135,30 @@ class ScanResults(BaseModel):
     bytes_scanned: int
     matches: list[MatchInfo]
     stats: ScanStats
-    scan_type: str = "regular"  # "regular", "zip", "git_repo"
+    scan_type: str = "regular"  # "regular", "archive", "git_repo"
 
 
-class NoseyParkerInput(BaseModel):
+class TitusInput(BaseModel):
     object_id: str
     workflow_id: str
+    original_path: str = ""
 
 
-class NoseyParkerOutput(BaseModel):
+class TitusOutput(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     object_id: str
     workflow_id: str
     scan_result: ScanResults
 
+    # Add a factory method to handle flexible parsing
     @classmethod
     def from_dict(cls, data: dict):
         """Parse from a dictionary, handling errors more gracefully"""
         try:
             return cls(**data)
         except Exception as e:
-            logger.warning(f"Error creating NoseyParkerOutput from dict: {e}")
+            logger.warning(f"Error creating TitusOutput from dict: {e}")
             # Try to construct with just the required fields
             return cls(
                 object_id=data.get("object_id", ""),

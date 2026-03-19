@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-enrichment
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "file-enrichment" "context" .) | nindent 4 }}
+spec:
+  {{- if not (and .Values.autoscaling.enabled .Values.autoscaling.fileEnrichment.enabled) }}
+  replicas: {{ .Values.fileEnrichment.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "file-enrichment" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "file-enrichment" "context" .) | nindent 8 }}
+      annotations:
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.fileEnrichment.dapr.appId "appPort" (toString .Values.fileEnrichment.port) "config" .Values.fileEnrichment.dapr.config "maxRequestSizeMB" "1024" "logLevel" .Values.fileEnrichment.dapr.logLevel) | nindent 8 }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.fileEnrichment.port | quote }}
+        prometheus.io/path: "/metrics"
+    spec:
+      initContainers:
+        {{- include "nemesis.waitForInfra" . | nindent 8 }}
+      containers:
+        - name: file-enrichment
+          image: {{ include "nemesis.image" (dict "image" .Values.fileEnrichment.image "context" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.fileEnrichment.port }}
+              name: http
+          env:
+            - name: APP_ID
+              value: {{ .Values.fileEnrichment.dapr.appId | quote }}
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: {{ .Values.nemesis.logLevel | quote }}
+            - name: DAPR_LOG_LEVEL
+              value: {{ .Values.fileEnrichment.dapr.logLevel | quote }}
+            - name: NEMESIS_URL
+              value: {{ .Values.nemesis.url | quote }}
+            - name: ENABLE_PII_DETECTION
+              value: {{ .Values.fileEnrichment.env.enablePiiDetection | quote }}
+            - name: PII_DETECTION_THRESHOLD
+              value: {{ .Values.fileEnrichment.env.piiDetectionThreshold | quote }}
+            - name: MAX_PARALLEL_WORKFLOWS
+              value: {{ .Values.fileEnrichment.env.maxParallelWorkflows | quote }}
+            - name: MAX_WORKFLOW_EXECUTION_TIME
+              value: {{ .Values.fileEnrichment.env.maxWorkflowExecutionTime | quote }}
+            - name: NEMESIS_MONITORING
+              value: {{ ternary "enabled" "disabled" .Values.monitoring.enabled | quote }}
+            {{- include "nemesis.postgresEnv" . | nindent 12 }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
+            {{- include "nemesis.rabbitmqEnv" . | nindent 12 }}
+            - name: HASURA_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: HASURA_ADMIN_SECRET
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.fileEnrichment.resources | nindent 12 }}
+      volumes:
+        {{- include "nemesis.daprSecretsVolume" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: file-enrichment
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "file-enrichment" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "file-enrichment" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.fileEnrichment.port }}
+      targetPort: http
+      name: http

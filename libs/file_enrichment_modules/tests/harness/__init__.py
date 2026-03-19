@@ -1,7 +1,7 @@
 """Test harness for standalone enrichment module testing.
 
 This package provides mocks and utilities for testing enrichment modules
-without requiring the full Nemesis infrastructure (Minio, PostgreSQL, Dapr).
+without requiring the full Nemesis infrastructure (S3 storage, PostgreSQL, Dapr).
 
 Usage:
     from tests.harness import ModuleTestHarness, FileEnrichedFactory
@@ -28,11 +28,12 @@ Usage:
 from .factories import FileEnrichedFactory
 from .harness import ModuleTestHarness
 from .mock_pool import MockAsyncpgPool
-from .mock_storage import MockStorageMinio
+from .mock_storage import MockStorageMinio, MockStorageS3
 
 __all__ = [
     "ModuleTestHarness",
     "FileEnrichedFactory",
+    "MockStorageS3",
     "MockStorageMinio",
     "MockAsyncpgPool",
 ]

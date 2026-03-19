@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-api
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "web-api" "context" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.webApi.replicas }}
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "web-api" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "web-api" "context" .) | nindent 8 }}
+      annotations:
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.webApi.dapr.appId "appPort" (toString .Values.webApi.port) "config" .Values.webApi.dapr.config "maxRequestSizeMB" "1024") | nindent 8 }}
+    spec:
+      initContainers:
+        {{- include "nemesis.waitForInfra" . | nindent 8 }}
+      containers:
+        - name: web-api
+          image: {{ include "nemesis.image" (dict "image" .Values.webApi.image "context" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.webApi.port }}
+              name: http
+          env:
+            - name: APP_ID
+              value: {{ .Values.webApi.dapr.appId | quote }}
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: {{ .Values.nemesis.logLevel | quote }}
+            - name: DEFAULT_EXPIRATION_DAYS
+              value: {{ .Values.webApi.env.defaultExpirationDays | quote }}
+            - name: NEMESIS_URL
+              value: {{ .Values.nemesis.url | quote }}
+            {{- include "nemesis.postgresEnv" . | nindent 12 }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
+            {{- include "nemesis.rabbitmqEnv" . | nindent 12 }}
+            - name: HASURA_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: HASURA_ADMIN_SECRET
+          readinessProbe:
+            httpGet:
+              path: /system/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /system/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.webApi.resources | nindent 12 }}
+      volumes:
+        {{- include "nemesis.daprSecretsVolume" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-api
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "web-api" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "web-api" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.webApi.port }}
+      targetPort: http
+      name: http

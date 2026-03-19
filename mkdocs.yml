@@ -23,7 +23,7 @@ nav:
     - chatbot.md
     - troubleshooting.md
     - yara.md
-    - Nosey Parker Rules: noseyparker_rules.md
+    - Titus Rules: titus_rules.md
     - Chromium Analysis: chromium.md
     - DPAPI Analysis: dpapi.md
     - Container Processing: containers.md
@@ -40,6 +40,7 @@ nav:
     - Adding File Enrichment Modules: file_enrichment_modules.md
     - Operational Data Reference: odr.md
     - Docker Compose Documentation: docker_compose.md
+    - Kubernetes Deployment (k3d): kubernetes.md
     - Nemesis API: api.md
 
 theme:

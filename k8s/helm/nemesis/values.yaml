@@ -1,0 +1,681 @@
+# Nemesis Helm Chart - values.yaml
+
+namespace: nemesis
+nameOverride: ""
+fullnameOverride: ""
+
+# ============================================
+# Global image settings
+# ============================================
+global:
+  imageRegistry: "ghcr.io/specterops/nemesis"
+  imagePullPolicy: IfNotPresent
+  # Set to k3d registry for local dev builds:
+  # imageRegistry: "k3d-nemesis-registry.localhost:5111"
+
+# ============================================
+# Credentials
+# ============================================
+credentials:
+  postgres:
+    user: nemesis
+    password: Qwerty12345
+  rabbitmq:
+    user: nemesis
+    password: Qwerty12345
+  s3:
+    accessKey: nemesis
+    secretKey: Qwerty12345
+  hasura:
+    adminSecret: pass456
+  # Basic auth users for Traefik (htpasswd format)
+  # Default: n:n
+  basicAuthUsers: "n:$apr1$bcQYJ0ci$QLOjnsYcpoauiEZ5VcXBi/"
+
+# ============================================
+# Nemesis settings
+# ============================================
+nemesis:
+  url: "https://localhost:7443/"
+  port: 7443
+  logLevel: INFO
+  defaultExpirationDays: 100
+
+# ============================================
+# Monitoring Stack
+# ============================================
+monitoring:
+  enabled: false
+
+  prometheus:
+    image:
+      repository: prom/prometheus
+      tag: "v3.10.0"
+    port: 9090
+    storage:
+      size: 10Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+  grafana:
+    image:
+      repository: grafana/grafana
+      tag: "12.3.4"
+    port: 3000
+    storage:
+      size: 5Gi
+      storageClass: ""
+    env:
+      anonymousEnabled: "true"
+      anonymousOrgRole: "Editor"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  loki:
+    image:
+      repository: grafana/loki
+      tag: "3.5.11"
+    port: 3100
+    storage:
+      size: 10Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+  promtail:
+    image:
+      repository: grafana/promtail
+      tag: "3.5.11"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  jaeger:
+    image:
+      repository: jaegertracing/jaeger
+      tag: "2.15.1"
+    port: 16686
+    storage:
+      size: 10Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+  otelCollector:
+    image:
+      repository: otel/opentelemetry-collector
+      tag: "0.139.0"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  nodeExporter:
+    image:
+      repository: prom/node-exporter
+      tag: "v1.10.2"
+    port: 9100
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  postgresExporter:
+    image:
+      repository: prometheuscommunity/postgres-exporter
+      tag: "v0.18.1"
+    port: 9187
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# ============================================
+# LLM Stack
+# ============================================
+llm:
+  enabled: false
+
+  agents:
+    image:
+      registry: ""
+      repository: agents
+      tag: latest
+    replicas: 1
+    appPort: 8000
+    mcpPort: 5000
+    dapr:
+      appId: agents
+      config: agents-config
+    env:
+      workflowRuntimeLogLevel: WARNING
+      workflowClientLogLevel: WARNING
+      litellmAdminPassword: admin123
+      maxBudget: "100"
+      budgetDuration: 30d
+      dotnetAnalysisRunRequestLimit: "25"
+      dotnetAnalysisRunTokensLimit: "1000000"
+      triageConsensusThreshold: "3"
+      mcpMaxResults: "100"
+      chatbotDbPassword: chatbot_pass_change_me
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  litellm:
+    image:
+      repository: ghcr.io/berriai/litellm
+      tag: "v1.81.12-stable.1"
+    port: 4000
+    env:
+      storeModelInDb: "True"
+      awsAccessKeyId: ""
+      awsSecretAccessKey: ""
+      awsRegionName: us-east-1
+      litellmAdminPassword: admin123
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+  phoenix:
+    image:
+      repository: arizephoenix/phoenix
+      tag: "13.3.0"
+    port: 6006
+    storage:
+      size: 5Gi
+      storageClass: ""
+    env:
+      retentionPolicyDays: "100"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+# ============================================
+# Jupyter Stack
+# ============================================
+jupyter:
+  enabled: false
+  image:
+    registry: ""
+    repository: jupyter
+    tag: latest
+  replicas: 1
+  port: 8888
+  env:
+    jupyterPassword: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# ============================================
+# PostgreSQL
+# ============================================
+postgres:
+  image:
+    repository: postgres
+    tag: "18.1"
+  # User/password sourced from credentials.postgres above — these are for non-secret config only
+  database: enrichment
+  port: "5432"
+  parameters: "sslmode=disable"
+  args:
+    maxConnections: "300"
+    sharedBuffers: "1GB"
+    sharedPreloadLibraries: "pg_stat_statements"
+  storage:
+    size: 20Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+# ============================================
+# PgBouncer (connection pooling)
+# ============================================
+pgbouncer:
+  image:
+    # Use upstream ECR directly. build-and-push-k3d.sh mirrors this to the
+    # k3d local registry; values-dev.yaml overrides the registry accordingly.
+    registry: "public.ecr.aws/bitnami"
+    repository: pgbouncer
+    tag: "1.25.1"
+  replicas: 1
+  port: 5432
+  poolMode: transaction
+  maxClientConn: 2000
+  defaultPoolSize: 60
+  minPoolSize: 20
+  reservePoolSize: 15
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ============================================
+# RabbitMQ
+# ============================================
+rabbitmq:
+  image:
+    repository: rabbitmq
+    tag: "4.2.0-management"
+  # User/password sourced from credentials.rabbitmq above
+  hostname: rabbitmq-node
+  storage:
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# ============================================
+# SeaweedFS (S3-compatible object storage)
+# ============================================
+seaweedfs:
+  image:
+    repository: chrislusf/seaweedfs
+    tag: "4.15"
+  buckets:
+    - files
+    - loki-data
+  storage:
+    size: 50Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# ============================================
+# Hasura
+# ============================================
+hasura:
+  image:
+    repository: hasura/graphql-engine
+    tag: "v2.48.6.cli-migrations-v2"
+  logLevel: warn
+  enableConsole: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# ============================================
+# Traefik / Ingress
+# ============================================
+ingress:
+  enabled: true
+  host: ""  # Empty = match all hosts
+  tls:
+    enabled: true
+    # TLS cert/key are stored in nemesis-tls-secret
+    secretName: nemesis-tls-secret
+
+# ============================================
+# Dapr
+# ============================================
+dapr:
+  sidecarImage: "daprio/daprd:1.17.0"
+  logLevel: warn
+  # Pubsub prefetch counts (per component)
+  pubsub:
+    files:
+      prefetchCount: "100"
+    alerting:
+      prefetchCount: "25"
+    documentConversion:
+      prefetchCount: "50"
+    dotnet:
+      prefetchCount: "25"
+    dpapi:
+      prefetchCount: "25"
+    titus:
+      prefetchCount: "100"
+    workflowMonitor:
+      prefetchCount: "25"
+
+# ============================================
+# Application Services
+# ============================================
+
+webApi:
+  image:
+    registry: ""
+    repository: web-api
+    tag: latest
+  replicas: 1
+  port: 8000
+  dapr:
+    appId: web-api
+    config: dapr-config
+  env:
+    defaultExpirationDays: "100"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+fileEnrichment:
+  image:
+    registry: ""
+    repository: file-enrichment
+    tag: latest
+  replicas: 1
+  port: 8001
+  dapr:
+    appId: file-enrichment
+    config: file-enrichment-config
+    logLevel: warn
+  env:
+    enablePiiDetection: "false"
+    piiDetectionThreshold: "0.7"
+    maxParallelWorkflows: "5"
+    maxWorkflowExecutionTime: "300"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+documentConversion:
+  image:
+    registry: ""
+    repository: document-conversion
+    tag: latest
+  replicas: 1
+  port: 8000
+  dapr:
+    appId: document-conversion
+    config: document-conversion-config
+  env:
+    tikaConfig: /tika-config.xml
+    tikaOcrLanguages: eng
+    tikaUseOcr: false
+    maxParallelWorkflows: "5"
+    maxWorkflowExecutionTime: "300"
+    ompThreadLimit: "1"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+titusScanner:
+  image:
+    registry: ""
+    repository: titus-scanner
+    tag: latest
+  replicas: 1
+  port: 8080
+  dapr:
+    appId: titus-scanner
+    config: dapr-config
+    maxConcurrency: "1"
+  env:
+    logLevel: info
+    snippetLength: "512"
+    maxConcurrentFiles: "2"
+    maxMatchesPerFile: "100"
+    maxFileSizeMb: "200"
+    goMemLimit: "1500MiB"
+    extractArchives: "true"
+    extractMaxFileSizeMb: "10"
+    extractMaxTotalSizeMb: "1000"
+    extractMaxDepth: "2"
+    enableValidation: "false"
+    validationWorkers: "4"
+    disabledRules: "np.s3.1,np.s3.2,np.linkedin.3,kingfisher.jira.1"
+    pubsubName: titus
+    outputTopic: titus_output
+    bulkMaxMessages: "100"
+    bulkMaxAwaitDurationMs: "1000"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+dotnetService:
+  image:
+    registry: ""
+    repository: dotnet-service
+    tag: latest
+  replicas: 1
+  port: 5000
+  dapr:
+    appId: dotnet-service
+    config: dapr-config
+    maxConcurrency: "1"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+alerting:
+  image:
+    registry: ""
+    repository: alerting
+    tag: latest
+  replicas: 1
+  port: 8000
+  dapr:
+    appId: alerting
+    config: dapr-config
+  env:
+    appriseUrls: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+housekeeping:
+  image:
+    registry: ""
+    repository: housekeeping
+    tag: latest
+  replicas: 1
+  dapr:
+    appId: housekeeping
+    config: dapr-config
+  env:
+    cleanupSchedule: "*/3 * * * *"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+gotenberg:
+  image:
+    repository: gotenberg/gotenberg
+    tag: "8.21.1"
+  replicas: 1
+  port: 3000
+  env:
+    apiTimeout: "180s"
+    libreofficeRestartAfter: "5"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+frontend:
+  image:
+    registry: ""
+    repository: frontend
+    tag: latest
+  replicas: 1
+  port: 3000
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ============================================
+# KEDA Autoscaling
+# ============================================
+# Common config values (per service):
+#   enabled          - Enable/disable autoscaling for this service
+#   minReplicas      - Minimum replica count (never scales below this)
+#   maxReplicas      - Maximum replica count (never scales above this)
+#   cooldownPeriod   - Seconds after last trigger before KEDA allows 0→1 scale-up
+#                      (not relevant when minReplicas >= 1)
+#   pollingInterval  - How often KEDA checks the trigger source (seconds)
+#
+# Queue-based services (file-enrichment, document-conversion, titus-scanner, dotnet-service):
+#   queueLength      - Messages per replica before scaling up
+#   queueName        - RabbitMQ queue name (Dapr creates as {consumerID}-{topic})
+#
+# CPU-based services (gotenberg):
+#   cpuThreshold           - Scale up when avg CPU exceeds this % of requests.cpu
+#   scaleUpStabilization   - Seconds CPU must stay above threshold before adding a replica
+#   scaleDownStabilization - Seconds CPU must stay below threshold before removing a replica
+autoscaling:
+  enabled: true
+
+  fileEnrichment:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    cooldownPeriod: 60
+    pollingInterval: 15
+    queueLength: "10"
+    # Dapr creates queues as: {consumerID}-{topic}
+    # Verify queue names with: kubectl exec rabbitmq-0 -n nemesis -- rabbitmqctl list_queues
+    queueName: "files-new_file"
+
+  documentConversion:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    cooldownPeriod: 60
+    pollingInterval: 15
+    queueLength: "5"
+    queueName: "files-document_conversion_input"
+
+  titusScanner:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    cooldownPeriod: 60
+    pollingInterval: 15
+    queueLength: "10"
+    queueName: "titus-titus_input"
+
+  dotnetService:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    cooldownPeriod: 60
+    pollingInterval: 15
+    queueLength: "5"
+    queueName: "dotnet-dotnet_input"
+
+  # Gotenberg uses CPU-based scaling (not queue-based) since it receives
+  # synchronous HTTP requests for LibreOffice PDF conversions.
+  gotenberg:
+    enabled: true
+    minReplicas: 1
+    # Keep conservative — Gotenberg is memory-heavy (LibreOffice per replica)
+    maxReplicas: 3
+    # Seconds after last scale event before KEDA allows 0→1 scale-up (not
+    # relevant when minReplicas >= 1, but required by the ScaledObject spec)
+    cooldownPeriod: 120
+    # How often KEDA polls the metrics API (seconds)
+    pollingInterval: 15
+    # Scale up when average CPU exceeds this % of the pod's requests.cpu (100m)
+    cpuThreshold: "70"
+    # Seconds CPU must stay above threshold before adding a replica (filters spikes)
+    scaleUpStabilization: 30
+    # Seconds CPU must stay below threshold before removing a replica
+    scaleDownStabilization: 30

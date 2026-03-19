@@ -1,0 +1,173 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      - job_name: "prometheus"
+        metrics_path: "/prometheus/metrics"
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      - job_name: "traefik"
+        static_configs:
+          - targets: ["traefik:8080"]
+
+      - job_name: "seaweedfs"
+        metrics_path: /metrics
+        scheme: http
+        static_configs:
+          - targets: ["seaweedfs:9324"]
+
+      - job_name: "loki"
+        static_configs:
+          - targets: ["loki:3100"]
+
+      - job_name: "node-exporter"
+        static_configs:
+          - targets: ["node-exporter:9100"]
+
+      - job_name: "postgres-exporter"
+        static_configs:
+          - targets: ["postgres-exporter:9187"]
+
+      - job_name: "rabbitmq"
+        static_configs:
+          - targets: ["rabbitmq:15692"]
+
+      - job_name: "dapr-sidecars"
+        static_configs:
+          - targets:
+              - "web-api:9090"
+              - "file-enrichment:9090"
+              - "document-conversion:9090"
+              - "alerting:9090"
+              - "housekeeping:9090"
+              - "titus-scanner:9090"
+              - "dotnet-service:9090"
+      {{- if .Values.llm.enabled }}
+              - "agents:9090"
+      {{- end }}
+
+      - job_name: "dapr-system"
+        static_configs:
+          - targets:
+              - "placement:9090"
+              - "scheduler:9090"
+
+      - job_name: "gotenberg"
+        metrics_path: /prometheus/metrics
+        static_configs:
+          - targets: ["gotenberg:3000"]
+
+      - job_name: "otel-collector"
+        static_configs:
+          - targets: ["otel-collector:8888"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.monitoring.prometheus.storage.storageClass }}
+  storageClassName: {{ .Values.monitoring.prometheus.storage.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.prometheus.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "prometheus" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "prometheus" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "prometheus" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: prometheus
+          image: "{{ .Values.monitoring.prometheus.image.repository }}:{{ .Values.monitoring.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.external-url=/prometheus/"
+          ports:
+            - containerPort: 9090
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /prometheus/-/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /prometheus/-/healthy
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.monitoring.prometheus.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "prometheus" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "prometheus" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.monitoring.prometheus.port }}
+      targetPort: http
+      name: http
+{{- end }}

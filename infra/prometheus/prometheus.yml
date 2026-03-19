@@ -8,41 +8,11 @@ scrape_configs:
     static_configs:
       - targets: ['traefik:8080']
 
-  - job_name: 'minio'
-    metrics_path: /minio/metrics/v3/cluster/health
+  - job_name: 'seaweedfs'
+    metrics_path: /metrics
     scheme: http
     static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-api'
-    metrics_path: /minio/metrics/v3/api/requests
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-bucket-api'
-    metrics_path: /minio/metrics/v3/bucket/api
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-cluster-usage-buckets'
-    metrics_path: /minio/metrics/v3/cluster/usage/buckets
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-cluster-usage-objects'
-    metrics_path: /minio/metrics/v3/cluster/usage/objects
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
-
-  - job_name: 'minio-drives'
-    metrics_path: /minio/metrics/v3/system/drive
-    scheme: http
-    static_configs:
-      - targets: ['minio:9000']
+      - targets: ['seaweedfs:9324']
 
   - job_name: 'loki'
     metrics_path: '/metrics'
@@ -83,42 +53,42 @@ scrape_configs:
   - job_name: 'nemesis-web-api'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['web-api:9090']
+      - targets: ['web-api:8000']
 
-  - job_name: 'nemesis-noseyparker-scanner'
+  - job_name: 'nemesis-titus-scanner'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['noseyparker-scanner:9090']
+      - targets: ['titus-scanner:8080']
 
   - job_name: 'nemesis-dotnet-service'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['dotnet-service:9090']
+      - targets: ['dotnet-service:5000']
 
   - job_name: 'nemesis-file-enrichment'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['file-enrichment:9090']
+      - targets: ['file-enrichment:8001']
 
   - job_name: 'nemesis-alerting'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['alerting:9090']
+      - targets: ['alerting:8000']
 
   - job_name: 'nemesis-agents'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['agents:9090']
+      - targets: ['agents:8000']
 
   - job_name: 'nemesis-housekeeping'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['housekeeping:9090']
+      - targets: ['housekeeping:8000']
 
   - job_name: 'nemesis-document-conversion'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['document-conversion:9090']
+      - targets: ['document-conversion:8000']
 
   - job_name: 'nemesis-gotenberg'
     metrics_path: '/prometheus/metrics'

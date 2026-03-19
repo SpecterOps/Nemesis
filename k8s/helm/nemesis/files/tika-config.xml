@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<properties>
+  <server>
+    <params>
+      <maxRestarts>10</maxRestarts>
+      <maxFiles>10</maxFiles>
+      <numConsumers>5</numConsumers>
+      <timeoutThresholdMillis>300000</timeoutThresholdMillis>
+      <!-- Increase max file size for large documents -->
+      <maxFileSize>1073741824</maxFileSize>
+    </params>
+  </server>
+
+  <!-- Disable Tesseract OCR -->
+  <parsers>
+    <parser class="org.apache.tika.parser.DefaultParser">
+      <parser-exclude class="org.apache.tika.parser.ocr.TesseractOCRParser"/>
+    </parser>
+
+    <!-- PDF Parser with OCR support 
+      - https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=109454066#PDFParser(ApachePDFBox)-OCR 
+      - https://cwiki.apache.org/confluence/display/tika/TikaOCR#TikaOCR-OCRandPDFs
+    -->
+    <parser class="org.apache.tika.parser.pdf.PDFParser">
+      <params>
+        <!-- Auto: use OCR only when needed -->
+        <param name="ocrStrategy" type="string">no_ocr</param>
+        <param name="extractInlineImages" type="bool">false</param>
+        <param name="extractFontNames" type="bool">false</param>
+        <!-- Prevent OOM on large PDFs - 512M -->
+        <param name="maxMainMemoryBytes" type="long">536870912</param>
+      </params>
+    </parser>
+
+  </parsers>
+
+  <!-- Enable language detection -->
+  <detector class="org.apache.tika.langdetect.optimaize.OptimaizeLangDetector"/>
+
+  <!-- Configure thread pool for async parsing -->
+  <executorService>
+    <corePoolSize>1</corePoolSize>
+    <maximumPoolSize>1</maximumPoolSize>
+    <keepAliveTime>60</keepAliveTime>
+    <max-threads>1</max-threads>
+    <core-threads>1</core-threads>
+  </executorService>
+
+</properties>

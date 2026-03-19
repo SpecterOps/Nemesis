@@ -132,6 +132,8 @@ async def publish_alerts_for_findings(
                     severity = finding["severity"]
                     origin_name = finding["origin_name"]
                     raw_data = finding["raw_data"]
+                    if isinstance(raw_data, str):
+                        raw_data = json.loads(raw_data)
 
                     # If LLM is enabled and this category will be triaged, skip immediate alert
                     if llm_enabled and category not in LLM_EXCLUDED_CATEGORIES:
@@ -152,15 +154,27 @@ async def publish_alerts_for_findings(
                     separator = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
 
                     rule_message = ""
+                    validation_message = ""
                     try:
-                        if finding_name == "noseyparker_match" and raw_data:
+                        if raw_data and finding_name.startswith("titus_"):
                             if "match" in raw_data and "rule_name" in raw_data["match"]:
                                 rule_name = raw_data["match"]["rule_name"]
-                                rule_message = f"- *Rule name:* {rule_name}\n"
-                    except (json.JSONDecodeError, KeyError) as e:
-                        logger.warning("Error processing raw_data for noseyparker_match", error=str(e))
+                                rule_id = raw_data["match"].get("rule_id", "")
+                                rule_id_suffix = f" (`{rule_id}`)" if rule_id else ""
+                                rule_message = f"- *Rule name:* {rule_name}{rule_id_suffix}\n"
+                            if "match" in raw_data and raw_data["match"].get("validation_result"):
+                                vr = raw_data["match"]["validation_result"]
+                                status = vr.get("status", "undetermined")
+                                status_label = {
+                                    "valid": "CONFIRMED ACTIVE",
+                                    "invalid": "INACTIVE",
+                                    "undetermined": "UNVERIFIED",
+                                }.get(status, "UNVERIFIED")
+                                validation_message = f"- *Validation:* {status_label}\n"
+                    except (json.JSONDecodeError, KeyError, TypeError) as e:
+                        logger.warning("Error processing raw_data for titus finding", error=str(e))
 
-                    body = f"{finding_message}{rule_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
+                    body = f"{finding_message}{rule_message}{validation_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
 
                     alert = Alert(
                         title=finding_name,
@@ -185,10 +199,10 @@ async def publish_findings_alerts(ctx: WorkflowActivityContext, object_id: str):
     Workflow activity to publish alerts for findings, excluding async service origins.
 
     This is called at the end of the main enrichment workflow and handles findings
-    from synchronous enrichment modules. Async services (dotnet, noseyparker) handle
+    from synchronous enrichment modules. Async services (dotnet, titus) handle
     their own alerting when their results arrive.
     """
     logger.info("Executing activity: publish_findings_alerts", object_id=object_id)
 
     # Exclude async service origins to prevent double-alerting
-    await publish_alerts_for_findings(object_id=object_id, origin_exclude=["dotnet_service", "noseyparker"])
+    await publish_alerts_for_findings(object_id=object_id, origin_exclude=["dotnet_service", "titus"])

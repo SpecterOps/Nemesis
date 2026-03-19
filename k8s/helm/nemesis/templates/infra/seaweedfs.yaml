@@ -1,0 +1,199 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seaweedfs-data
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.seaweedfs.storage.storageClass }}
+  storageClassName: {{ .Values.seaweedfs.storage.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.seaweedfs.storage.size }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seaweedfs-entrypoint
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  entrypoint.sh: |
+    #!/bin/sh
+    cat > /etc/seaweedfs/s3.json <<EOF
+    {
+      "identities": [
+        {
+          "name": "admin",
+          "credentials": [
+            {
+              "accessKey": "${S3_ACCESS_KEY}",
+              "secretKey": "${S3_SECRET_KEY}"
+            }
+          ],
+          "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+        }
+      ]
+    }
+    EOF
+    exec weed "$@"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: seaweedfs
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "seaweedfs" "context" .) | nindent 4 }}
+spec:
+  serviceName: seaweedfs
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "seaweedfs" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "seaweedfs" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: seaweedfs
+          image: "{{ .Values.seaweedfs.image.repository }}:{{ .Values.seaweedfs.image.tag }}"
+          command: ["/entrypoint.sh"]
+          args:
+            - server
+            - -s3
+            - -s3.port=8333
+            - -s3.config=/etc/seaweedfs/s3.json
+            - -master.port=9333
+            - -volume.port=8080
+            - -volume.max=0
+            - -metricsPort=9324
+            - -dir=/data
+          ports:
+            - containerPort: 8333
+              name: s3
+            - containerPort: 9333
+              name: master
+            - containerPort: 9324
+              name: metrics
+          env:
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: entrypoint
+              mountPath: /entrypoint.sh
+              subPath: entrypoint.sh
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: s3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: s3
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.seaweedfs.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: seaweedfs-data
+        - name: entrypoint
+          configMap:
+            name: seaweedfs-entrypoint
+            defaultMode: 0755
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "seaweedfs" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "seaweedfs" "context" .) | nindent 4 }}
+  ports:
+    - port: 8333
+      targetPort: s3
+      name: s3
+    - port: 9333
+      targetPort: master
+      name: master
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seaweedfs-init
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "seaweedfs-init" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seaweedfs-init
+          image: amazon/aws-cli:2.27.28
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for SeaweedFS to be ready..."
+              until aws --endpoint-url http://seaweedfs:8333 s3 ls 2>/dev/null; do
+                echo "SeaweedFS not ready, retrying in 3s..."
+                sleep 3
+              done
+              echo "SeaweedFS is ready."
+              {{- range .Values.seaweedfs.buckets }}
+              aws --endpoint-url http://seaweedfs:8333 s3 mb s3://{{ . }} --region us-east-1 2>/dev/null || true
+              echo "Bucket '{{ . }}' ensured."
+              {{- end }}
+              echo "SeaweedFS initialization complete."
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_ACCESS_KEY
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: S3_SECRET_KEY
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"

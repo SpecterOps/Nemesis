@@ -1,0 +1,25 @@
+{{- if and .Values.autoscaling.enabled .Values.autoscaling.titusScanner.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: titus-scanner-scaler
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: titus-scanner
+  minReplicaCount: {{ .Values.autoscaling.titusScanner.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.titusScanner.maxReplicas }}
+  cooldownPeriod: {{ .Values.autoscaling.titusScanner.cooldownPeriod }}
+  pollingInterval: {{ .Values.autoscaling.titusScanner.pollingInterval }}
+  triggers:
+    - type: rabbitmq
+      metadata:
+        protocol: amqp
+        queueName: {{ .Values.autoscaling.titusScanner.queueName | quote }}
+        mode: QueueLength
+        value: {{ .Values.autoscaling.titusScanner.queueLength | quote }}
+      authenticationRef:
+        name: rabbitmq-trigger-auth
+{{- end }}

@@ -1,7 +1,7 @@
 import base64
 import os
 import tempfile
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -122,7 +122,7 @@ class FileHandler:
         cache_key = f"filemeta{agent_file_id}"
         self.db.mset({cache_key: 1})
 
-    async def download_file(self, mythic_file_id: str, download_callback: Callable[[str], Awaitable[Any]]) -> None:
+    async def download_file(self, mythic_file_id: str, download_callback: Callable[[str], Coroutine[Any, Any, Any]]) -> None:
         fd, path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, "wb") as temp_file:
@@ -130,7 +130,7 @@ class FileHandler:
                     temp_file.write(chunk)
                 temp_file.flush()
 
-            download_callback(path)
+            await download_callback(path)
         finally:
             os.remove(path)
 

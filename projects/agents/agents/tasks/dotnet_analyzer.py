@@ -21,7 +21,7 @@ from agents.prompt_manager import PromptManager
 from agents.schemas import DotNetAnalysisResponse
 from common.db import get_postgres_connection_str
 from common.state_helpers import get_file_enriched
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import UsageLimitExceeded
@@ -337,7 +337,7 @@ Use the available tools systematically to analyze the assembly:
 3. Decompile suspicious methods for detailed analysis
 
 Provide analysis in markdown format with actionable security findings."""
-        self.storage = StorageMinio()
+        self.storage = StorageS3()
         self.dotnet_analyzer = None  # Will be set during execution
         self.postgres_connection_url = get_postgres_connection_str()
 

@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: workflow_monitor
+  name: workflow-monitor
 spec:
   type: pubsub.rabbitmq
   version: v1

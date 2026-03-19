@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tika-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  tika-config.xml: |
+{{ .Files.Get "files/tika-config.xml" | indent 4 }}
+  tika-config-tesseract.xml: |
+{{ .Files.Get "files/tika-config-tesseract.xml" | indent 4 }}

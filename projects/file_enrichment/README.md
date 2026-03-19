@@ -13,7 +13,7 @@ This service coordinates the analysis of uploaded files by running them through 
 - **Parallel processing**: Executes multiple enrichment modules concurrently with configurable limits
 - **Container extraction**: Processes archives and containers to analyze nested files
 - **Feature extraction**: Automatically determines file characteristics and selects appropriate modules
-- **NoseyParker integration**: Performs secret scanning on text-based files
+- **Titus integration**: Performs secret scanning on text-based files
 - **Rate limiting**: Controls resource usage with configurable concurrency limits
 
 ## Enrichment Modules

@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titus-scanner
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "titus-scanner" "context" .) | nindent 4 }}
+spec:
+  {{- if not (and .Values.autoscaling.enabled .Values.autoscaling.titusScanner.enabled) }}
+  replicas: {{ .Values.titusScanner.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "titus-scanner" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "titus-scanner" "context" .) | nindent 8 }}
+      annotations:
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.titusScanner.dapr.appId "appPort" (toString .Values.titusScanner.port) "config" .Values.titusScanner.dapr.config "maxConcurrency" (toString .Values.titusScanner.dapr.maxConcurrency)) | nindent 8 }}
+    spec:
+      containers:
+        - name: titus-scanner
+          image: {{ include "nemesis.image" (dict "image" .Values.titusScanner.image "context" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.titusScanner.port }}
+              name: http
+          env:
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: {{ .Values.titusScanner.env.logLevel | quote }}
+            - name: SNIPPET_LENGTH
+              value: {{ .Values.titusScanner.env.snippetLength | quote }}
+            - name: MAX_CONCURRENT_FILES
+              value: {{ .Values.titusScanner.env.maxConcurrentFiles | quote }}
+            - name: MAX_MATCHES_PER_FILE
+              value: {{ .Values.titusScanner.env.maxMatchesPerFile | quote }}
+            - name: MAX_FILE_SIZE_MB
+              value: {{ .Values.titusScanner.env.maxFileSizeMb | quote }}
+            - name: GOMEMLIMIT
+              value: {{ .Values.titusScanner.env.goMemLimit | quote }}
+            - name: EXTRACT_ARCHIVES
+              value: {{ .Values.titusScanner.env.extractArchives | quote }}
+            - name: EXTRACT_MAX_FILE_SIZE_MB
+              value: {{ .Values.titusScanner.env.extractMaxFileSizeMb | quote }}
+            - name: EXTRACT_MAX_TOTAL_SIZE_MB
+              value: {{ .Values.titusScanner.env.extractMaxTotalSizeMb | quote }}
+            - name: EXTRACT_MAX_DEPTH
+              value: {{ .Values.titusScanner.env.extractMaxDepth | quote }}
+            - name: ENABLE_VALIDATION
+              value: {{ .Values.titusScanner.env.enableValidation | quote }}
+            - name: VALIDATION_WORKERS
+              value: {{ .Values.titusScanner.env.validationWorkers | quote }}
+            - name: DISABLED_RULES
+              value: {{ .Values.titusScanner.env.disabledRules | quote }}
+            - name: PUBSUB_NAME
+              value: {{ .Values.titusScanner.env.pubsubName | quote }}
+            - name: OUTPUT_TOPIC
+              value: {{ .Values.titusScanner.env.outputTopic | quote }}
+            - name: BULK_MAX_MESSAGES
+              value: {{ .Values.titusScanner.env.bulkMaxMessages | quote }}
+            - name: BULK_MAX_AWAIT_DURATION_MS
+              value: {{ .Values.titusScanner.env.bulkMaxAwaitDurationMs | quote }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.titusScanner.resources | nindent 12 }}
+      volumes:
+        {{- include "nemesis.daprSecretsVolume" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: titus-scanner
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "titus-scanner" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "titus-scanner" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.titusScanner.port }}
+      targetPort: http
+      name: http

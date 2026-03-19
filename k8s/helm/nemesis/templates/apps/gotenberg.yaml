@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gotenberg
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 4 }}
+spec:
+  {{- if not (and .Values.autoscaling.enabled .Values.autoscaling.gotenberg.enabled) }}
+  replicas: {{ .Values.gotenberg.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 8 }}
+      annotations:
+        {{- include "nemesis.daprAnnotations" (dict "appId" "gotenberg" "appPort" (toString .Values.gotenberg.port) "config" "dapr-config") | nindent 8 }}
+    spec:
+      # Match the 180s API timeout (gotenberg.env.apiTimeout in values.yaml,
+      # httpx client in document_conversion/activities/pdf_conversion.py) so
+      # in-flight LibreOffice conversions finish before KEDA scale-down kills the pod.
+      terminationGracePeriodSeconds: 180
+      containers:
+        - name: gotenberg
+          image: "{{ .Values.gotenberg.image.repository }}:{{ .Values.gotenberg.image.tag }}"
+          command:
+            - gotenberg
+            - --api-timeout={{ .Values.gotenberg.env.apiTimeout }}
+            - --libreoffice-restart-after={{ .Values.gotenberg.env.libreofficeRestartAfter }}
+            - --libreoffice-auto-start=true
+            - --prometheus-collect-interval=10s
+          env:
+            - name: DISABLE_GOOGLE_CHROME
+              value: "1"
+          ports:
+            - containerPort: {{ .Values.gotenberg.port }}
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.gotenberg.resources | nindent 12 }}
+      volumes:
+        {{- include "nemesis.daprSecretsVolume" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gotenberg
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.gotenberg.port }}
+      targetPort: http
+      name: http

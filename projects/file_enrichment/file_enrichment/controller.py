@@ -3,7 +3,7 @@ import os
 from contextlib import AsyncExitStack, asynccontextmanager
 
 import file_enrichment.global_vars as global_vars
-from common.db import create_connection_pool
+from common.db import create_connection_pool, pool_stats_logger
 from common.logger import get_logger
 from common.queues import (
     DOTNET_OUTPUT_TOPIC,
@@ -11,8 +11,8 @@ from common.queues import (
     FILES_BULK_ENRICHMENT_TASK_TOPIC,
     FILES_NEW_FILE_TOPIC,
     FILES_PUBSUB,
-    NOSEYPARKER_OUTPUT_TOPIC,
-    NOSEYPARKER_PUBSUB,
+    TITUS_OUTPUT_TOPIC,
+    TITUS_PUBSUB,
 )
 from common.workflows.setup import set_workflow_runtime_loop, wf_runtime
 from common.workflows.tracking_service import WorkflowTrackingService
@@ -33,7 +33,7 @@ from .routes.health import router as health_router
 from .subscriptions.bulk_enrichment import bulk_enrichment_subscription_handler
 from .subscriptions.dotnet import dotnet_subscription_handler
 from .subscriptions.file import file_subscription_handler, start_workers, stop_workers
-from .subscriptions.noseyparker import noseyparker_subscription_handler
+from .subscriptions.titus import titus_subscription_handler
 from .workflow import initialize_enrichment_modules
 from .workflow_manager import WorkflowManager
 
@@ -154,6 +154,10 @@ async def lifespan(app: FastAPI):
             )
             cleanup_dapr_workflow_state_task = asyncio.create_task(purger.run())
 
+            pool_stats_logger_task = asyncio.create_task(
+                pool_stats_logger(global_vars.asyncpg_pool, logger, interval=30)
+            )
+
             # Start file processing workers
             start_workers()
             logger.info("Started file processing workers")
@@ -179,6 +183,7 @@ async def lifespan(app: FastAPI):
             await cancel_task(background_dpapi_task, "masterkey watcher task")
             await cancel_task(postgres_notify_listener_task, "PostgreSQL NOTIFY listener")
             await cancel_task(cleanup_dapr_workflow_state_task, "Dapr workflow state purger")
+            await cancel_task(pool_stats_logger_task, "DB pool stats logger")
 
             # Terminate the workflow purger monitor
             # terminate_workflow_safe("workflow-purger-monitor", "workflow purger monitor")
@@ -190,7 +195,7 @@ dapr_app = DaprApp(app)
 # Register subscriptions
 dapr_app.subscribe(pubsub=FILES_PUBSUB, topic=FILES_NEW_FILE_TOPIC)(file_subscription_handler)
 dapr_app.subscribe(pubsub=FILES_PUBSUB, topic=FILES_BULK_ENRICHMENT_TASK_TOPIC)(bulk_enrichment_subscription_handler)
-dapr_app.subscribe(pubsub=NOSEYPARKER_PUBSUB, topic=NOSEYPARKER_OUTPUT_TOPIC)(noseyparker_subscription_handler)
+dapr_app.subscribe(pubsub=TITUS_PUBSUB, topic=TITUS_OUTPUT_TOPIC)(titus_subscription_handler)
 dapr_app.subscribe(pubsub=DOTNET_PUBSUB, topic=DOTNET_OUTPUT_TOPIC)(dotnet_subscription_handler)
 
 # region API Routers/Endpoints

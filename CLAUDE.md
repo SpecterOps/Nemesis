@@ -81,7 +81,7 @@ cd projects/web_api && uv run pytest tests/test_file.py::test_function_name
 ### Testing Guidelines
 - **Write tests for every new feature.** New functionality must include tests before it is considered complete.
 - **Cover both happy path and unhappy path cases.** Tests should verify correct behavior with valid inputs (positive cases) and proper error handling with invalid inputs, missing data, edge cases, and failure conditions (negative cases).
-- **Mock external services.** Do not make real calls to external dependencies (Dapr, Minio, PostgreSQL, RabbitMQ, etc.) in unit tests. Use mocks or fakes to isolate the code under test.
+- **Mock external services.** Do not make real calls to external dependencies (Dapr, SeaweedFS, PostgreSQL, RabbitMQ, etc.) in unit tests. Use mocks or fakes to isolate the code under test.
 
 ### Docker Commands
 Information about building dev/prod container images can be found in the [docker compose docs](./docs/docker_compose.md).
@@ -110,7 +110,7 @@ docker compose up -d --build web-api web-api-dapr
 - **PostgreSQL** for database
 - **Dapr** for pub/sub, workflows, secrets, and service invocation
 - **RabbitMQ** for message queue
-- **Minio** for object storage
+- **SeaweedFS** for object storage
 - **Traefik** for reverse proxy
 
 ### Directory Structure
@@ -127,7 +127,7 @@ projects/           # Microservices
 ├── agents/         # AI-powered alert triage
 ├── jupyter/        # Jupyter notebook service
 ├── dotnet_service/ # .NET assembly analysis service
-├── noseyparker_scanner/ # Secret scanning with NoseyParker
+├── titus_scanner/  # Secret scanning with Titus
 ├── velociraptor_connector/ # Velociraptor integration
 └── ...
 
@@ -146,7 +146,7 @@ infra/              # Infrastructure configuration
 ```
 
 ### Data Flow
-1. Files uploaded via **web_api** or **cli** → stored in **Minio**
+1. Files uploaded via **web_api** or **cli** → stored in **SeaweedFS**
 2. **file_enrichment** receives file events via Dapr pub/sub
 3. Dapr workflow orchestrates enrichment modules in parallel
 4. Results written to **PostgreSQL**, findings published for alerting
@@ -161,3 +161,31 @@ infra/              # Infrastructure configuration
 
 ### Adding Enrichment Modules
 New file enrichment modules go in `libs/file_enrichment_modules/`. Each module implements a standard interface for detecting applicable files and extracting data.
+
+### Kubernetes (k3d / k3s) Deployment
+
+See [k8s/README.md](./k8s/README.md) and [docs/kubernetes.md](./docs/kubernetes.md) for full documentation.
+
+```bash
+# Setup cluster — choose one:
+./k8s/scripts/setup-cluster-k3d.sh   # k3d (k3s-in-Docker, local dev)
+./k8s/scripts/setup-cluster-k3s.sh   # k3s (native, VMs/bare-metal)
+
+# Deploy with pre-built images
+./k8s/scripts/deploy.sh install
+
+# Build locally and deploy (k3d only)
+./k8s/scripts/deploy.sh install --build
+
+# Check status
+./k8s/scripts/deploy.sh status
+
+# Verify deployment
+./k8s/scripts/verify.sh
+
+# Teardown — match the setup method used:
+./k8s/scripts/teardown-cluster-k3d.sh   # k3d
+./k8s/scripts/teardown-cluster-k3s.sh   # k3s
+```
+
+Helm chart is at `k8s/helm/nemesis/`. Configuration in `values.yaml`.

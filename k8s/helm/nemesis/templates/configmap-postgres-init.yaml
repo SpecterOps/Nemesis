@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  01-schema.sql: |-
+{{ .Files.Get "files/01-schema.sql" | indent 4 }}
+  02-seed.sql: |-
+{{ .Files.Get "files/02-seed.sql" | indent 4 }}

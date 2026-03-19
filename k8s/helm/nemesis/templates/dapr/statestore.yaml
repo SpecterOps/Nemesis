@@ -1,0 +1,43 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  type: state.postgresql
+  version: v2
+  metadata:
+    - name: host
+      secretKeyRef:
+        name: POSTGRES_HOST
+        key: POSTGRES_HOST
+    - name: port
+      secretKeyRef:
+        name: POSTGRES_PORT
+        key: POSTGRES_PORT
+    - name: database
+      secretKeyRef:
+        name: POSTGRES_DB
+        key: POSTGRES_DB
+    - name: user
+      secretKeyRef:
+        name: POSTGRES_USER
+        key: POSTGRES_USER
+    - name: password
+      secretKeyRef:
+        name: POSTGRES_PASSWORD
+        key: POSTGRES_PASSWORD
+    - name: actorStateStore
+      value: "true"
+    - name: tablePrefix
+      value: "dapr_"
+    - name: metadataTableName
+      value: "dapr_metadata"
+    - name: maxConns
+      value: "10"
+    - name: connectionMaxIdleTime
+      value: "5m"
+auth:
+  secretStore: nemesis-secret-store

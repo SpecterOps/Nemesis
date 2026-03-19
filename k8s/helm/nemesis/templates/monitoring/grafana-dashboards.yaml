@@ -1,0 +1,35 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-traefik
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+binaryData:
+  traefik.json: |-
+    {{ .Files.Get "files/grafana-dashboards/traefik.json" | b64enc }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-seaweedfs
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+binaryData:
+  seaweedfs.json: |-
+    {{ .Files.Get "files/grafana-dashboards/seaweedfs.json" | b64enc }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-node-exporter
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+binaryData:
+  node_exporter_full.json: |-
+    {{ .Files.Get "files/grafana-dashboards/node_exporter_full.json" | b64enc }}
+{{- end }}

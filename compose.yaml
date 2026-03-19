@@ -8,7 +8,7 @@ volumes:
   grafana_data:
   jaeger_data:
   loki_data:
-  minio_data:
+  seaweedfs_data:
   phoenix_data:
   postgres_data:
   prometheus_data:
@@ -52,7 +52,7 @@ services:
       - "traefik.http.routers.web-api.tls=true"
       - "traefik.http.routers.web-api.middlewares=auth"
   web-api-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
@@ -86,8 +86,8 @@ services:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:?}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
@@ -104,49 +104,56 @@ services:
       rabbitmq: { condition: service_healthy }
     network_mode: "service:web-api"
 
-  noseyparker-scanner:
-    image: ghcr.io/specterops/nemesis/noseyparker-scanner:latest
+  titus-scanner:
+    image: ghcr.io/specterops/nemesis/titus-scanner:latest
     depends_on:
-      minio: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     environment:
-      - DAPR_GRPC_PORT=50013
-      - DAPR_PORT=3513
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?}
-      - MINIO_BUCKET=files
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
-      - RUST_LOG=warn
-      - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Nosey Parker matches
-      - NOSEYPARKER_MAX_CONCURRENT_FILES=${NOSEYPARKER_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
+      - DAPR_HTTP_PORT=3513
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
+      - S3_BUCKET=files
+      - S3_ENDPOINT=http://seaweedfs:8333
+      - S3_SECRET_KEY=${S3_SECRET_KEY:?}
+      - LOG_LEVEL=info
+      - SNIPPET_LENGTH=${SNIPPET_LENGTH:-512} # context length around any Titus matches
+      - MAX_CONCURRENT_FILES=${TITUS_MAX_CONCURRENT_FILES:-2} # maximum number of concurrent files to scan
+      - MAX_MATCHES_PER_FILE=${MAX_MATCHES_PER_FILE:-100} # safety cap on matches per file
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-200} # maximum file size to scan, in megabytes
-      - DECOMPRESS_ZIPS=${DECOMPRESS_ZIPS:-true} # whether to decompress+scan zips
-      - MAX_EXTRACT_SIZE_MB=${MAX_EXTRACT_SIZE_MB:-1000} # maximum number of megabytes to extract from ZIPs (if decompressing)
-      - PUBSUB_NAME=noseyparker # Name of the Dapr pubsub resource
-      - OUTPUT_TOPIC=noseyparker_output # Name of the output topic in Dapr
+      - GOMEMLIMIT=1500MiB # soft memory limit for Go GC to be aggressive before kernel OOM kills us
+      - EXTRACT_ARCHIVES=${EXTRACT_ARCHIVES:-true} # extract+scan archive contents (zip, jar, war, ear, apk, tar, tar.gz, 7z)
+      - EXTRACT_MAX_FILE_SIZE_MB=${EXTRACT_MAX_FILE_SIZE_MB:-10} # max per-file size within archives (MB)
+      - EXTRACT_MAX_TOTAL_SIZE_MB=${EXTRACT_MAX_TOTAL_SIZE_MB:-1000} # total extraction budget per archive (MB)
+      - EXTRACT_MAX_DEPTH=${EXTRACT_MAX_DEPTH:-2} # max nesting depth for recursive archives
+      - ENABLE_VALIDATION=${ENABLE_VALIDATION:-false} # whether to enable credential validation
+      - VALIDATION_WORKERS=${VALIDATION_WORKERS:-4} # concurrent validation workers
+      - DISABLED_RULES=${DISABLED_RULES:-np.s3.1,np.s3.2,np.linkedin.3,kingfisher.jira.1} # comma-separated rule IDs to disable (np.s3.x have backtracking-prone patterns that timeout on large files, np.linkedin.3 / kingfisher.jira.1 have a lot of false positives)
+      - PUBSUB_NAME=titus # Name of the Dapr pubsub resource
+      - OUTPUT_TOPIC=titus_output # Name of the output topic in Dapr
+      - BULK_MAX_MESSAGES=${BULK_MAX_MESSAGES:-100} # max messages per bulk subscribe batch
+      - BULK_MAX_AWAIT_DURATION_MS=${BULK_MAX_AWAIT_DURATION_MS:-1000} # max wait before delivering partial batch (ms)
     volumes:
-      - ./projects/noseyparker_scanner/custom_rules/:/opt/noseyparker:ro
+      - ./projects/titus_scanner/custom_rules/:/opt/titus:ro
     deploy:
       resources:
         limits:
           cpus: "1"
-  noseyparker-scanner-dapr:
-    image: "daprio/daprd:1.16.2"
+          memory: 2G
+  titus-scanner-dapr:
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
         "--max-body-size",
         "1Gi",
         "--app-id",
-        "noseyparker-scanner",
+        "titus-scanner",
         "--app-port",
-        "50042",
+        "8080",
         "--app-protocol",
-        "grpc",
+        "http",
         "--dapr-http-port",
         "3513",
-        "--dapr-grpc-port",
-        "50013",
         "--placement-host-address",
         "placement:50006",
         "--resources-path",
@@ -164,11 +171,11 @@ services:
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     volumes:
-      - ./infra/dapr/components/pubsub/noseyparker.yaml:/dapr/components/noseyparker.yaml:ro
+      - ./infra/dapr/components/pubsub/titus.yaml:/dapr/components/titus.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
-    depends_on: [noseyparker-scanner, placement]
-    network_mode: "service:noseyparker-scanner"
+    depends_on: [titus-scanner, placement]
+    network_mode: "service:titus-scanner"
 
   dotnet-service:
     image: ghcr.io/specterops/nemesis/dotnet-service:latest
@@ -179,21 +186,20 @@ services:
       retries: 3
       start_period: 30s
     depends_on:
-      minio: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     environment:
       - DAPR_GRPC_PORT=50014
       - DAPR_PORT=3514
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?}
-      - MINIO_BUCKET=files
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
+      - S3_BUCKET=files
+      - S3_ENDPOINT=http://seaweedfs:8333
+      - S3_SECRET_KEY=${S3_SECRET_KEY:?}
       - ASPNETCORE_URLS=http://0.0.0.0:5000
-      - DOTNET_WORKERS=${DOTNET_WORKERS:-5}
     expose:
       - "5000"
   dotnet-service-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
@@ -249,7 +255,7 @@ services:
       DAPR_GRPC_PORT: 50003
       DAPR_HTTP_PORT: 3503
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      ENRICHMENT_WORKERS: ${ENRICHMENT_WORKERS:-5}
+      MAX_PARALLEL_WORKFLOWS: ${ENRICHMENT_MAX_PARALLEL_WORKFLOWS:-5}
       MAX_WORKFLOW_EXECUTION_TIME: ${MAX_WORKFLOW_EXECUTION_TIME:-300}
       NEMESIS_MONITORING: ${NEMESIS_MONITORING:-disabled}
       NEMESIS_URL: ${NEMESIS_URL:?}
@@ -268,7 +274,7 @@ services:
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   file-enrichment-dapr: &file-enrichment-dapr-template
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
@@ -302,7 +308,7 @@ services:
       - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
       - ./infra/dapr/components/pubsub/dpapi.yaml:/dapr/components/dpapi.yaml:ro
       - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
-      - ./infra/dapr/components/pubsub/noseyparker.yaml:/dapr/components/noseyparker.yaml:ro
+      - ./infra/dapr/components/pubsub/titus.yaml:/dapr/components/titus.yaml:ro
       - ./infra/dapr/components/pubsub/workflow_monitor.yaml:/dapr/components/workflow_monitor.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
@@ -315,9 +321,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-enrichment}
       POSTGRES_PARAMETERS: ${POSTGRES_PARAMETERS:-sslmode=disable}
       RABBITMQ_CONNECTION_STRING: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
-      ENRICHMENT_WORKERS: ${ENRICHMENT_WORKERS:-5}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?}
+      MAX_PARALLEL_WORKFLOWS: ${MAX_PARALLEL_WORKFLOWS:-5}
     depends_on: &file-enrichment-dapr-depends-on
       file-enrichment: { condition: service_started }
       placement: { condition: service_started }
@@ -429,7 +435,7 @@ services:
       retries: 5
       start_period: 20s
   alerting-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
@@ -475,7 +481,7 @@ services:
     image: ghcr.io/specterops/nemesis/housekeeping:latest
     environment:
       - APP_ID=housekeeping
-      - CLEANUP_SCHEDULE=*/3 * * * * # Every 3 minutes
+      - CLEANUP_SCHEDULE=*/5 * * * * # Every 5 minutes
       - DAPR_GRPC_PORT=50011
       - DAPR_HTTP_PORT=3510
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -486,7 +492,7 @@ services:
       rabbitmq: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
   housekeeping-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
@@ -519,8 +525,8 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:?}
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
@@ -549,7 +555,7 @@ services:
       #   - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng chi_sim chi_tra jpn rus deu spa}
       # Note: each package installed will increase the image size!
       - TIKA_OCR_LANGUAGES=${TIKA_OCR_LANGUAGES:-eng}
-      - DOCUMENTCONVERSION_WORKERS=${DOCUMENTCONVERSION_WORKERS:-5}
+      - MAX_PARALLEL_WORKFLOWS=${DOCUMENTCONVERSION_WORKERS:-5}
       - MAX_WORKFLOW_EXECUTION_TIME=${MAX_WORKFLOW_EXECUTION_TIME:-300}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - OMP_THREAD_LIMIT=1 # Limit the number of tesseract instances
@@ -568,7 +574,7 @@ services:
         limits:
           cpus: "2"
   document-conversion-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
@@ -603,8 +609,8 @@ services:
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
       - ./infra/dapr/configuration/:/dapr/configuration/
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:?}
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
@@ -620,7 +626,8 @@ services:
     network_mode: "service:document-conversion"
 
   gotenberg:
-    image: gotenberg/gotenberg:8.21.1
+    #image: gotenberg/gotenberg:8.21.1
+    image: gotenberg/gotenberg:8.27.0
     command:
       [
         "gotenberg",
@@ -636,7 +643,7 @@ services:
       timeout: 10s
       retries: 3
   gotenberg-dapr:
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
@@ -678,37 +685,41 @@ services:
   ############################
   # Infrastructure Services
   ############################
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.15
     environment:
-      MINIO_PROMETHEUS_AUTH_TYPE: public
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?}
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001" --address ":9000"
+      - seaweedfs_data:/data
+      - ./infra/seaweedfs/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/entrypoint.sh"]
+    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.port=9333 -volume.port=8080 -volume.max=0 -metricsPort=9324 -dir=/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8333/status"]
       interval: 30s
       timeout: 20s
       retries: 3
 
-  minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
-    depends_on: [minio]
+  seaweedfs-init:
+    image: amazon/aws-cli:2.27.28
+    depends_on:
+      seaweedfs: { condition: service_healthy }
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY}
+      - AWS_DEFAULT_REGION=us-east-1
     entrypoint:
       [
         "/bin/sh",
         "-c",
-        "sleep 1; until mc alias set minio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do echo 'Minio is not online. Waiting for it to start...'; sleep 2; done && mc mb minio/loki-data --ignore-existing && mc mb minio/files --ignore-existing",
+        "aws --endpoint-url http://seaweedfs:8333 s3 mb s3://loki-data --region us-east-1 2>/dev/null; aws --endpoint-url http://seaweedfs:8333 s3 mb s3://files --region us-east-1 2>/dev/null; echo 'SeaweedFS bucket initialization complete.'; true",
       ]
     restart: "no"
 
   rabbitmq:
-    image: rabbitmq:4.2.0-management
+    # image: rabbitmq:4.2.0-management
+    image: rabbitmq:4.2.4-management
     hostname: rabbitmq-node # have to do this for persistence reasons
     environment:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?}
@@ -751,8 +762,8 @@ services:
         "-c",
         "tcp_keepalives_count=3",
       ]
-    ports:
-      - "${POSTGRES_EXTERNAL_PORT:-}5432"
+    # ports:
+    #   - "${POSTGRES_EXTERNAL_PORT:-}5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-enrichment}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
@@ -777,7 +788,8 @@ services:
       postgres: { condition: service_healthy }
 
   hasura:
-    image: hasura/graphql-engine:v2.48.6.cli-migrations-v2
+    #image: hasura/graphql-engine:v2.48.6.cli-migrations-v2
+    image: hasura/graphql-engine:v2.48.12.cli-migrations-v2
     depends_on:
       postgres: { condition: service_healthy }
     environment:
@@ -804,7 +816,8 @@ services:
       - "traefik.http.routers.hasura.tls=true"
 
   traefik:
-    image: traefik:v3.6.1
+    # image: traefik:v3.6.1
+    image: traefik:v3.6.9
     command:
       - "--api.insecure=true"
       # - "--log.level=DEBUG"
@@ -834,7 +847,7 @@ services:
       - ./infra/traefik/config:/config:ro
 
   placement:
-    image: "daprio/dapr:1.16.2"
+    image: "daprio/dapr:1.17.0"
     command:
       [
         "./placement",
@@ -861,7 +874,7 @@ services:
     restart: "no"
 
   scheduler:
-    image: "daprio/dapr:1.16.2"
+    image: "daprio/scheduler:1.17.0"
     command:
       [
         "./scheduler",
@@ -892,7 +905,8 @@ services:
 
   jaeger:
     profiles: ["monitoring"]
-    image: jaegertracing/jaeger:2.11.0 # v2.x image
+    # image: jaegertracing/jaeger:2.11.0 # v2.x image
+    image: jaegertracing/jaeger:2.15.1
     user: "0:0"
     deploy:
       resources:
@@ -927,16 +941,17 @@ services:
 
   loki:
     profiles: ["monitoring"]
-    image: grafana/loki:3.3.2
+    # image: grafana/loki:3.3.2
+    image: grafana/loki:3.5.11
     command:
       ["-config.file=/etc/loki/local-config.yaml", "-config.expand-env=true"]
     environment:
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
     volumes:
       - ./infra/loki:/etc/loki:ro
       - loki_data:/loki
-    depends_on: [minio-init]
+    depends_on: [seaweedfs-init]
     healthcheck:
       test:
         [
@@ -947,7 +962,8 @@ services:
 
   promtail:
     profiles: ["monitoring"]
-    image: grafana/promtail:3.3.2
+    # image: grafana/promtail:3.3.2
+    image: grafana/promtail:3.5.11
     user: "0:0"
     volumes:
       - ./infra/promtail:/etc/promtail:ro
@@ -959,7 +975,8 @@ services:
 
   grafana:
     profiles: ["monitoring"]
-    image: grafana/grafana:11.4.0
+    # image: grafana/grafana:11.4.0
+    image: grafana/grafana:12.3.4
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Editor
@@ -987,7 +1004,8 @@ services:
 
   prometheus:
     profiles: ["monitoring"]
-    image: prom/prometheus:v3.1.0
+    # image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.10.0
     volumes:
       - ./infra/prometheus:/etc/prometheus:ro
       - prometheus_data:/prometheus
@@ -1095,7 +1113,7 @@ services:
       - "traefik.http.routers.mcp.middlewares=auth"
   agents-dapr:
     profiles: ["llm"]
-    image: "daprio/daprd:1.16.2"
+    image: "daprio/daprd:1.17.0"
     command:
       [
         "./daprd",
@@ -1134,8 +1152,8 @@ services:
       - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:?}
     depends_on:
       agents: { condition: service_started }
       placement: { condition: service_started }
@@ -1145,7 +1163,8 @@ services:
 
   litellm:
     profiles: ["llm"]
-    image: ghcr.io/berriai/litellm:v1.74.0-stable
+    # image: ghcr.io/berriai/litellm:v1.74.0-stable
+    image: ghcr.io/berriai/litellm:v1.81.12-stable.1
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
       - STORE_MODEL_IN_DB=True
@@ -1182,7 +1201,8 @@ services:
 
   phoenix:
     profiles: ["llm"]
-    image: arizephoenix/phoenix:11.24.1
+    # image: arizephoenix/phoenix:11.24.1
+    image: arizephoenix/phoenix:13.3.0
     environment:
       - PHOENIX_WORKING_DIR=/data
       - PHOENIX_HOST_ROOT_PATH=/phoenix

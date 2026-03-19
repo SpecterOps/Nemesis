@@ -1,0 +1,170 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  local-config.yaml: |
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+      log_level: info
+
+    common:
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: inmemory
+      replication_factor: 1
+      path_prefix: /loki
+
+    schema_config:
+      configs:
+        - from: "2020-10-24"
+          store: tsdb
+          object_store: s3
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    storage_config:
+      filesystem:
+        directory: /loki/chunks
+      tsdb_shipper:
+        active_index_directory: /loki/tsdb-index
+        cache_location: /loki/tsdb-cache
+      aws:
+        endpoint: http://seaweedfs:8333
+        bucketnames: loki-data
+        access_key_id: ${S3_ACCESS_KEY}
+        secret_access_key: ${S3_SECRET_KEY}
+        s3forcepathstyle: true
+        insecure: true
+
+    limits_config:
+      retention_period: 168h
+      ingestion_rate_mb: 50
+      ingestion_burst_size_mb: 100
+
+    chunk_store_config:
+      chunk_cache_config:
+        embedded_cache:
+          enabled: true
+          max_size_mb: 500
+
+    query_range:
+      results_cache:
+        cache:
+          embedded_cache:
+            enabled: true
+            max_size_mb: 100
+
+    compactor:
+      working_directory: /loki/compactor
+      compaction_interval: 10m
+      retention_enabled: true
+      retention_delete_delay: 2h
+
+    analytics:
+      reporting_enabled: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.monitoring.loki.storage.storageClass }}
+  storageClassName: {{ .Values.monitoring.loki.storage.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.loki.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "loki" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "loki" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "loki" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: loki
+          image: "{{ .Values.monitoring.loki.image.repository }}:{{ .Values.monitoring.loki.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "-config.file=/etc/loki/local-config.yaml"
+            - "-config.expand-env=true"
+          ports:
+            - containerPort: 3100
+              name: http
+          env:
+            {{- include "nemesis.s3Env" . | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+            - name: data
+              mountPath: /loki
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.monitoring.loki.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: loki-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "loki" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "loki" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.monitoring.loki.port }}
+      targetPort: http
+      name: http
+{{- end }}

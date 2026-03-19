@@ -1,0 +1,63 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "postgres-exporter" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "postgres-exporter" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "postgres-exporter" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: postgres-exporter
+          image: "{{ .Values.monitoring.postgresExporter.image.repository }}:{{ .Values.monitoring.postgresExporter.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: DATA_SOURCE_NAME
+              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}"
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.monitoring.postgresExporter.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-exporter
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "postgres-exporter" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "postgres-exporter" "context" .) | nindent 4 }}
+  ports:
+    - port: {{ .Values.monitoring.postgresExporter.port }}
+      targetPort: metrics
+      name: metrics
+{{- end }}

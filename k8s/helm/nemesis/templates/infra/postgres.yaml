@@ -1,0 +1,124 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.postgres.storage.storageClass }}
+  storageClassName: {{ .Values.postgres.storage.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.postgres.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "postgres" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "postgres" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "postgres" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          args:
+            - "-c"
+            - "max_connections={{ .Values.postgres.args.maxConnections }}"
+            - "-c"
+            - "shared_buffers={{ .Values.postgres.args.sharedBuffers }}"
+            - "-c"
+            - "shared_preload_libraries={{ .Values.postgres.args.sharedPreloadLibraries }}"
+            - "-c"
+            - "pg_stat_statements.track=all"
+            - "-c"
+            - "tcp_keepalives_idle=5"
+            - "-c"
+            - "tcp_keepalives_interval=2"
+            - "-c"
+            - "tcp_keepalives_count=3"
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.credentials.postgres.user }}
+                - -d
+                - {{ .Values.postgres.database }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.credentials.postgres.user }}
+                - -d
+                - {{ .Values.postgres.database }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: init-scripts
+          configMap:
+            name: postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "postgres" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "postgres" "context" .) | nindent 4 }}
+  ports:
+    - port: 5432
+      targetPort: postgres
+      name: postgres

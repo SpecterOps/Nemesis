@@ -11,13 +11,13 @@ import jpype.imports  # noqa: F401
 from common.logger import get_logger
 from common.models import Transform
 from common.state_helpers import get_file_enriched_async
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from common.workflows.setup import workflow_activity
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 logger = get_logger(__name__)
 
-storage = StorageMinio()
+storage = StorageS3()
 java = SimpleNamespace()  # Java types namespace - initialized in init_jvm
 tika_instance: jpype.JClass | None = None  # Initialized by init_tika()
 

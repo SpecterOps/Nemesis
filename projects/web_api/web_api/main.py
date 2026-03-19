@@ -50,7 +50,7 @@ from common.queues import (
     WORKFLOW_MONITOR_COMPLETED_TOPIC,
     WORKFLOW_MONITOR_PUBSUB,
 )
-from common.storage import StorageMinio
+from common.storage import StorageS3
 from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import Body, FastAPI, File, Form, HTTPException, Path, Query, Request, UploadFile
@@ -156,7 +156,7 @@ async def timeout_middleware(request: Request, call_next):
         raise HTTPException(status_code=504, detail="Request timeout") from None
 
 
-storage = StorageMinio()
+storage = StorageS3()
 DOWNLOAD_SIZE_LIMIT_MB = 500
 default_expiration_days = int(os.getenv("DEFAULT_EXPIRATION_DAYS", 100))
 

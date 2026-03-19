@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: housekeeping
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "housekeeping" "context" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.housekeeping.replicas }}
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "housekeeping" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "housekeeping" "context" .) | nindent 8 }}
+      annotations:
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.housekeeping.dapr.appId "appPort" "8000" "config" .Values.housekeeping.dapr.config) | nindent 8 }}
+    spec:
+      initContainers:
+        {{- include "nemesis.waitForInfra" . | nindent 8 }}
+      containers:
+        - name: housekeeping
+          image: {{ include "nemesis.image" (dict "image" .Values.housekeeping.image "context" .) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: APP_ID
+              value: {{ .Values.housekeeping.dapr.appId | quote }}
+            - name: DAPR_GRPC_PORT
+              value: "50001"
+            - name: DAPR_HTTP_PORT
+              value: "3500"
+            - name: LOG_LEVEL
+              value: {{ .Values.nemesis.logLevel | quote }}
+            - name: CLEANUP_SCHEDULE
+              value: {{ .Values.housekeeping.env.cleanupSchedule | quote }}
+            {{- include "nemesis.postgresEnv" . | nindent 12 }}
+            {{- include "nemesis.s3Env" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.housekeeping.resources | nindent 12 }}
+      volumes:
+        {{- include "nemesis.daprSecretsVolume" . | nindent 8 }}

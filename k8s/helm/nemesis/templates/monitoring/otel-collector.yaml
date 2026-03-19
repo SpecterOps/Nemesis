@@ -1,0 +1,130 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  otel-collector-config.yaml: |
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:13133"
+        path: /health
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+            tls:
+              insecure: true
+
+    processors:
+      memory_limiter:
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      batch:
+        timeout: 5s
+        send_batch_size: 512
+        send_batch_max_size: 1024
+
+    exporters:
+      otlp/jaeger:
+        endpoint: "jaeger:4317"
+        tls:
+          insecure: true
+        sending_queue:
+          num_consumers: 4
+          queue_size: 20000
+        retry_on_failure:
+          enabled: true
+
+    service:
+      extensions: [health_check]
+      telemetry:
+        metrics:
+          address: "0.0.0.0:8888"
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/jaeger]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "otel-collector" "context" .) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "otel-collector" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "otel-collector" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+    spec:
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.monitoring.otelCollector.image.repository }}:{{ .Values.monitoring.otelCollector.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "--config=/etc/otel-collector-config.yaml"
+          ports:
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 13133
+              name: health
+            - containerPort: 8888
+              name: metrics
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel-collector-config.yaml
+              subPath: otel-collector-config.yaml
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.monitoring.otelCollector.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "otel-collector" "context" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "nemesis.selectorLabels" (dict "name" "otel-collector" "context" .) | nindent 4 }}
+  ports:
+    - port: 4317
+      targetPort: otlp-grpc
+      name: otlp-grpc
+    - port: 8888
+      targetPort: metrics
+      name: metrics
+{{- end }}

@@ -20,7 +20,7 @@ namespace ILSpyDecompilerService.Controllers
     {
         private readonly ILogger<DecompilerController> _logger;
         private readonly DaprClient _daprClient;
-        private readonly MinioService _minioService;
+        private readonly S3StorageService _storageService;
         private readonly DecompilerEngine _decompilerEngine;
         private readonly AssemblyAnalysisService _assemblyAnalysisService;
         private readonly SemaphoreSlim _processingSemaphore;
@@ -31,14 +31,14 @@ namespace ILSpyDecompilerService.Controllers
         public DecompilerController(
             ILogger<DecompilerController> logger,
             DaprClient daprClient,
-            MinioService minioService,
+            S3StorageService storageService,
             DecompilerEngine decompilerEngine,
             AssemblyAnalysisService assemblyAnalysisService,
             IConfiguration configuration)
         {
             _logger = logger;
             _daprClient = daprClient;
-            _minioService = minioService;
+            _storageService = storageService;
             _decompilerEngine = decompilerEngine;
             _assemblyAnalysisService = assemblyAnalysisService;
             
@@ -75,7 +75,7 @@ namespace ILSpyDecompilerService.Controllers
                 var objectId = inputMessage.ObjectId;
 
                 // Download file from Minio
-                downloadedFilePath = await _minioService.DownloadFileAsync(objectId);
+                downloadedFilePath = await _storageService.DownloadFileAsync(objectId);
                 _logger.LogDebug("File downloaded to: {downloadedFilePath}", downloadedFilePath);
 
                 // Perform assembly analysis
@@ -94,7 +94,7 @@ namespace ILSpyDecompilerService.Controllers
                 await _decompilerEngine.CreateZipFromDirectoryAsync(outputDirectory, zipFilePath);
 
                 // Upload ZIP to Minio
-                await _minioService.UploadFileAsync(zipFilePath, newObjectId);
+                await _storageService.UploadFileAsync(zipFilePath, newObjectId);
                 _logger.LogDebug("Zip uploaded to: {newObjectId}", newObjectId);
 
                 // Publish result with both decompilation and analysis data
