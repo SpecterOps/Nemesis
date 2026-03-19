@@ -21,11 +21,7 @@ data:
       jaeger_query:
         storage:
           traces: badger_store
-        base-path: /jaeger
-      healthcheckv2:
-        http:
-          endpoint: "0.0.0.0:13133"
-          path: /status
+      healthcheckv2: {}
 
     receivers:
       otlp:
@@ -114,23 +110,19 @@ spec:
               name: query
             - containerPort: 4317
               name: otlp-grpc
-            - containerPort: 13133
-              name: health
           volumeMounts:
             - name: config
               mountPath: /etc/jaeger
             - name: data
               mountPath: /badger
           readinessProbe:
-            httpGet:
-              path: /status
-              port: health
+            tcpSocket:
+              port: query
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
-            httpGet:
-              path: /status
-              port: health
+            tcpSocket:
+              port: query
             initialDelaySeconds: 30
             periodSeconds: 15
           resources:

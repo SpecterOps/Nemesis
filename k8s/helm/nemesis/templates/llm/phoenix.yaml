@@ -47,12 +47,14 @@ spec:
             - containerPort: 6006
               name: http
           env:
+            - name: PHOENIX_PORT
+              value: "6006"
             - name: PHOENIX_WORKING_DIR
               value: "/data"
             - name: PHOENIX_HOST_ROOT_PATH
               value: "/phoenix"
             - name: PHOENIX_SQL_DATABASE_URL
-              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/phoenix"
+              value: "postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/phoenix"
             - name: PHOENIX_DEFAULT_RETENTION_POLICY_DAYS
               value: {{ .Values.llm.phoenix.env.retentionPolicyDays | quote }}
           volumeMounts:

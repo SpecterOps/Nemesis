@@ -19,13 +19,12 @@ data:
         protocols:
           grpc:
             endpoint: "0.0.0.0:4317"
-            tls:
-              insecure: true
 
     processors:
       memory_limiter:
         limit_percentage: 80
         spike_limit_percentage: 25
+        check_interval: 1s
       batch:
         timeout: 5s
         send_batch_size: 512
@@ -46,7 +45,7 @@ data:
       extensions: [health_check]
       telemetry:
         metrics:
-          address: "0.0.0.0:8888"
+          level: basic
       pipelines:
         traces:
           receivers: [otlp]

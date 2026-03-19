@@ -48,6 +48,10 @@ spec:
                 secretKeyRef:
                   name: nemesis-secrets
                   key: HASURA_ADMIN_SECRET
+            {{- if .Values.mountedContainers.enabled }}
+            - name: CLEANUP_CONTAINERS_AFTER_PROCESSING
+              value: {{ .Values.mountedContainers.cleanupAfterProcessing | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /system/health
@@ -62,8 +66,18 @@ spec:
             periodSeconds: 15
           resources:
             {{- toYaml .Values.webApi.resources | nindent 12 }}
+          {{- if .Values.mountedContainers.enabled }}
+          volumeMounts:
+            - name: mounted-containers
+              mountPath: /mounted-containers
+          {{- end }}
       volumes:
         {{- include "nemesis.daprSecretsVolume" . | nindent 8 }}
+        {{- if .Values.mountedContainers.enabled }}
+        - name: mounted-containers
+          persistentVolumeClaim:
+            claimName: mounted-containers
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

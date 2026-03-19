@@ -19,9 +19,3 @@ spec:
       endpointAddress: "otel-collector:4317"
       isSecure: false
   {{- end }}
-  httpPipeline:
-    handlers:
-      - name: maximum-request-size
-        type: middleware.http.requestsize
-        properties:
-          maxBodySize: "300MB"

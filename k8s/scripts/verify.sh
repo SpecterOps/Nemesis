@@ -50,10 +50,10 @@ check_dapr_components() {
     # Check configurations
     local configs
     configs=$(kubectl get configurations.dapr.io -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
-    if [[ "$configs" -ge 4 ]]; then
-        pass "Found $configs Dapr configurations (expected >= 4)"
+    if [[ "$configs" -ge 3 ]]; then
+        pass "Found $configs Dapr configurations (expected >= 3: 1 general + 2 service-specific)"
     else
-        fail "Found only $configs Dapr configurations (expected >= 4)"
+        fail "Found only $configs Dapr configurations (expected >= 3)"
     fi
     echo ""
 }
@@ -105,6 +105,39 @@ check_health_endpoints() {
     echo ""
 }
 
+check_mounted_containers() {
+    echo "=== Mounted Containers (EFS) ==="
+    local pvc_status
+    pvc_status=$(kubectl get pvc mounted-containers -n "$NAMESPACE" --no-headers -o custom-columns=STATUS:.status.phase 2>/dev/null || echo "")
+
+    if [[ -z "$pvc_status" ]]; then
+        warn_ "mounted-containers PVC not found (mountedContainers.enabled is likely false, OK for k3d/k3s)"
+    elif [[ "$pvc_status" == "Bound" ]]; then
+        pass "mounted-containers PVC is Bound"
+
+        # Check StorageClass
+        local sc_provisioner
+        sc_provisioner=$(kubectl get storageclass efs-sc -o jsonpath='{.provisioner}' 2>/dev/null || echo "")
+        if [[ "$sc_provisioner" == "efs.csi.aws.com" ]]; then
+            pass "efs-sc StorageClass exists (provisioner: efs.csi.aws.com)"
+        else
+            fail "efs-sc StorageClass missing or wrong provisioner: ${sc_provisioner:-not found}"
+        fi
+
+        # Check volume mount in web-api
+        local mount
+        mount=$(kubectl get deployment web-api -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].volumeMounts[?(@.name=="mounted-containers")].mountPath}' 2>/dev/null || echo "")
+        if [[ "$mount" == "/mounted-containers" ]]; then
+            pass "web-api has /mounted-containers volumeMount"
+        else
+            fail "web-api missing /mounted-containers volumeMount"
+        fi
+    else
+        fail "mounted-containers PVC status: ${pvc_status} (expected Bound)"
+    fi
+    echo ""
+}
+
 check_ingress() {
     echo "=== Ingress ==="
     if kubectl get ingressroute -n "$NAMESPACE" &>/dev/null; then
@@ -128,11 +161,12 @@ main() {
     check_services
     check_dapr_components
     check_keda
+    check_mounted_containers
     check_ingress
     check_health_endpoints
 
     echo "============================================"
-    echo "  Results: ${GREEN}$PASS passed${NC}, ${RED}$FAIL failed${NC}, ${YELLOW}$WARN warnings${NC}"
+    echo -e "  Results: ${GREEN}$PASS passed${NC}, ${RED}$FAIL failed${NC}, ${YELLOW}$WARN warnings${NC}"
     echo "============================================"
 
     if [[ $FAIL -gt 0 ]]; then

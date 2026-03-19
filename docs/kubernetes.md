@@ -2,6 +2,9 @@
 
 Deploy Nemesis to a lightweight Kubernetes cluster using either [k3d](https://k3d.io/) (k3s-in-Docker) or native [k3s](https://k3s.io/), with Dapr operator-managed sidecars and KEDA event-driven autoscaling.
 
+!!! tip
+    For cloud deployment on AWS, see the [EKS Deployment Guide](eks.md).
+
 !!! note
     Docker Compose remains the primary development environment. Kubernetes deployment is additive and intended for production-like environments and autoscaling testing. See the [quickstart guide](quickstart.md) for Docker Compose setup.
 

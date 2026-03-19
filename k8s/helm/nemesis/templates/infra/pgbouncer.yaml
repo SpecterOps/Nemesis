@@ -1,34 +1,4 @@
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: pgbouncer-config
-  namespace: {{ include "nemesis.namespace" . }}
-  labels:
-    {{- include "nemesis.labels" . | nindent 4 }}
-data:
-  pgbouncer.ini: |
-    [databases]
-    {{ .Values.postgres.database }} = host=postgres port={{ .Values.postgres.port }} dbname={{ .Values.postgres.database }}
-
-    [pgbouncer]
-    listen_addr = 0.0.0.0
-    listen_port = {{ .Values.pgbouncer.port }}
-    auth_type = md5
-    auth_file = /etc/pgbouncer/userlist.txt
-    pool_mode = {{ .Values.pgbouncer.poolMode }}
-    max_client_conn = {{ .Values.pgbouncer.maxClientConn }}
-    default_pool_size = {{ .Values.pgbouncer.defaultPoolSize }}
-    min_pool_size = {{ .Values.pgbouncer.minPoolSize }}
-    reserve_pool_size = {{ .Values.pgbouncer.reservePoolSize }}
-    reserve_pool_timeout = 3
-    server_idle_timeout = 300
-    log_connections = 0
-    log_disconnections = 0
-    log_pooler_errors = 1
-    stats_period = 60
-    admin_users = {{ .Values.credentials.postgres.user }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -48,7 +18,7 @@ spec:
         {{- include "nemesis.selectorLabels" (dict "name" "pgbouncer" "context" .) | nindent 8 }}
       annotations:
         dapr.io/enabled: "false"
-        checksum/config: {{ printf "%s-%d-%d-%d-%d" .Values.pgbouncer.poolMode (int .Values.pgbouncer.maxClientConn) (int .Values.pgbouncer.defaultPoolSize) (int .Values.pgbouncer.minPoolSize) (int .Values.pgbouncer.reservePoolSize) | sha256sum }}
+        checksum/config: {{ printf "%s-%d-%d-%d-%d-%s" .Values.pgbouncer.poolMode (int .Values.pgbouncer.maxClientConn) (int .Values.pgbouncer.defaultPoolSize) (int .Values.pgbouncer.minPoolSize) (int .Values.pgbouncer.reservePoolSize) (default "" (ternary .Values.llm.agents.env.chatbotDbPassword "" .Values.llm.enabled)) | sha256sum }}
     spec:
       initContainers:
         {{- include "nemesis.waitForPostgres" . | nindent 8 }}
@@ -91,6 +61,12 @@ spec:
               value: {{ .Values.pgbouncer.reservePoolSize | quote }}
             - name: PGBOUNCER_INIT_MAX_SLEEP
               value: "10"
+            - name: PGBOUNCER_ADMIN_USERS
+              value: {{ .Values.credentials.postgres.user | quote }}
+            {{- if .Values.llm.enabled }}
+            - name: PGBOUNCER_USERLIST
+              value: '"chatbot_readonly" "{{ .Values.llm.agents.env.chatbotDbPassword }}"'
+            {{- end }}
           readinessProbe:
             tcpSocket:
               port: pgbouncer

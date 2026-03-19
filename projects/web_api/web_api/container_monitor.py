@@ -18,6 +18,7 @@ from web_api.large_containers import LargeContainerProcessor
 logger = get_logger(__name__)
 
 MOUNTED_CONTAINER_PATH = os.getenv("MOUNTED_CONTAINER_PATH", "/mounted-containers")
+CLEANUP_CONTAINERS_AFTER_PROCESSING = os.getenv("CLEANUP_CONTAINERS_AFTER_PROCESSING", "true").lower() in ("true", "1", "yes")
 COMPLETED_FOLDER = "completed"
 
 
@@ -292,6 +293,14 @@ class ContainerMonitor:
         # Ensure completed directory exists
         self.completed_path.mkdir(exist_ok=True)
 
+    def _delete_source_file(self, file_path: Path):
+        """Delete a container file after successful processing"""
+        try:
+            file_path.unlink()
+            logger.info(f"Deleted processed container: {file_path}")
+        except Exception as e:
+            logger.error(f"Error deleting file {file_path}: {e}")
+
     def _move_to_completed(self, file_path: Path):
         """Move a container file to the completed folder"""
         try:
@@ -362,8 +371,11 @@ class ContainerMonitor:
                         f"Container processing completed: {file_path}", container_id=container_id, result=result
                     )
 
-                    # Move file to completed folder
-                    self._move_to_completed(file_path)
+                    # Clean up or move the source file
+                    if CLEANUP_CONTAINERS_AFTER_PROCESSING:
+                        self._delete_source_file(file_path)
+                    else:
+                        self._move_to_completed(file_path)
 
                 except Exception as e:
                     logger.exception(f"Error processing container {file_path}: {e}")
