@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Setup Python 3.12
         run: uv python install 3.12
@@ -44,7 +44,7 @@ jobs:
           uv run python ../../.github/scripts/generate_api_docs.py
 
       - name: Commit documentation changes
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: 'docs: update API documentation [skip ci]'
           file_pattern: 'docs/*'
