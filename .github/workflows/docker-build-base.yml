@@ -32,13 +32,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -47,7 +47,7 @@ jobs:
       # Python Base Dev Image
       - name: Extract metadata for Python base dev image
         id: meta-python-base-dev
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev
           tags: |
@@ -56,7 +56,7 @@ jobs:
             type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
 
       - name: Build and push Python base dev image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./infra/docker/python_base
           file: ./infra/docker/python_base/dev.Dockerfile
@@ -70,7 +70,7 @@ jobs:
       # Python Base Prod Image
       - name: Extract metadata for Python base prod image
         id: meta-python-base-prod
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod
           tags: |
@@ -79,7 +79,7 @@ jobs:
             type=raw,value=latest-${{ matrix.arch }},enable={{is_default_branch}}
 
       - name: Build and push Python base prod image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./infra/docker/python_base
           file: ./infra/docker/python_base/prod.Dockerfile
@@ -100,7 +100,7 @@ jobs:
 
     steps:
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -109,7 +109,7 @@ jobs:
       # Python Base Dev Manifest
       - name: Extract metadata for Python base dev manifest
         id: meta-python-base-dev
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-dev
           tags: |
@@ -132,7 +132,7 @@ jobs:
       # Python Base Prod Manifest
       - name: Extract metadata for Python base prod manifest
         id: meta-python-base-prod
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/python-base-prod
           tags: |
