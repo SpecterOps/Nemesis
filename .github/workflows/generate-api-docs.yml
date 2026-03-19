@@ -69,4 +69,4 @@ jobs:
           path: site
 
       - name: Deploy documentation to Github pages
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v4
