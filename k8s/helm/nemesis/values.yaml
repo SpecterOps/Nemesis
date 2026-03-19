@@ -209,6 +209,7 @@ llm:
       storeModelInDb: "True"
       awsAccessKeyId: ""
       awsSecretAccessKey: ""
+      awsSessionToken: ""
       awsRegionName: us-east-1
       litellmAdminPassword: admin123
     resources:

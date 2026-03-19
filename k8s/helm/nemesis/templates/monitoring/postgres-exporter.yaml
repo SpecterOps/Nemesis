@@ -29,7 +29,7 @@ spec:
               name: metrics
           env:
             - name: DATA_SOURCE_NAME
-              value: "postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}"
+              value: "postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}"
           readinessProbe:
             httpGet:
               path: /metrics

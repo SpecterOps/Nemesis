@@ -50,3 +50,15 @@ llm:
     storage:
       size: 50Gi
       storageClass: gp3
+#   # Replace with your AWS credentials for Bedrock LLM use
+#   # For STS temp credentials awsSessionToken needed
+#   litellm:
+#     env:
+#       awsAccessKeyId: "REPLACE_WITH_AWS_ACCESS_KEY_ID"
+#       awsSecretAccessKey: "REPLACE_WITH_AWS_SECRET_ACCESS_KEY"
+#       awsSessionToken: "REPLACE_WITH_AWS_SESSION_TOKEN"
+
+# # Basic auth credentials
+# # Generate with: htpasswd -nb <user> <password>
+# credentials:
+#   basicAuthUsers: "nemesis:$apr1$REPLACE_WITH_HTPASSWD_HASH"
