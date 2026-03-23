@@ -83,33 +83,43 @@ namespace ILSpyDecompilerService.Controllers
                 var analysisResult = _assemblyAnalysisService.AnalyzeAssembly(downloadedFilePath);
                 _logger.LogDebug("Assembly analysis completed for: {ObjectId}", objectId);
 
-                // Decompile assembly
-                outputDirectory = Path.Combine(Path.GetTempPath(), $"{objectId}_source");
-                await _decompilerEngine.DecompileAssemblyAsync(downloadedFilePath, outputDirectory);
-                _logger.LogDebug("File decompiled to: {outputDirectory}", outputDirectory);
+                // Attempt decompilation - this can fail for obfuscated assemblies with
+                // illegal path characters in type/namespace names, so we handle it gracefully
+                string decompilationObjectId = null;
+                try
+                {
+                    outputDirectory = Path.Combine(Path.GetTempPath(), $"{objectId}_source");
+                    await _decompilerEngine.DecompileAssemblyAsync(downloadedFilePath, outputDirectory);
+                    _logger.LogDebug("File decompiled to: {outputDirectory}", outputDirectory);
 
-                // Create ZIP file
-                var newObjectId = Guid.NewGuid().ToString();
-                zipFilePath = Path.Combine(Path.GetTempPath(), newObjectId);
-                await _decompilerEngine.CreateZipFromDirectoryAsync(outputDirectory, zipFilePath);
+                    // Create ZIP file
+                    decompilationObjectId = Guid.NewGuid().ToString();
+                    zipFilePath = Path.Combine(Path.GetTempPath(), decompilationObjectId);
+                    await _decompilerEngine.CreateZipFromDirectoryAsync(outputDirectory, zipFilePath);
 
-                // Upload ZIP to Minio
-                await _storageService.UploadFileAsync(zipFilePath, newObjectId);
-                _logger.LogDebug("Zip uploaded to: {newObjectId}", newObjectId);
+                    // Upload ZIP to Minio
+                    await _storageService.UploadFileAsync(zipFilePath, decompilationObjectId);
+                    _logger.LogDebug("Zip uploaded to: {decompilationObjectId}", decompilationObjectId);
+                }
+                catch (Exception decompEx)
+                {
+                    _logger.LogWarning(decompEx, "Decompilation failed for object ID: {ObjectId}, continuing with analysis results only", objectId);
+                    decompilationObjectId = null;
+                }
 
-                // Publish result with both decompilation and analysis data
+                // Publish result with analysis data (and decompilation if it succeeded)
                 var outputMessage = new OutputMessage
                 {
                     ObjectId = objectId,
-                    Decompilation = newObjectId,
+                    Decompilation = decompilationObjectId,
                     Analysis = analysisResult
                 };
 
                 await _daprClient.PublishEventAsync(PubSubName, OutputTopicName, outputMessage);
 
-                _logger.LogInformation("Successfully processed decompilation request and published result: {NewObjectId}", newObjectId);
+                _logger.LogInformation("Successfully processed request for object ID: {ObjectId}, decompilation: {DecompilationSuccess}", objectId, decompilationObjectId != null);
 
-                return Ok(new { success = true, outputId = newObjectId, analysisResult = analysisResult });
+                return Ok(new { success = true, outputId = decompilationObjectId, analysisResult = analysisResult });
             }
             catch (Exception ex)
             {
