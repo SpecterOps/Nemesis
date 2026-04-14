@@ -254,10 +254,10 @@ func (s *Scanner) scanArchive(ctx context.Context, archiveExt string, data []byt
 	}
 
 	var (
-		allMatches        []models.MatchInfo
 		totalBytesScanned int64
 		blobsScanned      int64
 	)
+	allMatches := make([]models.MatchInfo, 0)
 
 	for _, entry := range extracted {
 		select {
@@ -291,12 +291,12 @@ func (s *Scanner) scanArchive(ctx context.Context, archiveExt string, data []byt
 // skipping the .git internals directory.
 func (s *Scanner) scanGitRepo(ctx context.Context, repoPath string) (*models.ScanResult, error) {
 	var (
-		allMatches        []models.MatchInfo
 		totalBytesSeen    int64
 		totalBytesScanned int64
 		blobsSeen         int64
 		blobsScanned      int64
 	)
+	allMatches := make([]models.MatchInfo, 0)
 
 	maxBytes := int64(s.opts.ExtractMaxTotalSizeMB) * 1024 * 1024
 	var totalScanned int64
@@ -376,7 +376,7 @@ func (s *Scanner) scanBytes(data []byte, filePath *string, gitCommit *models.Git
 	scanDuration := time.Since(scanStart)
 	if err != nil {
 		slog.Warn("Titus scan error", "error", err)
-		return nil
+		return []models.MatchInfo{}
 	}
 	slog.Info("Titus ScanBytes completed",
 		"raw_matches", len(titusMatches),

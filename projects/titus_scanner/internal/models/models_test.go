@@ -150,3 +150,30 @@ func TestBulkSubscription_Marshal(t *testing.T) {
 		}
 	}
 }
+
+func TestScanResults_EmptyMatches_MarshalAsArray(t *testing.T) {
+	// Regression test for issue #117: ScanResults with an empty (non-nil)
+	// Matches slice must marshal to "matches":[] not "matches":null.
+	result := ScanResults{
+		ScanDurationMs: 100,
+		BytesScanned:   1024,
+		Matches:        []MatchInfo{},
+		Stats:          ScanStats{},
+		ScanType:       "regular",
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	matchesJSON := string(raw["matches"])
+	if matchesJSON != "[]" {
+		t.Errorf("matches = %s, want [] (not null)", matchesJSON)
+	}
+}

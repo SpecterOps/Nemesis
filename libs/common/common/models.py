@@ -194,9 +194,17 @@ class ScanStats(BaseModel):
 class ScanResults(BaseModel):
     scan_duration_ms: int
     bytes_scanned: int
-    matches: list[MatchInfo]
+    matches: list[MatchInfo] = []
     stats: ScanStats
     scan_type: str = "regular"  # "regular", "archive", "git_repo"
+
+    @field_validator("matches", mode="before")
+    @classmethod
+    def coerce_null_matches(cls, v: Any) -> Any:
+        """Accept null/None matches from Go's nil-slice JSON serialization."""
+        if v is None:
+            return []
+        return v
 
 
 class TitusInput(BaseModel):
