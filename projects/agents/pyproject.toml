@@ -33,6 +33,7 @@ dependencies = [
     "pythonnet>=3.0.4,<4.0.0",
     "protobuf>=6.33.5,<7.0.0",
     "pyasn1>=0.6.3",
+    "pytest>=9.0.3",
 ]
 
 [dependency-groups]

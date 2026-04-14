@@ -16,6 +16,7 @@ dependencies = [
     "apscheduler>=3.11.0,<4.0.0",
     "common",
     "asyncpg>=0.30.0,<0.31.0",
+    "pytest>=9.0.3",
 ]
 
 [dependency-groups]

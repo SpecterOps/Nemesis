@@ -13,6 +13,7 @@ dependencies = [
     "structlog>=20.0.0,<30.0.0",
     "common",
     "pyyaml>=6.0.3,<7.0.0",
+    "pytest>=9.0.3",
 ]
 
 [dependency-groups]

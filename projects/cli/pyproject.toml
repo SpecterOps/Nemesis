@@ -26,6 +26,7 @@ dependencies = [
     "watchdog>=6.0.0,<7.0.0",
     "dapr==1.16.0",
     "plyvel-ci>=1.5.1,<2.0.0",
+    "pytest>=9.0.3",
 ]
 
 [dependency-groups]

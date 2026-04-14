@@ -28,6 +28,7 @@ dependencies = [
     "markdown>=3.9,<4.0",
     "httpx>=0.28.1,<0.29.0",
     "pyasn1>=0.6.3",
+    "pytest>=9.0.3",
 ]
 
 [dependency-groups]

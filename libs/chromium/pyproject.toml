@@ -15,6 +15,7 @@ dependencies = [
     "file_linking",
     "common",
     "pyasn1>=0.6.3",
+    "pytest>=9.0.3",
 ]
 
 [dependency-groups]

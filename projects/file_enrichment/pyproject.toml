@@ -31,7 +31,7 @@ dependencies = [
     "msoffcrypto-tool>=5.4.2,<6.0.0",
     "oletools>=0.60.2,<0.61.0",
     "pypykatz>=0.6.11,<0.7.0",
-    "cryptography>=46.0.3,<47.0.0",
+    "cryptography>=46.0.7",
     "uvicorn>=0.37.0,<0.38.0",
     "regipy>=5.2.0,<6.0.0",
     "dapr-ext-fastapi==1.16.0",
@@ -39,7 +39,7 @@ dependencies = [
     "dapr==1.16.0",
     "durabletask-dapr==0.2.0a8",
     "protobuf>=6.33.5,<7.0.0",
-    "pillow>=12.1.1,<13.0.0",
+    "pillow>=12.2.0",
     "opentelemetry-api>=1.38.0,<2.0.0",
     "opentelemetry-sdk>=1.38.0,<2.0.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.38.0,<2.0.0",
@@ -48,6 +48,7 @@ dependencies = [
     "pydecipher",
     "oscrypto",
     "async-lru>=2.1.0",
+    "pytest>=9.0.3",
 ]
 
 [dependency-groups]

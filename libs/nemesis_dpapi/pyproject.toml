@@ -8,13 +8,14 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "impacket>=0.13.0,<0.14.0",
     "asyncpg>=0.29.0,<=0.30.0",
-    "cryptography>=46.0.0,<47.0.0",
+    "cryptography>=46.0.7",
     "pydantic>=2.0.0,<3.0.0",
     "pycryptodome>=3.23.0,<4.0.0",
     "dpapick3>=0.7.1,<0.8.0",
     "dapr==1.16.0",
     "common",
     "pyasn1>=0.6.3",
+    "pytest>=9.0.3",
 ]
 
 [dependency-groups]

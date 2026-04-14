@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from common.db import (
     DB_POOL_ACQUIRE_SECONDS,
     DB_POOL_EXHAUSTED,
