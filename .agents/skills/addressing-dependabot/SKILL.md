@@ -7,7 +7,7 @@ description: Addresses GitHub Dependabot security alerts by listing open alerts,
 
 Guide remediation of Dependabot alerts for this monorepo.
 
-**CRITICAL: At each approval gate (Steps 2 and 6), you MUST use the `AskUserQuestion` tool before proceeding.**
+**CRITICAL: At each approval gate (Steps 2 and 6), ask for explicit user approval before proceeding. Use `request_user_input` when available; otherwise ask a direct concise question in chat and wait for an explicit approval response.**
 
 ## Overview
 
@@ -66,7 +66,7 @@ Total: {count} open alerts
 
 Derive the "Project" column by stripping the filename from the alert's `manifest` path (e.g. `projects/web_api/uv.lock` → `projects/web_api`).
 
-**STOP: Use `AskUserQuestion` to ask which alerts to address. Options: specific numbers, a severity level ("all critical"), or "all".**
+**STOP: Ask which alerts to address. Options: specific numbers, a severity level ("all critical"), or "all". Use `request_user_input` when available; otherwise ask a direct concise question in chat and wait for an explicit approval response.**
 
 Skip this gate if the user already specified an alert number as an argument.
 
@@ -293,7 +293,7 @@ Present a summary using this template:
 fix: upgrade {packages} to address {CVEs} (Dependabot #{numbers})
 ```
 
-**STOP: Use `AskUserQuestion` to get approval before committing.**
+**STOP: Ask for approval before committing. Use `request_user_input` when available; otherwise ask a direct concise question in chat and wait for an explicit approval response.**
 
 Commit only the relevant files:
 
