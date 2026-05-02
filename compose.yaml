@@ -1164,7 +1164,7 @@ services:
   litellm:
     profiles: ["llm"]
     # image: ghcr.io/berriai/litellm:v1.74.0-stable
-    image: ghcr.io/berriai/litellm:v1.81.12-stable.1
+    image: ghcr.io/berriai/litellm:v1.83.14-stable
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
       - STORE_MODEL_IN_DB=True

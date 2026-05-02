@@ -18,7 +18,11 @@ from web_api.large_containers import LargeContainerProcessor
 logger = get_logger(__name__)
 
 MOUNTED_CONTAINER_PATH = os.getenv("MOUNTED_CONTAINER_PATH", "/mounted-containers")
-CLEANUP_CONTAINERS_AFTER_PROCESSING = os.getenv("CLEANUP_CONTAINERS_AFTER_PROCESSING", "true").lower() in ("true", "1", "yes")
+CLEANUP_CONTAINERS_AFTER_PROCESSING = os.getenv("CLEANUP_CONTAINERS_AFTER_PROCESSING", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+)
 COMPLETED_FOLDER = "completed"
 
 

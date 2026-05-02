@@ -122,7 +122,9 @@ class FileHandler:
         cache_key = f"filemeta{agent_file_id}"
         self.db.mset({cache_key: 1})
 
-    async def download_file(self, mythic_file_id: str, download_callback: Callable[[str], Coroutine[Any, Any, Any]]) -> None:
+    async def download_file(
+        self, mythic_file_id: str, download_callback: Callable[[str], Coroutine[Any, Any, Any]]
+    ) -> None:
         fd, path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, "wb") as temp_file:

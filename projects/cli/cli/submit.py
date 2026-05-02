@@ -341,9 +341,9 @@ def submit_files(
     # Normalize host: strip scheme if provided (we always use https://)
     host = host.rstrip("/")
     if host.startswith("https://"):
-        host = host[len("https://"):]
+        host = host[len("https://") :]
     elif host.startswith("http://"):
-        host = host[len("http://"):]
+        host = host[len("http://") :]
 
     # Validate that filters are only used with container mode
     if file_filters and not container:
