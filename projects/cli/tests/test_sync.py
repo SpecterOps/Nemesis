@@ -22,6 +22,7 @@ def _make_settings(
     mythic_cred=None,
     nemesis_url="https://nemesis.local:8080",
     nemesis_cred=None,
+    mythic_agent_id="mythic",
 ) -> Settings:
     """Create a Settings object for testing."""
     if mythic_cred is None:
@@ -31,7 +32,7 @@ def _make_settings(
 
     return Settings(
         project="TEST-PROJECT",
-        mythic=MythicConfig(url=mythic_url, credential=mythic_cred),
+        mythic=MythicConfig(url=mythic_url, credential=mythic_cred, agent_id=mythic_agent_id),
         nemesis=NemesisConfig(
             url=nemesis_url,
             credential=nemesis_cred,
@@ -278,6 +279,7 @@ class TestSettingsMythic:
         get_settings.cache_clear()
         cfg = get_settings(str(SETTINGS_DIR / "settings_mythic.yaml"))
         assert cfg.mythic.url == "https://mythic.local:7443"
+        assert cfg.mythic.agent_id == "mythic"
         assert isinstance(cfg.mythic.credential, UsernamePasswordCredential)
         assert cfg.mythic.credential.username == "a"
         assert cfg.mythic.credential.password == "a"

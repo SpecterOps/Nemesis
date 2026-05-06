@@ -73,6 +73,7 @@ async def setup_cobaltstrike_monitor(cobaltstrike_config: CobaltStrikeConfig, co
             config.cache_db_path,
             nemesis_client,
             cobaltstrike_config.project,
+            agent_id=cobaltstrike_config.agent_id,
             cobalt_strike=cobaltstrike_client,
         )
 

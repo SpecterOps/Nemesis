@@ -46,6 +46,7 @@ class OutflankDownloadProcessor:
         db_path: Path,
         nemesis: NemesisClient,
         project: str,
+        agent_id: str = "stage1",
         outflank_downloads_dir_path: Path | None = None,
         outflank: OutflankC2Client | None = None,
     ):
@@ -78,6 +79,7 @@ class OutflankDownloadProcessor:
 
         self.outflank_downloads_dir_path = outflank_downloads_dir_path
         self.project = project
+        self.agent_id = agent_id
         self.client = nemesis
         self.outflank = outflank
         self.db = plyvel.DB(str(db_path), create_if_missing=True)
@@ -163,7 +165,7 @@ class OutflankDownloadProcessor:
             source = f"host://{implant.hostname}" if implant.hostname else None
 
             metadata = FileMetadata(
-                agent_id="stage1",
+                agent_id=self.agent_id,
                 source=source,
                 project=self.project,
                 timestamp=datetime.now(UTC),

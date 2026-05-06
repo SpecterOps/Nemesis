@@ -42,6 +42,7 @@ class CobaltStrikeDownloadProcessor:
         db_path: Path,
         nemesis: NemesisClient,
         project: str,
+        agent_id: str = "Cobalt Strike",
         cobalt_strike: CobaltStrikeClient | None = None,
     ):
         """Initialize with LevelDB path and optional components
@@ -63,6 +64,7 @@ class CobaltStrikeDownloadProcessor:
             raise ValueError("NemesisClient is required")
 
         self.project = project
+        self.agent_id = agent_id
         self.client = nemesis
         self.cobalt_strike = cobalt_strike
         self.db = plyvel.DB(str(db_path), create_if_missing=True)
@@ -148,7 +150,7 @@ class CobaltStrikeDownloadProcessor:
             source = f"host://{beacon.computer}" if beacon.computer else None
 
             metadata = FileMetadata(
-                agent_id="Cobalt Strike",
+                agent_id=self.agent_id,
                 source=source,
                 project=self.project,
                 timestamp=datetime.now(UTC),
