@@ -282,6 +282,74 @@ class TestSettingsMythic:
         assert cfg.mythic.credential.username == "a"
         assert cfg.mythic.credential.password == "a"
 
+    def test_token_credential_settings_file(self, tmp_path):
+        config_file = tmp_path / "settings_mythic_token.yaml"
+        config_file.write_text(
+            """
+project: "ASSESS-TEST"
+
+mythic:
+  url: "https://mythic.local:7443"
+  credential:
+    token: "mythic-api-token"
+
+nemesis:
+  url: "https://nemesis.local:7443/"
+  credential:
+    username: "n"
+    password: "n"
+  expiration_days: 100
+  max_file_size: 1000000000
+
+db:
+  path: "mythic_sync.db"
+
+networking:
+  timeout_sec: 30
+  validate_https_certs: true
+""",
+        )
+
+        get_settings.cache_clear()
+        cfg = get_settings(str(config_file))
+
+        assert isinstance(cfg.mythic.credential, TokenCredential)
+        assert cfg.mythic.credential.token == "mythic-api-token"
+
+    def test_mixed_credential_settings_file_is_rejected(self, tmp_path):
+        config_file = tmp_path / "settings_mythic_mixed.yaml"
+        config_file.write_text(
+            """
+project: "ASSESS-TEST"
+
+mythic:
+  url: "https://mythic.local:7443"
+  credential:
+    username: "a"
+    password: "a"
+    token: "mythic-api-token"
+
+nemesis:
+  url: "https://nemesis.local:7443/"
+  credential:
+    username: "n"
+    password: "n"
+  expiration_days: 100
+  max_file_size: 1000000000
+
+db:
+  path: "mythic_sync.db"
+
+networking:
+  timeout_sec: 30
+  validate_https_certs: true
+""",
+        )
+
+        get_settings.cache_clear()
+        with pytest.raises(Exception, match="mythic\\.credential\\.(username|password) cannot exists"):
+            get_settings(str(config_file))
+
     def test_nemesis_section(self):
         get_settings.cache_clear()
         cfg = get_settings(str(SETTINGS_DIR / "settings_mythic.yaml"))

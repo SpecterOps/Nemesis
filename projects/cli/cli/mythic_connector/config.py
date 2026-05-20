@@ -123,7 +123,12 @@ VALIDATORS = [
     Validator(
         "mythic.credential.password", must_exist=True, when=Validator("mythic.credential.token", must_exist=False)
     ),
-    Validator("mythic.credential.token", must_exist=False),
+    Validator(
+        "mythic.credential.username", must_exist=False, when=Validator("mythic.credential.token", must_exist=True)
+    ),
+    Validator(
+        "mythic.credential.password", must_exist=False, when=Validator("mythic.credential.token", must_exist=True)
+    ),
     # Nemesis validators
     Validator("nemesis.url", must_exist=True),
     Validator("nemesis.credential", must_exist=True),
