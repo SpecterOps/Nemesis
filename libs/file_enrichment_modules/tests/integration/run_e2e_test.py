@@ -33,6 +33,7 @@ import httpx
 DEFAULT_API_HOST = "localhost:7443"
 DEFAULT_USERNAME = "n"
 DEFAULT_PASSWORD = "n"
+DEFAULT_HASURA_ADMIN_SECRET = os.environ.get("HASURA_ADMIN_SECRET", "pass456")
 DEFAULT_PROJECT = "e2e-test"
 MAX_WAIT_SECONDS = 120
 POLL_INTERVAL_SECONDS = 5
@@ -41,7 +42,7 @@ POLL_INTERVAL_SECONDS = 5
 def check_nemesis_health(host: str, username: str, password: str) -> bool:
     """Check if Nemesis API is healthy."""
     try:
-        url = f"https://{host}/api/health"
+        url = f"https://{host}/api/system/health"
         response = httpx.get(url, auth=(username, password), verify=False, timeout=10)
         return response.status_code == 200
     except Exception as e:
@@ -177,6 +178,7 @@ def wait_for_enrichment(
     host: str,
     username: str,
     password: str,
+    hasura_admin_secret: str,
     project: str,
     module_name: str,
     max_wait: int = MAX_WAIT_SECONDS,
@@ -185,7 +187,7 @@ def wait_for_enrichment(
     print(f"Waiting for enrichment by module '{module_name}' (max {max_wait}s)...")
 
     # Query Hasura for enrichment results
-    hasura_url = f"https://{host}/v1/graphql"
+    hasura_url = f"https://{host}/hasura/v1/graphql"
 
     # Map module names to their analyzer names
     module_to_analyzer = {
@@ -199,30 +201,29 @@ def wait_for_enrichment(
     analyzer_name = module_to_analyzer.get(module_name, f"{module_name}_analyzer")
 
     query = """
-    query GetEnrichment($module_name: String!, $project: String!) {
+    query GetEnrichment($module_name: String!, $finding_origin_name: String!, $project: String!) {
         enrichments(
             where: {
                 module_name: {_eq: $module_name},
-                file: {project: {_eq: $project}}
+                files_enriched: {project: {_eq: $project}}
             },
             order_by: {created_at: desc},
             limit: 1
         ) {
-            id
             object_id
             module_name
             created_at
-            results
+            result_data
         }
         findings(
             where: {
-                origin_name: {_eq: $module_name},
-                file: {project: {_eq: $project}}
+                origin_name: {_eq: $finding_origin_name},
+                files_enriched: {project: {_eq: $project}}
             },
             order_by: {created_at: desc},
             limit: 10
         ) {
-            id
+            finding_id
             object_id
             category
             finding_name
@@ -241,11 +242,13 @@ def wait_for_enrichment(
                 json={
                     "query": query,
                     "variables": {
-                        "module_name": analyzer_name,
+                        "module_name": module_name,
+                        "finding_origin_name": analyzer_name,
                         "project": project,
                     },
                 },
                 auth=(username, password),
+                headers={"x-hasura-admin-secret": hasura_admin_secret},
                 verify=False,
                 timeout=10,
             )
@@ -261,6 +264,10 @@ def wait_for_enrichment(
                             "enrichments": enrichments,
                             "findings": findings,
                         }
+                elif "errors" in data:
+                    print(f"  GraphQL errors: {data['errors']}")
+            else:
+                print(f"  GraphQL HTTP {response.status_code}: {response.text}")
 
             print(f"  No results yet, waiting {POLL_INTERVAL_SECONDS}s...")
             time.sleep(POLL_INTERVAL_SECONDS)
@@ -373,6 +380,11 @@ def main():
         help=f"API password (default: {DEFAULT_PASSWORD})",
     )
     parser.add_argument(
+        "--hasura-admin-secret",
+        default=DEFAULT_HASURA_ADMIN_SECRET,
+        help="Hasura admin secret (default: HASURA_ADMIN_SECRET env var or compose default)",
+    )
+    parser.add_argument(
         "--project",
         default=DEFAULT_PROJECT,
         help=f"Project name (default: {DEFAULT_PROJECT})",
@@ -453,6 +465,7 @@ def main():
         args.host,
         args.username,
         args.password,
+        args.hasura_admin_secret,
         args.project,
         args.module,
         args.max_wait,
