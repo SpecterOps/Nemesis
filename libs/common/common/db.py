@@ -129,9 +129,7 @@ async def acquire_with_timing(pool: asyncpg.Pool, logger=None):
         DB_POOL_ACQUIRE_SECONDS.observe(elapsed)
         if elapsed > 1.0 and logger:
             stats = get_pool_stats(pool)
-            logger.warning(
-                f"Slow pool acquire: {elapsed:.2f}s — in_use={stats['pool_in_use']}/{stats['pool_max']}"
-            )
+            logger.warning(f"Slow pool acquire: {elapsed:.2f}s — in_use={stats['pool_in_use']}/{stats['pool_max']}")
         yield conn
 
 

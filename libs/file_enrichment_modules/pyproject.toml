@@ -54,7 +54,7 @@ build-backend = "hatchling.build"
 packages = ["file_enrichment_modules"]
 
 [tool.uv]
-constraint-dependencies = ["pyasn1>=0.6.2"]
+constraint-dependencies = ["pyasn1>=0.6.3"]
 
 [tool.uv.sources]
 common = { path = "../common", editable = true }

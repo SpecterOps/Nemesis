@@ -93,9 +93,7 @@ class TestRawDataParsing:
 
     def test_raw_data_with_validation_undetermined(self):
         """raw_data with undetermined validation status."""
-        raw_data = json.dumps(
-            {"match": {"rule_name": "Slack Token", "validation_result": {"status": "undetermined"}}}
-        )
+        raw_data = json.dumps({"match": {"rule_name": "Slack Token", "validation_result": {"status": "undetermined"}}})
         rule_msg, val_msg = self._extract_titus_info(raw_data)
         assert "Slack Token" in rule_msg
         assert "UNVERIFIED" in val_msg

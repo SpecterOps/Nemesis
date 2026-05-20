@@ -47,7 +47,7 @@ build-backend = "hatchling.build"
 packages = ["web_api"]
 
 [tool.uv]
-constraint-dependencies = ["pyasn1>=0.6.2"]
+constraint-dependencies = ["pyasn1>=0.6.3"]
 
 [tool.uv.sources]
 common = { path = "../../libs/common", editable = true }

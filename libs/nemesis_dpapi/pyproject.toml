@@ -36,7 +36,7 @@ build-backend = "hatchling.build"
 packages = ["nemesis_dpapi"]
 
 [tool.uv]
-constraint-dependencies = ["pyasn1>=0.6.2"]
+constraint-dependencies = ["pyasn1>=0.6.3"]
 
 [tool.uv.sources]
 common = { path = "../common", editable = true }
