@@ -6,6 +6,9 @@ with Dapr's workflow_client, and purges them to free up resources.
 """
 
 import asyncio
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import asyncpg
 import dapr.ext.workflow as wf
@@ -28,6 +31,7 @@ class WorkflowPurger:
         max_execution_time: int = 300,
         batch_size=50,
         interval_seconds=5,
+        purge_grace_seconds=60,
     ):
         """Initialize the workflow purger.
 
@@ -44,6 +48,30 @@ class WorkflowPurger:
         self._max_execution_time = max_execution_time
         self._batch_size = batch_size
         self._interval_seconds = interval_seconds
+        self._purge_grace_seconds = purge_grace_seconds
+
+    def _is_ready_for_purge(self, record: Mapping[str, Any], now: datetime | None = None) -> bool:
+        """Return true when a workflow is old enough to purge from Dapr state."""
+        status = record["status"]
+
+        # Running workflows still need to be checked for timeout on every cycle.
+        if status == "RUNNING":
+            return True
+
+        start_time = record["start_time"]
+        if start_time is None:
+            return True
+
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=UTC)
+
+        runtime_seconds = record["runtime_seconds"]
+        completed_at = start_time
+        if runtime_seconds is not None:
+            completed_at = start_time + timedelta(seconds=float(runtime_seconds))
+
+        now = now or datetime.now(UTC)
+        return now >= completed_at + timedelta(seconds=self._purge_grace_seconds)
 
     async def _handle_running_workflow(self, wf_id: str) -> tuple[bool, str | None]:
         """Check if a running workflow has timed out and terminate it if so.
@@ -142,7 +170,7 @@ class WorkflowPurger:
                 # Include COMPLETED, FAILED, TERMINATED, and RUNNING workflows
                 records = await conn.fetch(
                     """
-                    SELECT wf_id
+                    SELECT wf_id, status, start_time, runtime_seconds
                     FROM workflows
                     WHERE status != 'SCHEDULED'
                     AND is_purged = false
@@ -154,7 +182,8 @@ class WorkflowPurger:
                     limit,
                 )
 
-                workflow_ids = [record["wf_id"] for record in records]
+                now = datetime.now(UTC)
+                workflow_ids = [record["wf_id"] for record in records if self._is_ready_for_purge(record, now)]
 
                 if workflow_ids:
                     logger.debug(
@@ -284,7 +313,7 @@ class WorkflowPurger:
                     # Create a cursor for streaming results
                     cursor = await conn.cursor(
                         """
-                        SELECT wf_id
+                        SELECT wf_id, status, start_time, runtime_seconds
                         FROM workflows
                         WHERE status != 'SCHEDULED'
                         AND is_purged = false
@@ -297,9 +326,14 @@ class WorkflowPurger:
                     # Process workflows in batches using the cursor
                     while True:
                         # Fetch next batch of workflow IDs from cursor
-                        workflow_ids = [record["wf_id"] for record in await cursor.fetch(self._batch_size)]
+                        workflow_records = await cursor.fetch(self._batch_size)
+                        workflow_ids = [
+                            record["wf_id"]
+                            for record in workflow_records
+                            if self._is_ready_for_purge(record, datetime.now(UTC))
+                        ]
 
-                        if not workflow_ids:
+                        if not workflow_records:
                             logger.debug(
                                 "No more workflows found",
                                 batches_processed=batches_processed,
@@ -307,7 +341,16 @@ class WorkflowPurger:
                             break
 
                         batches_processed += 1
-                        total_checked += len(workflow_ids)
+                        total_checked += len(workflow_records)
+
+                        if not workflow_ids:
+                            logger.debug(
+                                "No workflows ready for purge in batch",
+                                batch_num=batches_processed,
+                                checked=len(workflow_records),
+                                purge_grace_seconds=self._purge_grace_seconds,
+                            )
+                            continue
 
                         # Purge workflows in parallel from Dapr
                         purge_results = await asyncio.gather(

@@ -34,6 +34,7 @@ postgres_connection_string = get_postgres_connection_str()
 
 # Workflow purge interval in seconds
 workflow_purge_interval = int(os.getenv("WORKFLOW_PURGE_INTERVAL_SECONDS", "30"))
+workflow_purge_grace_seconds = int(os.getenv("WORKFLOW_PURGE_GRACE_SECONDS", "60"))
 
 
 async def cancel_task(task: asyncio.Task | None, task_name: str) -> None:
@@ -101,6 +102,7 @@ async def lifespan(app: FastAPI):
                 max_execution_time=max_workflow_execution_time,
                 batch_size=50,
                 interval_seconds=workflow_purge_interval,
+                purge_grace_seconds=workflow_purge_grace_seconds,
             )
             cleanup_dapr_workflow_state_task = asyncio.create_task(purger.run())
             logger.info("Workflow purger initialized")
