@@ -52,7 +52,7 @@ services:
       - "traefik.http.routers.web-api.tls=true"
       - "traefik.http.routers.web-api.middlewares=auth"
   web-api-dapr:
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",
@@ -140,7 +140,7 @@ services:
           cpus: "1"
           memory: 2G
   titus-scanner-dapr:
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",
@@ -199,7 +199,7 @@ services:
     expose:
       - "5000"
   dotnet-service-dapr:
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",
@@ -274,7 +274,7 @@ services:
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   file-enrichment-dapr: &file-enrichment-dapr-template
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",
@@ -435,7 +435,7 @@ services:
       retries: 5
       start_period: 20s
   alerting-dapr:
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",
@@ -492,7 +492,7 @@ services:
       rabbitmq: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
   housekeeping-dapr:
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",
@@ -574,7 +574,7 @@ services:
         limits:
           cpus: "2"
   document-conversion-dapr:
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",
@@ -643,7 +643,7 @@ services:
       timeout: 10s
       retries: 3
   gotenberg-dapr:
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",
@@ -847,7 +847,7 @@ services:
       - ./infra/traefik/config:/config:ro
 
   placement:
-    image: "daprio/dapr:1.17.0"
+    image: "daprio/dapr:1.17.7"
     command:
       [
         "./placement",
@@ -874,7 +874,7 @@ services:
     restart: "no"
 
   scheduler:
-    image: "daprio/scheduler:1.17.0"
+    image: "daprio/scheduler:1.17.7"
     command:
       [
         "./scheduler",
@@ -1113,7 +1113,7 @@ services:
       - "traefik.http.routers.mcp.middlewares=auth"
   agents-dapr:
     profiles: ["llm"]
-    image: "daprio/daprd:1.17.0"
+    image: "daprio/daprd:1.17.7"
     command:
       [
         "./daprd",

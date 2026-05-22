@@ -18,7 +18,7 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "agents" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.llm.agents.dapr.appId "appPort" (toString .Values.llm.agents.appPort) "config" .Values.llm.agents.dapr.config) | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.llm.agents.dapr.appId "appPort" (toString .Values.llm.agents.appPort) "config" .Values.llm.agents.dapr.config "sidecarImage" .Values.dapr.sidecarImage) | nindent 8 }}
     spec:
       containers:
         - name: agents

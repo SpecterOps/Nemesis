@@ -18,7 +18,7 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" "gotenberg" "appPort" (toString .Values.gotenberg.port) "config" "dapr-config") | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" "gotenberg" "appPort" (toString .Values.gotenberg.port) "config" "dapr-config" "sidecarImage" .Values.dapr.sidecarImage) | nindent 8 }}
     spec:
       # Match the 180s API timeout (gotenberg.env.apiTimeout in values.yaml,
       # httpx client in document_conversion/activities/pdf_conversion.py) so

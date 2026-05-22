@@ -90,6 +90,7 @@ dapr.io/enabled: "true"
 dapr.io/app-id: {{ .appId | quote }}
 dapr.io/app-port: {{ .appPort | quote }}
 dapr.io/config: {{ .config | default "dapr-config" | quote }}
+dapr.io/sidecar-image: {{ .sidecarImage | quote }}
 dapr.io/http-max-request-size: {{ .maxRequestSizeMB | default "300" | quote }}
 dapr.io/enable-metrics: "true"
 dapr.io/metrics-port: {{ .metricsPort | default "9090" | quote }}

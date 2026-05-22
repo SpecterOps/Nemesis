@@ -18,7 +18,7 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "file-enrichment" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.fileEnrichment.dapr.appId "appPort" (toString .Values.fileEnrichment.port) "config" .Values.fileEnrichment.dapr.config "maxRequestSizeMB" "1024" "logLevel" .Values.fileEnrichment.dapr.logLevel) | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.fileEnrichment.dapr.appId "appPort" (toString .Values.fileEnrichment.port) "config" .Values.fileEnrichment.dapr.config "sidecarImage" .Values.dapr.sidecarImage "maxRequestSizeMB" "1024" "logLevel" .Values.fileEnrichment.dapr.logLevel) | nindent 8 }}
         prometheus.io/scrape: "true"
         prometheus.io/port: {{ .Values.fileEnrichment.port | quote }}
         prometheus.io/path: "/metrics"

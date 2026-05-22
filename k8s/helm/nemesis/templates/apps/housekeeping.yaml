@@ -16,7 +16,7 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "housekeeping" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.housekeeping.dapr.appId "appPort" "8000" "config" .Values.housekeeping.dapr.config) | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.housekeeping.dapr.appId "appPort" "8000" "config" .Values.housekeeping.dapr.config "sidecarImage" .Values.dapr.sidecarImage) | nindent 8 }}
     spec:
       initContainers:
         {{- include "nemesis.waitForInfra" . | nindent 8 }}

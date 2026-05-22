@@ -16,7 +16,7 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "web-api" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.webApi.dapr.appId "appPort" (toString .Values.webApi.port) "config" .Values.webApi.dapr.config "maxRequestSizeMB" "1024") | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.webApi.dapr.appId "appPort" (toString .Values.webApi.port) "config" .Values.webApi.dapr.config "sidecarImage" .Values.dapr.sidecarImage "maxRequestSizeMB" "1024") | nindent 8 }}
     spec:
       initContainers:
         {{- include "nemesis.waitForInfra" . | nindent 8 }}

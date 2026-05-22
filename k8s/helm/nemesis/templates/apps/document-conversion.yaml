@@ -18,7 +18,7 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "document-conversion" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.documentConversion.dapr.appId "appPort" (toString .Values.documentConversion.port) "config" .Values.documentConversion.dapr.config "maxRequestSizeMB" "1024") | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.documentConversion.dapr.appId "appPort" (toString .Values.documentConversion.port) "config" .Values.documentConversion.dapr.config "sidecarImage" .Values.dapr.sidecarImage "maxRequestSizeMB" "1024") | nindent 8 }}
     spec:
       initContainers:
         {{- include "nemesis.waitForInfra" . | nindent 8 }}

@@ -18,7 +18,7 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "dotnet-service" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.dotnetService.dapr.appId "appPort" (toString .Values.dotnetService.port) "config" .Values.dotnetService.dapr.config "maxConcurrency" (toString .Values.dotnetService.dapr.maxConcurrency)) | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.dotnetService.dapr.appId "appPort" (toString .Values.dotnetService.port) "config" .Values.dotnetService.dapr.config "sidecarImage" .Values.dapr.sidecarImage "maxConcurrency" (toString .Values.dotnetService.dapr.maxConcurrency)) | nindent 8 }}
     spec:
       containers:
         - name: dotnet-service

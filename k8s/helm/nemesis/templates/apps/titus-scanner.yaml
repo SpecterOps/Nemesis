@@ -18,7 +18,7 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "titus-scanner" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.titusScanner.dapr.appId "appPort" (toString .Values.titusScanner.port) "config" .Values.titusScanner.dapr.config "maxConcurrency" (toString .Values.titusScanner.dapr.maxConcurrency)) | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" .Values.titusScanner.dapr.appId "appPort" (toString .Values.titusScanner.port) "config" .Values.titusScanner.dapr.config "sidecarImage" .Values.dapr.sidecarImage "maxConcurrency" (toString .Values.titusScanner.dapr.maxConcurrency)) | nindent 8 }}
     spec:
       containers:
         - name: titus-scanner
