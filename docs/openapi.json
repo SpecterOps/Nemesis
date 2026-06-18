@@ -631,7 +631,33 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DpapiCredentialRequest",
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PasswordCredentialKey"
+                  },
+                  {
+                    "$ref": "#/components/schemas/NtlmHashCredentialKey"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Sha1CredentialKey"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Pbkdf2StrongCredentialKey"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DomainBackupKeyCredential"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MasterKeyGuidPairList"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DpapiSystemCredentialRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ChromiumAppBoundKeyCredential"
+                  }
+                ],
+                "title": "Request",
                 "description": "The DPAPI credential data"
               }
             }
@@ -1944,7 +1970,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "description": "The container file to process"
           },
@@ -1965,7 +1991,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "description": "The file to upload"
           },
@@ -2273,34 +2299,6 @@
         ],
         "title": "DomainBackupKeyCredential",
         "description": "Domain backup key credential (PVK format)."
-      },
-      "DpapiCredentialRequest": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/PasswordCredentialKey"
-          },
-          {
-            "$ref": "#/components/schemas/NtlmHashCredentialKey"
-          },
-          {
-            "$ref": "#/components/schemas/Sha1CredentialKey"
-          },
-          {
-            "$ref": "#/components/schemas/Pbkdf2StrongCredentialKey"
-          },
-          {
-            "$ref": "#/components/schemas/DomainBackupKeyCredential"
-          },
-          {
-            "$ref": "#/components/schemas/MasterKeyGuidPairList"
-          },
-          {
-            "$ref": "#/components/schemas/DpapiSystemCredentialRequest"
-          },
-          {
-            "$ref": "#/components/schemas/ChromiumAppBoundKeyCredential"
-          }
-        ]
       },
       "DpapiSystemCredentialRequest": {
         "properties": {
@@ -3129,6 +3127,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
