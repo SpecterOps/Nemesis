@@ -203,7 +203,7 @@ llm:
   litellm:
     image:
       repository: ghcr.io/berriai/litellm
-      tag: "v1.83.14-stable"
+      tag: "v1.91.1"
     port: 4000
     env:
       storeModelInDb: "True"
