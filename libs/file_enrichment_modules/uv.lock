@@ -830,7 +830,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "plyara", specifier = ">=2.2.7,<3.0.0" },
     { name = "presidio-analyzer", specifier = ">=2.2.358,<3.0.0" },
-    { name = "py7zr", specifier = ">=0.22.0,<1.0.0" },
+    { name = "py7zr", specifier = ">=1.1.3,<2.0.0" },
     { name = "pyarrow", specifier = ">=19.0.1,<20.0.0" },
     { name = "pyasn1", specifier = ">=0.6.3" },
     { name = "pydantic", specifier = ">=2.10.5,<3.0.0" },
@@ -1773,9 +1773,10 @@ wheels = [
 
 [[package]]
 name = "py7zr"
-version = "0.22.0"
+version = "1.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "backports-zstd" },
     { name = "brotli", marker = "platform_python_implementation == 'CPython'" },
     { name = "brotlicffi", marker = "platform_python_implementation == 'PyPy'" },
     { name = "inflate64" },
@@ -1784,12 +1785,11 @@ dependencies = [
     { name = "pybcj" },
     { name = "pycryptodomex" },
     { name = "pyppmd" },
-    { name = "pyzstd" },
     { name = "texttable" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/26/c3/0e05c711c16af0b9c47f3f77323303b338b9a871ba020d95d2b8dd6605ae/py7zr-0.22.0.tar.gz", hash = "sha256:c6c7aea5913535184003b73938490f9a4d8418598e533f9ca991d3b8e45a139e", size = 4992926 }
+sdist = { url = "https://files.pythonhosted.org/packages/59/3f/ac248f25f3901d3d6cf80ac99d5bac6fd1e5e6543c1812c79b02b6074c60/py7zr-1.1.3.tar.gz", hash = "sha256:8d51894abb38355bf14881088bb97f01fe4cb5b14ebe22f66d6297668c7e1a74", size = 71695 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/59/dd1750002c0f46099281116f8165247bc62dc85edad41cdd26e7b26de19d/py7zr-0.22.0-py3-none-any.whl", hash = "sha256:993b951b313500697d71113da2681386589b7b74f12e48ba13cc12beca79d078", size = 67906 },
+    { url = "https://files.pythonhosted.org/packages/88/40/dc7f804abd0ea167ea8d4d9b3f5455321aaf671d040fcef647e9e952e714/py7zr-1.1.3-py3-none-any.whl", hash = "sha256:17934a35089e026dec6c72ee275d9b841e646881ef822d618e805c3006661d9a", size = 72242 },
 ]
 
 [[package]]
@@ -2034,9 +2034,21 @@ wheels = [
 
 [[package]]
 name = "pyppmd"
-version = "1.1.1"
+version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/42/8e/06581a619ad31cd28fd897bd55aff2ea945d3d566969b8b3f682599e6dee/pyppmd-1.1.1.tar.gz", hash = "sha256:f1a812f1e7628f4c26d05de340b91b72165d7b62778c27d322b82ce2e8ff00cb", size = 1349281 }
+sdist = { url = "https://files.pythonhosted.org/packages/81/d7/803232913cab9163a1a97ecf2236cd7135903c46ac8d49613448d88e8759/pyppmd-1.3.1.tar.gz", hash = "sha256:ced527f08ade4408c1bfc5264e9f97ffac8d221c9d13eca4f35ec1ec0c7b6b2e", size = 1351815 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f0/01/7cc3854b0e1304b90d2435e946db5e1c42e103adf840a68400002fc838b4/pyppmd-1.3.1-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:4b4edb3e9619fd0bc39c1a07eb03e8731db833a93b23134f36c7ef581a94b37a", size = 77800 },
+    { url = "https://files.pythonhosted.org/packages/dd/02/caf6305224b9432ea7373670d101392f620c1ce741d6f95458b1fb9a16a4/pyppmd-1.3.1-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:b8b5c813e462c91048b88e2adfbcc0c69f2c905f70097001d32066f86f675bd4", size = 48195 },
+    { url = "https://files.pythonhosted.org/packages/45/82/8c5d3f0f738a3cf5c209d1471efda105a16417c0aaa91a2ad39efb3d4efb/pyppmd-1.3.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:e8d372d9fac382183e0371cf0c2d736b494b1857a1befe98d563342b1205265b", size = 48482 },
+    { url = "https://files.pythonhosted.org/packages/76/9c/09ab8b4f00473f210284dacf837cae8355ad900f3fd8fd98b2bba12de4fa/pyppmd-1.3.1-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3b765ae21f7ed2f4ea8f32bfd9e3a4a8d738e73fc8f8dcddec9cbe2c898d60be", size = 142828 },
+    { url = "https://files.pythonhosted.org/packages/64/fd/673d429df719affa1445611288aab6111c0bc87e51eb4677fe2421a1dd64/pyppmd-1.3.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:bd00522ddfcc292304577386b6c217758c0c10e1fb9ce7877ad7d3b7b821a808", size = 144502 },
+    { url = "https://files.pythonhosted.org/packages/cf/0f/64dad213f56eaf23210ac7d3a5dedb19ad8f186f8b8682f65e7d51d9fa4a/pyppmd-1.3.1-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:3de62099ff2ca876c2d39bc547bcba6f7b878988663abd782a5bad4edac3bb44", size = 139718 },
+    { url = "https://files.pythonhosted.org/packages/74/61/bd5dbe8d7374748687d48f0bc44e6b930470e09552b1bbc65ef899ab673e/pyppmd-1.3.1-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:011f845de195d60fe973a635a1f4be981b7d80f357a8acb1b2d83bdf5087c808", size = 142578 },
+    { url = "https://files.pythonhosted.org/packages/42/ae/0af00a9b1cd59b6821eb182413033d5ddbe05dfcde7511e3a6b1a5b83f6d/pyppmd-1.3.1-cp313-cp313-win32.whl", hash = "sha256:7d61bd01f25289b6ae54832db4254602fb0c6d105f6e6bf0aee39b803b698b98", size = 42102 },
+    { url = "https://files.pythonhosted.org/packages/6c/6d/311d8faca142f39b4d158c94ed7eb237a197d41dd7eb67f53442a7904e04/pyppmd-1.3.1-cp313-cp313-win_amd64.whl", hash = "sha256:df8d84ab72381058a964ba66e5e81ed52dbd0b5ad734a5ef8353452983506098", size = 46962 },
+    { url = "https://files.pythonhosted.org/packages/bb/42/24b59b6bb73a3fec96c7f81521d146c2ac89ffcb89cf9e848f62e0660381/pyppmd-1.3.1-cp313-cp313-win_arm64.whl", hash = "sha256:124a04aab6936ba011f9ad57067798c7f052fdb1848b0cc4318606eea55475e6", size = 45209 },
+]
 
 [[package]]
 name = "pypykatz"
@@ -2167,18 +2179,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/de/94/980b50a6531b3019e45ddeada0626d45fa85cbe22300844a7983285bed3b/pyyaml-6.0.3-cp313-cp313-win32.whl", hash = "sha256:d0eae10f8159e8fdad514efdc92d74fd8d682c933a6dd088030f3834bc8e6b26", size = 137427 },
     { url = "https://files.pythonhosted.org/packages/97/c9/39d5b874e8b28845e4ec2202b5da735d0199dbe5b8fb85f91398814a9a46/pyyaml-6.0.3-cp313-cp313-win_amd64.whl", hash = "sha256:79005a0d97d5ddabfeeea4cf676af11e647e41d81c9a7722a193022accdb6b7c", size = 154090 },
     { url = "https://files.pythonhosted.org/packages/73/e8/2bdf3ca2090f68bb3d75b44da7bbc71843b19c9f2b9cb9b0f4ab7a5a4329/pyyaml-6.0.3-cp313-cp313-win_arm64.whl", hash = "sha256:5498cd1645aa724a7c71c8f378eb29ebe23da2fc0d7a08071d89469bf1d2defb", size = 140246 },
-]
-
-[[package]]
-name = "pyzstd"
-version = "0.19.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "backports-zstd" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/66/59fed71d0d2065e02974b40296f836a237c364c8bbe07295f2d0dc33c278/pyzstd-0.19.1.tar.gz", hash = "sha256:36723d3c915b3981de9198d0a2c82b2f5fe3eaa36e4d8d586937830a8afc7d72", size = 69531 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/62/f55d1363512d1b1cc122af6ca5951008e42605b63675c7d6781affc7c475/pyzstd-0.19.1-py3-none-any.whl", hash = "sha256:267e2eb0de0291dfcb7ccfebc4ffe75b2f9d84e7007ac38844f6ccafc6dce081", size = 23779 },
 ]
 
 [[package]]

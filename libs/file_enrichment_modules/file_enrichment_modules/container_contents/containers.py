@@ -18,6 +18,9 @@ from dapr.aio.clients import DaprClient
 
 logger = get_logger(__name__)
 
+MAX_ARCHIVE_FILES = 10_000
+MAX_EXTRACTED_ARCHIVE_SIZE = 2_147_483_648
+
 
 class FileNotSupportedException(Exception):
     """Raised when a file is not supported"""
@@ -31,7 +34,7 @@ class ArchiveExtractionError(Exception):
     pass
 
 
-def is_safe_path(base_path, path_to_check):
+def is_safe_path(base_path: str, path_to_check: str) -> bool:
     """
     Ensure the path doesn't escape the base directory.
 
@@ -42,11 +45,28 @@ def is_safe_path(base_path, path_to_check):
     Returns:
         bool: True if the path is safe, False otherwise
     """
-    # Convert to absolute paths and normalize
-    base_path = os.path.abspath(base_path)
-    path_to_check = os.path.abspath(path_to_check)
-    # Check if the path is within the base directory
-    return path_to_check.startswith(base_path)
+    try:
+        resolved_base_path = pathlib.Path(base_path).resolve()
+        resolved_path_to_check = pathlib.Path(path_to_check).resolve()
+    except (OSError, RuntimeError):
+        return False
+
+    return resolved_path_to_check == resolved_base_path or resolved_base_path in resolved_path_to_check.parents
+
+
+def is_safe_archive_member_name(filename: str) -> bool:
+    """Return whether an archive member name is a relative path without traversal."""
+    if not filename or "\x00" in filename:
+        return False
+
+    normalized_filename = filename.replace("\\", "/")
+    posix_path = pathlib.PurePosixPath(normalized_filename)
+    windows_path = pathlib.PureWindowsPath(filename)
+
+    if posix_path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
+        return False
+
+    return ".." not in posix_path.parts and all(len(part) <= 255 for part in posix_path.parts)
 
 
 def estimate_container_size(path: str) -> int:
@@ -133,14 +153,11 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
     Returns:
         bool: True if extraction was successful, False otherwise
     """
-    max_files = 10000  # Adjust based on your requirements
-    max_total_size = 2_147_483_648  # 2GB example
-
     try:
         if zipfile.is_zipfile(path):
             with zipfile.ZipFile(path) as zf:
                 # Check number of files
-                if len(zf.namelist()) > max_files:
+                if len(zf.namelist()) > MAX_ARCHIVE_FILES:
                     logger.warning(f"Too many files in archive ({len(zf.namelist())}), possible zip bomb")
                     return False
 
@@ -161,7 +178,7 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
                 # Extract only safe members
                 total_extracted = 0
                 for member in safe_members:
-                    if total_extracted > max_total_size:
+                    if total_extracted > MAX_EXTRACTED_ARCHIVE_SIZE:
                         logger.warning("Max extraction size exceeded, possible zip bomb")
                         return False
 
@@ -176,37 +193,53 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
             return True
 
         elif py7zr.is_7zfile(path):
-            with py7zr.SevenZipFile(path) as sz:
-                # Get the list of files
-                file_list = sz.getnames()
-
+            with py7zr.SevenZipFile(path, max_extract_size=MAX_EXTRACTED_ARCHIVE_SIZE) as sz:
+                members = sz.list()
                 # Check number of files
-                if len(file_list) > max_files:
-                    logger.warning(f"Too many files in archive ({len(file_list)}), possible archive bomb")
+                if len(members) > MAX_ARCHIVE_FILES:
+                    logger.warning(f"Too many files in archive ({len(members)}), possible archive bomb")
                     return False
 
-                # Filter out unsafe paths
+                total_uncompressed_size = 0
                 safe_members = []
-                for filename in file_list:
-                    if filename.startswith("/") or ".." in filename:
-                        logger.warning(f"Unsafe path in archive: {filename}")
-                        continue
+                for member in members:
+                    filename = member.filename
 
-                    # Check for extremely long filenames
-                    if len(os.path.basename(filename)) > 255:
-                        logger.warning(f"Filename too long, may be malicious: {filename}")
-                        continue
+                    # Reject the entire archive before extraction if it contains links
+                    # or any entry type other than a regular file or directory.
+                    if member.is_symlink or not (member.is_file or member.is_directory):
+                        logger.warning(f"Unsafe file type in 7z archive: {filename}")
+                        return False
+
+                    if not is_safe_archive_member_name(filename):
+                        logger.warning(f"Unsafe path in archive: {filename}")
+                        return False
+
+                    extract_path = os.path.join(extract_dir, filename)
+                    if not is_safe_path(extract_dir, extract_path):
+                        logger.warning(f"Path traversal attempt detected: {filename}")
+                        return False
+
+                    if member.is_file:
+                        if member.uncompressed < 0:
+                            logger.warning(f"Invalid uncompressed size for archive member: {filename}")
+                            return False
+
+                        total_uncompressed_size += member.uncompressed
+                        if total_uncompressed_size > MAX_EXTRACTED_ARCHIVE_SIZE:
+                            logger.warning("Max extraction size exceeded, possible archive bomb")
+                            return False
 
                     safe_members.append(filename)
 
-                # Extract only safe members if supported by library
                 sz.extract(path=extract_dir, targets=safe_members)
 
-            # Verify all extracted paths for safety after extraction
+            # Verify the extracted tree as defense in depth. The checks above must
+            # prevent links from being created in the first place.
             for root, dirs, files in os.walk(extract_dir):
                 for item in dirs + files:
                     item_path = os.path.join(root, item)
-                    if not is_safe_path(extract_dir, item_path):
+                    if os.path.islink(item_path) or not is_safe_path(extract_dir, item_path):
                         logger.warning(f"Unsafe path found after extraction: {item_path}")
                         shutil.rmtree(extract_dir, ignore_errors=True)
                         return False
@@ -217,7 +250,7 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
             with tarfile.open(path) as tf:
                 # Check number of files
                 members = tf.getmembers()
-                if len(members) > max_files:
+                if len(members) > MAX_ARCHIVE_FILES:
                     logger.warning(f"Too many files in archive ({len(members)}), possible archive bomb")
                     return False
 
@@ -251,7 +284,7 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
                 total_extracted = 0
                 for member in safe_members:
                     if member.type == tarfile.REGTYPE:  # Regular file
-                        if total_extracted > max_total_size:
+                        if total_extracted > MAX_EXTRACTED_ARCHIVE_SIZE:
                             logger.warning("Max extraction size exceeded, possible archive bomb")
                             return False
                         total_extracted += member.size
