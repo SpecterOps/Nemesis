@@ -1975,7 +1975,7 @@ wheels = [
 [[package]]
 name = "pydecipher"
 version = "1.0.0"
-source = { git = "https://github.com/HarmJ0y/pydecipher.git#375fc7dcd5473fc6d0aa6252e95c949e0ccecfc6" }
+source = { git = "https://github.com/HarmJ0y/pydecipher.git#8a39d696dfcc4de3a726738e291eda00a085a066" }
 dependencies = [
     { name = "asn1crypto" },
     { name = "decompyle3" },
@@ -1984,6 +1984,7 @@ dependencies = [
     { name = "pycryptodome" },
     { name = "python-magic" },
     { name = "textdistance" },
+    { name = "uncompyle6" },
     { name = "xdis" },
 ]
 
@@ -2548,6 +2549,23 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5e/a7/c202b344c5ca7daf398f3b8a477eeb205cf3b6f32e7ec3a6bac0629ca975/tzdata-2025.3.tar.gz", hash = "sha256:de39c2ca5dc7b0344f2eba86f49d614019d29f060fc4ebc8a417896a620b56a7", size = 196772 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/b0/003792df09decd6849a5e39c28b513c06e84436a54440380862b5aeff25d/tzdata-2025.3-py2.py3-none-any.whl", hash = "sha256:06a47e5700f3081aab02b2e513160914ff0694bce9947d6b76ebd6bf57cfc5d1", size = 348521 },
+]
+
+[[package]]
+name = "uncompyle6"
+version = "3.9.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "spark-parser" },
+    { name = "xdis" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/9b/c6ebd89902b60d397b5b992f58013fd0a29eee4ac87e46a7137a9a79b601/uncompyle6-3.9.3.tar.gz", hash = "sha256:78b764d4c843b0455fb39db6deb421a48d5d3ebb846537ba6444afe107c4ebc1", size = 2475497 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/a1/34986d9989501caf794e05f3d893314e209de9fcf7e49f93ae04c1433a74/uncompyle6-3.9.3-py3-none-any.whl", hash = "sha256:c2b059147afb97498b6cc42eb14bd09dea23f513aee957f461d0ab84a02d3c36", size = 358939 },
+    { url = "https://files.pythonhosted.org/packages/48/ab/baf6ecbfa3ed1551852e813999220c957b0d585867df466aa631c4829908/uncompyle6-3.9.3-py36-none-any.whl", hash = "sha256:7f3e21e650400ae144d2189a503b8febf9e76bec6b1b9761a78001896dd43672", size = 359145 },
+    { url = "https://files.pythonhosted.org/packages/61/e6/e9cfdba0753cdbbb566805279e0c646bcdf9210ef339adb908e16a67afcd/uncompyle6-3.9.3-py38-none-any.whl", hash = "sha256:501d873782b168d9f452a1316ad2caa4ee6853daf594518e6f3e0777cafa4ac8", size = 359123 },
+    { url = "https://files.pythonhosted.org/packages/43/1a/57b583724fa2b3b7c70c92e8d7629d0cfcd808ea836272b2d0e33200f207/uncompyle6-3.9.3-py39-none-any.whl", hash = "sha256:88b14b26e361e572a97b1c5092fe4a67102346927b75f52e8a738ed7ef587dbc", size = 359139 },
 ]
 
 [[package]]
