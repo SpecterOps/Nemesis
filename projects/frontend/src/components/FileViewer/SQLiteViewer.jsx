@@ -39,9 +39,9 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
     useEffect(() => {
         const loadSqlJs = async () => {
             try {
-                // Use CDN directly for sql.js WASM file
+                // Get sql.js WASM file from assets
                 const SQL = await initSQLJS({
-                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.13.0/${file}`,
+                    locateFile: file => `/assets/sql.js/${file}`,
                 });
 
                 console.log('Successfully loaded SQL.js WASM from CDN');
