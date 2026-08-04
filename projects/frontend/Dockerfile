@@ -39,6 +39,7 @@ FROM nginx:alpine AS prod
 RUN apk add --no-cache wget
 
 COPY --from=bundle /app/dist /usr/share/nginx/html
+COPY --from=bundle /app/node_modules/sql.js/dist/ /usr/share/nginx/html/assets/sql.js
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Create env.js with placeholder for runtime substitution
