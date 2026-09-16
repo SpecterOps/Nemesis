@@ -5,8 +5,13 @@
 </p>
 
 <p align="center">
-    <img src="docs/images/nemesis-light.png" alt="Nemesis" style="width: 800px;" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/nemesis-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/nemesis-light.png">
+    <img alt="Nemesis logo" src="docs/images/nemesis-dark.png" width="80%" style="max-width: 100%;">
+  </picture>
 </p>
+
 <!-- HERO CALLOUT: Update the below, it should be the essence of your project in once sentence. -->
 <h4 align="center">
   A centralized file processing platform that functions as an "offensive VirusTotal"
