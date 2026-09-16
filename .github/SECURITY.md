@@ -11,15 +11,14 @@ If you discover a security vulnerability in this project, we appreciate your hel
 Please do not report security vulnerabilities through public GitHub issues.  
 Instead, please report security vulnerabilities using one of the following methods:
 
-**1. GitHub Private Vulnerability Reporting**  
-Send a private message to the repository maintainer(s) via GitHub. This keeps the vulnerability confidential while we work on a fix.
+1. **GitHub Private Vulnerability Reporting**
+If this repository offers GitHub Private Vulnerability Reporting, use the **Report a vulnerability** button in the repository's Security tab.
 
-**2. Escalation: Community Slack**  
-If you do not receive a timely response, or if the issue is time-sensitive, you can reach out to the maintainer(s) directly via the [BloodHound Gang Slack](https://slack.specterops.io).
+3. **Private Maintainer Contact**
+If Private Vulnerability Reporting is unavailable or you do not receive a timely response, contact a repository maintainer through a private channel, such as a direct Slack message. Do not share vulnerability details in public Slack channels.
 
-**3. Last resort: Email**  
-For sensitive matters or if the above channels are unavailable, you can email us at 
-**community[@]specterops.io**.
+4. **Last resort: Email Community Team**  
+For sensitive matters or if the above channels are unavailable, you can email us at **community[@]specterops.io**.
 
 ## :pencil2: What to Include
 When reporting a vulnerability, please include:
