@@ -1,7 +1,29 @@
 <p align="center">
-    <img src="docs/images/nemesis-light.png" alt="Nemesis" style="width: 800px;" />
+  <a href="https://specterops.io" target="_blank">
+    <img alt="A project powered by SpecterOps - Creators of BloodHound" src=".github/GitHub-Header.png" width="100%" style="max-width: 100%;">
+  </a>
 </p>
-<hr />
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/nemesis-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/nemesis-light.png">
+    <img alt="Nemesis logo" src="docs/images/nemesis-dark.png" width="80%" style="max-width: 100%;">
+  </picture>
+</p>
+
+<!-- HERO CALLOUT: Update the below, it should be the essence of your project in once sentence. -->
+<h4 align="center">
+  A centralized file processing platform that functions as an "offensive VirusTotal"
+</h4>
+
+<!-- Standard shields, please do not remove -->
+<p align="center">
+  <a href="https://slack.specterops.io"><img src="https://custom-icon-badges.demolab.com/badge/Slack-BloodHound%20Gang-4A154B?logo=slack&logoColor=fff" alt="Slack"/></a>
+  <a href="https://reddit.com/r/SpecterOpsCommunity"><img src="https://img.shields.io/badge/Reddit-r/SpecterOpsCommunity-FF4500?logo=reddit&logoColor=white" alt="SpecterOps on Reddit"/></a>
+<!--  <a href="https://community.specterops.io"><img src="https://img.shields.io/badge/Discord-SpecterOps-%235865F2.svg?&logo=discord&logoColor=white" alt="SpecterOps on Discord"/></a>-->
+  <a href="https://github.com/specterops"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspecterops%2F.github%2Fmain%2Fconfig%2Fshield.json&style=flat" alt="Sponsored by SpecterOps"/></a>
+</p>
 
 <p align="center">
 <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="version 2.0.0"/>
@@ -17,9 +39,6 @@
 <a href="https://twitter.com/0xdab0">
     <img src="https://img.shields.io/twitter/follow/0xdab0?style=social"
       alt="@0xdab0 on Twitter"/></a>
-<a href="https://github.com/specterops#nemesis">
-    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspecterops%2F.github%2Fmain%2Fconfig%2Fshield.json&style=flat"
-      alt="Sponsored by SpecterOps"/>
 </a>
 </p>
 <hr />
@@ -28,33 +47,31 @@
 
 Nemesis is an open-source, centralized data processing platform that ingests, enriches, and allows collaborative analysis (with humans and AI) of files collected during offensive security assessments.
 
-
 Nemesis 2.0 is built on [Docker](https://www.docker.com/) with heavy [Dapr integration](https://dapr.io/), our goal with Nemesis was to create a centralized file processing platform that functions as an "offensive VirusTotal".
 
-_Note: the previous Nemesis 1.0.1 code base has been preserved [as a branch](https://github.com/SpecterOps/Nemesis/tree/nemesis-1.0.1)_
+> [!NOTE]
+> The previous Nemesis 1.0.1 code base has been preserved [as a branch](https://github.com/SpecterOps/Nemesis/tree/nemesis-1.0.1)
 
 ## Setup / Installation
-Follow the [quickstart guide](docs/quickstart.md).
-
+Follow the [quickstart guide](https://docs.specterops.io/nemesis-docs/docs/quickstart).
 
 ## Usage
-See the [Nemesis Usage Guide](docs/usage_guide.md).
-
+See the [Nemesis Usage Guide](https://docs.specterops.io/nemesis-docs/docs).
 
 ## Additional Information
 Blog Posts:
 
-| Title                                                                                                                                                            | Nemesis Version | Date         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------ |
-| [*Nemesis 2.2*](https://specterops.io/blog/2026/02/25/nemesis-2-2/)                                                                                              | v2.2            | Feb 25, 2025 |
-| [*Nemesis 2.0*](https://specterops.io/blog/2025/08/05/nemesis-2-0/)                                                                                              | v2.0            | Aug 5, 2025  |
-| [*Nemesis 1.0.0*](https://posts.specterops.io/nemesis-1-0-0-8c6b745dc7c5)                                                                                        | v1.0            | Apr 25, 2024 |
-| [*Summoning RAGnarok With Your Nemesis*](https://posts.specterops.io/summoning-ragnarok-with-your-nemesis-7c4f0577c93b)                                          | v1.0            | Mar 13, 2024 |
-| [*Shadow Wizard Registry Gang: Structured Registry Querying*](https://posts.specterops.io/shadow-wizard-registry-gang-structured-registry-querying-9a2fab62a26f) | v1.0            | Sep 5, 2023  |
-| [*Hacking With Your Nemesis*](https://posts.specterops.io/hacking-with-your-nemesis-7861f75fcab4)                                                                | v1.0            | Aug 9, 2023  |
-| [*Challenges In Post-Exploitation Workflows*](https://posts.specterops.io/challenges-in-post-exploitation-workflows-2b3469810fe9)                                | v1.0            | Aug 2, 2023  |
-| [*On (Structured) Data*](https://posts.specterops.io/on-structured-data-707b7d9876c6)                                                                            | v1.0            | Jul 26, 2023 |
-
+| Title | Nemesis Version | Date |
+| --- | --- | --- |
+| [*Nemesis 2.x Development Guide*](https://specterops.io/blog/2026/03/10/the-nemesis-2-x-development-guide/) | v2.x | Mar 10, 2026 |
+| [*Nemesis 2.2*](https://specterops.io/blog/2026/02/25/nemesis-2-2/) | v2.2 | Feb 25, 2026 |
+| [*Nemesis 2.0*](https://specterops.io/blog/2025/08/05/nemesis-2-0/) | v2.0 | Aug 5, 2025 |
+| [*Nemesis 1.0.0*](https://posts.specterops.io/nemesis-1-0-0-8c6b745dc7c5) | v1.0 | Apr 25, 2024 |
+| [*Summoning RAGnarok With Your Nemesis*](https://posts.specterops.io/summoning-ragnarok-with-your-nemesis-7c4f0577c93b) | v1.0 | Mar 13, 2024 |
+| [*Shadow Wizard Registry Gang: Structured Registry Querying*](https://posts.specterops.io/shadow-wizard-registry-gang-structured-registry-querying-9a2fab62a26f) | v1.0 | Sep 5, 2023 |
+| [*Hacking With Your Nemesis*](https://posts.specterops.io/hacking-with-your-nemesis-7861f75fcab4) | v1.0 | Aug 9, 2023 |
+| [*Challenges In Post-Exploitation Workflows*](https://posts.specterops.io/challenges-in-post-exploitation-workflows-2b3469810fe9) | v1.0 | Aug 2, 2023 |
+| [*On (Structured) Data*](https://posts.specterops.io/on-structured-data-707b7d9876c6) | v1.0 | Jul 26, 2023 |
 
 Presentations:
 
