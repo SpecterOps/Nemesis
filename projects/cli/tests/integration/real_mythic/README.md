@@ -33,19 +33,23 @@ Its operator password and Hasura admin secret are public test values in the
 Compose file. Tests restart this project's Hasura container and mutate only its
 fixture records and test API token. Ordinary test runs skip the live suite.
 
-The 11 scenarios confirm:
+The 13 scenarios confirm:
 
 - The old complete-filtered ID stream misses an older file completing late.
-- The fixed connector discovers and later processes that file.
+- The fixed connector discovers and later processes that file using a live
+  pending-file subscription, with metadata polling forbidden by the test.
 - The SDK accepts an unknown-file 404 as file bytes; the connector rejects it
   before its upload callback runs.
 - Invalid API tokens pass SDK login but fail the connector's GraphQL probe.
 - Incorrect passwords fail authentication.
-- Pending files marked deleted are retired without a successful-upload marker.
+- Live deletion updates retire pending files without a successful-upload marker.
 - A Hasura stop/start triggers reconnection and pending-file recovery.
 - Revoked tokens fail subsequent GraphQL queries.
 - A real Mythic download survives a Nemesis HTTP 503 upload failure and uploads
   the expected bytes after recovery (the Nemesis receiver is a local surrogate).
+- Updated metadata and newly discovered IDs are handled across multiple live
+  subscription batches without disrupting existing watches.
+- A live deletion retires a failed upload during its 60-second retry backoff.
 - A legitimate empty file is accepted.
 - The actual CLI downloads and previews a real Mythic file with `--dry-run`, no
   Nemesis listener, and no configured persistent database created.

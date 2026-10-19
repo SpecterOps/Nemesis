@@ -219,3 +219,127 @@ async def test_deleted_pending_file_is_removed_without_success_marker(db, monkey
     assert db.get_strict(handler.state_prefix + "pending:deleted") is None
     assert db.get_strict("filemetadeleted") is None
     handler.handle_file.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_live_watch_batches_stay_stable_and_close_on_cancellation(db, monkeypatch):
+    import asyncio
+
+    handler = make_handler(db)
+    handler._enqueue_discovered([{"id": i, "agent_file_id": str(i)} for i in range(1, 102)], 101)
+    started, stopped = [], []
+
+    async def stream(ids):
+        started.append(ids)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.append(ids)
+
+    async def wait_for(predicate):
+        async def poll():
+            while not predicate():
+                await asyncio.sleep(0)
+
+        await asyncio.wait_for(poll(), 2)
+
+    monkeypatch.setattr(handler, "_pending_stream", stream)
+    task = asyncio.create_task(handler._pending_subscriptions())
+    try:
+        await wait_for(lambda: len(started) == 2)
+        assert [len(batch) for batch in started] == [100, 1]
+        handler._enqueue_discovered([{"id": 102, "agent_file_id": "102"}], 102)
+        await wait_for(lambda: len(started) == 3)
+        assert started[-1] == (101, 102)
+        assert started[0] not in stopped  # The full batch remains stable.
+        handler._mark_processed("101")
+        handler._mark_processed("102")
+        await wait_for(lambda: (101, 102) in stopped)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    assert set(stopped) == set(started)
+
+
+@pytest.mark.asyncio
+async def test_pending_subscription_failure_cancels_other_watchers(db, monkeypatch):
+    import asyncio
+
+    handler = make_handler(db)
+    handler._enqueue_discovered([{"id": i, "agent_file_id": str(i)} for i in range(1, 102)], 101)
+    stopped = asyncio.Event()
+
+    async def stream(ids):
+        if ids == (101,):
+            raise ValueError("permission/schema failure")
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+
+    monkeypatch.setattr(handler, "_pending_stream", stream)
+    with pytest.raises(ValueError, match="permission/schema"):
+        await asyncio.wait_for(handler._pending_subscriptions(), 2)
+    assert stopped.is_set()
+
+
+@pytest.mark.asyncio
+async def test_transfer_retry_wakes_without_a_new_subscription_snapshot(db, monkeypatch):
+    import asyncio
+
+    handler = make_handler(db)
+    handler._enqueue_discovered([{"id": 1, "agent_file_id": "retry"}], 1)
+    handler._pending_metadata[1] = {"id": 1, "agent_file_id": "retry", "complete": True}
+    handler._refresh_pending = AsyncMock(side_effect=AssertionError("unexpected polling"))
+    monkeypatch.setattr(handlers, "RETRY_DELAYS_SEC", (0.01,))
+    done = asyncio.Event()
+    attempts = []
+
+    async def transfer(item):
+        attempts.append(item)
+        if len(attempts) == 2:
+            handler._mark_processed("retry")
+            done.set()
+
+    handler.handle_file = AsyncMock(side_effect=transfer)
+    task = asyncio.create_task(handler._pending_worker())
+    try:
+        await asyncio.wait_for(done.wait(), 2)
+        assert len(attempts) == 2
+        handler._refresh_pending.assert_not_awaited()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_live_snapshot_removes_missing_cached_row_but_preserves_pending(db, monkeypatch):
+    from gql.transport.exceptions import TransportClosed
+
+    handler = make_handler(db)
+    handler._enqueue_discovered([{"id": 1, "agent_file_id": "missing"}], 1)
+    handler._pending_metadata[1] = {"id": 1, "agent_file_id": "missing", "complete": True}
+
+    async def snapshots(**kwargs):
+        assert kwargs["variables"] == {"ids": [1]}
+        assert "subscription NemesisMythicPendingFiles" in kwargs["query"]
+        yield {"filemeta": []}
+
+    monkeypatch.setattr(handlers.mythic, "subscribe_custom_query", snapshots)
+    with pytest.raises(TransportClosed):
+        await handler._pending_stream((1,))
+    assert not handler._pending_metadata
+    assert pending_value(db, handler, "missing")["id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_live_snapshot_rejects_unrequested_row(db, monkeypatch):
+    handler = make_handler(db)
+
+    async def snapshots(**kwargs):
+        yield {"filemeta": [{"id": 2, "agent_file_id": "unexpected"}]}
+
+    monkeypatch.setattr(handlers.mythic, "subscribe_custom_query", snapshots)
+    with pytest.raises(ValueError, match="Invalid Mythic pending-file"):
+        await handler._pending_stream((1,))
+    assert not handler._pending_metadata

@@ -70,9 +70,13 @@ uv run python -m cli connect-cobaltstrike --config settings_cobaltstrike.yaml --
 The Mythic connector stores its discovery cursor and pending file UUIDs in
 LevelDB, scoped to the Mythic URL and selected operation. Existing
 `filemeta<agent-file-uuid>` success markers remain valid after upgrade. It
-discovers incomplete file records too, then refreshes pending batches of up to
-100 records until each file completes or is deleted. Transient failures retry
-after 5, 10, 20, 40, 80, 160, then 300 seconds. If Nemesis accepted a file but
+discovers incomplete file records too, then watches pending files through live
+GraphQL subscriptions in batches of up to 100 IDs. Completion and deletion
+updates arrive over WebSockets; there is no periodic connector metadata polling.
+Hasura evaluates live queries every second by default. Pending subscriptions
+receive a fresh snapshot after reconnecting, using the saved queue. Failed
+transfers still use retry timers even if no further metadata updates arrive.
+Transient failures retry after 5, 10, 20, 40, 80, 160, then 300 seconds. If Nemesis accepted a file but
 the connection failed before its response arrived, a retry may submit a
 duplicate; delivery is at least once while the remote outcome is uncertain.
 

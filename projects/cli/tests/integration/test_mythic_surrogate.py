@@ -94,7 +94,6 @@ async def test_incomplete_older_cursor_row_is_polled_until_complete(servers, tmp
     mythic_server.add_file(b"second", name="second.txt", path="C:\\second.txt")
     cfg = config(mythic_server, nemesis_server, str(tmp_path / "state"))
     handler, db, nemesis = await make_handler(cfg, nemesis_server)
-    monkeypatch.setattr(handlers, "DISCOVERY_POLL_INTERVAL_SEC", 0.05)
     task = asyncio.create_task(handler.subscribe())
     try:
         await wait_for_uploads(nemesis_server, 1)
@@ -432,7 +431,6 @@ async def test_real_cli_dry_run_downloads_without_touching_configured_database(s
 async def test_service_recovers_from_ws_drop_and_mythic_server_restart(servers, tmp_path, monkeypatch):
     mythic_server, nemesis_server = servers
     cfg = config(mythic_server, nemesis_server, str(tmp_path / "supervisor-state"))
-    monkeypatch.setattr(handlers, "DISCOVERY_POLL_INTERVAL_SEC", 0.05)
     import cli.mythic_connector.sync as sync_module
 
     monkeypatch.setattr(sync_module, "RECONNECT_DELAYS_SEC", (0.05, 0.05, 0.05))

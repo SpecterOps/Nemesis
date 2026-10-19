@@ -185,7 +185,7 @@ class MythicSurrogate:
                 elif payload.get("type") == "start":
                     op_id = payload.get("id", "1")
                     query = payload.get("payload", {}).get("query", "")
-                    await self._send_snapshot(ws, op_id, query)
+                    await self._send_snapshot(ws, op_id, query, payload.get("payload", {}).get("variables", {}))
                     self.event_log.append({"event": "ws_start", "id": op_id})
                     if self.ws_disconnect:
                         await ws.close()
@@ -200,7 +200,14 @@ class MythicSurrogate:
             self.event_log.append({"event": "ws_close"})
         return ws
 
-    async def _send_snapshot(self, ws: web.WebSocketResponse, op_id: str, query: str) -> None:
+    async def _send_snapshot(self, ws: web.WebSocketResponse, op_id: str, query: str, variables: dict) -> None:
+        if "filemeta_stream" not in query:
+            ids = variables["ids"]
+            self._ws[ws]["pending_ids"] = ids
+            rows = [row.metadata() for row in self.files.values() if row.id in ids]
+            await ws.send_json({"type": "data", "id": op_id, "payload": {"data": {"filemeta": rows}}})
+            self.event_log.append({"event": "ws_pending", "ids": ids})
+            return
         # Cursor semantics match Hasura: return rows strictly greater than id.
         import re
 
@@ -221,6 +228,13 @@ class MythicSurrogate:
     async def publish(self, row: SurrogateFile) -> None:
         for ws, state in tuple(self._ws.items()):
             op_id = state["op_id"]
+            if op_id and not ws.closed and row.id in state.get("pending_ids", []):
+                rows = [f.metadata() for f in self.files.values() if f.id in state["pending_ids"]]
+                await ws.send_json({"type": "data", "id": op_id, "payload": {"data": {"filemeta": rows}}})
+                self.event_log.append({"event": "ws_pending_update", "ids": [row.id]})
+                continue
+            if "pending_ids" in state:
+                continue
             if (
                 op_id
                 and not ws.closed

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import aiohttp
 import pytest
@@ -141,7 +142,7 @@ async def test_fixed_connector_recovers_late_completion(cfg, files, monkeypatch)
     db = Database(cfg.db.path)
     async with PreviewNemesisClient() as preview:
         handler = FileHandler(sdk, preview, db, cfg)
-        monkeypatch.setattr(handlers, "DISCOVERY_POLL_INTERVAL_SEC", 0.1)
+        handler._refresh_pending = AsyncMock(side_effect=AssertionError("unexpected metadata polling"))
         task = asyncio.create_task(handler.subscribe())
         try:
             await wait_until(lambda: handler._is_file_processed(new_uuid), task)
@@ -202,20 +203,23 @@ async def test_pending_deletion_is_retired(cfg, files):
     db = Database(cfg.db.path)
     async with PreviewNemesisClient() as preview:
         handler = FileHandler(sdk, preview, db, cfg)
+        handler._refresh_pending = AsyncMock(side_effect=AssertionError("unexpected metadata polling"))
+        task = asyncio.create_task(handler.subscribe())
         try:
-            handler._enqueue_discovered([{"id": row_id, "agent_file_id": file_uuid}], row_id)
+            await wait_until(lambda: row_id in handler._pending_metadata, task)
             sql(f"UPDATE filemeta SET deleted=true WHERE id={row_id}")
-            await handler.process_pending_once()
-            assert not handler._pending_entries()
+            await wait_until(lambda: not handler._pending_entries(), task)
             assert not handler._is_file_processed(file_uuid)
             assert handler._successful_files_count == 0
+            handler._refresh_pending.assert_not_awaited()
         finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
             db.close()
 
 
 async def test_hasura_restart_reconnects_and_recovers_pending(cfg, files, monkeypatch):
     row_id, file_uuid = files(complete=False)
-    monkeypatch.setattr(handlers, "DISCOVERY_POLL_INTERVAL_SEC", 0.1)
     service = SyncService(cfg)
     async with PreviewNemesisClient() as preview:
         service.nemesis = preview
@@ -223,7 +227,7 @@ async def test_hasura_restart_reconnects_and_recovers_pending(cfg, files, monkey
         task = asyncio.create_task(service._run_with_nemesis())
         stopped = False
         try:
-            await wait_until(lambda: service.file_handler and bool(service.file_handler._pending_entries()), task)
+            await wait_until(lambda: service.file_handler and row_id in service.file_handler._pending_metadata, task)
             previous = service.file_handler
             compose("stop", "hasura")
             stopped = True
@@ -254,35 +258,35 @@ async def test_revoked_token_is_rejected_on_next_query(cfg):
         sql(f"UPDATE apitokens SET active=true WHERE id={token_id}")
 
 
-async def test_upload_outage_keeps_real_mythic_file_pending(cfg, files):
+async def test_upload_outage_keeps_real_mythic_file_pending(cfg, files, monkeypatch):
     content = b"actual Mythic download, temporary Nemesis upload failure"
-    row_id, file_uuid = files(content)
+    _, file_uuid = files(content)
     sdk = await client(cfg)
     endpoint = await NemesisSurrogate().start()
     db = Database(cfg.db.path)
+    monkeypatch.setattr(handlers, "RETRY_DELAYS_SEC", (0.5,))
     try:
         async with HttpNemesisClient(
             HttpNemesisConfig(url=endpoint.url, credential=PasswordCredential(username="test", password="test")),
             verify_ssl=False,
         ) as nemesis:
             handler = FileHandler(sdk, nemesis, db, cfg)
-            handler._enqueue_discovered([{"id": row_id, "agent_file_id": file_uuid}], row_id)
+            handler._refresh_pending = AsyncMock(side_effect=AssertionError("unexpected metadata polling"))
             endpoint.online = False
-            await handler.process_pending_once()
-            assert not handler._is_file_processed(file_uuid)
-            assert len(handler._pending_entries()) == 1
-            assert not endpoint.uploads
-            endpoint.online = True
-            # Make the persisted retry due now; do not mock network operations.
-            key, entry = handler._pending_entries()[0]
-            import json
-
-            entry["retry_at"] = 0
-            db.write_batch({key: json.dumps(entry)})
-            await handler.process_pending_once()
-            assert handler._is_file_processed(file_uuid)
-            assert not handler._pending_entries()
-            assert endpoint.uploads[0]["bytes"] == content
+            task = asyncio.create_task(handler.subscribe())
+            try:
+                await wait_until(lambda: any(entry["attempt"] for _, entry in handler._pending_entries()), task)
+                assert not handler._is_file_processed(file_uuid)
+                assert not endpoint.uploads
+                endpoint.online = True
+                # No metadata update: the transfer retry timer must wake the worker.
+                await wait_until(lambda: handler._is_file_processed(file_uuid), task)
+                assert not handler._pending_entries()
+                assert endpoint.uploads[0]["bytes"] == content
+                handler._refresh_pending.assert_not_awaited()
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
     finally:
         db.close()
         await endpoint.close()
@@ -340,3 +344,64 @@ async def test_real_cli_dry_run_downloads_without_nemesis(cfg, files, tmp_path):
             except subprocess.TimeoutExpired:
                 process.kill()
                 await asyncio.to_thread(process.wait, 10)
+
+
+async def test_live_updates_and_new_discoveries_extend_pending_watches(cfg, files, monkeypatch):
+    # Small batches exercise the same rollover used for >100 pending files.
+    monkeypatch.setattr(handlers, "PENDING_BATCH_SIZE", 2)
+    first = [files(complete=False) for _ in range(3)]
+    sdk = await client(cfg)
+    db = Database(cfg.db.path)
+    async with PreviewNemesisClient() as preview:
+        handler = FileHandler(sdk, preview, db, cfg)
+        handler._refresh_pending = AsyncMock(side_effect=AssertionError("unexpected metadata polling"))
+        task = asyncio.create_task(handler.subscribe())
+        try:
+            await wait_until(lambda: all(row_id in handler._pending_metadata for row_id, _ in first), task)
+            row_id, _ = first[0]
+            sql(f"UPDATE filemeta SET host='UPDATED-HOST' WHERE id={row_id}")
+            await wait_until(lambda: handler._pending_metadata[row_id]["host"] == "UPDATED-HOST", task)
+            assert handler._successful_files_count == 0
+            later_id, later_uuid = files(complete=False)
+            await wait_until(lambda: later_id in handler._pending_metadata, task)
+            sql(f"UPDATE filemeta SET complete=true WHERE id={later_id}")
+            await wait_until(lambda: handler._is_file_processed(later_uuid), task)
+            # Existing watch batches must remain functional after adding/removing IDs.
+            sql(f"UPDATE filemeta SET complete=true WHERE id IN ({','.join(str(row_id) for row_id, _ in first)})")
+            await wait_until(lambda: all(handler._is_file_processed(uid) for _, uid in first), task)
+            assert handler._successful_files_count == 4
+            handler._refresh_pending.assert_not_awaited()
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            db.close()
+
+
+async def test_live_deletion_bypasses_transfer_backoff(cfg, files, monkeypatch):
+    row_id, file_uuid = files()
+    sdk = await client(cfg)
+    endpoint = await NemesisSurrogate().start()
+    endpoint.online = False
+    db = Database(cfg.db.path)
+    monkeypatch.setattr(handlers, "RETRY_DELAYS_SEC", (60,))
+    try:
+        async with HttpNemesisClient(
+            HttpNemesisConfig(url=endpoint.url, credential=PasswordCredential(username="test", password="test")),
+            verify_ssl=False,
+        ) as nemesis:
+            handler = FileHandler(sdk, nemesis, db, cfg)
+            handler._refresh_pending = AsyncMock(side_effect=AssertionError("unexpected metadata polling"))
+            task = asyncio.create_task(handler.subscribe())
+            try:
+                await wait_until(lambda: any(entry["attempt"] for _, entry in handler._pending_entries()), task)
+                sql(f"UPDATE filemeta SET deleted=true WHERE id={row_id}")
+                await wait_until(lambda: not handler._pending_entries(), task)
+                assert not handler._is_file_processed(file_uuid)
+                assert not endpoint.uploads
+                handler._refresh_pending.assert_not_awaited()
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+    finally:
+        db.close()
+        await endpoint.close()

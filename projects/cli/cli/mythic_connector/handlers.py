@@ -18,12 +18,12 @@ from cli.mythic_connector.logger import get_logger
 # from cli.mythic_connector.nemesis import NemesisClient
 from cli.nemesis_client import NemesisClient, PreviewUploadResult
 from common.models2.api import FileMetadata, FileWithMetadataResponse
+from gql.transport.exceptions import TransportClosed
 from mythic import mythic, mythic_classes
 
 logger = get_logger(__name__)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-DISCOVERY_POLL_INTERVAL_SEC = 5
 PENDING_BATCH_SIZE = 100
 RETRY_DELAYS_SEC = (5, 10, 20, 40, 80, 160, 300)
 
@@ -70,6 +70,9 @@ class FileHandler:
         self.cfg = config
         self._successful_files_count = 0
         self._total_files_count = 0
+        self._pending_changed = asyncio.Event()
+        self._metadata_changed = asyncio.Event()
+        self._pending_metadata: dict[int, dict[str, Any]] = {}
         self.operation_id = str(getattr(mythic, "current_operation_id", ""))
         self.state_prefix = f"mythic:v2:{_canonical_mythic_url(self.cfg.mythic.url)}:{self.operation_id}:"
 
@@ -151,6 +154,7 @@ class FileHandler:
         cache_key = f"filemeta{agent_file_id}"
         pending_key = self.state_prefix + "pending:" + agent_file_id
         self.db.write_batch({cache_key: "1"}, [pending_key])
+        self._pending_changed.set()
 
     def _state_value(self, key: str) -> dict[str, Any] | None:
         raw = self.db.get_strict(key)
@@ -175,6 +179,8 @@ class FileHandler:
             if self.db.get_strict(pending_key) is None:
                 puts[pending_key] = json.dumps({"id": record.get("id"), "uuid": uuid, "attempt": 0, "retry_at": 0})
         self.db.write_batch(puts)
+        if len(puts) > 1:
+            self._pending_changed.set()
 
     async def _refresh_pending(self, pending: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not pending:
@@ -193,19 +199,25 @@ class FileHandler:
         except Exception as exc:
             raise DatabaseError("LevelDB pending-state iteration failed") from exc
 
-    async def process_pending_once(self) -> None:
+    async def process_pending_once(self, metadata: list[dict[str, Any]] | None = None) -> None:
         now = time.time()
-        due = [(key, entry) for key, entry in self._pending_entries() if entry.get("retry_at", 0) <= now]
+        deleted = {item["agent_file_id"] for item in metadata or [] if item.get("deleted")}
+        due = [
+            (key, entry)
+            for key, entry in self._pending_entries()
+            if entry.get("retry_at", 0) <= now or entry["uuid"] in deleted
+        ]
         for offset in range(0, len(due), PENDING_BATCH_SIZE):
             batch = due[offset : offset + PENDING_BATCH_SIZE]
-            metadata = await self._refresh_pending([entry for _, entry in batch])
-            by_uuid = {item.get("agent_file_id"): item for item in metadata}
+            records = metadata if metadata is not None else await self._refresh_pending([entry for _, entry in batch])
+            by_uuid = {item.get("agent_file_id"): item for item in records}
             for key, entry in batch:
                 item = by_uuid.get(entry["uuid"])
                 if item is None:
                     continue
                 if item.get("deleted"):
                     self.db.write_batch({}, [key])
+                    self._pending_changed.set()
                     continue
                 if not item.get("complete"):
                     continue
@@ -233,26 +245,109 @@ class FileHandler:
                 newest = max(int(row["id"]) for row in records if row.get("id") is not None)
                 self._enqueue_discovered(records, newest)
 
-    async def subscribe(self) -> None:
-        """Maintain Mythic discovery and retryable pending-file processing."""
-        worker = asyncio.create_task(self._pending_worker())
-        discovery = asyncio.create_task(self._discovery_stream())
+    async def _pending_stream(self, ids: tuple[int, ...]) -> None:
+        query = """subscription NemesisMythicPendingFiles($ids:[Int!]!) {
+          filemeta(where:{id:{_in:$ids}}) {
+            id agent_file_id deleted complete filename_text full_remote_path_text host timestamp
+          }
+        }"""
+        async for result in mythic.subscribe_custom_query(
+            mythic=self.mythic, query=query, variables={"ids": list(ids)}, timeout=-1
+        ):
+            records = result["filemeta"]
+            for item in records:
+                if type(item.get("id")) is not int or item["id"] not in ids or not item.get("agent_file_id"):
+                    raise ValueError("Invalid Mythic pending-file subscription record")
+            # Live queries return full snapshots, including an empty snapshot if
+            # rows disappear. Missing rows stay pending rather than being lost.
+            for file_id in ids:
+                self._pending_metadata.pop(file_id, None)
+            self._pending_metadata.update({item["id"]: item for item in records})
+            self._metadata_changed.set()
+        raise TransportClosed("Mythic pending-file subscription ended")
+
+    async def _pending_subscriptions(self) -> None:
+        watchers: dict[asyncio.Task, tuple[int, ...]] = {}
         try:
-            done, _ = await asyncio.wait({worker, discovery}, return_when=asyncio.FIRST_COMPLETED)
-            for task in done:
-                exception = task.exception()
-                if exception:
-                    raise exception
+            while True:
+                self._pending_changed.clear()
+                pending_ids = {entry["id"] for _, entry in self._pending_entries()}
+                for task, ids in tuple(watchers.items()):
+                    if task.done():
+                        task.result()  # Propagate auth, schema and connection failures.
+                    if not pending_ids.intersection(ids):
+                        task.cancel()
+                        await asyncio.gather(task, return_exceptions=True)
+                        del watchers[task]
+                watched_ids = {file_id for ids in watchers.values() for file_id in ids}
+                unassigned = pending_ids - watched_ids
+                ideal_batches = (len(pending_ids) + PENDING_BATCH_SIZE - 1) // PENDING_BATCH_SIZE
+                compact = len(watchers) > 2 * ideal_batches
+                # Fill partial batches when discoveries arrive; otherwise a
+                # slow sequence of single files could open one socket per file.
+                refill = bool(unassigned)
+                for task, ids in tuple(watchers.items()):
+                    active_ids = pending_ids.intersection(ids)
+                    if compact or (refill and len(active_ids) < PENDING_BATCH_SIZE):
+                        task.cancel()
+                        await asyncio.gather(task, return_exceptions=True)
+                        del watchers[task]
+                        unassigned.update(active_ids)
+                new_ids = sorted(unassigned)
+                for offset in range(0, len(new_ids), PENDING_BATCH_SIZE):
+                    ids = tuple(new_ids[offset : offset + PENDING_BATCH_SIZE])
+                    task = asyncio.create_task(self._pending_stream(ids))
+                    task.add_done_callback(lambda _: self._pending_changed.set())
+                    watchers[task] = ids
+                for file_id in tuple(self._pending_metadata):
+                    if file_id not in pending_ids:
+                        del self._pending_metadata[file_id]
+                # Keep existing batches stable as files finish, avoiding a full
+                # resubscription of the backlog after every successful upload.
+                await self._pending_changed.wait()
         finally:
-            for task in (worker, discovery):
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(worker, discovery, return_exceptions=True)
+            for task in watchers:
+                task.cancel()
+            await asyncio.gather(*watchers, return_exceptions=True)
+
+    async def subscribe(self) -> None:
+        """Maintain discovery, live pending-file updates and transfer retries."""
+        tasks = {
+            asyncio.create_task(self._pending_worker()),
+            asyncio.create_task(self._pending_subscriptions()),
+            asyncio.create_task(self._discovery_stream()),
+        }
+        try:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                task.result()
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _pending_worker(self) -> None:
         while True:
-            await self.process_pending_once()
-            await asyncio.sleep(DISCOVERY_POLL_INTERVAL_SEC)
+            self._metadata_changed.clear()
+            await self.process_pending_once(list(self._pending_metadata.values()))
+            # Only failed transfers need a client-side timer. Unchanged complete
+            # records won't produce another live-query message to trigger retry.
+            deadlines = [
+                entry["retry_at"]
+                for _, entry in self._pending_entries()
+                if entry.get("retry_at", 0) > 0
+                and (item := self._pending_metadata.get(entry["id"]))
+                and item.get("complete")
+                and not item.get("deleted")
+            ]
+            if deadlines:
+                delay = max(0, min(deadlines) - time.time())
+                try:
+                    await asyncio.wait_for(self._metadata_changed.wait(), timeout=delay)
+                except TimeoutError:
+                    pass
+            else:
+                await self._metadata_changed.wait()
 
     async def download_file(
         self, mythic_file_id: str, download_callback: Callable[[str], Coroutine[Any, Any, Any]]
@@ -378,6 +473,7 @@ class FileHandler:
             refreshed = await self._refresh_pending([{"id": file_id, "uuid": agent_file_id}])
             if any(row.get("agent_file_id") == agent_file_id and row.get("deleted") for row in refreshed):
                 self.db.write_batch({}, [self.state_prefix + "pending:" + agent_file_id])
+                self._pending_changed.set()
                 logger.info("Discarded deleted Mythic file %s after download returned missing", agent_file_id)
             else:
                 logger.warning("Mythic file %s was not available; metadata will be retried", agent_file_id)
