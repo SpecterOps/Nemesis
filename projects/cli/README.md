@@ -34,14 +34,47 @@ Monitor a directory for new files and automatically submit them to Nemesis.
 
 ### Connector startup checks
 
-All C2 connectors (Mythic, Outflank, and Cobalt Strike) check Nemesis at
+Normal C2 connector runs (Mythic, Outflank, and Cobalt Strike) check Nemesis at
 `/api/system/health` before connecting to their C2 server. The check uses the
 configured Nemesis credentials and certificate validation setting. Its timeout is
 `conn_timeout_sec` for Cobalt Strike and Outflank, and `networking.timeout_sec`
 for Mythic.
+Mythic then validates its GraphQL login, current operation, and `filemeta` access
+before opening its durable discovery stream. Transient Mythic session failures
+reconnect after 1, 2, 4, 8, 16, then 30 seconds; a session healthy for at least
+60 seconds resets that delay. Authentication, authorization, schema, and database
+failures stop the connector with a nonzero exit status.
 
 If Nemesis is unreachable, rejects authentication, returns an invalid response,
 or reports an unhealthy status, the connector logs the failure and exits with status 1.
+
+Connector uploads use one pooled async Nemesis client per run, shared by the
+startup health check and file processors. At most four uploads run concurrently.
+Connection establishment and pool waits use the connector's configured timeout;
+upload reads and writes allow up to 520 seconds of inactivity. Only connection
+establishment failures are retried, up to three attempts with one- and two-second
+delays. HTTP responses and failures after connection establishment are returned
+without retry.
+
+All three C2 connectors support `--dry-run`. They still authenticate to the C2
+platform and download files, then log `WOULD UPLOAD` with each file's original
+path, project, source, byte count, and SHA-256. They skip Nemesis health checks
+and uploads. Dry runs use a temporary cache that is removed on exit.
+
+```bash
+uv run python -m cli connect-mythic --config settings_mythic.yaml --dry-run
+uv run python -m cli connect-outflank --config settings_outflank.yaml --dry-run
+uv run python -m cli connect-cobaltstrike --config settings_cobaltstrike.yaml --dry-run
+```
+
+The Mythic connector stores its discovery cursor and pending file UUIDs in
+LevelDB, scoped to the Mythic URL and selected operation. Existing
+`filemeta<agent-file-uuid>` success markers remain valid after upgrade. It
+discovers incomplete file records too, then refreshes pending batches of up to
+100 records until each file completes or is deleted. Transient failures retry
+after 5, 10, 20, 40, 80, 160, then 300 seconds. If Nemesis accepted a file but
+the connection failed before its response arrived, a retry may submit a
+duplicate; delivery is at least once while the remote outcome is uncertain.
 
 ### connect-mythic
 Synchronize data between Mythic C2 framework and Nemesis.
@@ -49,6 +82,7 @@ Synchronize data between Mythic C2 framework and Nemesis.
 **Configuration:**
 - Uses `settings_mythic.yaml` configuration file
 - `--showconfig`: Display example configuration
+- `--dry-run`: Download files and log upload previews without contacting Nemesis
 
 ### connect-outflank
 Ingest data from Outflank Stage1 C2 into Nemesis.
@@ -56,6 +90,7 @@ Ingest data from Outflank Stage1 C2 into Nemesis.
 **Configuration:**
 - Uses `settings_outflank.yaml` configuration file
 - `--showconfig`: Display example configuration
+- `--dry-run`: Download files and log upload previews without contacting Nemesis
 
 ### connect-cobaltstrike
 Ingest data from Cobalt Strike into Nemesis.
@@ -66,6 +101,7 @@ other running monitors.
 **Configuration:**
 - Uses `settings_cobaltstrike.yaml` configuration file
 - `--showconfig`: Display example configuration
+- `--dry-run`: Download files and log upload previews without contacting Nemesis
 
 ## Additional Tools
 

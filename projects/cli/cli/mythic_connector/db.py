@@ -5,6 +5,10 @@ import plyvel
 logger = logging.getLogger(__name__)
 
 
+class DatabaseError(RuntimeError):
+    """A LevelDB operation failed; progress must stop rather than be skipped."""
+
+
 class Database:
     """A wrapper around LevelDB providing Redis-like functionality.
 
@@ -63,3 +67,22 @@ class Database:
     def close(self) -> None:
         """Close the database connection."""
         self.db.close()
+
+    def get_strict(self, key: str) -> bytes | None:
+        """Read raw bytes and propagate storage errors to the supervisor."""
+        try:
+            return self.db.get(str(key).encode("utf-8"))
+        except Exception as exc:
+            raise DatabaseError(f"LevelDB read failed for key {key!r}") from exc
+
+    def write_batch(self, puts: dict[str, str | bytes], deletes: list[str] | None = None) -> None:
+        """Atomically apply string/byte values and deletions, raising on failure."""
+        try:
+            with self.db.write_batch(transaction=True, sync=True) as batch:
+                for key, value in puts.items():
+                    encoded = value.encode("utf-8") if isinstance(value, str) else value
+                    batch.put(str(key).encode("utf-8"), encoded)
+                for key in deletes or []:
+                    batch.delete(str(key).encode("utf-8"))
+        except Exception as exc:
+            raise DatabaseError("LevelDB atomic write failed") from exc

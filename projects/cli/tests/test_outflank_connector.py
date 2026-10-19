@@ -1,6 +1,6 @@
 """Nemesis preflight checks for the Outflank connector."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from cli.config import Config
@@ -31,10 +31,15 @@ async def test_preflight_before_outflank(config):
     async def monitor(*args):
         events.append("monitor")
 
-    with patch(f"{MODULE}.NemesisClient") as client, patch(f"{MODULE}.setup_outflank_monitor", side_effect=monitor):
-        client.return_value.get_health.side_effect = health
+    with (
+        patch(f"{MODULE}.NemesisClient") as client,
+        patch(f"{MODULE}.setup_outflank_monitor", side_effect=monitor) as setup,
+    ):
+        client.return_value.__aenter__.return_value = client.return_value
+        client.return_value.get_health = AsyncMock(side_effect=health)
         await run_outflank_connector(config, MagicMock())
-        client.return_value.get_health.assert_called_once_with(timeout=5, verify_ssl=True)
+        client.return_value.get_health.assert_called_once_with(timeout=5)
+        assert setup.await_args.args[3] is client.return_value
     assert events == ["preflight", "monitor"]
 
 
@@ -45,7 +50,8 @@ async def test_preflight_before_outflank(config):
 )
 async def test_failed_preflight_prevents_outflank_startup(config, health):
     with patch(f"{MODULE}.NemesisClient") as client, patch(f"{MODULE}.setup_outflank_monitor") as setup:
-        client.return_value.get_health.return_value = health
+        client.return_value.__aenter__.return_value = client.return_value
+        client.return_value.get_health = AsyncMock(return_value=health)
         with pytest.raises(RuntimeError, match="Nemesis preflight check failed"):
             await run_outflank_connector(config, MagicMock())
         setup.assert_not_called()
@@ -57,7 +63,8 @@ async def test_monitor_errors_propagate(config):
         patch(f"{MODULE}.NemesisClient") as client,
         patch(f"{MODULE}.setup_outflank_monitor", side_effect=RuntimeError("Server disconnected")),
     ):
-        client.return_value.get_health.return_value = HealthResponse(status="healthy")
+        client.return_value.__aenter__.return_value = client.return_value
+        client.return_value.get_health = AsyncMock(return_value=HealthResponse(status="healthy"))
         with pytest.raises(RuntimeError, match="Server disconnected"):
             await run_outflank_connector(config, MagicMock())
 

@@ -1,0 +1,62 @@
+name: nemesis-real-mythic
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mythic_user
+      POSTGRES_PASSWORD: isolated-test-password
+      POSTGRES_DB: mythic_db
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U mythic_user -d mythic_db']
+      interval: 2s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: mythic_user
+      RABBITMQ_DEFAULT_PASS: isolated-test-password
+      RABBITMQ_DEFAULT_VHOST: mythic_vhost
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 3s
+      retries: 30
+  server:
+    image: nemesis-real-mythic:test
+    working_dir: /usr/src/app
+    volumes:
+      - ./server/src:/usr/src/app
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: isolated-test-password
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PASSWORD: isolated-test-password
+      MYTHIC_ADMIN_USER: operator
+      MYTHIC_ADMIN_PASSWORD: isolated-test-password
+      MYTHIC_SERVER_BIND_LOCALHOST_ONLY: 'false'
+      JWT_SECRET: isolated-local-test-secret-0123456789
+      DEBUG_LEVEL: warning
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+  hasura:
+    image: hasura/graphql-engine:v2.48.15
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://mythic_user:isolated-test-password@postgres:5432/mythic_db
+      HASURA_GRAPHQL_ADMIN_SECRET: isolated-test-admin
+      HASURA_GRAPHQL_AUTH_HOOK: http://server:17443/graphql/webhook
+      HASURA_GRAPHQL_AUTH_HOOK_MODE: POST
+      MYTHIC_ACTIONS_URL_BASE: http://server:17443/api/v1.4
+    ports:
+      - '127.0.0.1:18081:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+  proxy:
+    image: nginx:alpine
+    ports:
+      - '127.0.0.1:18443:80'
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [server, hasura]

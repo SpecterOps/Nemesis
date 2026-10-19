@@ -1,10 +1,12 @@
+import asyncio
+import hashlib
 import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
-import requests
+import httpx
 from cli.config import NemesisConfig
 from common.models2.api import (
     APIInfo,
@@ -14,37 +16,114 @@ from common.models2.api import (
     HealthResponse,
     YaraReloadResponse,
 )
-from requests.auth import HTTPBasicAuth
-from requests_toolbelt import MultipartEncoder
 
 logger = logging.getLogger(__name__)
 
 
-class NemesisClient:
-    def __init__(self, cfg: NemesisConfig) -> None:
-        """Initialize the Nemesis client.
+class PreviewUploadResult:
+    """Local dry-run result; deliberately contains no generated Nemesis object ID."""
 
-        Args:
-            config: Application configuration
-        """
-        self.cfg = cfg
-        self.auth = HTTPBasicAuth(
-            cfg.credential.username,
-            cfg.credential.password,
+    def __init__(self, size_bytes: int, sha256: str) -> None:
+        self.size_bytes = size_bytes
+        self.sha256 = sha256
+
+
+class PreviewNemesisClient:
+    """Upload-compatible local preview backend used by connector dry runs."""
+
+    async def __aenter__(self) -> "PreviewNemesisClient":
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+    async def aclose(self) -> None:
+        return None
+
+    async def get_health(self, timeout: float = 10) -> HealthResponse:
+        raise RuntimeError("PreviewNemesisClient has no Nemesis health endpoint")
+
+    async def post_file(self, file: BinaryIO | str | Path, metadata: FileMetadata) -> PreviewUploadResult:
+        path = Path(file) if isinstance(file, (str, Path)) else None
+        if path is None:
+            raise TypeError("Preview uploads require a file path")
+        hash_task = asyncio.create_task(asyncio.to_thread(_hash_file, path))
+        try:
+            size, digest = await asyncio.shield(hash_task)
+        except asyncio.CancelledError:
+            await hash_task
+            raise
+        logger.info(
+            "WOULD UPLOAD path=%s project=%s source=%s size=%d sha256=%s",
+            metadata.path,
+            metadata.project,
+            metadata.source,
+            size,
+            digest,
         )
+        return PreviewUploadResult(size, digest)
+
+
+def _hash_file(path: Path) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            size += len(chunk)
+            digest.update(chunk)
+    return size, digest.hexdigest()
+
+
+class NemesisClient:
+    """Async HTTP client for Nemesis API operations."""
+
+    def __init__(
+        self,
+        cfg: NemesisConfig,
+        *,
+        verify_ssl: bool = True,
+        connect_timeout: float = 10,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self.cfg = cfg
+        self.verify_ssl = verify_ssl
+        self.connect_timeout = connect_timeout
+        self._transport = transport
+        self._http: httpx.AsyncClient | None = None
+        self._upload_slots = asyncio.Semaphore(4)
+
+    async def __aenter__(self) -> "NemesisClient":
+        limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
+        self._http = httpx.AsyncClient(
+            auth=(self.cfg.credential.username, self.cfg.credential.password),
+            verify=self.verify_ssl,
+            timeout=httpx.Timeout(
+                self.connect_timeout, connect=self.connect_timeout, read=520.0, write=520.0, pool=self.connect_timeout
+            ),
+            limits=limits,
+            transport=self._transport,
+        )
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        if self._http is not None:
+            client, self._http = self._http, None
+            await client.aclose()
+
+    @property
+    def http(self) -> httpx.AsyncClient:
+        if self._http is None:
+            raise RuntimeError("NemesisClient must be used inside 'async with'")
+        return self._http
+
+    def _ensure_open(self) -> None:
+        if self._http is None:
+            raise RuntimeError("NemesisClient must be used inside 'async with'")
 
     def create_file_metadata(self, path: str, agent_id: str, project: str, source: str | None = None) -> FileMetadata:
-        """Create standardized file metadata.
-
-        Args:
-            path: File path
-            agent_id: Identifier for the agent
-            project: Project name
-            source: Optional source identifier (e.g., "host://192.168.1.1", "https://site.domain.com")
-
-        Returns:
-            FileMetadata object with standard fields
-        """
         now = datetime.now(UTC)
         return FileMetadata(
             agent_id=agent_id,
@@ -55,135 +134,99 @@ class NemesisClient:
             path=path,
         )
 
-    def post_file(
-        self,
-        file: BinaryIO | str,
-        metadata: FileMetadata,
+    async def _request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
+        for attempt in range(3):
+            try:
+                return await self.http.request(method, url, **kwargs)
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                if attempt == 2:
+                    raise
+                logger.warning(
+                    "Nemesis %s connection failed; retrying in %s second(s) (%s/3)", method, attempt + 1, attempt + 2
+                )
+                await asyncio.sleep(attempt + 1)
+        raise AssertionError("unreachable")
+
+    async def post_file(
+        self, file: BinaryIO | str | Path, metadata: FileMetadata
     ) -> FileWithMetadataResponse | ErrorResponse:
-        """Upload file to Nemesis with required metadata using streaming multipart/form-data.
-
-        Args:
-            file: Either a file path string or a binary stream containing the file data
-            metadata: Required file metadata as FileMetadata object
-
-        Returns:
-            FileWithMetadataResponse if successful, ErrorResponse on error
-
-        Raises:
-            ValueError: If metadata is not provided
-            FileNotFoundError: If file path doesn't exist
-            PermissionError: If file path isn't readable
-            requests.exceptions.RequestException: For network/API errors
-        """
+        self._ensure_open()
         if not metadata:
             raise ValueError("File metadata is required")
-
-        file_stream = None
-        need_cleanup = False
-
+        owned = isinstance(file, (str, Path))
+        stream: BinaryIO | None = None
         try:
-            # If given a path string, open it as a binary stream
-            if isinstance(file, str):
+            if owned:
                 path = Path(file)
                 if not path.exists():
-                    raise FileNotFoundError(f"File not found: {file}")
+                    raise FileNotFoundError(f"File not found: {path}")
                 if not os.access(path, os.R_OK):
-                    raise PermissionError(f"No read permission for {file}")
-                file_stream = open(path, "rb")
-                need_cleanup = True
+                    raise PermissionError(f"No read permission for {path}")
+                stream = path.open("rb")
             else:
-                # Already a binary stream
-                file_stream = file
-
-            # Using MultipartEncoder so we can stream the upload w/o loading the entire file into memory
-            encoder = MultipartEncoder(
-                fields={
-                    "file": ("file", file_stream, "application/octet-stream"),
-                    "metadata": (None, metadata.model_dump_json(), "application/json"),
-                }
-            )
-
-            # Make request with streaming data
-            response = requests.post(
-                f"{self.cfg.url}/api/files",
-                data=encoder,
-                headers={"Content-Type": encoder.content_type},
-                auth=self.auth,
-                verify=False,
-                timeout=520,
-            )
-
+                stream = file
+            async with self._upload_slots:
+                response = await self._request(
+                    "POST",
+                    f"{self.cfg.url}/api/files",
+                    files={
+                        "file": ("file", stream, "application/octet-stream"),
+                        "metadata": (None, metadata.model_dump_json(), "application/json"),
+                    },
+                    timeout=httpx.Timeout(520.0, connect=self.connect_timeout, pool=self.connect_timeout),
+                )
             if response.status_code != 200:
                 return ErrorResponse(detail=f"Error uploading file to Nemesis: {response.status_code}")
-
             return FileWithMetadataResponse(**response.json())
-
-        except (FileNotFoundError, PermissionError) as e:
-            logger.error(f"File access error: {e}")
-            return ErrorResponse(detail=str(e))
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Request error uploading file to Nemesis: {e}")
-            return ErrorResponse(detail=f"Upload failed: {str(e)}")
-        except Exception as e:
-            logger.error(f"Unexpected error uploading file to Nemesis: {e}")
-            return ErrorResponse(detail=f"Unexpected error: {str(e)}")
+        except asyncio.CancelledError:
+            raise
+        except (FileNotFoundError, PermissionError) as exc:
+            logger.error("File access error uploading to Nemesis: %s", exc)
+            return ErrorResponse(detail=str(exc))
+        except Exception as exc:
+            logger.error("Upload request to Nemesis failed: %s", type(exc).__name__)
+            return ErrorResponse(detail=f"Upload failed: {exc}")
         finally:
-            # Only close the file stream if we opened it ourselves
-            if need_cleanup and file_stream is not None:
-                file_stream.close()
+            if owned and stream is not None:
+                stream.close()
 
-    def get_health(self, timeout: float = 10, verify_ssl: bool = False) -> HealthResponse | ErrorResponse:
-        """Get API health status.
-
-        Returns:
-            HealthResponse if successful, ErrorResponse on HTTP, network, or invalid-response errors.
-        """
+    async def get_health(self, timeout: float = 10) -> HealthResponse | ErrorResponse:
+        self._ensure_open()
         try:
-            response = requests.get(
-                f"{self.cfg.url}/api/system/health", auth=self.auth, verify=verify_ssl, timeout=timeout
-            )
-
+            response = await self._request("GET", f"{self.cfg.url}/api/system/health", timeout=httpx.Timeout(timeout))
             if response.status_code != 200:
                 return ErrorResponse(detail=f"Error getting health status: {response.status_code}")
-
             return HealthResponse(**response.json())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("Health request to Nemesis failed: %s", type(exc).__name__)
+            return ErrorResponse(detail=f"Error getting health status: {exc}")
 
-        except Exception as e:
-            logger.error(f"Error getting health status: {e}")
-            return ErrorResponse(detail=f"Error getting health status: {e}")
-
-    def get_api_info(self) -> APIInfo | ErrorResponse | None:
-        """Get API information.
-
-        Returns:
-            APIInfo if successful, ErrorResponse on error, None on exception
-        """
+    async def get_api_info(self) -> APIInfo | ErrorResponse:
+        self._ensure_open()
         try:
-            response = requests.get(f"{self.cfg.url}/api/", auth=self.auth, verify=False)
+            response = await self._request("GET", f"{self.cfg.url}/api/")
+            return (
+                APIInfo(**response.json())
+                if response.status_code == 200
+                else ErrorResponse(detail=f"Error getting API info: {response.status_code}")
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            return ErrorResponse(detail=f"Error getting API info: {exc}")
 
-            if response.status_code != 200:
-                return ErrorResponse(detail=f"Error getting API info: {response.status_code}")
-
-            return APIInfo(**response.json())
-
-        except Exception as e:
-            logger.error(f"Error getting API info: {e}")
-            return None
-
-    def reload_yara_rules(self) -> YaraReloadResponse | ErrorResponse | None:
-        """Reload Yara rules.
-
-        Returns:
-            YaraReloadResponse if successful, ErrorResponse on error, None on exception
-        """
+    async def reload_yara_rules(self) -> YaraReloadResponse | ErrorResponse:
+        self._ensure_open()
         try:
-            response = requests.post(f"{self.cfg.url}/api/yara/reload", auth=self.auth, verify=False)
-
-            if response.status_code != 200:
-                return ErrorResponse(detail=f"Error reloading Yara rules: {response.status_code}")
-
-            return YaraReloadResponse(**response.json())
-
-        except Exception as e:
-            logger.error(f"Error reloading Yara rules: {e}")
-            return None
+            response = await self._request("POST", f"{self.cfg.url}/api/yara/reload")
+            return (
+                YaraReloadResponse(**response.json())
+                if response.status_code == 200
+                else ErrorResponse(detail=f"Error reloading Yara rules: {response.status_code}")
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            return ErrorResponse(detail=f"Error reloading Yara rules: {exc}")

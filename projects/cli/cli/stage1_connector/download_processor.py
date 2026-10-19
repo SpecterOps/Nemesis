@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import plyvel
-from cli.nemesis_client import NemesisClient
+from cli.nemesis_client import NemesisClient, PreviewUploadResult
 from cli.stage1_connector.outflankc2_client import Download, Implant, OutflankC2Client
 from common.models2.api import FileMetadata, FileWithMetadataResponse
 
@@ -98,8 +98,10 @@ class OutflankDownloadProcessor:
                 "download_info": f"{download.uid} - {download.implant_uid}",
                 "success": success,
                 "file_path": str(download.uid),
-                "object_id": str(response.object_id) if response else None,
-                "submission_id": str(response.submission_id) if response else None,
+                "object_id": str(response.object_id) if isinstance(response, FileWithMetadataResponse) else None,
+                "submission_id": str(response.submission_id)
+                if isinstance(response, FileWithMetadataResponse)
+                else None,
             }
         ).encode()
         self.db.put(key, value)
@@ -118,9 +120,9 @@ class OutflankDownloadProcessor:
             if not os.access(file_path, os.R_OK):
                 raise PermissionError(f"No read permission for {file_path}")
 
-            response = self.client.post_file(str(file_path), metadata)
+            response = await self.client.post_file(str(file_path), metadata)
 
-            if isinstance(response, FileWithMetadataResponse):
+            if isinstance(response, (FileWithMetadataResponse, PreviewUploadResult)):
                 return True, None, response
             elif response is None:
                 return False, "Upload failed: No response from server", None
@@ -177,10 +179,13 @@ class OutflankDownloadProcessor:
             )
 
             if success and response:
-                logger.info(
-                    f"Successfully uploaded {downloaded_file_info.file_path} - "
-                    f"Object ID: {response.object_id}, Submission ID: {response.submission_id}"
-                )
+                if isinstance(response, PreviewUploadResult):
+                    logger.info("Dry run preview complete for %s", downloaded_file_info.file_path)
+                else:
+                    logger.info(
+                        f"Successfully uploaded {downloaded_file_info.file_path} - "
+                        f"Object ID: {response.object_id}, Submission ID: {response.submission_id}"
+                    )
                 self.mark_processed(download, success=True, response=response)
             else:
                 logger.error(f"Failed to upload {downloaded_file_info.file_path}: {error}")

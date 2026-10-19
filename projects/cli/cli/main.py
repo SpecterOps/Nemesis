@@ -36,6 +36,10 @@ def connector_options(tool_name: str):
         )(f)
 
         f = click.option(
+            "--dry-run", is_flag=True, default=False, help="Download and preview files without contacting Nemesis"
+        )(f)
+
+        f = click.option(
             "--debug",
             is_flag=True,
             help="Enable debug logging",
@@ -65,7 +69,7 @@ def cli():
 
 @cli.command()
 @connector_options("outflank")
-def connect_outflank(config: str, debug: bool, showconfig: bool):
+def connect_outflank(config: str, debug: bool, showconfig: bool, dry_run: bool):
     """Ingest Outflank C2 data into Nemesis"""
 
     if showconfig:
@@ -80,7 +84,7 @@ def connect_outflank(config: str, debug: bool, showconfig: bool):
 
         logger.info("Starting Outflank connector using the config file: %s", abs_path)
         cfg = load_config(config)
-        asyncio.run(run_outflank_connector(cfg, logger))
+        asyncio.run(run_outflank_connector(cfg, logger, dry_run=dry_run))
     except Exception as e:
         logger.exception("Outflank connector failed: %s", e)
         sys.exit(1)
@@ -88,7 +92,7 @@ def connect_outflank(config: str, debug: bool, showconfig: bool):
 
 @cli.command()
 @connector_options("mythic")
-def connect_mythic(config: str, debug: bool, showconfig: bool) -> None:
+def connect_mythic(config: str, debug: bool, showconfig: bool, dry_run: bool) -> None:
     """Mythic Sync - Synchronize data between Mythic and Nemesis."""
 
     if showconfig:
@@ -97,7 +101,7 @@ def connect_mythic(config: str, debug: bool, showconfig: bool) -> None:
         sys.exit(0)
 
     try:
-        asyncio.run(start(config, debug))
+        asyncio.run(start(config, debug, dry_run=dry_run))
     except KeyboardInterrupt:
         click.echo("Interrupted by user, shutting down...")
     except Exception as e:
@@ -107,7 +111,7 @@ def connect_mythic(config: str, debug: bool, showconfig: bool) -> None:
 
 @cli.command()
 @connector_options("cobaltstrike")
-def connect_cobaltstrike(config: str, debug: bool, showconfig: bool):
+def connect_cobaltstrike(config: str, debug: bool, showconfig: bool, dry_run: bool):
     """Ingest Cobalt Strike data into Nemesis"""
 
     if showconfig:
@@ -122,7 +126,7 @@ def connect_cobaltstrike(config: str, debug: bool, showconfig: bool):
 
         logger.info("Starting Cobalt Strike connector using the config file: %s", abs_path)
         cfg = load_config(config)
-        asyncio.run(run_cobaltstrike_connector(cfg, logger))
+        asyncio.run(run_cobaltstrike_connector(cfg, logger, dry_run=dry_run))
     except Exception as e:
         logger.exception("Cobalt Strike connector failed: %s", e)
         sys.exit(1)

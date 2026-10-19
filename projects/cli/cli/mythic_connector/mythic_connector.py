@@ -6,7 +6,7 @@ import urllib3
 from cli.mythic_connector.config import get_settings
 
 
-async def start(config_path: str, debug: bool) -> None:
+async def start(config_path: str, debug: bool, dry_run: bool = False) -> None:
     cfg = get_settings(config_path)
 
     logging.basicConfig(format="%(levelname)s %(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -26,7 +26,7 @@ async def start(config_path: str, debug: bool) -> None:
         from cli.mythic_connector.sync import SyncService
 
         service = SyncService(cfg)
-        await service.run()
+        await service.run(dry_run=dry_run)
     except Exception as e:
         logger.exception(f"Fatal error: {e}")
         raise click.Abort() from e

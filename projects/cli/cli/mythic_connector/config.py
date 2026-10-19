@@ -150,7 +150,7 @@ def get_settings(config_file: str) -> Settings:
         envvar_prefix="MYTHIC_SYNC",
         settings_files=[config_file],
         environments=False,
-        load_dotenv=True,
+        load_dotenv=False,
         validators=VALIDATORS,
     )
     dynaconf.validators.validate()

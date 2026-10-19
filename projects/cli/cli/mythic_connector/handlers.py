@@ -1,22 +1,49 @@
+import asyncio
 import base64
+import json
 import os
 import tempfile
+import time
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 
+import aiohttp
 import urllib3
 from cli.mythic_connector.config import Settings
-from cli.mythic_connector.db import Database
+from cli.mythic_connector.db import Database, DatabaseError
 from cli.mythic_connector.logger import get_logger
 
 # from cli.mythic_connector.nemesis import NemesisClient
-from cli.nemesis_client import NemesisClient
+from cli.nemesis_client import NemesisClient, PreviewUploadResult
 from common.models2.api import FileMetadata, FileWithMetadataResponse
 from mythic import mythic, mythic_classes
 
 logger = get_logger(__name__)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+DISCOVERY_POLL_INTERVAL_SEC = 5
+PENDING_BATCH_SIZE = 100
+RETRY_DELAYS_SEC = (5, 10, 20, 40, 80, 160, 300)
+
+
+class PermanentMythicError(RuntimeError):
+    """Mythic rejected the configured authentication or request permanently."""
+
+
+class FileUnavailableError(FileNotFoundError):
+    """A previously discovered Mythic file UUID is no longer downloadable."""
+
+
+def _canonical_mythic_url(value: str) -> str:
+    parsed = urlparse(value)
+    scheme = parsed.scheme.lower()
+    host = (parsed.hostname or "").lower()
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    port = parsed.port or (443 if scheme == "https" else 80)
+    return f"{scheme}://{host}:{port}"
 
 
 class FileHandler:
@@ -43,6 +70,8 @@ class FileHandler:
         self.cfg = config
         self._successful_files_count = 0
         self._total_files_count = 0
+        self.operation_id = str(getattr(mythic, "current_operation_id", ""))
+        self.state_prefix = f"mythic:v2:{_canonical_mythic_url(self.cfg.mythic.url)}:{self.operation_id}:"
 
     def _convert_timestamp(self, timestamp: str, days_to_add: int = 0) -> str:
         """Convert timestamp to a standard format.
@@ -116,11 +145,114 @@ class FileHandler:
 
     def _is_file_processed(self, agent_file_id: str) -> bool:
         cache_key = f"filemeta{agent_file_id}"
-        return self.db.get(cache_key) is None
+        return self.db.get_strict(cache_key) is not None
 
     def _mark_processed(self, agent_file_id: str) -> None:
         cache_key = f"filemeta{agent_file_id}"
-        self.db.mset({cache_key: 1})
+        pending_key = self.state_prefix + "pending:" + agent_file_id
+        self.db.write_batch({cache_key: "1"}, [pending_key])
+
+    def _state_value(self, key: str) -> dict[str, Any] | None:
+        raw = self.db.get_strict(key)
+        return json.loads(raw) if raw else None
+
+    def _enqueue_discovered(self, records: list[dict[str, Any]], cursor: int) -> None:
+        for record in records:
+            if type(record.get("id")) is not int:
+                raise ValueError("Mythic discovery record is missing an integer ID")
+            if not record.get("deleted") and (
+                not isinstance(record.get("agent_file_id"), str) or not record["agent_file_id"].strip()
+            ):
+                raise ValueError("Mythic discovery record is missing its agent file UUID")
+        puts: dict[str, str] = {self.state_prefix + "cursor": str(cursor)}
+        for record in records:
+            uuid = record.get("agent_file_id")
+            if not uuid or record.get("deleted"):
+                continue
+            if self.db.get_strict(f"filemeta{uuid}") is not None:
+                continue
+            pending_key = self.state_prefix + "pending:" + str(uuid)
+            if self.db.get_strict(pending_key) is None:
+                puts[pending_key] = json.dumps({"id": record.get("id"), "uuid": uuid, "attempt": 0, "retry_at": 0})
+        self.db.write_batch(puts)
+
+    async def _refresh_pending(self, pending: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not pending:
+            return []
+        ids = [entry["id"] for entry in pending if entry.get("id") is not None]
+        query = """query NemesisMythicPendingFiles($ids:[Int!]!) {
+          filemeta(where:{id:{_in:$ids}}) { id agent_file_id deleted complete filename_text full_remote_path_text host timestamp }
+        }"""
+        result = await mythic.execute_custom_query(mythic=self.mythic, query=query, variables={"ids": ids})
+        return result.get("filemeta", [])
+
+    def _pending_entries(self) -> list[tuple[str, dict[str, Any]]]:
+        prefix = (self.state_prefix + "pending:").encode()
+        try:
+            return [(key.decode(), json.loads(value)) for key, value in self.db.db.iterator(prefix=prefix)]
+        except Exception as exc:
+            raise DatabaseError("LevelDB pending-state iteration failed") from exc
+
+    async def process_pending_once(self) -> None:
+        now = time.time()
+        due = [(key, entry) for key, entry in self._pending_entries() if entry.get("retry_at", 0) <= now]
+        for offset in range(0, len(due), PENDING_BATCH_SIZE):
+            batch = due[offset : offset + PENDING_BATCH_SIZE]
+            metadata = await self._refresh_pending([entry for _, entry in batch])
+            by_uuid = {item.get("agent_file_id"): item for item in metadata}
+            for key, entry in batch:
+                item = by_uuid.get(entry["uuid"])
+                if item is None:
+                    continue
+                if item.get("deleted"):
+                    self.db.write_batch({}, [key])
+                    continue
+                if not item.get("complete"):
+                    continue
+                await self.handle_file(item)
+                if self.db.get_strict(key) is None:
+                    continue
+                if self.db.get_strict(f"filemeta{entry['uuid']}") is None:
+                    attempt = int(entry.get("attempt", 0)) + 1
+                    delay = RETRY_DELAYS_SEC[min(attempt - 1, len(RETRY_DELAYS_SEC) - 1)]
+                    entry.update(attempt=attempt, retry_at=time.time() + delay)
+                    self.db.write_batch({key: json.dumps(entry)})
+
+    async def _discovery_stream(self) -> None:
+        raw_cursor = self.db.get_strict(self.state_prefix + "cursor")
+        cursor = int(raw_cursor) if raw_cursor else 0
+        subscription = """subscription NemesisFileSubscription {
+          filemeta_stream(cursor:{initial_value:{id:CURSOR}},batch_size:100,
+            where:{is_download_from_agent:{_eq:true},deleted:{_eq:false}}) {
+            id agent_file_id deleted complete filename_text full_remote_path_text host timestamp
+          }
+        }""".replace("CURSOR", str(cursor))
+        async for data in mythic.subscribe_custom_query(mythic=self.mythic, query=subscription, timeout=-1):
+            records = data.get("filemeta_stream", [])
+            if records:
+                newest = max(int(row["id"]) for row in records if row.get("id") is not None)
+                self._enqueue_discovered(records, newest)
+
+    async def subscribe(self) -> None:
+        """Maintain Mythic discovery and retryable pending-file processing."""
+        worker = asyncio.create_task(self._pending_worker())
+        discovery = asyncio.create_task(self._discovery_stream())
+        try:
+            done, _ = await asyncio.wait({worker, discovery}, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                exception = task.exception()
+                if exception:
+                    raise exception
+        finally:
+            for task in (worker, discovery):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(worker, discovery, return_exceptions=True)
+
+    async def _pending_worker(self) -> None:
+        while True:
+            await self.process_pending_once()
+            await asyncio.sleep(DISCOVERY_POLL_INTERVAL_SEC)
 
     async def download_file(
         self, mythic_file_id: str, download_callback: Callable[[str], Coroutine[Any, Any, Any]]
@@ -128,8 +260,34 @@ class FileHandler:
         fd, path = tempfile.mkstemp()
         try:
             with os.fdopen(fd, "wb") as temp_file:
-                async for chunk in mythic.download_file_chunked(mythic=self.mythic, file_uuid=mythic_file_id):
-                    temp_file.write(chunk)
+                base = f"{self.mythic.http}{self.mythic.server_ip}:{self.mythic.server_port}"
+                timeout = aiohttp.ClientTimeout(total=self.cfg.networking.timeout_sec)
+                headers = {}
+                if getattr(self.mythic, "apitoken", None):
+                    headers["apitoken"] = self.mythic.apitoken
+                elif getattr(self.mythic, "access_token", None):
+                    headers["Authorization"] = f"Bearer {self.mythic.access_token}"
+                async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                    async with session.get(
+                        f"{base}/direct/download/{mythic_file_id}",
+                        ssl=self.cfg.networking.validate_https_certs
+                        if self.cfg.mythic.url.startswith("https:")
+                        else False,
+                        allow_redirects=False,
+                    ) as response:
+                        if response.status in (404, 410):
+                            raise FileUnavailableError(f"Mythic file no longer exists ({response.status})")
+                        if response.status >= 500:
+                            raise aiohttp.ClientResponseError(
+                                response.request_info,
+                                response.history,
+                                status=response.status,
+                                message="Mythic download server error",
+                            )
+                        if response.status != 200:
+                            raise PermanentMythicError(f"Mythic download rejected ({response.status})")
+                        async for chunk in response.content.iter_chunked(512_000):
+                            temp_file.write(chunk)
                 temp_file.flush()
 
             await download_callback(path)
@@ -158,7 +316,7 @@ class FileHandler:
 
             logger.debug(f"Processing file. ID: {file_id}. Name: {file_name}. Agent ID: {agent_file_id}")
 
-            if not self._is_file_processed(agent_file_id):
+            if self._is_file_processed(agent_file_id):
                 logger.debug(f"File {agent_file_id} already processed, skipping")
                 return
 
@@ -188,116 +346,43 @@ class FileHandler:
                     path=str(path),
                 )
 
-                response = self.nemesis.post_file(file_path, metadata)
+                response = await self.nemesis.post_file(file_path, metadata)
 
-                if isinstance(response, FileWithMetadataResponse):
+                if isinstance(response, (FileWithMetadataResponse, PreviewUploadResult)):
                     self._mark_processed(agent_file_id)
                     self._successful_files_count += 1
-                    logger.info(
-                        f"Successfully processed file {agent_file_id} (Nemesis ID: {response.object_id}) - {self._successful_files_count}/{self._total_files_count} files processed"
-                    )
+                    if isinstance(response, PreviewUploadResult):
+                        logger.info(
+                            "Dry run previewed Mythic file %s: %d bytes sha256=%s",
+                            agent_file_id,
+                            response.size_bytes,
+                            response.sha256,
+                        )
+                    else:
+                        logger.info(
+                            f"Successfully processed file {agent_file_id} (Nemesis ID: {response.object_id}) - {self._successful_files_count}/{self._total_files_count} files processed"
+                        )
 
                 elif response is None:
                     logger.warning("Upload failed: No response from server")
                 else:
                     logger.error(f"Upload failed: {response.detail}")
 
-                # Update the last processed file ID in the DB
-                last_file_id = self.db.get("last_file_id") or 0
-                if file_id > last_file_id:
-                    self.db.mset({"last_file_id": file_id})
-
             await self.download_file(agent_file_id, upload_to_nemesis)
 
+        except asyncio.CancelledError:
+            raise
+        except (DatabaseError, PermanentMythicError):
+            raise
+        except FileUnavailableError:
+            refreshed = await self._refresh_pending([{"id": file_id, "uuid": agent_file_id}])
+            if any(row.get("agent_file_id") == agent_file_id and row.get("deleted") for row in refreshed):
+                self.db.write_batch({}, [self.state_prefix + "pending:" + agent_file_id])
+                logger.info("Discarded deleted Mythic file %s after download returned missing", agent_file_id)
+            else:
+                logger.warning("Mythic file %s was not available; metadata will be retried", agent_file_id)
         except Exception as e:
             logger.exception(f"Error processing file {file_meta.get('id')}: {str(e)}")
-
-    async def subscribe(self) -> None:
-        """Subscribe to file downloads from Mythic.
-
-        This method establishes a real-time subscription to Mythic's file
-        download stream and processes new files as they become available.
-        It maintains the last processed file ID to ensure no files are
-        missed during service restarts.
-
-        The subscription query filters for:
-        - Files downloaded from agents (is_download_from_agent)
-        - Completed downloads (complete)
-        - Non-screenshot files (is_screenshot)
-        """
-
-        # Define the GraphQL subscription
-        subscription = """
-        subscription NemesisFileSubscription {
-            filemeta_stream(
-                cursor: {initial_value: {id: %s}},
-                batch_size: 5,
-                where: {
-                    is_download_from_agent: {_eq: true},
-                    complete: {_eq: true},
-                }
-            ) {
-                filename_text
-                full_remote_path_text
-                id
-                host
-                agent_file_id
-                timestamp
-                task {
-                    callback {
-                        agent_callback_id
-                        operation {
-                            name
-                        }
-                    }
-                    id
-                }
-                tags {
-                    tagtype {
-                        name
-                    }
-                }
-                chunk_size
-                chunks_received
-            }
-        }
-        """
-
-        try:
-            while True:
-                # Get the last processed file ID or start from 0
-                try:
-                    start_id = self.db.get("last_file_id")
-                    if start_id is None:
-                        start_id = 0
-                        self.db.mset({"last_file_id": 0})
-
-                except Exception:
-                    logger.warning("Failed to get last_file_id, starting from 0")
-                    self.db.mset({"last_file_id": 0})
-                    start_id = 0
-
-                logger.info(f"Starting subscription for file data, start_id: {start_id}")
-
-                async for data in mythic.subscribe_custom_query(
-                    mythic=self.mythic,
-                    query=(subscription % start_id),
-                    timeout=-1,
-                ):
-                    # Process each file in the batch
-                    for file_meta in data.get("filemeta_stream", []):
-                        try:
-                            await self.handle_file(file_meta)
-                        except Exception as e:
-                            logger.error(f"Failed to process file {file_meta.get('id')}: {str(e)}")
-                            continue
-
-                logger.info("Subscription ended. Restarting...")
-
-        except Exception as e:
-            logger.error(f"Subscription error: {str(e)}")
-            # The outer loop in SyncService will handle reconnection
-            raise
 
 
 # class FileBrowserHandler:
