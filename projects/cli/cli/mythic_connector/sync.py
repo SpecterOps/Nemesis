@@ -11,6 +11,7 @@ from cli.mythic_connector.db import Database
 from cli.mythic_connector.handlers import FileHandler
 from cli.mythic_connector.logger import get_logger
 from cli.nemesis_client import NemesisClient
+from cli.preflight import check_nemesis_availability
 from mythic import mythic
 
 logger = get_logger(__name__)
@@ -97,9 +98,7 @@ class SyncService:
             )
             return False
 
-    def initialize_handlers(self) -> None:
-        """Initialize the Nemesis client and data handlers."""
-
+    def _create_nemesis_client(self) -> NemesisClient:
         cfg = NemesisConfig(
             url=StrictHttpUrl(urlunparse(self.cfg.nemesis.url)),
             credential=PasswordCredential(
@@ -107,13 +106,18 @@ class SyncService:
                 password=self.cfg.nemesis.credential.password,
             ),
         )
+        return NemesisClient(cfg)
+
+    def initialize_handlers(self) -> None:
+        """Initialize the Nemesis client and data handlers."""
 
         if self.mythic is None:
             raise RuntimeError("Mythic client not initialized")
         if self.db is None:
             raise RuntimeError("Database not initialized")
 
-        self.nemesis = NemesisClient(cfg)
+        if self.nemesis is None:
+            self.nemesis = self._create_nemesis_client()
         self.file_handler = FileHandler(self.mythic, self.nemesis, self.db, self.cfg)
         # self.browser_handler = FileBrowserHandler(self.mythic, self.nemesis, self.db, self.cfg)
 
@@ -123,6 +127,14 @@ class SyncService:
         This method manages the lifecycle of the service, including initialization,
         maintaining connections, and handling errors.
         """
+        self.nemesis = self._create_nemesis_client()
+        await check_nemesis_availability(
+            self.nemesis,
+            timeout=self.cfg.networking.timeout_sec,
+            verify_ssl=self.cfg.networking.validate_https_certs,
+            logger=logger,
+        )
+
         try:
             # Initialize components
             if not await self.initialize_db():

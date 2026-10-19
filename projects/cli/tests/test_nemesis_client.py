@@ -4,8 +4,10 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from cli.config import NemesisConfig, PasswordCredential, StrictHttpUrl
 from cli.nemesis_client import NemesisClient
+from common.models2.api import ErrorResponse
 
 
 def _make_config() -> NemesisConfig:
@@ -147,9 +149,21 @@ class TestGetHealth:
         mock_response.status_code = 200
         mock_response.json.return_value = {"status": "healthy"}
 
-        with patch("cli.nemesis_client.requests.get", return_value=mock_response):
+        with patch("cli.nemesis_client.requests.get", return_value=mock_response) as get:
             result = client.get_health()
-        assert result is not None
+        assert result.status == "healthy"
+        get.assert_called_once_with(
+            "https://nemesis.local:8080/api/system/health", auth=client.auth, verify=False, timeout=10
+        )
+
+    def test_timeout_and_certificate_settings(self):
+        client = NemesisClient(_make_config())
+        with patch("cli.nemesis_client.requests.get") as get:
+            get.return_value.status_code = 200
+            get.return_value.json.return_value = {"status": "healthy"}
+            client.get_health(timeout=5, verify_ssl=True)
+        assert get.call_args.kwargs["timeout"] == 5
+        assert get.call_args.kwargs["verify"] is True
 
     def test_server_error(self):
         client = NemesisClient(_make_config())
@@ -160,12 +174,25 @@ class TestGetHealth:
             result = client.get_health()
         assert hasattr(result, "detail")
 
-    def test_connection_error_returns_none(self):
+    @pytest.mark.parametrize(
+        "error",
+        [requests.ConnectionError("Connection refused"), requests.Timeout("Timed out"), ValueError("Invalid JSON")],
+    )
+    def test_request_error_returns_details(self, error):
         client = NemesisClient(_make_config())
 
-        with patch("cli.nemesis_client.requests.get", side_effect=Exception("Connection refused")):
+        with patch("cli.nemesis_client.requests.get", side_effect=error):
             result = client.get_health()
-        assert result is None
+        assert isinstance(result, ErrorResponse)
+        assert str(error) in result.detail
+
+    def test_invalid_health_response(self):
+        client = NemesisClient(_make_config())
+        with patch("cli.nemesis_client.requests.get") as get:
+            get.return_value.status_code = 200
+            get.return_value.json.return_value = {"message": "unrelated service"}
+            result = client.get_health()
+        assert isinstance(result, ErrorResponse)
 
 
 class TestGetApiInfo:

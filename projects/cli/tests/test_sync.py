@@ -15,6 +15,7 @@ from cli.mythic_connector.config import (
     get_settings,
 )
 from cli.mythic_connector.sync import SyncService
+from common.models2.api import ErrorResponse, HealthResponse
 
 
 def _make_settings(
@@ -200,6 +201,65 @@ class TestSyncServiceInitializeMythic:
 
 
 class TestSyncServiceRun:
+    @pytest.fixture(autouse=True)
+    def nemesis_client(self):
+        with patch("cli.mythic_connector.sync.NemesisClient") as client:
+            client.return_value.get_health.return_value = HealthResponse(status="healthy")
+            yield client
+
+    @pytest.mark.asyncio
+    async def test_preflight_before_database_and_mythic(self, nemesis_client):
+        svc = SyncService(_make_settings())
+        events = []
+
+        def health(**kwargs):
+            events.append("preflight")
+            return HealthResponse(status="healthy")
+
+        async def initialize_db():
+            events.append("database")
+            svc.db = MagicMock()
+            return True
+
+        async def initialize_mythic():
+            events.append("mythic")
+            svc.mythic = MagicMock()
+            return True
+
+        nemesis_client.return_value.get_health.side_effect = health
+        svc.initialize_db = AsyncMock(side_effect=initialize_db)
+        svc.initialize_mythic = AsyncMock(side_effect=initialize_mythic)
+        with patch("cli.mythic_connector.sync.FileHandler") as handler, patch("asyncio.sleep", new_callable=AsyncMock):
+            handler.return_value.subscribe = AsyncMock()
+            await svc.run()
+            handler.return_value.subscribe.assert_awaited_once()
+        assert events == ["preflight", "database", "mythic"]
+        nemesis_client.return_value.get_health.assert_called_once_with(timeout=30, verify_ssl=False)
+        nemesis_client.assert_called_once()
+        assert str(nemesis_client.call_args.args[0].url) == "https://nemesis.local:8080"
+        assert nemesis_client.call_args.args[0].credential.username == "nemuser"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "health",
+        [
+            ErrorResponse(detail="Connection refused"),
+            ErrorResponse(detail="HTTP 401"),
+            HealthResponse(status="unhealthy"),
+        ],
+    )
+    async def test_preflight_failure_stops_startup(self, nemesis_client, health):
+        svc = SyncService(_make_settings())
+        svc.initialize_db = AsyncMock()
+        svc.initialize_mythic = AsyncMock()
+        svc.initialize_handlers = MagicMock()
+        nemesis_client.return_value.get_health.return_value = health
+        with pytest.raises(RuntimeError, match="Nemesis preflight check failed"):
+            await svc.run()
+        svc.initialize_db.assert_not_awaited()
+        svc.initialize_mythic.assert_not_awaited()
+        svc.initialize_handlers.assert_not_called()
+
     @pytest.mark.asyncio
     async def test_run_fails_if_file_handler_none(self):
         """The run method should raise if file_handler is None after init (new guard)."""

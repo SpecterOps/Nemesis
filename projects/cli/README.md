@@ -32,6 +32,17 @@ Monitor a directory for new files and automatically submit them to Nemesis.
 - `--only-monitor`: Skip existing files, only watch for new ones
 - `-w, --workers`: Number of threads for initial submission
 
+### Connector startup checks
+
+All C2 connectors (Mythic, Outflank, and Cobalt Strike) check Nemesis at
+`/api/system/health` before connecting to their C2 server. The check uses the
+configured Nemesis credentials and certificate validation setting. Its timeout is
+`conn_timeout_sec` for Cobalt Strike and Outflank, and `networking.timeout_sec`
+for Mythic.
+
+If Nemesis is unreachable, rejects authentication, returns an invalid response,
+or reports an unhealthy status, the connector logs the failure and exits with status 1.
+
 ### connect-mythic
 Synchronize data between Mythic C2 framework and Nemesis.
 
@@ -48,6 +59,9 @@ Ingest data from Outflank Stage1 C2 into Nemesis.
 
 ### connect-cobaltstrike
 Ingest data from Cobalt Strike into Nemesis.
+
+A Cobalt Strike startup or monitor failure exits with status 1 and cancels any
+other running monitors.
 
 **Configuration:**
 - Uses `settings_cobaltstrike.yaml` configuration file

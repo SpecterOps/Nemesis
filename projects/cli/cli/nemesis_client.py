@@ -132,14 +132,16 @@ class NemesisClient:
             if need_cleanup and file_stream is not None:
                 file_stream.close()
 
-    def get_health(self) -> HealthResponse | ErrorResponse | None:
+    def get_health(self, timeout: float = 10, verify_ssl: bool = False) -> HealthResponse | ErrorResponse:
         """Get API health status.
 
         Returns:
-            HealthResponse if successful, ErrorResponse on error, None on exception
+            HealthResponse if successful, ErrorResponse on HTTP, network, or invalid-response errors.
         """
         try:
-            response = requests.get(f"{self.cfg.url}/api/healthz", auth=self.auth, verify=False)
+            response = requests.get(
+                f"{self.cfg.url}/api/system/health", auth=self.auth, verify=verify_ssl, timeout=timeout
+            )
 
             if response.status_code != 200:
                 return ErrorResponse(detail=f"Error getting health status: {response.status_code}")
@@ -148,7 +150,7 @@ class NemesisClient:
 
         except Exception as e:
             logger.error(f"Error getting health status: {e}")
-            return None
+            return ErrorResponse(detail=f"Error getting health status: {e}")
 
     def get_api_info(self) -> APIInfo | ErrorResponse | None:
         """Get API information.

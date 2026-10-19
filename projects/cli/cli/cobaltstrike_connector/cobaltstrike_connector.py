@@ -10,6 +10,7 @@ from cli.cobaltstrike_connector.download_processor import CobaltStrikeDownloadPr
 from cli.config import CobaltStrikeConfig, Config
 from cli.log import setup_logging
 from cli.nemesis_client import NemesisClient
+from cli.preflight import check_nemesis_availability
 
 setup_logging()
 
@@ -20,31 +21,33 @@ async def run_cobaltstrike_connector(config: Config, logger: logging.Logger):
     if not config.validate_https_certs:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+    tasks = []
     try:
-        tasks = []
-
-        # Add CobaltStrike tasks
-        if config.cobaltstrike:
-            for cobaltstrike_config in config.cobaltstrike:
-                task = setup_cobaltstrike_monitor(cobaltstrike_config, config, logger)
-                tasks.append(task)
-
-        # Add Mythic tasks
-        # if config.mythic:
-        #     tasks.extend(setup_mythic_manager(mythic_config, config, logger) for mythic_config in config.mythic)
-
-        # Add other C2 platform tasks here following the same pattern...
-
-        if tasks:
-            # Run all managers concurrently
-            await asyncio.gather(*tasks, return_exceptions=True)
-        else:
+        if not config.cobaltstrike:
             logger.warning("No C2 platforms configured")
+            return
+
+        await check_nemesis_availability(
+            NemesisClient(config.nemesis),
+            timeout=config.conn_timeout_sec,
+            verify_ssl=config.validate_https_certs,
+            logger=logger,
+        )
+
+        for cobaltstrike_config in config.cobaltstrike:
+            task = asyncio.create_task(setup_cobaltstrike_monitor(cobaltstrike_config, config, logger))
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
 
     except Exception as e:
         logger.error(f"Error running connector: {e}")
         raise
     finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         logger.info("Shutting down")
 
 
@@ -59,8 +62,14 @@ async def setup_cobaltstrike_monitor(cobaltstrike_config: CobaltStrikeConfig, co
         verify_ssl=config.validate_https_certs,
     ) as cobaltstrike_client:
         # Authenticate
-        if not await cobaltstrike_client.authenticate(username, password):
-            raise Exception(f"Authentication failed for {base_url}")
+        try:
+            authenticated = await cobaltstrike_client.authenticate(username, password)
+        except Exception as e:
+            raise RuntimeError(f"Cobalt Strike authentication failed for {base_url}: {e}") from e
+        if not authenticated:
+            raise RuntimeError(
+                f"Cobalt Strike authentication failed for {base_url}: credentials rejected or token missing"
+            )
 
         # Initialize components
         implant_cache = ImplantCache(cobaltstrike_client)
@@ -88,5 +97,5 @@ async def setup_cobaltstrike_monitor(cobaltstrike_config: CobaltStrikeConfig, co
         try:
             await monitor.start()
         except Exception as e:
-            logger.error(f"Monitor failed: {e}")
+            logger.error("Cobalt Strike monitor failed for %s: %s", base_url, e)
             raise

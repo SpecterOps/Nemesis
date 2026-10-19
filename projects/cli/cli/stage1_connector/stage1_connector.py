@@ -6,6 +6,7 @@ import urllib3
 from cli.config import Config, OutflankConfig
 from cli.log import setup_logging
 from cli.nemesis_client import NemesisClient
+from cli.preflight import check_nemesis_availability
 from cli.stage1_connector.cache import ImplantCache
 from cli.stage1_connector.download_monitor import OutflankDownloadMonitor
 from cli.stage1_connector.download_processor import OutflankDownloadProcessor
@@ -20,31 +21,30 @@ async def run_outflank_connector(config: Config, logger: logging.Logger):
     if not config.validate_https_certs:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+    tasks = []
     try:
-        tasks = []
-
-        # Add Outflank tasks
-        if config.outflank:
-            for outflank_config in config.outflank:
-                task = setup_outflank_monitor(outflank_config, config, logger)
-                tasks.append(task)
-
-        # Add Mythic tasks
-        # if config.mythic:
-        #     tasks.extend(setup_mythic_manager(mythic_config, config, logger) for mythic_config in config.mythic)
-
-        # Add other C2 platform tasks here following the same pattern...
-
-        if tasks:
-            # Run all managers concurrently
-            await asyncio.gather(*tasks, return_exceptions=True)
-        else:
+        if not config.outflank:
             logger.warning("No C2 platforms configured")
+            return
+
+        await check_nemesis_availability(
+            NemesisClient(config.nemesis),
+            timeout=config.conn_timeout_sec,
+            verify_ssl=config.validate_https_certs,
+            logger=logger,
+        )
+        for outflank_config in config.outflank:
+            tasks.append(asyncio.create_task(setup_outflank_monitor(outflank_config, config, logger)))
+        await asyncio.gather(*tasks)
 
     except Exception as e:
         logger.error(f"Error running connector: {e}")
         raise
     finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         logger.info("Shutting down")
 
 

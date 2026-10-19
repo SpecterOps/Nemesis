@@ -82,7 +82,7 @@ def connect_outflank(config: str, debug: bool, showconfig: bool):
         cfg = load_config(config)
         asyncio.run(run_outflank_connector(cfg, logger))
     except Exception as e:
-        logger.exception("Unhandled exception in connector", e)
+        logger.exception("Outflank connector failed: %s", e)
         sys.exit(1)
 
 
@@ -124,7 +124,7 @@ def connect_cobaltstrike(config: str, debug: bool, showconfig: bool):
         cfg = load_config(config)
         asyncio.run(run_cobaltstrike_connector(cfg, logger))
     except Exception as e:
-        logger.exception("Unhandled exception in connector", e)
+        logger.exception("Cobalt Strike connector failed: %s", e)
         sys.exit(1)
 
 
