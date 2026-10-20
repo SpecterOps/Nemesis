@@ -1,6 +1,6 @@
 ---
 name: enrichment-module-builder
-description: Build a new Nemesis file enrichment module end-to-end with explicit user approval gates for output mode, library choice, sample files, and integration testing.
+description: "Scaffolds and implements a new Nemesis file enrichment module by analyzing target file formats, selecting parsing libraries, generating YARA detection rules, creating analyzer code with tests, and running E2E integration testing. Use when the user wants to create a new enrichment module, add file type support to Nemesis, or build a file analysis pipeline for security data extraction."
 ---
 
 # Enrichment Module Builder Skill
@@ -92,27 +92,7 @@ Determine what the module should produce as output:
 
 ### Present to User
 
-**Format your recommendation:**
-
-```
-## Module Output Mode for {file_type} Module
-
-Based on the data to be extracted, I recommend:
-
-### Recommended: {Findings Mode | Parsing-Only Mode | Hybrid Mode}
-
-**Rationale:** {why this mode fits the use case}
-
-### What this means:
-- {description of what will be produced}
-- {how data will be stored/displayed}
-- {whether alerts will be generated}
-
-### Alternative consideration:
-{brief note on why other modes might or might not apply}
-
-**Do you approve this output mode, or would you prefer a different approach?**
-```
+Present the recommended output mode with rationale, what it produces (data storage, alerts), and any alternative considerations.
 
 **STOP: Ask the user to approve one of the three output mode options (Findings Mode, Parsing-Only Mode, Hybrid Mode) before proceeding to Step 3. Prefer `request_user_input` when available.**
 
@@ -140,29 +120,7 @@ Search for parsing libraries before implementation:
 
 ### Present to User
 
-**Format your recommendation:**
-
-```
-## Library Recommendation for {file_type} Module
-
-### Recommended: {library_name}
-- **PyPI:** https://pypi.org/project/{library_name}/
-- **GitHub:** {github_url}
-- **Why:** {reasons - API quality, maintenance, features}
-- **Downloads:** {monthly_downloads}
-
-### Alternatives Considered:
-1. {alt_library_1} - {why_not_chosen}
-2. {alt_library_2} - {why_not_chosen}
-
-### Manual Parsing
-If no good library exists, we can implement manual parsing using:
-- struct module for binary formats
-- xml.etree for XML
-- Regular expressions for text patterns
-
-**Do you approve this library choice, or would you prefer an alternative?**
-```
+Present the recommended library (with PyPI/GitHub links, download stats, rationale) and alternatives considered. If no good library exists, note that manual parsing is available via `struct` (binary), `xml.etree` (XML), or regex (text).
 
 **STOP: Present the recommended library and alternatives and get explicit user approval before proceeding to Step 4. Prefer `request_user_input` when available.**
 
@@ -189,26 +147,7 @@ Obtain test files for development and testing:
 
 ### Present to User
 
-**Format your recommendation:**
-
-```
-## Sample File for {file_type} Module
-
-### Source: {source_description}
-- **URL/Location:** {url_or_path}
-- **File:** {filename}
-- **Size:** {size}
-- **Why suitable:** {reasons}
-
-### Alternative sources if needed:
-1. {alt_source_1}
-2. {alt_source_2}
-
-### Synthetic generation (if no public samples):
-{description of how to create test file}
-
-**Do you approve this sample file source, or do you have an alternative?**
-```
+Present the recommended sample file source (URL, filename, size, suitability) with alternatives. If no public samples exist, propose a synthetic file generation method.
 
 **STOP: Present sample file options and get explicit user approval before proceeding to Step 5. Prefer `request_user_input` when available.**
 
@@ -458,26 +397,7 @@ uv run pytest tests/test_{module_name}.py -v
 
 ### Ask User to Confirm Nemesis is Running
 
-Before proceeding, ask the user to confirm their Nemesis instance is ready:
-
-```
-## Integration Testing Ready Check
-
-The module implementation and unit tests are complete. Now we need to run end-to-end integration testing against a live Nemesis instance.
-
-**Please confirm:**
-1. Is Nemesis dev environment running? (Start with: `./tools/nemesis-ctl.sh start dev`)
-2. What is the Nemesis host? (default: `localhost:7443`)
-
-Once confirmed, I will:
-1. Verify the Nemesis instance is healthy
-2. Submit a test file to the running instance
-3. Wait for enrichment processing to complete
-4. Query the database to verify results
-5. Report the E2E test outcome
-
-**Reply with the host (or press enter for localhost:7443) to proceed with integration testing.**
-```
+Ask the user to confirm their Nemesis dev environment is running (`./tools/nemesis-ctl.sh start dev`) and provide the host (default: `localhost:7443`).
 
 **STOP: Confirm Nemesis is running and capture the target host before proceeding with E2E testing. Prefer `request_user_input` when available.**
 
@@ -559,28 +479,7 @@ docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c \
 
 #### 6. Report Results
 
-After executing the above steps, report the E2E test outcome to the user:
-
-```
-## E2E Integration Test Results
-
-### Status: {PASS | FAIL}
-
-### Verification Steps:
-- [ ] Nemesis health check: {PASS/FAIL}
-- [ ] Module loaded in file-enrichment: {PASS/FAIL}
-- [ ] File submission successful: {PASS/FAIL}
-- [ ] Enrichment record created: {PASS/FAIL}
-- [ ] Findings created (if applicable): {PASS/FAIL - count: N}
-- [ ] No errors in logs: {PASS/FAIL}
-
-### Details:
-{Summary of what was found, any errors encountered}
-
-### Object ID: {object_id}
-```
-
-If any step fails, provide troubleshooting guidance and offer to re-run after the user fixes the issue.
+Report E2E test outcome with pass/fail status for each verification step (health check, module loaded, file submitted, enrichment record created, findings created, no log errors), the object ID, and any error details. If any step fails, provide troubleshooting guidance and offer to re-run.
 
 ---
 
@@ -603,51 +502,4 @@ Before considering the module complete, ALL items must be checked:
 
 ## Troubleshooting
 
-### Database Connection Issues
-
-The most common issue is using wrong connection parameters. Use these exact values:
-
-```bash
-# Correct connection command
-docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c "YOUR_QUERY"
-
-# Common mistakes:
-# - Using $(docker compose ps -q postgres) instead of nemesis-postgres-1
-# - Using -d nemesis instead of -d enrichment
-# - Using -U postgres instead of -U nemesis
-```
-
-To list available databases:
-```bash
-docker exec nemesis-postgres-1 psql -U nemesis -l
-```
-
-To check table schemas:
-```bash
-docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c "\d enrichments"
-docker exec nemesis-postgres-1 psql -U nemesis -d enrichment -c "\d findings"
-```
-
-### Module Not Loading
-
-1. Check for syntax errors in analyzer.py
-2. Verify `create_enrichment_module()` function exists
-3. Check container logs for import errors
-
-### Detection Not Working
-
-1. Verify file_enriched fields match expectations
-2. Test YARA rules separately with yara-x
-3. Add debug logging to should_process()
-
-### Parsing Errors
-
-1. Check library compatibility with file format variant
-2. Add defensive error handling
-3. Test with multiple sample files
-
-### Tests Failing
-
-1. Verify test file path is correct
-2. Check FileEnrichedFactory fields match module expectations
-3. Ensure harness is properly registering files
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for database connection issues, module loading failures, detection problems, parsing errors, and test failures.
