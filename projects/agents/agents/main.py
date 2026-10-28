@@ -9,6 +9,7 @@ import asyncpg
 import structlog
 from agents.agent_manager import agent_manager
 from agents.helpers import check_triage_consensus, fetch_finding_details, get_litellm_token
+from agents.litellm_startup import mask_litellm_token
 from agents.model_manager import ModelManager
 from agents.phoenix_cost_sync import sync_pricing_to_phoenix
 from agents.prompt_manager import PromptManager
@@ -59,7 +60,6 @@ async def lifespan(app: FastAPI):
     try:
         # setup the LiteLLM connection/token (if available)
         litellm_token = await get_litellm_token()
-        logger.debug(f"LiteLLM token: {litellm_token}")
 
         # Initialize OpenTelemetry tracer provider first (needed for Phoenix)
         from agents.logger import get_tracer
@@ -71,7 +71,9 @@ async def lifespan(app: FastAPI):
         #   this is so we can pull the custom pricing and sync it back to Phoenix for tracking
         if litellm_token:
             ModelManager.initialize(litellm_token, litellm_model)
-            logger.info("ModelManager initialized", litellm_model=litellm_model, litellm_token=litellm_token)
+            logger.info(
+                "ModelManager initialized", litellm_model=litellm_model, litellm_token=mask_litellm_token(litellm_token)
+            )
 
             # Sync model pricing to Phoenix if we can reach LiteLLM and have Phoenix DB configured
             phoenix_db_url = os.getenv("PHOENIX_SQL_DATABASE_URL")
