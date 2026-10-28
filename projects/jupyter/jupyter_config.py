@@ -2,6 +2,7 @@
 
 import os
 
+from common.log_safety import mask
 from jupyter_server.auth import passwd
 
 # Server configuration
@@ -23,7 +24,7 @@ else:
     import string
     import tempfile
 
-    password_file = os.path.join(tempfile.gettempdir(), 'jupyter_random_password')
+    password_file = os.path.join(tempfile.gettempdir(), "jupyter_random_password")
 
     if os.path.exists(password_file):
         # Read existing password
@@ -32,13 +33,14 @@ else:
     else:
         # Generate new random password and save it
         alphabet = string.ascii_letters + string.digits
-        random_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+        random_password = "".join(secrets.choice(alphabet) for _ in range(12))
 
-        with open(password_file, 'w') as f:
+        with open(password_file, "w") as f:
             f.write(random_password)
 
         print("###########################################")
-        print(f"# JUPYTER_PASSWORD: {random_password}")
+        print(f"# JUPYTER_PASSWORD: {mask(random_password)}")
+        print(f"# Password saved to {password_file}")
         print("###########################################", flush=True)
 
     c.PasswordIdentityProvider.hashed_password = passwd(random_password)

@@ -10,6 +10,7 @@ from typing import Any
 
 import file_enrichment.global_vars as global_vars
 from common.helpers import sanitize_for_jsonb
+from common.log_safety import mask
 from common.logger import get_logger
 from common.models import (
     CloudEvent,
@@ -67,7 +68,7 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
     try:
         header_b64, payload_b64, signature = jwt_token.split(".")
     except Exception:
-        logger.exception(message="Invalid JWT format. Expected three parts separated by dots.", jwt_token=jwt_token)
+        logger.error("Invalid JWT format. Expected three parts separated by dots.", jwt_token=mask(jwt_token))
         return False, {}
 
     # Decode the payload
@@ -80,7 +81,7 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
         payload_json = base64.b64decode(payload_b64).decode("utf-8")
         payload = json.loads(payload_json)
     except Exception:
-        logger.exception(message="Error decoding JWT payload", jwt_token=jwt_token)
+        logger.error("Error decoding JWT payload", jwt_token=mask(jwt_token))
         return True, {}
 
     # Check if token is expired
@@ -94,7 +95,7 @@ def is_jwt_expired(jwt_token: str) -> tuple[bool, dict[str, Any]]:
 
         return current_time > int(payload["exp"]), payload
     except Exception:
-        logger.exception(message="Error processing jwt_token", jwt_token=jwt_token)
+        logger.error("Error processing jwt_token", jwt_token=mask(jwt_token))
         return True, payload
 
 

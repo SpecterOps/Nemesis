@@ -5,6 +5,7 @@ import os
 
 import aiohttp
 import structlog
+from common.log_safety import mask
 from dapr.clients import DaprClient
 
 # Set up logging
@@ -25,11 +26,6 @@ RETRY_DELAY = 5
 
 # Token key for Dapr state store
 TOKEN_KEY = "litellm_token"
-
-
-def mask_litellm_token(token: str) -> str:
-    """Show only the first two characters with a fixed-length mask."""
-    return token[:2] + "*" * 10
 
 
 async def wait_for_litellm() -> bool:
@@ -200,7 +196,7 @@ async def litellm_startup() -> str:
             logger.info("Using existing token from Dapr state store")
             logger.info(f"User: {LLM_EMAIL}")
             logger.info(f"Budget: ${MAX_BUDGET}")
-            logger.info("LiteLLM token available", litellm_token=mask_litellm_token(existing_token))
+            logger.info("LiteLLM token available", litellm_token=mask(existing_token))
             return existing_token
         else:
             logger.warning("Existing token is invalid, creating new one...")
@@ -223,6 +219,6 @@ async def litellm_startup() -> str:
     logger.info("Budget-limited token provisioned successfully!")
     logger.info(f"User: {LLM_EMAIL}")
     logger.info(f"Budget: ${MAX_BUDGET}")
-    logger.info("LiteLLM token available", litellm_token=mask_litellm_token(new_token))
+    logger.info("LiteLLM token available", litellm_token=mask(new_token))
 
     return new_token

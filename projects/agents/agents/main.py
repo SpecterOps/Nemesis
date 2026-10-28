@@ -9,7 +9,6 @@ import asyncpg
 import structlog
 from agents.agent_manager import agent_manager
 from agents.helpers import check_triage_consensus, fetch_finding_details, get_litellm_token
-from agents.litellm_startup import mask_litellm_token
 from agents.model_manager import ModelManager
 from agents.phoenix_cost_sync import sync_pricing_to_phoenix
 from agents.prompt_manager import PromptManager
@@ -19,6 +18,7 @@ from agents.tasks.dotnet_analyzer import analyze_dotnet_assembly
 from agents.tasks.summarizer import summarize_text
 from agents.tasks.translate import translate_text
 from common.db import get_postgres_connection_str
+from common.log_safety import mask
 from dapr.clients import DaprClient
 
 # from dapr.ext.fastapi import DaprApp # needed if we're doing pub/sub
@@ -71,9 +71,7 @@ async def lifespan(app: FastAPI):
         #   this is so we can pull the custom pricing and sync it back to Phoenix for tracking
         if litellm_token:
             ModelManager.initialize(litellm_token, litellm_model)
-            logger.info(
-                "ModelManager initialized", litellm_model=litellm_model, litellm_token=mask_litellm_token(litellm_token)
-            )
+            logger.info("ModelManager initialized", litellm_model=litellm_model, litellm_token=mask(litellm_token))
 
             # Sync model pricing to Phoenix if we can reach LiteLLM and have Phoenix DB configured
             phoenix_db_url = os.getenv("PHOENIX_SQL_DATABASE_URL")

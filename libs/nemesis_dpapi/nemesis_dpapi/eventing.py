@@ -1,13 +1,13 @@
 """Main DPAPI manager class."""
 
 import asyncio
-import json
 from abc import abstractmethod
 from datetime import UTC, datetime
 from logging import getLogger
 from typing import get_args
 from uuid import UUID
 
+from common.log_safety import mask
 from common.queues import DPAPI_EVENTS_TOPIC, DPAPI_PUBSUB
 from dapr.aio.clients import DaprClient
 from dapr.clients.grpc._response import TopicEventResponse, TopicEventResponseStatus
@@ -177,12 +177,12 @@ class DaprDpapiEventPublisher(DpapiEventPublisher):
     async def process_message(self, evnt: SubscriptionMessage) -> TopicEventResponse:
         """Process incoming Dapr pub/sub messages."""
 
-        logger.debug(f"Processing event of type {evnt.type()}.  JSON: {json.dumps(evnt.data())}")
+        logger.debug("Processing DPAPI event: %s", mask(evnt.data()))
 
         # type_name = evnt.type()
         typed_dpapi_event_dict = evnt.data()
         if not isinstance(typed_dpapi_event_dict, dict):
-            logger.error(f"Received event data is not a dictionary: {typed_dpapi_event_dict}")
+            logger.error("Received event data is not a dictionary: %s", mask(typed_dpapi_event_dict))
             return TopicEventResponse(TopicEventResponseStatus.drop)
 
         typed_dpapi_event = TypedDpapiEvent(**typed_dpapi_event_dict)

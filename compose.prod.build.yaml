@@ -61,8 +61,8 @@ services:
   jupyter:
     image: !reset null
     build:
-      context: ./projects/jupyter/
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./projects/jupyter/Dockerfile
 
   alerting:
     image: !reset null

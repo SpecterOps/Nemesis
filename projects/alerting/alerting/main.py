@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import aiohttp
 import apprise
 import common.helpers as helpers
+from common.log_safety import mask
 from common.logger import get_logger
 from common.models import Alert, CloudEvent
 from common.queues import (
@@ -55,7 +56,7 @@ nemesis_url = f"{nemesis_url}/" if not nemesis_url.endswith("/") else nemesis_ur
 with DaprClient() as client:
     secret = client.get_secret(store_name="nemesis-secret-store", key="HASURA_ADMIN_SECRET")
     hasura_admin_secret = secret.secret["HASURA_ADMIN_SECRET"]
-    logger.info(f"[alerting] HASURA_ADMIN_SECRET: {hasura_admin_secret}")
+    logger.info("[alerting] HASURA_ADMIN_SECRET retrieved", secret=mask(hasura_admin_secret))
 
 
 def process_apprise_url(url):
@@ -202,7 +203,7 @@ async def lifespan(app: FastAPI):
                 url, tag = process_apprise_url(apprise_url)
                 if not tag:
                     tag = "default"
-                logger.info(f"[alerting] adding Apprise URL: {url} (tag: {tag})")
+                logger.info("[alerting] adding Apprise URL", url=mask(url), tag=mask(tag))
                 apobj.add(f"{url}?footer=no", tag=tag)
         else:
             # Use test endpoint as default when APPRISE_URLS is not configured
@@ -372,7 +373,7 @@ async def handle_feedback_subscription():
                     # Join all parts with newlines
                     body = "\n".join(message_parts)
 
-                    logger.info(f"Nemesis feedback: {body}")
+                    logger.info("Nemesis feedback", body=mask(body))
 
                     # Create an Alert object and process it through the rate-limited handler
                     alert = Alert(title="Nemesis Feedback", body=body, tag="feedback", service="feedback")
@@ -538,10 +539,9 @@ async def handle_findings_triage_subscription():
 
 @app.post("/test/alert")
 async def test_alert(payload: dict):
-    """Test endpoint that prints alert details to console"""
-    # Log the raw payload
-    print("\n=== RAW PAYLOAD RECEIVED ===")
-    print(payload)
+    """Test endpoint that prints masked alert details to console."""
+    print("\n=== MASKED PAYLOAD RECEIVED ===")
+    print(mask(payload))
     print("=========================\n")
     try:
         # Extract fields from Apprise JSON payload
@@ -562,10 +562,10 @@ async def test_alert(payload: dict):
 
         # Print alert details to console
         print("\n=== TEST ALERT RECEIVED ===")
-        print(f"Title: {title}")
-        print(f"Body: {body}")
+        print(f"Title: {mask(title)}")
+        print(f"Body: {mask(body)}")
         if payload.get("tag"):
-            print(f"Tag: {payload['tag']}")
+            print(f"Tag: {mask(payload['tag'])}")
         print("=========================\n")
 
         return {"status": "success", "message": "Test alert received and printed"}
@@ -666,7 +666,7 @@ async def send_alert_with_retries(alert) -> str:
     should_filter, reason = should_filter_alert(alert)
 
     if should_filter:
-        logger.info(f"Alert filtered: {reason}", alert_title=alert.title)
+        logger.info("Alert filtered", reason=mask(reason), alert_title=mask(alert.title))
         return "filtered"
 
     # Prepare the alert parameters
@@ -688,20 +688,22 @@ async def send_alert_with_retries(alert) -> str:
             try:
                 success = await apobj.async_notify(**kwargs)
                 if success:
-                    logger.info(f"Alert sent successfully: {title}")
+                    logger.info("Alert sent successfully", title=mask(title))
                     return "sent"
 
                 retry_count += 1
-                logger.warning(f"Failed to send alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})", title=title)
+                logger.warning(f"Failed to send alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})", title=mask(title))
                 await asyncio.sleep(RETRY_DELAY_SECONDS)
             except Exception as e:
                 retry_count += 1
                 logger.error(
-                    f"Error sending alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})", error=str(e), title=title
+                    f"Error sending alert, retrying ({retry_count}/{MAX_ALERT_RETRIES})",
+                    error=mask(e),
+                    title=mask(title),
                 )
                 await asyncio.sleep(RETRY_DELAY_SECONDS)
 
-    logger.error(f"Failed to send alert after {MAX_ALERT_RETRIES} retries", title=title)
+    logger.error(f"Failed to send alert after {MAX_ALERT_RETRIES} retries", title=mask(title))
     return "failed"
 
 
@@ -709,7 +711,7 @@ async def send_alert_with_retries(alert) -> str:
 async def handle_alert(event: CloudEvent[Alert]):
     """Handler for `alert` events."""
 
-    logger.debug("Received an alert", title=event.data.title)
+    logger.debug("Received an alert", title=mask(event.data.title))
     try:
         alert = event.data
         if not alert.title:
@@ -719,7 +721,7 @@ async def handle_alert(event: CloudEvent[Alert]):
         result = await send_alert_with_retries(alert)
 
         if result == "failed":
-            logger.error("Alert could not be delivered after maximum retries", alert_title=alert.title)
+            logger.error("Alert could not be delivered after maximum retries", alert_title=mask(alert.title))
 
         return {}
 

@@ -52,7 +52,7 @@ jobs:
             context: .
             dockerfile: ./projects/housekeeping/Dockerfile
           - name: jupyter
-            context: ./projects/jupyter
+            context: .
             dockerfile: ./projects/jupyter/Dockerfile
           - name: web-api
             context: .

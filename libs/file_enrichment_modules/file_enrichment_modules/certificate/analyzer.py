@@ -3,6 +3,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from common.log_safety import mask
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched_async
@@ -88,7 +89,7 @@ class CertificateAnalyzer(EnrichmentModule):
                     decrypt_results["is_encrypted"] = True
                     decrypt_results["unsupported_algorithm"] = True
                     decrypt_results["error_details"] = f"Unsupported encryption algorithm: {str(e)}"
-                    logger.debug(f"Unsupported algorithm detected when checking encryption: {e}")
+                    logger.debug("Unsupported algorithm detected when checking encryption", error=mask(e))
             else:
                 # Try PEM private key without password
                 try:
@@ -103,9 +104,13 @@ class CertificateAnalyzer(EnrichmentModule):
                 except UnsupportedAlgorithm as e:
                     decrypt_results["unsupported_algorithm"] = True
                     decrypt_results["error_details"] = f"Unsupported encryption algorithm: {str(e)}"
-                    logger.debug(f"Unsupported algorithm detected: {e}")
+                    logger.debug("Unsupported algorithm detected", error=mask(e))
         except Exception as e:
-            logger.debug(f"Unexpected exception during initial decryption check: {type(e).__name__}: {e}")
+            logger.debug(
+                "Unexpected exception during initial decryption check",
+                error_type=type(e).__name__,
+                error=mask(e),
+            )
             pass
 
         # Try with passwords if potentially encrypted
@@ -125,12 +130,12 @@ class CertificateAnalyzer(EnrichmentModule):
                                 "error_details": None,
                             }
                         )
-                        logger.debug(f"Successfully decrypted PFX with password: '{password}'")
+                        logger.debug("Successfully decrypted PFX", password=mask(password))
                         return decrypt_results
                     except ValueError as e:
                         # Wrong password or other value error
                         decrypt_results["is_encrypted"] = True
-                        logger.debug(f"ValueError with password '{password}': {e}")
+                        logger.debug("ValueError with PFX password", password=mask(password), error=mask(e))
                         continue
                     except UnsupportedAlgorithm as e:
                         # Unsupported encryption algorithm - mark but continue trying
@@ -138,7 +143,11 @@ class CertificateAnalyzer(EnrichmentModule):
                         decrypt_results["unsupported_algorithm"] = True
                         if not decrypt_results["error_details"]:
                             decrypt_results["error_details"] = f"Unsupported encryption algorithm: {str(e)}"
-                        logger.debug(f"UnsupportedAlgorithm with password '{password}': {e}")
+                        logger.debug(
+                            "UnsupportedAlgorithm with PFX password",
+                            password=mask(password),
+                            error=mask(e),
+                        )
                         continue
 
                 # Try encrypted private key
@@ -152,21 +161,30 @@ class CertificateAnalyzer(EnrichmentModule):
                             "error_details": None,
                         }
                     )
-                    logger.debug(f"Successfully decrypted PEM private key with password: '{password}'")
+                    logger.debug("Successfully decrypted PEM private key", password=mask(password))
                     return decrypt_results
                 except ValueError as e:
                     decrypt_results["is_encrypted"] = True
-                    logger.debug(f"ValueError with PEM key password '{password}': {e}")
+                    logger.debug("ValueError with PEM key password", password=mask(password), error=mask(e))
                     continue
                 except UnsupportedAlgorithm as e:
                     decrypt_results["unsupported_algorithm"] = True
                     if not decrypt_results["error_details"]:
                         decrypt_results["error_details"] = f"Unsupported encryption algorithm: {str(e)}"
-                    logger.debug(f"UnsupportedAlgorithm with PEM key password '{password}': {e}")
+                    logger.debug(
+                        "UnsupportedAlgorithm with PEM key password",
+                        password=mask(password),
+                        error=mask(e),
+                    )
                     continue
 
             except Exception as e:
-                logger.debug(f"Unexpected exception with password '{password}': {type(e).__name__}: {e}")
+                logger.debug(
+                    "Unexpected exception with password",
+                    password=mask(password),
+                    error_type=type(e).__name__,
+                    error=mask(e),
+                )
                 continue
 
         return decrypt_results

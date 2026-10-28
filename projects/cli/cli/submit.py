@@ -13,6 +13,7 @@ import click
 import colorlog
 import requests
 import urllib3
+from common.log_safety import mask
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 from urllib3.util.retry import Retry
@@ -693,13 +694,13 @@ def upload_file(
                 continue
             return False, f"Upload failed: {file_path} - {str(e)}", 0
         except requests.exceptions.HTTPError as e:
-            # Handle HTTP errors (like 500) separately to include response body in debug mode
+            # Handle HTTP errors separately, masking response bodies in debug output.
             error_msg = f"Upload failed: {file_path} - {str(e)}"
             if logger.isEnabledFor(logging.DEBUG) and hasattr(e, "response") and e.response is not None:
                 try:
                     response_body = e.response.text
                     if response_body:
-                        error_msg += f"\nResponse body: {response_body}"
+                        error_msg += f"\nResponse body: {mask(response_body)}"
                 except Exception:
                     pass  # If we can't get the response body, just use the original error
             return False, error_msg, 0

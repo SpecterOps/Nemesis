@@ -13,6 +13,7 @@ from agents.logger import set_agent_metadata
 from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from common.db import get_postgres_connection_str
+from common.log_safety import mask
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -407,7 +408,7 @@ This order ensures you check the most relevant credential sources first before f
                 model_settings=ModelSettings(temperature=request.temperature),
             )
 
-            logger.info("Starting chatbot stream", message=request.message, temperature=request.temperature)
+            logger.info("Starting chatbot stream", message=mask(request.message), temperature=request.temperature)
 
             # When tools are involved, streaming doesn't work as expected
             # Get the complete result and send it
@@ -429,7 +430,7 @@ This order ensures you check the most relevant credential sources first before f
                             # Log tool calls (requests)
                             if hasattr(part, "tool_name"):
                                 tool_info = {"tool": part.tool_name, "args": getattr(part, "args", {})}
-                                logger.info(f"TOOL CALL: {part.tool_name}", args=tool_info["args"])
+                                logger.info(f"TOOL CALL: {part.tool_name}", args=mask(tool_info["args"]))
                                 tool_calls.append(tool_info)
 
                             # Log tool returns (responses)
@@ -437,14 +438,13 @@ This order ensures you check the most relevant credential sources first before f
                                 full_content = str(part.content)
                                 logger.debug(
                                     f"TOOL RESPONSE: {part.tool_name}",
-                                    content_length=len(full_content),
-                                    full_content=full_content,  # Log FULL content for debugging
+                                    full_content=mask(full_content),
                                 )
 
                             # Log errors
                             if hasattr(part, "error"):
                                 error_info = {"tool": getattr(part, "tool_name", "unknown"), "error": str(part.error)}
-                                logger.error("TOOL ERROR", error_info=error_info)
+                                logger.error("TOOL ERROR", error_info=mask(error_info))
                                 tool_errors.append(error_info)
 
             if tool_calls:
@@ -469,7 +469,7 @@ This order ensures you check the most relevant credential sources first before f
             if "object_id" in final_text.lower() or "uuid" in final_text.lower():
                 logger.warning(
                     "FINAL RESPONSE contains object_id/UUID",
-                    final_response=final_text[:2000],  # Log first 2000 chars
+                    final_response=mask(final_text),
                 )
 
             # Send the complete response
@@ -485,7 +485,7 @@ This order ensures you check the most relevant credential sources first before f
             )
 
         except Exception as e:
-            logger.error("Chatbot streaming failed", error=str(e))
+            logger.error("Chatbot streaming failed", error=mask(e))
             yield f"\n\n[Error: {str(e)}]"
 
 

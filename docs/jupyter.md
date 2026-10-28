@@ -25,7 +25,7 @@ This is also linked to by the Nemesis `Help` menu.
 
 ### Environment Variable Password
 
-Use the `JUPYTER_PASSWORD` value in .env (or ENV variable) to log in. If this value is not set, you can discover the randomized value by running `docker compose logs jupyter | grep PASS` .
+Use the `JUPYTER_PASSWORD` environment variable to log in. If this value is not set, retrieve the generated password with `docker compose exec jupyter cat /tmp/jupyter_random_password`. Logs show only a masked value.
 
 ## Getting Started
 

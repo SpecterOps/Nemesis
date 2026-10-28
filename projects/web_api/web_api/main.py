@@ -16,6 +16,7 @@ import psycopg
 import requests
 from common.db import get_postgres_connection_str
 from common.helpers import get_drive_from_path
+from common.log_safety import mask
 from common.logger import get_logger
 from common.models import BulkEnrichmentEvent, CloudEvent
 from common.models import File as FileModel
@@ -1124,7 +1125,7 @@ async def trigger_cleanup(request: CleanupRequest = Body(default=None, descripti
             logger.warning(
                 "Error from housekeeping service",
                 status_code=housekeeping_response.status_code,
-                response=housekeeping_response.text,
+                response=mask(housekeeping_response.text),
             )
             results["housekeeping"] = {
                 "status": "error",
@@ -1770,14 +1771,14 @@ async def synthesize_source_report(
         response = requests.post(url, json=request_data, timeout=120)
 
         if response.status_code != 200:
-            logger.error("Error calling agents service", status_code=response.status_code, response=response.text)
+            logger.error("Error calling agents service", status_code=response.status_code, response=mask(response.text))
             raise HTTPException(status_code=503, detail="Agents service unavailable")
 
         result = response.json()
 
         if not result.get("success"):
             error_msg = result.get("error", "Unknown error")
-            logger.error("Report synthesis failed", error=error_msg)
+            logger.error("Report synthesis failed", error=mask(error_msg))
             return LLMSynthesisResponse(
                 success=False,
                 error=error_msg,
@@ -1847,14 +1848,14 @@ async def synthesize_system_report(
         response = requests.post(url, json=request_data, timeout=120)
 
         if response.status_code != 200:
-            logger.error("Error calling agents service", status_code=response.status_code, response=response.text)
+            logger.error("Error calling agents service", status_code=response.status_code, response=mask(response.text))
             raise HTTPException(status_code=503, detail="Agents service unavailable")
 
         result = response.json()
 
         if not result.get("success"):
             error_msg = result.get("error", "Unknown error")
-            logger.error("Report synthesis failed", error=error_msg)
+            logger.error("Report synthesis failed", error=mask(error_msg))
             return LLMSynthesisResponse(
                 success=False,
                 error=error_msg,

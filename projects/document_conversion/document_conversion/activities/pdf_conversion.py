@@ -5,6 +5,7 @@ import os
 import document_conversion.global_vars as global_vars
 import httpx
 from common.helpers import can_convert_to_pdf
+from common.log_safety import mask
 from common.logger import get_logger
 from common.models import Transform
 from common.state_helpers import get_file_enriched_async
@@ -93,7 +94,7 @@ async def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict
                         logger.error(
                             "Error calling Gotenberg",
                             status_code=response.status_code,
-                            response_text=response.text,
+                            response_text=mask(response.text),
                         )
 
                         # Record failure in database due to Gotenberg error

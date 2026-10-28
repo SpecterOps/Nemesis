@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from common.helpers import get_drive_from_path
+from common.log_safety import mask
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
 from common.state_helpers import get_file_enriched_async
@@ -1397,8 +1398,8 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             # Create DPAPI system credential from the machine and user keys
             logger.debug(
                 "Registering DPAPI_SYSTEM credential with DPAPI manager",
-                machine_key=machine_key.hex(),
-                user_key=user_key.hex(),
+                machine_key=mask(machine_key.hex()),
+                user_key=mask(user_key.hex()),
             )
             dpapi_system_cred = DpapiSystemCredential(machine_key=machine_key, user_key=user_key)
 

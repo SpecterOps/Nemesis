@@ -7,6 +7,7 @@ from pathlib import Path
 
 import markdown
 import requests
+from common.log_safety import mask
 from jinja2 import Environment, FileSystemLoader
 
 DAPR_PORT = os.getenv("DAPR_HTTP_PORT", 3500)
@@ -118,7 +119,7 @@ def convert_html_to_pdf(html_content: str) -> bytes:
             if response.status_code == 200:
                 return response.content
             else:
-                raise Exception(f"Gotenberg returned status {response.status_code}: {response.text}")
+                raise Exception(f"Gotenberg returned status {response.status_code}: {mask(response.text)}")
 
     finally:
         # Clean up temporary file

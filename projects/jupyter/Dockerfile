@@ -23,14 +23,18 @@ RUN pip install --no-cache-dir \
     ipywidgets==8.1.7 \
     python-dotenv==1.1.0
 
+# Share the dependency-free logging helper without installing the service libraries.
+COPY --chown=jovyan:users ./libs/common/common/log_safety.py /opt/nemesis/common/log_safety.py
+ENV PYTHONPATH=/opt/nemesis
+
 # Create working directory
 WORKDIR /home/jovyan/work
 
 # Copy startup script
-COPY --chown=jovyan:users jupyter_config.py /home/jovyan/.jupyter/
+COPY --chown=jovyan:users ./projects/jupyter/jupyter_config.py /home/jovyan/.jupyter/
 
 # Copy notebooks
-COPY --chown=jovyan:users notebooks/ /home/jovyan/work/
+COPY --chown=jovyan:users ./projects/jupyter/notebooks/ /home/jovyan/work/
 
 # Expose port
 EXPOSE 8888
