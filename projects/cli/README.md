@@ -107,6 +107,22 @@ other running monitors.
 - `--showconfig`: Display example configuration
 - `--dry-run`: Download files and log upload previews without contacting Nemesis
 
+### Collector IDs and processing state
+
+Set `agent_id` inside each collector's YAML entry to identify the C2 instance on uploaded files.
+When omitted, the defaults are `mythic`, `stage1` (Outflank), and `cobaltstrike`.
+Empty or whitespace-only IDs are rejected.
+
+Collectors keep separate LevelDB databases under `cache_db_path` (Cobalt Strike and Outflank)
+or `db.path` (Mythic). Each database is identified by the framework, server URL, project, and
+agent ID, so different instances can run together without sharing download IDs or stream cursors.
+Keep those values stable across restarts. Two processes for the same instance still cannot
+open its database concurrently.
+
+After upgrading from the shared database layout, the old database is retained and new instance
+databases start empty. Previously collected downloads may be uploaded again once. Changing an
+instance's URL, project, or agent ID also starts fresh processing state.
+
 ## Additional Tools
 
 - **stress_test**: Load testing tool for API performance evaluation

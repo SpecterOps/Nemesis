@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 import urllib3
+from cli.collector_state import collector_state_path
 from cli.config import Config, OutflankConfig
 from cli.log import setup_logging
 from cli.nemesis_client import NemesisClient, PreviewNemesisClient, UploadClient
@@ -99,11 +100,15 @@ async def setup_outflank_monitor(
         implant_cache = ImplantCache(outflank_client)
         await implant_cache.initialize()
 
+        state_path = collector_state_path(
+            config.cache_db_path, "outflank", base_url, project["name"], outflank_config.agent_id
+        )
+
         # Initialize processor with the client
         if outflank_config.downloads_dir_path:
             # Grab files from stage1's download directory
             nemesis_file_processor = OutflankDownloadProcessor(
-                config.cache_db_path,
+                state_path,
                 nemesis_client,
                 project["name"],
                 agent_id=outflank_config.agent_id,
@@ -112,7 +117,7 @@ async def setup_outflank_monitor(
         else:
             # Grab stage1 download files from its API
             nemesis_file_processor = OutflankDownloadProcessor(
-                config.cache_db_path,
+                state_path,
                 nemesis_client,
                 project["name"],
                 agent_id=outflank_config.agent_id,

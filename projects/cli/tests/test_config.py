@@ -165,6 +165,7 @@ class TestMythicConfig:
         )
         assert cfg.agent_id == "mythic-initial"
 
+
 # --- OutflankConfig ---
 
 
@@ -205,7 +206,7 @@ class TestCobaltStrikeConfig:
             credential=PasswordCredential(username="u", password="p"),
             project="assessment-1",
         )
-        assert cfg.agent_id == "Cobalt Strike"
+        assert cfg.agent_id == "cobaltstrike"
         assert cfg.project == "assessment-1"
         assert cfg.poll_interval_sec == 3
 
@@ -324,7 +325,7 @@ class TestSettingsCobaltstrike:
         assert str(cs.url) == "https://cobaltstrike.example.com:50443"
         assert cs.credential.username == "nemesis_bot"
         assert cs.credential.password == "cobaltstrike_password"
-        assert cs.agent_id == "Cobalt Strike"
+        assert cs.agent_id == "cobaltstrike"
         assert cs.project == "my-assessment"
         assert cs.poll_interval_sec == 3
 
