@@ -5,6 +5,7 @@ from urllib.parse import ParseResult, urlparse, urlunparse
 
 # Third-party imports
 import aiohttp
+from cli.collector_state import collector_state_path
 from cli.config import NemesisConfig, PasswordCredential, StrictHttpUrl
 from cli.mythic_connector.config import Settings, TokenCredential
 from cli.mythic_connector.db import Database
@@ -43,7 +44,13 @@ class SyncService:
         Returns:
             True if successful, False otherwise
         """
-        self.db = Database(self.cfg.db.path)
+        self.db = Database(
+            str(
+                collector_state_path(
+                    self.cfg.db.path, "mythic", self.cfg.mythic.url, self.cfg.project, self.cfg.mythic.agent_id
+                )
+            )
+        )
         return True
 
     async def initialize_mythic(self) -> bool:

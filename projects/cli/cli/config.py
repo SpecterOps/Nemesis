@@ -64,7 +64,9 @@ class NemesisConfig(BaseConfig):
 class MythicConfig(BaseConfig):
     url: StrictHttpUrl
     credential: PasswordCredential | TokenCredential
-    agent_id: str = Field(default="mythic", min_length=1, description="Agent identifier for uploaded Mythic files")
+    agent_id: str = Field(
+        default="mythic", min_length=1, pattern=r"\S", description="Agent identifier for uploaded Mythic files"
+    )
 
     @field_validator("credential")
     @classmethod
@@ -79,7 +81,9 @@ class MythicConfig(BaseConfig):
 class OutflankConfig(BaseConfig):
     url: StrictHttpUrl
     credential: PasswordCredential
-    agent_id: str = Field(default="stage1", min_length=1, description="Agent identifier for uploaded Outflank files")
+    agent_id: str = Field(
+        default="stage1", min_length=1, pattern=r"\S", description="Agent identifier for uploaded Outflank files"
+    )
     downloads_dir_path: Path | None = Field(
         None,
         description="Optional: Path to Outflank C2's upload directory where files will be pulled from instead of the Outflank API",
@@ -98,7 +102,10 @@ class CobaltStrikeConfig(BaseConfig):
     url: StrictHttpUrl
     credential: PasswordCredential
     agent_id: str = Field(
-        default="Cobalt Strike", min_length=1, description="Agent identifier for uploaded Cobalt Strike files"
+        default="cobaltstrike",
+        min_length=1,
+        pattern=r"\S",
+        description="Agent identifier for uploaded Cobalt Strike files",
     )
     project: str = Field(description="Project name for Nemesis file uploads")
     poll_interval_sec: Annotated[

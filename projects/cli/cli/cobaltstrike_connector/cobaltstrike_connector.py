@@ -7,6 +7,7 @@ from cli.cobaltstrike_connector.cache import ImplantCache
 from cli.cobaltstrike_connector.cobaltstrike_client import CobaltStrikeClient
 from cli.cobaltstrike_connector.download_monitor import CobaltStrikeDownloadMonitor
 from cli.cobaltstrike_connector.download_processor import CobaltStrikeDownloadProcessor
+from cli.collector_state import collector_state_path
 from cli.config import CobaltStrikeConfig, Config
 from cli.log import setup_logging
 from cli.nemesis_client import NemesisClient
@@ -70,7 +71,13 @@ async def setup_cobaltstrike_monitor(cobaltstrike_config: CobaltStrikeConfig, co
 
         # Initialize processor with the client
         nemesis_file_processor = CobaltStrikeDownloadProcessor(
-            config.cache_db_path,
+            collector_state_path(
+                config.cache_db_path,
+                "cobaltstrike",
+                base_url,
+                cobaltstrike_config.project,
+                cobaltstrike_config.agent_id,
+            ),
             nemesis_client,
             cobaltstrike_config.project,
             agent_id=cobaltstrike_config.agent_id,
@@ -91,3 +98,5 @@ async def setup_cobaltstrike_monitor(cobaltstrike_config: CobaltStrikeConfig, co
         except Exception as e:
             logger.error(f"Monitor failed: {e}")
             raise
+        finally:
+            nemesis_file_processor.close()

@@ -46,9 +46,10 @@ class OutflankDownloadProcessor:
         db_path: Path,
         nemesis: NemesisClient,
         project: str,
-        agent_id: str = "stage1",
         outflank_downloads_dir_path: Path | None = None,
         outflank: OutflankC2Client | None = None,
+        *,
+        agent_id: str = "stage1",
     ):
         """Initialize with LevelDB path and optional components
 

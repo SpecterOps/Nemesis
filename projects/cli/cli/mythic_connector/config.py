@@ -20,7 +20,11 @@ class TokenCredential:
 class MythicConfig:
     url: str
     credential: UsernamePasswordCredential | TokenCredential
-    agent_id: str
+    agent_id: str = "mythic"
+
+    def __post_init__(self):
+        if not isinstance(self.agent_id, str) or not self.agent_id.strip():
+            raise ValueError("mythic.agent_id must be a nonempty string")
 
     @classmethod
     def from_dict(cls, data: dict) -> "MythicConfig":
@@ -125,7 +129,9 @@ VALIDATORS = [
         "mythic.credential.password", must_exist=True, when=Validator("mythic.credential.token", must_exist=False)
     ),
     Validator("mythic.credential.token", must_exist=False),
-    Validator("mythic.agent_id", default="mythic", is_type_of=str),
+    Validator(
+        "mythic.agent_id", default="mythic", is_type_of=str, condition=lambda v: isinstance(v, str) and bool(v.strip())
+    ),
     # Nemesis validators
     Validator("nemesis.url", must_exist=True),
     Validator("nemesis.credential", must_exist=True),

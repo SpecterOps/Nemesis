@@ -42,8 +42,9 @@ class CobaltStrikeDownloadProcessor:
         db_path: Path,
         nemesis: NemesisClient,
         project: str,
-        agent_id: str = "Cobalt Strike",
         cobalt_strike: CobaltStrikeClient | None = None,
+        *,
+        agent_id: str = "cobaltstrike",
     ):
         """Initialize with LevelDB path and optional components
 
