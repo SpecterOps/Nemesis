@@ -3,6 +3,7 @@ import Editor from "@monaco-editor/react";
 import { AlertCircle, ChevronDown, ChevronRight, Database, Download, ExternalLink, FileWarning, Info, Play, RefreshCw, Table } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import initSQLJS from 'sql.js';
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 // Maximum number of rows to display at once
 const MAX_ROWS = 1000;
@@ -39,12 +40,11 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
     useEffect(() => {
         const loadSqlJs = async () => {
             try {
-                // Use CDN directly for sql.js WASM file
                 const SQL = await initSQLJS({
-                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.13.0/${file}`,
+                    locateFile: () => sqlWasmUrl,
                 });
 
-                console.log('Successfully loaded SQL.js WASM from CDN');
+                console.log('Successfully loaded SQL.js WASM');
                 sqlJsRef.current = SQL;
                 setSqlJsInitialized(true);
             } catch (err) {
