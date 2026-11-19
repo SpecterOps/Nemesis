@@ -39,5 +39,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["alerting"]
 
+[tool.uv]
+# gql 3.5.x caps graphql-core <3.2.7; 3.2.12 fixes GHSA-r77w-qph3-7vf8 / GHSA-vj8h-fx38-h3vc
+override-dependencies = ["graphql-core>=3.2.12,<3.3"]
+
 [tool.uv.sources]
 common = { path = "../../libs/common", editable = true }
