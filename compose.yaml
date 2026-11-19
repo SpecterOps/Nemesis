@@ -634,6 +634,21 @@ services:
         "--api-timeout=180s",
         "--libreoffice-restart-after=5",
         "--libreoffice-auto-start=true",
+        # SSRF hardening: rendered HTML/documents are attacker-influenced, so the
+        # renderer gets no network egress. Chromium may only load the uploaded
+        # files under Gotenberg's /tmp work dir (no http/https/ws, loopback,
+        # 169.254.0.0/16, RFC1918 or public hosts); JS is off (templates use none).
+        # LibreOffice (HTML-linked stylesheets) is denied all hosts, and the
+        # downloadFrom/webhook features (unused by Nemesis) are disabled.
+        "--chromium-allow-list=^file:///tmp/",
+        "--chromium-deny-list=^(?!file:///tmp/)",
+        "--chromium-deny-private-ips=true",
+        "--chromium-deny-public-ips=true",
+        "--chromium-disable-javascript=true",
+        "--libreoffice-deny-private-ips=true",
+        "--libreoffice-deny-public-ips=true",
+        "--api-disable-download-from=true",
+        "--webhook-disable=true",
       ]
     environment:
       DISABLE_GOOGLE_CHROME: "1"

@@ -396,7 +396,8 @@
                 </span>
             </div>
             <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; font-size: 9pt; line-height: 1.6;">
-                {{ ai_synthesis.report_html|safe }}
+                {# report_html is a Markup object sanitized by pdf_generator.render_markdown_safe #}
+                {{ ai_synthesis.report_html }}
             </div>
         </div>
         {% endif %}

@@ -6,16 +6,89 @@ from datetime import datetime
 from pathlib import Path
 
 import markdown
+import nh3
 import requests
 from common.log_safety import mask
 from jinja2 import Environment, FileSystemLoader
+from markupsafe import Markup
 
 DAPR_PORT = os.getenv("DAPR_HTTP_PORT", 3500)
 GOTENBERG_URL = f"http://localhost:{DAPR_PORT}/v1.0/invoke/gotenberg/method/forms/chromium/convert/html"
 
-# Initialize Jinja2 environment
+# Initialize Jinja2 environment. Autoescape is mandatory: report fields (source names,
+# file paths, finding names, ...) are attacker-influenced, and the rendered HTML is
+# loaded by Gotenberg's server-side Chromium, so raw HTML there is an SSRF vector.
 templates_dir = Path(__file__).parent / "templates"
-jinja_env = Environment(loader=FileSystemLoader(str(templates_dir)))
+jinja_env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
+
+# Allowlist for HTML produced from AI-synthesis markdown (Python-Markdown passes raw
+# HTML through). Only the formatting tags the "extra"/"nl2br"/"sane_lists" extensions
+# emit are kept; anything that can load a resource (img, iframe, object, embed, svg,
+# link, style, script, ...), event handlers, and style attributes are removed.
+_MARKDOWN_ALLOWED_TAGS = {
+    "a",
+    "abbr",
+    "b",
+    "blockquote",
+    "br",
+    "code",
+    "dd",
+    "del",
+    "div",
+    "dl",
+    "dt",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "i",
+    "ins",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "strong",
+    "sub",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "ul",
+}
+_MARKDOWN_ALLOWED_ATTRIBUTES = {
+    "a": {"href", "title"},
+    "abbr": {"title"},
+    "ol": {"start"},
+    "td": {"align"},
+    "th": {"align"},
+}
+# <a href> is never navigated by the PDF renderer, but restrict schemes anyway
+# (no javascript:, data:, file:, ...).
+_MARKDOWN_URL_SCHEMES = {"http", "https", "mailto"}
+
+
+def render_markdown_safe(markdown_text: str | None) -> Markup:
+    """Convert untrusted markdown to allowlist-sanitized HTML safe for the PDF templates."""
+    if not markdown_text or not isinstance(markdown_text, str):
+        return Markup("")
+    html_content = markdown.markdown(markdown_text, extensions=["extra", "nl2br", "sane_lists"])
+    sanitized = nh3.clean(
+        html_content,
+        tags=_MARKDOWN_ALLOWED_TAGS,
+        attributes=_MARKDOWN_ALLOWED_ATTRIBUTES,
+        url_schemes=_MARKDOWN_URL_SCHEMES,
+        strip_comments=True,
+        link_rel="noopener noreferrer",
+    )
+    return Markup(sanitized)  # noqa: S704 - sanitized by nh3 above
 
 
 def render_source_report_html(report_data: dict) -> str:
@@ -27,20 +100,16 @@ def render_source_report_html(report_data: dict) -> str:
     if isinstance(generated_at, datetime):
         generated_at = generated_at.strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    # Prepare AI synthesis with markdown converted to HTML
+    # Rebuild AI synthesis from scratch so only sanitized HTML reaches the template;
+    # a client-supplied "report_html" (or any other key) is never passed through.
     ai_synthesis = report_data.get("ai_synthesis")
-    # print(f"DEBUG pdf_generator: ai_synthesis={ai_synthesis}")
-    if ai_synthesis and ai_synthesis.get("report_markdown"):
-        # print(f"DEBUG pdf_generator: Converting markdown to HTML, length={len(ai_synthesis['report_markdown'])}")
-        # Convert markdown to HTML
-        html_content = markdown.markdown(ai_synthesis["report_markdown"], extensions=["extra", "nl2br", "sane_lists"])
-        # print(f"DEBUG pdf_generator: HTML length={len(html_content)}")
+    if isinstance(ai_synthesis, dict) and ai_synthesis:
         ai_synthesis = {
             "risk_level": ai_synthesis.get("risk_level"),
-            "report_html": html_content,
+            "report_html": render_markdown_safe(ai_synthesis.get("report_markdown")),
         }
-    # else:
-    #     print(f"DEBUG pdf_generator: No markdown found in ai_synthesis")
+    else:
+        ai_synthesis = None
 
     # Prepare data for template
     context = {

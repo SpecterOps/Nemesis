@@ -29,6 +29,7 @@ dependencies = [
     "httpx>=0.28.1,<0.29.0",
     "pyasn1>=0.6.3",
     "pytest>=9.0.3",
+    "nh3>=0.3.8",
 ]
 
 [dependency-groups]
