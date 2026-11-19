@@ -77,10 +77,12 @@ FROM base AS bundle
 COPY --from=base /src /src
 
 WORKDIR /src/projects/agents
+# Install the exact locked set with --no-deps: pip ignores uv override-dependencies
+# (graphql-core is overridden past gql 3.5.x's cap), so it must not re-resolve.
 RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
     uv venv /venv --python /usr/local/bin/python3 --seed && \
-    /venv/bin/pip install --no-cache-dir -r requirements.txt && \
-    /venv/bin/pip install --no-cache-dir /src/libs/common /src/projects/agents
+    /venv/bin/pip install --no-cache-dir --no-deps -r requirements.txt && \
+    /venv/bin/pip install --no-cache-dir --no-deps /src/libs/common /src/projects/agents
 
 # FROM nemesis-python-base-prod AS prod
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
