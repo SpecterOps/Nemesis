@@ -35,7 +35,7 @@ def can_convert_to_pdf(file_path: str) -> bool:
     """Returns True if the supplied file_path matches an extension that Gotenberg can convert."""
     path_regex = (
         "^.*\\.(bib|doc|docx|fodt|html|ltx|txt|odt|ott|pdb|psw|odg|"
-        "rtf|sdw|stw|sxw|uot|vor|wps|epub|emf|eps|fodg|met|odd|otg|dotx|"
+        "rtf|sdw|stw|sxw|uot|vor|wps|emf|eps|fodg|met|odd|otg|dotx|"
         "pbm|pct|pgm|ppm|ras|std|svg|svm|swf|sxd|sxw|tiff|xhtml|xpm|xltx|"
         "fodp|potm|pot|pptx|pps|ppt|pwp|sda|sdd|sti|sxi|uop|wmf|dbf|"
         "dif|fods|ods|ots|pxl|sdc|slk|stc|sxc|uos|xls|xlt|xlsx|odp)$"

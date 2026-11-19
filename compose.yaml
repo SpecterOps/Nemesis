@@ -626,17 +626,19 @@ services:
     network_mode: "service:document-conversion"
 
   gotenberg:
-    #image: gotenberg/gotenberg:8.21.1
-    image: gotenberg/gotenberg:8.27.0
+    # 9.x drops the bundled JRE (Java4Shell, CVE-2026-114938)
+    image: gotenberg/gotenberg:9.9.0
     command:
       [
         "gotenberg",
         "--api-timeout=180s",
         "--libreoffice-restart-after=5",
         "--libreoffice-auto-start=true",
-        "--prometheus-collect-interval=10s",
       ]
-    environment: { DISABLE_GOOGLE_CHROME: "1" }
+    environment:
+      DISABLE_GOOGLE_CHROME: "1"
+      OTEL_METRICS_EXPORTER: prometheus
+      OTEL_EXPORTER_PROMETHEUS_HOST: 0.0.0.0
     healthcheck:
       test: ["CMD", "curl", "-sSf", "http://localhost:3000/health"]
       interval: 30s

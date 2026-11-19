@@ -584,9 +584,10 @@ housekeeping:
 gotenberg:
   image:
     repository: gotenberg/gotenberg
-    tag: "8.21.1"
+    tag: "9.9.0"
   replicas: 1
   port: 3000
+  metricsPort: 9464
   env:
     apiTimeout: "180s"
     libreofficeRestartAfter: "5"

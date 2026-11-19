@@ -91,9 +91,9 @@ scrape_configs:
       - targets: ['document-conversion:8000']
 
   - job_name: 'nemesis-gotenberg'
-    metrics_path: '/prometheus/metrics'
+    metrics_path: '/metrics'
     static_configs:
-      - targets: ['gotenberg:3000']
+      - targets: ['gotenberg:9464']
 
   - job_name: 'nemesis-placement'
     metrics_path: '/metrics'
