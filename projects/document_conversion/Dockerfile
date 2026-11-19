@@ -1,10 +1,14 @@
 # FROM nemesis-python-base-dev AS base
 ARG PYTHON_BASE_DEV_IMAGE=nemesis-python-base-dev
 ARG PYTHON_BASE_PROD_IMAGE=nemesis-python-base-prod
+# Minimum openjdk-17-jre-headless version allowed in the image. Builds fail below this.
+# 17.0.21.1+2-1~deb12u1 fixes Java4Shell (CVE-2026-114938, DLA-4917-1).
+ARG MIN_OPENJDK_VERSION="17.0.21.1+2-1~deb12u1"
 FROM ${PYTHON_BASE_DEV_IMAGE} AS base
 
 ARG TIKA_OCR_LANGUAGES="eng"
 ARG TIKA_VERSION="3.3.2"
+ARG MIN_OPENJDK_VERSION
 
 # Install dependencies including multiple Tesseract language packs
 RUN apt-get update && \
@@ -23,6 +27,10 @@ RUN apt-get update && \
     for lang in ${TIKA_OCR_LANGUAGES}; do \
         apt-get install -y --no-install-recommends tesseract-ocr-${lang} || echo "Warning: Failed to install tesseract-ocr-${lang}"; \
     done && \
+    # Refuse to build with a JRE older than the patched floor (CVE-2026-114938)
+    JDK_VERSION="$(dpkg-query -W -f='${Version}' openjdk-17-jre-headless)" && \
+    { dpkg --compare-versions "${JDK_VERSION}" ge "${MIN_OPENJDK_VERSION}" || \
+        { echo "ERROR: openjdk-17-jre-headless ${JDK_VERSION} < ${MIN_OPENJDK_VERSION} (CVE-2026-114938)"; exit 1; }; } && \
     # Download Tika server
     wget https://archive.apache.org/dist/tika/${TIKA_VERSION}/tika-server-standard-${TIKA_VERSION}.jar -O /tika-server-standard.jar && \
     apt-get clean && \
@@ -81,6 +89,7 @@ RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
 FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
 ARG TIKA_OCR_LANGUAGES="eng"
+ARG MIN_OPENJDK_VERSION
 
 # Install dependencies in a single RUN command to reduce layers
 RUN apt-get update && \
@@ -99,6 +108,10 @@ RUN apt-get update && \
     for lang in ${TIKA_OCR_LANGUAGES}; do \
         apt-get install -y --no-install-recommends tesseract-ocr-${lang} || echo "Warning: Failed to install tesseract-ocr-${lang}"; \
     done && \
+    # Refuse to build with a JRE older than the patched floor (CVE-2026-114938)
+    JDK_VERSION="$(dpkg-query -W -f='${Version}' openjdk-17-jre-headless)" && \
+    { dpkg --compare-versions "${JDK_VERSION}" ge "${MIN_OPENJDK_VERSION}" || \
+        { echo "ERROR: openjdk-17-jre-headless ${JDK_VERSION} < ${MIN_OPENJDK_VERSION} (CVE-2026-114938)"; exit 1; }; } && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
