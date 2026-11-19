@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from jinja2 import UndefinedError
 from markupsafe import Markup
 from web_api import pdf_generator
 from web_api.pdf_generator import (
@@ -24,7 +25,7 @@ def _source_report(**overrides) -> dict:
         "summary": {"total_files": 3, "total_findings": 2, "verified_true_positives": 1, "not_triaged": 1},
         "risk_indicators": {
             "credentials": {
-                "noseyparker_findings": 1,
+                "titus_findings": 1,
                 "chromium_logins_decrypted": 0,
                 "chromium_cookies_decrypted": 0,
                 "dpapi_masterkeys_decrypted": 0,
@@ -264,3 +265,34 @@ def test_generate_source_report_pdf_sends_sanitized_html():
     with patch.object(pdf_generator.requests, "post", side_effect=fake_post):
         assert generate_source_report_pdf(report) == b"%PDF"
     assert "<iframe" not in sent["html"]
+
+
+# Exactly the credential keys reporting_routes.py builds for RiskIndicators.credentials.
+REPORTING_ROUTES_CREDENTIAL_KEYS = {
+    "chromium_logins": 0,
+    "chromium_logins_decrypted": 0,
+    "chromium_cookies": 0,
+    "chromium_cookies_decrypted": 0,
+    "dpapi_masterkeys": 0,
+    "dpapi_masterkeys_decrypted": 0,
+    "titus_findings": 4,
+}
+
+
+def test_source_report_renders_with_reporting_routes_credential_keys():
+    """Template must only reference credential keys the report API actually produces."""
+    data = _source_report()
+    data["risk_indicators"]["credentials"] = dict(REPORTING_ROUTES_CREDENTIAL_KEYS)
+    html = render_source_report_html(data)
+    assert "Titus Findings" in html
+    assert ">4</div>" in html
+
+
+def test_source_report_fails_loudly_on_missing_credential_key():
+    """A missing credential key is a template/data mismatch, not something to render silently."""
+    data = _source_report()
+    data["risk_indicators"]["credentials"] = {
+        k: v for k, v in REPORTING_ROUTES_CREDENTIAL_KEYS.items() if k != "titus_findings"
+    }
+    with pytest.raises(UndefinedError):
+        render_source_report_html(data)
