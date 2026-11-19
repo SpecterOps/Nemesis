@@ -1,4 +1,5 @@
-FROM quay.io/jupyter/scipy-notebook:python-3.13
+# Pinned release: JupyterLab 4.6.6, Notebook 7.6.5, Python 3.13.18, Ubuntu 26.04
+FROM quay.io/jupyter/scipy-notebook:2026-11-16
 
 USER root
 
@@ -11,17 +12,15 @@ RUN apt-get update && apt-get install -y \
 # Switch back to jovyan user
 USER jovyan
 
-# Install Python packages for Hasura interaction and data analysis
+# Install Python packages for Hasura interaction and data analysis.
+# pandas, matplotlib, seaborn, ipywidgets and requests come from the base image;
+# don't re-pin them here or pip downgrades the image's newer versions.
 RUN pip install --no-cache-dir \
-    gql[requests]==3.5.3 \
-    requests==2.32.3 \
-    psycopg2-binary==2.9.10 \
-    pandas==2.3.0 \
-    matplotlib==3.10.3 \
-    seaborn==0.13.2 \
-    plotly==6.1.2 \
-    ipywidgets==8.1.7 \
-    python-dotenv==1.1.0
+    gql[requests]==4.4.0 \
+    "graphql-core>=3.2.12" \
+    psycopg2-binary==2.9.13 \
+    plotly==7.1.0 \
+    python-dotenv==1.2.4
 
 # Share the dependency-free logging helper without installing the service libraries.
 COPY --chown=jovyan:users ./libs/common/common/log_safety.py /opt/nemesis/common/log_safety.py
