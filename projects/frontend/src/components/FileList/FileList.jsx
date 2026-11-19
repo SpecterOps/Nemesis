@@ -288,7 +288,11 @@ const FileList = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [isPaginated, setIsPaginated] = useState(false);
+  // null until the first count query says which mode applies, so no live subscription starts
+  // before we know the result set is small enough to stream
+  const [isPaginated, setIsPaginated] = useState(null);
+  // Bumped to force a re-fetch (e.g. when the live subscription grows past the threshold)
+  const [refetchKey, setRefetchKey] = useState(0);
 
   // Filter states initialized from URL parameters
   const [fileTypeFilter, setFileTypeFilter] = useState(() => searchParams.get('type') || 'all');
@@ -972,18 +976,20 @@ const FileList = () => {
     };
 
     fetchData();
-  }, [currentPage, fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings, username]);
+  }, [currentPage, fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings, username, refetchKey]);
 
   // Set up subscription (only for non-paginated mode)
   useEffect(() => {
-    if (isPaginated) return; // Don't use subscriptions in paginated mode
+    // Only stream small result sets; paginated mode (or an unknown size) doesn't subscribe
+    if (isPaginated !== false) return;
 
     const subscription = {
       query: `
-        subscription WatchFiles($where: files_enriched_bool_exp, $order_by: [files_enriched_order_by!]) {
+        subscription WatchFiles($where: files_enriched_bool_exp, $order_by: [files_enriched_order_by!], $limit: Int!) {
           files_enriched(
             where: $where,
-            order_by: $order_by
+            order_by: $order_by,
+            limit: $limit
           ) {
             object_id
             agent_id
@@ -1015,7 +1021,9 @@ const FileList = () => {
       `,
       variables: {
         where: buildWhereClause(),
-        order_by: buildOrderByClause()
+        order_by: buildOrderByClause(),
+        // One past the threshold so we can tell when the set has outgrown streaming mode
+        limit: PAGINATION_THRESHOLD + 1
       }
     };
 
@@ -1027,6 +1035,12 @@ const FileList = () => {
         {
           next: ({ data }) => {
             if (data?.files_enriched) {
+              if (data.files_enriched.length > PAGINATION_THRESHOLD) {
+                // Grew past the threshold (or filters changed to a large set): switch to pages
+                setIsPaginated(true);
+                setRefetchKey(k => k + 1);
+                return;
+              }
               setFiles(data.files_enriched);
               setTotalCount(data.files_enriched.length);
             }
