@@ -71,30 +71,34 @@ def _system_report(**overrides) -> dict:
 # --- render_markdown_safe: malicious input is stripped ---
 
 
+# Raw HTML is rendered as escaped text (never markup) and markdown-generated markup is
+# allowlist-sanitized, so the check is that no live resource-loading or script markup
+# survives. URLs may still appear as inert text, exactly as in the frontend.
 @pytest.mark.parametrize(
     "payload, forbidden",
     [
-        (IFRAME, ["<iframe", "169.254.169.254"]),
-        ('<iframe src="http://127.0.0.1:3000/health"></iframe>', ["<iframe", "127.0.0.1"]),
-        ("<script>fetch('http://10.0.0.1/')</script>", ["<script", "fetch(", "10.0.0.1"]),
-        ('<img src="http://169.254.169.254/latest/meta-data/">', ["<img", "169.254.169.254"]),
+        (IFRAME, ["<iframe"]),
+        ('<iframe src="http://127.0.0.1:3000/health"></iframe>', ["<iframe"]),
+        ("<script>fetch('http://10.0.0.1/')</script>", ["<script"]),
+        ('<img src="http://169.254.169.254/latest/meta-data/">', ["<img"]),
         ("![x](http://169.254.169.254/latest/meta-data/)", ["<img", "169.254.169.254"]),
-        ('<a href="javascript:alert(1)">click</a>', ["javascript:"]),
-        ("[click](javascript:alert(1))", ["javascript:"]),
-        ('<a href="file:///etc/passwd">f</a>', ["file:"]),
-        ('<p onclick="x()" onmouseover="y()">hi</p>', ["onclick", "onmouseover"]),
-        ('<div style="background:url(http://10.0.0.1/x)">hi</div>', ["style=", "10.0.0.1"]),
-        ('<link rel="stylesheet" href="http://10.0.0.1/a.css">', ["<link", "10.0.0.1"]),
-        ("<style>@import url(http://10.0.0.1/a.css);</style>", ["<style", "@import", "10.0.0.1"]),
+        ('<a href="javascript:alert(1)">click</a>', ['<a href="javascript']),
+        ("[click](javascript:alert(1))", ['<a href="javascript']),
+        ('<a href="file:///etc/passwd">f</a>', ['<a href="file']),
+        ("[f](file:///etc/passwd)", ['<a href="file']),
+        ('<p onclick="x()" onmouseover="y()">hi</p>', ["<p onclick", "<p onmouseover"]),
+        ('<div style="background:url(http://10.0.0.1/x)">hi</div>', ["<div style"]),
+        ('<link rel="stylesheet" href="http://10.0.0.1/a.css">', ["<link"]),
+        ("<style>@import url(http://10.0.0.1/a.css);</style>", ["<style"]),
         ('<object data="http://10.0.0.1/"></object><embed src="http://10.0.0.1/">', ["<object", "<embed"]),
-        ('<svg><image href="http://10.0.0.1/x"/></svg>', ["<svg", "<image", "10.0.0.1"]),
+        ('<svg><image href="http://10.0.0.1/x"/></svg>', ["<svg", "<image"]),
         (
             '<base href="http://10.0.0.1/"><meta http-equiv="refresh" content="0;url=http://10.0.0.1/">',
             ["<base", "<meta"],
         ),
         ('<form action="http://10.0.0.1/"><input></form>', ["<form", "<input"]),
         ('<video src="http://10.0.0.1/v"></video><audio src="http://10.0.0.1/a"></audio>', ["<video", "<audio"]),
-        ('<div markdown="1"><iframe src="http://10.0.0.1/"></iframe></div>', ["<iframe", "10.0.0.1"]),
+        ('<div markdown="1"><iframe src="http://10.0.0.1/"></iframe></div>', ["<iframe", "<div"]),
     ],
 )
 def test_render_markdown_safe_strips_dangerous_html(payload, forbidden):
@@ -103,6 +107,12 @@ def test_render_markdown_safe_strips_dangerous_html(payload, forbidden):
         assert needle not in html, f"{needle!r} survived sanitization: {html}"
     assert "<h1>Report</h1>" in html
     assert "after" in html
+
+
+def test_render_markdown_safe_shows_raw_html_as_text():
+    html = str(render_markdown_safe(IFRAME))
+    assert "<iframe" not in html
+    assert "&lt;iframe" in html
 
 
 def test_render_markdown_safe_renders_normal_markdown():
@@ -139,8 +149,30 @@ def test_render_markdown_safe_renders_normal_markdown():
         assert expected in html, f"{expected!r} missing from {html}"
 
 
-def test_render_markdown_safe_nl2br_kept():
+def test_render_markdown_safe_line_breaks_kept():
     assert "<br>" in str(render_markdown_safe("line one\nline two"))
+
+
+@pytest.mark.parametrize(
+    "md",
+    [
+        "Key findings:\n- item one\n- item two",
+        "**Key findings:**\n* item one\n* item two",
+        "Steps:\n1. item one\n2. item two",
+    ],
+)
+def test_render_markdown_safe_list_directly_after_text(md):
+    """LLM output rarely puts a blank line before a list; it must still render as a list."""
+    html = str(render_markdown_safe(md))
+    assert "<li>item one</li>" in html
+    assert "<li>item two</li>" in html
+    assert "- item" not in html and "* item" not in html
+
+
+def test_render_markdown_safe_nested_list_and_strikethrough():
+    html = str(render_markdown_safe("- parent\n  - child\n\n~~old~~"))
+    assert html.count("<ul>") == 2
+    assert "<s>old</s>" in html
 
 
 def test_render_markdown_safe_returns_markup():
@@ -198,7 +230,8 @@ def test_source_report_sanitizes_ai_markdown_but_keeps_formatting():
     html = render_source_report_html(_source_report(ai_synthesis={"risk_level": "medium", "report_markdown": md}))
     assert "<iframe" not in html
     assert "<img" not in html
-    assert "169.254.169.254" not in html
+    # Injected raw HTML is shown as inert, escaped text
+    assert "&lt;iframe" in html
     # Not double-escaped: legitimate markup is real HTML
     assert "<h2>Findings</h2>" in html
     assert "<strong>one</strong>" in html

@@ -5,11 +5,11 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-import markdown
 import nh3
 import requests
 from common.log_safety import mask
 from jinja2 import Environment, FileSystemLoader
+from markdown_it import MarkdownIt
 from markupsafe import Markup
 
 DAPR_PORT = os.getenv("DAPR_HTTP_PORT", 3500)
@@ -21,10 +21,15 @@ GOTENBERG_URL = f"http://localhost:{DAPR_PORT}/v1.0/invoke/gotenberg/method/form
 templates_dir = Path(__file__).parent / "templates"
 jinja_env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
 
-# Allowlist for HTML produced from AI-synthesis markdown (Python-Markdown passes raw
-# HTML through). Only the formatting tags the "extra"/"nl2br"/"sane_lists" extensions
-# emit are kept; anything that can load a resource (img, iframe, object, embed, svg,
-# link, style, script, ...), event handlers, and style attributes are removed.
+# AI-synthesis markdown is rendered as CommonMark + GFM tables/strikethrough, the same
+# dialect the frontend uses (react-markdown + remark-gfm), so e.g. a list directly after a
+# line of text renders as a list in both. html=False renders raw HTML as escaped text
+# rather than markup; breaks=True keeps single newlines as <br> in the PDF.
+_MARKDOWN = MarkdownIt("commonmark", {"html": False, "breaks": True}).enable(["table", "strikethrough"])
+
+# Defense in depth: allowlist the HTML the renderer can emit. Anything that can load a
+# resource (img, iframe, object, embed, svg, link, style, script, ...), event handlers,
+# and style attributes are removed.
 _MARKDOWN_ALLOWED_TAGS = {
     "a",
     "abbr",
@@ -51,6 +56,7 @@ _MARKDOWN_ALLOWED_TAGS = {
     "ol",
     "p",
     "pre",
+    "s",
     "strong",
     "sub",
     "sup",
@@ -79,7 +85,7 @@ def render_markdown_safe(markdown_text: str | None) -> Markup:
     """Convert untrusted markdown to allowlist-sanitized HTML safe for the PDF templates."""
     if not markdown_text or not isinstance(markdown_text, str):
         return Markup("")
-    html_content = markdown.markdown(markdown_text, extensions=["extra", "nl2br", "sane_lists"])
+    html_content = _MARKDOWN.render(markdown_text)
     sanitized = nh3.clean(
         html_content,
         tags=_MARKDOWN_ALLOWED_TAGS,

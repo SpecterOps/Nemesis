@@ -786,15 +786,6 @@ wheels = [
 ]
 
 [[package]]
-name = "markdown"
-version = "3.10"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7d/ab/7dd27d9d863b3376fcf23a5a13cb5d024aed1db46f963f1b5735ae43b3be/markdown-3.10.tar.gz", hash = "sha256:37062d4f2aa4b2b6b32aefb80faa300f82cc790cb949a35b8caede34f2b68c0e", size = 364931 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/81/54e3ce63502cd085a0c556652a4e1b919c45a446bd1e5300e10c44c8c521/markdown-3.10-py3-none-any.whl", hash = "sha256:b5b99d6951e2e4948d939255596523444c0e677c669700b1d17aa4a8a464cb7c", size = 107678 },
-]
-
-[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1699,7 +1690,7 @@ dependencies = [
     { name = "fastapi", extra = ["all"] },
     { name = "httpx" },
     { name = "jinja2" },
-    { name = "markdown" },
+    { name = "markdown-it-py" },
     { name = "minio" },
     { name = "nemesis-dpapi" },
     { name = "nh3" },
@@ -1734,7 +1725,7 @@ requires-dist = [
     { name = "fastapi", extras = ["all"], specifier = ">=0.136.1,<0.137.0" },
     { name = "httpx", specifier = ">=0.28.1,<0.29.0" },
     { name = "jinja2", specifier = ">=3.1.6,<4.0.0" },
-    { name = "markdown", specifier = ">=3.9,<4.0" },
+    { name = "markdown-it-py", specifier = ">=4.0.0" },
     { name = "minio", specifier = ">=7.2.14,<8.0.0" },
     { name = "nemesis-dpapi", editable = "../../libs/nemesis_dpapi" },
     { name = "nh3", specifier = ">=0.3.8" },

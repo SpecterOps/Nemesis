@@ -232,6 +232,18 @@
                 page-break-inside: avoid;
             }
         }
+        /* AI synthesis markdown: restore spacing removed by the global reset */
+        .ai-synthesis p, .ai-synthesis ul, .ai-synthesis ol, .ai-synthesis pre,
+        .ai-synthesis blockquote, .ai-synthesis table { margin: 0 0 8px 0; }
+        .ai-synthesis ul, .ai-synthesis ol { padding-left: 20px; }
+        .ai-synthesis li > ul, .ai-synthesis li > ol { margin: 2px 0 0 0; }
+        .ai-synthesis h1, .ai-synthesis h2, .ai-synthesis h3, .ai-synthesis h4 { margin: 12px 0 6px 0; }
+        .ai-synthesis > :first-child { margin-top: 0; }
+        .ai-synthesis code { font-family: "Courier New", monospace; background: #eef0f3; padding: 0 3px; border-radius: 3px; }
+        .ai-synthesis pre { background: #eef0f3; padding: 8px; border-radius: 4px; white-space: pre-wrap; }
+        .ai-synthesis pre code { background: none; padding: 0; }
+        .ai-synthesis blockquote { border-left: 3px solid #d1d5db; padding-left: 10px; color: #4b5563; }
+        .ai-synthesis hr { border: 0; border-top: 1px solid #e5e7eb; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -395,7 +407,7 @@
                     Risk Level: {{ ai_synthesis.risk_level|upper }}
                 </span>
             </div>
-            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; font-size: 9pt; line-height: 1.6;">
+            <div class="ai-synthesis" style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; font-size: 9pt; line-height: 1.6;">
                 {# report_html is a Markup object sanitized by pdf_generator.render_markdown_safe #}
                 {{ ai_synthesis.report_html }}
             </div>
