@@ -146,7 +146,7 @@ export const TableRow = React.memo(({ index, style, data }) => {
             className={`
         flex items-center border-b dark:border-gray-700 cursor-pointer transition-colors
         dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700
-        ${selectedFindings.has(finding.finding_id) ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
+        ${isTriageMode && selectedFindings.has(finding.finding_id) ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
         ${isTriageMode && index === selectedIndex ? '!bg-blue-50 dark:!bg-blue-900/20' : ''}
       `}
             onClick={() => {

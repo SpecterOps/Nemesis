@@ -60,7 +60,7 @@ const Row = React.memo(({ index, style, data }) => {
       className={`
         flex items-center border-b dark:border-gray-700 cursor-pointer transition-colors
         dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700
-        ${selectedFiles.has(file.object_id) ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
+        ${isTriageMode && selectedFiles.has(file.object_id) ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
         ${isTriageMode && index === selectedIndex ? '!bg-blue-50 dark:!bg-blue-900/20' : ''}
       `}
       onClick={(e) => handleRowClick(e, file, index)}
@@ -374,6 +374,11 @@ const FileList = () => {
   const toggleDropdown = () => {
     setIsTagDropdownOpen(!isTagDropdownOpen);
   };
+
+  // Multi-selection only exists in triage mode: drop it when triage mode is turned off
+  useEffect(() => {
+    if (!isTriageMode) setSelectedFiles(prev => (prev.size ? new Set() : prev));
+  }, [isTriageMode]);
 
   // Outer (scrolling) element of the virtualized list
   const listRef = useRef(null);

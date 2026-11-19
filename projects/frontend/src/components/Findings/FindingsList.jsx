@@ -155,6 +155,11 @@ const FindingsList = () => {
     }
   }, [selectedIndex, isTriageMode]);
 
+  // Multi-selection only exists in triage mode: drop it when triage mode is turned off
+  useEffect(() => {
+    if (!isTriageMode) setSelectedFindings(prev => (prev.size ? new Set() : prev));
+  }, [isTriageMode]);
+
   // Keep the triage selection on the same finding when the list changes (subscription updates,
   // re-sorting, triaged rows dropping out of the filter), and clamp it if the list shrank.
   useEffect(() => {
