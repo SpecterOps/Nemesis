@@ -897,19 +897,6 @@ const FileViewer = () => {
     }
   }, [activeTab, fileData, transformData]);
 
-  // left arrow to go back
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        handleBackClick();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate]);
-
   useEffect(() => {
     const fetchFileData = async () => {
       try {

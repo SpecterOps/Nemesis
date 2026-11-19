@@ -279,10 +279,10 @@ const FileList = () => {
   const [files, setFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { isTriageMode, setIsTriageMode, selectedIndex, setSelectedIndex } = useTriageMode();
+  const { isTriageMode, setIsTriageMode, selectedIndex, setSelectedIndex } = useTriageMode('files');
   const [selectedFiles, setSelectedFiles] = useState(new Set());
-  const selectedRowRef = useRef(null);
-  const lastDirection = useRef('down');
+  const pageListRef = useRef(null);
+  const prevFilesRef = useRef([]);
   const { username } = useUser();
 
   // Pagination state
@@ -318,7 +318,8 @@ const FileList = () => {
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
-      setSelectedIndex(-1); // Reset selection when changing pages
+      // Reset selection when changing pages (to the new page's first row while triaging)
+      setSelectedIndex(isTriageMode ? (newPage - 1) * PAGE_SIZE : -1);
       setSelectedFiles(new Set());
     }
   };
@@ -374,12 +375,41 @@ const FileList = () => {
     setIsTagDropdownOpen(!isTagDropdownOpen);
   };
 
-  const listRef = useRef();
+  // Outer (scrolling) element of the virtualized list
+  const listRef = useRef(null);
+  // Scroll the list container just enough to keep the selected row visible (isLoading/currentPage
+  // re-run this once a new page has rendered). This sets scrollTop directly: react-window's
+  // scrollToItem goes through component state, and a scroll event handled before that state
+  // commits overwrites it, leaving the row hidden during fast key repeat.
   useEffect(() => {
-    if (listRef.current && isTriageMode && selectedIndex >= 0 && !isPaginated) {
-      listRef.current.scrollToItem(selectedIndex, 'center');
+    const container = isPaginated ? pageListRef.current : listRef.current;
+    if (!container || !isTriageMode || selectedIndex < 0) return;
+    const rowIndex = isPaginated ? selectedIndex - (currentPage - 1) * PAGE_SIZE : selectedIndex;
+    const rowTop = rowIndex * ROW_HEIGHT;
+    if (rowTop < container.scrollTop) {
+      container.scrollTop = rowTop;
+    } else if (rowTop + ROW_HEIGHT > container.scrollTop + container.clientHeight) {
+      container.scrollTop = rowTop + ROW_HEIGHT - container.clientHeight;
     }
-  }, [selectedIndex, isTriageMode, isPaginated]);
+  }, [selectedIndex, isTriageMode, isPaginated, currentPage, isLoading]);
+
+  // Keep the triage selection on the same file when the list changes (subscription updates,
+  // files dropping out of a view filter), and clamp it to the rows currently shown.
+  useEffect(() => {
+    const prevFiles = prevFilesRef.current;
+    prevFilesRef.current = files;
+    if (!isTriageMode || selectedIndex < 0 || files.length === 0) return;
+
+    const pageStart = isPaginated ? (currentPage - 1) * PAGE_SIZE : 0;
+    const prevId = prevFiles[selectedIndex - pageStart]?.object_id;
+    const newIndex = prevId === undefined ? -1 : files.findIndex(f => f.object_id === prevId);
+    if (newIndex >= 0) {
+      if (pageStart + newIndex !== selectedIndex) setSelectedIndex(pageStart + newIndex);
+    } else {
+      const clamped = Math.min(Math.max(selectedIndex, pageStart), pageStart + files.length - 1);
+      if (clamped !== selectedIndex) setSelectedIndex(clamped);
+    }
+  }, [files]);
 
   // Build where clause for queries
   const buildWhereClause = () => {
@@ -643,19 +673,6 @@ const FileList = () => {
     return new RegExp('^' + escapedWildcard.replace(/\\\*/g, '.*') + '$');
   };
 
-  // Scroll handling
-  useEffect(() => {
-    if (selectedRowRef.current && isTriageMode && selectedIndex >= 0) {
-      const timer = setTimeout(() => {
-        selectedRowRef.current.scrollIntoView({
-          behavior: 'smooth',
-          block: lastDirection.current === 'up' ? 'center' : 'end'
-        });
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedIndex, isTriageMode]);
-
   // keyboard controls
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -665,8 +682,8 @@ const FileList = () => {
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-        e.preventDefault();
         if (isTriageMode) {
+          e.preventDefault();
           // In paginated mode, only select files on current page
           const newSelection = new Set(files.map(f => f.object_id));
           setSelectedFiles(newSelection);
@@ -693,7 +710,6 @@ const FileList = () => {
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault();
-          lastDirection.current = 'up';
           if (isPaginated) {
             if (currentPageSelectedIndex > 0) {
               setSelectedIndex(selectedIndex - 1);
@@ -716,7 +732,6 @@ const FileList = () => {
           break;
         case 'ArrowDown':
           e.preventDefault();
-          lastDirection.current = 'down';
           if (isPaginated) {
             if (currentPageSelectedIndex < filesLength - 1) {
               setSelectedIndex(selectedIndex + 1);
@@ -749,7 +764,9 @@ const FileList = () => {
         case 'ArrowRight':
           e.preventDefault();
           if (selectedIndex >= 0 && currentPageSelectedIndex >= 0 && currentPageSelectedIndex < filesLength) {
-            navigate(`/files/${files[currentPageSelectedIndex].object_id}`);
+            // Preserve the current filters/sort so returning from the file viewer restores them
+            const currentSearch = searchParams.toString();
+            navigate(`/files/${files[currentPageSelectedIndex].object_id}${currentSearch ? `?${currentSearch}` : ''}`);
           }
           break;
         case 'v':
@@ -773,7 +790,7 @@ const FileList = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTriageMode, selectedIndex, files, navigate, setIsTriageMode, setSelectedIndex, selectedFiles, isPaginated, currentPage, totalPages]);
+  }, [isTriageMode, selectedIndex, files, navigate, setIsTriageMode, setSelectedIndex, selectedFiles, isPaginated, currentPage, totalPages, searchParams]);
 
   // Handle maintained triage mode state
   useEffect(() => {
@@ -1028,7 +1045,7 @@ const FileList = () => {
   }, [isPaginated, fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings, username]);
 
   return (
-    <div className="bg-white dark:bg-dark-secondary rounded-lg shadow">
+    <div className="bg-white dark:bg-dark-secondary rounded-lg shadow flex flex-col h-[calc(100vh-1rem)]">
       {isTriageMode && (
         <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
           <p className="text-sm text-blue-600 dark:text-blue-400">
@@ -1316,7 +1333,7 @@ const FileList = () => {
         <>
           {isPaginated ? (
             // Paginated table view
-            <div className="overflow-x-auto">
+            <div ref={pageListRef} className="flex-1 min-h-0 overflow-auto">
               <div className="min-w-full">
                 {files.map((file, index) => (
                   <Row
@@ -1337,14 +1354,15 @@ const FileList = () => {
               </div>
             </div>
           ) : (
-            // Virtualized list view
-            <div className="h-[calc(100vh-150px)]">
+            // Virtualized list view - fills the remaining viewport height
+            <div className="flex-1 min-h-0">
               <AutoSizer>
                 {({ height, width }) => (
                   <List
-                    ref={listRef}
+                    outerRef={listRef}
                     height={height}
                     width={width}
+                    initialScrollOffset={isTriageMode && selectedIndex > 0 ? Math.max(0, selectedIndex * ROW_HEIGHT - height / 2) : 0}
                     itemCount={files.length}
                     itemSize={ROW_HEIGHT}
                     itemData={{

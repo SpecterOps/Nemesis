@@ -35,13 +35,14 @@ const FindingsList = () => {
   const [error, setError] = useState(null);
   const [selectedFinding, setSelectedFinding] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { isTriageMode, setIsTriageMode, selectedIndex, setSelectedIndex } = useTriageMode();
+  const { isTriageMode, setIsTriageMode, selectedIndex, setSelectedIndex } = useTriageMode('findings');
   const [triageStates, setTriageStates] = useState({});
   const [selectedFindings, setSelectedFindings] = useState(new Set());
   const { username } = useUser();
-  const selectedRowRef = useRef(null);
   const lastDirection = useRef('down');
-  const listRef = useRef();
+  // Outer (scrolling) element of the virtualized list
+  const listRef = useRef(null);
+  const prevFilteredFindingsRef = useRef([]);
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState(() => searchParams.get('sort_column') || 'created_at');
@@ -140,11 +141,35 @@ const FindingsList = () => {
     }
   };
 
+  // Scroll just enough to keep the selected row visible. This sets the list element's scrollTop
+  // directly: react-window's scrollToItem goes through component state, and a scroll event handled
+  // before that state commits overwrites it, leaving the row hidden during fast key repeat.
   useEffect(() => {
-    if (listRef.current && isTriageMode && selectedIndex >= 0) {
-      listRef.current.scrollToItem(selectedIndex, 'center');
+    const outer = listRef.current;
+    if (!outer || !isTriageMode || selectedIndex < 0) return;
+    const rowTop = selectedIndex * ROW_HEIGHT;
+    if (rowTop < outer.scrollTop) {
+      outer.scrollTop = rowTop;
+    } else if (rowTop + ROW_HEIGHT > outer.scrollTop + outer.clientHeight) {
+      outer.scrollTop = rowTop + ROW_HEIGHT - outer.clientHeight;
     }
   }, [selectedIndex, isTriageMode]);
+
+  // Keep the triage selection on the same finding when the list changes (subscription updates,
+  // re-sorting, triaged rows dropping out of the filter), and clamp it if the list shrank.
+  useEffect(() => {
+    const prevFindings = prevFilteredFindingsRef.current;
+    prevFilteredFindingsRef.current = filteredFindings;
+    if (!isTriageMode || selectedIndex < 0 || filteredFindings.length === 0) return;
+
+    const prevId = prevFindings[selectedIndex]?.finding_id;
+    const newIndex = prevId === undefined ? -1 : filteredFindings.findIndex(f => f.finding_id === prevId);
+    if (newIndex >= 0) {
+      if (newIndex !== selectedIndex) setSelectedIndex(newIndex);
+    } else if (selectedIndex >= filteredFindings.length) {
+      setSelectedIndex(filteredFindings.length - 1);
+    }
+  }, [filteredFindings]);
 
   // Handle initial selected finding and modal state from URL/navigation
   useEffect(() => {
@@ -159,7 +184,6 @@ const FindingsList = () => {
         setSelectedIndex(findingIndex);
         setSelectedFinding(filteredFindings[findingIndex]);
         setIsTriageMode(true);
-        selectedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
       if (modalOpen) {
@@ -346,9 +370,10 @@ const FindingsList = () => {
       newParams.delete('modal');
     }
 
-    // Only update if the parameters have actually changed
+    // Only update if the parameters have actually changed. Moving the selection replaces the
+    // history entry so Back isn't flooded with one entry per keypress; opening/closing the modal pushes.
     if (newParams.toString() !== searchParams.toString()) {
-      setSearchParams(newParams, { replace: false });
+      setSearchParams(newParams, { replace: newParams.get('modal') === searchParams.get('modal') });
     }
 
   }, [searchParams, selectedIndex, filteredFindings, isLoading, isModalOpen]);
@@ -428,19 +453,22 @@ const FindingsList = () => {
 
         case '1':
           e.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
+          // With a multi-selection, the bulk handler below triages only the selected findings
+          if (selectedFindings.size === 0 && selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
             handleTriage(filteredFindings[selectedIndex].finding_id, 'true_positive');
           }
           break;
         case '2':
           e.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
+          // With a multi-selection, the bulk handler below triages only the selected findings
+          if (selectedFindings.size === 0 && selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
             handleTriage(filteredFindings[selectedIndex].finding_id, 'false_positive');
           }
           break;
         case '3':
           e.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
+          // With a multi-selection, the bulk handler below triages only the selected findings
+          if (selectedFindings.size === 0 && selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
             handleTriage(filteredFindings[selectedIndex].finding_id, 'needs_review');
           }
           break;
@@ -514,7 +542,7 @@ const FindingsList = () => {
 
 
   return (
-    <div className="bg-white dark:bg-dark-secondary rounded-lg shadow flex flex-col">
+    <div className="bg-white dark:bg-dark-secondary rounded-lg shadow flex flex-col h-[calc(100vh-1rem)]">
       {/* Triage mode indicator */}
       {isTriageMode ? (
         <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
@@ -538,8 +566,8 @@ const FindingsList = () => {
         sortDirection={sortDirection}
       />
 
-      {/* Findings Table */}
-      <div className="overflow-x-auto">
+      {/* Findings Table - fills the remaining viewport height so the list never extends below the window */}
+      <div className="overflow-x-auto flex-1 min-h-0 flex flex-col">
         {/* Headers - Keep these outside the virtualized area */}
         <TableHeaders
           isTriageMode={isTriageMode}
@@ -558,13 +586,14 @@ const FindingsList = () => {
         ) : filteredFindings.length === 0 ? (
           <NoFilteredFindings />
         ) : (
-          <div className="h-[calc(100vh-150px)]">
+          <div className="flex-1 min-h-0">
             <AutoSizer>
               {({ height, width }) => (
                 <List
-                  ref={listRef}
+                  outerRef={listRef}
                   height={height}
                   width={width}
+                  initialScrollOffset={isTriageMode && selectedIndex > 0 ? Math.max(0, selectedIndex * ROW_HEIGHT - height / 2) : 0}
                   itemCount={filteredFindings.length}
                   itemSize={ROW_HEIGHT}
                   itemData={{

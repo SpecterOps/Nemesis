@@ -117,9 +117,10 @@ const FindingsFilters = ({
             }
         }
 
-        // Only update if parameters have actually changed
+        // Only update if parameters have actually changed. Replace the history entry so filter
+        // normalization on mount and per-keystroke search updates don't break browser Back/Forward.
         if (newParams.toString() !== searchParams.toString()) {
-            setSearchParams(newParams, { replace: false });
+            setSearchParams(newParams, { replace: true });
         }
     }, [categoryFilter, severityFilter, searchFilter, triageFilter, triageSourceFilter, objectIdFilter, setSearchParams, searchParams]);
 
