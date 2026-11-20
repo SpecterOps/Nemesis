@@ -1,6 +1,6 @@
 import Tooltip from '@/components/shared/Tooltip2';
 import { AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, X, Download } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { FixedSizeList as List } from 'react-window';
@@ -481,6 +481,19 @@ const ChromiumLogins = ({ renderActions }) => {
     }
   }, [renderActions, isExporting, exportProgress, isLoading, totalCount]);
 
+  // Memoized so typing in a filter box doesn't re-render every visible row
+  const itemData = useMemo(() => ({ records }), [records]);
+  const pagedRows = useMemo(() => records.map((record, index) => (
+    <Row
+      key={`${record.originating_object_id}-${index}`}
+      index={index}
+      style={{ height: ROW_HEIGHT }}
+      data={{
+        records
+      }}
+    />
+  )), [records]);
+
   return (
     <div>
       {/* Filters */}
@@ -708,16 +721,7 @@ const ChromiumLogins = ({ renderActions }) => {
             // Paginated table view
             <div className="overflow-x-auto">
               <div className="min-w-full">
-                {records.map((record, index) => (
-                  <Row
-                    key={`${record.originating_object_id}-${index}`}
-                    index={index}
-                    style={{ height: ROW_HEIGHT }}
-                    data={{
-                      records
-                    }}
-                  />
-                ))}
+                {pagedRows}
               </div>
             </div>
           ) : (
@@ -730,9 +734,7 @@ const ChromiumLogins = ({ renderActions }) => {
                     width={width}
                     itemCount={records.length}
                     itemSize={ROW_HEIGHT}
-                    itemData={{
-                      records
-                    }}
+                    itemData={itemData}
                   >
                     {Row}
                   </List>
