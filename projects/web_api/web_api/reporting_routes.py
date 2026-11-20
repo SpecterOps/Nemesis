@@ -484,8 +484,12 @@ def get_system_report_data(
     start_date: datetime | None = None,
     end_date: datetime | None = None,
     project: str | None = None,
+    sources_limit: int | None = 50,
 ) -> SystemReport:
-    """Get system-wide statistics and findings."""
+    """Get system-wide statistics and findings.
+
+    `sources` holds the most recently active sources, at most `sources_limit` of them (None = all).
+    """
     conditions, params = _file_filters(project, start_date, end_date)
     where = _where(conditions)
 
@@ -603,7 +607,7 @@ def get_system_report_data(
             "total_credentials": creds_row[0] or 0,
             "decrypted_credentials": creds_row[1] or 0,
         },
-        sources=_to_source_summaries(source_rows, limit=50),
+        sources=_to_source_summaries(source_rows, limit=sources_limit),
         findings_by_category=findings_by_category,
         findings_by_severity=findings_by_severity,
         timeline={

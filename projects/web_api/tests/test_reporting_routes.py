@@ -261,6 +261,24 @@ def test_system_report_with_filters_qualifies_columns():
     assert category_params == ["p", start]
 
 
+def test_system_report_all_sources_when_limit_is_none():
+    rows = [(f"H{i}", 1, 1, NOW - timedelta(minutes=i), 0, 0) for i in range(80)]
+    report = rr.get_system_report_data(FakePool(_system_results(rows)), sources_limit=None)
+    assert len(report.sources) == 80
+
+
+def test_system_report_endpoint_sources_limit(client):
+    with (
+        patch("web_api.main.get_db_pool"),
+        patch("web_api.reporting_routes.get_system_report_data", side_effect=RuntimeError("x")) as mock_report,
+    ):
+        client.get("/reports/system", params={"sources_limit": 0})
+        assert mock_report.call_args.args[-1] is None  # 0 means all sources
+        client.get("/reports/system")
+        assert mock_report.call_args.args[-1] == 50
+    assert client.get("/reports/system", params={"sources_limit": -1}).status_code == 422
+
+
 # ---------------------------------------------------------------- endpoint
 
 

@@ -24,20 +24,17 @@ const ReportingPage = () => {
     try {
       setError(null);
 
-      // Fetch sources list and system stats in parallel
-      const [sourcesRes, systemRes] = await Promise.all([
-        fetch('/api/reports/sources'),
-        fetch('/api/reports/system')
-      ]);
+      // One request: the system report computes the per-source stats anyway, so ask it for all
+      // sources instead of running the same aggregation twice (/reports/sources + /reports/system).
+      const systemRes = await fetch('/api/reports/system?sources_limit=0');
 
-      if (!sourcesRes.ok || !systemRes.ok) {
+      if (!systemRes.ok) {
         throw new Error('Failed to fetch reporting data');
       }
 
-      const sourcesData = await sourcesRes.json();
       const systemData = await systemRes.json();
 
-      setSources(sourcesData);
+      setSources(systemData.sources);
       setSystemStats(systemData);
     } catch (err) {
       console.error('Error fetching reporting data:', err);

@@ -1733,12 +1733,17 @@ async def get_system_report(
     start_date: datetime | None = Query(None, description="Filter by start date"),
     end_date: datetime | None = Query(None, description="Filter by end date"),
     project: str | None = Query(None, description="Filter by project name"),
+    sources_limit: int = Query(
+        50, ge=0, description="Max number of (most recently active) sources to include; 0 = all sources"
+    ),
 ):
     """Get system-wide statistics and findings."""
     try:
         from web_api.reporting_routes import get_system_report_data
 
-        report = await asyncio.to_thread(get_system_report_data, get_db_pool(), start_date, end_date, project)
+        report = await asyncio.to_thread(
+            get_system_report_data, get_db_pool(), start_date, end_date, project, sources_limit or None
+        )
         return report
 
     except Exception as e:
