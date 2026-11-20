@@ -175,51 +175,36 @@ export async function cachedFetch(url, options = {}) {
   if (fileCache.pendingRequests.has(cacheKey)) {
     log('[FileCache] Deduplicating request:', cacheKey);
     // Wait for the pending request to complete
-    await fileCache.pendingRequests.get(cacheKey);
-    // Get a fresh copy from cache (each caller gets their own Response object)
-    const cached = await fileCache.get(url);
-    if (cached) {
-      return cached;
-    }
-    // If not in cache (caching may have failed), fallback to direct fetch
-    warn('[FileCache] Deduplicated request cache miss, falling back to direct fetch:', cacheKey);
-    return fetch(url, options);
+    const { blob, status, statusText, headers } = await fileCache.pendingRequests.get(cacheKey);
+    return new Response(blob, { status, statusText, headers: new Headers(headers) });
   }
 
   // Fetch from network
   log('[FileCache] Fetching from network:', cacheKey);
 
+  // Read the body once; every caller (including deduplicated ones) gets its own Response built from
+  // that blob, so a file too large to cache or an error response is never downloaded a second time.
   const fetchPromise = (async () => {
     const response = await fetch(url, options);
-
-    // Cache successful responses
+    const blob = await response.blob();
+    const snapshot = {
+      blob,
+      status: response.status,
+      statusText: response.statusText,
+      headers: new Headers(response.headers),
+    };
     if (response.ok) {
-      await fileCache.set(url, response);
+      await fileCache.set(url, new Response(blob, snapshot));
     }
-
-    // Signal completion (don't return the response itself to avoid stream issues)
-    return response.ok;
+    return snapshot;
   })();
 
   // Store the promise so concurrent requests can reuse it
   fileCache.pendingRequests.set(cacheKey, fetchPromise);
 
   try {
-    const success = await fetchPromise;
-    if (success) {
-      // Get from cache so we return a fresh Response object
-      const cached = await fileCache.get(url);
-      if (!cached) {
-        warn('[FileCache] Cache miss after successful fetch, falling back to direct fetch:', cacheKey);
-        log('[FileCache] Cache contents:', Array.from(fileCache.cache.keys()));
-        // Fallback to direct fetch if caching failed
-        return fetch(url, options);
-      }
-      return cached;
-    } else {
-      // Request failed, fetch again to get the actual error response
-      return fetch(url, options);
-    }
+    const { blob, status, statusText, headers } = await fetchPromise;
+    return new Response(blob, { status, statusText, headers: new Headers(headers) });
   } finally {
     // Remove from pending requests when done
     fileCache.pendingRequests.delete(cacheKey);

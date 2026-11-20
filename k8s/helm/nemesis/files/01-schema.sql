@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS files_enriched (
     security_info JSONB,
     hashes JSONB,
     file_tags TEXT[] DEFAULT '{}',
+    -- Number of findings for this file, kept current by the findings_count triggers on findings
+    findings_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -166,7 +168,11 @@ CREATE TABLE IF NOT EXISTS findings (
     data JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    triage_id BIGINT
+    -- Latest findings_triage_history entry, denormalized and kept current by the
+    -- findings_triage_history_set_latest trigger so list filters/sorts don't join the history
+    triage_id BIGINT,
+    triage_value VARCHAR(255),
+    triage_automated BOOLEAN
 );
 
 CREATE TABLE IF NOT EXISTS findings_triage_history (
@@ -234,6 +240,58 @@ CREATE INDEX IF NOT EXISTS idx_findings_object_id ON findings(object_id);
 -- Composite index for finding triage history joins (finding_triage_histories with order_by timestamp)
 CREATE INDEX IF NOT EXISTS idx_findings_triage_history_composite ON findings_triage_history(finding_id, timestamp DESC);
 
+-- Files / Findings list pages (server-side sort + pagination). Each sort index ends with the
+-- primary key the UI uses as tie-breaker so one index scan returns a page in order.
+-- Files default sort (timestamp desc): first page of 1M files 217ms -> 1ms
+CREATE INDEX IF NOT EXISTS idx_files_enriched_timestamp ON files_enriched(timestamp, object_id);
+-- Files list change signal (live subscription on max(created_at)): 150ms count -> 0.2ms
+CREATE INDEX IF NOT EXISTS idx_files_enriched_created_at ON files_enriched(created_at);
+-- Findings sorts: first page of 300k findings ~550ms -> 20-50ms
+CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity, finding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_finding_name ON findings(finding_name, finding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category, finding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_origin_name ON findings(origin_name, finding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_triage_value ON findings(triage_value, finding_id);
+-- Files "findings" sort on the trigger-maintained count (was a per-file aggregate sort: ~11s at 1M files)
+CREATE INDEX IF NOT EXISTS idx_files_enriched_findings_count ON files_enriched(findings_count, object_id);
+
+-- Keep findings.triage_id/triage_value/triage_automated pointing at the newest triage entry, whoever
+-- writes it (UI, agents service, API)
+CREATE OR REPLACE FUNCTION set_finding_latest_triage() RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE findings
+    SET triage_id = NEW.id, triage_value = NEW.value, triage_automated = COALESCE(NEW.automated, FALSE)
+    WHERE finding_id = NEW.finding_id AND (triage_id IS NULL OR triage_id < NEW.id);
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER findings_triage_history_set_latest
+    AFTER INSERT ON findings_triage_history
+    FOR EACH ROW EXECUTE FUNCTION set_finding_latest_triage();
+
+-- Keep files_enriched.findings_count in step with the findings rows for each file
+CREATE OR REPLACE FUNCTION update_file_findings_count() RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        UPDATE files_enriched SET findings_count = findings_count + 1 WHERE object_id = NEW.object_id;
+    END IF;
+    IF TG_OP IN ('DELETE', 'UPDATE') THEN
+        UPDATE files_enriched SET findings_count = findings_count - 1 WHERE object_id = OLD.object_id;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER findings_count_insert_delete
+    AFTER INSERT OR DELETE ON findings
+    FOR EACH ROW EXECUTE FUNCTION update_file_findings_count();
+
+CREATE OR REPLACE TRIGGER findings_count_object_id_update
+    AFTER UPDATE OF object_id ON findings
+    FOR EACH ROW WHEN (OLD.object_id IS DISTINCT FROM NEW.object_id)
+    EXECUTE FUNCTION update_file_findings_count();
+
 
 
 -----------------------
@@ -278,7 +336,9 @@ SELECT
 FROM plaintext_content pc
 JOIN files_enriched ef ON pc.object_id = ef.object_id;
 
--- Create a simple search function that uses the view
+-- Full-text search over plaintext chunks, newest files first, one (the first matching) chunk per file.
+-- Scale: matching is done on (object_id, chunk_number) only, so the content of the many matching
+-- chunks is not carried through the sort; only the max_results winners are joined back for content.
 CREATE OR REPLACE FUNCTION public.search_documents(
     search_query text,
     path_pattern text DEFAULT NULL,
@@ -292,38 +352,42 @@ CREATE OR REPLACE FUNCTION public.search_documents(
 STABLE
 LANGUAGE sql
 AS $$
-    WITH ranked_chunks AS (
-        SELECT *,
-            ROW_NUMBER() OVER (
-                PARTITION BY object_id
-                ORDER BY chunk_number ASC
-            ) as rn
-        FROM document_search_results
+    WITH matches AS (
+        SELECT pc.object_id, MIN(pc.chunk_number) AS chunk_number
+        FROM plaintext_content pc
+        WHERE pc.content_vector @@ plainto_tsquery('simple', search_query)
+        GROUP BY pc.object_id
+    ),
+    top_files AS (
+        SELECT m.object_id, m.chunk_number, ef.file_name, ef.path, ef.extension, ef.project, ef.agent_id, ef.source,
+               ef."timestamp"::timestamp with time zone AS "timestamp"
+        FROM matches m
+        JOIN files_enriched ef ON ef.object_id = m.object_id
         WHERE
-            content_vector @@ plainto_tsquery('simple', search_query)
-            AND (path_pattern IS NULL OR path LIKE path_pattern)
-            AND (agent_pattern IS NULL OR agent_id LIKE agent_pattern)
-            AND (project_name IS NULL OR project = project_name)
-            AND (start_date IS NULL OR "timestamp" >= start_date)
-            AND (end_date IS NULL OR "timestamp" <= end_date)
-            AND (source_pattern IS NULL OR source IS NULL OR source LIKE source_pattern)
+            (path_pattern IS NULL OR ef.path LIKE path_pattern)
+            AND (agent_pattern IS NULL OR ef.agent_id LIKE agent_pattern)
+            AND (project_name IS NULL OR ef.project = project_name)
+            AND (start_date IS NULL OR ef."timestamp" >= start_date)
+            AND (end_date IS NULL OR ef."timestamp" <= end_date)
+            AND (source_pattern IS NULL OR ef.source IS NULL OR ef.source LIKE source_pattern)
+        ORDER BY ef."timestamp" DESC
+        LIMIT max_results
     )
     SELECT
-        object_id,
-        chunk_number,
-        content,
-        content_vector,
-        file_name,
-        path,
-        extension,
-        project,
-        agent_id,
-        source,
-        "timestamp"
-    FROM ranked_chunks
-    WHERE rn = 1
-    ORDER BY "timestamp" DESC
-    LIMIT max_results;
+        t.object_id,
+        t.chunk_number,
+        pc.content,
+        pc.content_vector,
+        t.file_name,
+        t.path,
+        t.extension,
+        t.project,
+        t.agent_id,
+        t.source,
+        t."timestamp"
+    FROM top_files t
+    JOIN plaintext_content pc ON pc.object_id = t.object_id AND pc.chunk_number = t.chunk_number
+    ORDER BY t."timestamp" DESC;
 $$;
 
 -- compression
@@ -925,3 +989,55 @@ REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM chat
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA chromium FROM chatbot_readonly;
 REVOKE CREATE ON SCHEMA public FROM chatbot_readonly;
 REVOKE CREATE ON SCHEMA chromium FROM chatbot_readonly;
+
+-----------------------
+-- UI SCALE: dashboard, reporting, file browser, containers
+-----------------------
+-- Dashboard "files over time" chart: per-interval counts of submitted files (index-only range counts
+-- instead of one full files_enriched scan per interval).
+CREATE INDEX IF NOT EXISTS idx_files_enriched_created_at_submitted
+    ON files_enriched (created_at) WHERE originating_object_id IS NULL;
+
+-- Source reports (web_api reporting_routes) filter files with UPPER(source) = <source>.
+CREATE INDEX IF NOT EXISTS idx_files_enriched_upper_source ON files_enriched (UPPER(source));
+
+-- File browser: parent folder of a file_listings path in the UI's form (leading slashes stripped,
+-- '/'-separated, '' for the root), e.g. '/a/b/c.txt' -> 'a/b', 'c.txt' -> ''.
+CREATE OR REPLACE FUNCTION file_listing_parent(file_path text) RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$ SELECT regexp_replace(ltrim(file_path, '/'), '/?[^/]*$', '') $$;
+
+-- One folder level at a time (web_api file_browser_routes): files of a folder are an index range
+-- (keyset-paged by path) and sub-folders are found with a loose index scan over the parent column,
+-- which needs byte ("C") ordering.
+CREATE INDEX IF NOT EXISTS idx_file_listings_browse
+    ON file_listings (source, (file_listing_parent(path)) COLLATE "C", path);
+
+-- Containers page: newest first.
+CREATE INDEX IF NOT EXISTS idx_container_processing_submitted_at ON container_processing (submitted_at DESC);
+
+-----------------------
+-- SCALE INDEXES: FILE VIEWER / CHROMIUM / DPAPI
+-----------------------
+-- File viewer lookups by object_id (enrichment tabs, transforms, workflow status) and
+-- derived/child files by originating_object_id (containers can have 100k+ children)
+CREATE INDEX IF NOT EXISTS idx_files_enriched_originating_object_id ON files_enriched(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_enrichments_object_id_module ON enrichments(object_id, module_name);
+CREATE INDEX IF NOT EXISTS idx_transforms_object_id ON transforms(object_id);
+CREATE INDEX IF NOT EXISTS idx_workflows_object_id ON workflows(object_id);
+
+-- Chromium tables: originating_object_id serves per-file lookups and the ON DELETE CASCADE
+-- from files_enriched; (sort column, id) serves the UI's default sort + stable paging
+CREATE INDEX IF NOT EXISTS idx_chromium_history_originating_object_id ON chromium.history(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_history_last_visit_time ON chromium.history(last_visit_time, id);
+CREATE INDEX IF NOT EXISTS idx_chromium_downloads_originating_object_id ON chromium.downloads(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_downloads_end_time ON chromium.downloads(end_time, id);
+CREATE INDEX IF NOT EXISTS idx_chromium_logins_originating_object_id ON chromium.logins(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_logins_times_used ON chromium.logins(times_used, id);
+CREATE INDEX IF NOT EXISTS idx_chromium_cookies_originating_object_id ON chromium.cookies(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_cookies_last_access_utc ON chromium.cookies(last_access_utc, id);
+CREATE INDEX IF NOT EXISTS idx_chromium_state_keys_originating_object_id ON chromium.state_keys(originating_object_id, id);
+-- FK lookups for ON DELETE SET NULL from chromium.state_keys (without these, deleting a state
+-- key, e.g. via a files_enriched cascade, seq-scans all cookies/logins per row)
+CREATE INDEX IF NOT EXISTS idx_chromium_cookies_state_key_id ON chromium.cookies(state_key_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_logins_state_key_id ON chromium.logins(state_key_id);
