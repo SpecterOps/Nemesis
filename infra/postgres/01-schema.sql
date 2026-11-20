@@ -944,3 +944,7 @@ CREATE INDEX IF NOT EXISTS idx_chromium_logins_times_used ON chromium.logins(tim
 CREATE INDEX IF NOT EXISTS idx_chromium_cookies_originating_object_id ON chromium.cookies(originating_object_id);
 CREATE INDEX IF NOT EXISTS idx_chromium_cookies_last_access_utc ON chromium.cookies(last_access_utc, id);
 CREATE INDEX IF NOT EXISTS idx_chromium_state_keys_originating_object_id ON chromium.state_keys(originating_object_id, id);
+-- FK lookups for ON DELETE SET NULL from chromium.state_keys (without these, deleting a state
+-- key, e.g. via a files_enriched cascade, seq-scans all cookies/logins per row)
+CREATE INDEX IF NOT EXISTS idx_chromium_cookies_state_key_id ON chromium.cookies(state_key_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_logins_state_key_id ON chromium.logins(state_key_id);
