@@ -32,7 +32,13 @@ CMD ["npm", "run", "dev"]
 FROM base AS bundle
 COPY --from=base /app /app/
 
-RUN npm run build
+# public/version.json comes from CI or tools/nemesis-ctl.sh; builds without one get a minimal
+# placeholder so the Settings page never requests a missing file
+RUN npm run build && \
+    if [ ! -f dist/version.json ]; then \
+      printf '{"git":{"sha":"unknown","shaShort":"unknown","branch":"unknown","tag":"","dirty":false,"commitTimestamp":"","commitMessage":"","commitAuthor":""},"build":{"timestamp":"%s","source":"unknown"}}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist/version.json; \
+    fi
 
 
 FROM nginx:alpine AS prod

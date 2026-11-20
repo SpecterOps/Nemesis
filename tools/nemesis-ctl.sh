@@ -155,6 +155,8 @@ if [ "$ACTION" = "start" ]; then
   # Generate version.json for local builds
   echo "Generating version information..."
   "${SCRIPT_DIR}/generate-version.sh" "${COMPOSE_DIR}/version.json" "local"
+  # Prod images bake it in at build time (dev mounts the repo-root copy)
+  cp "${COMPOSE_DIR}/version.json" "${COMPOSE_DIR}/projects/frontend/public/version.json"
 
   if [ "$BUILD" = "true" ]; then
     # Base images must be built for both dev and prod before starting

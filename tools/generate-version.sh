@@ -22,6 +22,11 @@ fi
 # Get build timestamp
 BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# Escape a value for a JSON string (backslashes, double quotes; drop control characters)
+json_escape() {
+    printf '%s' "$1" | tr -d '\000-\037' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
+
 # Get last commit timestamp
 if [ "$GIT_SHA" != "unknown" ]; then
     COMMIT_TIMESTAMP=$(git log -1 --format=%cI 2>/dev/null || echo "")
@@ -34,6 +39,11 @@ else
 fi
 
 # Create JSON output
+GIT_BRANCH=$(json_escape "$GIT_BRANCH")
+GIT_TAG=$(json_escape "$GIT_TAG")
+COMMIT_MESSAGE=$(json_escape "$COMMIT_MESSAGE")
+COMMIT_AUTHOR=$(json_escape "$COMMIT_AUTHOR")
+
 cat > "$OUTPUT_FILE" <<EOF
 {
   "git": {

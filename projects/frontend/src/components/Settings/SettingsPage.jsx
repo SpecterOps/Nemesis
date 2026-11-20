@@ -187,13 +187,13 @@ const SettingsPage = () => {
   useEffect(() => {
     const fetchVersionInfo = async () => {
       try {
-        const response = await fetch('/version.json');
-        if (response.ok) {
-          const data = await response.json();
-          setVersionInfo(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch version info:', error);
+        const response = await fetch('/version.json', { cache: 'no-store' });
+        if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) return;
+        const data = await response.json();
+        // Only show it when it has the expected shape (a hand-made or partial file is ignored)
+        if (data?.git && data?.build) setVersionInfo(data);
+      } catch {
+        // Version info is optional (e.g. a dev server without a generated version.json)
       }
     };
 
