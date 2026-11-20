@@ -72,6 +72,9 @@ test('isEditableTarget ignores inputs, textareas, selects and contenteditable', 
   assert.equal(isEditableTarget({ tagName: 'DIV', isContentEditable: true }), true);
   assert.equal(isEditableTarget({ tagName: 'BODY' }), false);
   assert.equal(isEditableTarget(null), false);
+  // Monaco's focused EditContext <div> sits inside .monaco-editor
+  assert.equal(isEditableTarget({ tagName: 'DIV', closest: (sel) => (sel === '.monaco-editor' ? {} : null) }), true);
+  assert.equal(isEditableTarget({ tagName: 'DIV', closest: () => null }), false);
 });
 
 test('fetchPage reads back-half pages in reverse order from the end', async () => {

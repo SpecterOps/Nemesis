@@ -224,6 +224,7 @@ As on the Files page, the mouse-hover highlight is suppressed while navigating w
 | `→` | Findings | Yes | Open the finding details; again to open its file |
 | `←` | File details | | Back to the list |
 | `←` / `ESC` | Findings (details open) | | Close the finding details |
+| `←` | Findings (opened from a file with `f` or its Findings button) | | Back to that file's details (when the finding details aren't open) |
 | `ESC` | Files, Findings | Yes | Clear the selection; with no selection, exit triage mode (Findings: closes the details first if open) |
 | `v` | Files | Yes | Mark the selected files (or the active file) as viewed |
 | `Space` | Files, Findings | Yes | Toggle selection of the active row |

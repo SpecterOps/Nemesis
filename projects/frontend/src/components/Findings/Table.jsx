@@ -1,49 +1,21 @@
+import { CheckCell, CheckHeaderCell, SortableHeader, listRowClassName } from '@/components/shared/ListTable';
 import Tooltip from '@/components/shared/Tooltip2';
-import { Bot, ChevronDown, ChevronUp, HelpCircle, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { triageRowClasses } from '@/hooks/pagedList';
+import { Bot, HelpCircle, ThumbsDown, ThumbsUp } from 'lucide-react';
 import React from 'react';
 import { useFileNavigation } from './navigation';
 
 // Sortable header component
-const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
-  const isActive = currentSort === column;
-  const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
-
-  return (
-    <button
-      type="button"
-      className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
-      onClick={() => onSort(column, nextDirection)}
-    >
-      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{children}</span>
-      <div className="ml-1 flex flex-col">
-        {isActive ? (
-          currentDirection === 'asc' ? (
-            <ChevronUp className="w-3 h-3 text-gray-600 dark:text-gray-300" />
-          ) : (
-            <ChevronDown className="w-3 h-3 text-gray-600 dark:text-gray-300" />
-          )
-        ) : (
-          <div className="w-3 h-3" />
-        )}
-      </div>
-    </button>
-  );
-};
-
 
 export const TableHeaders = ({ isTriageMode, sortColumn, sortDirection, onSort }) => (
     <div className="min-w-full">
         <div className="flex bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
-            {isTriageMode && (
-                <div className="flex-shrink-0 w-8 text-sm font-medium text-gray-500 dark:text-gray-400 text-center" />
-            )}
+            {isTriageMode && <CheckHeaderCell />}
             <SortableHeader
                 column="severity"
                 currentSort={sortColumn}
                 currentDirection={sortDirection}
                 onSort={onSort}
-                className="flex-shrink-0 w-16 justify-center"
+                className="flex-shrink-0 w-24 justify-center"
             >
                 Severity
             </SortableHeader>
@@ -156,19 +128,11 @@ const FindingRow = ({
             data-row-index={index}
             data-finding-id={finding.finding_id}
             data-active={isTriageMode && isSelected ? 'true' : undefined}
-            className={`
-        flex items-center border-b dark:border-gray-700 cursor-pointer transition-colors
-        dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700
-        ${triageRowClasses(isTriageMode, isChecked, isTriageMode && isSelected)}
-      `}
+            className={listRowClassName(isTriageMode, isChecked, isTriageMode && isSelected)}
             onClick={(e) => onRowClick(finding, index, e)}
         >
-            {isTriageMode && (
-                <div className="flex-shrink-0 w-8 text-sm font-medium text-gray-500 dark:text-gray-400 text-center">
-                    {isChecked ? '✓' : ''}
-                </div>
-            )}
-            <div className="flex-shrink-0 w-16 text-center">
+            {isTriageMode && <CheckCell checked={isChecked} />}
+            <div className="flex-shrink-0 w-24 text-center">
                 {renderSeverityBadge(finding.severity)}
             </div>
             <div className="flex-shrink-0 w-40 text-sm text-gray-500 dark:text-gray-400 text-left">

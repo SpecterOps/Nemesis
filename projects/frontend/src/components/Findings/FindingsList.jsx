@@ -1,4 +1,5 @@
 import PaginationControls from '@/components/FileList/PaginationControls';
+import { LIST_ROW_HEIGHT } from '@/components/shared/ListTable';
 import { useUser } from '@/contexts/UserContext';
 import BulkActionBar from '@/components/FileList/BulkActionBar';
 import { fetchPage, forEachIdChunk, hasuraRequest, isEditableTarget } from '@/hooks/pagedList';
@@ -16,7 +17,7 @@ import {
 import { useFileNavigation } from './navigation';
 import { TableHeaders, TableRow } from './Table';
 
-const ROW_HEIGHT = 42;
+const ROW_HEIGHT = LIST_ROW_HEIGHT;
 const PAGE_SIZE = FINDINGS_PAGE_SIZE;
 
 // Only what the list renders; the (possibly large) finding `data` is loaded when the modal opens
@@ -70,6 +71,9 @@ const readUrlState = (searchParams) => {
 const FindingsList = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  // Opened from a file's viewer (its `f` key / Findings button): ← goes back to that file. Kept in a
+  // ref because the list later rewrites the URL (filters, page, selection) without router state.
+  const fromFileRef = useRef(location.state?.fromFile || null);
   const navigate = useNavigate();
   const navigateToFile = useFileNavigation();
   const { username } = useUser();
@@ -384,16 +388,19 @@ const FindingsList = () => {
       const { isModalOpen: modalOpen, closeModal: close } = keyState.current;
       const n = nav.current;
 
+      // The details dialog takes the key first: Esc/← only close it
+      if (modalOpen && (e.key === 'Escape' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        close();
+        return;
+      }
+      // ← with no dialog open: back to the file viewer this list was opened from
+      if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && fromFileRef.current) {
+        e.preventDefault();
+        navigate(`/files/${fromFileRef.current}`);
+        return;
+      }
       switch (e.key) {
-        case 'ArrowLeft':
-        case 'Escape':
-          // The details dialog takes the key first: Esc/← only close it
-          if (modalOpen) {
-            e.preventDefault();
-            close();
-            return;
-          }
-          break;
         case 't':
           if (e.ctrlKey || e.metaKey || e.altKey) return;
           e.preventDefault();

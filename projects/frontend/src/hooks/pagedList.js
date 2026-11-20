@@ -80,7 +80,10 @@ export const fetchPage = async ({
 
 // Keyboard shortcuts shouldn't fire while typing
 export const isEditableTarget = (target) =>
-  !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || !!target.isContentEditable);
+  !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+    || !!target.isContentEditable
+    // Monaco types through a focused <div> (EditContext), not a textarea, in current browsers
+    || !!(typeof target.closest === 'function' && target.closest('.monaco-editor')));
 
 // Triage-mode row highlight: checked rows get the filled background, the active (keyboard
 // cursor) row an inset ring (no layout change) plus a light background only when not checked

@@ -1,16 +1,17 @@
+import { CheckCell, CheckHeaderCell, LIST_ROW_HEIGHT, SortableHeader, listRowClassName } from '@/components/shared/ListTable';
 import Tooltip from '@/components/shared/Tooltip2';
 import { useUser } from '@/contexts/UserContext';
-import { fetchPage, forEachIdChunk, hasuraRequest, isEditableTarget, triageRowClasses } from '@/hooks/pagedList';
+import { fetchPage, forEachIdChunk, hasuraRequest, isEditableTarget } from '@/hooks/pagedList';
 import { useBulkAction } from '@/hooks/useBulkAction';
 import { usePagedList } from '@/hooks/usePagedList';
-import { AlertTriangle, ChevronDown, ChevronUp, Eye, Search, Tag, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Eye, Search, Tag, X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { FILES_PAGE_SIZE, FILE_SORT_COLUMNS, buildFilesOrderBy, buildFilesWhere } from './fileQuery';
 import BulkActionBar from './BulkActionBar';
 import PaginationControls from './PaginationControls';
 
-const ROW_HEIGHT = 48;
+const ROW_HEIGHT = LIST_ROW_HEIGHT;
 const PAGE_SIZE = FILES_PAGE_SIZE;
 
 export const formatFileSize = (bytes, decimals = 2) => {
@@ -45,18 +46,10 @@ const FileRow = ({ file, index, isTriageMode, isSelected, isChecked, onRowClick,
       data-row-index={index}
       data-object-id={file.object_id}
       data-active={isActive ? 'true' : undefined}
-      className={`
-        flex items-center border-b dark:border-gray-700 cursor-pointer transition-colors
-        dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700
-        ${triageRowClasses(isTriageMode, isChecked, isActive)}
-      `}
+      className={listRowClassName(isTriageMode, isChecked, isActive)}
       onClick={(e) => onRowClick(e, file, index)}
     >
-      {isTriageMode && (
-        <div className="w-8 px-2 text-center text-gray-400">
-          {isChecked ? '✓' : ''}
-        </div>
-      )}
+      {isTriageMode && <CheckCell checked={isChecked} />}
       <div className="px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left">
         <Tooltip
           content={<div role="presentation" onClick={stopPropagation} className="select-text">{file.agent_id}</div>}
@@ -82,7 +75,7 @@ const FileRow = ({ file, index, isTriageMode, isSelected, isChecked, onRowClick,
           content={<div role="presentation" onClick={stopPropagation} className="select-text">{file.magic_type || 'Unknown'}</div>}
           side="top"
         >
-          <span className="inline-block max-w-full px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 truncate">
+          <span className="inline-block max-w-full px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 truncate">
             {file.magic_type || 'Unknown'}
           </span>
         </Tooltip>
@@ -111,32 +104,6 @@ const FileRow = ({ file, index, isTriageMode, isSelected, isChecked, onRowClick,
 const Row = React.memo(FileRow);
 
 // Sortable header component
-const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
-  const isActive = currentSort === column;
-  const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
-
-  return (
-    <button
-      type="button"
-      className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
-      onClick={() => onSort(column, nextDirection)}
-    >
-      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{children}</span>
-      <div className="ml-1 flex flex-col">
-        {isActive ? (
-          currentDirection === 'asc' ? (
-            <ChevronUp className="w-3 h-3 text-gray-600 dark:text-gray-300" />
-          ) : (
-            <ChevronDown className="w-3 h-3 text-gray-600 dark:text-gray-300" />
-          )
-        ) : (
-          <div className="w-3 h-3" />
-        )}
-      </div>
-    </button>
-  );
-};
-
 const FILE_FIELDS = `
   object_id
   agent_id
@@ -696,9 +663,7 @@ const FileList = () => {
 
       {/* Headers */}
       <div className="flex border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-        {isTriageMode && (
-          <div className="w-8 px-2 py-2"></div>
-        )}
+        {isTriageMode && <CheckHeaderCell />}
         <SortableHeader
           column="agent_id"
           currentSort={sortColumn}

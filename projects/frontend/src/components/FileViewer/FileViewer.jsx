@@ -8,6 +8,7 @@ import {
 import Dialog from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUser } from '@/contexts/UserContext';
+import { isEditableTarget } from '@/hooks/pagedList';
 import { cachedFetch } from '@/utils/fileCache';
 import { createClient } from 'graphql-ws';
 import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileText, Image } from 'lucide-react';
@@ -1383,8 +1384,7 @@ const FileViewer = () => {
   // <- to go back, tab to scroll to file data area or cycle tabs if already in view, f to jump to findings
   const handleGlobalKeyDown = (e) => {
     // Only handle keyboard shortcuts when not in an input/textarea/monaco-editor
-    const isEditingText = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) ||
-      document.activeElement.classList.contains('monaco-editor');
+    const isEditingText = isEditableTarget(e.target) || isEditableTarget(document.activeElement);
 
     if (!isEditingText) {
       if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1420,7 +1420,7 @@ const FileViewer = () => {
         // Navigate to findings if count > 0
         const findingsCount = fileData?.findingsByObjectId_aggregate?.aggregate?.count || 0;
         if (findingsCount > 0) {
-          navigate(`/findings?object_id=${fileData.object_id}`);
+          navigate(`/findings?object_id=${fileData.object_id}`, { state: { fromFile: fileData.object_id } });
         }
       }
     }
@@ -1736,7 +1736,7 @@ const FileViewer = () => {
                 />
               )}
               <button
-                onClick={() => navigate(`/findings?object_id=${fileData.object_id}`)}
+                onClick={() => navigate(`/findings?object_id=${fileData.object_id}`, { state: { fromFile: fileData.object_id } })}
                 className={`${(fileData.findingsByObjectId_aggregate?.aggregate?.count || 0) > 0
                   ? 'bg-red-600 hover:bg-red-700'
                   : 'bg-gray-600 hover:bg-gray-700'
