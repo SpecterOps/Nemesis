@@ -280,3 +280,26 @@ def test_dashboard_stats_endpoint_error(client):
         response = client.get("/reports/dashboard-stats")
     assert response.status_code == 500
     assert "db down" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------- PDF HTML templates
+
+
+def test_source_report_template_renders_report_data():
+    from web_api.pdf_generator import render_source_report_html
+
+    file_rows = [(3, None, None, 2, Decimal(10), NOW, NOW), (1, "txt", None, 2, None, None, None)]
+    finding_rows = [(0b11111, None, None, None, None, None, 1), (0b11011, None, None, "titus", None, None, 1)]
+    top = [(1, "aws_key", "credential", 9, None, "/a/b.txt", NOW)]
+    report = rr.get_source_report_data(FakePool(_source_report_results(file_rows, finding_rows, top)), "host")
+    html = render_source_report_html(report.model_dump())
+    assert "Titus Findings" in html
+    assert "aws_key" in html
+
+
+def test_system_report_template_renders_report_data():
+    from web_api.pdf_generator import render_system_report_html
+
+    report = rr.get_system_report_data(FakePool(_system_results(_source_rows())))
+    html = render_system_report_html(report.model_dump())
+    assert "HOST-B" in html

@@ -361,15 +361,23 @@ def get_source_report_data(
             dpapi_row = cur.fetchone() or (0, 0)
 
             # --- Top findings (verified true positives first, then by severity, then newest) ---
+            # (file paths are joined only for the 20 winners, keeping the big join narrow)
             cur.execute(
                 f"""
-                SELECT f.finding_id, f.finding_name, f.category, f.severity, lt.value, fe.path, f.created_at
-                FROM files_enriched fe
-                JOIN findings f ON f.object_id = fe.object_id
-                {LATEST_TRIAGE_LATERAL}
-                WHERE {where}
-                ORDER BY (lt.value = 'true_positive') IS NOT TRUE, f.severity DESC, f.created_at DESC
-                LIMIT 20
+                WITH top AS (
+                    SELECT f.finding_id, f.finding_name, f.category, f.severity, lt.value AS triage_state,
+                           f.object_id, f.created_at
+                    FROM files_enriched fe
+                    JOIN findings f ON f.object_id = fe.object_id
+                    {LATEST_TRIAGE_LATERAL}
+                    WHERE {where}
+                    ORDER BY (lt.value = 'true_positive') IS NOT TRUE, f.severity DESC, f.created_at DESC
+                    LIMIT 20
+                )
+                SELECT t.finding_id, t.finding_name, t.category, t.severity, t.triage_state, fe.path, t.created_at
+                FROM top t
+                JOIN files_enriched fe ON fe.object_id = t.object_id
+                ORDER BY (t.triage_state = 'true_positive') IS NOT TRUE, t.severity DESC, t.created_at DESC
                 """,
                 params,
             )
