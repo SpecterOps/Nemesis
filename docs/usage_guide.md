@@ -9,12 +9,14 @@ For a general overview of the Nemesis project structure, see the [overview](over
     - [Nemesis C2 Connector Setup](#nemesis-c2-connector-setup)
   - [Nemesis Dashboard](#nemesis-dashboard)
     - [Files](#files)
+      - [Paging, Links and Live Updates](#paging-links-and-live-updates)
       - [File Triage Mode](#file-triage-mode)
       - [File Details](#file-details)
       - [File Tags](#file-tags)
     - [Manual File Upload](#manual-file-upload)
     - [Document Search](#document-search)
     - [Findings](#findings)
+      - [Keyboard Shortcuts](#keyboard-shortcuts)
     - [Dashboard Settings](#dashboard-settings)
   - [Alerting](#alerting)
   - [Submitting Files via the API](#submitting-files-via-the-api)
@@ -49,7 +51,7 @@ To analyze files in Nemesis, visit the `Files` page in the left navigation pane:
 
 ![Nemesis Dashboard Files View](images/nemesis-dashboard-files.png)
 
-As Nemesis processes files, they appear as a new row on this page. By default, Nemesis displays all uploaded files from newest to older. Clicking on column headers changes sorting behavior and the toolbar allows filtering the list in various ways.
+As Nemesis processes files, they appear as a new row on this page. By default, Nemesis displays all uploaded files from newest to oldest. Clicking on a column header sorts by that column (clicking it again reverses the order), and the toolbar allows filtering the list in various ways. The number of matching files is shown at the right of the toolbar.
 
 Each file's path has a blue dot to the left of it indicating if you have viewed it or not. Clicking on the row will bring you to the [File Details](#file-details) page and marks the file as viewed by you. Returning to the Files page, the blue indicator dot won't be present anymore. To only show files you have not viewed yet, you can click the dropdown in the top left of the toolbar and select one of the following options:
 
@@ -60,28 +62,64 @@ Each file's path has a blue dot to the left of it indicating if you have viewed 
 ![Nemesis Dashboard File View State](images/nemesis-dashboard-files-view-state.png)
 
 
-Some files may have findings associated with them. To show only files that have findings, click the "(Findings) All Files" button. 
+Some files may have findings associated with them. To show only files that have findings, click the "(Findings) All Files" button (it then reads "(Findings) Files With Findings"; click it again to show all files).
 
-Use the "Filter by path" search box to filter files by path/name/extension. Similarly, you can use the "Filter by Agent ID" to filter files by agent ID.
+Use the "Filter by path" search box to filter files by path/name/extension (`*` is a wildcard, e.g. `*.txt`; without a `*` the text matches anywhere in the path). Similarly, you can use the "Filter by source" box to filter files by their source (e.g., the agent/host they were collected from).
 
 On the File Details page you can [view and add tags](#file-tags) to a file. The "Filter by Tag" button allows you to filter the file list to particular tags.
 
+#### Paging, Links and Live Updates
+
+The Files and [Findings](#findings) lists are paginated on the server: each page shows 100 rows, and the bar at the bottom of the list shows which rows are displayed out of the total number of results (e.g. "Showing 101 to 200 of 5,432 files") along with page navigation buttons.
+
+The current filters, sort order and page number are all stored in the page's URL, so:
+
+- A filtered/sorted view can be bookmarked or shared with a teammate by copying the URL.
+- The browser's Back/Forward buttons restore previous filters, sort orders and pages.
+- Returning from a file's [details](#file-details) (with the `Back` button or `←`) brings you back to the same page, row and filters you left.
+
+The lists update live: when new files/findings arrive, or when you or a teammate views or triages something, the current page and the total count refresh automatically.
+
+Outside of triage mode, `PageUp`/`PageDown` scroll the list by about three quarters of its height; pressing `PageDown` at the bottom of the list (or `PageUp` at the top) moves to the next (or previous) page.
 
 #### File Triage Mode
 
-File Triage Mode is very convenient when you want to quickly navigate and view/triage files and findings.
-To enter File Triage Mode, hit the `t` key on the Files page:
+File Triage Mode is very convenient when you want to quickly navigate and view/triage files and findings with the keyboard.
+To enter File Triage Mode, hit the `t` key on the Files page (press `t` again to leave it):
 
 ![Nemesis Dashboard File Triage Mode](images/nemesis-dashboard-files-triage-mode.png)
 
-As the instructions specify at the top of the page, the following actions are possible:
-- `Up/down(↑↓) arrow` - Navigate up and down the list of files.
-- `Right(→) arrow` - Navigate to the [File Details](#file-details) page. Use `Left(←) arrow` to navigate back.
-- `Ctrl/Cmd + A` - Select all files on the current page.
-- `v` - Marks the selected/highlighted file(s) as viewed.
-- `t` or `ESC` - Exits triage mode. 
-- `Ctrl/Cmd + Mouse Click` - Select an individual file.
-- `Shift + Mouse Click` - Select multiple files.
+In triage mode, the **active row** (the one the keyboard acts on) is drawn with an outline. A column on the left shows a ✓ next to the rows an action will apply to: every selected row, or, when nothing is selected, the active row. Selected rows also get a filled blue highlight.
+
+The following actions are possible (a summary is also shown in the bar at the top of the page):
+
+- `Up/down(↑↓) arrow` - Move the active row up and down. Moving past the first/last row of a page continues onto the previous/next page.
+- `PageUp`/`PageDown` - Jump about three quarters of the visible rows up/down, also crossing page boundaries (stops at the first/last result).
+- `Right(→) arrow` - Open the active file's [File Details](#file-details) page. Use `Left(←) arrow` there to navigate back to the list.
+- `v` - Mark the selected files as viewed, or the active file if nothing is selected.
+- `ESC` - Clear the selection. With nothing selected, `ESC` exits triage mode.
+- `t` - Exit triage mode.
+
+Selecting multiple files (only possible in triage mode):
+
+- `Shift + Up/down(↑↓) arrow` - Extend the selection up/down from the active row.
+- `Mouse Click` - Select just the clicked file and make it the active row (in triage mode a click does not open the file; use `→`).
+- `Ctrl/Cmd + Mouse Click` - Add or remove an individual file from the selection.
+- `Shift + Mouse Click` - Select all files between the active row and the clicked file.
+- `Ctrl/Cmd + A` - Select all files on the current page. Pressing `Ctrl/Cmd + A` **again** selects **all** files matching the current filters, across every page (the top bar then reads "All N results selected").
+
+A selection made on one page is dropped when you move to another page, but an "all results" selection stays in place while you page around. Changing the filters or sort order, pressing `ESC`, or leaving triage mode clears the selection.
+
+Pressing `v` with all results selected first asks for confirmation ("Mark all N files matching the current filters as viewed?") - press `Enter` (or click `Confirm`) to proceed or `ESC` to cancel. While this prompt is shown, other keys are ignored. Nemesis then shows a progress bar while the files are marked, followed by a result message.
+
+When marking files as viewed while the `Unviewed Files` or `Files Unviewed by Me` filter is active, the files drop out of the list immediately and the next file becomes the active row, so you can work through unviewed files by repeatedly pressing `v`.
+
+!!! note
+    While you navigate with the keyboard in triage mode, the mouse-hover highlight is suppressed for the row that happens to be under a stationary mouse pointer, so it isn't confused with the active row. Moving the mouse brings the hover highlight back.
+
+    Keyboard shortcuts are ignored while you are typing in a text field (e.g. the path filter box).
+
+Triage mode stays on when you switch between the Files and Findings pages.
 
 #### File Details
 
@@ -143,21 +181,53 @@ Clicking on a finding brings up details for the finding:
 
 ![Nemesis Finding Details](images/nemesis-dashboard-finding-detail.png)
 
-Clicking the hyperlinked file path will take you to the file details page for the file the finding originates from.
+Clicking the hyperlinked file path (in the list or in the details) will take you to the file details page for the file the finding originates from. The details can be closed with the `Close` button, by clicking outside of them, or with `ESC`/`←`; the browser's Back button closes them as well.
 
-You can filter findings by triage state, category, severity, module origin, and triage source (human/automated) at the top of the table.
+At the top of the table you can filter findings by triage state, category, severity and triage source (human/automated), and search by finding name, category, origin module or file path. The `Clear Filters` button resets them. The triage state filter defaults to `Untriaged + Actionable`, which shows findings that are untriaged or whose latest triage is an automated "true positive" / "needs review" (e.g. from [AI triage](./agents.md)). Other options are `All Triage States`, `Untriaged Only`, `Triaged Only`, `True Positive`, `False Positive` and `Needs Review`.
 
-Like with the `Files` page, type `t` to enter triage mode. This will add a check box to the currently selected file along with displaying keyboard actions you can take:
+Clicking any column header will sort by that column's values. Like the Files page, the findings list is paginated (100 per page), keeps its filters/sort/page in the URL, and updates live - see [Paging, Links and Live Updates](#paging-links-and-live-updates). Each row also has thumbs-up / thumbs-down / question-mark buttons to triage that single finding with the mouse.
+
+Like with the `Files` page, type `t` to enter triage mode (and `t` again to leave it). The active row is outlined, and a ✓ marks the findings the triage keys will apply to (the selected findings, or the active row when nothing is selected). The keyboard actions are also summarized at the top of the page:
 
 ![Nemesis Finding Triage](images/nemesis-dashboard-finding-triage.png)
 
-As the text details, use ↑↓ to navigate findings, → to view finding details. You can select multiple with Shift + ↑↓, hitting space, or Ctrl+A. Clear selection with ESC. Typing 1, 2, or 3 will set the finding as true positive, false positive, or unknown:
+- `↑↓` - Move the active row, continuing onto the previous/next page at the edges.
+- `PageUp`/`PageDown` - Jump about three quarters of the visible rows, also crossing pages (stops at the first/last result).
+- `→` - View the active finding's details. Pressing `→` again while the details are open opens the finding's file; `←` or `ESC` closes the details.
+- `1`, `2`, `3` - Triage as **true positive**, **false positive** or **needs review**. This applies to the selected findings if there are any, otherwise to the active row.
+- `Space` - Add/remove the active row to/from the selection.
+- `Shift + ↑↓` - Extend the selection up/down.
+- `Ctrl/Cmd + A` - Select all findings on the current page; press it **again** to select **all** findings matching the current filters, across every page ("All N results selected").
+- `ESC` - Clear the selection (on this page `ESC` does not exit triage mode; use `t`).
 
 ![Nemesis Finding Triage](images/nemesis-dashboard-finding-triage2.png)
 
-When combined with the default "Untriaged Only" filter, this allows you to easily and collaboratively triage a large number of findings.
+Selections behave as on the [Files page](#file-triage-mode): a page-level selection is dropped when you change pages, an "all results" selection persists across pages, and changing filters/sort, pressing `ESC` or leaving triage mode clears it. Triaging an "all results" selection first asks for confirmation ("Triage all N findings matching the current filters as true positive? Enter to confirm, Esc to cancel"), then shows a progress bar and a result message. Other keys are ignored while the prompt is shown.
 
-Also, clicking any column will sort by that column's values.
+Triaged findings that no longer match the current filter drop out of the list immediately, and the next finding becomes the active row. When combined with the default "Untriaged + Actionable" filter, this allows you to easily and collaboratively triage a large number of findings by pressing `1`/`2`/`3` repeatedly.
+
+As on the Files page, the mouse-hover highlight is suppressed while navigating with the keyboard (until the mouse moves), and shortcuts are ignored while typing in the search box.
+
+#### Keyboard Shortcuts
+
+| Key | Page | Triage mode only | Action |
+|-----|------|:----------------:|--------|
+| `t` | Files, Findings | | Toggle triage mode |
+| `PageUp` / `PageDown` | Files, Findings | | Scroll the list by 3/4 of its height, moving to the previous/next page at the top/bottom |
+| `PageUp` / `PageDown` | Files, Findings | Yes | Move the active row by ~3/4 of the visible rows (across pages) |
+| `↑` / `↓` | Files, Findings | Yes | Move the active row (across pages) |
+| `Shift + ↑` / `Shift + ↓` | Files, Findings | Yes | Extend the selection |
+| `Ctrl/Cmd + A` | Files, Findings | Yes | Select all rows on the page; press again to select all results |
+| `→` | Files | Yes | Open the active file |
+| `→` | Findings | Yes | Open the finding details; again to open its file |
+| `←` | File details | | Back to the list |
+| `←` / `ESC` | Findings (details open) | | Close the finding details |
+| `ESC` | Files | Yes | Clear the selection; with no selection, exit triage mode |
+| `ESC` | Findings | Yes | Clear the selection |
+| `v` | Files | Yes | Mark the selected files (or the active file) as viewed |
+| `Space` | Findings | Yes | Toggle selection of the active row |
+| `1` / `2` / `3` | Findings | Yes | Triage selected findings (or the active row) as true positive / false positive / needs review |
+| `Enter` / `ESC` | Files, Findings | | Confirm / cancel a bulk action on all results |
 
 ### Dashboard Settings
 
