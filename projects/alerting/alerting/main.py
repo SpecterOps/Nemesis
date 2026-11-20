@@ -309,6 +309,24 @@ async def handle_alert_settings_subscription():
             await asyncio.sleep(5)
 
 
+def build_feedback_message(feedback: dict, base_url: str) -> str:
+    """Markdown body of a file feedback alert: file link, project, user and the reported issues."""
+    object_id = feedback["object_id"]
+    project = (feedback.get("files_enriched") or {}).get("project") or "unknown"
+    message_parts = [
+        f"*object_id:* <{base_url}files/{object_id}|{object_id}>",
+        f"*project:* {project}",
+        f"*user*: {feedback['username']}",
+    ]
+    if feedback.get("missing_parser"):
+        message_parts.append("- 📄 Missing parser")
+    if feedback.get("missing_file_viewer"):
+        message_parts.append("- 👁️ Missing file viewer")
+    if feedback.get("sensitive_info_not_detected"):
+        message_parts.append("- 🔒 Sensitive information not detected")
+    return "\n".join(message_parts)
+
+
 async def handle_feedback_subscription():
     """Sets up and handles subscription to files_feedback table in Hasura"""
     SUBSCRIPTION = gql("""
@@ -321,6 +339,9 @@ async def handle_feedback_subscription():
                 missing_file_viewer
                 sensitive_info_not_detected
                 timestamp
+                files_enriched {
+                    project
+                }
             }
         }
     """)
@@ -356,22 +377,7 @@ async def handle_feedback_subscription():
 
                     feedback = feedback_list[0]
 
-                    # Construct markdown message
-                    message_parts = []
-                    object_id = feedback["object_id"]
-                    nemesis_file_url = f"{nemesis_url}files/{object_id}"
-                    message_parts.append(f"*object_id:* <{nemesis_file_url}|{object_id}>")
-                    message_parts.append(f"*user*: {feedback['username']}")
-
-                    if feedback.get("missing_parser"):
-                        message_parts.append("- 📄 Missing parser")
-                    if feedback.get("missing_file_viewer"):
-                        message_parts.append("- 👁️ Missing file viewer")
-                    if feedback.get("sensitive_info_not_detected"):
-                        message_parts.append("- 🔒 Sensitive information not detected")
-
-                    # Join all parts with newlines
-                    body = "\n".join(message_parts)
+                    body = build_feedback_message(feedback, nemesis_url)
 
                     logger.info("Nemesis feedback", body=mask(body))
 
