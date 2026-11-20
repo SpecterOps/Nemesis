@@ -40,7 +40,7 @@ const ExampleQueries = ({ onExampleClick }) => {
               {example.description}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-500 italic line-clamp-2">
-              "{example.query}"
+              &quot;{example.query}&quot;
             </p>
           </button>
         ))}

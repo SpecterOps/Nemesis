@@ -1,15 +1,20 @@
 import { useTheme } from '@/components/ThemeProvider';
 import Editor from "@monaco-editor/react";
 import { AlertCircle, ChevronDown, ChevronRight, Database, Download, ExternalLink, FileWarning, Info, Play, RefreshCw, Table } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import initSQLJS from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 // Maximum number of rows to display at once
 const MAX_ROWS = 1000;
 
+// Helper function to escape SQL identifiers
+const escapeSQLIdentifier = (identifier) => {
+    // SQLite identifiers should be wrapped in double quotes if they contain special characters
+    return `"${identifier.replace(/"/g, '""')}"`;
+};
+
 const SQLiteViewer = ({ fileBuffer, fileName }) => {
-    const { isDark } = useTheme();
     const [db, setDb] = useState(null);
     const [tables, setTables] = useState([]);
     const [views, setViews] = useState([]);
@@ -26,8 +31,6 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
     const [hasMoreRows, setHasMoreRows] = useState(false);
     const [sqlJsInitialized, setSqlJsInitialized] = useState(false);
     const sqlJsRef = useRef(null);
-    // Add a state for file header preview
-    const [fileHeaderHex, setFileHeaderHex] = useState('');
     // Add state for table structure collapse
     const [isStructureCollapsed, setIsStructureCollapsed] = useState(true);
 
@@ -57,15 +60,13 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
     }, []);
 
     // Extract file header to help diagnose file issues
-    useEffect(() => {
-        if (fileBuffer && fileBuffer.byteLength > 0) {
-            // Get first 16 bytes for header inspection
-            const headerBytes = new Uint8Array(fileBuffer.slice(0, Math.min(32, fileBuffer.byteLength)));
-            const headerHex = Array.from(headerBytes)
-                .map(byte => byte.toString(16).padStart(2, '0'))
-                .join(' ');
-            setFileHeaderHex(headerHex);
-        }
+    const fileHeaderHex = useMemo(() => {
+        if (!fileBuffer || fileBuffer.byteLength === 0) return '';
+        // Get the first 32 bytes for header inspection
+        const headerBytes = new Uint8Array(fileBuffer.slice(0, Math.min(32, fileBuffer.byteLength)));
+        return Array.from(headerBytes)
+            .map(byte => byte.toString(16).padStart(2, '0'))
+            .join(' ');
     }, [fileBuffer]);
 
     // Then try to open the database with enhanced error handling
@@ -144,7 +145,7 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
 
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                         <Info className="inline w-4 h-4 mr-1 text-blue-500" />
-                        A valid SQLite database should start with "SQLite format 3" (hex: 53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00).
+                        A valid SQLite database should start with &quot;SQLite format 3&quot; (hex: 53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00).
                     </p>
 
                     <div className="flex flex-col space-y-2">
@@ -211,7 +212,7 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
                 }
 
                 // Set default SQL query
-                setSqlQuery(`SELECT * FROM ${selectedTable} LIMIT 100;`);
+                setSqlQuery(`SELECT * FROM ${escapeSQLIdentifier(selectedTable)} LIMIT 100;`);
             } catch (err) {
                 console.error('Error loading table data:', err);
                 setError(`Failed to load table data: ${err.message}`);
@@ -258,12 +259,6 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
         }
     };
 
-    // Helper function to escape SQL identifiers
-    const escapeSQLIdentifier = (identifier) => {
-        // SQLite identifiers should be wrapped in double quotes if they contain special characters
-        return `"${identifier.replace(/"/g, '""')}"`;
-    };
-
     // Format cell values for display
     const formatCellValue = (value) => {
         if (value === null) return <span className="text-gray-400 italic">NULL</span>;
@@ -274,6 +269,12 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
         return String(value);
     };
 
+    // Keep the latest executeQuery (it closes over db and sqlQuery) for the keyboard handler
+    const executeQueryRef = useRef(executeQuery);
+    useEffect(() => {
+        executeQueryRef.current = executeQuery;
+    });
+
     // Handle keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -281,14 +282,14 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 if (activeTab === 'query' && document.activeElement.closest('.monaco-editor')) {
                     e.preventDefault();
-                    executeQuery();
+                    executeQueryRef.current();
                 }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeTab, sqlQuery]);
+    }, [activeTab]);
 
     if (loading) {
         return (
@@ -381,9 +382,10 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
                             Tables
                         </div>
                     {tables.map(table => (
-                        <div
+                        <button
+                        type="button"
                         key={table}
-                        className={`flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                        className={`flex w-full text-left items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
                             selectedTable === table
                             ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                             : 'text-gray-700 dark:text-gray-300'
@@ -392,7 +394,7 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
                         >
                         <Table className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" />
                         <span className="truncate">{table}</span>
-                        </div>
+                        </button>
                     ))}
                     </div>
 
@@ -403,9 +405,10 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
                         Views
                         </div>
                         {views.map(view => (
-                        <div
+                        <button
+                            type="button"
                             key={view}
-                            className={`flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                            className={`flex w-full text-left items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
                             selectedTable === view
                                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                                 : 'text-gray-700 dark:text-gray-300'
@@ -414,7 +417,7 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
                         >
                             <Table className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" />
                             <span className="truncate">{view}</span>
-                        </div>
+                        </button>
                         ))}
                     </div>
                     )}
@@ -440,18 +443,20 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
                                     {tableStructure && (
                                         <div className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                                             {/* Clickable header for collapsing/expanding */}
-                                            <div
-                                                className="px-4 py-3 flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                                                onClick={toggleStructure}
-                                            >
-                                                {isStructureCollapsed ?
-                                                    <ChevronRight className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" /> :
-                                                    <ChevronDown className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" />
-                                                }
-                                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                <button
+                                                    type="button"
+                                                    aria-expanded={!isStructureCollapsed}
+                                                    className="w-full text-left px-4 py-3 flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                    onClick={toggleStructure}
+                                                >
+                                                    {isStructureCollapsed ?
+                                                        <ChevronRight className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" /> :
+                                                        <ChevronDown className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" />
+                                                    }
                                                     Table Structure
-                                                </h4>
-                                            </div>
+                                                </button>
+                                            </h4>
 
                                             {/* Collapsible content */}
                                             {!isStructureCollapsed && (
@@ -634,9 +639,12 @@ const EditableMonacoViewer = ({ content, language, readOnly = true, onChange, ed
     const { isDark } = useTheme();
     const [value, setValue] = useState(content);
 
-    useEffect(() => {
+    // Follow external content changes
+    const [prevContent, setPrevContent] = useState(content);
+    if (content !== prevContent) {
+        setPrevContent(content);
         setValue(content);
-    }, [content]);
+    }
 
     const handleEditorChange = (newValue) => {
         setValue(newValue);

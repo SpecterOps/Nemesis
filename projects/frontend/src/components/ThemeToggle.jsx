@@ -1,6 +1,5 @@
 import Tooltip from '@/components/shared/Tooltip2';
 import { Moon, Sun } from 'lucide-react';
-import React from 'react';
 import { useTheme } from './ThemeProvider';
 
 const ThemeToggle = ({ isCollapsed }) => {

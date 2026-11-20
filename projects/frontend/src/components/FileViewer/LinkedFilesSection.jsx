@@ -35,10 +35,7 @@ const LinkedFilesSection = ({ filePath, source }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!filePath || !source) {
-      setLoading(false);
-      return;
-    }
+    if (!filePath || !source) return;
 
     const fetchLinkedFiles = async () => {
       try {
@@ -274,7 +271,8 @@ const LinkedFilesSection = ({ filePath, source }) => {
     setLinkingToDelete(null);
   };
 
-  if (loading) {
+  // Without a path/source there is nothing to fetch
+  if (loading && filePath && source) {
     return (
       <Card className="bg-white dark:bg-dark-secondary shadow-lg transition-colors">
         <CardHeader className="pb-4">
@@ -322,7 +320,7 @@ const LinkedFilesSection = ({ filePath, source }) => {
         <CardContent>
           <div className="space-y-3">
             {visibleGroups.map((group) => {
-                const fileName = group.linkedPath.split(/[\/\\]/).pop() || group.linkedPath;
+                const fileName = group.linkedPath.split(/[/\\]/).pop() || group.linkedPath;
 
                 // Get file status info (case-insensitive lookup)
                 let fileInfo = fileStatusMap.get(group.linkedPath.toLowerCase());
@@ -390,16 +388,20 @@ const LinkedFilesSection = ({ filePath, source }) => {
                             </span>
                           )}
                         </div>
-                        <p
-                          className={`text-xs truncate mt-1 ${isCollected
-                            ? 'text-green-600 dark:text-green-400 cursor-pointer hover:text-green-800 dark:hover:text-green-200 hover:underline'
-                            : 'text-gray-500 dark:text-gray-400'
-                            }`}
-                          onClick={isCollected ? () => handleFileClick(group.linkedPath, fileInfo) : undefined}
-                          title={isCollected ? "Click to navigate to file" : undefined}
-                        >
-                          {group.linkedPath}
-                        </p>
+                        {isCollected ? (
+                          <button
+                            type="button"
+                            className="block w-full text-left text-xs truncate mt-1 text-green-600 dark:text-green-400 cursor-pointer hover:text-green-800 dark:hover:text-green-200 hover:underline"
+                            onClick={() => handleFileClick(group.linkedPath, fileInfo)}
+                            title="Click to navigate to file"
+                          >
+                            {group.linkedPath}
+                          </button>
+                        ) : (
+                          <p className="text-xs truncate mt-1 text-gray-500 dark:text-gray-400">
+                            {group.linkedPath}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>

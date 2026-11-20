@@ -1,6 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import React, { useState, useEffect } from 'react';
-import { useTheme } from '../ThemeProvider';
+import { useState, useEffect } from 'react';
 import LoadingSpinner from '../shared/LoadingSpinner';
 
 const allServices = [
@@ -103,7 +102,6 @@ const allServices = [
 ];
 
 const HelpPage = () => {
-  const { isDark, toggleTheme } = useTheme();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -180,14 +178,15 @@ const HelpPage = () => {
           <CardContent className="grid gap-1">
             {services.map((service) => (
               <div key={service.path}>
-                <a
-                  href={service.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block cursor-pointer"
-                >
-                  <div className="p-2 pt-1 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <div className="space-y-2">
+                {/* Sub-page links sit beside (not inside) the service link: nested <a> is invalid HTML */}
+                <div className="p-2 pt-1 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <div className="space-y-2">
+                    <a
+                      href={service.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block cursor-pointer space-y-2"
+                    >
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold text-gray-900 dark:text-white">
                           {service.title}
@@ -207,36 +206,36 @@ const HelpPage = () => {
                           </code>
                         </p>
                       )}
-                      {service.subpages && (
-                        <div className="mt-3 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-                          {service.subpages.map((doc) => (
-                            <a
-                              key={doc.path}
-                              href={doc.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block mt-2 group"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
-                                    {doc.title}
-                                  </h4>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    {doc.description}
-                                  </p>
-                                </div>
-                                <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-900 dark:text-gray-300">
-                                  {doc.path}
-                                </code>
+                    </a>
+                    {service.subpages && (
+                      <div className="mt-3 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
+                        {service.subpages.map((doc) => (
+                          <a
+                            key={doc.path}
+                            href={doc.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block mt-2 group"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
+                                  {doc.title}
+                                </h4>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  {doc.description}
+                                </p>
                               </div>
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                              <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-900 dark:text-gray-300">
+                                {doc.path}
+                              </code>
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </a>
+                </div>
               </div>
             ))}
           </CardContent>

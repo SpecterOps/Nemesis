@@ -5,7 +5,6 @@
 
 const isDev = import.meta.env.DEV;
 const log = (...args) => isDev && console.log(...args);
-const warn = (...args) => isDev && console.warn(...args);
 
 class FileCache {
   constructor() {
@@ -216,5 +215,5 @@ export { fileCache };
 
 // Expose to window for debugging
 if (typeof window !== 'undefined') {
-  window.fileCache = fileCache;
+  /** @type {any} */ (window).fileCache = fileCache;
 }

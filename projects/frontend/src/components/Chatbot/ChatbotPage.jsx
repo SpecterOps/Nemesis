@@ -1,5 +1,5 @@
 import { AlertCircle, Bot, Send, Settings as SettingsIcon, Trash2, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ExampleQueries from './ExampleQueries';
 import MessageBubble from './MessageBubble';
 
@@ -32,8 +32,8 @@ const ChatbotPage = () => {
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState(null);
   const [spendData, setSpendData] = useState(null);
-  const [showTokenWarning, setShowTokenWarning] = useState(false);
-  const [estimatedTokens, setEstimatedTokens] = useState(0);
+  // The messages array the token warning was dismissed for; any new message re-arms the warning
+  const [tokenWarningDismissedFor, setTokenWarningDismissedFor] = useState(null);
 
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -66,29 +66,6 @@ const ChatbotPage = () => {
       }, 100);
     }
   }, [isStreaming, messages.length]);
-
-  // Fetch system prompt when settings are opened
-  useEffect(() => {
-    if (showSettings && !systemPrompt) {
-      fetchSystemPrompt();
-    }
-  }, [showSettings]);
-
-  // Fetch spend data on mount
-  useEffect(() => {
-    fetchSpendData();
-  }, []);
-
-  // Calculate token usage and show warning if needed
-  useEffect(() => {
-    const totalText = messages.map(m => m.content).join(' ');
-    const tokens = estimateTokens(totalText);
-    setEstimatedTokens(tokens);
-
-    if (tokens > TOKEN_WARNING_THRESHOLD && !showTokenWarning) {
-      setShowTokenWarning(true);
-    }
-  }, [messages]);
 
   const fetchSpendData = async () => {
     try {
@@ -141,6 +118,28 @@ const ChatbotPage = () => {
       setPromptError('Failed to load system prompt');
     }
   };
+
+  // Fetch system prompt when settings are opened
+  useEffect(() => {
+    if (showSettings && !systemPrompt) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch; state is set after the request resolves
+      fetchSystemPrompt();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only (re)load when the panel opens, not while the user edits/clears the prompt
+  }, [showSettings]);
+
+  // Fetch spend data on mount
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch; state is set after the request resolves
+    fetchSpendData();
+  }, []);
+
+  // Token usage estimate; the warning shows once it passes the threshold until dismissed
+  const estimatedTokens = useMemo(
+    () => estimateTokens(messages.map(m => m.content).join(' ')),
+    [messages]
+  );
+  const showTokenWarning = estimatedTokens > TOKEN_WARNING_THRESHOLD && tokenWarningDismissedFor !== messages;
 
   const saveSystemPrompt = async () => {
     if (systemPrompt === originalPrompt) return;
@@ -284,7 +283,6 @@ const ChatbotPage = () => {
     if (window.confirm('Clear all conversation history?')) {
       setMessages([]);
       setError(null);
-      setShowTokenWarning(false);
       // Clear from localStorage as well
       try {
         localStorage.removeItem(MESSAGES_STORAGE_KEY);
@@ -471,11 +469,11 @@ const ChatbotPage = () => {
               <div className="flex-1">
                 <p className="text-sm text-yellow-600 dark:text-yellow-400">
                   <strong>High token usage detected:</strong> Your conversation history is getting long (~{estimatedTokens.toLocaleString()} tokens)
-                  and consuming significant LLM resources. Consider clicking "Clear History" to reset and reduce costs.
+                  and consuming significant LLM resources. Consider clicking &quot;Clear History&quot; to reset and reduce costs.
                 </p>
               </div>
               <button
-                onClick={() => setShowTokenWarning(false)}
+                onClick={() => setTokenWarningDismissedFor(messages)}
                 className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200"
                 title="Dismiss warning"
               >

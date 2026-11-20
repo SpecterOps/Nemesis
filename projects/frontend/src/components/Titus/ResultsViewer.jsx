@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const TitusViewer = () => {
   const [findings, setFindings] = useState([]);
@@ -7,10 +7,6 @@ const TitusViewer = () => {
   const [dismissedFindings, setDismissedFindings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  useEffect(() => {
-    fetchTitusResults();
-  }, []);
 
   const fetchTitusResults = async () => {
     try {
@@ -82,7 +78,7 @@ const TitusViewer = () => {
           num_matches: finding.allMatches.length,
           num_files: finding.files.size,
           matches: finding.allMatches.sort((a, b) =>
-            new Date(b.timestamp) - new Date(a.timestamp)
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           ),
           files: Array.from(finding.files)
         }))
@@ -96,6 +92,11 @@ const TitusViewer = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch; state is set after the request resolves
+    fetchTitusResults();
+  }, []);
 
   const toggleFinding = (findingId) => {
     setExpandedFindings(prev => ({

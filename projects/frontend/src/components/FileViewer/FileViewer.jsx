@@ -1,5 +1,4 @@
 import MarkdownRenderer from '@/components/shared/MarkdownRenderer';
-import { useTheme } from '@/components/ThemeProvider';
 import {
   Card,
   CardContent,
@@ -115,22 +114,6 @@ const isSqliteFile = (fileName, mimeType) => {
     fileName === 'database';
 };
 
-const isCsvFile = (fileName, mimeType) => {
-  if (!fileName && !mimeType) return false;
-
-  const csvExtensions = ['.csv'];
-  const csvMimeTypes = [
-    'text/csv',
-    'application/csv',
-    'application/vnd.ms-excel',
-    'text/comma-separated-values'
-  ];
-
-  const fileExt = fileName ? '.' + fileName.split('.').pop().toLowerCase() : '';
-
-  return csvMimeTypes.includes(mimeType) || csvExtensions.includes(fileExt);
-};
-
 const isSCCMLogFile = (fileName, content) => {
   if (!content) return false;
   // Only look at the first line (content can be a 10MB preview; avoid splitting all of it)
@@ -201,6 +184,39 @@ const detectEncodingFromBOM = (buffer) => {
 };
 
 
+// Helper to determine if a transform should be shown as a tab
+const isDisplayableTransform = (transform) => {
+  return transform.metadata?.display_type_in_dashboard === 'monaco' ||
+    transform.metadata?.display_type_in_dashboard === 'pdf' ||
+    transform.metadata?.display_type_in_dashboard === 'markdown' ||
+    transform.metadata?.display_type_in_dashboard === 'image' ||
+    transform.metadata?.display_type_in_dashboard === 'csv' ||
+    transform.type === 'csv';
+};
+
+// Helper to determine if a transform should be offered as a download
+const isDownloadableTransform = (transform) => {
+  return transform.metadata?.offer_as_download === true;
+};
+
+const displayableImageTypes = {
+  extensions: new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif']),
+  mimeTypes: new Set([
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'image/avif'
+  ])
+};
+
+const isDisplayableImage = (fileName, mimeType) => {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  return displayableImageTypes.extensions.has(ext) ||
+    displayableImageTypes.mimeTypes.has(mimeType);
+};
+
 const EncodingSelector = ({ onEncodingChange, initialEncoding }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedEncoding, setSelectedEncoding] = useState(initialEncoding || 'utf-8');
@@ -231,7 +247,9 @@ const EncodingSelector = ({ onEncodingChange, initialEncoding }) => {
 
       {isOpen && (
         <>
+          {/* Click-outside catcher (mouse only; the toggle button and options stay keyboard accessible) */}
           <div
+            role="presentation"
             className="fixed inset-0"
             onClick={() => setIsOpen(false)}
           />
@@ -263,10 +281,8 @@ const FileViewer = () => {
   const { objectId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isDark } = useTheme();
   const [fileData, setFileData] = useState(null);
   const [pdfContent, setPdfContent] = useState(null);
-  const [transformContents, setTransformContents] = useState({});
   const [textContent, setTextContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -275,8 +291,6 @@ const FileViewer = () => {
   const fileContentRef = useRef(null);
   const [transformData, setTransformData] = useState({});
   const { username } = useUser();
-  // const [hasRecordedView, setHasRecordedView] = useState(false);
-  const viewRecorded = useRef(false);
   const [containerAnalysisStarted, setContainerAnalysisStarted] = useState(false);
   const [summarizationStarted, setSummarizationStarted] = useState(false);
   const [credentialAnalysisStarted, setCredentialAnalysisStarted] = useState(false);
@@ -292,83 +306,19 @@ const FileViewer = () => {
   const isFromSearch = location.state?.from === 'search';
   const isFromFile = location.state?.from === 'file';
   const isFromFindings = location.state?.from === 'findings';
-  const previousFileId = location.state?.previousFileId;
 
   const [detectedEncoding, setDetectedEncoding] = useState('utf-8');
 
   const {
     previewContent, fullFileContent, previewError, fullFileError,
     isPreviewLoading, isFullFileLoading, fetchPreviewContent, fetchFullFile,
-    setPreviewContent, setFullFileContent, reset: resetLazyContent
+    setPreviewContent, setFullFileContent
   } = useLazyFileContent(objectId, fileData);
 
   const initialTabSet = useRef(false);
   const [tabInitialized, setTabInitialized] = useState(false);
   const lastTransformsSignatureRef = useRef(null);
 
-  const recordFileView = async (objectId) => {
-    // Check global map first
-    if (recordedViews.has(objectId)) {
-      return;
-    }
-
-    const mutation = {
-      query: `
-        mutation InsertFileView($object_id: uuid!, $username: String!) {
-          insert_files_view_history_one(object: {
-            object_id: $object_id,
-            username: $username,
-            automated: false
-          }) {
-            id
-            timestamp
-          }
-        }
-      `,
-      variables: {
-        object_id: objectId,
-        username: username
-      }
-    };
-
-    try {
-      // Set the recorded flag before making the request
-      recordedViews.set(objectId, true);
-
-      const response = await fetch('/hasura/v1/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-        },
-        body: JSON.stringify(mutation)
-      });
-
-      if (!response.ok) throw new Error('Network response was not ok');
-
-      const result = await response.json();
-      if (result.errors) {
-        const errorMessage = result.errors[0].message;
-
-        // Silently handle foreign key violations (file doesn't exist)
-        if (errorMessage.includes('foreign key constraint') && errorMessage.includes('fk_files_view_history_object_id')) {
-          return;
-        }
-
-        throw new Error(errorMessage);
-      }
-
-    } catch (err) {
-      // If there's an error, remove the flag so it can be retried
-      recordedViews.delete(objectId);
-
-      // Only log non-foreign-key errors
-      const errorMessage = err.message || '';
-      if (!errorMessage.includes('foreign key constraint')) {
-        console.error('Failed to record file view:', err);
-      }
-    }
-  };
 
   // check if LiteLLM service is available
   useEffect(() => {
@@ -389,6 +339,70 @@ const FileViewer = () => {
 
   // record that a user viewed this file
   useEffect(() => {
+    const recordFileView = async (objectId) => {
+      // Check global map first
+      if (recordedViews.has(objectId)) {
+        return;
+      }
+
+      const mutation = {
+        query: `
+          mutation InsertFileView($object_id: uuid!, $username: String!) {
+            insert_files_view_history_one(object: {
+              object_id: $object_id,
+              username: $username,
+              automated: false
+            }) {
+              id
+              timestamp
+            }
+          }
+        `,
+        variables: {
+          object_id: objectId,
+          username: username
+        }
+      };
+
+      try {
+        // Set the recorded flag before making the request
+        recordedViews.set(objectId, true);
+
+        const response = await fetch('/hasura/v1/graphql', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+          },
+          body: JSON.stringify(mutation)
+        });
+
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const result = await response.json();
+        if (result.errors) {
+          const errorMessage = result.errors[0].message;
+
+          // Silently handle foreign key violations (file doesn't exist)
+          if (errorMessage.includes('foreign key constraint') && errorMessage.includes('fk_files_view_history_object_id')) {
+            return;
+          }
+
+          throw new Error(errorMessage);
+        }
+
+      } catch (err) {
+        // If there's an error, remove the flag so it can be retried
+        recordedViews.delete(objectId);
+
+        // Only log non-foreign-key errors
+        const errorMessage = err.message || '';
+        if (!errorMessage.includes('foreign key constraint')) {
+          console.error('Failed to record file view:', err);
+        }
+      }
+    };
+
     if (objectId && username) {
       recordFileView(objectId);
     }
@@ -421,7 +435,7 @@ const FileViewer = () => {
       unsubscribe = wsClient.subscribe(
         subscription,
         {
-          next: ({ data }) => {
+          next: (/** @type {{ data?: any }} */ { data }) => {
             if (data?.files_enriched && data.files_enriched.length > 0) {
               const updatedFile = data.files_enriched[0];
 
@@ -465,11 +479,9 @@ const FileViewer = () => {
                       transforms: allTransforms
                     } : prev));
 
-                    // Fetch new transform content if needed
-                    const newTransforms = allTransforms.filter(transform =>
-                      isDisplayableTransform(transform) &&
-                      !transformData[transform.transform_object_id]
-                    );
+                    // Register tab metadata for new displayable transforms (content loads lazily);
+                    // the functional update below skips entries whose content was already fetched
+                    const newTransforms = allTransforms.filter(isDisplayableTransform);
 
                     newTransforms.forEach(transform => {
                       setTransformData(prev => {
@@ -512,29 +524,11 @@ const FileViewer = () => {
     };
   }, [objectId]);
 
-  // Helper to determine if a transform should be shown as a tab
-  const isDisplayableTransform = (transform) => {
-    return transform.metadata?.display_type_in_dashboard === 'monaco' ||
-      transform.metadata?.display_type_in_dashboard === 'pdf' ||
-      transform.metadata?.display_type_in_dashboard === 'markdown' ||
-      transform.metadata?.display_type_in_dashboard === 'image' ||
-      transform.metadata?.display_type_in_dashboard === 'csv' ||
-      transform.type === 'csv';
-  };
-
-  // Helper to determine if a transform should be offered as a download
-  const isDownloadableTransform = (transform) => {
-    return transform.metadata?.offer_as_download === true;
-  };
 
   const handleBackClick = () => {
-    if (isFromFile && previousFileId) {
-      navigate('/files', {
-        state: {
-          maintainSelectedIndex: selectedIndex,
-          filters: location.state?.filters
-        }
-      });
+    if (isFromFile) {
+      // Opened from another file's linked-files list: return to that file
+      navigate(-1);
     } else if (isFromSearch) {
       navigate('/search');
     } else if (isFromFindings) {
@@ -558,23 +552,6 @@ const FileViewer = () => {
     }
   };
 
-  const displayableImageTypes = {
-    extensions: new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif']),
-    mimeTypes: new Set([
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-      'image/svg+xml',
-      'image/avif'
-    ])
-  };
-
-  const isDisplayableImage = (fileName, mimeType) => {
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    return displayableImageTypes.extensions.has(ext) ||
-      displayableImageTypes.mimeTypes.has(mimeType);
-  };
 
   const hasPreviewableImage = Boolean(fileData && isDisplayableImage(fileData.file_name, fileData.mime_type));
   const hasPreviewableContent = Boolean(pdfContent || hasPreviewableImage || (fileData && fileData.mime_type === 'application/pdf'));
@@ -597,11 +574,6 @@ const FileViewer = () => {
     if (fileData && isSqliteFile(fileData.file_name, fileData.mime_type)) {
       tabs.push({ id: 'sqlite-explorer', type: 'sqlite', label: 'SQLite Explorer', icon: Database });
     }
-
-    // // add CSV explorer if it's a CSV file
-    // if (fileData && isCsvFile(fileData.file_name, fileData.mime_type) && fileContent) {
-    //   tabs.push({ id: 'csv-explorer', type: 'csv', label: 'CSV Explorer', icon: FileText });
-    // }
 
     if (isSCCMLogFile(fileData.file_name, textContent)) {
       tabs.push({ id: 'sccm-log', type: 'sccm-log', label: 'SCCM Log', icon: FileText });
@@ -948,6 +920,7 @@ const FileViewer = () => {
       setTabInitialized(true);
       // If no other conditions met, it will stay as 'hex'
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot (guarded by initialTabSet); getAvailableTabs is derived from these same values
   }, [fileData, pdfContent, hasPreviewableContent]);
 
   // Trigger lazy fetch for auto-selected tabs (ZIP, SQLite, image preview, hex).
@@ -975,6 +948,7 @@ const FileViewer = () => {
     if (activeTab.startsWith('enrichment-')) {
       fetchEnrichmentResult(activeTab.replace('enrichment-', ''));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on tab/data changes only; keying on the loading flags would retry a failed fetch in a loop
   }, [activeTab, fileData, transformData, tabInitialized]);
 
   useEffect(() => {
@@ -1120,7 +1094,7 @@ const FileViewer = () => {
     };
 
     fetchFileData();
-  }, [objectId, username]);
+  }, [objectId, username, setPreviewContent, setFullFileContent]);
 
   // Render transform content based on type
   const renderTransformContent = (tabId) => {
@@ -1152,6 +1126,7 @@ const FileViewer = () => {
       return (
         <div className="h-[80vh] min-h-[480px] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
           <iframe
+            title={`${transform.fileName || 'Transform'} (PDF)`}
             src={URL.createObjectURL(new Blob([transform.content], { type: 'application/pdf' }))}
             className="w-full h-full rounded-lg"
           />
@@ -1305,6 +1280,7 @@ const FileViewer = () => {
     return (
       <div className="h-[80vh] min-h-[480px] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
         <iframe
+          title={`${fileData.file_name} (PDF preview)`}
           src={URL.createObjectURL(new Blob([pdfContent], { type: 'application/pdf' }))}
           className="w-full h-full rounded-lg"
         />
@@ -1401,55 +1377,61 @@ const FileViewer = () => {
   };
 
   // <- to go back, tab to scroll to file data area or cycle tabs if already in view, f to jump to findings
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Only handle keyboard shortcuts when not in an input/textarea/monaco-editor
-      const isEditingText = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) ||
-        document.activeElement.classList.contains('monaco-editor');
+  const handleGlobalKeyDown = (e) => {
+    // Only handle keyboard shortcuts when not in an input/textarea/monaco-editor
+    const isEditingText = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) ||
+      document.activeElement.classList.contains('monaco-editor');
 
-      if (!isEditingText) {
-        if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
+    if (!isEditingText) {
+      if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
 
-          // Check if the file content section is already in view
-          if (fileContentRef.current) {
-            const rect = fileContentRef.current.getBoundingClientRect();
-            // Element is considered in view if its top is within the viewport
-            // Using a more lenient check: if the top is less than 100px from the top of viewport
-            const isInView = rect.top >= -50 && rect.top <= 100;
+        // Check if the file content section is already in view
+        if (fileContentRef.current) {
+          const rect = fileContentRef.current.getBoundingClientRect();
+          // Element is considered in view if its top is within the viewport
+          // Using a more lenient check: if the top is less than 100px from the top of viewport
+          const isInView = rect.top >= -50 && rect.top <= 100;
 
-            if (isInView) {
-              // If already in view, cycle through tabs
-              const tabs = getAvailableTabs();
-              const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
-              const nextIndex = (currentIndex + 1) % tabs.length;
-              handleTabChange(tabs[nextIndex].id);
-            } else {
-              // If not in view, scroll to it
-              fileContentRef.current.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-                inline: 'nearest'
-              });
-            }
-          }
-        } else if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
-          handleBackClick();
-        } else if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
-          // Navigate to findings if count > 0
-          const findingsCount = fileData?.findingsByObjectId_aggregate?.aggregate?.count || 0;
-          if (findingsCount > 0) {
-            navigate(`/findings?object_id=${fileData.object_id}`);
+          if (isInView) {
+            // If already in view, cycle through tabs
+            const tabs = getAvailableTabs();
+            const currentIndex = tabs.findIndex(tab => tab.id === activeTab);
+            const nextIndex = (currentIndex + 1) % tabs.length;
+            handleTabChange(tabs[nextIndex].id);
+          } else {
+            // If not in view, scroll to it
+            fileContentRef.current.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+              inline: 'nearest'
+            });
           }
         }
+      } else if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        handleBackClick();
+      } else if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        // Navigate to findings if count > 0
+        const findingsCount = fileData?.findingsByObjectId_aggregate?.aggregate?.count || 0;
+        if (findingsCount > 0) {
+          navigate(`/findings?object_id=${fileData.object_id}`);
+        }
       }
-    };
+    }
+  };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, handleBackClick]);
+  // Subscribe once and dispatch to the latest handler (it reads the current tab/file state)
+  const globalKeyDownRef = useRef(handleGlobalKeyDown);
+  useEffect(() => {
+    globalKeyDownRef.current = handleGlobalKeyDown;
+  });
+  useEffect(() => {
+    const listener = (e) => globalKeyDownRef.current(e);
+    window.addEventListener('keydown', listener);
+    return () => window.removeEventListener('keydown', listener);
+  }, []);
 
   const handleDownload = async () => {
     // Handle the "Download" button action
@@ -1664,19 +1646,6 @@ const FileViewer = () => {
     setTargetLanguage('English'); // Reset to default
   };
 
-  const renderContentTruncationAlert = () => {
-    // used to display a nicely formatted warning if data was truncated
-    if (!isContentTruncated) return null;
-
-    return (
-      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-4">
-        <p className="text-yellow-800 dark:text-yellow-200 text-sm">
-          This view shows the first 1MB of the file content. To view the complete file, please download it or use the "View Raw" option.
-        </p>
-      </div>
-    );
-  };
-
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -1713,7 +1682,7 @@ const FileViewer = () => {
     <div className="space-y-1">
       <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border dark:border-gray-700 p-1">
         <p className="text-sm text-blue-600 dark:text-blue-400">
-          Use ← to return to file list, [tab] to jump to preview (or cycle tabs if already there), and 'f' to jump to findings (if present)
+          Use ← to return to file list, [tab] to jump to preview (or cycle tabs if already there), and &apos;f&apos; to jump to findings (if present)
         </p>
       </div>
       <div className="flex justify-between items-center">

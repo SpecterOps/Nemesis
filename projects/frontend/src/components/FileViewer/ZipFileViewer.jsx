@@ -1,8 +1,7 @@
-import { useTheme } from '@/components/ThemeProvider';
 import JSZip from 'jszip';
 import { AlertCircle, ChevronDown, ChevronRight, FileText, Folder, Search, X } from 'lucide-react';
 // NEW: Import useCallback for memoizing the resizing function
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import MonacoContentViewer from './MonacoViewer';
 import { getMonacoLanguage } from './languageMap';
 
@@ -39,8 +38,6 @@ const makeMatcher = (term) => {
 };
 
 const ZipFileViewer = ({ fileBuffer, fileName }) => {
-    const { isDark } = useTheme();
-    const [zipContent, setZipContent] = useState(null);
     const [zipStructure, setZipStructure] = useState(null);
     const [expandedFolders, setExpandedFolders] = useState({});
     const [openFiles, setOpenFiles] = useState([]);
@@ -63,7 +60,7 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
     const maxSidebarWidth = 800; // Maximum width for the sidebar
 
     // This function handles the mouse down event on the resizer handle
-    const startResizing = useCallback((mouseDownEvent) => {
+    const startResizing = useCallback(() => {
         isResizing.current = true;
 
         const handleMouseMove = (mouseMoveEvent) => {
@@ -92,6 +89,18 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', stopResizing);
     }, []);
+
+    // Keyboard resizing for the sidebar handle
+    const handleResizerKeyDown = (e) => {
+        const step = e.shiftKey ? 50 : 10;
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            setSidebarWidth(w => Math.max(minSidebarWidth, w - step));
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            setSidebarWidth(w => Math.min(maxSidebarWidth, w + step));
+        }
+    };
     // --- RESIZING LOGIC END ---
 
 
@@ -144,7 +153,6 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
 
                 const zip = new JSZip();
                 const content = await zip.loadAsync(fileBuffer);
-                setZipContent(content);
 
                 const structure = buildZipStructure(content);
                 setZipStructure(structure);
@@ -283,14 +291,15 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
         const shown = children.slice(0, limit).map(child => renderFileTree(child, level));
         if (children.length > limit) {
             shown.push(
-                <div
+                <button
+                    type="button"
                     key={`${node.path}__more`}
-                    className="py-1 text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                    className="block w-full text-left py-1 text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
                     style={{ paddingLeft: `${level * 12 + 8}px` }}
                     onClick={() => setChildLimits(prev => ({ ...prev, [node.path]: limit + CHILDREN_PAGE_SIZE * 2 }))}
                 >
                     Show more ({(children.length - limit).toLocaleString()} more entries)
-                </div>
+                </button>
             );
         }
         return shown;
@@ -301,11 +310,11 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
             const isExpanded = expandedFolders[node.path] || false;
             return (
                 <div key={node.path} className="file-tree-node">
-                    <div className={`flex items-center cursor-pointer py-1 hover:bg-gray-100 dark:hover:bg-gray-700 pl-2 ${searchLower && node.name.toLowerCase().includes(searchLower) ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`} style={{ paddingLeft: `${level * 12 + 4}px` }} onClick={() => toggleFolder(node.path)}>
+                    <button type="button" aria-expanded={isExpanded} className={`flex w-full text-left items-center cursor-pointer py-1 hover:bg-gray-100 dark:hover:bg-gray-700 pl-2 ${searchLower && node.name.toLowerCase().includes(searchLower) ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`} style={{ paddingLeft: `${level * 12 + 4}px` }} onClick={() => toggleFolder(node.path)}>
                         {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" /> : <ChevronRight className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" />}
                         <Folder className={`w-4 h-4 mr-2 ${isExpanded ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`} />
                         <span className="text-sm truncate text-gray-900 dark:text-gray-200">{node.name}</span>
-                    </div>
+                    </button>
                     {isExpanded && node.children && Object.keys(node.children).length > 0 && (
                         <div className="directory-contents">
                             {renderChildren(node, level + 1)}
@@ -315,11 +324,11 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
             );
         } else {
             return (
-                <div key={node.path} className={`flex items-center cursor-pointer py-1 hover:bg-gray-100 dark:hover:bg-gray-700 pl-2 ${activeTab === node.path ? 'bg-blue-100 dark:bg-blue-900/50' : searchLower && node.name.toLowerCase().includes(searchLower) ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`} style={{ paddingLeft: `${level * 12 + 8}px` }} onClick={() => openFile(node)}>
+                <button type="button" key={node.path} className={`flex w-full text-left items-center cursor-pointer py-1 hover:bg-gray-100 dark:hover:bg-gray-700 pl-2 ${activeTab === node.path ? 'bg-blue-100 dark:bg-blue-900/50' : searchLower && node.name.toLowerCase().includes(searchLower) ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`} style={{ paddingLeft: `${level * 12 + 8}px` }} onClick={() => openFile(node)}>
                     <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-2" />
                     <span className="text-sm truncate text-gray-900 dark:text-gray-200">{node.name}</span>
                     <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">{formatFileSize(node.size)}</span>
-                </div>
+                </button>
             );
         }
     };
@@ -375,9 +384,12 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
                 </div>
 
                 {/* NEW: Resizer Handle */}
-                <div
+                <button
+                    type="button"
+                    aria-label="Resize file explorer (Left/Right arrow keys)"
                     onMouseDown={startResizing}
-                    className="w-1.5 cursor-col-resize flex-shrink-0 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 transition-colors"
+                    onKeyDown={handleResizerKeyDown}
+                    className="w-1.5 cursor-col-resize flex-shrink-0 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 focus:bg-blue-500 focus:outline-none transition-colors"
                 />
 
                 {/* Content Area */}
@@ -390,17 +402,26 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
                                 {openFiles.map(file => (
                                     <div
                                         key={file.path}
-                                        className={`flex items-center px-3 py-2 text-sm cursor-pointer border-r dark:border-gray-700 max-w-xs ${activeTab === file.path
+                                        className={`flex items-center text-sm border-r dark:border-gray-700 max-w-xs ${activeTab === file.path
                                                 ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 border-b-2 border-b-blue-500'
                                                 : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-200'
                                             }`}
-                                        onClick={() => setActiveTab(file.path)}
                                     >
-                                        <span className="truncate">{file.name}</span>
-                                        <X
-                                            className="w-4 h-4 ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex-shrink-0"
+                                        <button
+                                            type="button"
+                                            className="truncate pl-3 py-2 text-left cursor-pointer"
+                                            onClick={() => setActiveTab(file.path)}
+                                        >
+                                            {file.name}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label={`Close ${file.name}`}
+                                            className="ml-2 pr-3 py-2 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                                             onClick={(e) => closeTab(file.path, e)}
-                                        />
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 ))}
                             </div>

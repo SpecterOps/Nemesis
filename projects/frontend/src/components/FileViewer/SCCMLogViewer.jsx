@@ -1,17 +1,83 @@
-import { useTheme } from '@/components/ThemeProvider';
-import Editor from "@monaco-editor/react";
 import { AlertCircle, Clock, Download, Filter, Info, RefreshCw, Search, Server } from 'lucide-react';
-import React, { useDeferredValue, useEffect, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 // A 10MB log preview can hold ~100k entries; render them in slices
 const ROWS_PER_PAGE = 500;
 
+// Parse the log content into structured data
+const parseLogContent = (content) => {
+  if (!content) return [];
+
+  const logRegex = /<!\[LOG\[(.*?)\]LOG\]!><time="(.*?)" date="(.*?)" component="(.*?)" context="(.*?)" type="(.*?)" thread="(.*?)" file="(.*?)">/g;
+  const parsedLogs = [];
+  let match;
+
+  while ((match = logRegex.exec(content)) !== null) {
+    const logEntry = {
+      message: match[1],
+      time: match[2],
+      date: match[3],
+      component: match[4],
+      context: match[5],
+      type: parseInt(match[6]), // Type is numeric: 1=info, 2=warning, 3=error
+      thread: match[7],
+      file: match[8],
+      raw: match[0], // Store the full raw log entry
+      index: parsedLogs.length // Add index for key
+    };
+
+    parsedLogs.push(logEntry);
+  }
+
+  return parsedLogs;
+};
+
+// Apply search and filters to the logs
+const filterLogs = (allLogs, search, severityFilters, components) => {
+  if (!allLogs) return [];
+
+  const componentSet = new Set(components);
+  const searchLower = search && search.trim() !== '' ? search.toLowerCase() : null;
+  const filtered = allLogs.filter(log => {
+    // Apply severity filters
+    if (log.type === 3 && !severityFilters.error) return false;
+    if (log.type === 2 && !severityFilters.warning) return false;
+    if (log.type === 1 && !severityFilters.info) return false;
+
+    // Apply component filter
+    if (!componentSet.has(log.component)) return false;
+
+    // Apply text search
+    if (searchLower) {
+      return (
+        log.message.toLowerCase().includes(searchLower) ||
+        log.component.toLowerCase().includes(searchLower) ||
+        log.file.toLowerCase().includes(searchLower) ||
+        log.thread.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return true;
+  });
+
+  return filtered;
+};
+
+// Parse a whole log file; returns the entries and their sorted unique component names
+const parseLogFile = (fileContent) => {
+  if (!fileContent) return { logs: [], components: [], error: null };
+  try {
+    const parsedLogs = parseLogContent(fileContent);
+    const components = [...new Set(parsedLogs.map(log => log.component))].sort();
+    return { logs: parsedLogs, components, error: null };
+  } catch (err) {
+    console.error('Error parsing log file:', err);
+    return { logs: [], components: [], error: `Failed to parse log file: ${err.message}` };
+  }
+};
+
 const SCCMLogViewer = ({ fileContent, fileName }) => {
-  const { isDark } = useTheme();
-  const [logs, setLogs] = useState([]);
-  const [filteredLogs, setFilteredLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { logs, components: availableComponents, error } = useMemo(() => parseLogFile(fileContent), [fileContent]);
   const [searchTerm, setSearchTerm] = useState('');
   // Filter against a deferred copy so typing stays responsive on large logs
   const deferredSearchTerm = useDeferredValue(searchTerm);
@@ -21,39 +87,17 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
     warning: true,
     info: true
   });
-  const [selectedComponents, setSelectedComponents] = useState([]);
-  const [availableComponents, setAvailableComponents] = useState([]);
+  // Default to showing all components (reset whenever a new file is parsed)
+  const [selectedComponents, setSelectedComponents] = useState(availableComponents);
+  const [prevAvailableComponents, setPrevAvailableComponents] = useState(availableComponents);
+  if (availableComponents !== prevAvailableComponents) {
+    setPrevAvailableComponents(availableComponents);
+    setSelectedComponents(availableComponents);
+  }
   const [isAutoRefresh, setIsAutoRefresh] = useState(false);
   const [selectedLogEntry, setSelectedLogEntry] = useState(null);
   const autoRefreshInterval = useRef(null);
   const searchInputRef = useRef(null);
-
-  // Parse SCCM log format
-  useEffect(() => {
-    try {
-      if (!fileContent) {
-        setLoading(false);
-        return;
-      }
-
-      const parsedLogs = parseLogContent(fileContent);
-      setLogs(parsedLogs);
-
-      // Extract unique component names
-      const components = [...new Set(parsedLogs.map(log => log.component))].sort();
-      setAvailableComponents(components);
-
-      // Default to showing all components
-      setSelectedComponents(components);
-
-      applyFilters(parsedLogs, searchTerm, selectedSeverityFilters, components);
-      setLoading(false);
-    } catch (err) {
-      console.error('Error parsing log file:', err);
-      setError(`Failed to parse log file: ${err.message}`);
-      setLoading(false);
-    }
-  }, [fileContent]);
 
   // Handle auto-refresh (in a real application, this would fetch updated content)
   useEffect(() => {
@@ -74,69 +118,16 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
   }, [isAutoRefresh]);
 
   // Apply filters when criteria change
-  useEffect(() => {
-    applyFilters(logs, deferredSearchTerm, selectedSeverityFilters, selectedComponents);
+  const filteredLogs = useMemo(
+    () => filterLogs(logs, deferredSearchTerm, selectedSeverityFilters, selectedComponents),
+    [logs, deferredSearchTerm, selectedSeverityFilters, selectedComponents]
+  );
+  // Start from the first page whenever the filtered result changes
+  const [prevFilteredLogs, setPrevFilteredLogs] = useState(filteredLogs);
+  if (filteredLogs !== prevFilteredLogs) {
+    setPrevFilteredLogs(filteredLogs);
     setVisibleCount(ROWS_PER_PAGE);
-  }, [logs, deferredSearchTerm, selectedSeverityFilters, selectedComponents]);
-
-  // Parse the log content into structured data
-  const parseLogContent = (content) => {
-    if (!content) return [];
-
-    const logRegex = /<!\[LOG\[(.*?)\]LOG\]!><time="(.*?)" date="(.*?)" component="(.*?)" context="(.*?)" type="(.*?)" thread="(.*?)" file="(.*?)">/g;
-    const parsedLogs = [];
-    let match;
-
-    while ((match = logRegex.exec(content)) !== null) {
-      const logEntry = {
-        message: match[1],
-        time: match[2],
-        date: match[3],
-        component: match[4],
-        context: match[5],
-        type: parseInt(match[6]), // Type is numeric: 1=info, 2=warning, 3=error
-        thread: match[7],
-        file: match[8],
-        raw: match[0], // Store the full raw log entry
-        index: parsedLogs.length // Add index for key
-      };
-
-      parsedLogs.push(logEntry);
-    }
-
-    return parsedLogs;
-  };
-
-  // Apply search and filters to the logs
-  const applyFilters = (allLogs, search, severityFilters, components) => {
-    if (!allLogs) return;
-
-    const componentSet = new Set(components);
-    const searchLower = search && search.trim() !== '' ? search.toLowerCase() : null;
-    const filtered = allLogs.filter(log => {
-      // Apply severity filters
-      if (log.type === 3 && !severityFilters.error) return false;
-      if (log.type === 2 && !severityFilters.warning) return false;
-      if (log.type === 1 && !severityFilters.info) return false;
-
-      // Apply component filter
-      if (!componentSet.has(log.component)) return false;
-
-      // Apply text search
-      if (searchLower) {
-        return (
-          log.message.toLowerCase().includes(searchLower) ||
-          log.component.toLowerCase().includes(searchLower) ||
-          log.file.toLowerCase().includes(searchLower) ||
-          log.thread.toLowerCase().includes(searchLower)
-        );
-      }
-
-      return true;
-    });
-
-    setFilteredLogs(filtered);
-  };
+  }
 
   // Toggle a severity filter
   const toggleSeverityFilter = (severity) => {
@@ -224,14 +215,6 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
     const [month, day, year] = date.split('-');
     return `${month}/${day}/${year} ${timeString}`;
   };
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
-      </div>
-    );
-  }
 
   if (error) {
     return (

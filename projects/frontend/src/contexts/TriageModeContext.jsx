@@ -1,6 +1,6 @@
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useState } from 'react';
 
-const TriageModeContext = createContext();
+const TriageModeContext = createContext(null);
 
 export const TriageModeProvider = ({ children }) => {
   const [isTriageMode, setIsTriageMode] = useState(false);

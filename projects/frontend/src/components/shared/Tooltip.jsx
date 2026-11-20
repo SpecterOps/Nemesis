@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const Tooltip = ({ children, content }) => {
   const [isVisible, setIsVisible] = useState(false);
@@ -9,7 +9,6 @@ const Tooltip = ({ children, content }) => {
   const calculatePosition = () => {
     if (!tooltipRef.current || !containerRef.current) return;
 
-    const tooltip = tooltipRef.current.getBoundingClientRect();
     const container = containerRef.current.getBoundingClientRect();
     const viewport = {
       width: window.innerWidth,

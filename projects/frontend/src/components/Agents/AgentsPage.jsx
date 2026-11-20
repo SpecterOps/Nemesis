@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Bot, Edit3, Save, X, AlertCircle, Clock } from 'lucide-react';
 
 // Status badge component
@@ -68,10 +68,11 @@ const AgentCard = ({ agent, onEditClick, isEditing, editedPrompt, onPromptChange
       {isEditing && (
         <div className="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor={`agent-prompt-${agent.name}`} className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
               System Prompt
             </label>
             <textarea
+              id={`agent-prompt-${agent.name}`}
               value={editedPrompt}
               onChange={(e) => onPromptChange(e.target.value)}
               className="w-full h-48 p-2 text-sm border border-gray-300 dark:border-gray-600 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -116,11 +117,6 @@ const AgentsPage = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [spendData, setSpendData] = useState(null);
   const [spendLoading, setSpendLoading] = useState(true);
-
-  useEffect(() => {
-    fetchAgents();
-    fetchSpendData();
-  }, []);
 
   const fetchAgents = async () => {
     try {
@@ -292,6 +288,12 @@ const AgentsPage = () => {
       setSpendLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount fetch; only resets loading/error flags before awaiting
+    fetchAgents();
+    fetchSpendData();
+  }, []);
 
   if (error) {
     return (

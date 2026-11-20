@@ -1,4 +1,3 @@
-import React from 'react';
 import { Bot, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -46,7 +45,11 @@ const MessageBubble = ({ message, isStreaming }) => {
                   <ReactMarkdown
                     components={{
                       // Customize code blocks
-                      code({ node, inline, className, children, ...props }) {
+                      // react-markdown v10 dropped the `inline` prop, so infer it: fenced blocks carry a
+                      // language className or span multiple lines
+                      code({ className, children, ...props }) {
+                        delete props.node;
+                        const inline = !className && !String(children).includes('\n');
                         return inline ? (
                           <code
                             className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs"
@@ -61,6 +64,10 @@ const MessageBubble = ({ message, isStreaming }) => {
                             </code>
                           </pre>
                         );
+                      },
+                      // The code renderer above draws its own <pre> for blocks; avoid nesting a second one
+                      pre({ children }) {
+                        return <>{children}</>;
                       },
                       // Customize tables
                       table({ children }) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import Papa from 'papaparse';
 import { ChevronDown, ChevronUp, ArrowUpDown, Download } from 'lucide-react';
 
@@ -7,62 +7,99 @@ const ROWS_PER_PAGE = 500;
 // Only the first rows are parsed (and sortable); the full file stays downloadable
 const MAX_PARSED_ROWS = 50000;
 
-const CsvViewer = ({ content, fileName }) => {
-    const [csvData, setCsvData] = useState([]);
-    const [visibleRows, setVisibleRows] = useState(ROWS_PER_PAGE);
-    const [originalData, setOriginalData] = useState([]);
-    const [error, setError] = useState(null);
-    const [sortConfig, setSortConfig] = useState({
-        key: null,
-        direction: null // null for original order, 'ascending', or 'descending'
+// Helper function to determine if a value is numeric
+const isNumeric = (value) => {
+    return !isNaN(parseFloat(value)) && isFinite(value);
+};
+
+const parseCsv = (content) => {
+    if (typeof content !== 'string' || content.trim() === '') {
+        return { data: [], error: null };
+    }
+    try {
+        // Use PapaParse for robust CSV parsing
+        const result = Papa.parse(content, {
+            delimiter: ',',          // Auto-detect delimiter
+            newline: undefined,      // Auto-detect newline
+            quoteChar: '"',          // Set quote character
+            escapeChar: '"',         // Set escape character
+            header: false,           // We'll handle headers manually
+            skipEmptyLines: true,    // Skip empty lines
+            preview: MAX_PARSED_ROWS, // Bound parse time/memory on huge files
+            transformHeader: undefined // Don't transform header
+        });
+
+        if (result.errors && result.errors.length > 0) {
+            console.warn('CSV parsing warnings:', result.errors);
+        }
+        return { data: result.data, error: null };
+    } catch (e) {
+        console.error('CSV parsing error:', e);
+        return { data: [], error: 'Error parsing CSV content' };
+    }
+};
+
+const sortRows = (originalData, sortConfig) => {
+    if (originalData.length <= 1 || sortConfig.direction === null || sortConfig.key === null) {
+        // Original order
+        return originalData;
+    }
+
+    const headers = originalData[0];
+    const dataToSort = [...originalData.slice(1)]; // Create a copy of the data rows
+
+    const sortedRows = dataToSort.sort((a, b) => {
+        const columnIndex = sortConfig.key;
+
+        // Handle cases where the cell might not exist
+        const valueA = a[columnIndex] !== undefined ? a[columnIndex] : '';
+        const valueB = b[columnIndex] !== undefined ? b[columnIndex] : '';
+
+        // Try to sort numerically if both values are numbers
+        if (isNumeric(valueA) && isNumeric(valueB)) {
+            return sortConfig.direction === 'ascending'
+                ? parseFloat(valueA) - parseFloat(valueB)
+                : parseFloat(valueB) - parseFloat(valueA);
+        }
+
+        // Otherwise sort alphabetically
+        if (valueA < valueB) {
+            return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (valueA > valueB) {
+            return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
     });
 
-    useEffect(() => {
-        try {
-            if (typeof content !== 'string' || content.trim() === '') {
-                setCsvData([]);
-                setOriginalData([]);
-                return;
-            }
+    // Combine headers with sorted rows
+    return [headers, ...sortedRows];
+};
 
-            // Use PapaParse for robust CSV parsing
-            const result = Papa.parse(content, {
-                delimiter: ',',          // Auto-detect delimiter
-                newline: undefined,      // Auto-detect newline
-                quoteChar: '"',          // Set quote character
-                escapeChar: '"',         // Set escape character
-                header: false,           // We'll handle headers manually
-                skipEmptyLines: true,    // Skip empty lines
-                preview: MAX_PARSED_ROWS, // Bound parse time/memory on huge files
-                transformHeader: undefined // Don't transform header
-            });
+const INITIAL_SORT = {
+    key: null,
+    direction: null // null for original order, 'ascending', or 'descending'
+};
 
-            if (result.errors && result.errors.length > 0) {
-                console.warn('CSV parsing warnings:', result.errors);
-            }
+const CsvViewer = ({ content, fileName = '' }) => {
+    const [visibleRows, setVisibleRows] = useState(ROWS_PER_PAGE);
+    const [sortConfig, setSortConfig] = useState(INITIAL_SORT);
 
-            // Store both the displayed and original data
-            setCsvData(result.data);
-            setOriginalData(result.data);
-            
-            // Reset sorting when content changes
-            setSortConfig({ key: null, direction: null });
-            setVisibleRows(ROWS_PER_PAGE);
-        } catch (e) {
-            setError('Error parsing CSV content');
-            console.error('CSV parsing error:', e);
-        }
-    }, [content]);
+    // Reset sorting and pagination when the content changes
+    const [prevContent, setPrevContent] = useState(content);
+    if (content !== prevContent) {
+        setPrevContent(content);
+        setSortConfig(INITIAL_SORT);
+        setVisibleRows(ROWS_PER_PAGE);
+    }
 
-    // Helper function to determine if a value is numeric
-    const isNumeric = (value) => {
-        return !isNaN(parseFloat(value)) && isFinite(value);
-    };
+    const { data: originalData, error } = useMemo(() => parseCsv(content), [content]);
+    const csvData = useMemo(() => sortRows(originalData, sortConfig), [originalData, sortConfig]);
 
     // Function to handle column header click for sorting
     const handleSort = (columnIndex) => {
         let direction = 'ascending';
-        
+
         if (sortConfig.key === columnIndex) {
             if (sortConfig.direction === 'ascending') {
                 direction = 'descending';
@@ -70,50 +107,9 @@ const CsvViewer = ({ content, fileName }) => {
                 direction = null;
             }
         }
-        
+
         setSortConfig({ key: columnIndex, direction });
     };
-
-    // Effect to sort data when sortConfig changes
-    useEffect(() => {
-        if (!originalData.length || originalData.length <= 1) return;
-        
-        if (sortConfig.direction === null || sortConfig.key === null) {
-            // Reset to original order
-            setCsvData(originalData);
-            return;
-        }
-        
-        const headers = originalData[0];
-        const dataToSort = [...originalData.slice(1)]; // Create a copy of the data rows
-        
-        const sortedRows = dataToSort.sort((a, b) => {
-            const columnIndex = sortConfig.key;
-            
-            // Handle cases where the cell might not exist
-            const valueA = a[columnIndex] !== undefined ? a[columnIndex] : '';
-            const valueB = b[columnIndex] !== undefined ? b[columnIndex] : '';
-            
-            // Try to sort numerically if both values are numbers
-            if (isNumeric(valueA) && isNumeric(valueB)) {
-                return sortConfig.direction === 'ascending' 
-                    ? parseFloat(valueA) - parseFloat(valueB)
-                    : parseFloat(valueB) - parseFloat(valueA);
-            }
-            
-            // Otherwise sort alphabetically
-            if (valueA < valueB) {
-                return sortConfig.direction === 'ascending' ? -1 : 1;
-            }
-            if (valueA > valueB) {
-                return sortConfig.direction === 'ascending' ? 1 : -1;
-            }
-            return 0;
-        });
-        
-        // Combine headers with sorted rows
-        setCsvData([headers, ...sortedRows]);
-    }, [sortConfig, originalData]);
 
     // Render sort indicator for column headers
     const renderSortIcon = (columnIndex) => {

@@ -1,12 +1,24 @@
 import { useTheme } from '@/components/ThemeProvider';
 import Tooltip from '@/components/shared/Tooltip';
 import Editor from "@monaco-editor/react";
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
-const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguageSelect = true, isTruncated = false, onShowFullContent, isLoadingFullContent = false }) => {
+const LoadingComponent = () => (
+  <div className="flex items-center justify-center h-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 transition-colors">
+    <div className="flex flex-col items-center space-y-4">
+      <div className="animate-spin h-8 w-8 border-4 border-blue-500 dark:border-blue-400 rounded-full border-t-transparent"></div>
+      <span>Loading editor...</span>
+    </div>
+  </div>
+);
+
+const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguageSelect = true, isTruncated = false, onShowFullContent = null, isLoadingFullContent = false }) => {
   const { isDark } = useTheme();
   const editorRef = useRef(null);
+  const mountCleanupRef = useRef(null);
   const [wordWrapEnabled, setWordWrapEnabled] = useState(false);
+  // Several viewers can be mounted at once (one per tab), so the checkbox id must be unique
+  const wordWrapId = useId();
 
   const availableLanguages = [
     'abap', 'apex', 'azcli', 'bat', 'bicep', 'cameligo', 'clojure', 'coffeescript',
@@ -63,14 +75,8 @@ const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguage
     }
   }, []);
 
-  const LoadingComponent = () => (
-    <div className="flex items-center justify-center h-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 transition-colors">
-      <div className="flex flex-col items-center space-y-4">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-500 dark:border-blue-400 rounded-full border-t-transparent"></div>
-        <span>Loading editor...</span>
-      </div>
-    </div>
-  );
+  // Remove the resize listener/observer registered in onMount when the viewer unmounts
+  useEffect(() => () => mountCleanupRef.current?.(), []);
 
   return (
     <div className="relative">
@@ -80,12 +86,12 @@ const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguage
           <div className="flex items-center gap-2 px-3 py-1 border dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm">
             <input
               type="checkbox"
-              id="word-wrap-toggle"
+              id={wordWrapId}
               checked={wordWrapEnabled}
               onChange={() => setWordWrapEnabled(!wordWrapEnabled)}
               className="rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400"
             />
-            <label htmlFor="word-wrap-toggle" className="text-gray-900 dark:text-gray-100 select-none">
+            <label htmlFor={wordWrapId} className="text-gray-900 dark:text-gray-100 select-none">
               Word Wrap
             </label>
           </div>
@@ -166,7 +172,7 @@ const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguage
               scrollbarSliderActiveBackground: '#606060'
             })
           }}
-          onMount={(editor, monaco) => {
+          onMount={(editor) => {
             // Store editor reference
             editorRef.current = editor;
 
@@ -198,14 +204,14 @@ const MonacoContentViewer = ({ content, language, onLanguageChange, showLanguage
                 }
               }
 
-              // Cleanup function
-              return () => {
+              // Cleanup (onMount's return value is ignored by @monaco-editor/react, so run it on unmount)
+              mountCleanupRef.current = () => {
                 window.removeEventListener('resize', handleResize);
                 resizeObserver.disconnect();
               };
             } else {
               // Fallback for browsers without ResizeObserver
-              return () => {
+              mountCleanupRef.current = () => {
                 window.removeEventListener('resize', handleResize);
               };
             }

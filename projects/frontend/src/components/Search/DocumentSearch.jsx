@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronDown, FileText, Filter, Loader2, Search } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // Bounds on what one search result renders, whatever the size of the matched chunk
@@ -306,7 +306,6 @@ const DocumentSearch = () => {
 
     const searchTerms = getSearchTerms(query);
     const parts = [];
-    let lastIndex = 0;
 
     const patterns = searchTerms.map(term => {
       if (term.includes(' ')) {
@@ -359,11 +358,12 @@ const DocumentSearch = () => {
         <div className="mt-4 p-4 border dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 transition-colors mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="search-filter-pathPattern" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Path Pattern
               </label>
               <input
                 type="text"
+                id="search-filter-pathPattern"
                 value={filters.pathPattern}
                 onChange={(e) => setFilters({ ...filters, pathPattern: e.target.value })}
                 placeholder="e.g., *.py"
@@ -371,11 +371,12 @@ const DocumentSearch = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="search-filter-sourcePattern" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Source
               </label>
               <input
                 type="text"
+                id="search-filter-sourcePattern"
                 value={filters.sourcePattern}
                 onChange={(e) => setFilters({ ...filters, sourcePattern: e.target.value })}
                 placeholder="e.g., host://* or https://*"
@@ -383,11 +384,12 @@ const DocumentSearch = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="search-filter-agentPattern" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Agent ID
               </label>
               <input
                 type="text"
+                id="search-filter-agentPattern"
                 value={filters.agentPattern}
                 onChange={(e) => setFilters({ ...filters, agentPattern: e.target.value })}
                 placeholder="e.g., agent.*"
@@ -395,11 +397,12 @@ const DocumentSearch = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="search-filter-project" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Project
               </label>
               <input
                 type="text"
+                id="search-filter-project"
                 value={filters.project}
                 onChange={(e) => setFilters({ ...filters, project: e.target.value })}
                 placeholder="Enter project name"
@@ -407,10 +410,11 @@ const DocumentSearch = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="search-filter-dateRange" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Date Range
               </label>
               <select
+                id="search-filter-dateRange"
                 value={filters.dateRange}
                 onChange={(e) => setFilters({ ...filters, dateRange: e.target.value })}
                 className="w-full p-2 border dark:border-gray-700 rounded bg-white dark:bg-dark-secondary dark:text-gray-300 transition-colors"
@@ -446,13 +450,16 @@ const DocumentSearch = () => {
                 <FileText className="w-4 h-5 text-gray-400 dark:text-gray-500 mt-1" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3
-                      onClick={() => navigate(`/files/${result.object_id}`, {
-                        state: { from: 'search' }
-                      })}
-                      className="text-lg font-medium text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
-                    >
-                      {result.file_name}
+                    <h3 className="text-lg font-medium text-blue-600 dark:text-blue-400">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/files/${result.object_id}`, {
+                          state: { from: 'search' }
+                        })}
+                        className="text-left cursor-pointer hover:underline"
+                      >
+                        {result.file_name}
+                      </button>
                     </h3>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       {result.file_type}
@@ -488,7 +495,7 @@ const DocumentSearch = () => {
 
       {!loading && searchQuery && searchResults.length === 0 && (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          No results found for "{searchQuery}"
+          No results found for &quot;{searchQuery}&quot;
         </div>
       )}
     </div>

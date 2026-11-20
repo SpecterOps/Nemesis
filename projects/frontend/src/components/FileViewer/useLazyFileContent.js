@@ -66,7 +66,7 @@ export function useLazyFileContent(objectId, fileData) {
     } finally {
       setIsFullFileLoading(false);
     }
-  }, [objectId, fileData]);
+  }, [objectId]);
 
   const reset = useCallback(() => {
     setPreviewContent(null);

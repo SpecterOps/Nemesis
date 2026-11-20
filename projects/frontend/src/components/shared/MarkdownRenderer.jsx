@@ -1,4 +1,3 @@
-import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -113,6 +112,13 @@ const customDarkTheme = {
   italic: { fontStyle: 'italic' },
 };
 
+// react-markdown passes the hast `node` to every custom renderer; keep it off DOM elements
+const omitNode = (props) => {
+  const rest = { ...props };
+  delete rest.node;
+  return rest;
+};
+
 const MarkdownRenderer = ({ content }) => {
   const isDarkMode = document.documentElement.classList.contains('dark');
 
@@ -121,80 +127,81 @@ const MarkdownRenderer = ({ content }) => {
       remarkPlugins={[remarkGfm]}
       components={{
         // Headings
-        h1: ({ node, ...props }) => (
-          <h1 {...props} className="text-2xl font-bold dark:text-gray-100 mb-6 pb-2 border-b border-gray-200 dark:border-gray-700" />
+        h1: (props) => (
+          <h1 {...omitNode(props)} className="text-2xl font-bold dark:text-gray-100 mb-6 pb-2 border-b border-gray-200 dark:border-gray-700">{props.children}</h1>
         ),
-        h2: ({ node, ...props }) => (
-          <h2 {...props} className="text-xl font-bold dark:text-gray-100 mb-4 mt-6" />
+        h2: (props) => (
+          <h2 {...omitNode(props)} className="text-xl font-bold dark:text-gray-100 mb-4 mt-6">{props.children}</h2>
         ),
-        h3: ({ node, ...props }) => (
-          <h3 {...props} className="text-lg font-semibold dark:text-gray-100 mb-3 mt-4" />
+        h3: (props) => (
+          <h3 {...omitNode(props)} className="text-lg font-semibold dark:text-gray-100 mb-3 mt-4">{props.children}</h3>
         ),
-        h4: ({ node, ...props }) => (
-          <h4 {...props} className="text-base font-medium dark:text-gray-100 mb-2 mt-3" />
+        h4: (props) => (
+          <h4 {...omitNode(props)} className="text-base font-medium dark:text-gray-100 mb-2 mt-3">{props.children}</h4>
         ),
 
         // Lists with reduced spacing
-        ul: ({ node, ...props }) => (
-          <ul {...props} className="mb-2" />
+        ul: (props) => (
+          <ul {...omitNode(props)} className="mb-2" />
         ),
-        ol: ({ node, ...props }) => (
-          <ol {...props} className="mb-2" />
+        ol: (props) => (
+          <ol {...omitNode(props)} className="mb-2" />
         ),
-        li: ({ node, ...props }) => (
-          <li {...props} className="text-gray-700 dark:text-gray-300 flex items-baseline mb-1">
+        li: (props) => (
+          <li {...omitNode(props)} className="text-gray-700 dark:text-gray-300 flex items-baseline mb-1">
             <span className="inline-block w-3 mr-1">•</span>
             <span className="flex-1">{props.children}</span>
           </li>
         ),
 
         // Block elements
-        p: ({ node, ...props }) => (
-          <p {...props} className="text-gray-700 dark:text-gray-300 mb-4 leading-relaxed" />
+        p: (props) => (
+          <p {...omitNode(props)} className="text-gray-700 dark:text-gray-300 mb-4 leading-relaxed" />
         ),
-        blockquote: ({ node, ...props }) => (
-          <blockquote {...props} className="border-l-4 border-gray-200 dark:border-gray-700 pl-4 py-2 mb-4 italic" />
+        blockquote: (props) => (
+          <blockquote {...omitNode(props)} className="border-l-4 border-gray-200 dark:border-gray-700 pl-4 py-2 mb-4 italic" />
         ),
 
         // Table elements
-        table: ({ node, ...props }) => (
+        table: (props) => (
           <div className="overflow-x-auto mb-6">
-            <table {...props} className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg" />
+            <table {...omitNode(props)} className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg" />
           </div>
         ),
-        thead: ({ node, ...props }) => (
-          <thead {...props} className="bg-gray-50 dark:bg-gray-800" />
+        thead: (props) => (
+          <thead {...omitNode(props)} className="bg-gray-50 dark:bg-gray-800" />
         ),
-        tbody: ({ node, ...props }) => (
-          <tbody {...props} className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700" />
+        tbody: (props) => (
+          <tbody {...omitNode(props)} className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700" />
         ),
-        tr: ({ node, ...props }) => (
-          <tr {...props} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" />
+        tr: (props) => (
+          <tr {...omitNode(props)} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" />
         ),
-        th: ({ node, ...props }) => (
-          <th {...props} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" />
+        th: (props) => (
+          <th {...omitNode(props)} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" />
         ),
-        td: ({ node, ...props }) => (
-          <td {...props} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" />
+        td: (props) => (
+          <td {...omitNode(props)} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" />
         ),
 
         // Inline elements
-        a: ({ node, ...props }) => (
-          <a {...props} className="text-blue-600 dark:text-blue-400 hover:underline" />
+        a: (props) => (
+          <a {...omitNode(props)} className="text-blue-600 dark:text-blue-400 hover:underline">{props.children}</a>
         ),
-        strong: ({ node, ...props }) => (
-          <strong {...props} className="font-bold text-gray-900 dark:text-gray-100" />
+        strong: (props) => (
+          <strong {...omitNode(props)} className="font-bold text-gray-900 dark:text-gray-100" />
         ),
-        em: ({ node, ...props }) => (
-          <em {...props} className="italic text-gray-900 dark:text-gray-100" />
+        em: (props) => (
+          <em {...omitNode(props)} className="italic text-gray-900 dark:text-gray-100" />
         ),
 
         // Code blocks with consistent styling
-        code: ({ node, inline, className, children, ...props }) => {
+        code: ({ className, children, ...props }) => {
           const match = /language-(\w+)/.exec(className || '');
           const language = match ? match[1] : 'text';
 
-          return !inline && className ? (
+          // react-markdown v10 has no `inline` prop: fenced blocks with a language get a className
+          return className ? (
             <SyntaxHighlighter
               language={language}
               style={isDarkMode ? customDarkTheme : customLightTheme}
@@ -205,7 +212,7 @@ const MarkdownRenderer = ({ content }) => {
                 background: isDarkMode ? 'rgb(55, 65, 81)' // equivalent to dark:bg-gray-700
                   : 'rgb(249, 250, 251)' // equivalent to bg-gray-50
               }}
-              {...props}
+              {...omitNode(props)}
             >
               {String(children).replace(/\n$/, '')}
             </SyntaxHighlighter>
@@ -213,7 +220,7 @@ const MarkdownRenderer = ({ content }) => {
             <span className="inline-flex items-center">
               <code
                 className="px-1.5 mb-0 pb-0 py-0.5 text-sm bg-gray-300 dark:bg-gray-500 rounded font-mono"
-                {...props}
+                {...omitNode(props)}
               >
                 {children}
               </code>
@@ -221,11 +228,11 @@ const MarkdownRenderer = ({ content }) => {
           );
         },
 
-        pre: ({ node, ...props }) => (
-          <pre {...props} className="mb-4 overflow-x-auto" />
+        pre: (props) => (
+          <pre {...omitNode(props)} className="mb-4 overflow-x-auto" />
         ),
-        hr: ({ node, ...props }) => (
-          <hr {...props} className="my-8 border-t border-gray-200 dark:border-gray-700" />
+        hr: (props) => (
+          <hr {...omitNode(props)} className="my-8 border-t border-gray-200 dark:border-gray-700" />
         )
       }}
     >

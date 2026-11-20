@@ -1,6 +1,6 @@
 // src/components/User/UserPromptOverlay.jsx
 import { useUser } from '@/contexts/UserContext';
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 const UserPromptOverlay = () => {
   const { username, project, updateUser } = useUser();
@@ -43,6 +43,7 @@ const UserPromptOverlay = () => {
               className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your username"
               required
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- blocking first-run modal; focusing its first field is the expected entry point
               autoFocus
             />
           </div>

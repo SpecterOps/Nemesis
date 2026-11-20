@@ -28,17 +28,21 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
   const [availableTags, setAvailableTags] = useState([]);
   const [newTagInput, setNewTagInput] = useState('');
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
-  const [fileTags, setFileTags] = useState([]);
+  const [fileTags, setFileTags] = useState(() => fileData?.file_tags || []);
   const newTagInputRef = useRef(null);
   const tagDropdownRef = useRef(null);
   const [showMetadata, setShowMetadata] = useState(false);
 
-  useEffect(() => {
-    // Set initial tags from fileData
+  // Load the tags of a newly viewed file
+  const [tagsObjectId, setTagsObjectId] = useState(fileData?.object_id);
+  if (fileData?.object_id !== tagsObjectId) {
+    setTagsObjectId(fileData?.object_id);
     if (fileData?.file_tags) {
       setFileTags(fileData.file_tags);
     }
+  }
 
+  useEffect(() => {
     // Fetch existing feedback and available tags
     const fetchInitialData = async () => {
       try {
@@ -54,6 +58,7 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
     if (fileData?.object_id) {
       fetchInitialData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the viewed file changes; the fetchers read the current fileData
   }, [fileData?.object_id]);
 
   // Click outside to close dropdown
@@ -529,6 +534,7 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
                           }}
                           placeholder="Type to create or filter tags..."
                           className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded mb-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          // eslint-disable-next-line jsx-a11y/no-autofocus -- the dropdown opens on the user's click; typing a tag is its primary action
                           autoFocus
                         />
                         <div className="max-h-48 overflow-y-auto">
@@ -538,7 +544,7 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
                               className="w-full text-left p-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center text-blue-600 dark:text-blue-400"
                             >
                               <Plus className="w-3 h-3 mr-2" />
-                              Create "{newTagInput}"
+                              Create &quot;{newTagInput}&quot;
                             </button>
                           )}
                           {availableTags

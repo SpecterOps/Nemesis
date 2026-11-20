@@ -1,9 +1,9 @@
 // src/contexts/UserContext.jsx
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 
 const DEFAULT_EXPIRATION_DAYS = '100';
 
-const UserContext = createContext();
+const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
   const [username, setUsername] = useState(() => localStorage.getItem('username') || '');

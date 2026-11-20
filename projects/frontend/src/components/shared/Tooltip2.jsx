@@ -1,6 +1,17 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
-import React from 'react';
 
+/**
+ * @param {{
+ *   children: any,
+ *   content: any,
+ *   delayDuration?: number,
+ *   sideOffset?: number,
+ *   side?: 'top' | 'right' | 'bottom' | 'left',
+ *   align?: 'start' | 'center' | 'end',
+ *   maxWidth?: string,
+ *   [key: string]: any,
+ * }} props
+ */
 const Tooltip = ({
   children,
   content,

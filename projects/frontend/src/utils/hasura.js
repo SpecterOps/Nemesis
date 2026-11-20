@@ -3,6 +3,9 @@ import { createClient } from 'graphql-ws';
 
 /**
  * POST a GraphQL query to Hasura and return `data`, throwing on HTTP or GraphQL errors.
+ * @param {string} query
+ * @param {Record<string, any>} [variables]
+ * @param {{ signal?: AbortSignal }} [options]
  */
 export async function hasuraQuery(query, variables = {}, { signal } = {}) {
   const response = await fetch('/hasura/v1/graphql', {
@@ -54,6 +57,10 @@ export function getHasuraWsClient() {
  * cheaply (index-only max/min lookups) and only a few bytes cross the websocket.
  *
  * Returns an unsubscribe function.
+ * @param {string | string[]} queries
+ * @param {(data: any) => void} onChange
+ * @param {{ debounceMs?: number, variables?: Record<string, any>, onError?: (error: any) => void }} [options]
+ * @returns {() => void}
  */
 export function subscribeToChangeSignal(queries, onChange, { debounceMs = 1000, variables = {}, onError } = {}) {
   const list = Array.isArray(queries) ? queries : [queries];

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 import Tooltip from '@/components/shared/Tooltip';
@@ -112,13 +112,6 @@ const EnrichmentStatusSection = ({ objectId }) => {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleString();
-  };
-
-  // Truncate long error messages for display in badges
-  const truncateErrorName = (errorMsg, maxLength = 20) => {
-    if (!errorMsg) return '';
-    if (errorMsg.length <= maxLength) return errorMsg;
-    return `${errorMsg.substring(0, maxLength)}...`;
   };
 
   // Extract error details for tooltips with improved formatting
@@ -238,7 +231,6 @@ const EnrichmentStatusSection = ({ objectId }) => {
                                   <p>{errorMessage || moduleName}</p>
                                 </div>
                               }
-                              className="max-w-sm"
                             >
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">
                                 <XCircle className="w-3 h-3 mr-1" />

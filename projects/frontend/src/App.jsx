@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { hasuraQuery, subscribeToChangeSignal } from '@/utils/hasura';
-import { Route, BrowserRouter as Router, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Route, BrowserRouter as Router, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 // Providers
 import { TriageModeProvider } from '@/contexts/TriageModeContext';
@@ -57,9 +57,6 @@ const Sidebar = ({ onCollapse }) => {
   });
   const [findingsCount, setFindingsCount] = useState(0);
   const [litellmAvailable, setLitellmAvailable] = useState(false);
-
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     document.documentElement.style.setProperty('--navbar-width', `${isCollapsed ? 64 : 256}px`);
@@ -308,6 +305,13 @@ const Sidebar = ({ onCollapse }) => {
   );
 };
 
+// Remount the viewer when navigating between files (e.g. via linked files): its fetch guards,
+// lazily loaded content and initial-tab selection are all per file and are never reset in place.
+const FileViewerRoute = () => {
+  const { objectId } = useParams();
+  return <FileViewer key={objectId} />;
+};
+
 const App = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const savedState = localStorage.getItem('sidebarCollapsed');
@@ -332,7 +336,7 @@ const App = () => {
                     <Routes>
                       <Route path="/" element={<StatsOverview />} />
                       <Route path="/files" element={<FileList />} />
-                      <Route path="/files/:objectId" element={<FileViewer />} />
+                      <Route path="/files/:objectId" element={<FileViewerRoute />} />
                       <Route path="/file-browser" element={<FileBrowser />} />
                       <Route path="/upload" element={<FileUpload />} />
                       <Route path="/search" element={<DocumentSearch />} />

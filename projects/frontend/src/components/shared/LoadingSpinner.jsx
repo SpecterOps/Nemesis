@@ -1,4 +1,3 @@
-import React from 'react';
 
 const LoadingSpinner = ({ size = 'medium', className = '' }) => {
   const sizeClasses = {
