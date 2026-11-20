@@ -22,22 +22,20 @@ const sortedChildren = (node) => {
     return node._sorted;
 };
 
-// One pass over the tree: paths of nodes that match `term` or contain a match
-const collectMatches = (root, term) => {
-    const matches = new Set();
-    const visit = (node) => {
+// Memoized, short-circuiting matcher: does `node` match `term` or contain a match?
+// Only nodes that are actually rendered get evaluated.
+const makeMatcher = (term) => {
+    const memo = new Map();
+    const test = (node) => {
+        let result = memo.get(node.path);
+        if (result !== undefined) return result;
         if (node._lname === undefined) node._lname = node.name.toLowerCase();
-        let hit = node._lname.includes(term);
-        if (node.type === 'directory') {
-            for (const child of Object.values(node.children)) {
-                if (visit(child)) hit = true;
-            }
-        }
-        if (hit) matches.add(node.path);
-        return hit;
+        result = node._lname.includes(term) ||
+            (node.type === 'directory' && Object.values(node.children).some(test));
+        memo.set(node.path, result);
+        return result;
     };
-    Object.values(root.children).forEach(visit);
-    return matches;
+    return test;
 };
 
 const ZipFileViewer = ({ fileBuffer, fileName }) => {
@@ -273,13 +271,13 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
     const searchLower = deferredSearchTerm.toLowerCase();
-    const searchMatches = useMemo(
-        () => (zipStructure && searchLower ? collectMatches(zipStructure, searchLower) : null),
+    const searchMatcher = useMemo(
+        () => (zipStructure && searchLower ? makeMatcher(searchLower) : null),
         [zipStructure, searchLower]
     );
     const renderChildren = (node, level) => {
-        const children = searchMatches
-            ? sortedChildren(node).filter(child => searchMatches.has(child.path))
+        const children = searchMatcher
+            ? sortedChildren(node).filter(searchMatcher)
             : sortedChildren(node);
         const limit = childLimits[node.path] || CHILDREN_PAGE_SIZE;
         const shown = children.slice(0, limit).map(child => renderFileTree(child, level));
@@ -298,7 +296,7 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
         return shown;
     };
     const renderFileTree = (node, level = 0) => {
-        if (searchMatches && !searchMatches.has(node.path)) return null;
+        if (searchMatcher && !searchMatcher(node)) return null;
         if (node.type === 'directory') {
             const isExpanded = expandedFolders[node.path] || false;
             return (
