@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -24,7 +24,7 @@ import MarkdownRenderer from '@/components/shared/MarkdownRenderer';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
-const DashboardSection = ({ title, children, action }) => (
+const DashboardSection = ({ title, children, action = null }) => (
   <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-800">
     <div className="flex justify-between items-center mb-4">
       <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">{title}</h2>
@@ -44,29 +44,25 @@ const SystemReportPage = () => {
   const [llmError, setLlmError] = useState(null);
 
   useEffect(() => {
+    const fetchReport = async () => {
+      try {
+        const response = await fetch('/api/reports/system');
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch report: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setReport(data);
+      } catch (err) {
+        console.error('Error fetching report:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchReport();
   }, []);
-
-  const fetchReport = async () => {
-    try {
-      setError(null);
-      setLoading(true);
-
-      const response = await fetch('/api/reports/system');
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch report: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setReport(data);
-    } catch (err) {
-      console.error('Error fetching report:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleGenerateAIReport = async () => {
     try {

@@ -87,11 +87,19 @@ const CustomTooltip = ({ children, content }) => {
 
 // Enhanced stat card with icon and value
 // Enhanced stat card with icon and value - modified for consistent number alignment
-const StatCard = ({ title, value, icon: Icon, isLoading, onClick, tooltip }) => {
+const StatCard = ({ title, value, icon: Icon, isLoading, onClick = null, tooltip = null }) => {
   const content = (
     <div
       className={`group relative bg-white dark:bg-dark-secondary p-4 rounded-lg shadow-md transition-colors h-full ${onClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''}`}
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      } : undefined}
     >
       {/* Use flex column with justify-between to push content to top and bottom */}
       <div className="flex flex-col justify-between h-full">
@@ -131,7 +139,7 @@ const StatCard = ({ title, value, icon: Icon, isLoading, onClick, tooltip }) => 
 };
 
 // Section with title and optional action
-const DashboardSection = ({ title, children, action }) => (
+const DashboardSection = ({ title, children, action = null }) => (
   <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-800">
     <div className="flex justify-between items-center mb-4">
       <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 transition-colors">{title}</h2>
@@ -188,7 +196,6 @@ const StatsOverview = () => {
   const [enrichmentStats, setEnrichmentStats] = useState(null);
   const [failedWorkflows, setFailedWorkflows] = useState(null);
   const [filesOverTime, setFilesOverTime] = useState(null);
-  const [findingsOverTime, setFindingsOverTime] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEnrichmentLoading, setIsEnrichmentLoading] = useState(true);
   const [isFailedWorkflowsLoading, setIsFailedWorkflowsLoading] = useState(true);
@@ -388,7 +395,7 @@ const StatsOverview = () => {
       }
 
       // Calculate time difference in milliseconds
-      const timeDiffMs = endDate - startDate;
+      const timeDiffMs = endDate.getTime() - startDate.getTime();
       const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
 
       // Determine granularity based on time range
@@ -427,17 +434,6 @@ const StatsOverview = () => {
         startDate.setMinutes(Math.floor(minutes / 5) * 5, 0, 0);
       }
 
-      // Format dates using local timezone to avoid timezone shift issues
-      const formatLocalDate = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-
-      const startDateStr = formatLocalDate(startDate);
-      const endDateStr = formatLocalDate(endDate);
-
 
       // Generate time intervals based on granularity
       const getIntervalsArray = () => {
@@ -464,7 +460,6 @@ const StatsOverview = () => {
 
       // Create a batch query for all intervals
       let filesQueryParts = '';
-      let findingsQueryParts = '';
 
       intervals.forEach((intervalStart, index) => {
         // Calculate end of this interval
@@ -495,25 +490,12 @@ const StatsOverview = () => {
             }
           }
         `;
-
-        findingsQueryParts += `
-          findings_day_${index}: findings_aggregate(
-            where: {
-              created_at: { _gte: "${startTimestamp}", _lt: "${endTimestamp}" }
-            }
-          ) {
-            aggregate {
-              count
-            }
-          }
-        `;
       });
 
       const query = {
         query: `
           query GetTimeSeriesData {
             ${filesQueryParts}
-            ${findingsQueryParts}
           }
         `,
         variables: {}
@@ -541,9 +523,7 @@ const StatsOverview = () => {
 
       // Process the response data into time series format
       const filesData = [];
-      const findingsData = [];
       let cumulativeFileCount = 0;
-      let cumulativeFindingsCount = 0;
 
       intervals.forEach((intervalStart, index) => {
         // Format the label based on granularity
@@ -563,18 +543,9 @@ const StatsOverview = () => {
           date: formattedLabel,
           count: cumulativeFileCount
         });
-
-        // Get findings count for this interval and add to cumulative total
-        const findingsCount = result.data[`findings_day_${index}`]?.aggregate?.count || 0;
-        cumulativeFindingsCount += findingsCount;
-        findingsData.push({
-          date: formattedLabel,
-          count: cumulativeFindingsCount
-        });
       });
 
       setFilesOverTime(filesData);
-      setFindingsOverTime(findingsData);
       setTimeSeriesError(null);
     } catch (err) {
       console.error('Error fetching time series data:', err);

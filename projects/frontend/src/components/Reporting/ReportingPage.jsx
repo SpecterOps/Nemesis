@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, FileText, Search, TrendingUp, AlertCircle, ArrowUpRight, Clock } from 'lucide-react';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
@@ -17,32 +17,29 @@ const ReportingPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // One request: the system report computes the per-source stats anyway, so ask it for all
+        // sources instead of running the same aggregation twice (/reports/sources + /reports/system).
+        const systemRes = await fetch('/api/reports/system?sources_limit=0');
+
+        if (!systemRes.ok) {
+          throw new Error('Failed to fetch reporting data');
+        }
+
+        const systemData = await systemRes.json();
+
+        setSources(systemData.sources);
+        setSystemStats(systemData);
+      } catch (err) {
+        console.error('Error fetching reporting data:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchData();
   }, []);
-
-  const fetchData = async () => {
-    try {
-      setError(null);
-
-      // One request: the system report computes the per-source stats anyway, so ask it for all
-      // sources instead of running the same aggregation twice (/reports/sources + /reports/system).
-      const systemRes = await fetch('/api/reports/system?sources_limit=0');
-
-      if (!systemRes.ok) {
-        throw new Error('Failed to fetch reporting data');
-      }
-
-      const systemData = await systemRes.json();
-
-      setSources(systemData.sources);
-      setSystemStats(systemData);
-    } catch (err) {
-      console.error('Error fetching reporting data:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -51,6 +48,7 @@ const ReportingPage = () => {
       setSortField(field);
       setSortDirection('desc');
     }
+    setPage(0);
   };
 
   // Filter + sort once per input change (not on every render); only one page of rows is rendered,
@@ -75,10 +73,6 @@ const ReportingPage = () => {
       return sortDirection === 'asc' ? cmp : -cmp;
     });
   }, [sources, searchTerm, sortField, sortDirection]);
-
-  useEffect(() => {
-    setPage(0);
-  }, [searchTerm, sortField, sortDirection]);
 
   const pageCount = Math.max(1, Math.ceil(sortedSources.length / SOURCES_PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
@@ -185,7 +179,10 @@ const ReportingPage = () => {
                 type="text"
                 placeholder="Search sources..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(0);
+                }}
                 className="px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-dark-primary text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>

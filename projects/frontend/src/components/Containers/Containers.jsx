@@ -1,14 +1,12 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle,
   Clock,
   FileArchive,
-  Server,
   Download,
   AlertCircle,
-  Search,
   Filter,
   ArrowUpDown,
   X,
@@ -201,7 +199,7 @@ const ContainerCard = ({ container }) => {
       new Date(container.processing_completed_at) :
       new Date();
 
-    const diffMs = end - start;
+    const diffMs = end.getTime() - start.getTime();
     const diffMinutes = Math.floor(diffMs / 60000);
     const diffSeconds = Math.floor((diffMs % 60000) / 1000);
 
@@ -384,10 +382,11 @@ const FilterControls = ({ filters, onFilterChange, sortBy, sortOrder, onSortChan
       {showFilters && (
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="containers-filter-original-filename" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               File Path
             </label>
             <input
+              id="containers-filter-original-filename"
               type="text"
               value={filters.original_filename || ''}
               onChange={(e) => onFilterChange('original_filename', e.target.value)}
@@ -397,10 +396,11 @@ const FilterControls = ({ filters, onFilterChange, sortBy, sortOrder, onSortChan
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="containers-filter-agent-id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Agent ID
             </label>
             <input
+              id="containers-filter-agent-id"
               type="text"
               value={filters.agent_id || ''}
               onChange={(e) => onFilterChange('agent_id', e.target.value)}
@@ -410,10 +410,11 @@ const FilterControls = ({ filters, onFilterChange, sortBy, sortOrder, onSortChan
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="containers-filter-source" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Source
             </label>
             <input
+              id="containers-filter-source"
               type="text"
               value={filters.source || ''}
               onChange={(e) => onFilterChange('source', e.target.value)}
@@ -423,10 +424,11 @@ const FilterControls = ({ filters, onFilterChange, sortBy, sortOrder, onSortChan
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="containers-filter-container-id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Container ID
             </label>
             <input
+              id="containers-filter-container-id"
               type="text"
               value={filters.container_id || ''}
               onChange={(e) => onFilterChange('container_id', e.target.value)}
@@ -436,10 +438,11 @@ const FilterControls = ({ filters, onFilterChange, sortBy, sortOrder, onSortChan
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="containers-filter-status" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Status
             </label>
             <select
+              id="containers-filter-status"
               value={filters.status || ''}
               onChange={(e) => onFilterChange('status', e.target.value)}
               className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
@@ -477,8 +480,11 @@ const Containers = () => {
   const [page, setPage] = useState(0);
   const [stats, setStats] = useState(null);
   const scrollContainerRef = useRef(null);
+  // Latest loaded page, read by the polling refresh without re-creating fetchContainers
   const pageRef = useRef(0);
-  pageRef.current = page;
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
 
   // Filter and sort state initialized from URL parameters
   const [filters, setFilters] = useState(() => ({
@@ -632,7 +638,7 @@ const Containers = () => {
   // Handle filter changes
   const handleFilterChange = useCallback((key, value) => {
     if (key === 'reset') {
-      setFilters({});
+      setFilters({ original_filename: '', agent_id: '', source: '', status: '', container_id: '' });
     } else {
       setFilters(prev => ({
         ...prev,
@@ -678,26 +684,30 @@ const Containers = () => {
     setSearchParams(params, { replace: true });
   }, [filters, sortBy, sortOrder, setSearchParams]);
 
-  // Watch for URL changes and update the state
-  useEffect(() => {
-    const filenameParam = searchParams.get('filename');
-    const agentIdParam = searchParams.get('agent_id');
-    const sourceParam = searchParams.get('source');
-    const statusParam = searchParams.get('status');
-    const containerIdParam = searchParams.get('container_id');
-    const sortByParam = searchParams.get('sort_by');
-    const sortOrderParam = searchParams.get('sort_order');
-
-    setFilters({
-      original_filename: filenameParam || '',
-      agent_id: agentIdParam || '',
-      source: sourceParam || '',
-      status: statusParam || '',
-      container_id: containerIdParam || ''
-    });
-    setSortBy(sortByParam || 'submitted_at');
-    setSortOrder(sortOrderParam || 'desc');
-  }, [searchParams]);
+  // Watch for URL changes (e.g. navigation from another page) and update the state.
+  // Done during render rather than in an effect; only updates when the URL values actually differ
+  // from the current state, so our own URL writes above don't trigger a duplicate fetch.
+  const searchKey = searchParams.toString();
+  const [prevSearchKey, setPrevSearchKey] = useState(searchKey);
+  if (searchKey !== prevSearchKey) {
+    setPrevSearchKey(searchKey);
+    const urlFilters = {
+      original_filename: searchParams.get('filename') || '',
+      agent_id: searchParams.get('agent_id') || '',
+      source: searchParams.get('source') || '',
+      status: searchParams.get('status') || '',
+      container_id: searchParams.get('container_id') || ''
+    };
+    const urlSortBy = searchParams.get('sort_by') || 'submitted_at';
+    const urlSortOrder = searchParams.get('sort_order') || 'desc';
+    const filtersDiffer = Object.keys(urlFilters).some((k) => (filters[k] || '') !== urlFilters[k]);
+    if (filtersDiffer || urlSortBy !== sortBy || urlSortOrder !== sortOrder) {
+      setFilters(urlFilters);
+      setSortBy(urlSortBy);
+      setSortOrder(urlSortOrder);
+      setPage(0);
+    }
+  }
 
   // Handle infinite scroll
   const handleScroll = useCallback(() => {
@@ -714,8 +724,8 @@ const Containers = () => {
   }, [isLoading, hasMore, page, fetchContainers]);
 
   // Initial fetch and polling (polling refreshes the pages already loaded, while the tab is visible)
+  // (page is reset to 0 by every handler that changes filters/sort, which is what re-creates fetchContainers)
   useEffect(() => {
-    setPage(0);
     pageRef.current = 0;
     fetchContainers(0, true);
 

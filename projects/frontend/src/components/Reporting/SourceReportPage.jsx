@@ -1,21 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
-  BarChart2,
   CheckCircle,
   Clock,
   Download,
-  Eye,
   FileText,
   Layers,
   Search,
   Sparkles,
   X,
   AlertTriangle,
-  FileArchive,
-  Server
+  FileArchive
 } from 'lucide-react';
 import {
   BarChart,
@@ -27,19 +24,17 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  Legend
+  ResponsiveContainer
 } from 'recharts';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import MarkdownRenderer from '@/components/shared/MarkdownRenderer';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
-const StatCard = ({ title, value, icon: Icon, onClick, className = '' }) => {
+const StatCard = ({ title, value, icon: Icon, className = '' }) => {
   return (
     <div
-      className={`bg-white dark:bg-dark-secondary p-4 rounded-lg shadow-md transition-colors ${onClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''} ${className}`}
-      onClick={onClick}
+      className={`bg-white dark:bg-dark-secondary p-4 rounded-lg shadow-md transition-colors ${className}`}
     >
       <div className="flex flex-col justify-between h-full">
         <div className="flex items-start justify-between mb-2">
@@ -54,7 +49,7 @@ const StatCard = ({ title, value, icon: Icon, onClick, className = '' }) => {
   );
 };
 
-const DashboardSection = ({ title, children, action }) => (
+const DashboardSection = ({ title, children, action = null }) => (
   <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-800">
     <div className="flex justify-between items-center mb-4">
       <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">{title}</h2>
@@ -74,30 +69,41 @@ const SourceReportPage = () => {
   const [llmLoading, setLlmLoading] = useState(false);
   const [llmError, setLlmError] = useState(null);
 
+  // Reset per-source state when navigating to a different source (adjusted during render, not in an effect).
+  // Clearing the AI report also stops a previous source's synthesis from being shown or put in this PDF.
+  const [prevSourceName, setPrevSourceName] = useState(sourceName);
+  if (sourceName !== prevSourceName) {
+    setPrevSourceName(sourceName);
+    setLoading(true);
+    setError(null);
+    setLlmReport(null);
+    setLlmError(null);
+  }
+
   useEffect(() => {
-    fetchReport();
-  }, [sourceName]);
+    let cancelled = false;
+    const fetchReport = async () => {
+      try {
+        const response = await fetch(`/api/reports/source?source=${encodeURIComponent(sourceName)}`);
 
-  const fetchReport = async () => {
-    try {
-      setError(null);
-      setLoading(true);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch report: ${response.status}`);
+        }
 
-      const response = await fetch(`/api/reports/source?source=${encodeURIComponent(sourceName)}`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch report: ${response.status}`);
+        const data = await response.json();
+        if (!cancelled) setReport(data);
+      } catch (err) {
+        console.error('Error fetching report:', err);
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const data = await response.json();
-      setReport(data);
-    } catch (err) {
-      console.error('Error fetching report:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    fetchReport();
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceName]);
 
   const handleGenerateAIReport = async () => {
     try {

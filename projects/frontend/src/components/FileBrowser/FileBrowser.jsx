@@ -16,7 +16,7 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 // Status badge component
-const StatusBadge = ({ status, count }) => {
+const StatusBadge = ({ status, count = null }) => {
   const configs = {
     collected: { icon: CheckCircle, className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', label: 'Collected' },
     needs_to_be_collected: { icon: Clock, className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200', label: 'Needs Collection' },
@@ -42,6 +42,14 @@ const StatusBadge = ({ status, count }) => {
   );
 };
 
+// Keyboard activation (Enter/Space) for clickable non-button elements
+const onActivateKey = (handler) => (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    handler();
+  }
+};
+
 // Source card component
 const SourceCard = ({ source, totalFiles, statusCounts, onSourceClick }) => {
   const formatNumber = (num) => {
@@ -52,7 +60,10 @@ const SourceCard = ({ source, totalFiles, statusCounts, onSourceClick }) => {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={() => onSourceClick(source)}
+      onKeyDown={onActivateKey(() => onSourceClick(source))}
       className="bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:shadow-lg transition-shadow"
     >
       <div className="mb-3">
@@ -127,7 +138,10 @@ const FileItem = ({ item, onItemClick, onFileClick }) => {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={handleClick}
+      onKeyDown={onActivateKey(handleClick)}
       className={`
         flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 
         cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors
@@ -359,6 +373,7 @@ const FileBrowser = () => {
 
   // Effects and handlers
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on source deselect; sets loading state before the request
     if (!selectedSource) fetchSources();
   }, [selectedSource, fetchSources]);
 
@@ -366,6 +381,7 @@ const FileBrowser = () => {
   useEffect(() => {
     if (!selectedSource) return;
     if (showCollectionList) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch keyed on view/paging state; sets loading state before the request
       fetchCollectionPaths(selectedSource, collectionOffset, debouncedSearch);
     } else {
       fetchPathContents(selectedSource, currentPath, currentCursor, debouncedSearch);

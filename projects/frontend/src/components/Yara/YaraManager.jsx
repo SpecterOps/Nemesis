@@ -45,7 +45,8 @@ const Modal = ({ isOpen, onClose, children }) => {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={onClose}></div>
+      {/* Backdrop is a mouse-only affordance; keyboard users close with Escape or the Close button */}
+      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" role="presentation" onClick={onClose}></div>
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white dark:bg-dark-secondary rounded-lg shadow-xl max-w-4xl w-full h-[80vh] overflow-hidden">
           <button
@@ -89,13 +90,6 @@ const YaraRulesManager = () => {
   const [isReloading, setIsReloading] = useState(false);
   const [showReloadAlert, setShowReloadAlert] = useState(false);
   const [isBulkRunning, setIsBulkRunning] = useState(false);
-
-  // Set source to username when creating a new rule
-  useEffect(() => {
-    if (isNewRule && username) {
-      setNewRuleSource(`Created manually by ${username}`);
-    }
-  }, [isNewRule, username]);
 
   const extractRuleName = (content) => {
     const ruleRegex = /(?:private\s+)?rule\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\/\/[^\n]*)?[\s\n]*{/;
@@ -163,16 +157,14 @@ const YaraRulesManager = () => {
         return true;
       })
       .sort((a, b) => {
-        const dateA = new Date(a.created_at);
-        const dateB = new Date(b.created_at);
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
         return sortNewest ? dateB - dateA : dateA - dateB;
       });
   }, [rules, nameFilter, sourceFilter, enabledFilter, sortNewest]);
 
-  // Only one page of rules is rendered (thousands of rows with tooltips are slow to mount)
-  useEffect(() => {
-    setPage(0);
-  }, [nameFilter, sourceFilter, enabledFilter, sortNewest]);
+  // Only one page of rules is rendered (thousands of rows with tooltips are slow to mount).
+  // The filter/sort handlers below reset to the first page.
   const pageCount = Math.max(1, Math.ceil(filteredRules.length / RULES_PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
   const pageRules = filteredRules.slice(currentPage * RULES_PAGE_SIZE, (currentPage + 1) * RULES_PAGE_SIZE);
@@ -310,7 +302,8 @@ const YaraRulesManager = () => {
       if (result.errors) throw new Error(result.errors[0].message);
 
       // Update local state
-      const { content: _content, ...createdRule } = result.data.insert_yara_rules_one;
+      const createdRule = { ...result.data.insert_yara_rules_one };
+      delete createdRule.content;
       setRules([...rules, createdRule]);
       setNeedsReload(true);
       setShowReloadAlert(true);
@@ -387,6 +380,7 @@ const YaraRulesManager = () => {
   };
 
   // Add bulk re-run handler
+  // eslint-disable-next-line no-unused-vars -- button is temporarily disabled (commented out below); kept for re-enable
   const handleBulkRerun = async () => {
     try {
       setIsBulkRunning(true);
@@ -431,6 +425,8 @@ const YaraRulesManager = () => {
                   setIsNewRule(true);
                   setIsEditorOpen(true);
                   setEditedContent('');
+                  // Default the source to the current user
+                  if (username) setNewRuleSource(`Created manually by ${username}`);
                 }}
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
@@ -489,7 +485,7 @@ const YaraRulesManager = () => {
             <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center space-x-2">
               <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
               <span className="text-yellow-800 dark:text-yellow-300 font-medium">
-                Click 'Reload Yara Engine' to Register Rule Changes
+                Click &apos;Reload Yara Engine&apos; to Register Rule Changes
               </span>
             </div>
           )}
@@ -523,7 +519,10 @@ const YaraRulesManager = () => {
                 placeholder="Filter by name"
                 className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-100 rounded p-2"
                 value={nameFilter}
-                onChange={(e) => setNameFilter(e.target.value)}
+                onChange={(e) => {
+                  setNameFilter(e.target.value);
+                  setPage(0);
+                }}
               />
             </div>
 
@@ -534,7 +533,10 @@ const YaraRulesManager = () => {
                 placeholder="Filter by source"
                 className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-100 rounded p-2"
                 value={sourceFilter}
-                onChange={(e) => setSourceFilter(e.target.value)}
+                onChange={(e) => {
+                  setSourceFilter(e.target.value);
+                  setPage(0);
+                }}
               />
             </div>
 
@@ -543,7 +545,10 @@ const YaraRulesManager = () => {
               <select
                 className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
                 value={enabledFilter}
-                onChange={(e) => setEnabledFilter(e.target.value)}
+                onChange={(e) => {
+                  setEnabledFilter(e.target.value);
+                  setPage(0);
+                }}
               >
                 <option value="all">All Rules</option>
                 <option value="enabled">Enabled Only</option>
@@ -554,7 +559,10 @@ const YaraRulesManager = () => {
             <Tooltip content={sortNewest ? "Showing newest first" : "Showing oldest first"}>
               <button
                 className="flex items-center space-x-2 px-3 py-2 border dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                onClick={() => setSortNewest(!sortNewest)}
+                onClick={() => {
+                  setSortNewest(!sortNewest);
+                  setPage(0);
+                }}
               >
                 <Clock className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -580,7 +588,7 @@ const YaraRulesManager = () => {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-4 text-center">
+                    <td colSpan={6} className="px-6 py-4 text-center">
                       <div className="flex justify-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
                       </div>
@@ -689,10 +697,11 @@ const YaraRulesManager = () => {
             {isNewRule && (
               <div className="flex flex-col space-y-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="yara-new-rule-source" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Source
                   </label>
                   <input
+                    id="yara-new-rule-source"
                     type="text"
                     value={newRuleSource}
                     onChange={(e) => setNewRuleSource(e.target.value)}
@@ -724,7 +733,7 @@ const YaraRulesManager = () => {
             {isNewRule && isDuplicateName ? (
               <div className="flex items-center space-x-2 text-yellow-600 dark:text-yellow-400">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                <span className="text-sm">A rule named "{extractedRuleName}" already exists. Change the rule name to create a new rule.</span>
+                <span className="text-sm">A rule named &quot;{extractedRuleName}&quot; already exists. Change the rule name to create a new rule.</span>
               </div>
             ) : (
               <div />

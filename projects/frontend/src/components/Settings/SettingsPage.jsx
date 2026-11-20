@@ -1,10 +1,10 @@
 import { useUser } from '@/contexts/UserContext';
-import { AlertTriangle, Bell, Bot, Calendar, Clock, Database, Edit3, Save, Trash2, User, X } from 'lucide-react';
+import { AlertTriangle, Bell, Bot, Calendar, Database, Edit3, Save, Trash2, User, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Dialog from '../ui/dialog';
 
 // SettingsSection component remains the same
-const SettingsSection = ({ icon: Icon, title, description, children }) => (
+const SettingsSection = ({ icon: Icon, title, description = null, children }) => (
   <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
     <div className="p-6">
       <div className="flex items-center gap-2 mb-1">
@@ -90,10 +90,11 @@ const AgentCard = ({ agent, onEditClick, isEditing, editedPrompt, onPromptChange
       {isEditing && (
         <div className="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor={`agent-prompt-${agent.name}`} className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
               System Prompt
             </label>
             <textarea
+              id={`agent-prompt-${agent.name}`}
               value={editedPrompt}
               onChange={(e) => onPromptChange(e.target.value)}
               className="w-full h-48 p-2 text-sm border border-gray-300 dark:border-gray-600 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -142,7 +143,6 @@ const SettingsPage = () => {
   const [newProject, setNewProject] = useState(project);
   const [newExpirationDays, setNewExpirationDays] = useState(dataExpirationDays || '100');
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [newExpirationDate, setNewExpirationDate] = useState(dataExpirationDate);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState('');
 
@@ -158,7 +158,8 @@ const SettingsPage = () => {
   const [alertInfo, setAlertInfo] = useState(null);
 
   // Alert settings state
-  const [alertSettings, setAlertSettings] = useState({
+  // minimum_severity holds the raw <input> string while editing; it is parsed to an int on save
+  const [alertSettings, setAlertSettings] = useState(/** @type {{alerting_enabled: boolean, minimum_severity: number | string, category_excluded: string[], category_included: string[], file_path_excluded_regex: string[], file_path_included_regex: string[], llm_triage_values_to_alert: string[]}} */ ({
     alerting_enabled: true,
     minimum_severity: 4,
     category_excluded: [],
@@ -166,7 +167,7 @@ const SettingsPage = () => {
     file_path_excluded_regex: [],
     file_path_included_regex: [],
     llm_triage_values_to_alert: ['true_positive']
-  });
+  }));
   const [alertSettingsLoaded, setAlertSettingsLoaded] = useState(false);
   const [alertSettingsSaving, setAlertSettingsSaving] = useState(false);
   const [alertSettingsSaved, setAlertSettingsSaved] = useState(false);
@@ -179,7 +180,6 @@ const SettingsPage = () => {
   const [editingAgent, setEditingAgent] = useState(null);
   const [editedPrompt, setEditedPrompt] = useState('');
   const [agentSaving, setAgentSaving] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [spendData, setSpendData] = useState(null);
   const [spendLoading, setSpendLoading] = useState(true);
 
@@ -289,7 +289,6 @@ const SettingsPage = () => {
 
         const data = await response.json();
         setAgents(data.agents || []);
-        setLastUpdated(new Date());
 
       } catch (err) {
         console.error('Error fetching agents:', err);
@@ -349,7 +348,7 @@ const SettingsPage = () => {
       updateUser(newUsername.trim(), newProject.trim());
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
-    } catch (err) {
+    } catch {
       setError('Failed to update settings');
     }
   };
@@ -473,7 +472,7 @@ const SettingsPage = () => {
           `,
           variables: {
             alerting_enabled: alertSettings.alerting_enabled,
-            minimum_severity: parseInt(alertSettings.minimum_severity),
+            minimum_severity: parseInt(String(alertSettings.minimum_severity)),
             category_excluded: alertSettings.category_excluded,
             category_included: alertSettings.category_included,
             file_path_excluded_regex: alertSettings.file_path_excluded_regex,
@@ -773,13 +772,13 @@ const SettingsPage = () => {
 
                 {/* LLM Triage Values to Alert */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <div id="llm_triage_values_label" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     LLM Triage Values to Alert On
-                  </label>
+                  </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                     When LLM functionality is enabled, only alert on findings with these triage values
                   </p>
-                  <div className="flex gap-4">
+                  <div className="flex gap-4" role="group" aria-labelledby="llm_triage_values_label">
                     <label className="flex items-center space-x-2">
                       <input
                         type="checkbox"
@@ -883,7 +882,7 @@ const SettingsPage = () => {
                   </p>
                   <textarea
                     id="file_path_included_regex"
-                    rows="3"
+                    rows={3}
                     value={alertSettings.file_path_included_regex.join('\n')}
                     onChange={(e) => setAlertSettings({
                       ...alertSettings,
@@ -904,7 +903,7 @@ const SettingsPage = () => {
                   </p>
                   <textarea
                     id="file_path_excluded_regex"
-                    rows="3"
+                    rows={3}
                     value={alertSettings.file_path_excluded_regex.join('\n')}
                     onChange={(e) => setAlertSettings({
                       ...alertSettings,
@@ -950,13 +949,14 @@ const SettingsPage = () => {
         >
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="data_expiration_days" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Data Expiration
               </label>
               <div className="space-y-4">
                 <form onSubmit={handleExpirationSubmit} className="flex gap-2 w-full">
                   <div className="flex-grow">
                     <input
+                      id="data_expiration_days"
                       type="number"
                       min="1"
                       value={newExpirationDays}
@@ -1252,7 +1252,8 @@ const SettingsPage = () => {
           <input
             type="datetime-local"
             className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={newExpirationDate}
+            aria-label="Expiration date"
+            value={dataExpirationDate || ''}
             onChange={(e) => handleDateSelect(e.target.value)}
           />
         </div>
