@@ -475,7 +475,10 @@ const Containers = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
+  const [stats, setStats] = useState(null);
   const scrollContainerRef = useRef(null);
+  const pageRef = useRef(0);
+  pageRef.current = page;
 
   // Filter and sort state initialized from URL parameters
   const [filters, setFilters] = useState(() => ({
@@ -492,12 +495,15 @@ const Containers = () => {
   const PAGE_SIZE = 20;
 
 
-  const fetchContainers = useCallback(async (pageNum = 0, reset = false) => {
+  // pageNum/reset: load one page (reset replaces the list). refreshLoaded: re-fetch every page
+  // loaded so far in one request (used by polling, so live refreshes don't drop scrolled pages).
+  const fetchContainers = useCallback(async (pageNum = 0, reset = false, refreshLoaded = false) => {
     try {
       // Build filter variables instead of inline conditions
+      const limit = refreshLoaded ? (pageRef.current + 1) * PAGE_SIZE : PAGE_SIZE;
       const variables = {
-        limit: PAGE_SIZE,
-        offset: pageNum * PAGE_SIZE
+        limit,
+        offset: refreshLoaded ? 0 : pageNum * PAGE_SIZE
       };
 
       // Build where conditions as GraphQL variables
@@ -530,11 +536,22 @@ const Containers = () => {
         variables.where = { _and: whereConditions };
       }
 
+      // Summary counts are server-side aggregates over all matching containers (not just loaded ones)
+      const withStatus = (statuses) => ({ _and: [...whereConditions, { status: { _in: statuses } }] });
+      variables.where_completed = withStatus(['completed', 'workflows_complete']);
+      variables.where_processing = withStatus(['processing', 'extracting', 'extracted']);
+      variables.where_failed = withStatus(['failed']);
+
       // Build order by
-      variables.order_by = { [sortBy]: sortOrder };
+      // container_id tie-breaker keeps offset paging stable when many rows share the sort value
+      variables.order_by = [{ [sortBy]: sortOrder }, { container_id: 'asc' }];
 
       const query = `
-        query GetContainers($where: container_processing_bool_exp, $order_by: [container_processing_order_by!], $limit: Int!, $offset: Int!) {
+        query GetContainers($where: container_processing_bool_exp, $where_completed: container_processing_bool_exp, $where_processing: container_processing_bool_exp, $where_failed: container_processing_bool_exp, $order_by: [container_processing_order_by!], $limit: Int!, $offset: Int!) {
+          total: container_processing_aggregate(where: $where) { aggregate { count } }
+          completed: container_processing_aggregate(where: $where_completed) { aggregate { count } }
+          processing: container_processing_aggregate(where: $where_processing) { aggregate { count } }
+          failed: container_processing_aggregate(where: $where_failed) { aggregate { count } }
           container_processing(
             where: $where
             order_by: $order_by
@@ -588,13 +605,19 @@ const Containers = () => {
 
       const newContainers = result.data.container_processing || [];
 
-      if (reset || pageNum === 0) {
+      if (refreshLoaded || reset || pageNum === 0) {
         setContainers(newContainers);
       } else {
         setContainers(prev => [...prev, ...newContainers]);
       }
 
-      setHasMore(newContainers.length === PAGE_SIZE);
+      setStats({
+        total: result.data.total.aggregate.count,
+        completed: result.data.completed.aggregate.count,
+        processing: result.data.processing.aggregate.count,
+        failed: result.data.failed.aggregate.count,
+      });
+      setHasMore(newContainers.length === limit);
       setLastUpdated(new Date());
       setError(null);
     } catch (err) {
@@ -690,12 +713,14 @@ const Containers = () => {
     }
   }, [isLoading, hasMore, page, fetchContainers]);
 
-  // Initial fetch and polling
+  // Initial fetch and polling (polling refreshes the pages already loaded, while the tab is visible)
   useEffect(() => {
+    setPage(0);
+    pageRef.current = 0;
     fetchContainers(0, true);
 
     const intervalId = setInterval(() => {
-      fetchContainers(0, true);
+      if (!document.hidden) fetchContainers(0, false, true);
     }, POLL_INTERVAL);
 
     return () => clearInterval(intervalId);
@@ -714,7 +739,7 @@ const Containers = () => {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        fetchContainers(0, true);
+        fetchContainers(0, false, true);
       }
     };
 
@@ -783,32 +808,32 @@ const Containers = () => {
       </div>
 
       {/* Summary stats */}
-      {containers.length > 0 && (
+      {stats && stats.total > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
           <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {containers.length}
+              {stats.total.toLocaleString()}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Total Containers</div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {containers.filter(c => c.status === 'completed' || c.status === 'workflows_complete').length}
+              {stats.completed.toLocaleString()}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Completed Containers</div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {containers.filter(c => c.status === 'processing' || c.status === 'extracting' || c.status === 'extracted').length}
+              {stats.processing.toLocaleString()}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Processing Containers</div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-              {containers.filter(c => c.status === 'failed').length}
+              {stats.failed.toLocaleString()}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Failed Containers</div>
           </div>

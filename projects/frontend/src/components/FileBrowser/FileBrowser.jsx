@@ -13,7 +13,7 @@ import {
   Search,
   XCircle
 } from 'lucide-react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 // Status badge component
 const StatusBadge = ({ status, count }) => {
@@ -193,290 +193,197 @@ const FilePathItem = ({ pathData }) => {
   );
 };
 
-// Helper function to normalize paths by removing leading slashes
-const normalizePath = (path) => {
-  if (!path) return '';
-  // Remove leading slashes to ensure consistent path parsing
-  return path.replace(/^\/+/, '');
+const PAGE_SIZE = 200;
+const SEARCH_DEBOUNCE_MS = 300;
+
+const fetchJson = async (url, signal) => {
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    let detail = '';
+    try {
+      detail = (await response.json()).detail || '';
+    } catch {
+      // ignore non-JSON error bodies
+    }
+    throw new Error(`Network response error: ${response.status}${detail ? ` - ${detail}` : ''}`);
+  }
+  return response.json();
+};
+
+// Prev/next pager with a "showing X-Y of N" summary
+const Pager = ({ start, count, total, canPrev, canNext, onPrev, onNext, noun = 'files' }) => {
+  if (!total) return null;
+  return (
+    <div className="flex items-center justify-between px-4 py-2 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700">
+      <span>
+        {count > 0 ? `${(start + 1).toLocaleString()}-${(start + count).toLocaleString()} of ` : ''}
+        {total.toLocaleString()} {noun}
+      </span>
+      {(canPrev || canNext) && (
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={onPrev}
+            disabled={!canPrev}
+            className="px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-700 disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-gray-600"
+          >
+            Previous
+          </button>
+          <button
+            onClick={onNext}
+            disabled={!canNext}
+            className="px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-700 disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-gray-600"
+          >
+            Next
+          </button>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // Main FileBrowser component
+//
+// All tree navigation is server-side (web_api /file-browser/*): one folder level per request,
+// files paged with a keyset cursor, so very wide folders (100k+ entries) and deep trees only ever
+// transfer and render one page.
 const FileBrowser = () => {
   const [sources, setSources] = useState([]);
   const [selectedSource, setSelectedSource] = useState(null);
   const [currentPath, setCurrentPath] = useState('');
-  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showCollectionList, setShowCollectionList] = useState(false);
-  const [collectionPaths, setCollectionPaths] = useState([]);
 
-  // Efficient single-query approach for sources and their counts
+  // Tree view state: folders of the current level + current page of files
+  const [folders, setFolders] = useState([]);
+  const [foldersTruncated, setFoldersTruncated] = useState(false);
+  const [files, setFiles] = useState([]);
+  const [totalFiles, setTotalFiles] = useState(0);
+  const [nextCursor, setNextCursor] = useState(null);
+  // cursorStack[i] = cursor used to load page i (null for the first page)
+  const [cursorStack, setCursorStack] = useState([null]);
+
+  // Collection view state
+  const [collectionPaths, setCollectionPaths] = useState([]);
+  const [collectionTotal, setCollectionTotal] = useState(0);
+  const [collectionOffset, setCollectionOffset] = useState(0);
+
+  const requestRef = useRef(null);
+  const startRequest = () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    return controller;
+  };
+  useEffect(() => () => requestRef.current?.abort(), []);
+
+  // Back to the first page (of files or of collection paths)
+  const resetPaging = () => {
+    setCursorStack([null]);
+    setCollectionOffset(0);
+  };
+
+  // Debounce the search box: searching is server-side
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const value = searchTerm.trim();
+      setDebouncedSearch(prev => {
+        if (prev !== value) resetPaging();
+        return value;
+      });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   const fetchSources = useCallback(async () => {
+    const controller = startRequest();
     try {
       setLoading(true);
       setError(null);
-
-      // Single query to get all data we need
-      const query = {
-        query: `
-          query GetSourcesAndCounts {
-            file_listings {
-              source
-              status
-            }
-          }
-        `
-      };
-
-      const response = await fetch('/hasura/v1/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-        },
-        body: JSON.stringify(query)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Network response error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      if (result.errors) {
-        throw new Error(result.errors[0].message);
-      }
-
-      // Process data efficiently in memory
-      const sourceData = {};
-      result.data.file_listings.forEach(({ source, status }) => {
-        if (!sourceData[source]) {
-          sourceData[source] = { total: 0, statusCounts: {} };
-        }
-        sourceData[source].total++;
-        sourceData[source].statusCounts[status] = (sourceData[source].statusCounts[status] || 0) + 1;
-      });
-
-      const sourcesArray = Object.entries(sourceData).map(([source, data]) => ({
-        source,
-        totalFiles: data.total,
-        statusCounts: data.statusCounts
-      }));
-
-      setSources(sourcesArray);
+      const data = await fetchJson('/api/file-browser/sources', controller.signal);
+      setSources(data.map(s => ({ source: s.source, totalFiles: s.total_files, statusCounts: s.status_counts })));
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Error fetching sources:', err);
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, []);
 
-  // Efficient path contents fetching with smart filtering
-  const fetchPathContents = useCallback(async (source, path) => {
+  const fetchPathContents = useCallback(async (source, path, cursor, search) => {
+    const controller = startRequest();
     try {
       setLoading(true);
       setError(null);
-
-      // Use LIKE patterns for efficient database filtering
-      // Database paths have leading slashes, so we need to add them back for the query
-      const pathPattern = path === '' ? '%' : `/${path}/%`;
-
-      const query = {
-        query: `
-          query GetPathContents($source: String!, $path_pattern: String!) {
-            file_listings(
-              where: {
-                source: {_eq: $source},
-                path: {_like: $path_pattern}
-              },
-              order_by: {path: asc}
-            ) {
-              path
-              object_id
-              status
-            }
-          }
-        `,
-        variables: { source, path_pattern: pathPattern }
-      };
-
-      const response = await fetch('/hasura/v1/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-        },
-        body: JSON.stringify(query)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Network response error: ${response.status}`);
+      const params = new URLSearchParams({ source, path, limit: String(PAGE_SIZE) });
+      if (cursor) params.set('cursor', cursor);
+      if (search) params.set('search', search);
+      const data = await fetchJson(`/api/file-browser/children?${params}`, controller.signal);
+      if (!cursor) {
+        setFolders(data.folders.map(f => ({ ...f, item_type: 'folder', status: 'folder' })));
+        setFoldersTruncated(data.folders_truncated);
       }
-
-      const result = await response.json();
-      if (result.errors) {
-        throw new Error(result.errors[0].message);
-      }
-
-      // Efficiently process paths to extract immediate children only
-      const childrenMap = new Map();
-      const currentLevel = path === '' ? 0 : path.split('/').length;
-
-      result.data.file_listings.forEach(item => {
-        // Normalize the path to remove leading slashes
-        const normalizedPath = normalizePath(item.path);
-        const pathParts = normalizedPath.split('/');
-
-        // Only process items at the next level down
-        if (pathParts.length === currentLevel + 1 ||
-          (pathParts.length > currentLevel + 1 && pathParts.slice(0, currentLevel + 1).join('/') === (path === '' ? pathParts[0] : `${path}/${pathParts[currentLevel]}`))) {
-
-          const childName = pathParts[currentLevel];
-          const childPath = pathParts.slice(0, currentLevel + 1).join('/');
-
-          if (!childrenMap.has(childName)) {
-            const isFile = pathParts.length === currentLevel + 1;
-            childrenMap.set(childName, {
-              source,
-              path: childPath,
-              item_type: isFile ? 'file' : 'folder',
-              object_id: isFile ? item.object_id : null,
-              status: isFile ? item.status : 'folder',
-              name: childName
-            });
-          }
-        }
-      });
-
-      const processedItems = Array.from(childrenMap.values());
-      processedItems.sort((a, b) => {
-        if (a.item_type !== b.item_type) {
-          return a.item_type === 'folder' ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-      });
-
-      setItems(processedItems);
+      setFiles(data.files.map(f => ({ ...f, item_type: 'file' })));
+      setTotalFiles(data.total_files);
+      setNextCursor(data.next_cursor);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Error fetching path contents:', err);
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, []);
 
-  // Fetch all files that need to be collected for a source
-  const fetchCollectionPaths = useCallback(async (source) => {
+  const fetchCollectionPaths = useCallback(async (source, offset, search) => {
+    const controller = startRequest();
     try {
       setLoading(true);
       setError(null);
-
-      // Fetch file listings (needs collection), linkings, and collected files with object_ids
-      const queries = {
-        query: `
-          query GetCollectionPathsAndLinkings($source: String!) {
-            file_listings(
-              where: {
-                source: {_eq: $source},
-                status: {_eq: "needs_to_be_collected"}
-              },
-              order_by: {path: asc}
-            ) {
-              path
-            }
-            file_linkings(
-              where: {
-                source: {_eq: $source}
-              }
-            ) {
-              file_path_1
-              file_path_2
-              link_type
-            }
-            collected_files: file_listings(
-              where: {
-                source: {_eq: $source},
-                status: {_eq: "collected"}
-              }
-            ) {
-              path
-              object_id
-            }
-          }
-        `,
-        variables: { source }
-      };
-
-      const response = await fetch('/hasura/v1/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-        },
-        body: JSON.stringify(queries)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Network response error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      if (result.errors) {
-        throw new Error(result.errors[0].message);
-      }
-
-      // Build a map of file path -> object_id for collected files
-      const objectIdMap = new Map();
-      result.data.collected_files.forEach(file => {
-        objectIdMap.set(file.path, file.object_id);
-      });
-
-      // Build a map of file_path_2 -> linkings for quick lookup
-      const linkingsMap = new Map();
-      result.data.file_linkings.forEach(linking => {
-        if (!linkingsMap.has(linking.file_path_2)) {
-          linkingsMap.set(linking.file_path_2, []);
-        }
-        linkingsMap.get(linking.file_path_2).push({
-          requiredBy: linking.file_path_1,
-          requiredByObjectId: objectIdMap.get(linking.file_path_1) || null,
-          reason: linking.link_type
-        });
-      });
-
-      // Combine paths with their linking reasons
-      const pathsWithReasons = result.data.file_listings.map(item => ({
-        path: item.path,
-        linkings: linkingsMap.get(item.path) || []
-      }));
-
-      setCollectionPaths(pathsWithReasons);
+      const params = new URLSearchParams({ source, offset: String(offset), limit: String(PAGE_SIZE) });
+      if (search) params.set('search', search);
+      const data = await fetchJson(`/api/file-browser/collection?${params}`, controller.signal);
+      setCollectionPaths(data.paths);
+      setCollectionTotal(data.total);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Error fetching collection paths:', err);
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, []);
 
   // Effects and handlers
   useEffect(() => {
-    fetchSources();
-  }, [fetchSources]);
+    if (!selectedSource) fetchSources();
+  }, [selectedSource, fetchSources]);
 
+  const currentCursor = cursorStack[cursorStack.length - 1];
   useEffect(() => {
-    if (selectedSource) {
-      if (showCollectionList) {
-        fetchCollectionPaths(selectedSource);
-      } else {
-        fetchPathContents(selectedSource, currentPath);
-      }
+    if (!selectedSource) return;
+    if (showCollectionList) {
+      fetchCollectionPaths(selectedSource, collectionOffset, debouncedSearch);
+    } else {
+      fetchPathContents(selectedSource, currentPath, currentCursor, debouncedSearch);
     }
-  }, [selectedSource, currentPath, showCollectionList, fetchPathContents, fetchCollectionPaths]);
+  }, [selectedSource, currentPath, showCollectionList, debouncedSearch, currentCursor, collectionOffset, fetchPathContents, fetchCollectionPaths]);
+
+  // Clears the current level and goes back to its first page (source / folder / view changes)
+  const resetLevel = () => {
+    resetPaging();
+    setFolders([]);
+    setFiles([]);
+    setTotalFiles(0);
+    setNextCursor(null);
+    setFoldersTruncated(false);
+  };
 
   const handleSourceClick = (source) => {
+    resetLevel();
     setSelectedSource(source);
     setCurrentPath('');
   };
@@ -484,16 +391,17 @@ const FileBrowser = () => {
   const handleBackToSources = () => {
     setSelectedSource(null);
     setCurrentPath('');
-    setItems([]);
+    resetLevel();
     setShowCollectionList(false);
     setCollectionPaths([]);
+    setCollectionTotal(0);
   };
 
-  const handlePathNavigate = (path) => {
-    setCurrentPath(path);
-  };
-
-  const handleItemClick = (path) => {
+  const navigateTo = (path) => {
+    if (path === currentPath) return;
+    resetLevel();
+    setSearchTerm('');
+    setDebouncedSearch('');
     setCurrentPath(path);
   };
 
@@ -502,19 +410,14 @@ const FileBrowser = () => {
   };
 
   const handleToggleView = () => {
+    resetPaging();
     setShowCollectionList(!showCollectionList);
     setSearchTerm(''); // Clear search when switching views
+    setDebouncedSearch('');
   };
 
-  // Filter items based on search term
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Filter collection paths based on search term
-  const filteredCollectionPaths = collectionPaths.filter(pathData =>
-    pathData.path.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const pageIndex = cursorStack.length - 1;
+  const items = pageIndex === 0 ? [...folders, ...files] : files;
 
   if (error) {
     return (
@@ -624,7 +527,7 @@ const FileBrowser = () => {
             <div className="p-4 border-b border-gray-200 dark:border-gray-700">
               <Breadcrumb
                 currentPath={currentPath}
-                onNavigate={handlePathNavigate}
+                onNavigate={navigateTo}
               />
             </div>
           )}
@@ -638,7 +541,7 @@ const FileBrowser = () => {
                   Files Requiring Collection
                 </h3>
                 <span className="text-sm text-gray-500 dark:text-gray-400">
-                  ({filteredCollectionPaths.length} {filteredCollectionPaths.length === 1 ? 'file' : 'files'})
+                  ({collectionTotal.toLocaleString()} {collectionTotal === 1 ? 'file' : 'files'})
                 </span>
               </div>
             </div>
@@ -650,32 +553,60 @@ const FileBrowser = () => {
                 <div className="animate-spin h-6 w-6 border-2 border-blue-500 rounded-full border-t-transparent" />
               </div>
             ) : showCollectionList ? (
-              filteredCollectionPaths.length > 0 ? (
-                filteredCollectionPaths.map((pathData, index) => (
+              collectionPaths.length > 0 ? (
+                collectionPaths.map((pathData, index) => (
                   <FilePathItem key={`${pathData.path}-${index}`} pathData={pathData} />
                 ))
               ) : (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  {searchTerm ? 'No collection paths match your search.' : 'No files need to be collected from this source.'}
+                  {debouncedSearch ? 'No collection paths match your search.' : 'No files need to be collected from this source.'}
                 </div>
               )
             ) : (
-              filteredItems.length > 0 ? (
-                filteredItems.map((item, index) => (
+              items.length > 0 ? (
+                items.map((item) => (
                   <FileItem
-                    key={`${item.path}-${index}`}
+                    key={`${item.item_type}-${item.path}`}
                     item={item}
-                    onItemClick={handleItemClick}
+                    onItemClick={navigateTo}
                     onFileClick={handleFileClick}
                   />
                 ))
               ) : (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  {searchTerm ? 'No items match your search.' : 'No files or folders found in this location.'}
+                  {debouncedSearch ? 'No items match your search.' : 'No files or folders found in this location.'}
                 </div>
               )
             )}
           </div>
+
+          {!showCollectionList && foldersTruncated && pageIndex === 0 && (
+            <div className="px-4 py-2 text-xs text-yellow-700 dark:text-yellow-400 border-t border-gray-200 dark:border-gray-700">
+              Only the first {folders.length.toLocaleString()} sub-folders are shown; use search to narrow them down.
+            </div>
+          )}
+
+          {showCollectionList ? (
+            <Pager
+              start={collectionOffset}
+              count={collectionPaths.length}
+              total={collectionTotal}
+              canPrev={!loading && collectionOffset > 0}
+              canNext={!loading && collectionOffset + PAGE_SIZE < collectionTotal}
+              onPrev={() => setCollectionOffset(Math.max(0, collectionOffset - PAGE_SIZE))}
+              onNext={() => setCollectionOffset(collectionOffset + PAGE_SIZE)}
+            />
+          ) : (
+            <Pager
+              start={pageIndex * PAGE_SIZE}
+              count={files.length}
+              total={totalFiles}
+              canPrev={!loading && pageIndex > 0}
+              canNext={!loading && !!nextCursor}
+              onPrev={() => setCursorStack(stack => stack.slice(0, -1))}
+              onNext={() => setCursorStack(stack => [...stack, nextCursor])}
+            />
+          )}
         </div>
       )}
     </div>

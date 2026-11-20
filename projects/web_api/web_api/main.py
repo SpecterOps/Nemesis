@@ -64,6 +64,7 @@ from web_api.models.responses import (
 )
 from web_api.pdf_generator import generate_source_report_pdf
 from web_api.queue_monitor import WorkflowQueueMonitor
+from web_api.workflow_stats import get_workflow_metrics
 
 logger = get_logger(__name__)
 
@@ -561,27 +562,8 @@ async def get_status():
             pool = get_db_pool()
             with pool.connection() as conn:
                 with conn.cursor() as cur:
-                    # Get metrics: counts and processing times
-                    cur.execute("""
-                        SELECT
-                            COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed_count,
-                            COUNT(*) FILTER (WHERE status IN ('FAILED', 'ERROR', 'TIMEOUT')) as failed_count,
-                            COUNT(*) FILTER (WHERE status = 'RUNNING') as running_count,
-                            AVG(runtime_seconds) FILTER (WHERE runtime_seconds IS NOT NULL) as avg_time,
-                            MIN(runtime_seconds) FILTER (WHERE runtime_seconds IS NOT NULL) as min_time,
-                            MAX(runtime_seconds) FILTER (WHERE runtime_seconds IS NOT NULL) as max_time,
-                            COUNT(runtime_seconds) FILTER (WHERE runtime_seconds IS NOT NULL) as samples_count
-                        FROM workflows
-                    """)
-                    metrics_row = cur.fetchone()
-                    if metrics_row is None:
-                        # No workflows found, return default values
-                        completed_count = failed_count = running_count = samples_count = 0
-                        avg_time = min_time = max_time = None
-                    else:
-                        completed_count, failed_count, running_count, avg_time, min_time, max_time, samples_count = (
-                            metrics_row
-                        )
+                    # Counts, runtimes and per-status counts in one scan (percentiles cached)
+                    metrics, status_counts = get_workflow_metrics(cur)
 
                     # Get active workflow details from database
                     cur.execute("""
@@ -611,53 +593,8 @@ async def get_status():
                             }
                         )
 
-                    # Get status counts
-                    cur.execute("""
-                        SELECT status, COUNT(*) FROM workflows GROUP BY status
-                    """)
-                    status_counts = {row[0]: row[1] for row in cur.fetchall()}
-
-                    # Calculate percentiles
-                    percentiles = {}
-                    if samples_count >= 5:
-                        cur.execute("""
-                            SELECT
-                                percentile_cont(0.5) WITHIN GROUP (ORDER BY runtime_seconds) as p50,
-                                percentile_cont(0.9) WITHIN GROUP (ORDER BY runtime_seconds) as p90,
-                                percentile_cont(0.95) WITHIN GROUP (ORDER BY runtime_seconds) as p95,
-                                percentile_cont(0.99) WITHIN GROUP (ORDER BY runtime_seconds) as p99
-                            FROM workflows
-                            WHERE runtime_seconds IS NOT NULL
-                        """)
-                        result = cur.fetchone()
-                        if result:
-                            p50, p90, p95, p99 = result
-                            percentiles = {
-                                "p50_seconds": round(float(p50), 2) if p50 is not None else None,
-                                "p90_seconds": round(float(p90), 2) if p90 is not None else None,
-                                "p95_seconds": round(float(p95), 2) if p95 is not None else None,
-                                "p99_seconds": round(float(p99), 2) if p99 is not None else None,
-                            }
-
                     return {
-                        "metrics": {
-                            "completed_count": completed_count or 0,
-                            "failed_count": failed_count or 0,
-                            "running_count": running_count or 0,
-                            "total_processed": (completed_count or 0) + (failed_count or 0),
-                            "success_rate": round(
-                                (completed_count or 0) / ((completed_count or 0) + (failed_count or 0)) * 100, 2
-                            )
-                            if ((completed_count or 0) + (failed_count or 0)) > 0
-                            else None,
-                            "processing_times": {
-                                "avg_seconds": round(avg_time, 2) if avg_time else None,
-                                "min_seconds": round(min_time, 2) if min_time else None,
-                                "max_seconds": round(max_time, 2) if max_time else None,
-                                "samples_count": samples_count or 0,
-                                **percentiles,
-                            },
-                        },
+                        "metrics": metrics,
                         "status_counts": status_counts,
                         "active_workflows_db": active_workflows_db,
                     }
@@ -1678,6 +1615,83 @@ async def list_sources(
 
 
 @app.get(
+    "/file-browser/sources",
+    tags=["file-browser"],
+    summary="List file listing sources",
+    description="All sources in file_listings with their total and per-status listing counts.",
+)
+async def file_browser_sources():
+    try:
+        from web_api.file_browser_routes import list_sources
+
+        return await asyncio.to_thread(list_sources, get_db_pool())
+    except Exception as e:
+        logger.exception(message="Error listing file browser sources")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/file-browser/children",
+    tags=["file-browser"],
+    summary="List one folder level of a source's file listings",
+    description="Immediate sub-folders (first page only) and a keyset-paged list of files directly in `path`.",
+)
+async def file_browser_children(
+    source: str = Query(..., description="file_listings source"),
+    path: str = Query("", description="Folder path without leading slash ('' for the root)"),
+    cursor: str | None = Query(None, description="Return files after this path (next_cursor of the previous page)"),
+    limit: int = Query(200, ge=1, le=1000, description="Files per page"),
+    search: str | None = Query(None, description="Case-insensitive substring filter on folder/file names"),
+):
+    try:
+        from web_api.file_browser_routes import list_children
+
+        return await asyncio.to_thread(list_children, get_db_pool(), source, path, cursor, limit, search)
+    except Exception as e:
+        logger.exception(message="Error listing file browser folder", source=source)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/file-browser/collection",
+    tags=["file-browser"],
+    summary="List paths that still need collection",
+    description="Paged list of a source's needs_to_be_collected paths with the linkings that require them.",
+)
+async def file_browser_collection(
+    source: str = Query(..., description="file_listings source"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    search: str | None = Query(None, description="Case-insensitive substring filter on the path"),
+):
+    try:
+        from web_api.file_browser_routes import list_collection_paths
+
+        return await asyncio.to_thread(list_collection_paths, get_db_pool(), source, offset, limit, search)
+    except Exception as e:
+        logger.exception(message="Error listing collection paths", source=source)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/reports/dashboard-stats",
+    tags=["reports"],
+    summary="Dashboard file and triage counts",
+    description="File counts (total, submitted, derived, containers, unviewed) and findings counts by latest "
+    "triage value (true_positive, false_positive, needs_review, untriaged), aggregated server-side.",
+)
+async def get_dashboard_stats():
+    """Get dashboard file counts and findings triage counts."""
+    try:
+        from web_api.reporting_routes import get_dashboard_stats as _get_dashboard_stats
+
+        return await asyncio.to_thread(_get_dashboard_stats, get_db_pool())
+    except Exception as e:
+        logger.exception(message="Error getting dashboard stats")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
     "/reports/source",
     tags=["reports"],
     summary="Get source report",
@@ -1719,12 +1733,17 @@ async def get_system_report(
     start_date: datetime | None = Query(None, description="Filter by start date"),
     end_date: datetime | None = Query(None, description="Filter by end date"),
     project: str | None = Query(None, description="Filter by project name"),
+    sources_limit: int = Query(
+        50, ge=0, description="Max number of (most recently active) sources to include; 0 = all sources"
+    ),
 ):
     """Get system-wide statistics and findings."""
     try:
         from web_api.reporting_routes import get_system_report_data
 
-        report = await asyncio.to_thread(get_system_report_data, get_db_pool(), start_date, end_date, project)
+        report = await asyncio.to_thread(
+            get_system_report_data, get_db_pool(), start_date, end_date, project, sources_limit or None
+        )
         return report
 
     except Exception as e:

@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, FileText, Search, TrendingUp, AlertCircle, ArrowUpRight, Clock } from 'lucide-react';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+
+const SOURCES_PAGE_SIZE = 100;
 
 const ReportingPage = () => {
   const [sources, setSources] = useState([]);
@@ -11,6 +13,7 @@ const ReportingPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('last_activity');
   const [sortDirection, setSortDirection] = useState('desc');
+  const [page, setPage] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,20 +24,17 @@ const ReportingPage = () => {
     try {
       setError(null);
 
-      // Fetch sources list and system stats in parallel
-      const [sourcesRes, systemRes] = await Promise.all([
-        fetch('/api/reports/sources'),
-        fetch('/api/reports/system')
-      ]);
+      // One request: the system report computes the per-source stats anyway, so ask it for all
+      // sources instead of running the same aggregation twice (/reports/sources + /reports/system).
+      const systemRes = await fetch('/api/reports/system?sources_limit=0');
 
-      if (!sourcesRes.ok || !systemRes.ok) {
+      if (!systemRes.ok) {
         throw new Error('Failed to fetch reporting data');
       }
 
-      const sourcesData = await sourcesRes.json();
       const systemData = await systemRes.json();
 
-      setSources(sourcesData);
+      setSources(systemData.sources);
       setSystemStats(systemData);
     } catch (err) {
       console.error('Error fetching reporting data:', err);
@@ -53,30 +53,36 @@ const ReportingPage = () => {
     }
   };
 
-  const filteredSources = sources.filter(source =>
-    source.source.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter + sort once per input change (not on every render); only one page of rows is rendered,
+  // so thousands of sources stay cheap to display.
+  const sortedSources = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    const filtered = term ? sources.filter(source => source.source.toLowerCase().includes(term)) : sources;
+    const valueOf = (source) => {
+      const value = source[sortField];
+      if (value === null || value === undefined) return null;
+      return sortField === 'last_activity' ? new Date(value).getTime() : value;
+    };
+    return [...filtered].sort((a, b) => {
+      const aVal = valueOf(a);
+      const bVal = valueOf(b);
+      // Nulls last
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return 1;
+      if (bVal === null) return -1;
+      if (aVal === bVal) return 0;
+      const cmp = aVal > bVal ? 1 : -1;
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [sources, searchTerm, sortField, sortDirection]);
 
-  const sortedSources = [...filteredSources].sort((a, b) => {
-    let aVal = a[sortField];
-    let bVal = b[sortField];
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, sortField, sortDirection]);
 
-    // Handle null values
-    if (aVal === null) return 1;
-    if (bVal === null) return -1;
-
-    // Handle dates
-    if (sortField === 'last_activity') {
-      aVal = new Date(aVal);
-      bVal = new Date(bVal);
-    }
-
-    if (sortDirection === 'asc') {
-      return aVal > bVal ? 1 : -1;
-    } else {
-      return aVal < bVal ? 1 : -1;
-    }
-  });
+  const pageCount = Math.max(1, Math.ceil(sortedSources.length / SOURCES_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageSources = sortedSources.slice(currentPage * SOURCES_PAGE_SIZE, (currentPage + 1) * SOURCES_PAGE_SIZE);
 
   if (loading) {
     return (
@@ -226,7 +232,7 @@ const ReportingPage = () => {
               </tr>
             </thead>
             <tbody className="divide-y dark:divide-gray-700">
-              {sortedSources.map((source) => (
+              {pageSources.map((source) => (
                 <tr
                   key={source.source}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -272,6 +278,33 @@ const ReportingPage = () => {
           {sortedSources.length === 0 && (
             <div className="text-center py-12 text-gray-500 dark:text-gray-400">
               {searchTerm ? 'No sources match your search' : 'No sources available'}
+            </div>
+          )}
+
+          {sortedSources.length > SOURCES_PAGE_SIZE && (
+            <div className="flex items-center justify-between px-4 py-3 border-t dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400">
+              <span>
+                {(currentPage * SOURCES_PAGE_SIZE + 1).toLocaleString()}-
+                {Math.min((currentPage + 1) * SOURCES_PAGE_SIZE, sortedSources.length).toLocaleString()} of{' '}
+                {sortedSources.length.toLocaleString()} sources
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setPage(currentPage - 1)}
+                  disabled={currentPage === 0}
+                  className="px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-700 disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  Previous
+                </button>
+                <span>Page {currentPage + 1} of {pageCount}</span>
+                <button
+                  onClick={() => setPage(currentPage + 1)}
+                  disabled={currentPage >= pageCount - 1}
+                  className="px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-700 disabled:opacity-40 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>

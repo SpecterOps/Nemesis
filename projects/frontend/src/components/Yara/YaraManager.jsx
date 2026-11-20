@@ -62,6 +62,8 @@ const Modal = ({ isOpen, onClose, children }) => {
   );
 };
 
+const RULES_PAGE_SIZE = 100;
+
 const YaraRulesManager = () => {
   const { isDark } = useTheme();
   const { username } = useUser();
@@ -75,6 +77,7 @@ const YaraRulesManager = () => {
   const [sourceFilter, setSourceFilter] = useState('');
   const [enabledFilter, setEnabledFilter] = useState('all');
   const [sortNewest, setSortNewest] = useState(true);
+  const [page, setPage] = useState(0);
 
   // Editor states
   const [selectedRule, setSelectedRule] = useState(null);
@@ -113,7 +116,6 @@ const YaraRulesManager = () => {
                 updated_at
                 enabled
                 name
-                content
                 alert_enabled
               }
             }
@@ -167,6 +169,45 @@ const YaraRulesManager = () => {
       });
   }, [rules, nameFilter, sourceFilter, enabledFilter, sortNewest]);
 
+  // Only one page of rules is rendered (thousands of rows with tooltips are slow to mount)
+  useEffect(() => {
+    setPage(0);
+  }, [nameFilter, sourceFilter, enabledFilter, sortNewest]);
+  const pageCount = Math.max(1, Math.ceil(filteredRules.length / RULES_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageRules = filteredRules.slice(currentPage * RULES_PAGE_SIZE, (currentPage + 1) * RULES_PAGE_SIZE);
+
+  // Load a rule's body on demand and open it in the editor
+  const openRuleEditor = async (rule) => {
+    try {
+      const response = await fetch('/hasura/v1/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+        },
+        body: JSON.stringify({
+          query: `
+            query GetYaraRuleContent($name: String!) {
+              yara_rules_by_pk(name: $name) { content }
+            }
+          `,
+          variables: { name: rule.name }
+        })
+      });
+      if (!response.ok) throw new Error(`Network response error: ${response.status}`);
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      const content = result.data.yara_rules_by_pk?.content ?? '';
+      setSelectedRule({ ...rule, content });
+      setEditedContent(content);
+      setIsEditorOpen(true);
+      setIsNewRule(false);
+    } catch (err) {
+      setOperationError(`Failed to load rule: ${err.message}`);
+    }
+  };
+
   // Handle rule updates
   const updateRule = async (rule, newContent) => {
     try {
@@ -203,7 +244,7 @@ const YaraRulesManager = () => {
 
       // Update local state
       setRules(rules.map(r =>
-        r.name === rule.name ? { ...r, content: newContent } : r
+        r.name === rule.name ? { ...r, updated_at: new Date().toISOString() } : r
       ));
       setNeedsReload(true);
       setShowReloadAlert(true);
@@ -269,7 +310,8 @@ const YaraRulesManager = () => {
       if (result.errors) throw new Error(result.errors[0].message);
 
       // Update local state
-      setRules([...rules, result.data.insert_yara_rules_one]);
+      const { content: _content, ...createdRule } = result.data.insert_yara_rules_one;
+      setRules([...rules, createdRule]);
       setNeedsReload(true);
       setShowReloadAlert(true);
       setIsEditorOpen(false);
@@ -545,7 +587,7 @@ const YaraRulesManager = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredRules.map((rule) => (
+                  pageRules.map((rule) => (
                     <tr
                       key={rule.name}
                       className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -576,12 +618,7 @@ const YaraRulesManager = () => {
                       <td className="px-3 py-1.5">
                         <Tooltip content="Edit Rule">
                           <button
-                            onClick={() => {
-                              setSelectedRule(rule);
-                              setEditedContent(rule.content);
-                              setIsEditorOpen(true);
-                              setIsNewRule(false);
-                            }}
+                            onClick={() => openRuleEditor(rule)}
                             className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                           >
                             <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -594,6 +631,33 @@ const YaraRulesManager = () => {
               </tbody>
             </table>
           </div>
+
+          {!loading && filteredRules.length > RULES_PAGE_SIZE && (
+            <div className="flex items-center justify-between px-3 py-3 text-sm text-gray-600 dark:text-gray-400">
+              <span>
+                {(currentPage * RULES_PAGE_SIZE + 1).toLocaleString()}-
+                {Math.min((currentPage + 1) * RULES_PAGE_SIZE, filteredRules.length).toLocaleString()} of{' '}
+                {filteredRules.length.toLocaleString()} rules
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setPage(currentPage - 1)}
+                  disabled={currentPage === 0}
+                  className="px-3 py-1 rounded-md border dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Previous
+                </button>
+                <span>Page {currentPage + 1} of {pageCount}</span>
+                <button
+                  onClick={() => setPage(currentPage + 1)}
+                  disabled={currentPage >= pageCount - 1}
+                  className="px-3 py-1 rounded-md border dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
