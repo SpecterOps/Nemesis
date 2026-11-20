@@ -4,10 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { FixedSizeList as List } from 'react-window';
+import { buildStableOrderBy, csvEscape, exportHasuraTableToCsv, useDebouncedValue, useHasuraTable } from './useHasuraTable';
 
 const ROW_HEIGHT = 48;
 const PAGINATION_THRESHOLD = 10000;
 const PAGE_SIZE = 100;
+const TABLE_FIELDS = 'originating_object_id source username browser url download_path end_time';
 
 const Row = React.memo(({ index, style, data }) => {
   const { records } = data;
@@ -229,14 +231,9 @@ const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange 
 const ChromiumDownloads = ({ renderActions }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [records, setRecords] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [isPaginated, setIsPaginated] = useState(false);
 
   // Filter states
   const [sourceFilter, setSourceFilter] = useState(() => searchParams.get('source') || '');
@@ -249,8 +246,8 @@ const ChromiumDownloads = ({ renderActions }) => {
 
   // CSV export state
   const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const handleSort = (column, direction) => {
     setSortColumn(column);
@@ -264,27 +261,34 @@ const ChromiumDownloads = ({ renderActions }) => {
     }
   };
 
+  // Debounce text filters so typing doesn't fire a query per keystroke
+  const debouncedSourceFilter = useDebouncedValue(sourceFilter);
+  const debouncedUsernameFilter = useDebouncedValue(usernameFilter);
+  const debouncedBrowserFilter = useDebouncedValue(browserFilter);
+  const debouncedUrlFilter = useDebouncedValue(urlFilter);
+  const debouncedDownloadPathFilter = useDebouncedValue(downloadPathFilter);
+
   const buildWhereClause = () => {
     const conditions = [];
 
-    if (sourceFilter) {
-      conditions.push({ source: { _ilike: sourceFilter.replace(/\*/g, '%') } });
+    if (debouncedSourceFilter) {
+      conditions.push({ source: { _ilike: debouncedSourceFilter.replace(/\*/g, '%') } });
     }
 
-    if (usernameFilter) {
-      conditions.push({ username: { _ilike: usernameFilter.replace(/\*/g, '%') } });
+    if (debouncedUsernameFilter) {
+      conditions.push({ username: { _ilike: debouncedUsernameFilter.replace(/\*/g, '%') } });
     }
 
-    if (browserFilter) {
-      conditions.push({ browser: { _ilike: browserFilter.replace(/\*/g, '%') } });
+    if (debouncedBrowserFilter) {
+      conditions.push({ browser: { _ilike: debouncedBrowserFilter.replace(/\*/g, '%') } });
     }
 
-    if (urlFilter) {
-      conditions.push({ url: { _ilike: urlFilter.replace(/\*/g, '%') } });
+    if (debouncedUrlFilter) {
+      conditions.push({ url: { _ilike: debouncedUrlFilter.replace(/\*/g, '%') } });
     }
 
-    if (downloadPathFilter) {
-      conditions.push({ download_path: { _ilike: downloadPathFilter.replace(/\*/g, '%') } });
+    if (debouncedDownloadPathFilter) {
+      conditions.push({ download_path: { _ilike: debouncedDownloadPathFilter.replace(/\*/g, '%') } });
     }
 
     return conditions.length > 1 ? { _and: conditions } : conditions[0] || {};
@@ -319,97 +323,46 @@ const ChromiumDownloads = ({ renderActions }) => {
         orderBy.end_time = sortDirection;
     }
     
-    return orderBy;
+    return buildStableOrderBy(Object.keys(orderBy)[0], sortDirection);
   };
+
+  const { records, totalCount, isPaginated, isLoading, error } = useHasuraTable({
+    table: 'chromium_downloads',
+    fields: TABLE_FIELDS,
+    where: buildWhereClause(),
+    orderBy: buildOrderByClause(),
+    currentPage,
+    pageSize: PAGE_SIZE,
+    threshold: PAGINATION_THRESHOLD,
+  });
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const handleExportCSV = async () => {
     setIsExporting(true);
+    setExportProgress(0);
     try {
-      // Query to get ALL data matching current filters (bypassing pagination)
-      const exportQuery = {
-        query: `
-          query GetDownloadsExport($where: chromium_downloads_bool_exp, $order_by: [chromium_downloads_order_by!]) {
-            chromium_downloads(
-              where: $where,
-              order_by: $order_by
-            ) {
-              originating_object_id
-              source
-              username
-              browser
-              url
-              download_path
-              end_time
-            }
-          }
-        `,
-        variables: {
-          where: buildWhereClause(),
-          order_by: buildOrderByClause()
-        }
-      };
-
-      const response = await fetch('/hasura/v1/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-        },
-        body: JSON.stringify(exportQuery)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Network response error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      if (result.errors) {
-        throw new Error(result.errors[0].message);
-      }
-
-      const data = result.data.chromium_downloads;
-
-      // Convert to CSV
-      if (data.length === 0) {
-        alert('No data to export');
-        return;
-      }
-
-      const headers = [
-        'Object ID',
-        'Source', 
-        'Username',
-        'Browser',
-        'URL',
-        'Download Path',
-        'End Time'
-      ];
-
-      const csvContent = [
-        headers.join(','),
-        ...data.map(record => [
-          `"${(record.originating_object_id || '').replace(/"/g, '""')}"`,
-          `"${(record.source || '').replace(/"/g, '""')}"`,
-          `"${(record.username || '').replace(/"/g, '""')}"`,
-          `"${(record.browser || '').replace(/"/g, '""')}"`,
-          `"${(record.url || '').replace(/"/g, '""')}"`,
-          `"${(record.download_path || '').replace(/"/g, '""')}"`,
+      // Stream ALL rows matching the current filters in chunks (tables can hold millions of rows)
+      const exported = await exportHasuraTableToCsv({
+        table: 'chromium_downloads',
+        fields: TABLE_FIELDS,
+        where: buildWhereClause(),
+        orderBy: buildOrderByClause(),
+        headers: ['Object ID', 'Source', 'Username', 'Browser', 'URL', 'Download Path', 'End Time'],
+        toCsvRow: (record) => [
+          csvEscape(record.originating_object_id),
+          csvEscape(record.source),
+          csvEscape(record.username),
+          csvEscape(record.browser),
+          csvEscape(record.url),
+          csvEscape(record.download_path),
           record.end_time ? `"${new Date(record.end_time).toISOString()}"` : '""'
-        ].join(','))
-      ].join('\n');
-
-      // Download the file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `chromium_downloads_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
+        ],
+        filename: `chromium_downloads_${new Date().toISOString().split('T')[0]}.csv`,
+        onProgress: setExportProgress,
+      });
+      if (exported === 0) {
+        alert('No data to export');
+      }
     } catch (err) {
       console.error('Error exporting CSV:', err);
       alert(`Error exporting CSV: ${err.message}`);
@@ -449,135 +402,6 @@ const ChromiumDownloads = ({ renderActions }) => {
 
   // Removed the useEffect that was syncing from URL params to avoid circular updates
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-      
-      try {
-        // First, get the count
-        const countQuery = {
-          query: `
-            query GetDownloadsCount($where: chromium_downloads_bool_exp) {
-              chromium_downloads_aggregate(where: $where) {
-                aggregate {
-                  count
-                }
-              }
-            }
-          `,
-          variables: {
-            where: buildWhereClause()
-          }
-        };
-
-        const countResponse = await fetch('/hasura/v1/graphql', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-          },
-          body: JSON.stringify(countQuery)
-        });
-
-        if (!countResponse.ok) {
-          throw new Error(`Network response error: ${countResponse.status}`);
-        }
-
-        const countResult = await countResponse.json();
-        if (countResult.errors) {
-          throw new Error(countResult.errors[0].message);
-        }
-
-        const count = countResult.data.chromium_downloads_aggregate.aggregate.count;
-        setTotalCount(count);
-        setIsPaginated(count > PAGINATION_THRESHOLD);
-
-        // Now fetch the actual data
-        let dataQuery;
-        if (count > PAGINATION_THRESHOLD) {
-          // Paginated query
-          dataQuery = {
-            query: `
-              query GetDownloadsPaginated($where: chromium_downloads_bool_exp, $limit: Int!, $offset: Int!, $order_by: [chromium_downloads_order_by!]) {
-                chromium_downloads(
-                  where: $where,
-                  limit: $limit,
-                  offset: $offset,
-                  order_by: $order_by
-                ) {
-                  originating_object_id
-                  source
-                  username
-                  browser
-                  url
-                  download_path
-                  end_time
-                }
-              }
-            `,
-            variables: {
-              where: buildWhereClause(),
-              limit: PAGE_SIZE,
-              offset: (currentPage - 1) * PAGE_SIZE,
-              order_by: buildOrderByClause()
-            }
-          };
-        } else {
-          // Non-paginated query - get all data
-          dataQuery = {
-            query: `
-              query GetDownloadsAll($where: chromium_downloads_bool_exp, $order_by: [chromium_downloads_order_by!]) {
-                chromium_downloads(
-                  where: $where,
-                  order_by: $order_by
-                ) {
-                  originating_object_id
-                  source
-                  username
-                  browser
-                  url
-                  download_path
-                  end_time
-                }
-              }
-            `,
-            variables: {
-              where: buildWhereClause(),
-              order_by: buildOrderByClause()
-            }
-          };
-        }
-
-        const dataResponse = await fetch('/hasura/v1/graphql', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-          },
-          body: JSON.stringify(dataQuery)
-        });
-
-        if (!dataResponse.ok) {
-          throw new Error(`Network response error: ${dataResponse.status}`);
-        }
-
-        const dataResult = await dataResponse.json();
-        if (dataResult.errors) {
-          throw new Error(dataResult.errors[0].message);
-        }
-
-        setRecords(dataResult.data.chromium_downloads);
-      } catch (err) {
-        console.error('Error fetching chromium downloads:', err);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [currentPage, sourceFilter, usernameFilter, browserFilter, urlFilter, downloadPathFilter, sortColumn, sortDirection]);
 
   // Provide the CSV download button to the parent component
   useEffect(() => {
@@ -592,7 +416,7 @@ const ChromiumDownloads = ({ renderActions }) => {
           {isExporting ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span>Exporting...</span>
+              <span>Exporting{exportProgress > 0 ? ` ${exportProgress.toLocaleString()} / ${totalCount.toLocaleString()}` : '...'}</span>
             </>
           ) : (
             <>
@@ -603,7 +427,7 @@ const ChromiumDownloads = ({ renderActions }) => {
         </button>
       );
     }
-  }, [renderActions, isExporting, isLoading, totalCount]);
+  }, [renderActions, isExporting, exportProgress, isLoading, totalCount]);
 
   return (
     <div>
