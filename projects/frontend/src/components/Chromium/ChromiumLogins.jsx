@@ -1,7 +1,7 @@
 import Tooltip from '@/components/shared/Tooltip2';
-import { AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, X, Download } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, Download } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { FixedSizeList as List } from 'react-window';
 import { buildStableOrderBy, csvEscape, exportHasuraTableToCsv, useDebouncedValue, useHasuraTable } from './useHasuraTable';
@@ -11,7 +11,8 @@ const PAGINATION_THRESHOLD = 10000;
 const PAGE_SIZE = 100;
 const TABLE_FIELDS = 'originating_object_id source username browser origin_url signon_realm username_value times_used is_decrypted password_value_dec';
 
-const Row = React.memo(({ index, style, data }) => {
+/** @param {{ index: number, style: import('react').CSSProperties, data: any }} props */
+const RecordRow = ({ index, style, data }) => {
   const { records } = data;
   const record = records[index];
   const [copiedCell, setCopiedCell] = useState(null);
@@ -30,14 +31,18 @@ const Row = React.memo(({ index, style, data }) => {
       className="flex items-center border-b dark:border-gray-700 transition-colors dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700"
     >
       <div className="px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left">
-        <Tooltip content={record.originating_object_id} side="top" align="start">
-          <Link
-            to={`/files/${record.originating_object_id}`}
-            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 truncate block"
-          >
-            {record.originating_object_id.substring(0, 8)}...
-          </Link>
-        </Tooltip>
+        {record.originating_object_id ? (
+          <Tooltip content={record.originating_object_id} side="top" align="start">
+            <Link
+              to={`/files/${record.originating_object_id}`}
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 truncate block"
+            >
+              {record.originating_object_id.substring(0, 8)}...
+            </Link>
+          </Tooltip>
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
       </div>
       <div
         className={`px-2 flex-shrink-0 w-24 text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center cursor-pointer select-text transition-colors ${copiedCell === 'is_decrypted' ? 'bg-green-200 dark:bg-green-800' : ''}`}
@@ -124,14 +129,16 @@ const Row = React.memo(({ index, style, data }) => {
       </div>
     </div>
   );
-});
+};
+const Row = React.memo(RecordRow);
 
 const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
   const isActive = currentSort === column;
   const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
 
   return (
-    <div
+    <button
+      type="button"
       className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
       onClick={() => onSort(column, nextDirection)}
     >
@@ -147,7 +154,7 @@ const SortableHeader = ({ children, column, currentSort, currentDirection, onSor
           <div className="w-3 h-3" />
         )}
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -260,7 +267,6 @@ const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange 
 };
 
 const ChromiumLogins = ({ renderActions }) => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Pagination state
@@ -455,12 +461,18 @@ const ChromiumLogins = ({ renderActions }) => {
 
 
 
+  // The parent renders the button once per effect run below; always export with the latest filters
+  const exportRef = useRef(handleExportCSV);
+  useEffect(() => {
+    exportRef.current = handleExportCSV;
+  });
+
   // Provide the CSV download button to the parent component
   useEffect(() => {
     if (renderActions) {
       renderActions(
         <button
-          onClick={handleExportCSV}
+          onClick={() => exportRef.current()}
           disabled={isExporting || isLoading || totalCount === 0}
           className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed"
           title={totalCount === 0 ? "No data to export" : `Export ${totalCount.toLocaleString()} records to CSV`}

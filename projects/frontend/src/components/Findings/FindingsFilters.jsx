@@ -36,9 +36,12 @@ const FindingsFilters = ({
     // The search box updates the (server-side) filter after a short pause in typing
     const [searchFilter, setSearchFilter] = React.useState(filters.search);
     const searchTimer = useRef(null);
-    useEffect(() => {
+    // Adopt external changes to the search (e.g. Back/Forward) during render rather than in an effect
+    const [prevSearch, setPrevSearch] = React.useState(filters.search);
+    if (filters.search !== prevSearch) {
+        setPrevSearch(filters.search);
         setSearchFilter(filters.search);
-    }, [filters.search]);
+    }
     useEffect(() => () => clearTimeout(searchTimer.current), []);
 
     // Check if any filters are active

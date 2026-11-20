@@ -107,6 +107,7 @@ const FindingsList = () => {
   // Optimistic triage: finding_id -> { value, doneAt } until a fetch started after the write lands
   const pendingTriage = useRef(new Map());
   const filtersRef = useRef(filters);
+  // eslint-disable-next-line react-hooks/refs -- latest-value ref read by stable callbacks
   filtersRef.current = filters;
 
   const withTriage = (finding, value) => ({
@@ -159,11 +160,12 @@ const FindingsList = () => {
     signalQueries: SIGNAL_QUERIES,
   });
   const listRef = useRef(list);
+  // eslint-disable-next-line react-hooks/refs -- latest-value ref read by the window key handler
   listRef.current = list;
   const {
     page, rows, rowsPage, total, totalPages, isLoading, isFetching, error, containerRef, nav,
     isTriageMode, setIsTriageMode, selectedIndex, select, checked, setChecked,
-    allSelected, selectAllKey, clearSelection,
+    allSelected,
   } = list;
 
   // Serialize triage writes so repeated presses on one finding land in order
@@ -352,7 +354,8 @@ const FindingsList = () => {
   }, [openModal, select, nav]);
 
   // ----- Keyboard -----
-  const keyState = useRef({});
+  const keyState = useRef({ isModalOpen, closeModal, openModal, triage, navigateToFile, bulkAction, triageAllResults });
+  // eslint-disable-next-line react-hooks/refs -- latest-value ref read by the window key handler
   keyState.current = { isModalOpen, closeModal, openModal, triage, navigateToFile, bulkAction, triageAllResults };
 
   useEffect(() => {

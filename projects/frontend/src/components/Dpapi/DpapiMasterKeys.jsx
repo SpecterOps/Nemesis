@@ -13,7 +13,8 @@ const PAGINATION_THRESHOLD = 5000;
 const PAGE_SIZE = 100;
 const TABLE_FIELDS = 'guid plaintext_key_sha1 backup_key_guid';
 
-const Row = React.memo(({ index, style, data }) => {
+/** @param {{ index: number, style: import('react').CSSProperties, data: any }} props */
+const RecordRow = ({ index, style, data }) => {
   const { records } = data;
   const record = records[index];
   const [copiedCell, setCopiedCell] = useState(null);
@@ -79,14 +80,16 @@ const Row = React.memo(({ index, style, data }) => {
       </div>
     </div>
   );
-});
+};
+const Row = React.memo(RecordRow);
 
 const SortableHeader = ({ children, column, currentSort, currentDirection, onSort, className = "" }) => {
   const isActive = currentSort === column;
   const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
 
   return (
-    <div
+    <button
+      type="button"
       className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-4 py-2 ${className}`}
       onClick={() => onSort(column, nextDirection)}
     >
@@ -102,7 +105,7 @@ const SortableHeader = ({ children, column, currentSort, currentDirection, onSor
           <div className="w-3 h-3" />
         )}
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -163,7 +166,8 @@ const DpapiMasterKeys = () => {
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   useEffect(() => {
-    const params = new URLSearchParams(searchParams);
+    // Start from the current URL (not a possibly stale render) so other params are kept
+    const params = new URLSearchParams(window.location.search);
 
     if (guidFilter) {
       params.set('guid', guidFilter);

@@ -1,6 +1,6 @@
 import MarkdownRenderer from '@/components/shared/MarkdownRenderer';
 import { WrapText } from 'lucide-react';
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFileNavigation } from './navigation';
 
 const FindingModal = ({
@@ -23,7 +23,7 @@ const FindingModal = ({
   const parseJson = (s) => {
     try {
       return JSON.parse(s);
-    } catch (e) {
+    } catch {
       return { type: 'string', data: s };
     }
   };
@@ -40,7 +40,7 @@ const FindingModal = ({
   if (typeof findingData === 'string') {
     try {
       findingData = JSON.parse(findingData);
-    } catch (e) {
+    } catch {
       // If parsing fails, treat it as plain text
       findingData = { type: 'string', data: findingData };
     }
@@ -63,7 +63,9 @@ const FindingModal = ({
     : '```json\n' + JSON.stringify(readableData.data ?? readableData, null, 2) + '\n```';
 
   return (
+    // Backdrop click closes (ESC and the Close button are the keyboard equivalents)
     <div
+      role="presentation"
       className="fixed inset-0 z-50 bg-black bg-opacity-30"
       onClick={onClose}
     >
@@ -72,10 +74,11 @@ const FindingModal = ({
         style={{ marginLeft: 'calc(var(--navbar-width,0px)/2)' }}
       >
         <div
+          role="presentation"
           className="w-11/12 max-w-6xl h-screen py-2 pointer-events-auto"
           onClick={e => e.stopPropagation()}
         >
-          <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-xl h-full flex flex-col relative">
+          <div role="dialog" aria-modal="true" aria-label="Finding details" className="bg-white dark:bg-dark-secondary rounded-lg shadow-xl h-full flex flex-col relative">
             {/* Modal Header with integrated close button */}
             <div className="p-2 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700 flex justify-between items-center">
               <p className="text-sm text-blue-600 dark:text-blue-400">

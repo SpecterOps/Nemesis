@@ -31,14 +31,14 @@ export async function hasuraQuery(query, variables, signal) {
 // so clearing a filter feels instant).
 export function useDebouncedValue(value, delay = FILTER_DEBOUNCE_MS) {
   const [debounced, setDebounced] = useState(value);
+  const isEmpty = value === '' || value === null || value === undefined;
+  // Empty values apply immediately: adjust the state during render instead of in the effect
+  if (isEmpty && debounced !== value) setDebounced(value);
   useEffect(() => {
-    if (value === '' || value === null || value === undefined) {
-      setDebounced(value);
-      return undefined;
-    }
+    if (isEmpty) return undefined;
     const t = setTimeout(() => setDebounced(value), delay);
     return () => clearTimeout(t);
-  }, [value, delay]);
+  }, [value, delay, isEmpty]);
   return debounced;
 }
 
@@ -69,6 +69,7 @@ export function useHasuraTable({ table, fields, where, orderBy, currentPage, pag
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- show loading as this effect starts its request
     setState((s) => ({ ...s, isLoading: true, error: null }));
 
     const run = async () => {
@@ -123,6 +124,8 @@ export function useHasuraTable({ table, fields, where, orderBy, currentPage, pag
       cancelled = true;
       controller.abort();
     };
+    // where/orderBy are new objects every render; their JSON keys stand in for them
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table, fields, whereKey, orderKey, currentPage, pageSize, threshold]);
 
   return state;

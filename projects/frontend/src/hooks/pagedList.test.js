@@ -6,7 +6,13 @@ import { buildFilesOrderBy, buildFilesWhere, wildcardToIlike } from '../componen
 import {
   ALL_CATEGORIES, ALL_SEVERITIES, buildFindingsOrderBy, buildFindingsWhere, escapeLike, matchesAfterHumanTriage,
 } from '../components/Findings/findingsQuery.js';
-import { fetchPage, forEachIdChunk, isEditableTarget, jumpSelection, pageJumpRows, reverseOrderBy, scrollListByPage, scrollRowIntoView } from './pagedList.js';
+import {
+  fetchPage, forEachIdChunk, isEditableTarget, jumpSelection, pageJumpRows, reverseOrderBy, scrollListByPage, scrollRowIntoView,
+  triageRowClasses,
+} from './pagedList.js';
+
+// The tests stub the browser globals that hasuraRequest uses
+const g = /** @type {any} */ (globalThis);
 
 const defaults = {
   categories: ALL_CATEGORIES, severities: ALL_SEVERITIES, search: '', triageState: 'all', triageSource: 'all', objectId: '',
@@ -70,8 +76,8 @@ test('isEditableTarget ignores inputs, textareas, selects and contenteditable', 
 
 test('fetchPage reads back-half pages in reverse order from the end', async () => {
   const calls = [];
-  globalThis.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
-  globalThis.fetch = async (url, opts) => {
+  g.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
+  g.fetch = async (url, opts) => {
     const body = JSON.parse(opts.body);
     calls.push(body.variables);
     const rows = Array.from({ length: body.variables.limit }, (_, i) => ({ id: body.variables.offset + i }));
@@ -89,9 +95,9 @@ test('fetchPage reads back-half pages in reverse order from the end', async () =
   await fetchPage({ table: 't', fields: 'id', where: {}, orderBy: [{ a: 'asc' }], offset: 900, limit: 100 });
   assert.equal(calls[2].offset, 900);
   // errors surface
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ errors: [{ message: 'boom' }] }) });
+  g.fetch = async () => ({ ok: true, json: async () => ({ errors: [{ message: 'boom' }] }) });
   await assert.rejects(() => fetchPage({ table: 't', fields: 'id', where: {}, orderBy: [], offset: 0, limit: 1 }), /boom/);
-  globalThis.fetch = async () => ({ ok: false, status: 500 });
+  g.fetch = async () => ({ ok: false, status: 500 });
   await assert.rejects(() => fetchPage({ table: 't', fields: 'id', where: {}, orderBy: [], offset: 0, limit: 1 }), /500/);
 });
 
@@ -172,11 +178,11 @@ test('files order_by: every sortable column, stable tie-breaker', () => {
 });
 
 test('forEachIdChunk walks every matching id by keyset, even when rows stop matching', async () => {
-  globalThis.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
+  g.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
   // 7 matching ids; processing a chunk removes those rows from the result (like triaging untriaged rows)
   let matching = [3, 5, 8, 9, 12, 15, 20];
   const wheres = [];
-  globalThis.fetch = async (url, opts) => {
+  g.fetch = async (url, opts) => {
     const { variables } = JSON.parse(opts.body);
     wheres.push(variables.where);
     const after = variables.where._and ? variables.where._and[1].finding_id._gt : -Infinity;
@@ -195,10 +201,10 @@ test('forEachIdChunk walks every matching id by keyset, even when rows stop matc
 });
 
 test('forEachIdChunk: no matches, exact multiple of the chunk size, and errors', async () => {
-  globalThis.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
+  g.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
   const all = [1, 2, 3, 4];
   let calls = 0;
-  globalThis.fetch = async (url, opts) => {
+  g.fetch = async (url, opts) => {
     calls++;
     const { variables } = JSON.parse(opts.body);
     const after = variables.where._and ? variables.where._and[1].id._gt : -Infinity;
@@ -210,14 +216,26 @@ test('forEachIdChunk: no matches, exact multiple of the chunk size, and errors',
   assert.deepEqual(chunks, [[1, 2], [3, 4]]);
   assert.equal(calls, 3, 'a full last chunk needs one more (empty) fetch to know it is done');
 
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ data: { t: [] } }) });
+  g.fetch = async () => ({ ok: true, json: async () => ({ data: { t: [] } }) });
   let called = false;
   assert.equal(await forEachIdChunk({ table: 't', idField: 'id', where: {}, onChunk: async () => { called = true; } }), 0);
   assert.equal(called, false);
 
-  globalThis.fetch = async () => ({ ok: false, status: 503 });
+  g.fetch = async () => ({ ok: false, status: 503 });
   await assert.rejects(() => forEachIdChunk({ table: 't', idField: 'id', where: {}, onChunk: async () => {} }), /503/);
   // a failing chunk action stops the walk
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ data: { t: [{ id: 1 }] } }) });
+  g.fetch = async () => ({ ok: true, json: async () => ({ data: { t: [{ id: 1 }] } }) });
   await assert.rejects(() => forEachIdChunk({ table: 't', idField: 'id', where: {}, onChunk: async () => { throw new Error('insert failed'); } }), /insert failed/);
+});
+
+test('triageRowClasses: checked rows are filled, the active row gets a ring, never two backgrounds', () => {
+  const classes = (...args) => triageRowClasses(...args).split(/\s+/).filter(Boolean);
+  assert.deepEqual(classes(false, true, true), []);
+  assert.deepEqual(classes(true, false, false), []);
+  assert.deepEqual(classes(true, true, false), ['!bg-blue-100', 'dark:!bg-blue-900/30']);
+  assert.deepEqual(classes(true, false, true), ['!bg-blue-50', 'dark:!bg-blue-900/20', 'ring-2', 'ring-inset', 'ring-blue-600', 'dark:ring-blue-400']);
+  // active + checked: the checked background (not the light one) plus the ring
+  const both = classes(true, true, true);
+  assert.ok(both.includes('!bg-blue-100') && both.includes('ring-2') && both.includes('ring-inset'));
+  assert.ok(!both.includes('!bg-blue-50'));
 });

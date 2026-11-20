@@ -50,14 +50,22 @@ export const usePagedList = ({
   const nav = useRef({
     page, index: selectedIndex, rows: [], rowsPage: null, total: null, loading: true,
     selectedId: undefined, checked: new Set(), allSelected: false, triage: isTriageMode, pendingScroll: null,
+    /** @type {number | 'last' | undefined} row to select once the pending page shows */
+    pendingIndex: undefined,
   });
+  // Latest-value refs written during render, so the window keydown handlers (which read them
+  // synchronously) always see the current mode and callbacks without re-subscribing.
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-value ref read by key handlers
   nav.current.triage = isTriageMode;
 
   const fetcherRef = useRef(fetcher);
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-value ref
   fetcherRef.current = fetcher;
   const transformRef = useRef(transformRows);
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-value ref
   transformRef.current = transformRows;
   const getIdRef = useRef(getId);
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-value ref
   getIdRef.current = getId;
   const countKeyRef = useRef(null); // queryKey the current total belongs to
   const lastTickRef = useRef(refetchTick);
@@ -275,7 +283,7 @@ export const usePagedList = ({
 
   // Go to another page; `index` = row to select there ('last' for the last row), `scroll` =
   // where to put the (non-triage) scroll position once it renders.
-  const goToPage = useCallback((p, { index, scroll = 'top' } = {}) => {
+  const goToPage = useCallback((p, /** @type {{index?: number | 'last', scroll?: string}} */ { index, scroll = 'top' } = {}) => {
     const n = nav.current;
     if (p === n.page && n.rowsPage === p) {
       if (index !== undefined) select(index === 'last' ? n.rows.length - 1 : index);

@@ -27,6 +27,7 @@ const getClient = () => {
  */
 export const useChangeSignal = (queries, onChange, { debounceMs = 800, minIntervalMs = 2500, enabled = true } = {}) => {
   const onChangeRef = useRef(onChange);
+  // eslint-disable-next-line react-hooks/refs -- latest-value ref so the subscription never goes stale
   onChangeRef.current = onChange;
   const key = queries.join('\n');
 

@@ -1,5 +1,4 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import React from 'react';
 
 const pageButton = 'relative inline-flex items-center px-4 py-2 text-sm font-medium';
 const idleButton = 'bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700';

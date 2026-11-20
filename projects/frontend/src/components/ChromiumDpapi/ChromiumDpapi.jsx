@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import ChromiumHistory from '../Chromium/ChromiumHistory';
 import ChromiumDownloads from '../Chromium/ChromiumDownloads';
 import ChromiumLogins from '../Chromium/ChromiumLogins';
@@ -12,6 +12,7 @@ const ChromiumDpapi = () => {
   const [activeTab, setActiveTab] = useState('history');
   const [tabActions, setTabActions] = useState(null);
 
+  /** @type {{ id: string, label: string, component: import('react').ComponentType<any> }[]} */
   const tabs = [
     { id: 'history', label: 'History', component: ChromiumHistory },
     { id: 'downloads', label: 'Downloads', component: ChromiumDownloads },

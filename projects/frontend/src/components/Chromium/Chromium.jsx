@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import ChromiumHistory from './ChromiumHistory';
 import ChromiumDownloads from './ChromiumDownloads';
 import ChromiumLogins from './ChromiumLogins';
@@ -55,13 +55,8 @@ const Chromium = () => {
 
       {/* Tab Content */}
       <div className="p-0">
-        {ActiveComponent && (
-          ['history', 'downloads', 'logins', 'cookies', 'stateKeys'].includes(activeTab) ? (
-            <ActiveComponent renderActions={setTabActions} />
-          ) : (
-            <ActiveComponent />
-          )
-        )}
+        {/* Every tab provides its own actions (CSV download) */}
+        {ActiveComponent && <ActiveComponent renderActions={setTabActions} />}
       </div>
     </div>
   );

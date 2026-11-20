@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, Send, CheckCircle, XCircle } from 'lucide-react';
 
 const DpapiSubmitCredential = () => {
@@ -12,7 +12,7 @@ const DpapiSubmitCredential = () => {
   const [browser, setBrowser] = useState('chrome');
   const [username, setUsername] = useState('UNKNOWN');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '', details: null });
+  const [message, setMessage] = useState(/** @type {{ type: string, text: string, details?: any }} */ ({ type: '', text: '', details: null }));
   const [showDetails, setShowDetails] = useState(false);
 
   const credentialTypes = [
@@ -51,7 +51,7 @@ const DpapiSubmitCredential = () => {
       apiType: 'domain_backup_key',
       requiresGuid: true,
       supportsDomainController: true,
-      description: 'Domain controller DPAPI backup key in base64 PVK format. Extract from domain controllers using tools like mimikatz\'s lsadump::backupkeys, SharpDPAPI\s backupkey command, or by accessing the DPAPI_SYSTEM LSA secret on a host.'
+      description: 'Domain controller DPAPI backup key in base64 PVK format. Extract from domain controllers using tools like mimikatz\'s lsadump::backupkeys, SharpDPAPI\'s backupkey command, or by accessing the DPAPI_SYSTEM LSA secret on a host.'
     },
     {
       value: 'master_key_guid_pair',
@@ -66,7 +66,7 @@ const DpapiSubmitCredential = () => {
       label: 'DPAPI_SYSTEM Secret',
       placeholder: 'ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890',
       apiType: 'dpapi_system',
-      description: 'System DPAPI credential used for machine-wide encryption. Collect from the DPAPI_SYSTEM LSA secret (e.g., via the SYSTEM and SECURITY registry hives) or using the LSA APIs (e.g. using mimikatz\s lsadump::secrets command).'
+      description: 'System DPAPI credential used for machine-wide encryption. Collect from the DPAPI_SYSTEM LSA secret (e.g., via the SYSTEM and SECURITY registry hives) or using the LSA APIs (e.g. using mimikatz\'s lsadump::secrets command).'
     },
     {
       value: 'chromium_app_bound_key',
@@ -445,7 +445,7 @@ const DpapiSubmitCredential = () => {
                 required
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Format: One entry per line in the format "{"{guid}"}:{"{sha1}"}"
+                Format: One entry per line in the format &quot;{"{guid}"}:{"{sha1}"}&quot;
               </p>
             </div>
           )}

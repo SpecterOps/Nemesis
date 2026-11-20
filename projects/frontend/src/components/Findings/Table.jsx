@@ -1,5 +1,6 @@
 import Tooltip from '@/components/shared/Tooltip2';
 import { Bot, ChevronDown, ChevronUp, HelpCircle, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { triageRowClasses } from '@/hooks/pagedList';
 import React from 'react';
 import { useFileNavigation } from './navigation';
 
@@ -9,7 +10,8 @@ const SortableHeader = ({ children, column, currentSort, currentDirection, onSor
   const nextDirection = isActive && currentDirection === 'asc' ? 'desc' : 'asc';
 
   return (
-    <div
+    <button
+      type="button"
       className={`flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-2 py-2 ${className}`}
       onClick={() => onSort(column, nextDirection)}
     >
@@ -25,7 +27,7 @@ const SortableHeader = ({ children, column, currentSort, currentDirection, onSor
           <div className="w-3 h-3" />
         )}
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -105,7 +107,14 @@ export const TableHeaders = ({ isTriageMode, sortColumn, sortDirection, onSort }
 
 // One finding row. Props are per-row values and stable callbacks so React.memo skips rows whose
 // selection/triage state didn't change (keyboard navigation re-renders only two rows).
-export const TableRow = React.memo(({
+/**
+ * @param {{
+ *   finding: any, index: number, height: number, isTriageMode: boolean, isSelected: boolean,
+ *   isChecked: boolean, hasMultiSelection: boolean, onRowClick: (finding: any, index: number) => void,
+ *   onTriage: (...args: any[]) => any,
+ * }} props
+ */
+const FindingRow = ({
     finding,
     index,
     height,
@@ -141,15 +150,17 @@ export const TableRow = React.memo(({
     };
 
     return (
+        // Keyboard access to rows is the page-level handler (t, arrows, ArrowRight opens), not per-row focus
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
         <div
             style={{ height }}
             data-row-index={index}
             data-finding-id={finding.finding_id}
+            data-active={isTriageMode && isSelected ? 'true' : undefined}
             className={`
         flex items-center border-b dark:border-gray-700 cursor-pointer transition-colors
         dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700
-        ${isTriageMode && isChecked ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
-        ${isTriageMode && isSelected ? '!bg-blue-50 dark:!bg-blue-900/20' : ''}
+        ${triageRowClasses(isTriageMode, isChecked, isTriageMode && isSelected)}
       `}
             onClick={() => onRowClick(finding, index)}
         >
@@ -170,7 +181,7 @@ export const TableRow = React.memo(({
                     content={finding.finding_name}
                     side="top"
                     sideOffset={10}
-                    align="left"
+                    align="start"
                     alignOffset={-35}
                     avoidCollisions={true}
                     maxWidth="full"
@@ -186,7 +197,7 @@ export const TableRow = React.memo(({
                     content={finding.category}
                     side="top"
                     sideOffset={10}
-                    align="left"
+                    align="start"
                     alignOffset={-35}
                     avoidCollisions={true}
                     maxWidth="full"
@@ -202,7 +213,7 @@ export const TableRow = React.memo(({
                     content={finding.origin_name}
                     side="top"
                     sideOffset={10}
-                    align="left"
+                    align="start"
                     alignOffset={-35}
                     avoidCollisions={true}
                     maxWidth="full"
@@ -218,7 +229,7 @@ export const TableRow = React.memo(({
                     content={finding.files_enriched?.path || 'Unknown path'}
                     side="top"
                     sideOffset={10}
-                    align="left"
+                    align="start"
                     alignOffset={-35}
                     avoidCollisions={true}
                     maxWidth="full"
@@ -243,7 +254,8 @@ export const TableRow = React.memo(({
             </div>
         </div>
     );
-});
+};
+export const TableRow = React.memo(FindingRow);
 
 const TriageActions = ({ finding, latestTriage, onTriage }) => (
     <div className="flex items-center justify-center w-full">

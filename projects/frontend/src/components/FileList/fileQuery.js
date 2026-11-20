@@ -10,6 +10,7 @@ export const FILE_SORT_COLUMNS = ['agent_id', 'source', 'size', 'timestamp', 'ma
 export const wildcardToIlike = (pattern) => pattern.replace(/\\/g, '\\\\').replace(/\*/g, '%');
 
 export const buildFilesWhere = ({ fileType, source, path, objectId, tag, viewState, onlyWithFindings, username }) => {
+  /** @type {object[]} Hasura bool_exp conditions, ANDed together */
   const and = [
     // Top-level files, plus extracted children that have a nesting level
     {
