@@ -24,6 +24,10 @@ export default [
     settings: {
       react: { version: 'detect' },
     },
+    rules: {
+      // The project documents props with defaults/destructuring, not PropTypes
+      'react/prop-types': 'off',
+    },
   },
   {
     // Build/tool config files and node:test unit tests run under Node.

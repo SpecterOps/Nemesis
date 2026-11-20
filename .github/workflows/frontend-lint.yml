@@ -1,0 +1,40 @@
+name: Frontend Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'projects/frontend/**'
+      - '.github/workflows/frontend-lint.yml'
+  pull_request:
+    paths:
+      - 'projects/frontend/**'
+      - '.github/workflows/frontend-lint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    # Same Node as the frontend image (projects/frontend/Dockerfile)
+    container: node:20-alpine
+    defaults:
+      run:
+        working-directory: projects/frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Type check (checkJs)
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: node --test src/hooks/pagedList.test.js
