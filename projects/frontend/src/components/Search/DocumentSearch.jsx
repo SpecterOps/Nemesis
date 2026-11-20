@@ -2,6 +2,10 @@ import { AlertTriangle, ChevronDown, FileText, Filter, Loader2, Search } from 'l
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+// Bounds on what one search result renders, whatever the size of the matched chunk
+const MAX_SNIPPET_LINE_CHARS = 400;
+const MAX_LISTED_LINE_NUMBERS = 20;
+
 const DocumentSearch = () => {
   const navigate = useNavigate();
   const [searchParams] = useState(new URLSearchParams(window.location.search));
@@ -137,6 +141,22 @@ const DocumentSearch = () => {
       sortedLines = groups.slice(0, totalMatchGroups)
         .flatMap(group => group);
     }
+    // A single group can still span thousands of lines (e.g. a chunk where every line matches):
+    // never render more than maxTotalLines lines per result.
+    sortedLines = sortedLines.slice(0, maxTotalLines);
+
+    // Very long lines (minified files, binary-ish text) are clipped around the first match
+    const clipLine = (line) => {
+      if (line.length <= MAX_SNIPPET_LINE_CHARS) return line;
+      const lower = line.toLowerCase();
+      const hit = searchTerms
+        .map(term => lower.indexOf(term.toLowerCase()))
+        .filter(pos => pos >= 0)
+        .reduce((min, pos) => Math.min(min, pos), Infinity);
+      const start = Number.isFinite(hit) ? Math.max(0, hit - MAX_SNIPPET_LINE_CHARS / 2) : 0;
+      const end = Math.min(line.length, start + MAX_SNIPPET_LINE_CHARS);
+      return `${start > 0 ? '...' : ''}${line.slice(start, end)}${end < line.length ? '...' : ''}`;
+    };
 
     let snippet = '';
     let lastLine = -1;
@@ -144,7 +164,7 @@ const DocumentSearch = () => {
       if (lastLine !== -1 && lineNum > lastLine + 1) {
         snippet += '\n...\n';
       }
-      snippet += lines[lineNum] + '\n';
+      snippet += clipLine(lines[lineNum]) + '\n';
       lastLine = lineNum;
     });
 
@@ -452,7 +472,8 @@ const DocumentSearch = () => {
                       {new Date(result.timestamp).toLocaleDateString()}
                     </span>
                     <span>
-                      Matches on lines: {result.matched_lines.join(', ')}
+                      Matches on lines: {result.matched_lines.slice(0, MAX_LISTED_LINE_NUMBERS).join(', ')}
+                      {result.matched_lines.length > MAX_LISTED_LINE_NUMBERS ? ', ...' : ''}
                     </span>
                     <span>
                       Total matches: {result.total_matches}

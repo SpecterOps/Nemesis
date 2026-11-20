@@ -1678,6 +1678,83 @@ async def list_sources(
 
 
 @app.get(
+    "/file-browser/sources",
+    tags=["file-browser"],
+    summary="List file listing sources",
+    description="All sources in file_listings with their total and per-status listing counts.",
+)
+async def file_browser_sources():
+    try:
+        from web_api.file_browser_routes import list_sources
+
+        return await asyncio.to_thread(list_sources, get_db_pool())
+    except Exception as e:
+        logger.exception(message="Error listing file browser sources")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/file-browser/children",
+    tags=["file-browser"],
+    summary="List one folder level of a source's file listings",
+    description="Immediate sub-folders (first page only) and a keyset-paged list of files directly in `path`.",
+)
+async def file_browser_children(
+    source: str = Query(..., description="file_listings source"),
+    path: str = Query("", description="Folder path without leading slash ('' for the root)"),
+    cursor: str | None = Query(None, description="Return files after this path (next_cursor of the previous page)"),
+    limit: int = Query(200, ge=1, le=1000, description="Files per page"),
+    search: str | None = Query(None, description="Case-insensitive substring filter on folder/file names"),
+):
+    try:
+        from web_api.file_browser_routes import list_children
+
+        return await asyncio.to_thread(list_children, get_db_pool(), source, path, cursor, limit, search)
+    except Exception as e:
+        logger.exception(message="Error listing file browser folder", source=source)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/file-browser/collection",
+    tags=["file-browser"],
+    summary="List paths that still need collection",
+    description="Paged list of a source's needs_to_be_collected paths with the linkings that require them.",
+)
+async def file_browser_collection(
+    source: str = Query(..., description="file_listings source"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    search: str | None = Query(None, description="Case-insensitive substring filter on the path"),
+):
+    try:
+        from web_api.file_browser_routes import list_collection_paths
+
+        return await asyncio.to_thread(list_collection_paths, get_db_pool(), source, offset, limit, search)
+    except Exception as e:
+        logger.exception(message="Error listing collection paths", source=source)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
+    "/reports/dashboard-stats",
+    tags=["reports"],
+    summary="Dashboard file and triage counts",
+    description="File counts (total, submitted, derived, containers, unviewed) and findings counts by latest "
+    "triage value (true_positive, false_positive, needs_review, untriaged), aggregated server-side.",
+)
+async def get_dashboard_stats():
+    """Get dashboard file counts and findings triage counts."""
+    try:
+        from web_api.reporting_routes import get_dashboard_stats as _get_dashboard_stats
+
+        return await asyncio.to_thread(_get_dashboard_stats, get_db_pool())
+    except Exception as e:
+        logger.exception(message="Error getting dashboard stats")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get(
     "/reports/source",
     tags=["reports"],
     summary="Get source report",

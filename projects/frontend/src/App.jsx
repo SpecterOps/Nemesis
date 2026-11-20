@@ -1,5 +1,4 @@
 // src/App.jsx
-import { createClient } from 'graphql-ws';
 import {
   BarChart2,
   Bot,
@@ -18,6 +17,7 @@ import {
   Upload
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { hasuraQuery, subscribeToChangeSignal } from '@/utils/hasura';
 import { Route, BrowserRouter as Router, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 // Providers
@@ -82,95 +82,67 @@ const Sidebar = ({ onCollapse }) => {
 
     checkLitellmAvailability();
 
-    // Initial count fetch
+    // Untriaged findings count for the nav badge.
+    // This runs on every page, so instead of a live subscription on the (expensive) anti-join
+    // count, subscribe to a tiny change signal (index-only max(id) lookups) and re-run the
+    // count only when findings or triage history actually change (plus a slow safety refresh
+    // to catch deletions).
+    let cancelled = false;
+    let inFlight = false;
+    let rerun = false;
     const fetchFindingsCount = async () => {
-      const query = {
-        query: `
+      if (inFlight) {
+        rerun = true;
+        return;
+      }
+      inFlight = true;
+      try {
+        const data = await hasuraQuery(`
           query GetCountOfFindingsWithNoTriageHistories {
-            findings_aggregate(
-              where: {
-                _not: {
-                  finding_triage_histories: {}
-                }
-              }
-            ) {
-              aggregate {
-                count
-              }
+            findings_aggregate(where: { _not: { finding_triage_histories: {} } }) {
+              aggregate { count }
             }
           }
-        `
-      };
-
-      try {
-        const response = await fetch('/hasura/v1/graphql', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-          },
-          body: JSON.stringify(query)
-        });
-
-        if (!response.ok) throw new Error('Network response error');
-        const result = await response.json();
-        if (result.errors) throw new Error(result.errors[0].message);
-
-        setFindingsCount(result.data.findings_aggregate.aggregate.count);
+        `);
+        if (!cancelled) setFindingsCount(data.findings_aggregate.aggregate.count);
       } catch (err) {
         console.error('Error fetching findings count:', err);
+      } finally {
+        inFlight = false;
+        if (rerun && !cancelled) {
+          rerun = false;
+          fetchFindingsCount();
+        }
       }
     };
 
-    fetchFindingsCount();
-
-    // Set up subscription
-    const wsClient = createClient({
-      url: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/hasura/v1/graphql`,
-      connectionParams: {
-        headers: {
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-        },
-      },
-    });
-
-    const subscription = wsClient.subscribe(
+    const unsubscribe = subscribeToChangeSignal(
+      [
+        `subscription WatchFindingsChangeSignal {
+          findings_aggregate { aggregate { max { finding_id } } }
+        }`,
+        `subscription WatchTriageChangeSignal {
+          findings_triage_history_aggregate { aggregate { max { id } } }
+        }`,
+      ],
+      fetchFindingsCount,
       {
-        query: `
-          subscription WatchCountOfFindingsWithNoTriageHistories {
-            findings_aggregate(
-              where: {
-                _not: {
-                  finding_triage_histories: {}
-                }
-              }
-            ) {
-              aggregate {
-                count
-              }
-            }
-          }
-        `
-      },
-      {
-        next(result) {
-          if (result?.data?.findings_aggregate?.aggregate?.count !== undefined) {
-            setFindingsCount(result.data.findings_aggregate.aggregate.count);
-          }
-        },
-        error(error) {
+        debounceMs: 1000,
+        onError: (error) => {
           console.error('Subscription error:', error);
+          fetchFindingsCount();
         },
-        complete() {
-          // console.log('Subscription completed');
-        }
       }
     );
 
+    const refreshId = setInterval(() => {
+      if (!document.hidden) fetchFindingsCount();
+    }, 60000);
+
     return () => {
-      if (subscription) {
-        subscription();
-      }
+      cancelled = true;
+      clearInterval(refreshId);
+      unsubscribe();
     };
   }, []);
 

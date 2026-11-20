@@ -278,7 +278,9 @@ SELECT
 FROM plaintext_content pc
 JOIN files_enriched ef ON pc.object_id = ef.object_id;
 
--- Create a simple search function that uses the view
+-- Full-text search over plaintext chunks, newest files first, one (the first matching) chunk per file.
+-- Scale: matching is done on (object_id, chunk_number) only, so the content of the many matching
+-- chunks is not carried through the sort; only the max_results winners are joined back for content.
 CREATE OR REPLACE FUNCTION public.search_documents(
     search_query text,
     path_pattern text DEFAULT NULL,
@@ -292,38 +294,42 @@ CREATE OR REPLACE FUNCTION public.search_documents(
 STABLE
 LANGUAGE sql
 AS $$
-    WITH ranked_chunks AS (
-        SELECT *,
-            ROW_NUMBER() OVER (
-                PARTITION BY object_id
-                ORDER BY chunk_number ASC
-            ) as rn
-        FROM document_search_results
+    WITH matches AS (
+        SELECT pc.object_id, MIN(pc.chunk_number) AS chunk_number
+        FROM plaintext_content pc
+        WHERE pc.content_vector @@ plainto_tsquery('simple', search_query)
+        GROUP BY pc.object_id
+    ),
+    top_files AS (
+        SELECT m.object_id, m.chunk_number, ef.file_name, ef.path, ef.extension, ef.project, ef.agent_id, ef.source,
+               ef."timestamp"::timestamp with time zone AS "timestamp"
+        FROM matches m
+        JOIN files_enriched ef ON ef.object_id = m.object_id
         WHERE
-            content_vector @@ plainto_tsquery('simple', search_query)
-            AND (path_pattern IS NULL OR path LIKE path_pattern)
-            AND (agent_pattern IS NULL OR agent_id LIKE agent_pattern)
-            AND (project_name IS NULL OR project = project_name)
-            AND (start_date IS NULL OR "timestamp" >= start_date)
-            AND (end_date IS NULL OR "timestamp" <= end_date)
-            AND (source_pattern IS NULL OR source IS NULL OR source LIKE source_pattern)
+            (path_pattern IS NULL OR ef.path LIKE path_pattern)
+            AND (agent_pattern IS NULL OR ef.agent_id LIKE agent_pattern)
+            AND (project_name IS NULL OR ef.project = project_name)
+            AND (start_date IS NULL OR ef."timestamp" >= start_date)
+            AND (end_date IS NULL OR ef."timestamp" <= end_date)
+            AND (source_pattern IS NULL OR ef.source IS NULL OR ef.source LIKE source_pattern)
+        ORDER BY ef."timestamp" DESC
+        LIMIT max_results
     )
     SELECT
-        object_id,
-        chunk_number,
-        content,
-        content_vector,
-        file_name,
-        path,
-        extension,
-        project,
-        agent_id,
-        source,
-        "timestamp"
-    FROM ranked_chunks
-    WHERE rn = 1
-    ORDER BY "timestamp" DESC
-    LIMIT max_results;
+        t.object_id,
+        t.chunk_number,
+        pc.content,
+        pc.content_vector,
+        t.file_name,
+        t.path,
+        t.extension,
+        t.project,
+        t.agent_id,
+        t.source,
+        t."timestamp"
+    FROM top_files t
+    JOIN plaintext_content pc ON pc.object_id = t.object_id AND pc.chunk_number = t.chunk_number
+    ORDER BY t."timestamp" DESC;
 $$;
 
 -- compression
@@ -922,3 +928,29 @@ REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM chat
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA chromium FROM chatbot_readonly;
 REVOKE CREATE ON SCHEMA public FROM chatbot_readonly;
 REVOKE CREATE ON SCHEMA chromium FROM chatbot_readonly;
+
+-----------------------
+-- UI SCALE: dashboard, reporting, file browser, containers
+-----------------------
+-- Dashboard "files over time" chart: per-interval counts of submitted files (index-only range counts
+-- instead of one full files_enriched scan per interval).
+CREATE INDEX IF NOT EXISTS idx_files_enriched_created_at_submitted
+    ON files_enriched (created_at) WHERE originating_object_id IS NULL;
+
+-- Source reports (web_api reporting_routes) filter files with UPPER(source) = <source>.
+CREATE INDEX IF NOT EXISTS idx_files_enriched_upper_source ON files_enriched (UPPER(source));
+
+-- File browser: parent folder of a file_listings path in the UI's form (leading slashes stripped,
+-- '/'-separated, '' for the root), e.g. '/a/b/c.txt' -> 'a/b', 'c.txt' -> ''.
+CREATE OR REPLACE FUNCTION file_listing_parent(file_path text) RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$ SELECT regexp_replace(ltrim(file_path, '/'), '/?[^/]*$', '') $$;
+
+-- One folder level at a time (web_api file_browser_routes): files of a folder are an index range
+-- (keyset-paged by path) and sub-folders are found with a loose index scan over the parent column,
+-- which needs byte ("C") ordering.
+CREATE INDEX IF NOT EXISTS idx_file_listings_browse
+    ON file_listings (source, (file_listing_parent(path)) COLLATE "C", path);
+
+-- Containers page: newest first.
+CREATE INDEX IF NOT EXISTS idx_container_processing_submitted_at ON container_processing (submitted_at DESC);

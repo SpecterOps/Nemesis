@@ -141,7 +141,47 @@ const DashboardSection = ({ title, children, action }) => (
   </div>
 );
 
-const POLL_INTERVAL = 5000; // Poll every 5 seconds
+const POLL_INTERVAL = 5000; // Poll cheap endpoints (queues/workflows) every 5 seconds
+// Aggregate counts over millions of files/findings are not free: poll them less often.
+const STATS_POLL_INTERVAL = 15000;
+const TIME_SERIES_POLL_INTERVAL = 60000;
+
+// File counts and findings-by-latest-triage-value counts, aggregated server-side by web_api in
+// single table scans (separate Hasura aggregates scanned millions of files four times, and the
+// triage breakdown used to download every finding's latest triage row).
+const fetchDashboardStats = async () => {
+  const response = await fetch('/api/reports/dashboard-stats');
+  if (!response.ok) throw new Error(`Network response error: ${response.status}`);
+  return response.json();
+};
+
+// Poll `fn` every `intervalMs` while the tab is visible, never overlapping requests
+// (a slow aggregate must not pile up concurrent copies of itself), and refresh
+// immediately when the tab becomes visible again.
+const usePolling = (fn, intervalMs) => {
+  useEffect(() => {
+    let inFlight = false;
+    const tick = async () => {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      try {
+        await fn();
+      } finally {
+        inFlight = false;
+      }
+    };
+    tick();
+    const intervalId = setInterval(tick, intervalMs);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fn, intervalMs]);
+};
 
 const StatsOverview = () => {
   const [stats, setStats] = useState(null);
@@ -166,56 +206,14 @@ const StatsOverview = () => {
 
 
   const fetchStats = useCallback(async () => {
+    // File/triage counts (web_api) are fetched in parallel with the (cheap) Hasura aggregates
+    const dashboardStatsPromise = fetchDashboardStats();
+    // Avoid an unhandled rejection if the Hasura request fails first; the await below rethrows
+    dashboardStatsPromise.catch(() => {});
     try {
       const query = {
         query: `
           query GetStats {
-            files_enriched_aggregate {
-              aggregate {
-                count
-              }
-            }
-            processed_files: files_enriched_aggregate(
-              where: { originating_object_id: { _is_null: true } }
-            ) {
-              aggregate {
-                count
-              }
-            }
-            containers_processed: files_enriched_aggregate(
-              where: { is_container: { _eq: true } }
-            ) {
-              aggregate {
-                count
-              }
-            }
-            unviewed_files: files_enriched_aggregate(
-              where: {
-                _and: [
-                  {
-                    _or: [
-                      { originating_object_id: { _is_null: true } },
-                      {
-                        _and: [
-                          { originating_object_id: { _is_null: false } },
-                          { nesting_level: { _is_null: false } },
-                          { nesting_level: { _gt: 0 } }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    _not: {
-                      files_view_histories: {}
-                    }
-                  }
-                ]
-              }
-            ) {
-              aggregate {
-                count
-              }
-            }
             titus_findings: findings_aggregate(
               where: { origin_name: { _eq: "titus" } }
             ) {
@@ -241,24 +239,6 @@ const StatsOverview = () => {
               aggregate {
                 count
               }
-            }
-            untriaged_findings: findings_aggregate(
-              where: {
-                _not: {
-                  finding_triage_histories: {}
-                }
-              }
-            ) {
-              aggregate {
-                count
-              }
-            }
-            latest_triage_entries: findings_triage_history(
-              distinct_on: finding_id
-              order_by: [{ finding_id: asc }, { timestamp: desc }]
-            ) {
-              finding_id
-              value
             }
           }
         `,
@@ -287,23 +267,18 @@ const StatsOverview = () => {
       const titusCount = result.data.titus_findings.aggregate.count;
       const yaraCount = result.data.yara_findings.aggregate.count;
 
-      // Process latest triage entries to get counts by value
-      const latestTriageEntries = result.data.latest_triage_entries || [];
-      const triageCounts = latestTriageEntries.reduce((acc, entry) => {
-        acc[entry.value] = (acc[entry.value] || 0) + 1;
-        return acc;
-      }, {});
+      const { files: fileCounts, triage: triageCounts } = await dashboardStatsPromise;
 
       setStats({
-        totalFiles: result.data.files_enriched_aggregate.aggregate.count,
-        processedFiles: result.data.processed_files.aggregate.count,
-        containersProcessed: result.data.containers_processed.aggregate.count,
-        unviewedFiles: result.data.unviewed_files.aggregate.count,
+        totalFiles: fileCounts.total,
+        processedFiles: fileCounts.submitted,
+        containersProcessed: fileCounts.containers,
+        unviewedFiles: fileCounts.unviewed,
         totalFindings: result.data.findings_aggregate.aggregate.count,
         titusMatches: titusCount,
         yaraMatches: yaraCount,
         enabledYaraRules: result.data.yara_rules_aggregate.aggregate.count,
-        untriagedFindings: result.data.untriaged_findings.aggregate.count,
+        untriagedFindings: triageCounts.untriaged || 0,
         truePositiveFindings: triageCounts.true_positive || 0,
         falsePositiveFindings: triageCounts.false_positive || 0,
         needsReviewFindings: triageCounts.needs_review || 0
@@ -463,7 +438,6 @@ const StatsOverview = () => {
       const startDateStr = formatLocalDate(startDate);
       const endDateStr = formatLocalDate(endDate);
 
-      console.log('Time series date range:', { startDateStr, endDateStr, startDate, endDate, granularity });
 
       // Generate time intervals based on granularity
       const getIntervalsArray = () => {
@@ -508,7 +482,6 @@ const StatsOverview = () => {
         const startTimestamp = intervalStart.toISOString();
         const endTimestamp = intervalEnd.toISOString();
 
-        console.log(`Query for interval ${index}:`, { intervalStart, startTimestamp, endTimestamp });
 
         filesQueryParts += `
           files_day_${index}: files_enriched_aggregate(
@@ -565,7 +538,6 @@ const StatsOverview = () => {
         throw new Error(result.errors[0].message);
       }
 
-      console.log('Time series GraphQL result:', result);
 
       // Process the response data into time series format
       const filesData = [];
@@ -631,49 +603,11 @@ const StatsOverview = () => {
     }
   }, []);
 
-  useEffect(() => {
-    // Initial fetch for all data sources
-    fetchStats();
-    fetchEnrichmentStatus();
-    fetchFailedWorkflows();
-    fetchTimeSeriesData();
-    fetchQueueStats();
-
-    // Set up polling interval for all
-    const statsIntervalId = setInterval(fetchStats, POLL_INTERVAL);
-    const enrichmentIntervalId = setInterval(fetchEnrichmentStatus, POLL_INTERVAL);
-    const failedWorkflowsIntervalId = setInterval(fetchFailedWorkflows, POLL_INTERVAL);
-    const timeSeriesIntervalId = setInterval(fetchTimeSeriesData, POLL_INTERVAL);
-    const queueStatsIntervalId = setInterval(fetchQueueStats, POLL_INTERVAL);
-
-    // Cleanup intervals on component unmount
-    return () => {
-      clearInterval(statsIntervalId);
-      clearInterval(enrichmentIntervalId);
-      clearInterval(failedWorkflowsIntervalId);
-      clearInterval(timeSeriesIntervalId);
-      clearInterval(queueStatsIntervalId);
-    };
-  }, [fetchStats, fetchEnrichmentStatus, fetchFailedWorkflows, fetchTimeSeriesData, fetchQueueStats]);
-
-  // Add visibility change handler to pause/resume polling when tab is hidden
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        // Immediately fetch when tab becomes visible again
-        fetchStats();
-        fetchEnrichmentStatus();
-        fetchFailedWorkflows();
-        fetchTimeSeriesData();
-        fetchQueueStats();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [fetchStats, fetchEnrichmentStatus, fetchFailedWorkflows, fetchTimeSeriesData, fetchQueueStats]);
-
-
+  usePolling(fetchStats, STATS_POLL_INTERVAL);
+  usePolling(fetchEnrichmentStatus, POLL_INTERVAL);
+  usePolling(fetchFailedWorkflows, POLL_INTERVAL);
+  usePolling(fetchTimeSeriesData, TIME_SERIES_POLL_INTERVAL);
+  usePolling(fetchQueueStats, POLL_INTERVAL);
 
   // Processing time breakdown data
   const processingTimeData = enrichmentStats?.metrics?.processing_times && [
