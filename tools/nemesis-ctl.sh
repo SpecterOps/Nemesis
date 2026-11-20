@@ -117,7 +117,8 @@ fi
 ensure_hasura_admin_secret() {
   local env_file=".env" current new
   [ -f "$env_file" ] || return 0
-  current="$(grep -E '^[[:space:]]*HASURA_ADMIN_SECRET=' "$env_file" | tail -n 1 | cut -d= -f2- \
+  # (|| true: no matching line is fine under set -euo pipefail)
+  current="$( { grep -E '^[[:space:]]*HASURA_ADMIN_SECRET=' "$env_file" || true; } | tail -n 1 | cut -d= -f2- \
     | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
   if [ -n "$current" ] && [ "$current" != "pass456" ]; then
     return 0
