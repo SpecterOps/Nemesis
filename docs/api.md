@@ -109,6 +109,54 @@ Bulk enrichment cannot be stopped once tasks are published
 ---
 
 
+## File-Browser
+
+### `GET /file-browser/children`
+
+List one folder level of a source's file listings
+
+Immediate sub-folders (first page only) and a keyset-paged list of files directly in `path`.
+
+**Parameters:**
+
+- `source` (string, **required**): file_listings source
+- `path` (string, optional): Folder path without leading slash ('' for the root)
+- `cursor` (unknown, optional): Return files after this path (next_cursor of the previous page)
+- `limit` (integer, optional): Files per page
+- `search` (unknown, optional): Case-insensitive substring filter on folder/file names
+
+**Returns:** 200 on success
+
+---
+
+### `GET /file-browser/collection`
+
+List paths that still need collection
+
+Paged list of a source's needs_to_be_collected paths with the linkings that require them.
+
+**Parameters:**
+
+- `source` (string, **required**): file_listings source
+- `offset` (integer, optional): 
+- `limit` (integer, optional): 
+- `search` (unknown, optional): Case-insensitive substring filter on the path
+
+**Returns:** 200 on success
+
+---
+
+### `GET /file-browser/sources`
+
+List file listing sources
+
+All sources in file_listings with their total and per-status listing counts.
+
+**Returns:** 200 on success
+
+---
+
+
 ## Files
 
 ### `POST /containers`
@@ -208,6 +256,16 @@ Get metrics for a specific queue topic
 
 ## Reports
 
+### `GET /reports/dashboard-stats`
+
+Dashboard file and triage counts
+
+File counts (total, submitted, derived, containers, unviewed) and findings counts by latest triage value (true_positive, false_positive, needs_review, untriaged), aggregated server-side.
+
+**Returns:** 200 on success
+
+---
+
 ### `GET /reports/source`
 
 Get source report
@@ -285,6 +343,7 @@ Get system-wide statistics and findings across all sources
 - `start_date` (unknown, optional): Filter by start date
 - `end_date` (unknown, optional): Filter by end date
 - `project` (unknown, optional): Filter by project name
+- `sources_limit` (integer, optional): Max number of (most recently active) sources to include; 0 = all sources
 
 **Returns:** 200 on success
 

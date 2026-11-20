@@ -1346,6 +1346,235 @@
         }
       }
     },
+    "/file-browser/sources": {
+      "get": {
+        "tags": [
+          "file-browser"
+        ],
+        "summary": "List file listing sources",
+        "description": "All sources in file_listings with their total and per-status listing counts.",
+        "operationId": "file_browser_sources_file_browser_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/file-browser/children": {
+      "get": {
+        "tags": [
+          "file-browser"
+        ],
+        "summary": "List one folder level of a source's file listings",
+        "description": "Immediate sub-folders (first page only) and a keyset-paged list of files directly in `path`.",
+        "operationId": "file_browser_children_file_browser_children_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "file_listings source",
+              "title": "Source"
+            },
+            "description": "file_listings source"
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Folder path without leading slash ('' for the root)",
+              "default": "",
+              "title": "Path"
+            },
+            "description": "Folder path without leading slash ('' for the root)"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Return files after this path (next_cursor of the previous page)",
+              "title": "Cursor"
+            },
+            "description": "Return files after this path (next_cursor of the previous page)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Files per page",
+              "default": 200,
+              "title": "Limit"
+            },
+            "description": "Files per page"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive substring filter on folder/file names",
+              "title": "Search"
+            },
+            "description": "Case-insensitive substring filter on folder/file names"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/file-browser/collection": {
+      "get": {
+        "tags": [
+          "file-browser"
+        ],
+        "summary": "List paths that still need collection",
+        "description": "Paged list of a source's needs_to_be_collected paths with the linkings that require them.",
+        "operationId": "file_browser_collection_file_browser_collection_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "file_listings source",
+              "title": "Source"
+            },
+            "description": "file_listings source"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive substring filter on the path",
+              "title": "Search"
+            },
+            "description": "Case-insensitive substring filter on the path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/dashboard-stats": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Dashboard file and triage counts",
+        "description": "File counts (total, submitted, derived, containers, unviewed) and findings counts by latest triage value (true_positive, false_positive, needs_review, untriaged), aggregated server-side.",
+        "operationId": "get_dashboard_stats_reports_dashboard_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/reports/source": {
       "get": {
         "tags": [
@@ -1493,6 +1722,19 @@
               "title": "Project"
             },
             "description": "Filter by project name"
+          },
+          {
+            "name": "sources_limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Max number of (most recently active) sources to include; 0 = all sources",
+              "default": 50,
+              "title": "Sources Limit"
+            },
+            "description": "Max number of (most recently active) sources to include; 0 = all sources"
           }
         ],
         "responses": {
