@@ -25,12 +25,6 @@ spec:
           ports:
             - containerPort: {{ .Values.frontend.port }}
               name: http
-          env:
-            - name: HASURA_ADMIN_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: nemesis-secrets
-                  key: HASURA_ADMIN_SECRET
           readinessProbe:
             httpGet:
               path: /

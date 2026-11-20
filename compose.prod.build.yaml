@@ -49,12 +49,6 @@ services:
       context: ./projects/frontend/
       dockerfile: Dockerfile
       target: prod
-    command: >
-      sh -c "
-        SECRET=\"$$HASURA_ADMIN_SECRET\" &&
-        sed -i \"s/\\$$HASURA_ADMIN_SECRET/$$SECRET/g\" /usr/share/nginx/html/index.html &&
-        nginx -g 'daemon off;'
-      "
     labels:
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 

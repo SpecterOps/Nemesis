@@ -191,7 +191,6 @@ const DpapiDomainBackupKeys = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
           },
           body: JSON.stringify(query)
         });

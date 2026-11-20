@@ -9,9 +9,6 @@ const getClient = () => {
     client = createClient({
       url: `${wsProtocol}//${window.location.host}/hasura/v1/graphql`,
       lazy: true,
-      connectionParams: {
-        headers: { 'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET },
-      },
     });
   }
   return client;

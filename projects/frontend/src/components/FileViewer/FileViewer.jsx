@@ -56,11 +56,6 @@ const wsUrl = `${wsProtocol}//${window.location.host}/hasura/v1/graphql`;
 
 const wsClient = createClient({
   url: wsUrl,
-  connectionParams: {
-    headers: {
-      'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-    },
-  },
 });
 
 const createHexView = (data, maxSize = MAX_VIEW_SIZE) => {
@@ -374,7 +369,6 @@ const FileViewer = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
           },
           body: JSON.stringify(mutation)
         });
@@ -458,7 +452,6 @@ const FileViewer = () => {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
-                      'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
                     },
                     body: JSON.stringify({
                       query: `
@@ -786,7 +779,6 @@ const FileViewer = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
         },
         body: JSON.stringify({
           query: `
@@ -1007,7 +999,6 @@ const FileViewer = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
           },
           body: JSON.stringify(query)
         });

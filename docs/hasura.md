@@ -4,6 +4,13 @@ Nemesis uses Hasura to wrap the PostgreSQL backend to easily build a GraphQL and
 
 Navigating to the "Help" menu reachable in the bottom left of the Nemesis interface and clicking the `/hasura/console/` route link will take you to the Hasura login. Enter the value of the `HASURA_ADMIN_SECRET` ENV variable to login. With Docker Compose, `./tools/nemesis-ctl.sh` generates a random secret on first run and stores it in `.env`; with Helm, a random secret is generated on install and stored in the `nemesis-secrets` Secret (`kubectl get secret nemesis-secrets -n <namespace> -o jsonpath='{.data.HASURA_ADMIN_SECRET}' | base64 -d`).
 
+## Access model
+
+- **The web UI** calls Hasura at `/hasura` from the browser **without** the admin secret, behind the same Traefik login as the rest of Nemesis. Those requests get the restricted `operator` role (`HASURA_GRAPHQL_UNAUTHORIZED_ROLE`), defined in `infra/hasura/metadata/tables.yaml` (mirrored in `k8s/helm/nemesis/files/tables.yaml`): it can read every tracked table and make only the writes the UI itself makes (triage entries, file views, feedback, file tags, Yara rules, alert settings, agent prompts, and deleting file links). It has no access to the SQL (`run_sql`) or metadata APIs.
+- **Nemesis services, Jupyter, the CLI and the Hasura console** use the admin secret (`HASURA_ADMIN_SECRET`), which is never sent to the browser.
+
+If you add a UI feature that writes a new table or column through GraphQL, add a matching `insert_permissions` / `update_permissions` / `delete_permissions` entry for the `operator` role in both metadata files.
+
 ## Console
 
 The Hasura console allows you to explore the pre-configured backend data schema, which allows you to explore the schema and query data:

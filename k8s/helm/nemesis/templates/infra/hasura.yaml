@@ -70,8 +70,10 @@ spec:
               value: /hasura-metadata
             - name: HASURA_GRAPHQL_LOG_LEVEL
               value: {{ .Values.hasura.logLevel | quote }}
+            # Requests without the admin secret (the web UI, behind the Traefik login) get the restricted
+            # `operator` role from the Hasura metadata; services use the admin secret
             - name: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
-              value: "anonymous"
+              value: "operator"
             - name: HASURA_GRAPHQL_ENABLE_METADATA_SYNC
               value: "true"
             - name: HASURA_GRAPHQL_ENABLE_TELEMETRY

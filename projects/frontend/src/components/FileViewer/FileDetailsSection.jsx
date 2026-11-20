@@ -99,7 +99,6 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
         },
         body: JSON.stringify(query)
       });
@@ -145,7 +144,6 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
         },
         body: JSON.stringify(query)
       });
@@ -210,7 +208,6 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
       },
       body: JSON.stringify(mutation)
     });
@@ -227,7 +224,7 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
     // In Hasura, array types often need specific handling
     const mutation = {
       query: `
-        mutation UpdateFileTags($object_id: uuid!, $file_tags: [String]) {
+        mutation UpdateFileTags($object_id: uuid!, $file_tags: [String!]) {
           update_files_enriched_by_pk(
             pk_columns: {object_id: $object_id}, 
             _set: {file_tags: $file_tags}
@@ -249,7 +246,6 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
         },
         body: JSON.stringify(mutation)
       });
@@ -347,7 +343,6 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
         },
         body: JSON.stringify(mutation)
       });

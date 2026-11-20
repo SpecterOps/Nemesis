@@ -376,8 +376,6 @@ services:
   frontend:
     image: ghcr.io/specterops/nemesis/frontend:latest
     depends_on: [postgres, hasura]
-    environment:
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
       interval: 10s
@@ -823,7 +821,10 @@ services:
       HASURA_GRAPHQL_LOG_LEVEL: "warn"
       HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
-      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+      # Requests without the admin secret (the web UI) get the restricted `operator` role defined in
+      # infra/hasura/metadata/tables.yaml: read access plus the UI's own writes, no SQL/metadata API.
+      # Services, Jupyter and the CLI keep using the admin secret on hasura:8080.
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: operator
       # The UI and Jupyter reach Hasura from the same origin (/hasura via Traefik) or server-side, so
       # no CORS headers: pages on other sites can't call it from a browser
       HASURA_GRAPHQL_DISABLE_CORS: "true"
@@ -833,7 +834,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.hasura.rule=PathPrefix(`/hasura`)"
       - "traefik.http.services.hasura.loadbalancer.server.port=8080"
-      - "traefik.http.routers.hasura.middlewares=graphql-stripprefix"
+      # Same Traefik login as the rest of Nemesis (the UI calls /hasura from the same origin)
+      - "traefik.http.routers.hasura.middlewares=auth,graphql-stripprefix"
       - "traefik.http.middlewares.graphql-stripprefix.stripprefix.prefixes=/hasura"
       - "traefik.http.routers.hasura.entrypoints=websecure"
       - "traefik.http.routers.hasura.tls=true"

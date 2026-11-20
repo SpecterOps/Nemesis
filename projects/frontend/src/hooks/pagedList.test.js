@@ -79,7 +79,7 @@ test('isEditableTarget ignores inputs, textareas, selects and contenteditable', 
 
 test('fetchPage reads back-half pages in reverse order from the end', async () => {
   const calls = [];
-  g.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
+  g.window = {};
   g.fetch = async (url, opts) => {
     const body = JSON.parse(opts.body);
     calls.push(body.variables);
@@ -181,7 +181,7 @@ test('files order_by: every sortable column, stable tie-breaker', () => {
 });
 
 test('forEachIdChunk walks every matching id by keyset, even when rows stop matching', async () => {
-  g.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
+  g.window = {};
   // 7 matching ids; processing a chunk removes those rows from the result (like triaging untriaged rows)
   let matching = [3, 5, 8, 9, 12, 15, 20];
   const wheres = [];
@@ -204,7 +204,7 @@ test('forEachIdChunk walks every matching id by keyset, even when rows stop matc
 });
 
 test('forEachIdChunk: no matches, exact multiple of the chunk size, and errors', async () => {
-  g.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
+  g.window = {};
   const all = [1, 2, 3, 4];
   let calls = 0;
   g.fetch = async (url, opts) => {

@@ -2,15 +2,65 @@
 - table:
     name: alert_settings
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  insert_permissions:
+  - role: operator
+    permission:
+      check: {}
+      columns:
+      - alerting_enabled
+      - category_excluded
+      - category_included
+      - file_path_excluded_regex
+      - file_path_included_regex
+      - id
+      - llm_triage_values_to_alert
+      - minimum_severity
+  update_permissions:
+  - role: operator
+    permission:
+      columns:
+      - alerting_enabled
+      - category_excluded
+      - category_included
+      - file_path_excluded_regex
+      - file_path_included_regex
+      - llm_triage_values_to_alert
+      - minimum_severity
+      filter: {}
+      check: {}
 - table:
     name: document_search_results
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: container_processing
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: workflows
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: enrichments
     schema: public
@@ -18,12 +68,36 @@
   - name: files_enriched
     using:
       foreign_key_constraint_on: object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: files
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: file_tags
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  insert_permissions:
+  - role: operator
+    permission:
+      check: {}
+      columns:
+      - tag_name
 - table:
     name: files_enriched
     schema: public
@@ -78,9 +152,28 @@
         table:
           name: transforms
           schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  update_permissions:
+  - role: operator
+    permission:
+      columns:
+      - file_tags
+      filter: {}
+      check: {}
 - table:
     name: files_enriched_dataset
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: files_feedback
     schema: public
@@ -88,6 +181,36 @@
   - name: files_enriched
     using:
       foreign_key_constraint_on: object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  insert_permissions:
+  - role: operator
+    permission:
+      check: {}
+      columns:
+      - automated
+      - comments
+      - missing_file_viewer
+      - missing_parser
+      - object_id
+      - sensitive_info_not_detected
+      - username
+  update_permissions:
+  - role: operator
+    permission:
+      columns:
+      - automated
+      - comments
+      - missing_file_viewer
+      - missing_parser
+      - sensitive_info_not_detected
+      - username
+      filter: {}
+      check: {}
 - table:
     name: files_view_history
     schema: public
@@ -95,6 +218,20 @@
   - name: files_enriched
     using:
       foreign_key_constraint_on: object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  insert_permissions:
+  - role: operator
+    permission:
+      check: {}
+      columns:
+      - automated
+      - object_id
+      - username
 - table:
     name: findings
     schema: public
@@ -113,6 +250,12 @@
         table:
           name: findings_triage_history
           schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: findings_triage_history
     schema: public
@@ -128,6 +271,21 @@
         table:
           name: findings
           schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  insert_permissions:
+  - role: operator
+    permission:
+      check: {}
+      columns:
+      - automated
+      - finding_id
+      - username
+      - value
 - table:
     name: plaintext_content
     schema: public
@@ -135,6 +293,12 @@
   - name: files_enriched
     using:
       foreign_key_constraint_on: object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: transforms
     schema: public
@@ -142,62 +306,183 @@
   - name: files_enriched
     using:
       foreign_key_constraint_on: object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: yara_rules
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  insert_permissions:
+  - role: operator
+    permission:
+      check: {}
+      columns:
+      - alert_enabled
+      - content
+      - enabled
+      - name
+      - source
+  update_permissions:
+  - role: operator
+    permission:
+      columns:
+      - content
+      - enabled
+      - updated_at
+      filter: {}
+      check: {}
 - table:
     name: agent_prompts
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  insert_permissions:
+  - role: operator
+    permission:
+      check: {}
+      columns:
+      - description
+      - enabled
+      - name
+      - prompt
+  update_permissions:
+  - role: operator
+    permission:
+      columns:
+      - description
+      - prompt
+      - updated_at
+      filter: {}
+      check: {}
 - table:
     name: file_linkings
     schema: public
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
+  delete_permissions:
+  - role: operator
+    permission:
+      filter: {}
 - table:
     name: file_listings
     schema: public
-
-# `chromium` schema
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: history
     schema: chromium
   object_relationships:
-    - name: files_enriched
-      using:
-        foreign_key_constraint_on: originating_object_id
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: originating_object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: downloads
     schema: chromium
   object_relationships:
-    - name: files_enriched
-      using:
-        foreign_key_constraint_on: originating_object_id
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: originating_object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: logins
     schema: chromium
   object_relationships:
-    - name: files_enriched
-      using:
-        foreign_key_constraint_on: originating_object_id
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: originating_object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: cookies
     schema: chromium
   object_relationships:
-    - name: files_enriched
-      using:
-        foreign_key_constraint_on: originating_object_id
+  - name: files_enriched
+    using:
+      foreign_key_constraint_on: originating_object_id
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: state_keys
     schema: chromium
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: chrome_keys
     schema: chromium
-
-# `dpapi` schema
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: masterkeys
     schema: dpapi
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: system_credentials
     schema: dpapi
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
 - table:
     name: domain_backup_keys
     schema: dpapi
+  select_permissions:
+  - role: operator
+    permission:
+      columns: '*'
+      filter: {}
+      allow_aggregations: true
