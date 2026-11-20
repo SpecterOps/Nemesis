@@ -103,21 +103,20 @@ export const TableHeaders = ({ isTriageMode, sortColumn, sortDirection, onSort }
     </div>
 );
 
-export const TableRow = React.memo(({ index, style, data }) => {
-    const {
-        findings,
-        isTriageMode,
-        selectedIndex,
-        selectedFindings,
-        handleTriage,
-        triageStates,
-        setSelectedFinding,
-        setIsModalOpen,
-        setSelectedIndex
-    } = data;
-
-    const finding = findings[index];
+// One finding row. Props are per-row values and stable callbacks so React.memo skips rows whose
+// selection/triage state didn't change (keyboard navigation re-renders only two rows).
+export const TableRow = React.memo(({
+    finding,
+    index,
+    height,
+    isTriageMode,
+    isSelected,
+    isChecked,
+    onRowClick,
+    onTriage,
+}) => {
     const navigateToFile = useFileNavigation();
+    const latestTriage = finding.finding_triage_histories?.[0];
 
     const renderSeverityBadge = (severity) => {
         let classes = 'px-2.5 py-0.5 rounded-full text-xs font-medium ';
@@ -142,24 +141,20 @@ export const TableRow = React.memo(({ index, style, data }) => {
 
     return (
         <div
-            style={style}
+            style={{ height }}
+            data-row-index={index}
+            data-finding-id={finding.finding_id}
             className={`
         flex items-center border-b dark:border-gray-700 cursor-pointer transition-colors
         dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700
-        ${isTriageMode && selectedFindings.has(finding.finding_id) ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
-        ${isTriageMode && index === selectedIndex ? '!bg-blue-50 dark:!bg-blue-900/20' : ''}
+        ${isTriageMode && isChecked ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
+        ${isTriageMode && isSelected ? '!bg-blue-50 dark:!bg-blue-900/20' : ''}
       `}
-            onClick={() => {
-                setSelectedFinding(finding);
-                setIsModalOpen(true);
-                if (isTriageMode) {
-                    setSelectedIndex(findings.findIndex(f => f.finding_id === finding.finding_id));
-                }
-            }}
+            onClick={() => onRowClick(finding, index)}
         >
             {isTriageMode && (
                 <div className="flex-shrink-0 w-8 text-sm font-medium text-gray-500 dark:text-gray-400 text-center">
-                    {index === selectedIndex ? '✓' : ''}
+                    {isSelected ? '✓' : ''}
                 </div>
             )}
             <div className="flex-shrink-0 w-16 text-center">
@@ -240,15 +235,15 @@ export const TableRow = React.memo(({ index, style, data }) => {
             <div className="flex-shrink-0 w-[140px] flex justify-center items-center space-x-2">
                 <TriageActions
                     finding={finding}
-                    handleTriage={handleTriage}
-                    triageStates={triageStates}
+                    latestTriage={latestTriage}
+                    onTriage={onTriage}
                 />
             </div>
         </div>
     );
 });
 
-const TriageActions = ({ finding, handleTriage, triageStates }) => (
+const TriageActions = ({ finding, latestTriage, onTriage }) => (
     <div className="flex items-center justify-center w-full">
         <div className="grid grid-cols-4 gap-1">
             <Tooltip content="Mark as true positive" side="top">
@@ -256,10 +251,10 @@ const TriageActions = ({ finding, handleTriage, triageStates }) => (
                     className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                     onClick={(e) => {
                         e.stopPropagation();
-                        handleTriage(finding.finding_id, 'true_positive');
+                        onTriage(finding.finding_id, 'true_positive');
                     }}
                 >
-                    <ThumbsUp className={`w-4 h-4 ${triageStates[finding.finding_id] === 'true_positive'
+                    <ThumbsUp className={`w-4 h-4 ${latestTriage?.value === 'true_positive'
                         ? 'text-green-500 dark:text-green-400'
                         : 'text-gray-300 dark:text-gray-600'
                         }`} />
@@ -271,10 +266,10 @@ const TriageActions = ({ finding, handleTriage, triageStates }) => (
                     className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                     onClick={(e) => {
                         e.stopPropagation();
-                        handleTriage(finding.finding_id, 'false_positive');
+                        onTriage(finding.finding_id, 'false_positive');
                     }}
                 >
-                    <ThumbsDown className={`w-4 h-4 ${triageStates[finding.finding_id] === 'false_positive'
+                    <ThumbsDown className={`w-4 h-4 ${latestTriage?.value === 'false_positive'
                         ? 'text-red-500 dark:text-red-400'
                         : 'text-gray-300 dark:text-gray-600'
                         }`} />
@@ -286,10 +281,10 @@ const TriageActions = ({ finding, handleTriage, triageStates }) => (
                     className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                     onClick={(e) => {
                         e.stopPropagation();
-                        handleTriage(finding.finding_id, 'needs_review');
+                        onTriage(finding.finding_id, 'needs_review');
                     }}
                 >
-                    <HelpCircle className={`w-4 h-4 ${triageStates[finding.finding_id] === 'needs_review'
+                    <HelpCircle className={`w-4 h-4 ${latestTriage?.value === 'needs_review'
                         ? 'text-gray-500 dark:text-gray-400'
                         : 'text-gray-300 dark:text-gray-600'
                         }`} />
@@ -297,14 +292,13 @@ const TriageActions = ({ finding, handleTriage, triageStates }) => (
             </Tooltip>
 
             <div className="flex items-center justify-center">
-                {finding.finding_triage_histories.length > 0 &&
-                    finding.finding_triage_histories[0].automated ? (
+                {latestTriage?.automated ? (
                     <Tooltip
                         content={
                             <>
-                                {finding.finding_triage_histories[0].explanation || "No explanation provided"}
-                                {finding.finding_triage_histories[0].confidence && finding.finding_triage_histories[0].confidence > 0 && (
-                                    <span> (confidence: <strong>{finding.finding_triage_histories[0].confidence}</strong>)</span>
+                                {latestTriage.explanation || "No explanation provided"}
+                                {latestTriage.confidence && latestTriage.confidence > 0 && (
+                                    <span> (confidence: <strong>{latestTriage.confidence}</strong>)</span>
                                 )}
                             </>
                         }

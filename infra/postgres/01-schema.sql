@@ -234,6 +234,18 @@ CREATE INDEX IF NOT EXISTS idx_findings_object_id ON findings(object_id);
 -- Composite index for finding triage history joins (finding_triage_histories with order_by timestamp)
 CREATE INDEX IF NOT EXISTS idx_findings_triage_history_composite ON findings_triage_history(finding_id, timestamp DESC);
 
+-- Files / Findings list pages (server-side sort + pagination). Each sort index ends with the
+-- primary key the UI uses as tie-breaker so one index scan returns a page in order.
+-- Files default sort (timestamp desc): first page of 1M files 217ms -> 1ms
+CREATE INDEX IF NOT EXISTS idx_files_enriched_timestamp ON files_enriched(timestamp, object_id);
+-- Files list change signal (live subscription on max(created_at)): 150ms count -> 0.2ms
+CREATE INDEX IF NOT EXISTS idx_files_enriched_created_at ON files_enriched(created_at);
+-- Findings sorts: first page of 300k findings ~550ms -> 20-50ms
+CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity, finding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_finding_name ON findings(finding_name, finding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category, finding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_origin_name ON findings(origin_name, finding_id);
+
 
 
 -----------------------

@@ -1,579 +1,444 @@
-import { useTriageMode } from '@/contexts/TriageModeContext';
+import PaginationControls from '@/components/FileList/PaginationControls';
 import { useUser } from '@/contexts/UserContext';
-import { createClient } from 'graphql-ws';
-import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import AutoSizer from 'react-virtualized-auto-sizer';
-import { FixedSizeList as List } from 'react-window';
+import { fetchPage, hasuraRequest, isEditableTarget } from '@/hooks/pagedList';
+import { usePagedList } from '@/hooks/usePagedList';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import Alert from './Alert';
 import FindingModal from './FindingModal';
 import FindingsFilters from './FindingsFilters';
+import {
+  ALL_CATEGORIES, ALL_SEVERITIES, DEFAULT_TRIAGE_STATE, FINDINGS_PAGE_SIZE, SORT_COLUMNS, TRIAGE_SOURCES,
+  TRIAGE_STATES, buildFindingsOrderBy, buildFindingsWhere, matchesAfterHumanTriage,
+} from './findingsQuery';
 import { useFileNavigation } from './navigation';
 import { TableHeaders, TableRow } from './Table';
 
-// Create WebSocket client for GraphQL subscriptions
-const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsUrl = `${wsProtocol}//${window.location.host}/hasura/v1/graphql`;
-
-const wsClient = createClient({
-  url: wsUrl,
-  connectionParams: {
-    headers: {
-      'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-    },
-  },
-});
-
 const ROW_HEIGHT = 42;
+const PAGE_SIZE = FINDINGS_PAGE_SIZE;
+
+// Only what the list renders; the (possibly large) finding `data` is loaded when the modal opens
+const ROW_FIELDS = `
+  finding_id
+  finding_name
+  object_id
+  origin_type
+  origin_name
+  category
+  severity
+  created_at
+  files_enriched { path agent_id source magic_type }
+  finding_triage_histories(order_by: {timestamp: desc}, limit: 1) {
+    id automated username value explanation confidence true_positive_context timestamp
+  }`;
+
+// Tiny live queries: any new/deleted finding or new triage entry refreshes the current page
+const SIGNAL_QUERIES = [
+  'subscription FindingsChanged { findings_aggregate { aggregate { max { finding_id } } } }',
+  'subscription FindingsTriageChanged { findings_triage_history_aggregate { aggregate { max { id } } } }',
+];
+
+const parseList = (value, allowed) => {
+  if (!value) return allowed;
+  const list = allowed.filter((v) => value.split(',').map((s) => s.trim()).includes(v));
+  return list.length > 0 ? list : allowed;
+};
+
+// Filters, sort and page all live in the URL
+const readUrlState = (searchParams) => {
+  const triageState = searchParams.get('triage_state');
+  const triageSource = searchParams.get('triage_source');
+  const sortColumn = searchParams.get('sort_column');
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  return {
+    filters: {
+      categories: parseList(searchParams.get('category'), ALL_CATEGORIES),
+      severities: parseList(searchParams.get('severity'), ALL_SEVERITIES),
+      search: searchParams.get('search') || '',
+      triageState: TRIAGE_STATES.includes(triageState) ? triageState : DEFAULT_TRIAGE_STATE,
+      triageSource: TRIAGE_SOURCES.includes(triageSource) ? triageSource : 'all',
+      objectId: searchParams.get('object_id') || '',
+    },
+    sortColumn: SORT_COLUMNS.includes(sortColumn) ? sortColumn : 'created_at',
+    sortDirection: searchParams.get('sort_direction') === 'asc' ? 'asc' : 'desc',
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+  };
+};
 
 const FindingsList = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const [findings, setFindings] = useState([]);
-  const [filteredFindings, setFilteredFindings] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedFinding, setSelectedFinding] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const { isTriageMode, setIsTriageMode, selectedIndex, setSelectedIndex } = useTriageMode('findings');
-  const [triageStates, setTriageStates] = useState({});
-  const [selectedFindings, setSelectedFindings] = useState(new Set());
-  const { username } = useUser();
-  const lastDirection = useRef('down');
-  // Outer (scrolling) element of the virtualized list
-  const listRef = useRef(null);
-  const prevFilteredFindingsRef = useRef([]);
-
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState(() => searchParams.get('sort_column') || 'created_at');
-  const [sortDirection, setSortDirection] = useState(() => searchParams.get('sort_direction') || 'desc');
-
-  // Handle column sorting
-  const handleSort = (column, direction) => {
-    setSortColumn(column);
-    setSortDirection(direction);
-  };
-
-  // Update URL parameters when sort changes
-  useEffect(() => {
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set('sort_column', sortColumn);
-    newParams.set('sort_direction', sortDirection);
-
-    if (newParams.toString() !== searchParams.toString()) {
-      setSearchParams(newParams, { replace: true });
-    }
-  }, [sortColumn, sortDirection, searchParams, setSearchParams]);
-
-  // Update sort state when URL parameters change
-  useEffect(() => {
-    const urlSortColumn = searchParams.get('sort_column');
-    const urlSortDirection = searchParams.get('sort_direction');
-
-    if (urlSortColumn && urlSortColumn !== sortColumn) {
-      setSortColumn(urlSortColumn);
-    }
-    if (urlSortDirection && urlSortDirection !== sortDirection) {
-      setSortDirection(urlSortDirection);
-    }
-  }, [searchParams]);
-
-  // Function to handle multi-selection triage
-  const handleBulkTriage = (value) => {
-    selectedFindings.forEach(findingId => {
-      handleTriage(findingId, value);
-    });
-    setSelectedFindings(new Set());
-  };
-
-  const handleTriage = async (findingId, value) => {
-    // Update local state immediately for UI responsiveness
-    setTriageStates(prev => ({
-      ...prev,
-      [findingId]: value
-    }));
-
-    const mutation = {
-      query: `
-        mutation InsertTriage($finding_id: bigint!, $username: String!, $value: String!) {
-          insert_findings_triage_history_one(object: {
-            finding_id: $finding_id,
-            username: $username,
-            value: $value,
-            automated: false
-          }) {
-            id
-            timestamp
-          }
-        }
-      `,
-      variables: {
-        finding_id: findingId,
-        username: username,
-        value: value
-      }
-    };
-
-    try {
-      const response = await fetch('/hasura/v1/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-        },
-        body: JSON.stringify(mutation)
-      });
-
-      if (!response.ok) throw new Error('Network error');
-
-      const result = await response.json();
-      if (result.errors) throw new Error(result.errors[0].message);
-
-      console.log('Finding triage recorded successfully');
-    } catch (err) {
-      console.error('Failed to record finding triage:', err);
-      // Revert the local state if the server update failed
-      setTriageStates(prev => {
-        const newState = { ...prev };
-        delete newState[findingId];
-        return newState;
-      });
-    }
-  };
-
-  // Scroll just enough to keep the selected row visible. This sets the list element's scrollTop
-  // directly: react-window's scrollToItem goes through component state, and a scroll event handled
-  // before that state commits overwrites it, leaving the row hidden during fast key repeat.
-  useEffect(() => {
-    const outer = listRef.current;
-    if (!outer || !isTriageMode || selectedIndex < 0) return;
-    const rowTop = selectedIndex * ROW_HEIGHT;
-    if (rowTop < outer.scrollTop) {
-      outer.scrollTop = rowTop;
-    } else if (rowTop + ROW_HEIGHT > outer.scrollTop + outer.clientHeight) {
-      outer.scrollTop = rowTop + ROW_HEIGHT - outer.clientHeight;
-    }
-  }, [selectedIndex, isTriageMode]);
-
-  // Multi-selection only exists in triage mode: drop it when triage mode is turned off
-  useEffect(() => {
-    if (!isTriageMode) setSelectedFindings(prev => (prev.size ? new Set() : prev));
-  }, [isTriageMode]);
-
-  // Keep the triage selection on the same finding when the list changes (subscription updates,
-  // re-sorting, triaged rows dropping out of the filter), and clamp it if the list shrank.
-  useEffect(() => {
-    const prevFindings = prevFilteredFindingsRef.current;
-    prevFilteredFindingsRef.current = filteredFindings;
-    if (!isTriageMode || selectedIndex < 0 || filteredFindings.length === 0) return;
-
-    const prevId = prevFindings[selectedIndex]?.finding_id;
-    const newIndex = prevId === undefined ? -1 : filteredFindings.findIndex(f => f.finding_id === prevId);
-    if (newIndex >= 0) {
-      if (newIndex !== selectedIndex) setSelectedIndex(newIndex);
-    } else if (selectedIndex >= filteredFindings.length) {
-      setSelectedIndex(filteredFindings.length - 1);
-    }
-  }, [filteredFindings]);
-
-  // Handle initial selected finding and modal state from URL/navigation
-  useEffect(() => {
-    if (isLoading) return;
-
-    const selected = searchParams.get('selected');
-    const modalOpen = searchParams.get('modal');
-
-    if (selected && filteredFindings.length > 0 && selectedIndex === -1) {
-      const findingIndex = filteredFindings.findIndex(f => f.finding_id === parseInt(selected));
-      if (findingIndex >= 0) {
-        setSelectedIndex(findingIndex);
-        setSelectedFinding(filteredFindings[findingIndex]);
-        setIsTriageMode(true);
-      }
-
-      if (modalOpen) {
-        setIsModalOpen(true);
-      }
-    }
-  }, [filteredFindings, searchParams, selectedIndex, isLoading]);
-
-  // Initial data fetch
-  useEffect(() => {
-    const fetchFindings = async () => {
-      const query = {
-        query: `
-          query GetFindings {
-            findings(order_by: {created_at: desc}) {
-              finding_name
-              finding_id
-              object_id
-              origin_type
-              origin_name
-              category
-              severity
-              data
-              created_at
-              files_enriched {
-                path
-                agent_id
-                magic_type
-              }
-              finding_triage_histories(order_by: {timestamp: desc}, limit: 1) {
-                id
-                automated
-                username
-                value
-                explanation
-                confidence
-                true_positive_context
-                timestamp
-              }
-            }
-          }
-        `
-      };
-
-      try {
-        const response = await fetch('/hasura/v1/graphql', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-          },
-          body: JSON.stringify(query)
-        });
-
-        if (!response.ok) {
-          throw new Error(`Network response error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.errors) {
-          throw new Error(result.errors[0].message);
-        }
-
-        // Initialize triageStates from the fetched data
-        const initialTriageStates = {};
-        result.data.findings.forEach(finding => {
-          if (finding.finding_triage_histories && finding.finding_triage_histories.length > 0) {
-            initialTriageStates[finding.finding_id] = finding.finding_triage_histories[0].value;
-          }
-        });
-
-        setTriageStates(initialTriageStates);
-        setFindings(result.data.findings);
-      } catch (err) {
-        console.error('Error fetching findings:', err);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchFindings();
-  }, []);
-
-  // Set up subscription for real-time updates
-  useEffect(() => {
-    const subscription = {
-      query: `
-        subscription WatchFindings {
-          findings(order_by: {created_at: desc}) {
-            finding_name
-            finding_id
-            object_id
-            origin_type
-            origin_name
-            category
-            severity
-            data
-            created_at
-            files_enriched {
-              path
-              agent_id
-              magic_type
-            }
-            finding_triage_histories(order_by: {timestamp: desc}, limit: 1) {
-              id
-              automated
-              username
-              value
-              explanation
-              confidence
-              true_positive_context
-              timestamp
-            }
-          }
-        }
-      `
-    };
-
-    let unsubscribe;
-
-    (async () => {
-      unsubscribe = wsClient.subscribe(
-        subscription,
-        {
-          next: ({ data }) => {
-            if (data?.findings) {
-              // Update triage states when new data comes in
-              const newTriageStates = {};
-              data.findings.forEach(finding => {
-                if (finding.finding_triage_histories && finding.finding_triage_histories.length > 0) {
-                  newTriageStates[finding.finding_id] = finding.finding_triage_histories[0].value;
-                }
-              });
-              setTriageStates(newTriageStates);
-              setFindings(data.findings);
-            }
-          },
-          error: (err) => {
-            console.error('Subscription error:', err);
-            setError('Error in real-time updates. Please refresh the page.');
-          },
-          complete: () => {
-            // console.log('Subscription completed');
-          },
-        },
-      );
-    })();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, []);
-
+  const location = useLocation();
+  const navigate = useNavigate();
   const navigateToFile = useFileNavigation();
+  const { username } = useUser();
 
-  // If the modal is open, change its contents when up/down are used.
+  const { filters, sortColumn, sortDirection, page: urlPage } = readUrlState(searchParams);
+  const selectedParam = searchParams.get('selected');
+  const isModalOpen = searchParams.get('modal') === 'true';
+  const queryKey = JSON.stringify([filters, sortColumn, sortDirection]);
+
+  // Update URL params from the latest location (not a possibly stale render), replacing by default
+  const updateParams = useCallback((mutate, options = { replace: true }) => {
+    const params = new URLSearchParams(window.location.search);
+    mutate(params);
+    if (params.toString() !== new URLSearchParams(window.location.search).toString()) {
+      setSearchParams(params, options);
+    }
+  }, [setSearchParams]);
+
+  // Normalize the URL so it always carries the triage state and sort (as before)
   useEffect(() => {
-    if (isModalOpen && isTriageMode && selectedIndex >= 0 && filteredFindings[selectedIndex]) {
-      setSelectedFinding(filteredFindings[selectedIndex]);
-      setIsModalOpen(true);
-    }
-  }, [selectedIndex, filteredFindings, isTriageMode, isModalOpen]);
+    updateParams((p) => {
+      if (!p.get('triage_state')) p.set('triage_state', filters.triageState);
+      if (!p.get('sort_column')) p.set('sort_column', sortColumn);
+      if (!p.get('sort_direction')) p.set('sort_direction', sortDirection);
+    });
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update URL when selection or modal state changes
+  const setPage = useCallback((p) => {
+    updateParams((params) => {
+      if (p > 1) params.set('page', String(p));
+      else params.delete('page');
+    });
+  }, [updateParams]);
+
+  // Optimistic triage: finding_id -> { value, doneAt } until a fetch started after the write lands
+  const pendingTriage = useRef(new Map());
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  const withTriage = (finding, value) => ({
+    ...finding,
+    finding_triage_histories: [{
+      id: null, automated: false, username, value, explanation: null, confidence: null,
+      true_positive_context: null, timestamp: new Date().toISOString(),
+    }],
+  });
+
+  const transformRows = useCallback((rows, fetchStartedAt) => {
+    const pending = pendingTriage.current;
+    if (pending.size === 0) return { rows, dropped: 0 };
+    const { triageState, triageSource } = filtersRef.current;
+    let dropped = 0;
+    const out = [];
+    for (const row of rows) {
+      const p = pending.get(row.finding_id);
+      if (p && p.doneAt && fetchStartedAt > p.doneAt) {
+        pending.delete(row.finding_id);
+        out.push(row);
+      } else if (p) {
+        if (matchesAfterHumanTriage(p.value, triageState, triageSource)) out.push(withTriage(row, p.value));
+        else dropped++;
+      } else {
+        out.push(row);
+      }
+    }
+    return { rows: out, dropped };
+  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetcher = useCallback(({ offset, limit, knownTotal, withCount, signal }) => fetchPage({
+    table: 'findings',
+    fields: ROW_FIELDS,
+    where: buildFindingsWhere(filters),
+    orderBy: buildFindingsOrderBy(sortColumn, sortDirection),
+    offset, limit, knownTotal, withCount, signal,
+  }), [queryKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const list = usePagedList({
+    listKey: 'findings',
+    pageSize: PAGE_SIZE,
+    rowHeight: ROW_HEIGHT,
+    page: urlPage,
+    setPage,
+    queryKey,
+    fetcher,
+    getId: (f) => f.finding_id,
+    transformRows,
+    signalQueries: SIGNAL_QUERIES,
+  });
+  const listRef = useRef(list);
+  listRef.current = list;
+  const {
+    page, rows, rowsPage, total, totalPages, isLoading, isFetching, error, containerRef, nav,
+    isTriageMode, setIsTriageMode, selectedIndex, select, checked, setChecked,
+  } = list;
+
+  // Serialize triage writes so repeated presses on one finding land in order
+  const writeQueue = useRef(Promise.resolve());
+
+  const triage = useCallback((findingIds, value) => {
+    if (findingIds.length === 0) return;
+    const ids = [...new Set(findingIds)];
+    const { triageState, triageSource } = filtersRef.current;
+    const keep = matchesAfterHumanTriage(value, triageState, triageSource);
+    ids.forEach((id) => pendingTriage.current.set(id, { value, doneAt: null }));
+
+    // Update/drop the rows right away (selection stays on the same row, or the one that replaces it)
+    const idSet = new Set(ids);
+    const onPage = nav.current.rows.filter((r) => idSet.has(r.finding_id)).length;
+    listRef.current.updateRows((current) => {
+      const next = [];
+      for (const row of current) {
+        if (!idSet.has(row.finding_id)) next.push(row);
+        else if (keep) next.push(withTriage(row, value));
+      }
+      return next;
+    }, { totalDelta: keep ? 0 : -onPage });
+
+    writeQueue.current = writeQueue.current.then(async () => {
+      try {
+        const inserted = await hasuraRequest(`
+          mutation InsertTriage($objects: [findings_triage_history_insert_input!]!) {
+            insert_findings_triage_history(objects: $objects) { returning { id finding_id } }
+          }`, {
+          objects: ids.map((id) => ({ finding_id: id, username, value, automated: false })),
+        });
+        // Point each finding at its latest triage entry (lets the list filter/sort on it exactly)
+        await hasuraRequest(`
+          mutation SetLatestTriage($updates: [findings_updates!]!) {
+            update_findings_many(updates: $updates) { affected_rows }
+          }`, {
+          updates: inserted.insert_findings_triage_history.returning.map((r) => ({
+            where: { finding_id: { _eq: r.finding_id } },
+            _set: { triage_id: r.id },
+          })),
+        });
+        const doneAt = Date.now();
+        ids.forEach((id) => {
+          const p = pendingTriage.current.get(id);
+          if (p && p.value === value) p.doneAt = doneAt;
+        });
+      } catch (err) {
+        console.error('Failed to record finding triage:', err);
+        ids.forEach((id) => pendingTriage.current.delete(id));
+        listRef.current.refetch();
+      }
+    });
+  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleTriage = useCallback((findingId, value) => triage([findingId], value), [triage]);
+
+  // ----- Selection <-> URL -----
+  // Apply ?selected=<finding id> once the first page has loaded (turns triage mode on, as before)
+  const initialSelectionDone = useRef(false);
   useEffect(() => {
-    if (isLoading) return;
+    if (initialSelectionDone.current || isLoading) return;
+    initialSelectionDone.current = true;
+    if (!selectedParam) return;
+    const idx = rows.findIndex((f) => String(f.finding_id) === selectedParam);
+    if (idx >= 0) {
+      setIsTriageMode(true);
+      select(idx);
+    }
+  }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const newParams = new URLSearchParams(searchParams);
+  // (undefined while another page is loading: the index already refers to that page)
+  const selectedRow = selectedIndex >= 0 && rowsPage === page ? rows[selectedIndex] : undefined;
 
-    // Handle selected parameter
-    if (selectedIndex >= 0 && filteredFindings[selectedIndex]) {
-      newParams.set('selected', filteredFindings[selectedIndex].finding_id);
+  // Mirror the triage selection (finding id) into the URL. Outside triage mode ?selected only
+  // names the finding whose modal is open (set when it was opened).
+  useEffect(() => {
+    if (!initialSelectionDone.current || isLoading) return;
+    let id;
+    if (isTriageMode) {
+      if (!selectedRow) return;
+      id = String(selectedRow.finding_id);
     } else {
-      newParams.delete('selected');
+      if (isModalOpen) return;
+      id = null;
     }
+    if (id === selectedParam) return undefined;
+    // Debounced: every router update re-renders the app, which would slow down key repeat
+    const timer = setTimeout(() => updateParams((p) => (id ? p.set('selected', id) : p.delete('selected'))), 250);
+    return () => clearTimeout(timer);
+  }, [selectedRow, isTriageMode, isModalOpen, selectedParam, isLoading, updateParams]);
 
-    // Handle modal parameter
-    if (isModalOpen) {
-      newParams.set('modal', 'true');
+  // ----- Modal (open state lives in the URL so Back/Forward open and close it) -----
+  const openModal = useCallback((finding) => {
+    updateParams((p) => {
+      p.set('selected', String(finding.finding_id));
+      p.set('modal', 'true');
+    }, { replace: false, state: { findingModal: true } });
+  }, [updateParams]);
+
+  const closeModal = useCallback(() => {
+    if (location.state?.findingModal) {
+      navigate(-1);
     } else {
-      newParams.delete('modal');
+      updateParams((p) => p.delete('modal'));
     }
+  }, [location.state, navigate, updateParams]);
 
-    // Only update if the parameters have actually changed. Moving the selection replaces the
-    // history entry so Back isn't flooded with one entry per keypress; opening/closing the modal pushes.
-    if (newParams.toString() !== searchParams.toString()) {
-      setSearchParams(newParams, { replace: newParams.get('modal') === searchParams.get('modal') });
-    }
+  const modalFindingId = isModalOpen ? (selectedRow && (isTriageMode || String(selectedRow.finding_id) === selectedParam)
+    ? selectedRow.finding_id : parseInt(selectedParam, 10)) : null;
+  const [modalDetails, setModalDetails] = useState(null);
+  useEffect(() => {
+    if (!modalFindingId) return undefined;
+    let cancelled = false;
+    hasuraRequest(`
+      query FindingDetails($id: bigint!) {
+        findings_by_pk(finding_id: $id) { ${ROW_FIELDS} data }
+      }`, { id: modalFindingId })
+      .then((data) => { if (!cancelled) setModalDetails(data.findings_by_pk); })
+      .catch((err) => console.error('Failed to load finding details:', err));
+    return () => { cancelled = true; };
+  }, [modalFindingId]);
 
-  }, [searchParams, selectedIndex, filteredFindings, isLoading, isModalOpen]);
+  const modalFinding = useMemo(() => {
+    if (!modalFindingId) return null;
+    const row = rows.find((f) => f.finding_id === modalFindingId);
+    const details = modalDetails?.finding_id === modalFindingId ? modalDetails : null;
+    if (!row && !details) return null;
+    // Row carries the optimistic triage state; details carry the data
+    return { ...(details || {}), ...(row || {}), data: details ? details.data : undefined };
+  }, [modalFindingId, rows, modalDetails]);
 
-  // Keyboard navigation logic
+  // ----- Sorting / filters -----
+  const handleSort = useCallback((column, direction) => {
+    updateParams((p) => {
+      p.set('sort_column', column);
+      p.set('sort_direction', direction);
+      p.delete('page');
+    });
+  }, [updateParams]);
+
+  const handleFiltersChange = useCallback((changes) => {
+    updateParams((p) => {
+      const next = { ...filtersRef.current, ...changes };
+      const setOrDelete = (key, value) => (value ? p.set(key, value) : p.delete(key));
+      setOrDelete('category', next.categories.length < ALL_CATEGORIES.length ? next.categories.join(',') : '');
+      setOrDelete('severity', next.severities.length < ALL_SEVERITIES.length ? next.severities.join(',') : '');
+      setOrDelete('search', next.search);
+      p.set('triage_state', next.triageState);
+      setOrDelete('triage_source', next.triageSource !== 'all' ? next.triageSource : '');
+      setOrDelete('object_id', next.objectId);
+      p.delete('page');
+    });
+  }, [updateParams]);
+
+  // ----- Row callbacks (stable, so memoized rows only re-render when their own props change) -----
+  const handleRowClick = useCallback((finding, index) => {
+    if (nav.current.triage) select(index);
+    openModal(finding);
+  }, [openModal, select, nav]);
+
+  // ----- Keyboard -----
+  const keyState = useRef({});
+  keyState.current = { isModalOpen, closeModal, openModal, triage, navigateToFile };
+
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ignore keyboard shortcuts when focus is on an input or textarea element
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
-        return;
-      }
+      if (isEditableTarget(e.target)) return;
+      const { isModalOpen: modalOpen, closeModal: close } = keyState.current;
+      const n = nav.current;
 
-      // Handle global keyboard actions on the Findings page
       switch (e.key) {
         case 'ArrowLeft':
         case 'Escape':
           e.preventDefault();
-          if (isModalOpen) {
-            setIsModalOpen(false);
-          }
+          if (modalOpen) close();
           break;
         case 't':
+          if (e.ctrlKey || e.metaKey || e.altKey) return;
           e.preventDefault();
-          setIsTriageMode(value => {
-            const isTriageMode = !value;
-            if (isTriageMode && selectedIndex === -1) {
-              setSelectedIndex(0);
-            }
-            return isTriageMode;
-          });
+          if (!n.triage && n.index < 0) select(0);
+          setIsTriageMode((v) => !v);
           return;
-      }
-
-      // Handle keyboard shortcuts when in triage mode
-      if (!isTriageMode) return;
-
-      // Select all with Ctrl/Cmd + A
-      if (!isModalOpen && (e.ctrlKey || e.metaKey) && e.key === 'a') {
-        e.preventDefault();
-        const newSelection = new Set(filteredFindings.map(f => f.finding_id));
-        setSelectedFindings(newSelection);
-        return;
-      }
-
-      const filteredFindingsLength = filteredFindings.length;
-
-      switch (e.key) {
-        case 'Escape':
+        case 'PageDown':
+        case 'PageUp':
+          if (modalOpen || e.ctrlKey || e.metaKey || e.altKey) return;
           e.preventDefault();
-          setSelectedFindings(new Set());
-          break;
-
-        case 'ArrowUp':
-          e.preventDefault();
-          lastDirection.current = 'up';
-          setSelectedIndex(prev => Math.max(0, prev - 1));
-          break;
-
-        case 'ArrowDown':
-          e.preventDefault();
-          lastDirection.current = 'down';
-          setSelectedIndex(prev => Math.min(filteredFindingsLength - 1, prev + 1));
-          break;
-
-        case 'ArrowRight':
-          e.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
-            if (isModalOpen) {
-              setIsModalOpen(true);
-              navigateToFile(filteredFindings[selectedIndex]);
-            } else {
-              setSelectedFinding(filteredFindings[selectedIndex]);
-              setIsModalOpen(true);
-            }
+          {
+            const dir = e.key === 'PageDown' ? 1 : -1;
+            listRef.current.run(() => listRef.current.pageKey(dir));
           }
-          break;
-
-        case '1':
-          e.preventDefault();
-          // With a multi-selection, the bulk handler below triages only the selected findings
-          if (selectedFindings.size === 0 && selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
-            handleTriage(filteredFindings[selectedIndex].finding_id, 'true_positive');
-          }
-          break;
-        case '2':
-          e.preventDefault();
-          // With a multi-selection, the bulk handler below triages only the selected findings
-          if (selectedFindings.size === 0 && selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
-            handleTriage(filteredFindings[selectedIndex].finding_id, 'false_positive');
-          }
-          break;
-        case '3':
-          e.preventDefault();
-          // With a multi-selection, the bulk handler below triages only the selected findings
-          if (selectedFindings.size === 0 && selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
-            handleTriage(filteredFindings[selectedIndex].finding_id, 'needs_review');
-          }
-          break;
-
-        case ' ':
-          e.preventDefault();
-          if (selectedIndex >= 0 && selectedIndex < filteredFindingsLength) {
-            const newSelection = new Set(selectedFindings);
-            const findingId = filteredFindings[selectedIndex].finding_id;
-            if (newSelection.has(findingId)) {
-              newSelection.delete(findingId);
-            } else {
-              newSelection.add(findingId);
-            }
-            setSelectedFindings(newSelection);
-          }
+          return;
+        default:
           break;
       }
 
+      if (!n.triage) return;
 
-      // Handle Shift + Arrow navigation to select multiple findings
-      if (e.shiftKey && isTriageMode && selectedIndex >= 0) {
-        switch (e.key) {
-          case 'ArrowDown':
-            e.preventDefault();
-            const nextIndex = Math.min(filteredFindings.length - 1, selectedIndex + 1);
-            const newSelection = new Set(selectedFindings);
-            newSelection.add(filteredFindings[selectedIndex].finding_id);
-            newSelection.add(filteredFindings[nextIndex].finding_id);
-            setSelectedFindings(newSelection);
-            setSelectedIndex(nextIndex);
+      const ctrlA = (e.ctrlKey || e.metaKey) && e.key === 'a';
+      if (ctrlA && modalOpen) return;
+      if (!ctrlA && !['Escape', 'ArrowUp', 'ArrowDown', 'ArrowRight', '1', '2', '3', ' '].includes(e.key)) return;
+      if (e.key !== 'Escape') e.preventDefault();
+      const { key, shiftKey } = e;
+      const l = listRef.current;
+
+      // Row actions run in order once a page that is still loading has arrived
+      l.run(() => {
+        const row = l.currentRow();
+        if (ctrlA) {
+          setChecked(new Set(n.rows.map((f) => f.finding_id)));
+          return;
+        }
+        switch (key) {
+          case 'Escape':
+            if (n.checked.size) setChecked(new Set());
             break;
           case 'ArrowUp':
-            e.preventDefault();
-            const prevIndex = Math.max(0, selectedIndex - 1);
-            const newSelectionUp = new Set(selectedFindings);
-            newSelectionUp.add(filteredFindings[selectedIndex].finding_id);
-            newSelectionUp.add(filteredFindings[prevIndex].finding_id);
-            setSelectedFindings(newSelectionUp);
-            setSelectedIndex(prevIndex);
+          case 'ArrowDown': {
+            const delta = key === 'ArrowDown' ? 1 : -1;
+            if (shiftKey) l.extendSelection(delta);
+            else l.moveSelection(delta);
             break;
-        }
-      }
-
-      // Bulk triage shortcuts
-      if (selectedFindings.size > 0 && isTriageMode) {
-        switch (e.key) {
+          }
+          case 'ArrowRight':
+            if (!row) break;
+            if (keyState.current.isModalOpen) keyState.current.navigateToFile(row);
+            else keyState.current.openModal(row);
+            break;
           case '1':
-            e.preventDefault();
-            handleBulkTriage('true_positive');
-            break;
           case '2':
-            e.preventDefault();
-            handleBulkTriage('false_positive');
+          case '3': {
+            const value = { 1: 'true_positive', 2: 'false_positive', 3: 'needs_review' }[key];
+            if (n.checked.size > 0) {
+              keyState.current.triage([...n.checked], value);
+              setChecked(new Set());
+            } else if (row) {
+              keyState.current.triage([row.finding_id], value);
+            }
             break;
-          case '3':
-            e.preventDefault();
-            handleBulkTriage('needs_review');
+          }
+          case ' ':
+            if (row) {
+              const set = new Set(n.checked);
+              if (set.has(row.finding_id)) set.delete(row.finding_id);
+              else set.add(row.finding_id);
+              setChecked(set);
+            }
+            break;
+          default:
             break;
         }
-      }
+      });
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTriageMode, selectedIndex, filteredFindings, isModalOpen, selectedFindings]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) {
+  if (error && rows.length === 0) {
     return <Alert title="Error" variant="error">Failed to load findings: {error}</Alert>;
   }
-
 
   return (
     <div className="bg-white dark:bg-dark-secondary rounded-lg shadow flex flex-col h-[calc(100vh-1rem)]">
       {/* Triage mode indicator */}
-      {isTriageMode ? (
-        <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
-          <p className="text-sm text-blue-600 dark:text-blue-400">
-            Triage Mode Active: ↑↓ to navigate, → to view details. Select multiple with Shift + ↑↓, hitting space, or Ctrl+A. Clear selection with ESC. Triage selected results with 1, 2, or 3 keys.
-          </p>
-        </div>
-      ) : (
-        <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
-          <p className="text-sm text-blue-600 dark:text-blue-400">
-            Press 't' to enter triage mode
-          </p>
-        </div>
-      )}
+      <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
+        <p className="text-sm text-blue-600 dark:text-blue-400">
+          {isTriageMode
+            ? 'Triage Mode Active: ↑↓ to navigate (PgUp/PgDn to jump), → to view details. Select multiple with Shift + ↑↓, hitting space, or Ctrl+A. Clear selection with ESC. Triage selected results with 1, 2, or 3 keys.'
+            : "Press 't' to enter triage mode"}
+        </p>
+      </div>
 
       {/* Filters section */}
-      <FindingsFilters
-        findings={findings}
-        onFilteredDataChange={setFilteredFindings}
-        sortColumn={sortColumn}
-        sortDirection={sortDirection}
-      />
+      <FindingsFilters filters={filters} onChange={handleFiltersChange} totalCount={total} />
 
       {/* Findings Table - fills the remaining viewport height so the list never extends below the window */}
       <div className="overflow-x-auto flex-1 min-h-0 flex flex-col">
-        {/* Headers - Keep these outside the virtualized area */}
         <TableHeaders
           isTriageMode={isTriageMode}
           sortColumn={sortColumn}
@@ -581,56 +446,69 @@ const FindingsList = () => {
           onSort={handleSort}
         />
 
-        {/* Virtualized List or No Findings Message */}
-        {isLoading ? (
+        {isLoading && rows.length === 0 ? (
           <div className="flex justify-center py-4">
             <div className="animate-spin rounded-full h-10 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
           </div>
-        ) : findings.length === 0 ? (
-          <NoFindings />
-        ) : filteredFindings.length === 0 ? (
-          <NoFilteredFindings />
+        ) : rows.length === 0 && !isFetching ? (
+          <NoResults />
         ) : (
-          <div className="flex-1 min-h-0">
-            <AutoSizer>
-              {({ height, width }) => (
-                <List
-                  outerRef={listRef}
-                  height={height}
-                  width={width}
-                  initialScrollOffset={isTriageMode && selectedIndex > 0 ? Math.max(0, selectedIndex * ROW_HEIGHT - height / 2) : 0}
-                  itemCount={filteredFindings.length}
-                  itemSize={ROW_HEIGHT}
-                  itemData={{
-                    findings: filteredFindings,
-                    isTriageMode,
-                    selectedIndex,
-                    selectedFindings,
-                    handleTriage,
-                    triageStates,
-                    setSelectedFinding,
-                    setIsModalOpen,
-                    setSelectedIndex
-                  }}
-                >
-                  {TableRow}
-                </List>
-              )}
-            </AutoSizer>
+          <div
+            ref={containerRef}
+            className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden transition-opacity ${isFetching && nav.current.loading ? 'opacity-60' : ''}`}
+          >
+            {rows.map((finding, index) => (
+              <TableRow
+                key={finding.finding_id}
+                finding={finding}
+                index={index}
+                height={ROW_HEIGHT}
+                isTriageMode={isTriageMode}
+                isSelected={isTriageMode && index === selectedIndex && rowsPage === page}
+                isChecked={isTriageMode && checked.has(finding.finding_id)}
+                onRowClick={handleRowClick}
+                onTriage={handleTriage}
+              />
+            ))}
           </div>
+        )}
+        {error && rows.length > 0 && (
+          <div className="px-4 py-1 text-sm text-red-600 dark:text-red-400">Failed to refresh findings: {error}</div>
         )}
       </div>
 
+      {typeof total === 'number' && total > 0 && (
+        <PaginationControls
+          currentPage={Math.min(page, totalPages)}
+          totalPages={totalPages}
+          totalCount={total}
+          pageSize={PAGE_SIZE}
+          itemLabel="findings"
+          onPageChange={(p) => {
+            if (p >= 1 && p <= totalPages) list.goToPage(p);
+          }}
+        />
+      )}
+
       <FindingModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setSelectedFinding(null);
-        }}
-        finding={selectedFinding}
+        isOpen={isModalOpen && !!modalFinding}
+        onClose={closeModal}
+        finding={modalFinding}
       />
     </div>
   );
+};
+
+// Empty result: tell "no findings at all" apart from "none match the filters" with a 1-row query
+const NoResults = () => {
+  const [anyFindings, setAnyFindings] = useState(null);
+  useEffect(() => {
+    hasuraRequest('query AnyFinding { findings(limit: 1) { finding_id } }')
+      .then((data) => setAnyFindings(data.findings.length > 0))
+      .catch(() => setAnyFindings(true));
+  }, []);
+  if (anyFindings === null) return null;
+  return anyFindings ? <NoFilteredFindings /> : <NoFindings />;
 };
 
 const NoFindings = () => {
@@ -649,29 +527,14 @@ const NoFindings = () => {
 };
 
 const NoFilteredFindings = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
 
-  // Function to handle viewing all findings
+  // Reset to the default filters (untriaged + actionable), keeping the sort
   const handleViewAllFindings = () => {
-    // Get the current search params
-    const newParams = new URLSearchParams(searchParams);
-
-    // Explicitly set triage_state to "untriaged_and_actionable" (the new default)
-    newParams.set('triage_state', 'untriaged_and_actionable');
-
-    // Clear other filter parameters that might be causing the filtering
-    newParams.delete('category');
-    newParams.delete('severity');
-    newParams.delete('origin');
-    newParams.delete('triage_source');
-    newParams.delete('object_id');
-
-    // Update the URL with the new parameters
-    setSearchParams(newParams, { replace: false });
-
-    // Force a page reload to ensure all components re-initialize with the new parameters
-    // This bypasses any issues with state management in the FilterFindings component
-    window.location.href = `/findings?${newParams.toString()}`;
+    const params = new URLSearchParams(window.location.search);
+    params.set('triage_state', DEFAULT_TRIAGE_STATE);
+    ['category', 'severity', 'search', 'origin', 'triage_source', 'object_id', 'page', 'selected', 'modal'].forEach((k) => params.delete(k));
+    setSearchParams(params, { replace: false });
   };
 
   return (
@@ -693,7 +556,5 @@ const NoFilteredFindings = () => {
     </div>
   );
 };
-
-
 
 export default FindingsList;

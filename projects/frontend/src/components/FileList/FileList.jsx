@@ -1,30 +1,15 @@
 import Tooltip from '@/components/shared/Tooltip2';
-import { useTriageMode } from '@/contexts/TriageModeContext';
 import { useUser } from '@/contexts/UserContext';
-import { createClient } from 'graphql-ws';
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, Search, Tag, X } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import AutoSizer from 'react-virtualized-auto-sizer';
-import { FixedSizeList as List } from 'react-window';
-import { CONFIG_FILE_EXTENSIONS, OFFICE_EXTENSIONS, SOURCE_CODE_EXTENSIONS } from './fileExtensions';
-
-
-const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsUrl = `${wsProtocol}//${window.location.host}/hasura/v1/graphql`;
-
-const wsClient = createClient({
-  url: wsUrl,
-  connectionParams: {
-    headers: {
-      'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-    },
-  },
-});
+import { fetchPage, hasuraRequest, isEditableTarget } from '@/hooks/pagedList';
+import { usePagedList } from '@/hooks/usePagedList';
+import { AlertTriangle, ChevronDown, ChevronUp, Eye, Search, Tag, X } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { FILES_PAGE_SIZE, FILE_SORT_COLUMNS, buildFilesOrderBy, buildFilesWhere } from './fileQuery';
+import PaginationControls from './PaginationControls';
 
 const ROW_HEIGHT = 48;
-const PAGINATION_THRESHOLD = 10000;
-const PAGE_SIZE = 100;
+const PAGE_SIZE = FILES_PAGE_SIZE;
 
 export const formatFileSize = (bytes, decimals = 2) => {
   if (bytes === 0) return '0 Bytes';
@@ -36,47 +21,34 @@ export const formatFileSize = (bytes, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
 };
 
+// Prevent tooltip clicks from triggering row navigation
+const stopPropagation = (e) => e.stopPropagation();
 
-const Row = React.memo(({ index, style, data }) => {
-  const {
-    files,
-    isTriageMode,
-    selectedIndex,
-    selectedFiles,
-    handleRowClick,
-    navigate,
-    username
-  } = data;
-  const file = files[index];
-
-  // Prevent tooltip clicks from triggering row navigation
-  const handleTooltipClick = (e) => {
-    e.stopPropagation();
-  };
-
+// One file row. Per-row props + stable callbacks so React.memo skips rows whose selection
+// state didn't change (keyboard navigation re-renders only two rows).
+const Row = React.memo(({ file, index, isTriageMode, isSelected, isChecked, onRowClick, username }) => {
+  const findingsCount = file.findingsByObjectId_aggregate.aggregate.count || 0;
   return (
     <div
-      style={style}
+      style={{ height: ROW_HEIGHT }}
+      data-row-index={index}
+      data-object-id={file.object_id}
       className={`
         flex items-center border-b dark:border-gray-700 cursor-pointer transition-colors
         dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700
-        ${isTriageMode && selectedFiles.has(file.object_id) ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
-        ${isTriageMode && index === selectedIndex ? '!bg-blue-50 dark:!bg-blue-900/20' : ''}
+        ${isTriageMode && isChecked ? '!bg-blue-100 dark:!bg-blue-900/30' : ''}
+        ${isTriageMode && isSelected ? '!bg-blue-50 dark:!bg-blue-900/20' : ''}
       `}
-      onClick={(e) => handleRowClick(e, file, index)}
+      onClick={(e) => onRowClick(e, file, index)}
     >
       {isTriageMode && (
         <div className="w-8 px-2 text-center text-gray-400">
-          {index === selectedIndex ? '✓' : ''}
+          {isSelected ? '✓' : ''}
         </div>
       )}
       <div className="px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left">
         <Tooltip
-          content={
-            <div onClick={handleTooltipClick} className="select-text">
-              {file.agent_id}
-            </div>
-          }
+          content={<div onClick={stopPropagation} className="select-text">{file.agent_id}</div>}
           side="top"
           align="start"
         >
@@ -85,11 +57,7 @@ const Row = React.memo(({ index, style, data }) => {
       </div>
       <div className="px-2 flex-shrink-0 w-40 text-sm text-gray-500 dark:text-gray-400 text-left">
         <Tooltip
-          content={
-            <div onClick={handleTooltipClick} className="select-text">
-              {file.source || 'Unknown'}
-            </div>
-          }
+          content={<div onClick={stopPropagation} className="select-text">{file.source || 'Unknown'}</div>}
           side="top"
           align="start"
         >
@@ -100,11 +68,7 @@ const Row = React.memo(({ index, style, data }) => {
       <div className="px-2 flex-shrink-0 w-44 text-sm text-gray-500 dark:text-gray-400 text-left">{new Date(file.timestamp).toLocaleString()}</div>
       <div className="px-2 flex-shrink-0 w-48 text-sm text-sm text-gray-500 dark:text-gray-400 text-left">
         <Tooltip
-          content={
-            <div onClick={handleTooltipClick} className="select-text">
-              {file.magic_type || 'Unknown'}
-            </div>
-          }
+          content={<div onClick={stopPropagation} className="select-text">{file.magic_type || 'Unknown'}</div>}
           side="top"
         >
           <span className="inline-block max-w-full px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300 truncate">
@@ -113,8 +77,8 @@ const Row = React.memo(({ index, style, data }) => {
         </Tooltip>
       </div>
       <div className="px-2 flex-shrink-0 w-12 text-sm flex items-center justify-center h-full text-center">
-        <span className={`inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs ${file.findingsByObjectId_aggregate.aggregate.count > 0 ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
-          {file.findingsByObjectId_aggregate.aggregate.count || 0}
+        <span className={`inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs ${findingsCount > 0 ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
+          {findingsCount}
         </span>
       </div>
       <div className="px-6 flex-grow text-sm text-gray-500 dark:text-gray-400 truncate text-left relative">
@@ -122,11 +86,7 @@ const Row = React.memo(({ index, style, data }) => {
           <div className="absolute left top-1/2 transform -translate-y-1/2 w-1.5 h-1.5 bg-blue-400 opacity-60 rounded-full" title="Unviewed by you"></div>
         )}
         <Tooltip
-          content={
-            <div onClick={handleTooltipClick} className="select-text">
-              {file.path}
-            </div>
-          }
+          content={<div onClick={stopPropagation} className="select-text">{file.path}</div>}
           side="top"
           align="start"
           maxWidth="full"
@@ -164,911 +124,360 @@ const SortableHeader = ({ children, column, currentSort, currentDirection, onSor
   );
 };
 
-// Pagination controls component
-const PaginationControls = ({ currentPage, totalPages, totalCount, onPageChange }) => {
-  const maxVisiblePages = 7;
-  const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-  const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+const FILE_FIELDS = `
+  object_id
+  agent_id
+  source
+  file_name
+  size
+  path
+  timestamp
+  extension
+  magic_type
+  mime_type
+  is_plaintext
+  file_tags
+  findingsByObjectId_aggregate { aggregate { count } }
+  files_view_histories(where: {username: {_eq: $username}}, order_by: {timestamp: desc}, limit: 1) { username timestamp }`;
 
-  const pageNumbers = [];
-  for (let i = startPage; i <= endPage; i++) {
-    pageNumbers.push(i);
-  }
+// Tiny live queries: new files, new findings or new views refresh the current page
+const SIGNAL_QUERIES = [
+  'subscription FilesChanged { files_enriched_aggregate { aggregate { max { created_at } } } }',
+  'subscription FindingsChanged { findings_aggregate { aggregate { max { finding_id } } } }',
+  'subscription FileViewsChanged { files_view_history_aggregate { aggregate { max { id } } } }',
+];
 
+const FILE_TYPES = ['all', 'plaintext', 'binary', 'source', 'office', 'config'];
+const VIEW_STATES = ['unviewed', 'unviewed_by_me', 'all'];
+
+// Filters, sort and page all live in the URL
+const readUrlState = (searchParams) => {
+  const type = searchParams.get('type');
+  const viewState = searchParams.get('view_state');
+  const sortColumn = searchParams.get('sort_column');
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  return {
+    filters: {
+      fileType: FILE_TYPES.includes(type) ? type : 'all',
+      source: searchParams.get('source') || '',
+      path: searchParams.get('path') || '',
+      objectId: searchParams.get('object_id') || '',
+      tag: searchParams.get('tag') || '',
+      viewState: VIEW_STATES.includes(viewState) ? viewState : 'all',
+      onlyWithFindings: searchParams.get('findings') === 'true',
+    },
+    sortColumn: FILE_SORT_COLUMNS.includes(sortColumn) ? sortColumn : 'timestamp',
+    sortDirection: searchParams.get('sort_direction') === 'asc' ? 'asc' : 'desc',
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+  };
+};
+
+// Text filter box that updates its (server-side) filter after a short pause in typing
+const DebouncedInput = ({ value, onChange, ...props }) => {
+  const [text, setText] = useState(value);
+  const timer = useRef(null);
+  useEffect(() => { setText(value); }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t dark:border-gray-700">
-      <div className="flex-1 flex justify-between sm:hidden">
-        <button
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="relative inline-flex items-center px-4 py-2 border dark:border-gray-700 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-secondary hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Previous
-        </button>
-        <button
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="ml-3 relative inline-flex items-center px-4 py-2 border dark:border-gray-700 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-secondary hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Next
-        </button>
-      </div>
-      <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm text-gray-700 dark:text-gray-300">
-            Showing <span className="font-medium">{(currentPage - 1) * PAGE_SIZE + 1}</span> to{' '}
-            <span className="font-medium">
-              {Math.min(currentPage * PAGE_SIZE, totalCount)}
-            </span>{' '}
-            of <span className="font-medium">{totalCount.toLocaleString()}</span> results
-          </p>
-        </div>
-        <div>
-          <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-            <button
-              onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="relative inline-flex items-center px-2 py-2 rounded-l-md border dark:border-gray-700 bg-white dark:bg-dark-secondary text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-
-            {startPage > 1 && (
-              <>
-                <button
-                  onClick={() => onPageChange(1)}
-                  className="bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 relative inline-flex items-center px-4 py-2 text-sm font-medium"
-                >
-                  1
-                </button>
-                {startPage > 2 && (
-                  <span className="relative inline-flex items-center px-4 py-2 border dark:border-gray-700 bg-white dark:bg-dark-secondary text-sm font-medium text-gray-700 dark:text-gray-300">
-                    ...
-                  </span>
-                )}
-              </>
-            )}
-
-            {pageNumbers.map((page) => (
-              <button
-                key={page}
-                onClick={() => onPageChange(page)}
-                className={`${currentPage === page
-                  ? 'z-10 bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  } relative inline-flex items-center px-4 py-2 text-sm font-medium`}
-              >
-                {page}
-              </button>
-            ))}
-
-            {endPage < totalPages && (
-              <>
-                {endPage < totalPages - 1 && (
-                  <span className="relative inline-flex items-center px-4 py-2 border dark:border-gray-700 bg-white dark:bg-dark-secondary text-sm font-medium text-gray-700 dark:text-gray-300">
-                    ...
-                  </span>
-                )}
-                <button
-                  onClick={() => onPageChange(totalPages)}
-                  className="bg-white dark:bg-dark-secondary border dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 relative inline-flex items-center px-4 py-2 text-sm font-medium"
-                >
-                  {totalPages}
-                </button>
-              </>
-            )}
-
-            <button
-              onClick={() => onPageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-              className="relative inline-flex items-center px-2 py-2 rounded-r-md border dark:border-gray-700 bg-white dark:bg-dark-secondary text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </nav>
-        </div>
-      </div>
-    </div>
+    <input
+      {...props}
+      value={text}
+      onChange={(e) => {
+        const v = e.target.value;
+        setText(v);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => onChange(v), 300);
+      }}
+    />
   );
 };
 
-
 const FileList = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [files, setFiles] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const { isTriageMode, setIsTriageMode, selectedIndex, setSelectedIndex } = useTriageMode('files');
-  const [selectedFiles, setSelectedFiles] = useState(new Set());
-  const pageListRef = useRef(null);
-  const prevFilesRef = useRef([]);
   const { username } = useUser();
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  // null until the first count query says which mode applies, so no live subscription starts
-  // before we know the result set is small enough to stream
-  const [isPaginated, setIsPaginated] = useState(null);
-  // Bumped to force a re-fetch (e.g. when the live subscription grows past the threshold)
-  const [refetchKey, setRefetchKey] = useState(0);
-
-  // Filter states initialized from URL parameters
-  const [fileTypeFilter, setFileTypeFilter] = useState(() => searchParams.get('type') || 'all');
-  const [sourceFilter, setSourceFilter] = useState(() => searchParams.get('source') || '');
-  const [pathFilter, setPathFilter] = useState(() => searchParams.get('path') || '');
-  const [objectIdFilter, setObjectIdFilter] = useState(() => searchParams.get('object_id') || '');
-  const [sortColumn, setSortColumn] = useState(() => searchParams.get('sort_column') || 'timestamp');
-  const [sortDirection, setSortDirection] = useState(() => searchParams.get('sort_direction') || 'desc');
-  const [viewFilter, setViewFilter] = useState(() => searchParams.get('view_state') || 'all');
-  const [showOnlyWithFindings, setShowOnlyWithFindings] = useState(false);
+  const { filters, sortColumn, sortDirection, page: urlPage } = readUrlState(searchParams);
+  const queryKey = JSON.stringify([filters, sortColumn, sortDirection, username]);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   const [availableTags, setAvailableTags] = useState([]);
-  const [selectedTag, setSelectedTag] = useState('');
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
   const tagDropdownRef = useRef(null);
 
-  // Calculate total pages
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-
-  // Handle column sorting
-  const handleSort = (column, direction) => {
-    setSortColumn(column);
-    setSortDirection(direction);
-    setCurrentPage(1); // Reset to first page on sort change
-  };
-
-  const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      // Reset selection when changing pages (to the new page's first row while triaging)
-      setSelectedIndex(isTriageMode ? (newPage - 1) * PAGE_SIZE : -1);
-      setSelectedFiles(new Set());
+  // Update URL params from the latest location (not a possibly stale render), replacing by default
+  const updateParams = useCallback((mutate, options = { replace: true }) => {
+    const params = new URLSearchParams(window.location.search);
+    mutate(params);
+    if (params.toString() !== new URLSearchParams(window.location.search).toString()) {
+      setSearchParams(params, options);
     }
-  };
+  }, [setSearchParams]);
 
-  const handleRowClick = (e, file, index) => {
-    if (isTriageMode) {
-      const actualIndex = isPaginated ? (currentPage - 1) * PAGE_SIZE + index : index;
-
-      if (e.shiftKey && selectedIndex !== -1) {
-        // For paginated mode, only allow shift selection within current page
-        if (isPaginated) {
-          const pageStartIndex = (currentPage - 1) * PAGE_SIZE;
-          const pageEndIndex = Math.min(pageStartIndex + PAGE_SIZE, totalCount);
-
-          if (selectedIndex >= pageStartIndex && selectedIndex < pageEndIndex) {
-            const start = Math.min(selectedIndex - pageStartIndex, index);
-            const end = Math.max(selectedIndex - pageStartIndex, index);
-            const newSelection = new Set(selectedFiles);
-            for (let i = start; i <= end; i++) {
-              newSelection.add(files[i].object_id);
-            }
-            setSelectedFiles(newSelection);
-          }
-        } else {
-          const start = Math.min(selectedIndex, actualIndex);
-          const end = Math.max(selectedIndex, actualIndex);
-          const newSelection = new Set(selectedFiles);
-          for (let i = start; i <= end; i++) {
-            newSelection.add(files[i].object_id);
-          }
-          setSelectedFiles(newSelection);
-        }
-      } else if (e.ctrlKey || e.metaKey) {
-        const newSelection = new Set(selectedFiles);
-        if (newSelection.has(file.object_id)) {
-          newSelection.delete(file.object_id);
-        } else {
-          newSelection.add(file.object_id);
-        }
-        setSelectedFiles(newSelection);
-      } else {
-        setSelectedFiles(new Set([file.object_id]));
-      }
-      setSelectedIndex(actualIndex);
-    } else if (!e.target.closest('button')) {
-      // Get current search params to preserve them
-      const currentSearch = searchParams.toString();
-      navigate(`/files/${file.object_id}${currentSearch ? `?${currentSearch}` : ''}`);
-    }
-  };
-
-  const toggleDropdown = () => {
-    setIsTagDropdownOpen(!isTagDropdownOpen);
-  };
-
-  // Multi-selection only exists in triage mode: drop it when triage mode is turned off
+  // Normalize the URL so it always carries the view state and sort (as before)
   useEffect(() => {
-    if (!isTriageMode) setSelectedFiles(prev => (prev.size ? new Set() : prev));
-  }, [isTriageMode]);
-
-  // Outer (scrolling) element of the virtualized list
-  const listRef = useRef(null);
-  // Scroll the list container just enough to keep the selected row visible (isLoading/currentPage
-  // re-run this once a new page has rendered). This sets scrollTop directly: react-window's
-  // scrollToItem goes through component state, and a scroll event handled before that state
-  // commits overwrites it, leaving the row hidden during fast key repeat.
-  useEffect(() => {
-    const container = isPaginated ? pageListRef.current : listRef.current;
-    if (!container || !isTriageMode || selectedIndex < 0) return;
-    const rowIndex = isPaginated ? selectedIndex - (currentPage - 1) * PAGE_SIZE : selectedIndex;
-    const rowTop = rowIndex * ROW_HEIGHT;
-    if (rowTop < container.scrollTop) {
-      container.scrollTop = rowTop;
-    } else if (rowTop + ROW_HEIGHT > container.scrollTop + container.clientHeight) {
-      container.scrollTop = rowTop + ROW_HEIGHT - container.clientHeight;
-    }
-  }, [selectedIndex, isTriageMode, isPaginated, currentPage, isLoading]);
-
-  // Keep the triage selection on the same file when the list changes (subscription updates,
-  // files dropping out of a view filter), and clamp it to the rows currently shown.
-  useEffect(() => {
-    const prevFiles = prevFilesRef.current;
-    prevFilesRef.current = files;
-    if (!isTriageMode || selectedIndex < 0 || files.length === 0) return;
-
-    const pageStart = isPaginated ? (currentPage - 1) * PAGE_SIZE : 0;
-    const prevId = prevFiles[selectedIndex - pageStart]?.object_id;
-    const newIndex = prevId === undefined ? -1 : files.findIndex(f => f.object_id === prevId);
-    if (newIndex >= 0) {
-      if (pageStart + newIndex !== selectedIndex) setSelectedIndex(pageStart + newIndex);
-    } else {
-      const clamped = Math.min(Math.max(selectedIndex, pageStart), pageStart + files.length - 1);
-      if (clamped !== selectedIndex) setSelectedIndex(clamped);
-    }
-  }, [files]);
-
-  // Build where clause for queries
-  const buildWhereClause = () => {
-    const conditions = [];
-
-    // Base condition for files
-    conditions.push({
-      _or: [
-        { originating_object_id: { _is_null: true } },
-        {
-          _and: [
-            { originating_object_id: { _is_null: false } },
-            { nesting_level: { _is_null: false } },
-            { nesting_level: { _gt: 0 } }
-          ]
-        }
-      ]
+    updateParams((p) => {
+      if (!p.get('view_state')) p.set('view_state', filters.viewState);
+      if (!p.get('sort_column')) p.set('sort_column', sortColumn);
+      if (!p.get('sort_direction')) p.set('sort_direction', sortDirection);
     });
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Add filter conditions
-    if (showOnlyWithFindings) {
-      conditions.push({
-        findingsByObjectId_aggregate: {
-          count: {
-            predicate: { _gt: 0 }
-          }
-        }
-      });
-    }
+  const setPage = useCallback((p) => {
+    updateParams((params) => {
+      if (p > 1) params.set('page', String(p));
+      else params.delete('page');
+    });
+  }, [updateParams]);
 
-    if (objectIdFilter) {
-      conditions.push({ object_id: { _eq: objectIdFilter } });
-    }
+  const setFilter = useCallback((key, value) => {
+    updateParams((p) => {
+      if (value) p.set(key, value);
+      else p.delete(key);
+      p.delete('page');
+    });
+  }, [updateParams]);
 
-    if (fileTypeFilter === 'plaintext') {
-      conditions.push({ is_plaintext: { _eq: true } });
-    } else if (fileTypeFilter === 'binary') {
-      conditions.push({ is_plaintext: { _eq: false } });
-    } else if (fileTypeFilter === 'source') {
-      conditions.push({ extension: { _in: SOURCE_CODE_EXTENSIONS } });
-    } else if (fileTypeFilter === 'office') {
-      conditions.push({ extension: { _in: OFFICE_EXTENSIONS } });
-    } else if (fileTypeFilter === 'config') {
-      conditions.push({ extension: { _in: CONFIG_FILE_EXTENSIONS } });
-    }
+  // Optimistic "viewed" marks: object_id -> { doneAt } until a fetch started after the write lands
+  const pendingViews = useRef(new Map());
+  const dropsWhenViewed = (viewState) => viewState === 'unviewed' || viewState === 'unviewed_by_me';
+  const withView = (file) => ({
+    ...file,
+    files_view_histories: [{ username, timestamp: new Date().toISOString() }],
+  });
 
-    if (sourceFilter) {
-      conditions.push({ source: { _ilike: sourceFilter.replace(/\*/g, '%') } });
-    }
-
-    if (pathFilter) {
-      const searchValue = pathFilter.includes('*') ? pathFilter : `*${pathFilter}*`;
-      conditions.push({ path: { _ilike: searchValue.replace(/\*/g, '%') } });
-    }
-
-    if (selectedTag) {
-      conditions.push({ file_tags: { _contains: [selectedTag] } });
-    }
-
-    if (viewFilter !== 'all') {
-      if (viewFilter === 'unviewed') {
-        conditions.push({
-          _not: {
-            files_view_histories: {}
-          }
-        });
-      } else if (viewFilter === 'unviewed_by_me') {
-        conditions.push({
-          _not: {
-            files_view_histories: {
-              username: { _eq: username }
-            }
-          }
-        });
+  const transformRows = useCallback((rows, fetchStartedAt) => {
+    const pending = pendingViews.current;
+    if (pending.size === 0) return { rows, dropped: 0 };
+    const drop = dropsWhenViewed(filtersRef.current.viewState);
+    let dropped = 0;
+    const out = [];
+    for (const row of rows) {
+      const p = pending.get(row.object_id);
+      if (p && p.doneAt && fetchStartedAt > p.doneAt) {
+        pending.delete(row.object_id);
+        out.push(row);
+      } else if (p) {
+        if (drop) dropped++;
+        else out.push(withView(row));
+      } else {
+        out.push(row);
       }
     }
+    return { rows: out, dropped };
+  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return conditions.length > 1 ? { _and: conditions } : conditions[0];
+  const fetcher = useCallback(({ offset, limit, knownTotal, withCount, signal }) => fetchPage({
+    table: 'files_enriched',
+    fields: FILE_FIELDS,
+    where: buildFilesWhere({ ...filters, username }),
+    orderBy: buildFilesOrderBy(sortColumn, sortDirection),
+    offset, limit, knownTotal, withCount, signal,
+    varDefs: ', $username: String!',
+    vars: { username: username || '' },
+  }), [queryKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const list = usePagedList({
+    listKey: 'files',
+    pageSize: PAGE_SIZE,
+    rowHeight: ROW_HEIGHT,
+    page: urlPage,
+    setPage,
+    queryKey,
+    fetcher,
+    getId: (f) => f.object_id,
+    transformRows,
+    signalQueries: SIGNAL_QUERIES,
+  });
+  const listRef = useRef(list);
+  listRef.current = list;
+  const {
+    page, rows: files, rowsPage, total, totalPages, isLoading, isFetching, error, containerRef, nav,
+    isTriageMode, setIsTriageMode, selectedIndex, select, checked: selectedFiles, setChecked,
+  } = list;
+
+  const handleSort = (column, direction) => {
+    updateParams((p) => {
+      p.set('sort_column', column);
+      p.set('sort_direction', direction);
+      p.delete('page');
+    });
   };
 
-  // Build order by clause
-  const buildOrderByClause = () => {
-    const orderBy = {};
+  const openFile = useCallback((file) => {
+    // Keep the filters/sort/page in the URL so returning from the file viewer restores them
+    const currentSearch = window.location.search;
+    navigate(`/files/${file.object_id}${currentSearch}`);
+  }, [navigate]);
 
-    switch (sortColumn) {
-      case 'agent_id':
-        orderBy.agent_id = sortDirection;
-        break;
-      case 'source':
-        orderBy.source = sortDirection;
-        break;
-      case 'size':
-        orderBy.size = sortDirection;
-        break;
-      case 'timestamp':
-        orderBy.timestamp = sortDirection;
-        break;
-      case 'magic_type':
-        orderBy.magic_type = sortDirection;
-        break;
-      case 'findings':
-        orderBy.findingsByObjectId_aggregate = { count: sortDirection };
-        break;
-      case 'path':
-        orderBy.path = sortDirection;
-        break;
-      default:
-        orderBy.timestamp = sortDirection;
+  // Serialize writes so repeated presses land in order
+  const writeQueue = useRef(Promise.resolve());
+
+  const recordFileViews = useCallback((objectIds) => {
+    const ids = [...new Set(objectIds)];
+    if (ids.length === 0) return;
+    ids.forEach((id) => pendingViews.current.set(id, { doneAt: null }));
+    const drop = dropsWhenViewed(filtersRef.current.viewState);
+    const idSet = new Set(ids);
+    const onPage = nav.current.rows.filter((r) => idSet.has(r.object_id)).length;
+    listRef.current.updateRows(
+      (current) => current.flatMap((row) => (!idSet.has(row.object_id) ? [row] : drop ? [] : [withView(row)])),
+      { totalDelta: drop ? -onPage : 0 },
+    );
+
+    writeQueue.current = writeQueue.current.then(async () => {
+      try {
+        await hasuraRequest(`
+          mutation InsertFileViews($objects: [files_view_history_insert_input!]!) {
+            insert_files_view_history(objects: $objects) { affected_rows }
+          }`, { objects: ids.map((id) => ({ object_id: id, username, automated: false })) });
+        const doneAt = Date.now();
+        ids.forEach((id) => {
+          const p = pendingViews.current.get(id);
+          if (p) p.doneAt = doneAt;
+        });
+      } catch (err) {
+        console.error('Failed to record file view:', err);
+        ids.forEach((id) => pendingViews.current.delete(id));
+        listRef.current.refetch();
+      }
+    });
+  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRowClick = useCallback((e, file, index) => {
+    const n = nav.current;
+    if (n.triage) {
+      if (e.shiftKey && n.index >= 0 && n.rowsPage === n.page) {
+        const start = Math.min(n.index, index);
+        const end = Math.max(n.index, index);
+        const set = new Set(n.checked);
+        for (let i = start; i <= end; i++) if (n.rows[i]) set.add(n.rows[i].object_id);
+        setChecked(set);
+      } else if (e.ctrlKey || e.metaKey) {
+        const set = new Set(n.checked);
+        if (set.has(file.object_id)) set.delete(file.object_id);
+        else set.add(file.object_id);
+        setChecked(set);
+      } else {
+        setChecked(new Set([file.object_id]));
+      }
+      select(index);
+    } else if (!e.target.closest('button')) {
+      openFile(file);
     }
-
-    return orderBy;
-  };
+  }, [nav, openFile, select, setChecked]);
 
   useEffect(() => {
     const fetchAvailableTags = async () => {
-      const query = {
-        query: `
-          query GetAllTags {
-            file_tags {
-              tag_name
-            }
-          }
-        `
-      };
-
       try {
-        const response = await fetch('/hasura/v1/graphql', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-          },
-          body: JSON.stringify(query)
-        });
-
-        if (!response.ok) throw new Error('Network error');
-
-        const result = await response.json();
-        if (result.errors) throw new Error(result.errors[0].message);
-
-        const tags = result.data.file_tags.map(tag => tag.tag_name);
-        setAvailableTags(tags);
+        const data = await hasuraRequest('query GetAllTags { file_tags { tag_name } }');
+        setAvailableTags(data.file_tags.map((tag) => tag.tag_name));
       } catch (err) {
         console.error('Failed to fetch available tags:', err);
       }
     };
-
     fetchAvailableTags();
   }, []);
 
   useEffect(() => {
+    if (!isTagDropdownOpen) return undefined;
     const handleClickOutside = (event) => {
       if (tagDropdownRef.current && !tagDropdownRef.current.contains(event.target)) {
-        console.log("Click outside detected");
         setIsTagDropdownOpen(false);
       }
     };
-
-    // Only add the listener if the dropdown is open
-    if (isTagDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
-    return () => { }; // Empty cleanup function when condition isn't met
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isTagDropdownOpen]);
 
-  // Update URL parameters when filters change
-  useEffect(() => {
-    const params = new URLSearchParams();
+  // Keyboard controls (one listener; reads the latest state through refs)
+  const keyState = useRef({});
+  keyState.current = { openFile, recordFileViews };
 
-    if (fileTypeFilter !== 'all') {
-      params.set('type', fileTypeFilter);
-    }
-
-    if (sourceFilter) {
-      params.set('source', sourceFilter);
-    }
-
-    if (pathFilter) {
-      params.set('path', pathFilter);
-    }
-
-    params.set('view_state', viewFilter);
-
-    if (objectIdFilter) {
-      params.set('object_id', objectIdFilter);
-    }
-
-    if (selectedTag) {
-      params.set('tag', selectedTag);
-    }
-
-    // Add sort column and direction to URL params
-    params.set('sort_column', sortColumn);
-    params.set('sort_direction', sortDirection);
-
-    // Add findings filter to URL params
-    if (showOnlyWithFindings) {
-      params.set('findings', 'true');
-    }
-
-    // Use replace: true to avoid adding to browser history for every filter change
-    setSearchParams(params, { replace: true });
-  }, [fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings]);
-
-  // Removed the useEffect that was syncing from URL params to avoid circular updates
-
-  const handleBulkRecordFileView = (value) => {
-    selectedFiles.forEach(fileId => {
-      recordFileView(fileId);
-    });
-    setSelectedFiles(new Set());
-  };
-
-  const recordFileView = async (objectId) => {
-    console.log("Calling recordFileView for:", objectId);
-    const mutation = {
-      query: `
-        mutation InsertFileView($object_id: uuid!, $username: String!) {
-          insert_files_view_history_one(object: {
-            object_id: $object_id,
-            username: $username,
-            automated: false
-          }) {
-            id
-            timestamp
-          }
-        }
-      `,
-      variables: {
-        object_id: objectId,
-        username: username
-      }
-    };
-
-    try {
-      const response = await fetch('/hasura/v1/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-        },
-        body: JSON.stringify(mutation)
-      });
-
-      if (!response.ok) throw new Error('Network response was not ok');
-
-      const result = await response.json();
-      if (result.errors) throw new Error(result.errors[0].message);
-
-    } catch (err) {
-      console.error('Failed to record file view:', err);
-    }
-  };
-
-  // Convert wildcard pattern to regex
-  const wildcardToRegExp = (wildcard) => {
-    const escapedWildcard = wildcard.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp('^' + escapedWildcard.replace(/\\\*/g, '.*') + '$');
-  };
-
-  // keyboard controls
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ignore keyboard shortcuts when focus is on an input or textarea element
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
-        return;
-      }
+      if (isEditableTarget(e.target)) return;
+      const n = nav.current;
+      const l = listRef.current;
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-        if (isTriageMode) {
+        if (n.triage) {
           e.preventDefault();
-          // In paginated mode, only select files on current page
-          const newSelection = new Set(files.map(f => f.object_id));
-          setSelectedFiles(newSelection);
+          // Selects the files on the current page
+          l.run(() => setChecked(new Set(n.rows.map((f) => f.object_id))));
         }
         return;
       }
 
       if (e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        setIsTriageMode(prev => {
-          const newMode = !prev;
-          if (newMode && selectedIndex === -1) {
-            setSelectedIndex(isPaginated ? (currentPage - 1) * PAGE_SIZE : 0);
-          }
-          return newMode;
-        });
+        if (!n.triage && n.index < 0) select(0);
+        setIsTriageMode((v) => !v);
         return;
       }
 
-      if (!isTriageMode) return;
-
-      const filesLength = files.length;
-      const currentPageSelectedIndex = isPaginated ? selectedIndex - (currentPage - 1) * PAGE_SIZE : selectedIndex;
-
-      switch (e.key) {
-        case 'ArrowUp':
-          e.preventDefault();
-          if (isPaginated) {
-            if (currentPageSelectedIndex > 0) {
-              setSelectedIndex(selectedIndex - 1);
-            } else if (currentPage > 1) {
-              handlePageChange(currentPage - 1);
-              setSelectedIndex((currentPage - 2) * PAGE_SIZE + PAGE_SIZE - 1);
-            }
-          } else {
-            if (e.shiftKey) {
-              const prevIndex = Math.max(0, selectedIndex - 1);
-              const newSelection = new Set(selectedFiles);
-              newSelection.add(files[selectedIndex].object_id);
-              newSelection.add(files[prevIndex].object_id);
-              setSelectedFiles(newSelection);
-              setSelectedIndex(prevIndex);
-            } else {
-              setSelectedIndex(prev => Math.max(0, prev - 1));
-            }
-          }
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          if (isPaginated) {
-            if (currentPageSelectedIndex < filesLength - 1) {
-              setSelectedIndex(selectedIndex + 1);
-            } else if (currentPage < totalPages) {
-              handlePageChange(currentPage + 1);
-              setSelectedIndex((currentPage) * PAGE_SIZE);
-            }
-          } else {
-            if (e.shiftKey) {
-              const nextIndex = Math.min(filesLength - 1, selectedIndex + 1);
-              const newSelection = new Set(selectedFiles);
-              newSelection.add(files[selectedIndex].object_id);
-              newSelection.add(files[nextIndex].object_id);
-              setSelectedFiles(newSelection);
-              setSelectedIndex(nextIndex);
-            } else {
-              setSelectedIndex(prev => Math.min(filesLength - 1, prev + 1));
-            }
-          }
-          break;
-        case 'Escape':
-          e.preventDefault();
-          if (selectedFiles.size > 0) {
-            setSelectedFiles(new Set());
-          } else {
-            setIsTriageMode(false);
-            setSelectedIndex(-1);
-          }
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          if (selectedIndex >= 0 && currentPageSelectedIndex >= 0 && currentPageSelectedIndex < filesLength) {
-            // Preserve the current filters/sort so returning from the file viewer restores them
-            const currentSearch = searchParams.toString();
-            navigate(`/files/${files[currentPageSelectedIndex].object_id}${currentSearch ? `?${currentSearch}` : ''}`);
-          }
-          break;
-        case 'v':
-          e.preventDefault();
-          if (selectedIndex >= 0 && currentPageSelectedIndex >= 0 && currentPageSelectedIndex < filesLength) {
-            recordFileView(files[currentPageSelectedIndex].object_id);
-          }
-          break;
+      if ((e.key === 'PageDown' || e.key === 'PageUp') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const dir = e.key === 'PageDown' ? 1 : -1;
+        l.run(() => l.pageKey(dir));
+        return;
       }
 
-      // Bulk triage shortcuts
-      if (selectedFiles.size > 0) {
-        switch (e.key) {
+      if (!n.triage) return;
+      if (!['ArrowUp', 'ArrowDown', 'Escape', 'ArrowRight', 'v'].includes(e.key)) return;
+      e.preventDefault();
+      const { key, shiftKey } = e;
+
+      // Row actions run in order once a page that is still loading has arrived
+      l.run(() => {
+        const row = l.currentRow();
+        switch (key) {
+          case 'ArrowUp':
+          case 'ArrowDown': {
+            const delta = key === 'ArrowDown' ? 1 : -1;
+            if (shiftKey) l.extendSelection(delta);
+            else l.moveSelection(delta);
+            break;
+          }
+          case 'Escape':
+            if (n.checked.size > 0) {
+              setChecked(new Set());
+            } else {
+              setIsTriageMode(false);
+              select(-1);
+            }
+            break;
+          case 'ArrowRight':
+            if (row) keyState.current.openFile(row);
+            break;
           case 'v':
-            e.preventDefault();
-            handleBulkRecordFileView();
+            if (n.checked.size > 0) {
+              keyState.current.recordFileViews([...n.checked]);
+              setChecked(new Set());
+            } else if (row) {
+              keyState.current.recordFileViews([row.object_id]);
+            }
+            break;
+          default:
             break;
         }
-      }
+      });
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTriageMode, selectedIndex, files, navigate, setIsTriageMode, setSelectedIndex, selectedFiles, isPaginated, currentPage, totalPages, searchParams]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle maintained triage mode state
-  useEffect(() => {
-    if (location.state?.maintainTriageMode) {
-      setIsTriageMode(true);
-      if (location.state?.maintainSelectedIndex >= 0) {
-        setSelectedIndex(location.state.maintainSelectedIndex);
-      }
-    }
-  }, [location.state, setIsTriageMode, setSelectedIndex]);
-
-  // Fetch data based on count
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // First, get the count
-        const countQuery = {
-          query: `
-            query GetFileCount($where: files_enriched_bool_exp) {
-              files_enriched_aggregate(where: $where) {
-                aggregate {
-                  count
-                }
-              }
-            }
-          `,
-          variables: {
-            where: buildWhereClause()
-          }
-        };
-
-        const countResponse = await fetch('/hasura/v1/graphql', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-          },
-          body: JSON.stringify(countQuery)
-        });
-
-        if (!countResponse.ok) {
-          throw new Error(`Network response error: ${countResponse.status}`);
-        }
-
-        const countResult = await countResponse.json();
-        if (countResult.errors) {
-          throw new Error(countResult.errors[0].message);
-        }
-
-        const count = countResult.data.files_enriched_aggregate.aggregate.count;
-        setTotalCount(count);
-        setIsPaginated(count > PAGINATION_THRESHOLD);
-
-        // Now fetch the actual data
-        let dataQuery;
-        if (count > PAGINATION_THRESHOLD) {
-          // Paginated query
-          dataQuery = {
-            query: `
-              query GetFilesPaginated($where: files_enriched_bool_exp, $limit: Int!, $offset: Int!, $order_by: [files_enriched_order_by!]) {
-                files_enriched(
-                  where: $where,
-                  limit: $limit,
-                  offset: $offset,
-                  order_by: $order_by
-                ) {
-                  object_id
-                  agent_id
-                  source
-                  file_name
-                  size
-                  path
-                  timestamp
-                  extension
-                  magic_type
-                  mime_type
-                  is_plaintext
-                  hashes
-                  file_tags
-                  findingsByObjectId_aggregate {
-                    aggregate {
-                      count
-                    }
-                  }
-                  files_view_histories(
-                    distinct_on: username
-                    order_by: [{ username: asc }, { timestamp: desc }]
-                  ) {
-                    username
-                    timestamp
-                  }
-                }
-              }
-            `,
-            variables: {
-              where: buildWhereClause(),
-              limit: PAGE_SIZE,
-              offset: (currentPage - 1) * PAGE_SIZE,
-              order_by: buildOrderByClause()
-            }
-          };
-        } else {
-          // Non-paginated query - get all data
-          dataQuery = {
-            query: `
-              query GetFilesAll($where: files_enriched_bool_exp, $order_by: [files_enriched_order_by!]) {
-                files_enriched(
-                  where: $where,
-                  order_by: $order_by
-                ) {
-                  object_id
-                  agent_id
-                  source
-                  file_name
-                  size
-                  path
-                  timestamp
-                  extension
-                  magic_type
-                  mime_type
-                  is_plaintext
-                  hashes
-                  file_tags
-                  findingsByObjectId_aggregate {
-                    aggregate {
-                      count
-                    }
-                  }
-                  files_view_histories(
-                    distinct_on: username
-                    order_by: [{ username: asc }, { timestamp: desc }]
-                  ) {
-                    username
-                    timestamp
-                  }
-                }
-              }
-            `,
-            variables: {
-              where: buildWhereClause(),
-              order_by: buildOrderByClause()
-            }
-          };
-        }
-
-        const dataResponse = await fetch('/hasura/v1/graphql', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-          },
-          body: JSON.stringify(dataQuery)
-        });
-
-        if (!dataResponse.ok) {
-          throw new Error(`Network response error: ${dataResponse.status}`);
-        }
-
-        const dataResult = await dataResponse.json();
-        if (dataResult.errors) {
-          throw new Error(dataResult.errors[0].message);
-        }
-
-        setFiles(dataResult.data.files_enriched);
-      } catch (err) {
-        console.error('Error fetching files:', err);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [currentPage, fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings, username, refetchKey]);
-
-  // Set up subscription (only for non-paginated mode)
-  useEffect(() => {
-    // Only stream small result sets; paginated mode (or an unknown size) doesn't subscribe
-    if (isPaginated !== false) return;
-
-    const subscription = {
-      query: `
-        subscription WatchFiles($where: files_enriched_bool_exp, $order_by: [files_enriched_order_by!], $limit: Int!) {
-          files_enriched(
-            where: $where,
-            order_by: $order_by,
-            limit: $limit
-          ) {
-            object_id
-            agent_id
-            source
-            file_name
-            size
-            path
-            timestamp
-            extension
-            magic_type
-            mime_type
-            is_plaintext
-            hashes
-            file_tags
-            findingsByObjectId_aggregate {
-              aggregate {
-                count
-              }
-            }
-            files_view_histories(
-              distinct_on: username
-              order_by: [{ username: asc }, { timestamp: desc }]
-            ) {
-              username
-              timestamp
-            }
-          }
-        }
-      `,
-      variables: {
-        where: buildWhereClause(),
-        order_by: buildOrderByClause(),
-        // One past the threshold so we can tell when the set has outgrown streaming mode
-        limit: PAGINATION_THRESHOLD + 1
-      }
-    };
-
-    let unsubscribe;
-
-    (async () => {
-      unsubscribe = wsClient.subscribe(
-        subscription,
-        {
-          next: ({ data }) => {
-            if (data?.files_enriched) {
-              if (data.files_enriched.length > PAGINATION_THRESHOLD) {
-                // Grew past the threshold (or filters changed to a large set): switch to pages
-                setIsPaginated(true);
-                setRefetchKey(k => k + 1);
-                return;
-              }
-              setFiles(data.files_enriched);
-              setTotalCount(data.files_enriched.length);
-            }
-          },
-          error: (err) => {
-            console.error('Subscription error:', err);
-            setError('Error in real-time updates. Please refresh the page.');
-          },
-          complete: () => {
-            // console.log('Subscription completed');
-          },
-        },
-      );
-    })();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [isPaginated, fileTypeFilter, sourceFilter, pathFilter, viewFilter, objectIdFilter, selectedTag, sortColumn, sortDirection, showOnlyWithFindings, username]);
+  const hasActiveFilters = filters.fileType !== 'all' || !!filters.source || !!filters.path || !!filters.objectId
+    || !!filters.tag || filters.viewState !== 'all' || filters.onlyWithFindings;
 
   return (
     <div className="bg-white dark:bg-dark-secondary rounded-lg shadow flex flex-col h-[calc(100vh-1rem)]">
       {isTriageMode && (
         <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
           <p className="text-sm text-blue-600 dark:text-blue-400">
-            Triage Mode Active(<a href="https://specterops.github.io/Nemesis/usage_guide/#file-triage-mode" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-700 dark:hover:text-blue-300">more info</a>) - Use ↑ ↓ ← → to navigate. Ctrl/Cmd+A to select all{isPaginated ? ' on current page' : ''}.
+            Triage Mode Active(<a href="https://specterops.github.io/Nemesis/usage_guide/#file-triage-mode" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-700 dark:hover:text-blue-300">more info</a>) - Use ↑ ↓ ← → to navigate (PgUp/PgDn to jump). Ctrl/Cmd+A to select all on the current page.
             'v' to mark{selectedFiles.size > 0 ? ' selected files' : ''} as viewed,
             or ESC to exit{' '}
 
@@ -1083,11 +492,8 @@ const FileList = () => {
             <Eye className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             <select
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-              value={viewFilter}
-              onChange={(e) => {
-                setViewFilter(e.target.value);
-                setCurrentPage(1);
-              }}
+              value={filters.viewState}
+              onChange={(e) => setFilter('view_state', e.target.value)}
             >
               <option value="unviewed">Unviewed Files</option>
               <option value="unviewed_by_me">Files Unviewed by Me</option>
@@ -1095,65 +501,55 @@ const FileList = () => {
             </select>
           </div>
 
-          <Tooltip content={showOnlyWithFindings ? "Click to show all files" : "Click to show only files with findings"}>
+          <Tooltip content={filters.onlyWithFindings ? "Click to show all files" : "Click to show only files with findings"}>
             <button
               className="flex items-center space-x-2 px-3 py-2 border dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              onClick={() => {
-                setShowOnlyWithFindings(!showOnlyWithFindings);
-                setCurrentPage(1);
-              }}
+              onClick={() => setFilter('findings', filters.onlyWithFindings ? '' : 'true')}
             >
               <AlertTriangle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               <span className="text-sm text-gray-700 dark:text-gray-300">
-                (Findings) {showOnlyWithFindings ? "Files With Findings" : "All Files"}
+                (Findings) {filters.onlyWithFindings ? "Files With Findings" : "All Files"}
               </span>
             </button>
           </Tooltip>
 
           <div className="flex items-center space-x-2">
             <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            <input
+            <DebouncedInput
               type="text"
               placeholder="Filter by source"
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-              value={sourceFilter}
-              onChange={(e) => {
-                setSourceFilter(e.target.value);
-                setCurrentPage(1);
-              }}
+              value={filters.source}
+              onChange={(v) => setFilter('source', v)}
             />
           </div>
 
           <div className="flex items-center space-x-2">
             <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            <input
+            <DebouncedInput
               type="text"
               placeholder="Filter by path (e.g. *.txt)"
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
-              value={pathFilter}
-              onChange={(e) => {
-                setPathFilter(e.target.value);
-                setCurrentPage(1);
-              }}
+              value={filters.path}
+              onChange={(v) => setFilter('path', v)}
             />
           </div>
 
           <div className="relative" ref={tagDropdownRef}>
             <button
               className="flex items-center space-x-2 px-3 py-2 border dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              onClick={toggleDropdown}
+              onClick={() => setIsTagDropdownOpen((open) => !open)}
             >
               <Tag className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               <span className="text-sm text-gray-700 dark:text-gray-300">
-                {selectedTag ? selectedTag : "Filter by Tag"}
+                {filters.tag ? filters.tag : "Filter by Tag"}
               </span>
-              {selectedTag ? (
+              {filters.tag ? (
                 <span
                   className="ml-2 cursor-pointer text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedTag('');
-                    setCurrentPage(1);
+                    setFilter('tag', '');
                   }}
                 >
                   <X className="w-4 h-4" />
@@ -1172,10 +568,9 @@ const FileList = () => {
                 }}>
                 <div className="max-h-60 overflow-y-auto">
                   <button
-                    className={`w-full text-left px-4 py-2 text-sm ${!selectedTag ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                    className={`w-full text-left px-4 py-2 text-sm ${!filters.tag ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                     onClick={() => {
-                      setSelectedTag('');
-                      setCurrentPage(1);
+                      setFilter('tag', '');
                       setIsTagDropdownOpen(false);
                     }}
                   >
@@ -1186,10 +581,9 @@ const FileList = () => {
                     availableTags.map((tag) => (
                       <button
                         key={tag}
-                        className={`w-full text-left px-4 py-2 text-sm ${selectedTag === tag ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        className={`w-full text-left px-4 py-2 text-sm ${filters.tag === tag ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                         onClick={() => {
-                          setSelectedTag(tag);
-                          setCurrentPage(1);
+                          setFilter('tag', tag);
                           setIsTagDropdownOpen(false);
                         }}
                       >
@@ -1207,8 +601,9 @@ const FileList = () => {
           </div>
 
           <span className="text-sm text-gray-600 dark:text-gray-400">
-            {totalCount.toLocaleString()} file{totalCount !== 1 ? 's' : ''} found
-            {isPaginated && ` (showing ${files.length})`}
+            {typeof total === 'number'
+              ? `${total.toLocaleString()} file${total !== 1 ? 's' : ''} found`
+              : 'Counting files...'}
           </span>
         </div>
       </div>
@@ -1295,17 +690,17 @@ const FileList = () => {
       )}
 
       {/* Loading state */}
-      {isLoading && (
+      {isLoading && files.length === 0 && (
         <div className="flex justify-center items-center h-32">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
         </div>
       )}
 
       {/* No results state */}
-      {!isLoading && !error && files.length === 0 && totalCount === 0 && (
+      {!isLoading && !isFetching && !error && files.length === 0 && (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <div className="text-gray-500 dark:text-gray-400 mb-6">
-            {totalCount > 0 ? (
+            {hasActiveFilters ? (
               <>
                 <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <h3 className="text-lg font-medium mb-2">No matching files found</h3>
@@ -1336,7 +731,7 @@ const FileList = () => {
               </>
             )}
           </div>
-          {totalCount > 0 && (
+          {hasActiveFilters && (
             <Link
               to="/files?view_state=all"
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors inline-flex items-center"
@@ -1347,70 +742,39 @@ const FileList = () => {
         </div>
       )}
 
-      {/* List or Table based on pagination */}
-      {!isLoading && !error && files.length > 0 && (
-        <>
-          {isPaginated ? (
-            // Paginated table view
-            <div ref={pageListRef} className="flex-1 min-h-0 overflow-auto">
-              <div className="min-w-full">
-                {files.map((file, index) => (
-                  <Row
-                    key={file.object_id}
-                    index={index}
-                    style={{ height: ROW_HEIGHT }}
-                    data={{
-                      files,
-                      isTriageMode,
-                      selectedIndex: selectedIndex - (currentPage - 1) * PAGE_SIZE,
-                      selectedFiles,
-                      handleRowClick,
-                      navigate,
-                      username
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : (
-            // Virtualized list view - fills the remaining viewport height
-            <div className="flex-1 min-h-0">
-              <AutoSizer>
-                {({ height, width }) => (
-                  <List
-                    outerRef={listRef}
-                    height={height}
-                    width={width}
-                    initialScrollOffset={isTriageMode && selectedIndex > 0 ? Math.max(0, selectedIndex * ROW_HEIGHT - height / 2) : 0}
-                    itemCount={files.length}
-                    itemSize={ROW_HEIGHT}
-                    itemData={{
-                      files,
-                      isTriageMode,
-                      selectedIndex,
-                      selectedFiles,
-                      handleRowClick,
-                      navigate,
-                      username
-                    }}
-                  >
-                    {Row}
-                  </List>
-                )}
-              </AutoSizer>
-            </div>
-          )}
+      {/* Current page of files */}
+      {!error && files.length > 0 && (
+        <div
+          ref={containerRef}
+          className={`flex-1 min-h-0 overflow-auto transition-opacity ${isFetching && nav.current.loading ? 'opacity-60' : ''}`}
+        >
+          <div className="min-w-full">
+            {files.map((file, index) => (
+              <Row
+                key={file.object_id}
+                file={file}
+                index={index}
+                isTriageMode={isTriageMode}
+                isSelected={isTriageMode && index === selectedIndex && rowsPage === page}
+                isChecked={isTriageMode && selectedFiles.has(file.object_id)}
+                onRowClick={handleRowClick}
+                username={username}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
-          {/* Pagination controls */}
-          {isPaginated && (
-            <PaginationControls
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalCount={totalCount}
-              onPageChange={handlePageChange}
-            />
-          )}
-        </>
+      {typeof total === 'number' && total > 0 && (
+        <PaginationControls
+          currentPage={Math.min(page, totalPages)}
+          totalPages={totalPages}
+          totalCount={total}
+          pageSize={PAGE_SIZE}
+          onPageChange={(p) => {
+            if (p >= 1 && p <= totalPages) list.goToPage(p);
+          }}
+        />
       )}
     </div>
   );

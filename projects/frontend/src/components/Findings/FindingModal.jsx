@@ -19,9 +19,19 @@ const FindingModal = ({
 
   if (!isOpen || !finding) return null;
 
-  const parsedData = finding.data ?
-    (typeof finding.data === 'string' ? JSON.parse(finding.data) : finding.data)
-    : { type: 'string', data: 'No data available' };
+  // The list doesn't download finding data; it is loaded when the modal opens (undefined until then)
+  const parseJson = (s) => {
+    try {
+      return JSON.parse(s);
+    } catch (e) {
+      return { type: 'string', data: s };
+    }
+  };
+  const parsedData = finding.data === undefined
+    ? { type: 'string', data: 'Loading...' }
+    : finding.data ?
+      (typeof finding.data === 'string' ? parseJson(finding.data) : finding.data)
+      : { type: 'string', data: 'No data available' };
 
   // Handle case where data is an array (common format) - take first element
   let findingData = Array.isArray(parsedData) ? parsedData[0] : parsedData;

@@ -1,38 +1,28 @@
 import { AlertTriangle, Bot, ChevronDown, Filter, Search, ThumbsUp } from 'lucide-react';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'react-router-dom';
+import { ALL_CATEGORIES, ALL_SEVERITIES, DEFAULT_TRIAGE_STATE } from './findingsQuery';
 
+const CATEGORY_LABELS = {
+    credential: 'Credentials',
+    extracted_hash: 'Extracted Hashes',
+    extracted_data: 'Extracted Data',
+    vulnerability: 'Vulnerabilities',
+    yara_match: 'Yara',
+    pii: 'PII',
+    misc: 'Misc',
+    informational: 'Informational'
+};
+
+// Filter bar for the Findings list. Controlled: the filter values live in the URL (owned by
+// FindingsList) and are applied server-side; this component only renders and reports changes.
 const FindingsFilters = ({
-    findings,
-    onFilteredDataChange,
-    sortColumn,
-    sortDirection
+    filters,
+    onChange,
+    totalCount
 }) => {
-    const [searchParams, setSearchParams] = useSearchParams();
+    const { categories: categoryFilter, severities: severityFilter, triageState: triageFilter, triageSource: triageSourceFilter } = filters;
 
-    // Helper functions for URL parameter handling
-    const getFilterFromUrl = (key, defaultValue) => {
-        const value = searchParams.get(key);
-        return value !== null ? value : defaultValue;
-    };
-
-    // Initialize state from URL parameters
-    const [categoryFilter, setCategoryFilter] = React.useState(() => {
-        const urlCategory = getFilterFromUrl('category', '');
-        if (!urlCategory) return ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'];
-
-        // Handle comma-separated multiple categories
-        const categories = urlCategory.split(',').filter(c => ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'].includes(c.trim()));
-        return categories.length > 0 ? categories : ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'];
-    });
-
-    const [severityFilter, setSeverityFilter] = React.useState(() => {
-        const urlSeverity = getFilterFromUrl('severity', '');
-        if (!urlSeverity) return ['critical', 'high', 'medium', 'low', 'informational'];
-        const severities = urlSeverity.split(',').filter(s => ['critical', 'high', 'medium', 'low', 'informational'].includes(s.trim()));
-        return severities.length > 0 ? severities : ['critical', 'high', 'medium', 'low', 'informational'];
-    });
     const [severityDropdownOpen, setSeverityDropdownOpen] = React.useState(false);
     const severityDropdownRef = useRef(null);
     const severityButtonRef = useRef(null);
@@ -43,231 +33,50 @@ const FindingsFilters = ({
     const categoryButtonRef = useRef(null);
     const [categoryDropdownPosition, setCategoryDropdownPosition] = React.useState({ top: 0, left: 0 });
 
-    const [searchFilter, setSearchFilter] = React.useState(() =>
-        getFilterFromUrl('search', '')
-    );
-
-    const [triageFilter, setTriageFilter] = React.useState(() =>
-        getFilterFromUrl('triage_state', 'untriaged_and_actionable')
-    );
-
-    const [triageSourceFilter, setTriageSourceFilter] = React.useState(() =>
-        getFilterFromUrl('triage_source', 'all')
-    );
-
-    // Add object_id filter
-    const [objectIdFilter, setObjectIdFilter] = React.useState(() =>
-        getFilterFromUrl('object_id', '')
-    );
-
+    // The search box updates the (server-side) filter after a short pause in typing
+    const [searchFilter, setSearchFilter] = React.useState(filters.search);
+    const searchTimer = useRef(null);
+    useEffect(() => {
+        setSearchFilter(filters.search);
+    }, [filters.search]);
+    useEffect(() => () => clearTimeout(searchTimer.current), []);
 
     // Check if any filters are active
     const hasActiveFilters = useMemo(() => {
-        return categoryFilter.length !== 8 ||
-            severityFilter.length !== 5 ||
-            searchFilter !== '' ||
-            triageFilter !== 'untriaged_and_actionable' ||
+        return categoryFilter.length !== ALL_CATEGORIES.length ||
+            severityFilter.length !== ALL_SEVERITIES.length ||
+            filters.search !== '' ||
+            triageFilter !== DEFAULT_TRIAGE_STATE ||
             triageSourceFilter !== 'all' ||
-            objectIdFilter !== '';
-    }, [categoryFilter, severityFilter, searchFilter, triageFilter, triageSourceFilter, objectIdFilter]);
+            filters.objectId !== '';
+    }, [categoryFilter, severityFilter, filters.search, triageFilter, triageSourceFilter, filters.objectId]);
 
     // Handle clearing all filters
     const handleClearFilters = () => {
-        setCategoryFilter(['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational']);
-        setSeverityFilter(['critical', 'high', 'medium', 'low', 'informational']);
+        clearTimeout(searchTimer.current);
         setSearchFilter('');
-        setTriageFilter('untriaged_and_actionable');
-        setTriageSourceFilter('all');
-        setObjectIdFilter('');
+        onChange({
+            categories: ALL_CATEGORIES,
+            severities: ALL_SEVERITIES,
+            search: '',
+            triageState: DEFAULT_TRIAGE_STATE,
+            triageSource: 'all',
+            objectId: '',
+        });
     };
-
-    // Update URL when filters change
-    useEffect(() => {
-        const newParams = new URLSearchParams();
-
-        // Only set parameters that aren't default values
-        if (categoryFilter.length < 8) {
-            // Only set URL parameter if not all categories are selected
-            newParams.set('category', categoryFilter.join(','));
-        }
-
-        if (severityFilter.length < 5) {
-            // Only set URL parameter if not all severities are selected
-            newParams.set('severity', severityFilter.join(','));
-        }
-
-        if (searchFilter) {
-            newParams.set('search', searchFilter);
-        }
-
-        newParams.set('triage_state', triageFilter);
-
-        if (triageSourceFilter !== 'all') {
-            newParams.set('triage_source', triageSourceFilter);
-        }
-
-        if (objectIdFilter) {
-            newParams.set('object_id', objectIdFilter);
-        }
-
-        // Preserve other existing parameters that we don't manage
-        for (const [key, value] of searchParams.entries()) {
-            if (!['category', 'severity', 'search', 'triage_state', 'triage_source', 'object_id'].includes(key)) {
-                newParams.set(key, value);
-            }
-        }
-
-        // Only update if parameters have actually changed. Replace the history entry so filter
-        // normalization on mount and per-keystroke search updates don't break browser Back/Forward.
-        if (newParams.toString() !== searchParams.toString()) {
-            setSearchParams(newParams, { replace: true });
-        }
-    }, [categoryFilter, severityFilter, searchFilter, triageFilter, triageSourceFilter, objectIdFilter, setSearchParams, searchParams]);
-
-    // Memoized filtered and sorted findings calculation
-    const filteredFindings = useMemo(() => {
-        const filtered = findings.filter(finding => {
-            // Category filter
-            if (categoryFilter.length < 8 && !categoryFilter.includes(finding.category)) return false;
-
-            // Severity filter
-            if (severityFilter.length < 5) {
-                let severityMatch = false;
-                for (const selected of severityFilter) {
-                    if (selected === 'critical' && finding.severity >= 9) {
-                        severityMatch = true;
-                        break;
-                    }
-                    if (selected === 'high' && finding.severity >= 7 && finding.severity <= 8) {
-                        severityMatch = true;
-                        break;
-                    }
-                    if (selected === 'medium' && finding.severity >= 4 && finding.severity <= 6) {
-                        severityMatch = true;
-                        break;
-                    }
-                    if (selected === 'low' && finding.severity >= 2 && finding.severity <= 3) {
-                        severityMatch = true;
-                        break;
-                    }
-                    if (selected === 'informational' && finding.severity <= 1) {
-                        severityMatch = true;
-                        break;
-                    }
-                }
-                if (!severityMatch) return false;
-            }
-
-            // Multi-field search filter
-            if (searchFilter) {
-                const searchLower = searchFilter.toLowerCase();
-                const matchesName = finding.finding_name.toLowerCase().includes(searchLower);
-                const matchesCategory = finding.category.toLowerCase().includes(searchLower);
-                const matchesOrigin = finding.origin_name.toLowerCase().includes(searchLower);
-                const matchesFilePath = finding.files_enriched?.path?.toLowerCase().includes(searchLower) || false;
-
-                if (!matchesName && !matchesCategory && !matchesOrigin && !matchesFilePath) return false;
-            }
-
-            // Object ID filter
-            if (objectIdFilter && finding.object_id.toString() !== objectIdFilter) return false;
-
-            // Triage state filter
-            if (triageFilter && triageFilter !== 'all') {
-                const hasTriage = finding.finding_triage_histories.length > 0;
-                const latestTriage = hasTriage ? finding.finding_triage_histories[0].value : null;
-
-                switch (triageFilter) {
-                    case 'untriaged':
-                        if (hasTriage) return false;
-                        break;
-                    case 'untriaged_and_actionable':
-                        // Show untriaged files OR files triaged as true_positive or needs_review from automated sources
-                        if (hasTriage) {
-                            const isAutomated = finding.finding_triage_histories[0].automated;
-                            if (!isAutomated || (latestTriage !== 'true_positive' && latestTriage !== 'needs_review')) {
-                                return false;
-                            }
-                        }
-                        break;
-                    case 'triaged':
-                        if (!hasTriage) return false;
-                        break;
-                    case 'true_positive':
-                    case 'false_positive':
-                    case 'needs_review':
-                        if (latestTriage !== triageFilter) return false;
-                        break;
-                }
-            }
-
-            // Triage source filter
-            if (triageSourceFilter !== 'all') {
-                const hasTriage = finding.finding_triage_histories.length > 0;
-                if (!hasTriage) return false;
-
-                const isAutomated = finding.finding_triage_histories[0].automated;
-                if (triageSourceFilter === 'automated' && !isAutomated) return false;
-                if (triageSourceFilter === 'human' && isAutomated) return false;
-            }
-
-            return true;
-        });
-
-        // Apply sorting
-        return filtered.sort((a, b) => {
-            let comparison = 0;
-
-            switch (sortColumn) {
-                case 'severity':
-                    comparison = a.severity - b.severity;
-                    break;
-                case 'created_at':
-                    comparison = new Date(a.created_at) - new Date(b.created_at);
-                    break;
-                case 'finding_name':
-                    comparison = a.finding_name.localeCompare(b.finding_name);
-                    break;
-                case 'category':
-                    comparison = a.category.localeCompare(b.category);
-                    break;
-                case 'origin_name':
-                    comparison = a.origin_name.localeCompare(b.origin_name);
-                    break;
-                case 'file_path':
-                    const pathA = a.files_enriched?.path || '';
-                    const pathB = b.files_enriched?.path || '';
-                    comparison = pathA.localeCompare(pathB);
-                    break;
-                case 'triage_value':
-                    const triageA = a.finding_triage_histories.length > 0 ? a.finding_triage_histories[0].value : '';
-                    const triageB = b.finding_triage_histories.length > 0 ? b.finding_triage_histories[0].value : '';
-                    comparison = triageA.localeCompare(triageB);
-                    break;
-                default:
-                    comparison = new Date(a.created_at) - new Date(b.created_at);
-            }
-
-            return sortDirection === 'asc' ? comparison : -comparison;
-        });
-    }, [findings, categoryFilter, severityFilter, searchFilter, triageFilter, triageSourceFilter, objectIdFilter, sortColumn, sortDirection]);
-
-    // Notify parent component of filtered data changes
-    useEffect(() => {
-        onFilteredDataChange(filteredFindings);
-    }, [filteredFindings, onFilteredDataChange]);
 
     // Filter change handlers
 
     const handleSeverityToggle = (severity) => {
-        setSeverityFilter(prev => {
-            if (prev.includes(severity)) {
-                const newSelection = prev.filter(s => s !== severity);
-                return newSelection.length === 0 ? ['critical', 'high', 'medium', 'low', 'informational'] : newSelection;
-            } else {
-                return [...prev, severity];
-            }
-        });
+        const prev = severityFilter;
+        let next;
+        if (prev.includes(severity)) {
+            next = prev.filter(s => s !== severity);
+            if (next.length === 0) next = ALL_SEVERITIES;
+        } else {
+            next = ALL_SEVERITIES.filter(s => s === severity || prev.includes(s));
+        }
+        onChange({ severities: next });
     };
 
     // Close dropdowns when clicking outside
@@ -288,7 +97,7 @@ const FindingsFilters = ({
     }, []);
 
     const getSeverityButtonText = () => {
-        if (severityFilter.length === 5) return 'All Severities';
+        if (severityFilter.length === ALL_SEVERITIES.length) return 'All Severities';
         if (severityFilter.length === 0) return 'No Severities';
         const labels = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', informational: 'Info' };
         return severityFilter.map(s => labels[s]).join(', ');
@@ -329,42 +138,36 @@ const FindingsFilters = ({
     };
 
     const getCategoryButtonText = () => {
-        if (categoryFilter.length === 8) return 'All Categories';
+        if (categoryFilter.length === ALL_CATEGORIES.length) return 'All Categories';
         if (categoryFilter.length === 0) return 'No Categories';
-        const labels = {
-            credential: 'Credentials',
-            extracted_hash: 'Extracted Hashes',
-            extracted_data: 'Extracted Data',
-            vulnerability: 'Vulnerabilities',
-            yara_match: 'Yara',
-            pii: 'PII',
-            misc: 'Misc',
-            informational: 'Informational'
-        };
-        return categoryFilter.map(c => labels[c]).join(', ');
+        return categoryFilter.map(c => CATEGORY_LABELS[c]).join(', ');
     };
 
     const handleCategoryToggle = (category) => {
-        setCategoryFilter(prev => {
-            if (prev.includes(category)) {
-                const newSelection = prev.filter(c => c !== category);
-                return newSelection.length === 0 ? ['credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'] : newSelection;
-            } else {
-                return [...prev, category];
-            }
-        });
+        const prev = categoryFilter;
+        let next;
+        if (prev.includes(category)) {
+            next = prev.filter(c => c !== category);
+            if (next.length === 0) next = ALL_CATEGORIES;
+        } else {
+            next = ALL_CATEGORIES.filter(c => c === category || prev.includes(c));
+        }
+        onChange({ categories: next });
     };
 
     const handleSearchChange = (e) => {
-        setSearchFilter(e.target.value);
+        const value = e.target.value;
+        setSearchFilter(value);
+        clearTimeout(searchTimer.current);
+        searchTimer.current = setTimeout(() => onChange({ search: value }), 300);
     };
 
     const handleTriageStateChange = (e) => {
-        setTriageFilter(e.target.value);
+        onChange({ triageState: e.target.value });
     };
 
     const handleTriageSourceChange = (e) => {
-        setTriageSourceFilter(e.target.value);
+        onChange({ triageSource: e.target.value });
     };
 
     return (
@@ -512,7 +315,9 @@ const FindingsFilters = ({
                 </button>
 
                 <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                    {filteredFindings.length.toLocaleString()} finding{filteredFindings.length !== 1 ? 's' : ''} found
+                    {typeof totalCount === 'number'
+                        ? `${totalCount.toLocaleString()} finding${totalCount !== 1 ? 's' : ''} found`
+                        : 'Counting findings...'}
                 </span>
             </div>
         </div>
