@@ -12,7 +12,7 @@ import {
   Search,
   X
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const Tooltip = ({ children, content, position = 'top' }) => {
   const [isVisible, setIsVisible] = useState(false);
@@ -33,29 +33,70 @@ const Tooltip = ({ children, content, position = 'top' }) => {
   );
 };
 
-const Modal = ({ isOpen, onClose, children }) => {
+// Editor modal: closes on Escape, the X button or a click outside it. With unsaved edits those ask
+// first (an inline "discard?" bar), so a stray click or keypress can't throw work away.
+const Modal = ({ isOpen, onClose, isDirty = false, children }) => {
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const keepEditingRef = useRef(null);
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    setConfirmDiscard(false);
+  }
+
+  const requestClose = useCallback(() => {
+    if (isDirty) setConfirmDiscard(true);
+    else onClose();
+  }, [isDirty, onClose]);
+
   useEffect(() => {
-    if (!isOpen) return;
-    const handleEsc = (e) => { if (e.key === 'Escape') onClose(); };
+    if (!isOpen) return undefined;
+    const handleEsc = (e) => {
+      if (e.key !== 'Escape') return;
+      // Let Monaco close its own popups (suggestions, find widget) first
+      if (e.target instanceof Element && e.target.closest('.monaco-editor')
+        && document.querySelector('.monaco-editor .suggest-widget.visible, .monaco-editor .find-widget.visible')) return;
+      if (confirmDiscard) setConfirmDiscard(false);
+      else requestClose();
+    };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose]);
+  }, [isOpen, requestClose, confirmDiscard]);
+
+  // Move focus to the safe choice so a stray Enter/Space keeps the edits
+  useEffect(() => {
+    if (confirmDiscard) keepEditingRef.current?.focus();
+  }, [confirmDiscard]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Backdrop is a mouse-only affordance; keyboard users close with Escape or the Close button */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" role="presentation" onClick={onClose}></div>
-      <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative bg-white dark:bg-dark-secondary rounded-lg shadow-xl max-w-4xl w-full h-[80vh] overflow-hidden">
+      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" role="presentation" onClick={requestClose} />
+      {/* Clicks on the area around the dialog (not inside it) count as "close"; keyboard users use
+          Escape or the Close button */}
+      <div
+        className="relative flex min-h-full items-center justify-center p-4"
+        role="presentation"
+        onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}
+      >
+        <div role="dialog" aria-modal="true" className="relative bg-white dark:bg-dark-secondary rounded-lg shadow-xl max-w-4xl w-full h-[80vh] overflow-hidden">
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="absolute top-3 right-3 z-10 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             aria-label="Close"
           >
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
+          {confirmDiscard && (
+            <div role="alertdialog" aria-label="Discard unsaved changes" className="absolute inset-x-0 top-0 z-20 px-6 py-3 bg-amber-50 dark:bg-amber-900/40 border-b border-amber-200 dark:border-amber-800 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-amber-800 dark:text-amber-200 font-medium">Discard unsaved changes?</span>
+              <span className="flex gap-2 ml-auto">
+                <button onClick={onClose} className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white">Discard</button>
+                <button ref={keepEditingRef} onClick={() => setConfirmDiscard(false)} className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200">Keep editing</button>
+              </span>
+            </div>
+          )}
           {children}
         </div>
       </div>
@@ -672,6 +713,7 @@ const YaraRulesManager = () => {
       {/* Editor Modal */}
       <Modal
         isOpen={isEditorOpen}
+        isDirty={isNewRule ? editedContent.trim() !== '' : editedContent !== (selectedRule?.content ?? '')}
         onClose={() => {
           setIsEditorOpen(false);
           setSelectedRule(null);
