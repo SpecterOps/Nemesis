@@ -76,6 +76,9 @@ spec:
               value: "true"
             - name: HASURA_GRAPHQL_ENABLE_TELEMETRY
               value: "false"
+            # The UI reaches Hasura from the same origin (/hasura) or server-side: no CORS for other sites
+            - name: HASURA_GRAPHQL_DISABLE_CORS
+              value: "true"
             - name: HASURA_GRAPHQL_ENABLED_LOG_TYPES
               value: "startup, http-log, webhook-log, websocket-log, query-log"
           volumeMounts:

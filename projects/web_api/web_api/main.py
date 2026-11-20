@@ -46,6 +46,7 @@ from psycopg.rows import TupleRow
 from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
+from web_api.cross_site import CrossSiteRequestBlocker
 from web_api.large_containers import LargeContainerProcessor
 from web_api.models.requests import ChatbotRequest, CleanupRequest, EnrichmentRequest
 from web_api.models.responses import (
@@ -139,6 +140,8 @@ app = FastAPI(
         {"name": "system", "description": "System and health check endpoints"},
     ],
 )
+# Refuse requests another site makes a logged-in browser send (see web_api/cross_site.py)
+app.add_middleware(CrossSiteRequestBlocker)
 
 
 # Add timeout middleware for requests

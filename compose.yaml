@@ -824,6 +824,9 @@ services:
       HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
       HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+      # The UI and Jupyter reach Hasura from the same origin (/hasura via Traefik) or server-side, so
+      # no CORS headers: pages on other sites can't call it from a browser
+      HASURA_GRAPHQL_DISABLE_CORS: "true"
     volumes:
       - ./infra/hasura/metadata:/hasura-metadata:ro
     labels:
