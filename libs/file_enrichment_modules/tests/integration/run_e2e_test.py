@@ -33,7 +33,8 @@ import httpx
 DEFAULT_API_HOST = "localhost:7443"
 DEFAULT_USERNAME = "n"
 DEFAULT_PASSWORD = "n"
-DEFAULT_HASURA_ADMIN_SECRET = os.environ.get("HASURA_ADMIN_SECRET", "pass456")
+# No built-in default: deployments generate a random secret (see tools/nemesis-ctl.sh / .env)
+DEFAULT_HASURA_ADMIN_SECRET = os.environ.get("HASURA_ADMIN_SECRET", "")
 DEFAULT_PROJECT = "e2e-test"
 MAX_WAIT_SECONDS = 120
 POLL_INTERVAL_SECONDS = 5
@@ -382,7 +383,7 @@ def main():
     parser.add_argument(
         "--hasura-admin-secret",
         default=DEFAULT_HASURA_ADMIN_SECRET,
-        help="Hasura admin secret (default: HASURA_ADMIN_SECRET env var or compose default)",
+        help="Hasura admin secret (default: HASURA_ADMIN_SECRET env var; required)",
     )
     parser.add_argument(
         "--project",
@@ -402,6 +403,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if not args.hasura_admin_secret:
+        parser.error("set --hasura-admin-secret or the HASURA_ADMIN_SECRET env var (see .env)")
 
     # Suppress SSL warnings
     import urllib3

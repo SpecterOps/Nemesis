@@ -2,7 +2,7 @@
 
 Nemesis uses Hasura to wrap the PostgreSQL backend to easily build a GraphQL and REST API for the structure Nemesis data model.
 
-Navigating to the "Help" menu reachable in the bottom left of the Nemesis interface and clicking the `/hasura/console/` route link will take you to the Hasura login. Enter the value of the `HASURA_ADMIN_SECRET` ENV variable to login.
+Navigating to the "Help" menu reachable in the bottom left of the Nemesis interface and clicking the `/hasura/console/` route link will take you to the Hasura login. Enter the value of the `HASURA_ADMIN_SECRET` ENV variable to login. With Docker Compose, `./tools/nemesis-ctl.sh` generates a random secret on first run and stores it in `.env`; with Helm, a random secret is generated on install and stored in the `nemesis-secrets` Secret (`kubectl get secret nemesis-secrets -n <namespace> -o jsonpath='{.data.HASURA_ADMIN_SECRET}' | base64 -d`).
 
 ## Console
 

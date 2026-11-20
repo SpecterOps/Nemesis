@@ -35,7 +35,7 @@ cp env.example .env
 ```
 Then configure the values in the `.env` file with a text editor.
 
-This file contains passwords and configuration that Nemesis uses. You should randomize these password values for your deployment!
+This file contains passwords and configuration that Nemesis uses. You should randomize these password values for your deployment! (`HASURA_ADMIN_SECRET` is left empty in `env.example`; `./tools/nemesis-ctl.sh` fills it with a random value on first run.)
 
 Some Nemesis enrichments allow for (or require) configuration. See the [enrichment configuration](./enrichment_configuration.md) guide for details, for example to enable PII detection (which can be a performance hit).
 

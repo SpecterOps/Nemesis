@@ -229,3 +229,30 @@ Usage: include in container spec under volumeMounts
   mountPath: /dapr/secrets
   readOnly: true
 {{- end }}
+
+{{/*
+Hasura admin secret. Uses credentials.hasura.adminSecret when set to something other than the old
+public default; otherwise keeps the value already stored in the nemesis-secrets Secret (so upgrades
+don't rotate it), or generates a random one on first install. Resolved once per render so every
+template gets the same value.
+*/}}
+{{- define "nemesis.hasuraAdminSecret" -}}
+{{- if not (hasKey .Values.credentials.hasura "_resolvedAdminSecret") -}}
+{{- $secret := .Values.credentials.hasura.adminSecret | default "" -}}
+{{- if or (eq $secret "") (eq $secret "pass456") -}}
+{{- $secret = "" -}}
+{{- $existing := lookup "v1" "Secret" (include "nemesis.namespace" .) "nemesis-secrets" -}}
+{{- if and $existing $existing.data (hasKey $existing.data "HASURA_ADMIN_SECRET") -}}
+{{- $stored := index $existing.data "HASURA_ADMIN_SECRET" | b64dec -}}
+{{- if and (ne $stored "") (ne $stored "pass456") -}}
+{{- $secret = $stored -}}
+{{- end -}}
+{{- end -}}
+{{- if eq $secret "" -}}
+{{- $secret = randAlphaNum 48 -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set .Values.credentials.hasura "_resolvedAdminSecret" $secret -}}
+{{- end -}}
+{{- index .Values.credentials.hasura "_resolvedAdminSecret" -}}
+{{- end }}

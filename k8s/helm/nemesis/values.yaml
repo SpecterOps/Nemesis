@@ -27,7 +27,9 @@ credentials:
     accessKey: nemesis
     secretKey: Qwerty12345
   hasura:
-    adminSecret: pass456
+    # Leave empty to generate a random secret on install (kept across upgrades); read it back with
+    #   kubectl get secret nemesis-secrets -n <namespace> -o jsonpath='{.data.HASURA_ADMIN_SECRET}' | base64 -d
+    adminSecret: ""
   # Basic auth users for Traefik (htpasswd format)
   # Default: n:n
   basicAuthUsers: "n:$apr1$bcQYJ0ci$QLOjnsYcpoauiEZ5VcXBi/"

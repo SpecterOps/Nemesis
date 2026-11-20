@@ -377,7 +377,7 @@ services:
     image: ghcr.io/specterops/nemesis/frontend:latest
     depends_on: [postgres, hasura]
     environment:
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
       interval: 10s
@@ -396,7 +396,7 @@ services:
     image: ghcr.io/specterops/nemesis/jupyter:latest
     depends_on: [postgres, hasura]
     environment:
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
       - HASURA_GRAPHQL_URL=http://hasura:8080/v1/graphql
       - JUPYTER_PASSWORD=${JUPYTER_PASSWORD:-}
     volumes:
@@ -469,7 +469,7 @@ services:
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
     depends_on:
       alerting: { condition: service_started }
       placement: { condition: service_started }
@@ -813,7 +813,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     environment:
-      HASURA_GRAPHQL_ADMIN_SECRET: "${HASURA_ADMIN_SECRET:-pass456}"
+      HASURA_GRAPHQL_ADMIN_SECRET: "${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}"
       HASURA_GRAPHQL_BASE_PATH: "/hasura"
       HASURA_GRAPHQL_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
@@ -1173,7 +1173,7 @@ services:
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
       - POSTGRES_DB=${POSTGRES_DB:-enrichment}
       - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:-pass456}
+      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
       - S3_SECRET_KEY=${S3_SECRET_KEY:?}
