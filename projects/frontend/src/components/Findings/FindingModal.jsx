@@ -46,9 +46,21 @@ const FindingModal = ({
     }
   }
 
+  // Anything that isn't a data object (empty array, null, number, ...) is shown as text
+  if (findingData === undefined || findingData === null || (Array.isArray(parsedData) && parsedData.length === 0)) {
+    findingData = { type: 'string', data: 'No data available' };
+  } else if (typeof findingData !== 'object') {
+    findingData = { type: 'string', data: String(findingData) };
+  }
+
   const readableData = findingData.type === 'finding_summary'
-    ? { type: 'string', data: findingData.metadata.summary }
+    ? { type: 'string', data: findingData.metadata?.summary ?? 'No summary available' }
     : findingData;
+
+  // Markdown text to show: the finding's text, or its raw JSON when it has no text form
+  const displayText = typeof readableData.data === 'string'
+    ? readableData.data
+    : '```json\n' + JSON.stringify(readableData.data ?? readableData, null, 2) + '\n```';
 
   return (
     <div
@@ -218,7 +230,7 @@ const FindingModal = ({
                       }} />
                     )}
                     <div className={wordWrapEnabled ? 'word-wrap-container' : 'overflow-x-auto'}>
-                      <MarkdownRenderer content={readableData.data} />
+                      <MarkdownRenderer content={displayText} />
                     </div>
                   </div>
                 </div>
