@@ -1,11 +1,17 @@
 import Tooltip from '@/components/shared/Tooltip2';
 import { AlertTriangle, ChevronDown, ChevronUp, Search } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { FixedSizeList as List } from 'react-window';
+import PaginationControls from '../Chromium/PaginationControls';
+import { buildStableOrderBy, useDebouncedValue, useHasuraTable } from '../Chromium/useHasuraTable';
 
 const ROW_HEIGHT = 48;
+// Above this many matching keys the list is server-paginated instead of loaded whole
+const PAGINATION_THRESHOLD = 5000;
+const PAGE_SIZE = 100;
+const TABLE_FIELDS = 'guid plaintext_key_sha1 backup_key_guid';
 
 const Row = React.memo(({ index, style, data }) => {
   const { records } = data;
@@ -102,10 +108,7 @@ const SortableHeader = ({ children, column, currentSort, currentDirection, onSor
 
 const DpapiMasterKeys = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [records, setRecords] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Valid columns for sorting
   const VALID_SORT_COLUMNS = ['guid', 'plaintext_key_sha1', 'backup_key_guid'];
@@ -124,29 +127,40 @@ const DpapiMasterKeys = () => {
     if (VALID_SORT_COLUMNS.includes(column)) {
       setSortColumn(column);
       setSortDirection(direction);
+      setCurrentPage(1);
     }
   };
+
+  const debouncedGuidFilter = useDebouncedValue(guidFilter);
 
   const buildWhereClause = () => {
     const conditions = [];
 
-    if (guidFilter) {
+    if (debouncedGuidFilter) {
       // If user provided wildcards, use them as-is; otherwise add wildcards around the term
-      const hasWildcard = guidFilter.includes('*');
+      const hasWildcard = debouncedGuidFilter.includes('*');
       const pattern = hasWildcard
-        ? guidFilter.replace(/\*/g, '%')
-        : `%${guidFilter}%`;
+        ? debouncedGuidFilter.replace(/\*/g, '%')
+        : `%${debouncedGuidFilter}%`;
       conditions.push({ guid: { _ilike: pattern } });
     }
 
     return conditions.length > 0 ? conditions[0] : {};
   };
 
-  const buildOrderByClause = () => {
-    const orderBy = {};
-    orderBy[sortColumn] = sortDirection;
-    return orderBy;
-  };
+  // guid is unique, so it needs no tiebreaker
+  const buildOrderByClause = () => buildStableOrderBy(sortColumn, sortDirection, sortColumn === 'guid' ? null : 'id');
+
+  const { records, totalCount, isPaginated, isLoading, error } = useHasuraTable({
+    table: 'dpapi_masterkeys',
+    fields: TABLE_FIELDS,
+    where: buildWhereClause(),
+    orderBy: buildOrderByClause(),
+    currentPage,
+    pageSize: PAGE_SIZE,
+    threshold: PAGINATION_THRESHOLD,
+  });
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -163,66 +177,12 @@ const DpapiMasterKeys = () => {
     setSearchParams(params, { replace: true });
   }, [guidFilter, sortColumn, sortDirection, setSearchParams]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
 
-      try {
-        const query = {
-          query: `
-            query GetMasterKeys($where: dpapi_masterkeys_bool_exp, $order_by: [dpapi_masterkeys_order_by!]) {
-              dpapi_masterkeys(
-                where: $where,
-                order_by: $order_by
-              ) {
-                guid
-                plaintext_key_sha1
-                backup_key_guid
-              }
-              dpapi_masterkeys_aggregate(where: $where) {
-                aggregate {
-                  count
-                }
-              }
-            }
-          `,
-          variables: {
-            where: buildWhereClause(),
-            order_by: buildOrderByClause()
-          }
-        };
-
-        const response = await fetch('/hasura/v1/graphql', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-          },
-          body: JSON.stringify(query)
-        });
-
-        if (!response.ok) {
-          throw new Error(`Network response error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.errors) {
-          throw new Error(result.errors[0].message);
-        }
-
-        setRecords(result.data.dpapi_masterkeys);
-        setTotalCount(result.data.dpapi_masterkeys_aggregate.aggregate.count);
-      } catch (err) {
-        console.error('Error fetching DPAPI masterkeys:', err);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [guidFilter, sortColumn, sortDirection]);
+  // Memoized so typing in a filter box doesn't re-render every visible row
+  const itemData = useMemo(() => ({ records }), [records]);
+  const pagedRows = useMemo(() => records.map((record, index) => (
+    <Row key={record.guid} index={index} style={{ height: ROW_HEIGHT }} data={{ records }} />
+  )), [records]);
 
   return (
     <div>
@@ -236,12 +196,16 @@ const DpapiMasterKeys = () => {
               placeholder="Filter by GUID"
               className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
               value={guidFilter}
-              onChange={(e) => setGuidFilter(e.target.value)}
+              onChange={(e) => {
+                setGuidFilter(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
 
           <span className="text-sm text-gray-600 dark:text-gray-400">
             {totalCount.toLocaleString()} masterkey{totalCount !== 1 ? 's' : ''} found
+            {isPaginated && ` (showing ${records.length})`}
           </span>
         </div>
       </div>
@@ -308,25 +272,41 @@ const DpapiMasterKeys = () => {
         </div>
       )}
 
-      {/* Virtualized list */}
       {!isLoading && !error && records.length > 0 && (
-        <div className="h-[calc(100vh-180px)]">
-          <AutoSizer>
-            {({ height, width }) => (
-              <List
-                height={height}
-                width={width}
-                itemCount={records.length}
-                itemSize={ROW_HEIGHT}
-                itemData={{
-                  records
-                }}
-              >
-                {Row}
-              </List>
-            )}
-          </AutoSizer>
-        </div>
+        isPaginated ? (
+          // Large result set: one server page at a time
+          <>
+            <div className="overflow-x-auto">
+              <div className="min-w-full">
+                {pagedRows}
+              </div>
+            </div>
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              pageSize={PAGE_SIZE}
+              onPageChange={(page) => page >= 1 && page <= totalPages && setCurrentPage(page)}
+            />
+          </>
+        ) : (
+          // Virtualized list
+          <div className="h-[calc(100vh-180px)]">
+            <AutoSizer>
+              {({ height, width }) => (
+                <List
+                  height={height}
+                  width={width}
+                  itemCount={records.length}
+                  itemSize={ROW_HEIGHT}
+                  itemData={itemData}
+                >
+                  {Row}
+                </List>
+              )}
+            </AutoSizer>
+          </div>
+        )
       )}
     </div>
   );

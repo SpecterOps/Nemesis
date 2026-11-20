@@ -1,7 +1,10 @@
 import { useTheme } from '@/components/ThemeProvider';
 import Editor from "@monaco-editor/react";
 import { AlertCircle, Clock, Download, Filter, Info, RefreshCw, Search, Server } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useDeferredValue, useEffect, useRef, useState } from 'react';
+
+// A 10MB log preview can hold ~100k entries; render them in slices
+const ROWS_PER_PAGE = 500;
 
 const SCCMLogViewer = ({ fileContent, fileName }) => {
   const { isDark } = useTheme();
@@ -10,6 +13,9 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  // Filter against a deferred copy so typing stays responsive on large logs
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const [visibleCount, setVisibleCount] = useState(ROWS_PER_PAGE);
   const [selectedSeverityFilters, setSelectedSeverityFilters] = useState({
     error: true,
     warning: true,
@@ -69,8 +75,9 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
 
   // Apply filters when criteria change
   useEffect(() => {
-    applyFilters(logs, searchTerm, selectedSeverityFilters, selectedComponents);
-  }, [logs, searchTerm, selectedSeverityFilters, selectedComponents]);
+    applyFilters(logs, deferredSearchTerm, selectedSeverityFilters, selectedComponents);
+    setVisibleCount(ROWS_PER_PAGE);
+  }, [logs, deferredSearchTerm, selectedSeverityFilters, selectedComponents]);
 
   // Parse the log content into structured data
   const parseLogContent = (content) => {
@@ -104,6 +111,8 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
   const applyFilters = (allLogs, search, severityFilters, components) => {
     if (!allLogs) return;
 
+    const componentSet = new Set(components);
+    const searchLower = search && search.trim() !== '' ? search.toLowerCase() : null;
     const filtered = allLogs.filter(log => {
       // Apply severity filters
       if (log.type === 3 && !severityFilters.error) return false;
@@ -111,11 +120,10 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
       if (log.type === 1 && !severityFilters.info) return false;
 
       // Apply component filter
-      if (!components.includes(log.component)) return false;
+      if (!componentSet.has(log.component)) return false;
 
       // Apply text search
-      if (search && search.trim() !== '') {
-        const searchLower = search.toLowerCase();
+      if (searchLower) {
         return (
           log.message.toLowerCase().includes(searchLower) ||
           log.component.toLowerCase().includes(searchLower) ||
@@ -386,7 +394,7 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredLogs.map(log => (
+                {filteredLogs.slice(0, visibleCount).map(log => (
                   <tr
                     key={log.index}
                     className={getRowClass(log)}
@@ -410,6 +418,18 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
                 ))}
               </tbody>
             </table>
+
+            {filteredLogs.length > visibleCount && (
+              <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                <span>Showing {visibleCount.toLocaleString()} of {filteredLogs.length.toLocaleString()} matching entries</span>
+                <button
+                  onClick={() => setVisibleCount(c => c + ROWS_PER_PAGE * 2)}
+                  className="px-3 py-1 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200"
+                >
+                  Show more
+                </button>
+              </div>
+            )}
 
             {filteredLogs.length === 0 && (
               <div className="flex flex-col items-center justify-center h-32 text-gray-500 dark:text-gray-400">

@@ -6,12 +6,28 @@ import {
 } from "@/components/ui/card";
 import Dialog from "@/components/ui/dialog";
 import { ExternalLink, FileText, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+// A file can be linked to thousands of others; only load/render a bounded slice.
+const MAX_LINKINGS = 1000;
+const INITIAL_VISIBLE = 50;
+const VISIBLE_STEP = 200;
+
+const getLinkedFilePath = (linking, currentPath) => {
+  return linking.file_path_1.toLowerCase() === currentPath.toLowerCase() ? linking.file_path_2 : linking.file_path_1;
+};
+
+const getRelationshipDirection = (linking, currentPath) => {
+  return linking.file_path_1.toLowerCase() === currentPath.toLowerCase() ? 'outbound' : 'inbound';
+};
 
 const LinkedFilesSection = ({ filePath, source }) => {
   const [linkedFiles, setLinkedFiles] = useState([]);
+  const [totalLinkings, setTotalLinkings] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const [fileStatusMap, setFileStatusMap] = useState(new Map());
+  const statusRequestedRef = useRef(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -28,25 +44,33 @@ const LinkedFilesSection = ({ filePath, source }) => {
       try {
         const query = {
           query: `
-            query GetLinkedFiles($filePath: String!, $source: String!) {
-              file_linkings(where: {
-                _and: [
-                  { source: { _eq: $source } },
-                  { _or: [
-                    { file_path_1: { _eq: $filePath } },
-                    { file_path_2: { _eq: $filePath } }
-                  ]}
-                ]
-              }) {
+            query GetLinkedFiles($where: file_linkings_bool_exp!, $limit: Int!) {
+              file_linkings(where: $where, order_by: {linking_id: asc}, limit: $limit) {
                 linking_id
                 file_path_1
                 file_path_2
                 link_type
                 created_at
               }
+              file_linkings_aggregate(where: $where) {
+                aggregate {
+                  count
+                }
+              }
             }
           `,
-          variables: { filePath, source }
+          variables: {
+            limit: MAX_LINKINGS,
+            where: {
+              _and: [
+                { source: { _eq: source } },
+                { _or: [
+                  { file_path_1: { _eq: filePath } },
+                  { file_path_2: { _eq: filePath } }
+                ]}
+              ]
+            }
+          }
         };
 
         const response = await fetch('/hasura/v1/graphql', {
@@ -69,23 +93,69 @@ const LinkedFilesSection = ({ filePath, source }) => {
 
         const linkedFilesResult = result.data.file_linkings || [];
 
-        // Now fetch file status for each linked file
-        const statusMap = new Map();
+        statusRequestedRef.current = new Set();
+        setFileStatusMap(new Map());
+        setVisibleCount(INITIAL_VISIBLE);
+        setTotalLinkings(result.data.file_linkings_aggregate?.aggregate?.count ?? linkedFilesResult.length);
+        setLinkedFiles(linkedFilesResult);
+      } catch (err) {
+        setError(err.message);
+        console.error('Error fetching linked files:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-        if (linkedFilesResult.length > 0) {
-          // Collect all unique linked file paths
-          const linkedPaths = new Set();
-          linkedFilesResult.forEach(linking => {
-            // Add the path that's not the current file (case-insensitive comparison)
-            if (linking.file_path_1.toLowerCase() !== filePath.toLowerCase()) {
-              linkedPaths.add(linking.file_path_1);
-            }
-            if (linking.file_path_2.toLowerCase() !== filePath.toLowerCase()) {
-              linkedPaths.add(linking.file_path_2);
-            }
-          });
+    fetchLinkedFiles();
+  }, [filePath, source]);
 
-          const statusQuery = {
+  // Group linked files by path to merge entries with different directions (case-insensitive)
+  const groupedFiles = useMemo(() => {
+    const groups = new Map();
+    if (!filePath) return [];
+    linkedFiles.forEach((linking) => {
+      const linkedPath = getLinkedFilePath(linking, filePath);
+      const direction = getRelationshipDirection(linking, filePath);
+      const pathKey = linkedPath.toLowerCase();
+
+      if (groups.has(pathKey)) {
+        const existing = groups.get(pathKey);
+        existing.directions.add(direction);
+        existing.linkTypes.add(linking.link_type);
+      } else {
+        groups.set(pathKey, {
+          linkedPath,
+          directions: new Set([direction]),
+          linkTypes: new Set([linking.link_type].filter(Boolean)),
+          linkingId: linking.linking_id
+        });
+      }
+    });
+    return Array.from(groups.values());
+  }, [linkedFiles, filePath]);
+
+  const visibleGroups = useMemo(() => groupedFiles.slice(0, visibleCount), [groupedFiles, visibleCount]);
+
+  // Fetch collection status only for the linked files currently rendered
+  useEffect(() => {
+    if (!source) return;
+    const paths = visibleGroups
+      .map(g => g.linkedPath.toLowerCase())
+      .filter(p => !statusRequestedRef.current.has(p));
+    if (paths.length === 0) return;
+    paths.forEach(p => statusRequestedRef.current.add(p));
+
+    let cancelled = false;
+    let done = false;
+    (async () => {
+      try {
+        const statusResponse = await fetch('/hasura/v1/graphql', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+          },
+          body: JSON.stringify({
             query: `
               query GetFileStatuses($paths: [String!]!, $source: String!) {
                 file_listings(where: {
@@ -100,47 +170,38 @@ const LinkedFilesSection = ({ filePath, source }) => {
                 }
               }
             `,
-            variables: { paths: Array.from(linkedPaths).map(p => p.toLowerCase()), source }
-          };
-
-          const statusResponse = await fetch('/hasura/v1/graphql', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
-            },
-            body: JSON.stringify(statusQuery)
+            variables: { paths, source }
+          })
+        });
+        if (!statusResponse.ok || cancelled) return;
+        const statusResult = await statusResponse.json();
+        if (cancelled) return;
+        done = true;
+        if (statusResult.errors) return;
+        const fileListingsResult = statusResult.data.file_listings || [];
+        if (fileListingsResult.length === 0) return;
+        setFileStatusMap(prev => {
+          const next = new Map(prev);
+          // Create status map with case-insensitive keys
+          fileListingsResult.forEach(file => {
+            next.set(file.path.toLowerCase(), {
+              status: file.status,
+              object_id: file.object_id,
+              originalPath: file.path
+            });
           });
-
-          if (statusResponse.ok) {
-            const statusResult = await statusResponse.json();
-            if (!statusResult.errors) {
-              const fileListingsResult = statusResult.data.file_listings || [];
-
-              // Create status map with case-insensitive keys
-              fileListingsResult.forEach(file => {
-                statusMap.set(file.path.toLowerCase(), {
-                  status: file.status,
-                  object_id: file.object_id,
-                  originalPath: file.path
-                });
-              });
-            }
-          }
-        }
-
-        setLinkedFiles(linkedFilesResult);
-        setFileStatusMap(statusMap);
+          return next;
+        });
       } catch (err) {
-        setError(err.message);
-        console.error('Error fetching linked files:', err);
-      } finally {
-        setLoading(false);
+        console.error('Error fetching linked file statuses:', err);
       }
+    })();
+    return () => {
+      cancelled = true;
+      // allow a retry if this request was abandoned before it completed
+      if (!done) paths.forEach(p => statusRequestedRef.current.delete(p));
     };
-
-    fetchLinkedFiles();
-  }, [filePath, source]);
+  }, [visibleGroups, source]);
 
   const handleFileClick = async (targetPath, linkInfo) => {
     try {
@@ -155,14 +216,6 @@ const LinkedFilesSection = ({ filePath, source }) => {
     } catch (err) {
       console.error('Error navigating to linked file:', err);
     }
-  };
-
-  const getLinkedFilePath = (linking, currentPath) => {
-    return linking.file_path_1.toLowerCase() === currentPath.toLowerCase() ? linking.file_path_2 : linking.file_path_1;
-  };
-
-  const getRelationshipDirection = (linking, currentPath) => {
-    return linking.file_path_1.toLowerCase() === currentPath.toLowerCase() ? 'outbound' : 'inbound';
   };
 
   const handleDeleteClick = (linkingId) => {
@@ -205,6 +258,7 @@ const LinkedFilesSection = ({ filePath, source }) => {
 
       // Remove the deleted linking from the state
       setLinkedFiles(linkedFiles.filter(linking => linking.linking_id !== linkingToDelete));
+      setTotalLinkings(n => Math.max(0, n - 1));
       setShowDeleteDialog(false);
       setLinkingToDelete(null);
     } catch (err) {
@@ -261,36 +315,13 @@ const LinkedFilesSection = ({ filePath, source }) => {
           <CardTitle className="text-gray-900 dark:text-gray-100 flex items-center gap-2">
             Linked Files
             <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-1 rounded-full">
-              {linkedFiles.length}
+              {totalLinkings.toLocaleString()}
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {(() => {
-              // Group linked files by path to merge entries with different directions (case-insensitive)
-              const groupedFiles = new Map();
-
-              linkedFiles.forEach((linking) => {
-                const linkedPath = getLinkedFilePath(linking, filePath);
-                const direction = getRelationshipDirection(linking, filePath);
-                const pathKey = linkedPath.toLowerCase();
-
-                if (groupedFiles.has(pathKey)) {
-                  const existing = groupedFiles.get(pathKey);
-                  existing.directions.add(direction);
-                  existing.linkTypes.add(linking.link_type);
-                } else {
-                  groupedFiles.set(pathKey, {
-                    linkedPath,
-                    directions: new Set([direction]),
-                    linkTypes: new Set([linking.link_type].filter(Boolean)),
-                    linkingId: linking.linking_id
-                  });
-                }
-              });
-
-              return Array.from(groupedFiles.values()).map((group) => {
+            {visibleGroups.map((group) => {
                 const fileName = group.linkedPath.split(/[\/\\]/).pop() || group.linkedPath;
 
                 // Get file status info (case-insensitive lookup)
@@ -373,9 +404,24 @@ const LinkedFilesSection = ({ filePath, source }) => {
                     </div>
                   </div>
                 );
-              });
-            })()}
+            })}
           </div>
+          {(groupedFiles.length > visibleCount || totalLinkings > linkedFiles.length) && (
+            <div className="mt-3 flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
+              <span>
+                Showing {Math.min(visibleCount, groupedFiles.length).toLocaleString()} of {groupedFiles.length.toLocaleString()} linked files
+                {totalLinkings > linkedFiles.length && ` (first ${linkedFiles.length.toLocaleString()} of ${totalLinkings.toLocaleString()} links loaded)`}
+              </span>
+              {groupedFiles.length > visibleCount && (
+                <button
+                  onClick={() => setVisibleCount(c => c + VISIBLE_STEP)}
+                  className="px-3 py-1 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200"
+                >
+                  Show {Math.min(VISIBLE_STEP, groupedFiles.length - visibleCount).toLocaleString()} more
+                </button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

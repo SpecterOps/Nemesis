@@ -229,16 +229,26 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
         setError(null);
 
         try {
-            const result = db.exec(sqlQuery);
-            if (result && result.length > 0) {
-                setQueryResult({
-                    columns: result[0].columns,
-                    values: result[0].values
-                });
-            } else {
-                // Handle empty result or statements like INSERT, UPDATE, DELETE
-                setQueryResult({ columns: [], values: [] });
+            // Step through statements ourselves instead of db.exec() so an unbounded
+            // SELECT on a huge table only materializes the first MAX_ROWS rows.
+            let firstResult = null;
+            for (const stmt of db.iterateStatements(sqlQuery)) {
+                const columns = stmt.getColumnNames();
+                const values = [];
+                let truncated = false;
+                while (stmt.step()) {
+                    if (values.length >= MAX_ROWS) {
+                        truncated = true;
+                        break;
+                    }
+                    values.push(stmt.get());
+                }
+                if (!firstResult && columns.length > 0) {
+                    firstResult = { columns, values, truncated };
+                }
             }
+            // Statements like INSERT, UPDATE, DELETE produce no result set
+            setQueryResult(firstResult || { columns: [], values: [], truncated: false });
         } catch (err) {
             console.error('Error executing SQL query:', err);
             setError(`SQL error: ${err.message}`);
@@ -567,7 +577,9 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
                             {queryResult && (
                                 <div className="flex-1 overflow-auto bg-white dark:bg-gray-800 p-4">
                                     <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Query Results {queryResult.values.length > 0 && `(${queryResult.values.length} rows)`}
+                                        Query Results {queryResult.values.length > 0 && (queryResult.truncated
+                                            ? `(showing first ${MAX_ROWS} rows; add a LIMIT/WHERE to narrow results)`
+                                            : `(${queryResult.values.length} rows)`)}
                                     </h4>
 
                                     <div className="overflow-x-auto border dark:border-gray-700 rounded-md">

@@ -2,6 +2,9 @@ import { useCallback, useRef, useState } from 'react';
 import { cachedFetch } from '@/utils/fileCache';
 
 const MAX_VIEW_SIZE = 10 * 1024 * 1024; // 10MB preview limit
+// cachedFetch refuses to cache bodies over 50MB and then re-fetches them from the network,
+// downloading large files twice; fetch those directly instead.
+const MAX_CACHEABLE_SIZE = 50 * 1024 * 1024;
 
 /**
  * Custom hook for lazy file content fetching.
@@ -50,7 +53,8 @@ export function useLazyFileContent(objectId, fileData) {
     setFullFileError(null);
 
     try {
-      const response = await cachedFetch(`/api/files/${objectId}`);
+      const url = `/api/files/${objectId}`;
+      const response = fileData && fileData.size > MAX_CACHEABLE_SIZE ? await fetch(url) : await cachedFetch(url);
       if (!response.ok) throw new Error(`Failed to fetch file: ${response.status}`);
       const buffer = await response.arrayBuffer();
       setFullFileContent(buffer);
@@ -65,7 +69,7 @@ export function useLazyFileContent(objectId, fileData) {
     } finally {
       setIsFullFileLoading(false);
     }
-  }, [objectId]);
+  }, [objectId, fileData]);
 
   const reset = useCallback(() => {
     setPreviewContent(null);

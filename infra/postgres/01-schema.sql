@@ -1012,3 +1012,29 @@ CREATE INDEX IF NOT EXISTS idx_file_listings_browse
 
 -- Containers page: newest first.
 CREATE INDEX IF NOT EXISTS idx_container_processing_submitted_at ON container_processing (submitted_at DESC);
+
+-----------------------
+-- SCALE INDEXES: FILE VIEWER / CHROMIUM / DPAPI
+-----------------------
+-- File viewer lookups by object_id (enrichment tabs, transforms, workflow status) and
+-- derived/child files by originating_object_id (containers can have 100k+ children)
+CREATE INDEX IF NOT EXISTS idx_files_enriched_originating_object_id ON files_enriched(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_enrichments_object_id_module ON enrichments(object_id, module_name);
+CREATE INDEX IF NOT EXISTS idx_transforms_object_id ON transforms(object_id);
+CREATE INDEX IF NOT EXISTS idx_workflows_object_id ON workflows(object_id);
+
+-- Chromium tables: originating_object_id serves per-file lookups and the ON DELETE CASCADE
+-- from files_enriched; (sort column, id) serves the UI's default sort + stable paging
+CREATE INDEX IF NOT EXISTS idx_chromium_history_originating_object_id ON chromium.history(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_history_last_visit_time ON chromium.history(last_visit_time, id);
+CREATE INDEX IF NOT EXISTS idx_chromium_downloads_originating_object_id ON chromium.downloads(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_downloads_end_time ON chromium.downloads(end_time, id);
+CREATE INDEX IF NOT EXISTS idx_chromium_logins_originating_object_id ON chromium.logins(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_logins_times_used ON chromium.logins(times_used, id);
+CREATE INDEX IF NOT EXISTS idx_chromium_cookies_originating_object_id ON chromium.cookies(originating_object_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_cookies_last_access_utc ON chromium.cookies(last_access_utc, id);
+CREATE INDEX IF NOT EXISTS idx_chromium_state_keys_originating_object_id ON chromium.state_keys(originating_object_id, id);
+-- FK lookups for ON DELETE SET NULL from chromium.state_keys (without these, deleting a state
+-- key, e.g. via a files_enriched cascade, seq-scans all cookies/logins per row)
+CREATE INDEX IF NOT EXISTS idx_chromium_cookies_state_key_id ON chromium.cookies(state_key_id);
+CREATE INDEX IF NOT EXISTS idx_chromium_logins_state_key_id ON chromium.logins(state_key_id);

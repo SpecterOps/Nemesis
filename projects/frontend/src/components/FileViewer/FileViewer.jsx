@@ -30,6 +30,24 @@ import ZipFileViewer from './ZipFileViewer';
 const MAX_VIEW_SIZE = 10 * 1024 * 1024; // 10MB preview/display limit
 const MAX_RENDERABLE_VIEW_SIZE = 100 * 1024 * 1024; // 100MB limit for sqlite/zip/etc.
 
+// Transforms produced on files derived from this one (e.g. a summary of extracted_plaintext.txt).
+// Queried from the transforms side so a container with 100k+ children doesn't return one row per child.
+const DERIVED_TRANSFORM_TYPES = ['text_summary', 'text_translation', 'llm_extracted_credentials'];
+const DERIVED_TRANSFORMS_SELECTION = `
+  derived_transforms: transforms(where: {
+    type: {_in: ${JSON.stringify(DERIVED_TRANSFORM_TYPES)}},
+    files_enriched: {originating_object_id: {_eq: $objectId}}
+  }) {
+    metadata
+    type
+    transform_object_id
+  }
+`;
+
+// Signature of the subscription payload, used to skip refetches when nothing relevant changed
+const transformsSignature = (updatedAt, transforms) =>
+  `${updatedAt}|${(transforms || []).map(t => `${t.transform_object_id}:${t.type}`).sort().join(',')}`;
+
 const recordedViews = new Map();
 
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -115,7 +133,9 @@ const isCsvFile = (fileName, mimeType) => {
 
 const isSCCMLogFile = (fileName, content) => {
   if (!content) return false;
-  const firstLine = content.split('\n')[0];
+  // Only look at the first line (content can be a 10MB preview; avoid splitting all of it)
+  const newline = content.indexOf('\n');
+  const firstLine = newline === -1 ? content : content.slice(0, newline);
   return firstLine.includes('<![LOG[') && firstLine.includes(']LOG]!>');
 };
 
@@ -283,6 +303,8 @@ const FileViewer = () => {
   } = useLazyFileContent(objectId, fileData);
 
   const initialTabSet = useRef(false);
+  const [tabInitialized, setTabInitialized] = useState(false);
+  const lastTransformsSignatureRef = useRef(null);
 
   const recordFileView = async (objectId) => {
     // Check global map first
@@ -374,6 +396,7 @@ const FileViewer = () => {
 
   useEffect(() => {
     if (!objectId) return;
+    lastTransformsSignatureRef.current = null;
 
     const subscription = {
       query: `
@@ -402,6 +425,15 @@ const FileViewer = () => {
             if (data?.files_enriched && data.files_enriched.length > 0) {
               const updatedFile = data.files_enriched[0];
 
+              // The first snapshot normally matches what the initial query already loaded;
+              // only refetch when the file or its transforms actually changed.
+              // Before the initial query finishes there is nothing to merge into (and that
+              // query already includes these transforms).
+              if (lastTransformsSignatureRef.current === null) return;
+              const signature = transformsSignature(updatedFile.updated_at, updatedFile.transforms);
+              if (signature === lastTransformsSignatureRef.current) return;
+              lastTransformsSignatureRef.current = signature;
+
               // When main file updates, re-fetch everything including derived transforms
               // This is simpler than trying to maintain sync
               const refetchData = async () => {
@@ -415,14 +447,7 @@ const FileViewer = () => {
                     body: JSON.stringify({
                       query: `
                         query GetDerivedFileTransforms($objectId: uuid!) {
-                          files_enriched(where: {originating_object_id: {_eq: $objectId}}) {
-                            object_id
-                            transforms(where: {type: {_in: ["text_summary", "text_translation", "llm_extracted_credentials"]}}) {
-                              metadata
-                              type
-                              transform_object_id
-                            }
-                          }
+                          ${DERIVED_TRANSFORMS_SELECTION}
                         }
                       `,
                       variables: { objectId }
@@ -431,14 +456,14 @@ const FileViewer = () => {
 
                   if (response.ok) {
                     const result = await response.json();
-                    const derivedTransforms = result.data?.files_enriched?.flatMap(df => df.transforms || []) || [];
+                    const derivedTransforms = result.data?.derived_transforms || [];
                     const allTransforms = [...(updatedFile.transforms || []), ...derivedTransforms];
 
                     // Update fileData with merged transforms
-                    setFileData(prev => ({
+                    setFileData(prev => (prev ? {
                       ...prev,
                       transforms: allTransforms
-                    }));
+                    } : prev));
 
                     // Fetch new transform content if needed
                     const newTransforms = allTransforms.filter(transform =>
@@ -606,15 +631,12 @@ const FileViewer = () => {
     // Add enrichment tabs
     if (fileData?.enrichments) {
       fileData.enrichments.forEach(enrichment => {
-        if (enrichment.result_data) {
-          tabs.push({
-            id: `enrichment-${enrichment.module_name}`,
-            type: 'enrichment',
-            label: `Enrichment - ${enrichment.module_name}`,
-            enrichmentData: enrichment,
-            icon: FileText
-          });
-        }
+        tabs.push({
+          id: `enrichment-${enrichment.module_name}`,
+          type: 'enrichment',
+          label: `Enrichment - ${enrichment.module_name}`,
+          icon: FileText
+        });
       });
     }
 
@@ -713,6 +735,14 @@ const FileViewer = () => {
   const transformFetchedRef = useRef({});
   const transformFullFetchedRef = useRef({});
   const [enrichmentExpanded, setEnrichmentExpanded] = useState({});
+  // Enrichment result_data is loaded per tab on demand (can be many MB for containers);
+  // cached as { [module_name]: { json: string } | { error } | { loading: true } }
+  const [enrichmentResults, setEnrichmentResults] = useState({});
+  const enrichmentFetchedRef = useRef({});
+  useEffect(() => {
+    setEnrichmentResults({});
+    enrichmentFetchedRef.current = {};
+  }, [objectId]);
 
   const fetchTransformContent = useCallback(async (tabId) => {
     if (transformFetchedRef.current[tabId]) return;
@@ -773,8 +803,46 @@ const FileViewer = () => {
     }
   }, []);
 
+  const fetchEnrichmentResult = useCallback(async (moduleName) => {
+    if (!objectId || enrichmentFetchedRef.current[moduleName]) return;
+    enrichmentFetchedRef.current[moduleName] = true;
+    setEnrichmentResults(prev => ({ ...prev, [moduleName]: { loading: true } }));
+    try {
+      const response = await fetch('/hasura/v1/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-hasura-admin-secret': window.ENV.HASURA_ADMIN_SECRET,
+        },
+        body: JSON.stringify({
+          query: `
+            query GetEnrichmentResult($objectId: uuid!, $moduleName: String!) {
+              enrichments(where: {object_id: {_eq: $objectId}, module_name: {_eq: $moduleName}}, limit: 1) {
+                result_data
+              }
+            }
+          `,
+          variables: { objectId, moduleName }
+        })
+      });
+      if (!response.ok) throw new Error(`Network response error: ${response.status}`);
+      const result = await response.json();
+      if (result.errors) throw new Error(result.errors[0].message);
+      const resultData = result.data.enrichments[0]?.result_data ?? null;
+      // Stringify once here instead of on every render
+      setEnrichmentResults(prev => ({ ...prev, [moduleName]: { json: JSON.stringify(resultData, null, 2) } }));
+    } catch (err) {
+      console.error('Error fetching enrichment result:', err);
+      enrichmentFetchedRef.current[moduleName] = false;
+      setEnrichmentResults(prev => ({ ...prev, [moduleName]: { error: err.message } }));
+    }
+  }, [objectId]);
+
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
+    if (tabId.startsWith('enrichment-')) {
+      fetchEnrichmentResult(tabId.replace('enrichment-', ''));
+    }
     if (['zip-explorer', 'sqlite-explorer'].includes(tabId) && !fullFileContent && !isFullFileLoading) {
       fetchFullFile();
     }
@@ -790,7 +858,7 @@ const FileViewer = () => {
     if (transformData[tabId] && !transformData[tabId].content && !transformsLoading[tabId]) {
       fetchTransformContent(tabId);
     }
-  }, [fullFileContent, isFullFileLoading, fileData, fetchFullFile, previewContent, isPreviewLoading, fetchPreviewContent, transformData, transformsLoading, fetchTransformContent]);
+  }, [fullFileContent, isFullFileLoading, fileData, fetchFullFile, previewContent, isPreviewLoading, fetchPreviewContent, transformData, transformsLoading, fetchTransformContent, fetchEnrichmentResult]);
 
   // Handler to disable truncation and show full file content in the text view
   const handleShowFullContent = useCallback(async () => {
@@ -824,6 +892,7 @@ const FileViewer = () => {
       // First check if the file is a ZIP file
       if (fileData && isZipFile(fileData.file_name, fileData.mime_type)) {
         initialTabSet.current = true;
+        setTabInitialized(true);
         setActiveTab('zip-explorer');
         return;
       }
@@ -835,6 +904,7 @@ const FileViewer = () => {
         );
         if (zipTransform) {
           initialTabSet.current = true;
+          setTabInitialized(true);
           setActiveTab(zipTransform.transform_object_id);
           return;
         }
@@ -847,6 +917,7 @@ const FileViewer = () => {
         );
         if (pdfTransform) {
           initialTabSet.current = true;
+          setTabInitialized(true);
           setActiveTab(pdfTransform.transform_object_id);
           return;
         }
@@ -857,6 +928,7 @@ const FileViewer = () => {
         );
         if (defaultTransform) {
           initialTabSet.current = true;
+          setTabInitialized(true);
           setActiveTab(defaultTransform.transform_object_id);
           return;
         }
@@ -865,12 +937,15 @@ const FileViewer = () => {
       // Then follow fallback order: Preview -> Text -> Hex
       if (hasPreviewableContent) {
         initialTabSet.current = true;
+        setTabInitialized(true);
         setActiveTab('preview');
       } else if (tabs.find(tab => tab.id === 'text')) {
         initialTabSet.current = true;
+        setTabInitialized(true);
         setActiveTab('text');
       }
       initialTabSet.current = true;
+      setTabInitialized(true);
       // If no other conditions met, it will stay as 'hex'
     }
   }, [fileData, pdfContent, hasPreviewableContent]);
@@ -878,8 +953,10 @@ const FileViewer = () => {
   // Trigger lazy fetch for auto-selected tabs (ZIP, SQLite, image preview, hex).
   // Only runs after initial tab selection to avoid eagerly fetching for the
   // default 'hex' tab before a better tab has been chosen.
+  // (Keyed on state, not the ref: the ref flips during the same commit in which activeTab is
+  // still the default 'hex', which used to trigger a wasted 10MB hex preview download.)
   useEffect(() => {
-    if (!fileData || !initialTabSet.current) return;
+    if (!fileData || !tabInitialized) return;
     if (['zip-explorer', 'sqlite-explorer'].includes(activeTab) && !fullFileContent && !isFullFileLoading) {
       fetchFullFile();
     }
@@ -895,7 +972,10 @@ const FileViewer = () => {
     if (transformData[activeTab] && !transformData[activeTab].content && !transformsLoading[activeTab]) {
       fetchTransformContent(activeTab);
     }
-  }, [activeTab, fileData, transformData]);
+    if (activeTab.startsWith('enrichment-')) {
+      fetchEnrichmentResult(activeTab.replace('enrichment-', ''));
+    }
+  }, [activeTab, fileData, transformData, tabInitialized]);
 
   useEffect(() => {
     const fetchFileData = async () => {
@@ -927,7 +1007,6 @@ const FileViewer = () => {
                 updated_at
                 enrichments {
                   module_name
-                  result_data
                   created_at
                   updated_at
                 }
@@ -936,24 +1015,13 @@ const FileViewer = () => {
                   type
                   transform_object_id
                 }
-                files_view_histories {
-                  username
-                  timestamp
-                }
                 findingsByObjectId_aggregate {
                   aggregate {
                     count
                   }
                 }
               }
-              derived_files: files_enriched(where: {originating_object_id: {_eq: $objectId}}) {
-                object_id
-                transforms(where: {type: {_in: ["text_summary", "text_translation", "llm_extracted_credentials"]}}) {
-                  metadata
-                  type
-                  transform_object_id
-                }
-              }
+              ${DERIVED_TRANSFORMS_SELECTION}
             }
           `,
           variables: { objectId }
@@ -985,8 +1053,8 @@ const FileViewer = () => {
         }
 
         // Merge transforms from derived files (like extracted_plaintext.txt)
-        const derivedFiles = result.data.derived_files || [];
-        const derivedTransforms = derivedFiles.flatMap(df => df.transforms || []);
+        lastTransformsSignatureRef.current = transformsSignature(file.updated_at, file.transforms);
+        const derivedTransforms = result.data.derived_transforms || [];
         file.transforms = [...(file.transforms || []), ...derivedTransforms];
 
         setFileData(file);
@@ -1163,9 +1231,28 @@ const FileViewer = () => {
   const renderEnrichmentContent = (tabId) => {
     const enrichmentKey = tabId.replace('enrichment-', '');
     const enrichment = fileData?.enrichments?.find(e => e.module_name === enrichmentKey);
-    if (!enrichment || !enrichment.result_data) return null;
+    if (!enrichment) return null;
 
-    const jsonContent = JSON.stringify(enrichment.result_data, null, 2);
+    const loaded = enrichmentResults[enrichmentKey];
+    if (!loaded || loaded.loading) return <LoadingState message="Loading enrichment results..." />;
+    if (loaded.error) {
+      return (
+        <div className="p-4 text-center">
+          <p className="text-red-500 mb-2">Error loading enrichment: {loaded.error}</p>
+          <button
+            onClick={() => {
+              enrichmentFetchedRef.current[enrichmentKey] = false;
+              fetchEnrichmentResult(enrichmentKey);
+            }}
+            className="text-blue-500 hover:underline"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    const jsonContent = loaded.json;
     const isTruncated = jsonContent.length > MAX_VIEW_SIZE && !enrichmentExpanded[tabId];
     const displayContent = isTruncated ? jsonContent.slice(0, MAX_VIEW_SIZE) : jsonContent;
     return (
@@ -1732,7 +1819,8 @@ const FileViewer = () => {
               onValueChange={handleTabChange}
               className="w-full"
             >
-              <TabsList className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-10">
+              {/* Wrap instead of widening the page: files can have dozens of enrichment/transform tabs */}
+              <TabsList className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-auto min-h-[2.5rem] flex-wrap justify-start">
                 {getAvailableTabs().map(tab => (
                   <TabsTrigger
                     key={tab.id}
@@ -1744,7 +1832,7 @@ const FileViewer = () => {
                   </TabsTrigger>
                 ))}
 
-                <div className="ml-2 border-l border-gray-200 dark:border-gray-700 pl-2 flex space-x-2">
+                <div className="ml-2 border-l border-gray-200 dark:border-gray-700 pl-2 flex flex-wrap gap-2">
                   <button
                     onClick={() => window.open(`/api/files/${fileData?.object_id}?raw=True`, '_blank')}
                     className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 h-9 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
