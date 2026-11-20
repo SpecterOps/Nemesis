@@ -66,7 +66,7 @@ export const fetchPage = async ({
 
 // Keyboard shortcuts shouldn't fire while typing
 export const isEditableTarget = (target) =>
-  !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+  !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || !!target.isContentEditable);
 
 // Rows a PageUp/PageDown moves the selection: floor(0.75 x fully visible rows), at least 1
 export const pageJumpRows = (container, rowHeight) => {
