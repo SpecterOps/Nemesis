@@ -110,7 +110,7 @@ export const TableHeaders = ({ isTriageMode, sortColumn, sortDirection, onSort }
 /**
  * @param {{
  *   finding: any, index: number, height: number, isTriageMode: boolean, isSelected: boolean,
- *   isChecked: boolean, hasMultiSelection: boolean, onRowClick: (finding: any, index: number, e?: React.MouseEvent) => void,
+ *   isChecked: boolean, onRowClick: (finding: any, index: number, e?: React.MouseEvent) => void,
  *   onTriage: (...args: any[]) => any,
  * }} props
  */
@@ -121,7 +121,6 @@ const FindingRow = ({
     isTriageMode,
     isSelected,
     isChecked,
-    hasMultiSelection,
     onRowClick,
     onTriage,
 }) => {
@@ -166,8 +165,7 @@ const FindingRow = ({
         >
             {isTriageMode && (
                 <div className="flex-shrink-0 w-8 text-sm font-medium text-gray-500 dark:text-gray-400 text-center">
-                    {/* ✓ = what an action applies to: every selected row, else the current row */}
-                    {isChecked || (isSelected && !hasMultiSelection) ? '✓' : ''}
+                    {isChecked ? '✓' : ''}
                 </div>
             )}
             <div className="flex-shrink-0 w-16 text-center">

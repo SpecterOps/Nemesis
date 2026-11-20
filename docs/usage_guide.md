@@ -89,7 +89,7 @@ To enter File Triage Mode, hit the `t` key on the Files page (press `t` again to
 
 ![Nemesis Dashboard File Triage Mode](images/nemesis-dashboard-files-triage-mode.png)
 
-In triage mode, the **active row** (the one the keyboard acts on) is drawn with an outline. A column on the left shows a ✓ next to the rows an action will apply to: every selected row, or, when nothing is selected, the active row. Selected rows also get a filled blue highlight.
+In triage mode, the **active row** (the one the keyboard acts on) is drawn with an outline. Selected rows show a ✓ in the left column and a filled blue highlight. Actions (`v`, `1`/`2`/`3`) apply to the selected rows, or to the active row when nothing is selected.
 
 The following actions are possible (a summary is also shown in the bar at the top of the page):
 

@@ -31,10 +31,10 @@ const stopPropagation = (e) => e.stopPropagation();
 /**
  * @param {{
  *   file: any, index: number, isTriageMode: boolean, isSelected: boolean, isChecked: boolean,
- *   hasMultiSelection: boolean, onRowClick: (e: any, file: any, index: number) => void, username: string,
+ *   onRowClick: (e: any, file: any, index: number) => void, username: string,
  * }} props
  */
-const FileRow = ({ file, index, isTriageMode, isSelected, isChecked, hasMultiSelection, onRowClick, username }) => {
+const FileRow = ({ file, index, isTriageMode, isSelected, isChecked, onRowClick, username }) => {
   const findingsCount = file.findings_count || 0;
   const isActive = isTriageMode && isSelected;
   return (
@@ -54,8 +54,7 @@ const FileRow = ({ file, index, isTriageMode, isSelected, isChecked, hasMultiSel
     >
       {isTriageMode && (
         <div className="w-8 px-2 text-center text-gray-400">
-          {/* ✓ = what an action applies to: every selected row, else the current row */}
-          {isChecked || (isSelected && !hasMultiSelection) ? '✓' : ''}
+          {isChecked ? '✓' : ''}
         </div>
       )}
       <div className="px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left">
@@ -844,7 +843,6 @@ const FileList = () => {
                 isTriageMode={isTriageMode}
                 isSelected={isTriageMode && index === selectedIndex && rowsPage === page}
                 isChecked={isTriageMode && (allSelected || selectedFiles.has(file.object_id))}
-                hasMultiSelection={allSelected || selectedFiles.size > 0}
                 onRowClick={handleRowClick}
                 username={username}
               />

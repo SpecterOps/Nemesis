@@ -540,7 +540,6 @@ const FindingsList = () => {
                 isTriageMode={isTriageMode}
                 isSelected={isTriageMode && index === selectedIndex && rowsPage === page}
                 isChecked={isTriageMode && (allSelected || checked.has(finding.finding_id))}
-                hasMultiSelection={allSelected || checked.size > 0}
                 onRowClick={handleRowClick}
                 onTriage={handleTriage}
               />
