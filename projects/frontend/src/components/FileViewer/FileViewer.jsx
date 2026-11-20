@@ -133,7 +133,9 @@ const isCsvFile = (fileName, mimeType) => {
 
 const isSCCMLogFile = (fileName, content) => {
   if (!content) return false;
-  const firstLine = content.split('\n')[0];
+  // Only look at the first line (content can be a 10MB preview; avoid splitting all of it)
+  const newline = content.indexOf('\n');
+  const firstLine = newline === -1 ? content : content.slice(0, newline);
   return firstLine.includes('<![LOG[') && firstLine.includes(']LOG]!>');
 };
 
@@ -301,6 +303,7 @@ const FileViewer = () => {
   } = useLazyFileContent(objectId, fileData);
 
   const initialTabSet = useRef(false);
+  const [tabInitialized, setTabInitialized] = useState(false);
   const lastTransformsSignatureRef = useRef(null);
 
   const recordFileView = async (objectId) => {
@@ -393,6 +396,7 @@ const FileViewer = () => {
 
   useEffect(() => {
     if (!objectId) return;
+    lastTransformsSignatureRef.current = null;
 
     const subscription = {
       query: `
@@ -423,6 +427,9 @@ const FileViewer = () => {
 
               // The first snapshot normally matches what the initial query already loaded;
               // only refetch when the file or its transforms actually changed.
+              // Before the initial query finishes there is nothing to merge into (and that
+              // query already includes these transforms).
+              if (lastTransformsSignatureRef.current === null) return;
               const signature = transformsSignature(updatedFile.updated_at, updatedFile.transforms);
               if (signature === lastTransformsSignatureRef.current) return;
               lastTransformsSignatureRef.current = signature;
@@ -453,10 +460,10 @@ const FileViewer = () => {
                     const allTransforms = [...(updatedFile.transforms || []), ...derivedTransforms];
 
                     // Update fileData with merged transforms
-                    setFileData(prev => ({
+                    setFileData(prev => (prev ? {
                       ...prev,
                       transforms: allTransforms
-                    }));
+                    } : prev));
 
                     // Fetch new transform content if needed
                     const newTransforms = allTransforms.filter(transform =>
@@ -885,6 +892,7 @@ const FileViewer = () => {
       // First check if the file is a ZIP file
       if (fileData && isZipFile(fileData.file_name, fileData.mime_type)) {
         initialTabSet.current = true;
+        setTabInitialized(true);
         setActiveTab('zip-explorer');
         return;
       }
@@ -896,6 +904,7 @@ const FileViewer = () => {
         );
         if (zipTransform) {
           initialTabSet.current = true;
+          setTabInitialized(true);
           setActiveTab(zipTransform.transform_object_id);
           return;
         }
@@ -908,6 +917,7 @@ const FileViewer = () => {
         );
         if (pdfTransform) {
           initialTabSet.current = true;
+          setTabInitialized(true);
           setActiveTab(pdfTransform.transform_object_id);
           return;
         }
@@ -918,6 +928,7 @@ const FileViewer = () => {
         );
         if (defaultTransform) {
           initialTabSet.current = true;
+          setTabInitialized(true);
           setActiveTab(defaultTransform.transform_object_id);
           return;
         }
@@ -926,12 +937,15 @@ const FileViewer = () => {
       // Then follow fallback order: Preview -> Text -> Hex
       if (hasPreviewableContent) {
         initialTabSet.current = true;
+        setTabInitialized(true);
         setActiveTab('preview');
       } else if (tabs.find(tab => tab.id === 'text')) {
         initialTabSet.current = true;
+        setTabInitialized(true);
         setActiveTab('text');
       }
       initialTabSet.current = true;
+      setTabInitialized(true);
       // If no other conditions met, it will stay as 'hex'
     }
   }, [fileData, pdfContent, hasPreviewableContent]);
@@ -939,8 +953,10 @@ const FileViewer = () => {
   // Trigger lazy fetch for auto-selected tabs (ZIP, SQLite, image preview, hex).
   // Only runs after initial tab selection to avoid eagerly fetching for the
   // default 'hex' tab before a better tab has been chosen.
+  // (Keyed on state, not the ref: the ref flips during the same commit in which activeTab is
+  // still the default 'hex', which used to trigger a wasted 10MB hex preview download.)
   useEffect(() => {
-    if (!fileData || !initialTabSet.current) return;
+    if (!fileData || !tabInitialized) return;
     if (['zip-explorer', 'sqlite-explorer'].includes(activeTab) && !fullFileContent && !isFullFileLoading) {
       fetchFullFile();
     }
@@ -959,7 +975,7 @@ const FileViewer = () => {
     if (activeTab.startsWith('enrichment-')) {
       fetchEnrichmentResult(activeTab.replace('enrichment-', ''));
     }
-  }, [activeTab, fileData, transformData]);
+  }, [activeTab, fileData, transformData, tabInitialized]);
 
   useEffect(() => {
     const fetchFileData = async () => {
@@ -1803,7 +1819,8 @@ const FileViewer = () => {
               onValueChange={handleTabChange}
               className="w-full"
             >
-              <TabsList className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-10">
+              {/* Wrap instead of widening the page: files can have dozens of enrichment/transform tabs */}
+              <TabsList className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-auto min-h-[2.5rem] flex-wrap justify-start">
                 {getAvailableTabs().map(tab => (
                   <TabsTrigger
                     key={tab.id}
@@ -1815,7 +1832,7 @@ const FileViewer = () => {
                   </TabsTrigger>
                 ))}
 
-                <div className="ml-2 border-l border-gray-200 dark:border-gray-700 pl-2 flex space-x-2">
+                <div className="ml-2 border-l border-gray-200 dark:border-gray-700 pl-2 flex flex-wrap gap-2">
                   <button
                     onClick={() => window.open(`/api/files/${fileData?.object_id}?raw=True`, '_blank')}
                     className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 h-9 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"

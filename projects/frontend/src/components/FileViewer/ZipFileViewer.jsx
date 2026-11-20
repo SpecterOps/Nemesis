@@ -2,11 +2,43 @@ import { useTheme } from '@/components/ThemeProvider';
 import JSZip from 'jszip';
 import { AlertCircle, ChevronDown, ChevronRight, FileText, Folder, Search, X } from 'lucide-react';
 // NEW: Import useCallback for memoizing the resizing function
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import MonacoContentViewer from './MonacoViewer';
 import { getMonacoLanguage } from './languageMap';
 
 const MAX_DISPLAYABLE_SIZE = 2 * 1024 * 1024; // 2MB text file display limit
+// Archives can hold 100k+ entries; render at most this many children per folder at a time
+const CHILDREN_PAGE_SIZE = 500;
+
+// Sorted (directories first, then by name) children of a tree node, cached on the node
+const sortedChildren = (node) => {
+    if (!node._sorted) {
+        node._sorted = Object.values(node.children).sort((a, b) => {
+            if (a.type === 'directory' && b.type !== 'directory') return -1;
+            if (a.type !== 'directory' && b.type === 'directory') return 1;
+            return a.name.localeCompare(b.name);
+        });
+    }
+    return node._sorted;
+};
+
+// One pass over the tree: paths of nodes that match `term` or contain a match
+const collectMatches = (root, term) => {
+    const matches = new Set();
+    const visit = (node) => {
+        if (node._lname === undefined) node._lname = node.name.toLowerCase();
+        let hit = node._lname.includes(term);
+        if (node.type === 'directory') {
+            for (const child of Object.values(node.children)) {
+                if (visit(child)) hit = true;
+            }
+        }
+        if (hit) matches.add(node.path);
+        return hit;
+    };
+    Object.values(root.children).forEach(visit);
+    return matches;
+};
 
 const ZipFileViewer = ({ fileBuffer, fileName }) => {
     const { isDark } = useTheme();
@@ -19,6 +51,8 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
     const [loading, setLoading] = useState(true);
     const [extracting, setExtracting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const deferredSearchTerm = useDeferredValue(searchTerm);
+    const [childLimits, setChildLimits] = useState({});
     const [error, setError] = useState(null);
 
     const fileExplorerRef = useRef(null);
@@ -129,21 +163,12 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
         loadZipContents();
     }, [fileBuffer]);
 
-    // Make sure Monaco editor resizes properly when the window or container changes size
+    // Make sure Monaco editor relayouts after the active file changes. (This used to also
+    // re-dispatch 'resize' from inside a 'resize' listener, which recursed until the stack overflowed.)
     useEffect(() => {
-        const handleResize = () => {
-            window.dispatchEvent(new Event('resize'));
-        };
-
-        window.addEventListener('resize', handleResize);
-
-        if (activeTab) {
-            setTimeout(handleResize, 50);
-        }
-
-        return () => {
-            window.removeEventListener('resize', handleResize);
-        };
+        if (!activeTab) return undefined;
+        const timer = setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+        return () => clearTimeout(timer);
     }, [activeTab]);
 
     // (The rest of your functions like buildZipStructure, toggleFolder, etc., remain unchanged)
@@ -247,42 +272,52 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
-    const filterTree = (node, term) => {
-        if (!term) return true;
-        const searchLower = term.toLowerCase();
-        if (node.name.toLowerCase().includes(searchLower)) return true;
-        if (node.type === 'directory' && node.children) {
-            for (const childName in node.children) {
-                if (filterTree(node.children[childName], term)) return true;
-            }
+    const searchLower = deferredSearchTerm.toLowerCase();
+    const searchMatches = useMemo(
+        () => (zipStructure && searchLower ? collectMatches(zipStructure, searchLower) : null),
+        [zipStructure, searchLower]
+    );
+    const renderChildren = (node, level) => {
+        const children = searchMatches
+            ? sortedChildren(node).filter(child => searchMatches.has(child.path))
+            : sortedChildren(node);
+        const limit = childLimits[node.path] || CHILDREN_PAGE_SIZE;
+        const shown = children.slice(0, limit).map(child => renderFileTree(child, level));
+        if (children.length > limit) {
+            shown.push(
+                <div
+                    key={`${node.path}__more`}
+                    className="py-1 text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                    style={{ paddingLeft: `${level * 12 + 8}px` }}
+                    onClick={() => setChildLimits(prev => ({ ...prev, [node.path]: limit + CHILDREN_PAGE_SIZE * 2 }))}
+                >
+                    Show more ({(children.length - limit).toLocaleString()} more entries)
+                </div>
+            );
         }
-        return false;
+        return shown;
     };
     const renderFileTree = (node, level = 0) => {
-        if (searchTerm && !filterTree(node, searchTerm)) return null;
+        if (searchMatches && !searchMatches.has(node.path)) return null;
         if (node.type === 'directory') {
             const isExpanded = expandedFolders[node.path] || false;
             return (
                 <div key={node.path} className="file-tree-node">
-                    <div className={`flex items-center cursor-pointer py-1 hover:bg-gray-100 dark:hover:bg-gray-700 pl-2 ${searchTerm && node.name.toLowerCase().includes(searchTerm.toLowerCase()) ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`} style={{ paddingLeft: `${level * 12 + 4}px` }} onClick={() => toggleFolder(node.path)}>
+                    <div className={`flex items-center cursor-pointer py-1 hover:bg-gray-100 dark:hover:bg-gray-700 pl-2 ${searchLower && node.name.toLowerCase().includes(searchLower) ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`} style={{ paddingLeft: `${level * 12 + 4}px` }} onClick={() => toggleFolder(node.path)}>
                         {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" /> : <ChevronRight className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-1" />}
                         <Folder className={`w-4 h-4 mr-2 ${isExpanded ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`} />
                         <span className="text-sm truncate text-gray-900 dark:text-gray-200">{node.name}</span>
                     </div>
                     {isExpanded && node.children && Object.keys(node.children).length > 0 && (
                         <div className="directory-contents">
-                            {Object.values(node.children).sort((a, b) => {
-                                if (a.type === 'directory' && b.type !== 'directory') return -1;
-                                if (a.type !== 'directory' && b.type === 'directory') return 1;
-                                return a.name.localeCompare(b.name);
-                            }).map(child => renderFileTree(child, level + 1))}
+                            {renderChildren(node, level + 1)}
                         </div>
                     )}
                 </div>
             );
         } else {
             return (
-                <div key={node.path} className={`flex items-center cursor-pointer py-1 hover:bg-gray-100 dark:hover:bg-gray-700 pl-2 ${activeTab === node.path ? 'bg-blue-100 dark:bg-blue-900/50' : searchTerm && node.name.toLowerCase().includes(searchTerm.toLowerCase()) ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`} style={{ paddingLeft: `${level * 12 + 8}px` }} onClick={() => openFile(node)}>
+                <div key={node.path} className={`flex items-center cursor-pointer py-1 hover:bg-gray-100 dark:hover:bg-gray-700 pl-2 ${activeTab === node.path ? 'bg-blue-100 dark:bg-blue-900/50' : searchLower && node.name.toLowerCase().includes(searchLower) ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}`} style={{ paddingLeft: `${level * 12 + 8}px` }} onClick={() => openFile(node)}>
                     <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400 mr-2" />
                     <span className="text-sm truncate text-gray-900 dark:text-gray-200">{node.name}</span>
                     <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">{formatFileSize(node.size)}</span>
@@ -336,14 +371,7 @@ const ZipFileViewer = ({ fileBuffer, fileName }) => {
                 >
                     {zipStructure && (
                         <div className="py-2">
-                            {Object.values(zipStructure.children)
-                                .sort((a, b) => {
-                                    if (a.type === 'directory' && b.type !== 'directory') return -1;
-                                    if (a.type !== 'directory' && b.type === 'directory') return 1;
-                                    return a.name.localeCompare(b.name);
-                                })
-                                .map(node => renderFileTree(node))
-                            }
+                            {renderChildren(zipStructure, 0)}
                         </div>
                     )}
                 </div>

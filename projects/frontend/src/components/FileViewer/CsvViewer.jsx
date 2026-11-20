@@ -2,8 +2,14 @@ import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import { ChevronDown, ChevronUp, ArrowUpDown, Download } from 'lucide-react';
 
+// Large CSVs (the 10MB preview can be 100k+ rows) are rendered incrementally
+const ROWS_PER_PAGE = 500;
+// Only the first rows are parsed (and sortable); the full file stays downloadable
+const MAX_PARSED_ROWS = 50000;
+
 const CsvViewer = ({ content, fileName }) => {
     const [csvData, setCsvData] = useState([]);
+    const [visibleRows, setVisibleRows] = useState(ROWS_PER_PAGE);
     const [originalData, setOriginalData] = useState([]);
     const [error, setError] = useState(null);
     const [sortConfig, setSortConfig] = useState({
@@ -27,6 +33,7 @@ const CsvViewer = ({ content, fileName }) => {
                 escapeChar: '"',         // Set escape character
                 header: false,           // We'll handle headers manually
                 skipEmptyLines: true,    // Skip empty lines
+                preview: MAX_PARSED_ROWS, // Bound parse time/memory on huge files
                 transformHeader: undefined // Don't transform header
             });
 
@@ -40,6 +47,7 @@ const CsvViewer = ({ content, fileName }) => {
             
             // Reset sorting when content changes
             setSortConfig({ key: null, direction: null });
+            setVisibleRows(ROWS_PER_PAGE);
         } catch (e) {
             setError('Error parsing CSV content');
             console.error('CSV parsing error:', e);
@@ -137,7 +145,8 @@ const CsvViewer = ({ content, fileName }) => {
     }
 
     const headers = csvData[0];
-    const rows = csvData.slice(1);
+    const totalRows = csvData.length - 1;
+    const rows = csvData.slice(1, 1 + visibleRows);
 
     const handleDownload = () => {
         const blob = new Blob([content], { type: 'text/csv' });
@@ -221,6 +230,20 @@ const CsvViewer = ({ content, fileName }) => {
                     ))}
                 </tbody>
             </table>
+            {totalRows > rows.length && (
+                <div className="flex items-center justify-between mt-3 text-sm text-gray-500 dark:text-gray-400">
+                    <span>
+                        Showing {rows.length.toLocaleString()} of {totalRows.toLocaleString()} rows
+                        {csvData.length >= MAX_PARSED_ROWS && ` (only the first ${MAX_PARSED_ROWS.toLocaleString()} rows are loaded)`}
+                    </span>
+                    <button
+                        onClick={() => setVisibleRows(v => v + ROWS_PER_PAGE * 2)}
+                        className="px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                    >
+                        Show {Math.min(ROWS_PER_PAGE * 2, totalRows - rows.length).toLocaleString()} more rows
+                    </button>
+                </div>
+            )}
             </div>
         </div>
     );
