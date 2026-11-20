@@ -48,7 +48,6 @@ class ModuleTestHarness:
         """Initialize the test harness."""
         self.storage = MockStorageMinio()
         self.pool = MockAsyncpgPool()
-        self._patches: list = []
 
     def register_file(
         self,
@@ -108,6 +107,41 @@ class ModuleTestHarness:
         # Register with mock pool
         self.pool.register_file_enriched(object_id, file_enriched)
 
+    def _start_storage_patches(self, module_class: type) -> list:
+        """Patch StorageMinio so module construction never touches Dapr/SeaweedFS.
+
+        StorageMinio is patched both at its definition site (common.storage) and at
+        the import site in the module under test, if the module imported it directly.
+
+        Returns:
+            The started patchers; the caller is responsible for stopping them.
+        """
+        targets = ["common.storage.StorageMinio", f"{module_class.__module__}.StorageMinio"]
+        started = []
+        for target in targets:
+            p = patch(target, return_value=self.storage)
+            try:
+                p.start()
+            except AttributeError:
+                continue  # Module didn't import StorageMinio directly
+            started.append(p)
+        return started
+
+    def _instantiate(self, module_class: type[T]) -> T:
+        """Instantiate a module and inject the mock storage and pool."""
+        if hasattr(module_class, "create_enrichment_module"):
+            module = module_class.create_enrichment_module()
+        else:
+            module = module_class()
+
+        # Replace storage with our mock (in case the module created its own)
+        if hasattr(module, "storage"):
+            module.storage = self.storage
+        if hasattr(module, "asyncpg_pool"):
+            module.asyncpg_pool = self.pool
+
+        return module
+
     @asynccontextmanager
     async def create_module(self, module_class: type[T]) -> T:
         """Create a module instance with mocked dependencies.
@@ -125,60 +159,16 @@ class ModuleTestHarness:
             async with harness.create_module(PEAnalyzer) as module:
                 result = await module.process("test-uuid")
         """
-        # We need to patch StorageMinio in multiple places:
-        # 1. The common.storage module (where it's defined)
-        # 2. The specific module's namespace (where it's imported)
-
-        # Get the module that contains the class
-        module_name = module_class.__module__
-
-        patches_to_apply = [
-            # Patch at the definition site
-            patch("common.storage.StorageMinio", return_value=self.storage),
-        ]
-
-        # Also patch at the import site if the module imported StorageMinio
+        patches = self._start_storage_patches(module_class)
         try:
-            patches_to_apply.append(patch(f"{module_name}.StorageMinio", return_value=self.storage))
-        except Exception:
-            pass  # Module might not have imported StorageMinio directly
-
-        # Start all patches
-        for p in patches_to_apply:
-            try:
-                p.start()
-                self._patches.append(p)
-            except Exception:
-                pass  # Ignore patch failures for modules that don't import StorageMinio
-
-        try:
-            # Create the module instance
-            # The module's __init__ will get our mock storage
-            if hasattr(module_class, "create_enrichment_module"):
-                # Module uses factory function
-                module = module_class.create_enrichment_module()
-            else:
-                # Module is instantiated directly
-                module = module_class()
-
-            # Replace storage with our mock (in case the module created its own)
-            if hasattr(module, "storage"):
-                module.storage = self.storage
-
-            # Inject the mock pool
-            if hasattr(module, "asyncpg_pool"):
-                module.asyncpg_pool = self.pool
-
+            module = self._instantiate(module_class)
             yield module
-
         finally:
-            # Stop all patches
-            for p in self._patches:
+            for p in patches:
                 try:
                     p.stop()
                 except Exception:
                     pass
-            self._patches.clear()
 
     def get_uploaded_files(self) -> dict[str, bytes]:
         """Get files uploaded during testing (for assertions on transforms).
@@ -219,22 +209,19 @@ class ModuleTestHarness:
             module_class: The enrichment module class to instantiate
 
         Returns:
-            Configured module instance (not yet patched - use create_module for testing)
+            Configured module instance with mock storage and pool injected
 
         Note:
-            This method does NOT apply patches. Use create_module() for actual testing.
+            StorageMinio is only patched while the module is constructed. Code that
+            instantiates StorageMinio later (e.g. inside process()) is not covered;
+            use create_module() for those tests.
         """
-        if hasattr(module_class, "create_enrichment_module"):
-            module = module_class.create_enrichment_module()
-        else:
-            module = module_class()
-
-        if hasattr(module, "storage"):
-            module.storage = self.storage
-        if hasattr(module, "asyncpg_pool"):
-            module.asyncpg_pool = self.pool
-
-        return module
+        patches = self._start_storage_patches(module_class)
+        try:
+            return self._instantiate(module_class)
+        finally:
+            for p in patches:
+                p.stop()
 
 
 async def run_module_test(

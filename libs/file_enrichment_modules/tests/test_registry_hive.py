@@ -14,6 +14,7 @@ import pytest
 from file_enrichment_modules.registry_hive.analyzer import (
     EMPTY_LM_HASH,
     EMPTY_NT_HASH,
+    HEX_BLOB_TRUNCATE_CHARS,
     RegistryHiveAnalyzer,
     _filetime_to_str,
     _regipy_value_to_bytes,
@@ -728,7 +729,8 @@ class TestFormatLsaSecretsText:
         assert "User Key: ccdd" in text
 
     def test_hex_blob_truncated(self, analyzer):
-        long_hex = "ab" * 100  # 200 hex chars = 100 bytes
+        # One byte past the display limit
+        long_hex = "ab" * (HEX_BLOB_TRUNCATE_CHARS // 2 + 1)
         secrets = [
             {
                 "name": "NK$LM",
@@ -741,8 +743,25 @@ class TestFormatLsaSecretsText:
         lines = analyzer._format_lsa_secrets_text(secrets)
         text = "\n".join(lines)
         assert "NK$LM:" in text
-        assert "..." in text
-        assert "(100 bytes)" in text
+        assert f"  {long_hex[:HEX_BLOB_TRUNCATE_CHARS]}..." in text
+        assert long_hex not in text
+        assert f"({len(long_hex) // 2} bytes)" in text
+
+    def test_hex_blob_at_limit_not_truncated(self, analyzer):
+        exact_hex = "ab" * (HEX_BLOB_TRUNCATE_CHARS // 2)
+        secrets = [
+            {
+                "name": "NK$LM",
+                "secret_type": "hex_blob",
+                "decrypted": True,
+                "value": exact_hex,
+                "bootkey_available": True,
+            }
+        ]
+        text = "\n".join(analyzer._format_lsa_secrets_text(secrets))
+        assert exact_hex in text
+        assert "..." not in text
+        assert "bytes)" not in text
 
     def test_hex_blob_short_not_truncated(self, analyzer):
         short_hex = "abcdef1234"
@@ -864,7 +883,7 @@ class TestFormatLsaSecretsMarkdown:
         assert "**User Key**: `ccdd`" in md
 
     def test_hex_blob_truncated(self, analyzer):
-        long_hex = "ab" * 100
+        long_hex = "ab" * (HEX_BLOB_TRUNCATE_CHARS // 2 + 1)
         secrets = [
             {
                 "name": "NK$LM",
@@ -876,7 +895,37 @@ class TestFormatLsaSecretsMarkdown:
         ]
         md = analyzer._format_lsa_secrets_markdown(secrets)
         assert "### NK$LM" in md
-        assert "(100 bytes)" in md
+        assert f"`{long_hex[:HEX_BLOB_TRUNCATE_CHARS]}...` ({len(long_hex) // 2} bytes)" in md
+        assert long_hex not in md
+
+    def test_hex_blob_at_limit_not_truncated(self, analyzer):
+        exact_hex = "ab" * (HEX_BLOB_TRUNCATE_CHARS // 2)
+        secrets = [
+            {
+                "name": "NK$LM",
+                "secret_type": "hex_blob",
+                "decrypted": True,
+                "value": exact_hex,
+                "bootkey_available": True,
+            }
+        ]
+        md = analyzer._format_lsa_secrets_markdown(secrets)
+        assert f"`{exact_hex}`" in md
+        assert "..." not in md
+
+    def test_hex_blob_empty(self, analyzer):
+        secrets = [
+            {
+                "name": "NK$LM",
+                "secret_type": "hex_blob",
+                "decrypted": True,
+                "value": "",
+                "bootkey_available": True,
+            }
+        ]
+        md = analyzer._format_lsa_secrets_markdown(secrets)
+        assert "### NK$LM" in md
+        assert "(empty)" in md
 
     def test_generic_encrypted_secret(self, analyzer):
         secrets = [

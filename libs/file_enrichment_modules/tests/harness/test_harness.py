@@ -299,3 +299,49 @@ class TestModuleTestHarness:
 
         assert not harness.storage.check_file_exists("test-uuid")
         assert "test-uuid" not in harness.pool._file_enriched_data
+
+    def test_create_module_sync_patches_storage_during_init(self):
+        """Modules that build StorageMinio in __init__ must get the mock, not a Dapr-backed client."""
+        import common.storage
+        import file_enrichment_modules.container.analyzer as container_mod
+        from file_enrichment_modules.container.analyzer import ContainerAnalyzer
+
+        real_definition = common.storage.StorageMinio
+        real_import_site = container_mod.StorageMinio
+        harness = ModuleTestHarness()
+
+        module = harness.create_module_sync(ContainerAnalyzer)
+
+        assert module.storage is harness.storage
+        assert module.asyncpg_pool is harness.pool
+        # Patches are only active during construction
+        assert common.storage.StorageMinio is real_definition
+        assert container_mod.StorageMinio is real_import_site
+
+    def test_create_module_sync_without_storage_import(self):
+        """A module that never imported StorageMinio is created without patch errors."""
+
+        class PlainModule:
+            def __init__(self):
+                self.asyncpg_pool = None
+
+        harness = ModuleTestHarness()
+        module = harness.create_module_sync(PlainModule)
+
+        assert module.asyncpg_pool is harness.pool
+        assert not hasattr(module, "storage")
+
+    def test_create_module_sync_stops_patches_when_init_fails(self):
+        """A failing constructor propagates and leaves StorageMinio unpatched."""
+        import common.storage
+
+        real_definition = common.storage.StorageMinio
+
+        class BrokenModule:
+            def __init__(self):
+                raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError, match="boom"):
+            ModuleTestHarness().create_module_sync(BrokenModule)
+
+        assert common.storage.StorageMinio is real_definition

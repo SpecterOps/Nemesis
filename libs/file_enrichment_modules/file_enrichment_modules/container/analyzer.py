@@ -37,11 +37,12 @@ class ContainerAnalyzer(EnrichmentModule):
 
     def _format_size(self, size_in_bytes: int) -> str:
         """Convert size in bytes to human readable format."""
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if size_in_bytes < 1024:
-                return f"{size_in_bytes:.2f} {unit}"
-            size_in_bytes //= 1024
-        return f"{size_in_bytes:.2f} TB"
+        size = float(size_in_bytes)
+        for unit in ["B", "KB", "MB", "GB"]:
+            if size < 1024:
+                return f"{size:.2f} {unit}"
+            size /= 1024  # true division: keep the fraction (1536 bytes -> "1.50 KB")
+        return f"{size:.2f} TB"
 
     def _analyze_zip(self, file_path: str) -> list[tuple[str, int]]:
         """Get contents of a ZIP file without extraction."""

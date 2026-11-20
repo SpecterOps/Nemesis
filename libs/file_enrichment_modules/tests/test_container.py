@@ -515,3 +515,12 @@ class TestFormatSize:
 
     def test_gigabytes(self, module):
         assert module._format_size(1024 * 1024 * 1024) == "1.00 GB"
+
+    def test_fractional_sizes_keep_their_decimals(self, module):
+        assert module._format_size(1536) == "1.50 KB"
+        assert module._format_size(int(2.25 * 1024 * 1024)) == "2.25 MB"
+        assert module._format_size(1024**3 + 1024**3 // 4) == "1.25 GB"
+
+    def test_terabytes_and_beyond_stay_in_tb(self, module):
+        assert module._format_size(1024**4) == "1.00 TB"
+        assert module._format_size(3 * 1024**5) == "3072.00 TB"
