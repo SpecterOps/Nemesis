@@ -77,6 +77,9 @@ spec:
               mountPath: /var/lib/postgresql
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
+            # Parallel query workers need more than the container runtime's 64MB /dev/shm
+            - name: dshm
+              mountPath: /dev/shm
           readinessProbe:
             exec:
               command:
@@ -106,6 +109,10 @@ spec:
         - name: init-scripts
           configMap:
             name: postgres-init
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
 ---
 apiVersion: v1
 kind: Service

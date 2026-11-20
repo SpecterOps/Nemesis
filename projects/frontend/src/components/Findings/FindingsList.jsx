@@ -187,21 +187,12 @@ const FindingsList = () => {
 
     writeQueue.current = writeQueue.current.then(async () => {
       try {
-        const inserted = await hasuraRequest(`
+        // A database trigger points each finding's triage_id/triage_value at this new entry
+        await hasuraRequest(`
           mutation InsertTriage($objects: [findings_triage_history_insert_input!]!) {
-            insert_findings_triage_history(objects: $objects) { returning { id finding_id } }
+            insert_findings_triage_history(objects: $objects) { affected_rows }
           }`, {
           objects: ids.map((id) => ({ finding_id: id, username, value, automated: false })),
-        });
-        // Point each finding at its latest triage entry (lets the list filter/sort on it exactly)
-        await hasuraRequest(`
-          mutation SetLatestTriage($updates: [findings_updates!]!) {
-            update_findings_many(updates: $updates) { affected_rows }
-          }`, {
-          updates: inserted.insert_findings_triage_history.returning.map((r) => ({
-            where: { finding_id: { _eq: r.finding_id } },
-            _set: { triage_id: r.id },
-          })),
         });
         const doneAt = Date.now();
         ids.forEach((id) => {

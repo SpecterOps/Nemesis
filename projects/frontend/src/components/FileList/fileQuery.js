@@ -20,7 +20,7 @@ export const buildFilesWhere = ({ fileType, source, path, objectId, tag, viewSta
     },
   ];
 
-  if (onlyWithFindings) and.push({ findingsByObjectId: {} });
+  if (onlyWithFindings) and.push({ findings_count: { _gt: 0 } });
 
   if (objectId) {
     const valid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectId.trim());
@@ -64,7 +64,7 @@ export const buildFilesOrderBy = (column, direction) => {
     case 'path':
       return [{ [column]: dir }, tie];
     case 'findings':
-      return [{ findingsByObjectId_aggregate: { count: dir } }, tie];
+      return [{ findings_count: dir }, tie];
     case 'timestamp':
     default:
       return [{ timestamp: dir }, tie];

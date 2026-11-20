@@ -25,43 +25,34 @@ const SEVERITY_RANGES = {
 // Escape LIKE metacharacters so the search text matches literally (e.g. "C:\Users", "file_1")
 export const escapeLike = (s) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-const HUMAN = { _or: [{ automated: { _eq: false } }, { automated: { _is_null: true } }] };
-const AUTOMATED = { automated: { _eq: true } };
-const ACTIONABLE_VALUES = { value: { _in: ['true_positive', 'needs_review'] } };
-
-// "The latest triage entry matches `pred`". findings.triage_id points at the latest entry when it is
-// set (the UI sets it with every triage); findings without it fall back to "some entry matches"
-// (automated triage runs once, before any human triage, so the latest entry is the human one if
-// there is any). `noHumanFallback` additionally requires the fallback rows to have no human entry.
-const latestTriage = (pred, { noHumanFallback = false } = {}) => {
-  const fallback = [{ triage_id: { _is_null: true } }, { finding_triage_histories: pred }];
-  if (noHumanFallback) fallback.push({ _not: { finding_triage_histories: HUMAN } });
-  return { _or: [{ findings_triage_history: pred }, { _and: fallback }] };
-};
-
-const UNTRIAGED = { _not: { finding_triage_histories: {} } };
+// findings.triage_id / triage_value / triage_automated always describe the latest triage entry (a
+// database trigger maintains them), so triage filters are plain column conditions, no history joins.
+const UNTRIAGED = { triage_id: { _is_null: true } };
+const TRIAGED = { triage_id: { _is_null: false } };
+const AUTOMATED = { triage_automated: { _eq: true } };
+const HUMAN = { _and: [TRIAGED, { triage_automated: { _eq: false } }] };
 
 export const triageStateCondition = (state) => {
   switch (state) {
     case 'untriaged':
       return UNTRIAGED;
     case 'triaged':
-      return { finding_triage_histories: {} };
+      return TRIAGED;
     case 'untriaged_and_actionable':
       // Untriaged, or the latest triage is an automated true_positive / needs_review
-      return { _or: [UNTRIAGED, latestTriage({ _and: [AUTOMATED, ACTIONABLE_VALUES] }, { noHumanFallback: true })] };
+      return { _or: [UNTRIAGED, { _and: [AUTOMATED, { triage_value: { _in: ['true_positive', 'needs_review'] } }] }] };
     case 'true_positive':
     case 'false_positive':
     case 'needs_review':
-      return latestTriage({ value: { _eq: state } });
+      return { triage_value: { _eq: state } };
     default:
       return null;
   }
 };
 
 export const triageSourceCondition = (source) => {
-  if (source === 'automated') return latestTriage(AUTOMATED, { noHumanFallback: true });
-  if (source === 'human') return latestTriage(HUMAN);
+  if (source === 'automated') return AUTOMATED;
+  if (source === 'human') return HUMAN;
   return null;
 };
 
@@ -111,7 +102,7 @@ export const buildFindingsOrderBy = (column, direction) => {
       return [{ files_enriched: { path: dir } }, tie];
     case 'triage_value':
       // Untriaged ('' in the old client-side sort) first when ascending, last when descending
-      return [{ findings_triage_history: { value: dir === 'asc' ? 'asc_nulls_first' : 'desc_nulls_last' } }, tie];
+      return [{ triage_value: dir === 'asc' ? 'asc_nulls_first' : 'desc_nulls_last' }, tie];
     case 'created_at':
     default:
       return [{ created_at: dir }, tie];

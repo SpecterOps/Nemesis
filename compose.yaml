@@ -779,6 +779,9 @@ services:
         "-c",
         "tcp_keepalives_count=3",
       ]
+    # Parallel query workers allocate dynamic shared memory in /dev/shm; Docker's 64MB default
+    # fails large sorts/aggregates with "could not resize shared memory segment"
+    shm_size: 1g
     # ports:
     #   - "${POSTGRES_EXTERNAL_PORT:-}5432"
     environment:

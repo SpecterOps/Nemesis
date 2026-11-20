@@ -27,7 +27,7 @@ const stopPropagation = (e) => e.stopPropagation();
 // One file row. Per-row props + stable callbacks so React.memo skips rows whose selection
 // state didn't change (keyboard navigation re-renders only two rows).
 const Row = React.memo(({ file, index, isTriageMode, isSelected, isChecked, onRowClick, username }) => {
-  const findingsCount = file.findingsByObjectId_aggregate.aggregate.count || 0;
+  const findingsCount = file.findings_count || 0;
   return (
     <div
       style={{ height: ROW_HEIGHT }}
@@ -137,7 +137,7 @@ const FILE_FIELDS = `
   mime_type
   is_plaintext
   file_tags
-  findingsByObjectId_aggregate { aggregate { count } }
+  findings_count
   files_view_histories(where: {username: {_eq: $username}}, order_by: {timestamp: desc}, limit: 1) { username timestamp }`;
 
 // Tiny live queries: new files, new findings or new views refresh the current page

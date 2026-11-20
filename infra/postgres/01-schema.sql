@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS files_enriched (
     security_info JSONB,
     hashes JSONB,
     file_tags TEXT[] DEFAULT '{}',
+    -- Number of findings for this file, kept current by the findings_count triggers on findings
+    findings_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -166,7 +168,11 @@ CREATE TABLE IF NOT EXISTS findings (
     data JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    triage_id BIGINT
+    -- Latest findings_triage_history entry, denormalized and kept current by the
+    -- findings_triage_history_set_latest trigger so list filters/sorts don't join the history
+    triage_id BIGINT,
+    triage_value VARCHAR(255),
+    triage_automated BOOLEAN
 );
 
 CREATE TABLE IF NOT EXISTS findings_triage_history (
@@ -245,6 +251,46 @@ CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity, finding_i
 CREATE INDEX IF NOT EXISTS idx_findings_finding_name ON findings(finding_name, finding_id);
 CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category, finding_id);
 CREATE INDEX IF NOT EXISTS idx_findings_origin_name ON findings(origin_name, finding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_triage_value ON findings(triage_value, finding_id);
+-- Files "findings" sort on the trigger-maintained count (was a per-file aggregate sort: ~11s at 1M files)
+CREATE INDEX IF NOT EXISTS idx_files_enriched_findings_count ON files_enriched(findings_count, object_id);
+
+-- Keep findings.triage_id/triage_value/triage_automated pointing at the newest triage entry, whoever
+-- writes it (UI, agents service, API)
+CREATE OR REPLACE FUNCTION set_finding_latest_triage() RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE findings
+    SET triage_id = NEW.id, triage_value = NEW.value, triage_automated = COALESCE(NEW.automated, FALSE)
+    WHERE finding_id = NEW.finding_id AND (triage_id IS NULL OR triage_id < NEW.id);
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER findings_triage_history_set_latest
+    AFTER INSERT ON findings_triage_history
+    FOR EACH ROW EXECUTE FUNCTION set_finding_latest_triage();
+
+-- Keep files_enriched.findings_count in step with the findings rows for each file
+CREATE OR REPLACE FUNCTION update_file_findings_count() RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        UPDATE files_enriched SET findings_count = findings_count + 1 WHERE object_id = NEW.object_id;
+    END IF;
+    IF TG_OP IN ('DELETE', 'UPDATE') THEN
+        UPDATE files_enriched SET findings_count = findings_count - 1 WHERE object_id = OLD.object_id;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER findings_count_insert_delete
+    AFTER INSERT OR DELETE ON findings
+    FOR EACH ROW EXECUTE FUNCTION update_file_findings_count();
+
+CREATE OR REPLACE TRIGGER findings_count_object_id_update
+    AFTER UPDATE OF object_id ON findings
+    FOR EACH ROW WHEN (OLD.object_id IS DISTINCT FROM NEW.object_id)
+    EXECUTE FUNCTION update_file_findings_count();
 
 
 

@@ -99,7 +99,7 @@ const Sidebar = ({ onCollapse }) => {
       try {
         const data = await hasuraQuery(`
           query GetCountOfFindingsWithNoTriageHistories {
-            findings_aggregate(where: { _not: { finding_triage_histories: {} } }) {
+            findings_aggregate(where: { triage_id: { _is_null: true } }) {
               aggregate { count }
             }
           }
