@@ -1,6 +1,8 @@
 import PaginationControls from '@/components/FileList/PaginationControls';
 import { useUser } from '@/contexts/UserContext';
-import { fetchPage, hasuraRequest, isEditableTarget } from '@/hooks/pagedList';
+import BulkActionBar from '@/components/FileList/BulkActionBar';
+import { fetchPage, forEachIdChunk, hasuraRequest, isEditableTarget } from '@/hooks/pagedList';
+import { useBulkAction } from '@/hooks/useBulkAction';
 import { usePagedList } from '@/hooks/usePagedList';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -161,6 +163,7 @@ const FindingsList = () => {
   const {
     page, rows, rowsPage, total, totalPages, isLoading, isFetching, error, containerRef, nav,
     isTriageMode, setIsTriageMode, selectedIndex, select, checked, setChecked,
+    allSelected, selectAllKey, clearSelection,
   } = list;
 
   // Serialize triage writes so repeated presses on one finding land in order
@@ -208,6 +211,41 @@ const FindingsList = () => {
   }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTriage = useCallback((findingId, value) => triage([findingId], value), [triage]);
+
+  // ----- Bulk triage of every result (second Ctrl+A) -----
+  const bulkAction = useBulkAction();
+  const TRIAGE_LABELS = { true_positive: 'true positive', false_positive: 'false positive', needs_review: 'needs review' };
+
+  const triageAllResults = useCallback((value) => {
+    const count = nav.current.total || 0;
+    if (count === 0) return;
+    // Snapshot the filters: the selection is "everything these filters match right now"
+    const where = buildFindingsWhere(filtersRef.current);
+    const label = TRIAGE_LABELS[value];
+    bulkAction.ask({
+      message: `Triage all ${count.toLocaleString()} findings matching the current filters as ${label}?`,
+      label: `Triaging as ${label}`,
+      total: count,
+      work: (progress) => forEachIdChunk({
+        table: 'findings',
+        idField: 'finding_id',
+        where,
+        chunkSize: 2000,
+        onChunk: async (ids) => {
+          await hasuraRequest(`
+            mutation InsertTriage($objects: [findings_triage_history_insert_input!]!) {
+              insert_findings_triage_history(objects: $objects) { affected_rows }
+            }`, { objects: ids.map((id) => ({ finding_id: id, username, value, automated: false })) });
+          progress(ids.length);
+        },
+      }),
+      doneMessage: (n) => `Triaged ${n.toLocaleString()} findings as ${label}.`,
+      onFinish: () => {
+        listRef.current.clearSelection();
+        listRef.current.refetch();
+      },
+    });
+  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ----- Selection <-> URL -----
   // Apply ?selected=<finding id> once the first page has loaded (turns triage mode on, as before)
@@ -315,11 +353,12 @@ const FindingsList = () => {
 
   // ----- Keyboard -----
   const keyState = useRef({});
-  keyState.current = { isModalOpen, closeModal, openModal, triage, navigateToFile };
+  keyState.current = { isModalOpen, closeModal, openModal, triage, navigateToFile, bulkAction, triageAllResults };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (isEditableTarget(e.target)) return;
+      if (keyState.current.bulkAction.handleKey(e)) return;
       const { isModalOpen: modalOpen, closeModal: close } = keyState.current;
       const n = nav.current;
 
@@ -361,12 +400,13 @@ const FindingsList = () => {
       l.run(() => {
         const row = l.currentRow();
         if (ctrlA) {
-          setChecked(new Set(n.rows.map((f) => f.finding_id)));
+          // First press: this page; second press: every result
+          l.selectAllKey();
           return;
         }
         switch (key) {
           case 'Escape':
-            if (n.checked.size) setChecked(new Set());
+            l.clearSelection();
             break;
           case 'ArrowUp':
           case 'ArrowDown': {
@@ -384,7 +424,9 @@ const FindingsList = () => {
           case '2':
           case '3': {
             const value = { 1: 'true_positive', 2: 'false_positive', 3: 'needs_review' }[key];
-            if (n.checked.size > 0) {
+            if (n.allSelected) {
+              keyState.current.triageAllResults(value);
+            } else if (n.checked.size > 0) {
               keyState.current.triage([...n.checked], value);
               setChecked(new Set());
             } else if (row) {
@@ -420,10 +462,19 @@ const FindingsList = () => {
       <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
         <p className="text-sm text-blue-600 dark:text-blue-400">
           {isTriageMode
-            ? 'Triage Mode Active: ↑↓ to navigate (PgUp/PgDn to jump), → to view details. Select multiple with Shift + ↑↓, hitting space, or Ctrl+A. Clear selection with ESC. Triage selected results with 1, 2, or 3 keys.'
+            ? 'Triage Mode Active: ↑↓ to navigate (PgUp/PgDn to jump), → to view details. Select multiple with Shift + ↑↓, hitting space, or Ctrl+A (press again to select all results). Clear selection with ESC. Triage selected results with 1, 2, or 3 keys.'
             : "Press 't' to enter triage mode"}
+          {isTriageMode && (allSelected || checked.size > 0) && (
+            <span className="ml-2 font-semibold">
+              {allSelected
+                ? `All ${(total || 0).toLocaleString()} results selected.`
+                : `${checked.size.toLocaleString()} selected${checked.size === rows.length && typeof total === 'number' && total > rows.length ? ' (Ctrl+A again to select all results)' : ''}.`}
+            </span>
+          )}
         </p>
       </div>
+
+      <BulkActionBar bulk={bulkAction.bulk} onConfirm={bulkAction.confirm} onCancel={bulkAction.cancel} />
 
       {/* Filters section */}
       <FindingsFilters filters={filters} onChange={handleFiltersChange} totalCount={total} />
@@ -446,7 +497,7 @@ const FindingsList = () => {
         ) : (
           <div
             ref={containerRef}
-            className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden transition-opacity ${isFetching && nav.current.loading ? 'opacity-60' : ''}`}
+            className={`${list.keyboardNav ? 'kbd-nav ' : ''}flex-1 min-h-0 overflow-y-auto overflow-x-hidden transition-opacity ${isFetching && nav.current.loading ? 'opacity-60' : ''}`}
           >
             {rows.map((finding, index) => (
               <TableRow
@@ -456,7 +507,8 @@ const FindingsList = () => {
                 height={ROW_HEIGHT}
                 isTriageMode={isTriageMode}
                 isSelected={isTriageMode && index === selectedIndex && rowsPage === page}
-                isChecked={isTriageMode && checked.has(finding.finding_id)}
+                isChecked={isTriageMode && (allSelected || checked.has(finding.finding_id))}
+                hasMultiSelection={allSelected || checked.size > 0}
                 onRowClick={handleRowClick}
                 onTriage={handleTriage}
               />

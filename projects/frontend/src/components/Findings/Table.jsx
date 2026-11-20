@@ -112,6 +112,7 @@ export const TableRow = React.memo(({
     isTriageMode,
     isSelected,
     isChecked,
+    hasMultiSelection,
     onRowClick,
     onTriage,
 }) => {
@@ -154,7 +155,8 @@ export const TableRow = React.memo(({
         >
             {isTriageMode && (
                 <div className="flex-shrink-0 w-8 text-sm font-medium text-gray-500 dark:text-gray-400 text-center">
-                    {isSelected ? '✓' : ''}
+                    {/* ✓ = what an action applies to: every selected row, else the current row */}
+                    {isChecked || (isSelected && !hasMultiSelection) ? '✓' : ''}
                 </div>
             )}
             <div className="flex-shrink-0 w-16 text-center">

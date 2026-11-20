@@ -6,7 +6,7 @@ import { buildFilesOrderBy, buildFilesWhere, wildcardToIlike } from '../componen
 import {
   ALL_CATEGORIES, ALL_SEVERITIES, buildFindingsOrderBy, buildFindingsWhere, escapeLike, matchesAfterHumanTriage,
 } from '../components/Findings/findingsQuery.js';
-import { fetchPage, isEditableTarget, jumpSelection, pageJumpRows, reverseOrderBy, scrollListByPage, scrollRowIntoView } from './pagedList.js';
+import { fetchPage, forEachIdChunk, isEditableTarget, jumpSelection, pageJumpRows, reverseOrderBy, scrollListByPage, scrollRowIntoView } from './pagedList.js';
 
 const defaults = {
   categories: ALL_CATEGORIES, severities: ALL_SEVERITIES, search: '', triageState: 'all', triageSource: 'all', objectId: '',
@@ -169,4 +169,55 @@ test('files order_by: every sortable column, stable tie-breaker', () => {
   assert.deepEqual(buildFilesOrderBy('findings', 'desc'), [{ findings_count: 'desc' }, { object_id: 'desc' }]);
   assert.deepEqual(buildFilesOrderBy('path', 'asc'), [{ path: 'asc' }, { object_id: 'asc' }]);
   assert.deepEqual(buildFilesOrderBy(undefined, undefined), [{ timestamp: 'desc' }, { object_id: 'desc' }]);
+});
+
+test('forEachIdChunk walks every matching id by keyset, even when rows stop matching', async () => {
+  globalThis.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
+  // 7 matching ids; processing a chunk removes those rows from the result (like triaging untriaged rows)
+  let matching = [3, 5, 8, 9, 12, 15, 20];
+  const wheres = [];
+  globalThis.fetch = async (url, opts) => {
+    const { variables } = JSON.parse(opts.body);
+    wheres.push(variables.where);
+    const after = variables.where._and ? variables.where._and[1].finding_id._gt : -Infinity;
+    const ids = matching.filter((id) => id > after).slice(0, variables.limit);
+    return { ok: true, json: async () => ({ data: { findings: ids.map((finding_id) => ({ finding_id })) } }) };
+  };
+  const seen = [];
+  const n = await forEachIdChunk({
+    table: 'findings', idField: 'finding_id', where: { category: { _eq: 'pii' } }, chunkSize: 3,
+    onChunk: async (ids) => { seen.push(ids); matching = matching.filter((id) => !ids.includes(id)); },
+  });
+  assert.equal(n, 7);
+  assert.deepEqual(seen, [[3, 5, 8], [9, 12, 15], [20]]);
+  assert.deepEqual(wheres[0], { category: { _eq: 'pii' } });
+  assert.deepEqual(wheres[1], { _and: [{ category: { _eq: 'pii' } }, { finding_id: { _gt: 8 } }] });
+});
+
+test('forEachIdChunk: no matches, exact multiple of the chunk size, and errors', async () => {
+  globalThis.window = { ENV: { HASURA_ADMIN_SECRET: 'x' } };
+  const all = [1, 2, 3, 4];
+  let calls = 0;
+  globalThis.fetch = async (url, opts) => {
+    calls++;
+    const { variables } = JSON.parse(opts.body);
+    const after = variables.where._and ? variables.where._and[1].id._gt : -Infinity;
+    const ids = all.filter((id) => id > after).slice(0, variables.limit);
+    return { ok: true, json: async () => ({ data: { t: ids.map((id) => ({ id })) } }) };
+  };
+  const chunks = [];
+  assert.equal(await forEachIdChunk({ table: 't', idField: 'id', where: {}, chunkSize: 2, onChunk: async (ids) => chunks.push(ids) }), 4);
+  assert.deepEqual(chunks, [[1, 2], [3, 4]]);
+  assert.equal(calls, 3, 'a full last chunk needs one more (empty) fetch to know it is done');
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ data: { t: [] } }) });
+  let called = false;
+  assert.equal(await forEachIdChunk({ table: 't', idField: 'id', where: {}, onChunk: async () => { called = true; } }), 0);
+  assert.equal(called, false);
+
+  globalThis.fetch = async () => ({ ok: false, status: 503 });
+  await assert.rejects(() => forEachIdChunk({ table: 't', idField: 'id', where: {}, onChunk: async () => {} }), /503/);
+  // a failing chunk action stops the walk
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ data: { t: [{ id: 1 }] } }) });
+  await assert.rejects(() => forEachIdChunk({ table: 't', idField: 'id', where: {}, onChunk: async () => { throw new Error('insert failed'); } }), /insert failed/);
 });

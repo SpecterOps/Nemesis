@@ -1,11 +1,13 @@
 import Tooltip from '@/components/shared/Tooltip2';
 import { useUser } from '@/contexts/UserContext';
-import { fetchPage, hasuraRequest, isEditableTarget } from '@/hooks/pagedList';
+import { fetchPage, forEachIdChunk, hasuraRequest, isEditableTarget } from '@/hooks/pagedList';
+import { useBulkAction } from '@/hooks/useBulkAction';
 import { usePagedList } from '@/hooks/usePagedList';
 import { AlertTriangle, ChevronDown, ChevronUp, Eye, Search, Tag, X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { FILES_PAGE_SIZE, FILE_SORT_COLUMNS, buildFilesOrderBy, buildFilesWhere } from './fileQuery';
+import BulkActionBar from './BulkActionBar';
 import PaginationControls from './PaginationControls';
 
 const ROW_HEIGHT = 48;
@@ -26,7 +28,7 @@ const stopPropagation = (e) => e.stopPropagation();
 
 // One file row. Per-row props + stable callbacks so React.memo skips rows whose selection
 // state didn't change (keyboard navigation re-renders only two rows).
-const Row = React.memo(({ file, index, isTriageMode, isSelected, isChecked, onRowClick, username }) => {
+const Row = React.memo(({ file, index, isTriageMode, isSelected, isChecked, hasMultiSelection, onRowClick, username }) => {
   const findingsCount = file.findings_count || 0;
   return (
     <div
@@ -43,7 +45,8 @@ const Row = React.memo(({ file, index, isTriageMode, isSelected, isChecked, onRo
     >
       {isTriageMode && (
         <div className="w-8 px-2 text-center text-gray-400">
-          {isSelected ? '✓' : ''}
+          {/* ✓ = what an action applies to: every selected row, else the current row */}
+          {isChecked || (isSelected && !hasMultiSelection) ? '✓' : ''}
         </div>
       )}
       <div className="px-2 flex-shrink-0 w-32 text-sm text-gray-500 dark:text-gray-400 text-left">
@@ -296,6 +299,7 @@ const FileList = () => {
   const {
     page, rows: files, rowsPage, total, totalPages, isLoading, isFetching, error, containerRef, nav,
     isTriageMode, setIsTriageMode, selectedIndex, select, checked: selectedFiles, setChecked,
+    allSelected, selectAllKey, clearSelection,
   } = list;
 
   const handleSort = (column, direction) => {
@@ -343,6 +347,38 @@ const FileList = () => {
         ids.forEach((id) => pendingViews.current.delete(id));
         listRef.current.refetch();
       }
+    });
+  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ----- Mark every result viewed (second Ctrl+A, then 'v') -----
+  const bulkAction = useBulkAction();
+  const viewAllResults = useCallback(() => {
+    const count = nav.current.total || 0;
+    if (count === 0) return;
+    // Snapshot the filters: the selection is "everything these filters match right now"
+    const where = buildFilesWhere({ ...filtersRef.current, username });
+    bulkAction.ask({
+      message: `Mark all ${count.toLocaleString()} files matching the current filters as viewed?`,
+      label: 'Marking files as viewed',
+      total: count,
+      work: (progress) => forEachIdChunk({
+        table: 'files_enriched',
+        idField: 'object_id',
+        where,
+        chunkSize: 5000,
+        onChunk: async (ids) => {
+          await hasuraRequest(`
+            mutation InsertFileViews($objects: [files_view_history_insert_input!]!) {
+              insert_files_view_history(objects: $objects) { affected_rows }
+            }`, { objects: ids.map((id) => ({ object_id: id, username, automated: false })) });
+          progress(ids.length);
+        },
+      }),
+      doneMessage: (n) => `Marked ${n.toLocaleString()} files as viewed.`,
+      onFinish: () => {
+        listRef.current.clearSelection();
+        listRef.current.refetch();
+      },
     });
   }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -394,19 +430,20 @@ const FileList = () => {
 
   // Keyboard controls (one listener; reads the latest state through refs)
   const keyState = useRef({});
-  keyState.current = { openFile, recordFileViews };
+  keyState.current = { openFile, recordFileViews, bulkAction, viewAllResults };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (isEditableTarget(e.target)) return;
+      if (keyState.current.bulkAction.handleKey(e)) return;
       const n = nav.current;
       const l = listRef.current;
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         if (n.triage) {
           e.preventDefault();
-          // Selects the files on the current page
-          l.run(() => setChecked(new Set(n.rows.map((f) => f.object_id))));
+          // First press: the files on this page; second press: every result
+          l.run(() => l.selectAllKey());
         }
         return;
       }
@@ -441,8 +478,8 @@ const FileList = () => {
             break;
           }
           case 'Escape':
-            if (n.checked.size > 0) {
-              setChecked(new Set());
+            if (n.checked.size > 0 || n.allSelected) {
+              l.clearSelection();
             } else {
               setIsTriageMode(false);
               select(-1);
@@ -452,7 +489,9 @@ const FileList = () => {
             if (row) keyState.current.openFile(row);
             break;
           case 'v':
-            if (n.checked.size > 0) {
+            if (n.allSelected) {
+              keyState.current.viewAllResults();
+            } else if (n.checked.size > 0) {
               keyState.current.recordFileViews([...n.checked]);
               setChecked(new Set());
             } else if (row) {
@@ -477,13 +516,21 @@ const FileList = () => {
       {isTriageMode && (
         <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
           <p className="text-sm text-blue-600 dark:text-blue-400">
-            Triage Mode Active(<a href="https://specterops.github.io/Nemesis/usage_guide/#file-triage-mode" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-700 dark:hover:text-blue-300">more info</a>) - Use ↑ ↓ ← → to navigate (PgUp/PgDn to jump). Ctrl/Cmd+A to select all on the current page.
-            'v' to mark{selectedFiles.size > 0 ? ' selected files' : ''} as viewed,
+            Triage Mode Active(<a href="https://specterops.github.io/Nemesis/usage_guide/#file-triage-mode" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-700 dark:hover:text-blue-300">more info</a>) - Use ↑ ↓ ← → to navigate (PgUp/PgDn to jump). Ctrl/Cmd+A to select all on the current page (press again to select all results).
+            'v' to mark{allSelected || selectedFiles.size > 0 ? ' selected files' : ''} as viewed,
             or ESC to exit{' '}
+            {(allSelected || selectedFiles.size > 0) && (
+              <span className="font-semibold">
+                {allSelected
+                  ? `All ${(total || 0).toLocaleString()} results selected.`
+                  : `${selectedFiles.size.toLocaleString()} selected${selectedFiles.size === files.length && typeof total === 'number' && total > files.length ? ' (Ctrl+A again to select all results)' : ''}.`}
+              </span>
+            )}
 
           </p>
         </div>
       )}
+      <BulkActionBar bulk={bulkAction.bulk} onConfirm={bulkAction.confirm} onCancel={bulkAction.cancel} />
 
       {/* Filters */}
       <div className="p-2 border-b dark:border-gray-700 overflow-x-auto">
@@ -746,7 +793,7 @@ const FileList = () => {
       {!error && files.length > 0 && (
         <div
           ref={containerRef}
-          className={`flex-1 min-h-0 overflow-auto transition-opacity ${isFetching && nav.current.loading ? 'opacity-60' : ''}`}
+          className={`${list.keyboardNav ? 'kbd-nav ' : ''}flex-1 min-h-0 overflow-auto transition-opacity ${isFetching && nav.current.loading ? 'opacity-60' : ''}`}
         >
           <div className="min-w-full">
             {files.map((file, index) => (
@@ -756,7 +803,8 @@ const FileList = () => {
                 index={index}
                 isTriageMode={isTriageMode}
                 isSelected={isTriageMode && index === selectedIndex && rowsPage === page}
-                isChecked={isTriageMode && selectedFiles.has(file.object_id)}
+                isChecked={isTriageMode && (allSelected || selectedFiles.has(file.object_id))}
+                hasMultiSelection={allSelected || selectedFiles.size > 0}
                 onRowClick={handleRowClick}
                 username={username}
               />

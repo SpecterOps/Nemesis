@@ -108,3 +108,27 @@ export const jumpSelection = ({ page, index, step, total, pageSize }) => {
   const target = Math.min(Math.max(0, current + step), Math.max(0, total - 1));
   return { page: Math.floor(target / pageSize) + 1, index: target % pageSize };
 };
+
+// Visit every id matching `where` in `idField` order, `chunkSize` ids at a time (keyset paging,
+// so rows that stop matching once a chunk is processed don't shift later chunks). Calls
+// `onChunk(ids)` and awaits it before fetching the next chunk; resolves to the number of ids.
+export const forEachIdChunk = async ({ table, idField, where, chunkSize = 2000, onChunk, signal }) => {
+  let last = null;
+  let done = 0;
+  for (;;) {
+    const chunkWhere = last === null ? where : { _and: [where, { [idField]: { _gt: last } }] };
+    const data = await hasuraRequest(
+      `query ChunkIds($where: ${table}_bool_exp!, $limit: Int!) {
+        ${table}(where: $where, order_by: { ${idField}: asc }, limit: $limit) { ${idField} }
+      }`,
+      { where: chunkWhere, limit: chunkSize },
+      signal,
+    );
+    const ids = data[table].map((r) => r[idField]);
+    if (ids.length === 0) return done;
+    await onChunk(ids);
+    done += ids.length;
+    last = ids[ids.length - 1];
+    if (ids.length < chunkSize) return done;
+  }
+};

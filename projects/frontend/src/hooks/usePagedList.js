@@ -41,13 +41,15 @@ export const usePagedList = ({
   const [isFetching, setIsFetching] = useState(false); // any request in flight
   const [error, setError] = useState(null);
   const [checked, setCheckedState] = useState(() => new Set()); // multi-selection (triage mode only)
+  // Every result of the current filters is selected (second Ctrl+A); spans all pages, ids aren't loaded
+  const [allSelected, setAllSelectedState] = useState(false);
   const [refetchTick, setRefetchTick] = useState(0);
   const containerRef = useRef(null);
 
   // Synchronous view of the navigation state (target page/index may run ahead of the render)
   const nav = useRef({
     page, index: selectedIndex, rows: [], rowsPage: null, total: null, loading: true,
-    selectedId: undefined, checked: new Set(), triage: isTriageMode, pendingScroll: null,
+    selectedId: undefined, checked: new Set(), allSelected: false, triage: isTriageMode, pendingScroll: null,
   });
   nav.current.triage = isTriageMode;
 
@@ -70,10 +72,31 @@ export const usePagedList = ({
     setSelectedIndex(index);
   }, [setSelectedIndex]);
 
+  const setAllSelected = useCallback((value) => {
+    nav.current.allSelected = value;
+    setAllSelectedState(value);
+  }, []);
+
+  // Any explicit change to the multi-selection drops "all results selected"
   const setChecked = useCallback((next) => {
     nav.current.checked = next;
     setCheckedState(next);
-  }, []);
+    if (nav.current.allSelected) setAllSelected(false);
+  }, [setAllSelected]);
+
+  const clearSelection = useCallback(() => {
+    if (nav.current.checked.size) setChecked(new Set());
+    else if (nav.current.allSelected) setAllSelected(false);
+  }, [setAllSelected, setChecked]);
+
+  // Ctrl+A: the first press selects the rows on this page, the next selects every result
+  const selectAllKey = useCallback(() => {
+    const n = nav.current;
+    if (n.loading || n.rows.length === 0 || n.allSelected) return;
+    const pageIds = n.rows.map((r) => getIdRef.current(r));
+    if (pageIds.every((id) => n.checked.has(id))) setAllSelected(true);
+    else setChecked(new Set(pageIds));
+  }, [setAllSelected, setChecked]);
 
   const setPage = useCallback((p) => {
     nav.current.page = p;
@@ -266,7 +289,8 @@ export const usePagedList = ({
       n.selectedId = undefined;
     }
     n.pendingScroll = scroll;
-    if (n.checked.size) setChecked(new Set());
+    // A page-level selection doesn't carry over to another page; "all results" does
+    if (n.checked.size && !n.allSelected) setChecked(new Set());
     setPage(p);
   }, [pageSize, select, setChecked, setPage]);
 
@@ -324,8 +348,48 @@ export const usePagedList = ({
 
   // Multi-selection only exists in triage mode
   useEffect(() => {
-    if (!isTriageMode && nav.current.checked.size) setChecked(new Set());
-  }, [isTriageMode, setChecked]);
+    if (!isTriageMode) clearSelection();
+  }, [isTriageMode, clearSelection]);
+
+  // A selection belongs to the results it was made on: new filters/sort start with none
+  const selectionKeyRef = useRef(queryKey);
+  useEffect(() => {
+    if (selectionKeyRef.current === queryKey) return;
+    selectionKeyRef.current = queryKey;
+    clearSelection();
+  }, [queryKey, clearSelection]);
+
+  // Keyboard vs mouse in triage mode: a key press suppresses the rows' hover highlight (rows
+  // scroll under a still pointer while navigating); a real mouse move brings it back. Chrome sends
+  // synthetic mousemoves with an unchanged position after scrolling, so compare coordinates.
+  const [keyboardNav, setKeyboardNav] = useState(false);
+  const keyboardNavRef = useRef(false);
+  useEffect(() => {
+    const set = (v) => {
+      if (keyboardNavRef.current === v) return;
+      keyboardNavRef.current = v;
+      setKeyboardNav(v);
+    };
+    if (!isTriageMode) {
+      set(false);
+      return undefined;
+    }
+    let last = null;
+    const onKeyDown = (e) => {
+      if (!e.repeat || !keyboardNavRef.current) set(true);
+    };
+    const onMouseMove = (e) => {
+      const moved = last !== null && (e.clientX !== last.x || e.clientY !== last.y);
+      last = { x: e.clientX, y: e.clientY };
+      if (moved) set(false);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('mousemove', onMouseMove, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('mousemove', onMouseMove, true);
+    };
+  }, [isTriageMode]);
 
   // Keep the selected row fully visible; apply a pending scroll position after a page change
   useLayoutEffect(() => {
@@ -344,6 +408,7 @@ export const usePagedList = ({
   return {
     page, rows, rowsPage, total, totalPages, isLoading, isFetching, error, containerRef, nav,
     isTriageMode, setIsTriageMode, selectedIndex, select, checked, setChecked,
+    allSelected, selectAllKey, clearSelection, keyboardNav,
     updateRows, refetch, run, goToPage, moveSelection, pageKey, extendSelection, currentRow,
   };
 };
