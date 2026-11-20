@@ -1,5 +1,6 @@
 import { AlertCircle, Clock, Download, Filter, Info, RefreshCw, Search, Server } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { downloadBlob } from './blobUrl';
 
 // A 10MB log preview can hold ~100k entries; render them in slices
 const ROWS_PER_PAGE = 500;
@@ -242,14 +243,7 @@ const SCCMLogViewer = ({ fileContent, fileName }) => {
           </button>
           <button
             onClick={() => {
-              const blob = new Blob([fileContent], { type: 'text/plain' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = fileName;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
+              downloadBlob(new Blob([fileContent], { type: 'text/plain' }), fileName);
             }}
             className="p-1 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
             title="Download log file"

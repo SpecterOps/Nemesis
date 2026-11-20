@@ -482,7 +482,7 @@ const FileList = () => {
       }
 
       if (!n.triage) return;
-      if (!['ArrowUp', 'ArrowDown', 'Escape', 'ArrowRight', 'v'].includes(e.key)) return;
+      if (!['ArrowUp', 'ArrowDown', 'Escape', 'ArrowRight', 'v', ' '].includes(e.key)) return;
       e.preventDefault();
       const { key, shiftKey } = e;
 
@@ -507,6 +507,15 @@ const FileList = () => {
             break;
           case 'ArrowRight':
             if (row) keyState.current.openFile(row);
+            break;
+          case ' ':
+            // Toggle the active row's selection (same as Findings)
+            if (row) {
+              const set = new Set(n.checked);
+              if (set.has(row.object_id)) set.delete(row.object_id);
+              else set.add(row.object_id);
+              setChecked(set);
+            }
             break;
           case 'v':
             if (n.allSelected) {
@@ -536,7 +545,7 @@ const FileList = () => {
       {isTriageMode && (
         <div className="p-1 bg-blue-50 dark:bg-blue-900/20 border-b dark:border-gray-700">
           <p className="text-sm text-blue-600 dark:text-blue-400">
-            Triage Mode Active(<a href="https://specterops.github.io/Nemesis/usage_guide/#file-triage-mode" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-700 dark:hover:text-blue-300">more info</a>) - Use ↑ ↓ ← → to navigate (PgUp/PgDn to jump). Ctrl/Cmd+A to select all on the current page (press again to select all results).
+            Triage Mode Active(<a href="https://specterops.github.io/Nemesis/usage_guide/#file-triage-mode" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-700 dark:hover:text-blue-300">more info</a>) - Use ↑ ↓ ← → to navigate (PgUp/PgDn to jump). Space or Shift+↑↓ to select, Ctrl/Cmd+A to select all on the current page (press again to select all results).
             &apos;v&apos; to mark{allSelected || selectedFiles.size > 0 ? ' selected files' : ''} as viewed,
             or ESC to exit{' '}
             {(allSelected || selectedFiles.size > 0) && (

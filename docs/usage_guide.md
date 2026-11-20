@@ -102,6 +102,7 @@ The following actions are possible (a summary is also shown in the bar at the to
 
 Selecting multiple files (only possible in triage mode):
 
+- `Space` - Add/remove the active file to/from the selection.
 - `Shift + Up/down(↑↓) arrow` - Extend the selection up/down from the active row.
 - `Mouse Click` - Select just the clicked file and make it the active row (in triage mode a click does not open the file; use `→`).
 - `Ctrl/Cmd + Mouse Click` - Add or remove an individual file from the selection.
@@ -198,7 +199,8 @@ Like with the `Files` page, type `t` to enter triage mode (and `t` again to leav
 - `Space` - Add/remove the active row to/from the selection.
 - `Shift + ↑↓` - Extend the selection up/down.
 - `Ctrl/Cmd + A` - Select all findings on the current page; press it **again** to select **all** findings matching the current filters, across every page ("All N results selected").
-- `ESC` - Clear the selection (on this page `ESC` does not exit triage mode; use `t`).
+- `Ctrl/Cmd + Mouse Click` - Add or remove a finding from the selection; `Shift + Mouse Click` selects all findings between the active row and the clicked one. These clicks don't open the details (a plain click does).
+- `ESC` - Close the details if they are open; otherwise clear the selection, or, with nothing selected, exit triage mode (same as the Files page).
 
 ![Nemesis Finding Triage](images/nemesis-dashboard-finding-triage2.png)
 
@@ -222,10 +224,10 @@ As on the Files page, the mouse-hover highlight is suppressed while navigating w
 | `→` | Findings | Yes | Open the finding details; again to open its file |
 | `←` | File details | | Back to the list |
 | `←` / `ESC` | Findings (details open) | | Close the finding details |
-| `ESC` | Files | Yes | Clear the selection; with no selection, exit triage mode |
-| `ESC` | Findings | Yes | Clear the selection |
+| `ESC` | Files, Findings | Yes | Clear the selection; with no selection, exit triage mode (Findings: closes the details first if open) |
 | `v` | Files | Yes | Mark the selected files (or the active file) as viewed |
-| `Space` | Findings | Yes | Toggle selection of the active row |
+| `Space` | Files, Findings | Yes | Toggle selection of the active row |
+| `Ctrl/Cmd + Click` / `Shift + Click` | Files, Findings | Yes | Toggle a row's selection / select a range from the active row |
 | `1` / `2` / `3` | Findings | Yes | Triage selected findings (or the active row) as true positive / false positive / needs review |
 | `Enter` / `ESC` | Files, Findings | | Confirm / cancel a bulk action on all results |
 

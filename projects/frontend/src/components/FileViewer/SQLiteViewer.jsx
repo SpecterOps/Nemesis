@@ -4,6 +4,7 @@ import { AlertCircle, ChevronDown, ChevronRight, Database, Download, ExternalLin
 import { useEffect, useMemo, useRef, useState } from 'react';
 import initSQLJS from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { downloadBlob } from './blobUrl';
 
 // Maximum number of rows to display at once
 const MAX_ROWS = 1000;
@@ -314,13 +315,7 @@ const SQLiteViewer = ({ fileBuffer, fileName }) => {
                 <div className="flex space-x-4 mt-4">
                     <button
                         onClick={() => {
-                            const a = document.createElement('a');
-                            const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
-                            a.href = URL.createObjectURL(blob);
-                            a.download = fileName;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
+                            downloadBlob(new Blob([fileBuffer], { type: 'application/octet-stream' }), fileName);
                         }}
                         className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                     >

@@ -110,7 +110,7 @@ export const TableHeaders = ({ isTriageMode, sortColumn, sortDirection, onSort }
 /**
  * @param {{
  *   finding: any, index: number, height: number, isTriageMode: boolean, isSelected: boolean,
- *   isChecked: boolean, hasMultiSelection: boolean, onRowClick: (finding: any, index: number) => void,
+ *   isChecked: boolean, hasMultiSelection: boolean, onRowClick: (finding: any, index: number, e?: React.MouseEvent) => void,
  *   onTriage: (...args: any[]) => any,
  * }} props
  */
@@ -162,7 +162,7 @@ const FindingRow = ({
         dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700
         ${triageRowClasses(isTriageMode, isChecked, isTriageMode && isSelected)}
       `}
-            onClick={() => onRowClick(finding, index)}
+            onClick={(e) => onRowClick(finding, index, e)}
         >
             {isTriageMode && (
                 <div className="flex-shrink-0 w-8 text-sm font-medium text-gray-500 dark:text-gray-400 text-center">

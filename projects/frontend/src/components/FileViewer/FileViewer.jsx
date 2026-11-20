@@ -14,6 +14,7 @@ import { Archive, ArrowLeft, ChevronDown, Database, Download, Eye, File, FileTex
 import { LoadingState } from '@/components/shared/LoadingSpinner';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { BlobFrame, BlobImage } from './blobUrl';
 import CsvViewer from './CsvViewer';
 import { useLazyFileContent } from './useLazyFileContent';
 import EnrichmentStatusSection from './EnrichmentStatusSection';
@@ -1125,9 +1126,10 @@ const FileViewer = () => {
     if (transform.type === 'pdf') {
       return (
         <div className="h-[80vh] min-h-[480px] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
-          <iframe
+          <BlobFrame
             title={`${transform.fileName || 'Transform'} (PDF)`}
-            src={URL.createObjectURL(new Blob([transform.content], { type: 'application/pdf' }))}
+            data={transform.content}
+            type="application/pdf"
             className="w-full h-full rounded-lg"
           />
         </div>
@@ -1163,8 +1165,8 @@ const FileViewer = () => {
     if (transform.type === 'image') {
       return (
         <div className="flex justify-center items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
-          <img
-            src={URL.createObjectURL(new Blob([transform.content]))}
+          <BlobImage
+            data={transform.content}
             alt={transform.fileName}
             className="max-w-full max-h-[80vh] object-contain"
           />
@@ -1269,8 +1271,9 @@ const FileViewer = () => {
     if (hasPreviewableImage) {
       return renderFullFileContent('Loading image...', () => (
         <div className="w-full flex justify-center bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
-          <img
-            src={URL.createObjectURL(new Blob([fullFileContent], { type: fileData.mime_type }))}
+          <BlobImage
+            data={fullFileContent}
+            type={fileData.mime_type}
             alt={fileData.file_name}
             className="max-w-full max-h-[800px] object-contain"
           />
@@ -1279,9 +1282,10 @@ const FileViewer = () => {
     }
     return (
       <div className="h-[80vh] min-h-[480px] w-full bg-gray-100 dark:bg-gray-800 rounded-lg">
-        <iframe
+        <BlobFrame
           title={`${fileData.file_name} (PDF preview)`}
-          src={URL.createObjectURL(new Blob([pdfContent], { type: 'application/pdf' }))}
+          data={pdfContent}
+          type="application/pdf"
           className="w-full h-full rounded-lg"
         />
       </div>

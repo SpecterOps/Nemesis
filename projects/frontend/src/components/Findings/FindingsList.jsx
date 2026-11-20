@@ -348,10 +348,29 @@ const FindingsList = () => {
   }, [updateParams]);
 
   // ----- Row callbacks (stable, so memoized rows only re-render when their own props change) -----
-  const handleRowClick = useCallback((finding, index) => {
-    if (nav.current.triage) select(index);
+  // Click: open the details (and make the row active in triage mode). In triage mode, Ctrl/Cmd-click
+  // toggles the row's selection and Shift-click selects the range from the active row; neither opens
+  // the details (same selection clicks as the Files list).
+  const handleRowClick = useCallback((finding, index, e) => {
+    const n = nav.current;
+    if (n.triage && e && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+      const set = new Set(n.checked);
+      if (e.shiftKey && n.index >= 0 && n.rowsPage === n.page) {
+        const start = Math.min(n.index, index);
+        const end = Math.max(n.index, index);
+        for (let i = start; i <= end; i++) if (n.rows[i]) set.add(n.rows[i].finding_id);
+      } else if (set.has(finding.finding_id)) {
+        set.delete(finding.finding_id);
+      } else {
+        set.add(finding.finding_id);
+      }
+      setChecked(set);
+      select(index);
+      return;
+    }
+    if (n.triage) select(index);
     openModal(finding);
-  }, [openModal, select, nav]);
+  }, [openModal, select, setChecked, nav]);
 
   // ----- Keyboard -----
   const keyState = useRef({ isModalOpen, closeModal, openModal, triage, navigateToFile, bulkAction, triageAllResults });
@@ -368,8 +387,12 @@ const FindingsList = () => {
       switch (e.key) {
         case 'ArrowLeft':
         case 'Escape':
-          e.preventDefault();
-          if (modalOpen) close();
+          // The details dialog takes the key first: Esc/← only close it
+          if (modalOpen) {
+            e.preventDefault();
+            close();
+            return;
+          }
           break;
         case 't':
           if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -409,7 +432,13 @@ const FindingsList = () => {
         }
         switch (key) {
           case 'Escape':
-            l.clearSelection();
+            // Clear the selection, or leave triage mode when there is none (same as Files)
+            if (n.checked.size > 0 || n.allSelected) {
+              l.clearSelection();
+            } else {
+              setIsTriageMode(false);
+              select(-1);
+            }
             break;
           case 'ArrowUp':
           case 'ArrowDown': {
@@ -438,7 +467,7 @@ const FindingsList = () => {
             break;
           }
           case ' ':
-            if (row) {
+            if (row && !keyState.current.isModalOpen) {
               const set = new Set(n.checked);
               if (set.has(row.finding_id)) set.delete(row.finding_id);
               else set.add(row.finding_id);
