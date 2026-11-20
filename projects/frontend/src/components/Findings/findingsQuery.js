@@ -72,7 +72,7 @@ export const buildFindingsWhere = ({ categories, severities, search, triageState
         { finding_name: { _ilike: pattern } },
         { category: { _ilike: pattern } },
         { origin_name: { _ilike: pattern } },
-        { files_enriched: { path: { _ilike: pattern } } },
+        { file_path: { _ilike: pattern } },
       ],
     });
   }
@@ -99,7 +99,7 @@ export const buildFindingsOrderBy = (column, direction) => {
     case 'origin_name':
       return [{ [column]: dir }, tie];
     case 'file_path':
-      return [{ files_enriched: { path: dir } }, tie];
+      return [{ file_path: dir }, tie];
     case 'triage_value':
       // Untriaged ('' in the old client-side sort) first when ascending, last when descending
       return [{ triage_value: dir === 'asc' ? 'asc_nulls_first' : 'desc_nulls_last' }, tie];

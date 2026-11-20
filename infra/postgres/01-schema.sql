@@ -172,7 +172,10 @@ CREATE TABLE IF NOT EXISTS findings (
     -- findings_triage_history_set_latest trigger so list filters/sorts don't join the history
     triage_id BIGINT,
     triage_value VARCHAR(255),
-    triage_automated BOOLEAN
+    triage_automated BOOLEAN,
+    -- Copy of files_enriched.path (findings_set_file_path / files_enriched_propagate_path triggers) so
+    -- the Findings list can sort and search by path without joining files_enriched
+    file_path TEXT
 );
 
 CREATE TABLE IF NOT EXISTS findings_triage_history (
@@ -252,6 +255,8 @@ CREATE INDEX IF NOT EXISTS idx_findings_finding_name ON findings(finding_name, f
 CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category, finding_id);
 CREATE INDEX IF NOT EXISTS idx_findings_origin_name ON findings(origin_name, finding_id);
 CREATE INDEX IF NOT EXISTS idx_findings_triage_value ON findings(triage_value, finding_id);
+-- Findings "file path" sort on the denormalized path (was a join sort: ~7s at 300k findings)
+CREATE INDEX IF NOT EXISTS idx_findings_file_path ON findings(file_path, finding_id);
 -- Files "findings" sort on the trigger-maintained count (was a per-file aggregate sort: ~11s at 1M files)
 CREATE INDEX IF NOT EXISTS idx_files_enriched_findings_count ON files_enriched(findings_count, object_id);
 
@@ -269,6 +274,30 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER findings_triage_history_set_latest
     AFTER INSERT ON findings_triage_history
     FOR EACH ROW EXECUTE FUNCTION set_finding_latest_triage();
+
+-- Keep findings.file_path equal to the file's path
+CREATE OR REPLACE FUNCTION set_finding_file_path() RETURNS TRIGGER AS $$
+BEGIN
+    SELECT path INTO NEW.file_path FROM files_enriched WHERE object_id = NEW.object_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER findings_set_file_path
+    BEFORE INSERT OR UPDATE OF object_id ON findings
+    FOR EACH ROW EXECUTE FUNCTION set_finding_file_path();
+
+CREATE OR REPLACE FUNCTION propagate_file_path_to_findings() RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE findings SET file_path = NEW.path WHERE object_id = NEW.object_id;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER files_enriched_propagate_path
+    AFTER UPDATE OF path ON files_enriched
+    FOR EACH ROW WHEN (OLD.path IS DISTINCT FROM NEW.path)
+    EXECUTE FUNCTION propagate_file_path_to_findings();
 
 -- Keep files_enriched.findings_count in step with the findings rows for each file
 CREATE OR REPLACE FUNCTION update_file_findings_count() RETURNS TRIGGER AS $$

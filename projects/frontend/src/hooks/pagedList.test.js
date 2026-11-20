@@ -102,7 +102,7 @@ test('findings where: defaults are unfiltered, each filter maps to a server cond
   assert.deepEqual(buildFindingsWhere({ ...defaults, severities: ['low', 'informational'] }), { _or: [{ severity: { _gte: 2, _lte: 3 } }, { severity: { _lte: 1 } }] });
   const search = buildFindingsWhere({ ...defaults, search: 'C:\\a_b%' });
   assert.equal(search._or[0].finding_name._ilike, '%C:\\\\a\\_b\\%%');
-  assert.deepEqual(search._or[3], { files_enriched: { path: { _ilike: '%C:\\\\a\\_b\\%%' } } });
+  assert.deepEqual(search._or[3], { file_path: { _ilike: '%C:\\\\a\\_b\\%%' } });
   assert.deepEqual(buildFindingsWhere({ ...defaults, triageState: 'untriaged' }), { triage_id: { _is_null: true } });
   assert.deepEqual(buildFindingsWhere({ ...defaults, triageState: 'true_positive' }), { triage_value: { _eq: 'true_positive' } });
   assert.deepEqual(buildFindingsWhere({ ...defaults, triageState: 'untriaged_and_actionable' }), {
@@ -129,7 +129,7 @@ test('findings where: a malformed object_id matches nothing instead of erroring'
 
 test('findings order_by: every sortable column, stable tie-breaker', () => {
   assert.deepEqual(buildFindingsOrderBy('severity', 'asc'), [{ severity: 'asc' }, { finding_id: 'asc' }]);
-  assert.deepEqual(buildFindingsOrderBy('file_path', 'desc'), [{ files_enriched: { path: 'desc' } }, { finding_id: 'desc' }]);
+  assert.deepEqual(buildFindingsOrderBy('file_path', 'desc'), [{ file_path: 'desc' }, { finding_id: 'desc' }]);
   assert.deepEqual(buildFindingsOrderBy('triage_value', 'asc')[0], { triage_value: 'asc_nulls_first' });
   assert.deepEqual(buildFindingsOrderBy('bogus', 'sideways'), [{ created_at: 'desc' }, { finding_id: 'desc' }]);
 });
