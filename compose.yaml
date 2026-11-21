@@ -1104,7 +1104,7 @@ services:
       - NEMESIS_URL=${NEMESIS_URL:?}
       - WORKFLOW_RUNTIME_LOG_LEVEL=${WORKFLOW_RUNTIME_LOG_LEVEL:-WARNING}
       - WORKFLOW_CLIENT_LOG_LEVEL=${WORKFLOW_CLIENT_LOG_LEVEL:-WARNING}
-      - LITELLM_ADMIN_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
+      - LITELLM_ADMIN_KEY=sk-${LITELLM_ADMIN_PASSWORD:?LITELLM_ADMIN_PASSWORD must be set in .env - tools/nemesis-ctl.sh generates one}
       - MAX_BUDGET=${LLM_MAX_BUDGET:-100}
       - BUDGET_DURATION=${LLM_BUDGET_DURATION:-30d}
       - DOTNET_ANALYSIS_RUN_REQUEST_LIMIT=${DOTNET_ANALYSIS_RUN_REQUEST_LIMIT:-25} # max LLM calls to use per .NET program analysis run
@@ -1196,8 +1196,8 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_REGION_NAME=${AWS_REGION_NAME:-us-east-1}
-      - LITELLM_MASTER_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
-      - LITELLM_SALT_KEY=sk-${LITELLM_ADMIN_PASSWORD:-admin123}
+      - LITELLM_MASTER_KEY=sk-${LITELLM_ADMIN_PASSWORD:?LITELLM_ADMIN_PASSWORD must be set in .env - tools/nemesis-ctl.sh generates one}
+      - LITELLM_SALT_KEY=${LITELLM_SALT_KEY:?LITELLM_SALT_KEY must be set in .env - tools/nemesis-ctl.sh generates one}
       - SERVER_ROOT_PATH=/llm
       - PROXY_BASE_URL=${NEMESIS_URL:?}
       - UI_BASE_PATH=/llm/ui
@@ -1210,7 +1210,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python3 -c \"import urllib.request,json; r=urllib.request.urlopen(urllib.request.Request('http://localhost:4000/health',headers={'Authorization':'Bearer sk-${LITELLM_ADMIN_PASSWORD:-admin123}'})); d=json.load(r); exit(0 if d.get('healthy_count',0)>0 and d.get('unhealthy_count',0)==0 else 1)\"",
+          "python3 -c \"import urllib.request,json; r=urllib.request.urlopen(urllib.request.Request('http://localhost:4000/health',headers={'Authorization':'Bearer sk-${LITELLM_ADMIN_PASSWORD}'})); d=json.load(r); exit(0 if d.get('healthy_count',0)>0 and d.get('unhealthy_count',0)==0 else 1)\"",
         ]
       interval: 30s
       timeout: 10s

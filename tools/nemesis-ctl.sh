@@ -112,36 +112,18 @@ if [ "$ACTION" = "start" ]; then
   fi
 fi
 
-# --- Hasura admin secret: generate a random one when unset or still the old public default ---
-# Only that line of .env is touched and the value is never printed.
-ensure_hasura_admin_secret() {
-  local env_file=".env" current new
-  [ -f "$env_file" ] || return 0
-  # (|| true: no matching line is fine under set -euo pipefail)
-  current="$( { grep -E '^[[:space:]]*HASURA_ADMIN_SECRET=' "$env_file" || true; } | tail -n 1 | cut -d= -f2- \
-    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
-  if [ -n "$current" ] && [ "$current" != "pass456" ]; then
-    return 0
-  fi
-  new="$(openssl rand -hex 24 2>/dev/null || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-  if [ -z "$new" ]; then
-    echo "Error: could not generate a random HASURA_ADMIN_SECRET; set one in .env" >&2
-    exit 1
-  fi
-  if grep -qE '^[[:space:]]*HASURA_ADMIN_SECRET=' "$env_file"; then
-    # Rewrite in place (cat > keeps the file's owner and permissions)
-    awk -v v="$new" '/^[[:space:]]*HASURA_ADMIN_SECRET=/ { print "HASURA_ADMIN_SECRET=\"" v "\""; next } { print }' \
-      "$env_file" > "${env_file}.tmp" && cat "${env_file}.tmp" > "$env_file" && rm -f "${env_file}.tmp"
-  else
-    printf '\nHASURA_ADMIN_SECRET="%s"\n' "$new" >> "$env_file"
-  fi
-  if [ -n "$current" ]; then
-    echo "Replaced the default HASURA_ADMIN_SECRET in .env with a random one."
-  else
-    echo "Generated a random HASURA_ADMIN_SECRET in .env."
-  fi
-}
-ensure_hasura_admin_secret
+# --- Secrets: generate random values when unset or still a public default ---
+# shellcheck source=lib/env_secrets.sh
+source "${SCRIPT_DIR}/lib/env_secrets.sh"
+ensure_random_env_secret .env HASURA_ADMIN_SECRET pass456
+# The salt must be settled before the admin password: it falls back to the old default only when
+# this deployment already has data that may have been encrypted with it.
+POSTGRES_DATA_EXISTS=false
+if docker volume inspect nemesis_postgres_data > /dev/null 2>&1; then
+  POSTGRES_DATA_EXISTS=true
+fi
+ensure_litellm_salt_key .env "$POSTGRES_DATA_EXISTS"
+ensure_random_env_secret .env LITELLM_ADMIN_PASSWORD admin123
 
 # --- Build Command ---
 declare -a DOCKER_CMD=("docker" "compose")

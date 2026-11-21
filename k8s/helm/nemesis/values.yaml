@@ -30,6 +30,14 @@ credentials:
     # Leave empty to generate a random secret on install (kept across upgrades); read it back with
     #   kubectl get secret nemesis-secrets -n <namespace> -o jsonpath='{.data.HASURA_ADMIN_SECRET}' | base64 -d
     adminSecret: ""
+  litellm:
+    # LiteLLM master key is "sk-<adminPassword>". Leave empty to generate a random one on install
+    # (kept across upgrades); read it back with
+    #   kubectl get secret nemesis-secrets -n <namespace> -o jsonpath='{.data.LITELLM_MASTER_KEY}' | base64 -d
+    adminPassword: ""
+    # Encrypts provider credentials LiteLLM stores in its database. Leave empty to generate one on install;
+    # never change it after models are added in the LiteLLM UI.
+    saltKey: ""
   # Basic auth users for Traefik (htpasswd format)
   # Default: n:n
   basicAuthUsers: "n:$apr1$bcQYJ0ci$QLOjnsYcpoauiEZ5VcXBi/"
@@ -186,7 +194,6 @@ llm:
     env:
       workflowRuntimeLogLevel: WARNING
       workflowClientLogLevel: WARNING
-      litellmAdminPassword: admin123
       maxBudget: "100"
       budgetDuration: 30d
       dotnetAnalysisRunRequestLimit: "25"
@@ -213,7 +220,6 @@ llm:
       awsSecretAccessKey: ""
       awsSessionToken: ""
       awsRegionName: us-east-1
-      litellmAdminPassword: admin123
     resources:
       requests:
         cpu: 100m

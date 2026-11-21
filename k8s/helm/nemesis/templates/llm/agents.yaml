@@ -45,7 +45,10 @@ spec:
             - name: WORKFLOW_CLIENT_LOG_LEVEL
               value: {{ .Values.llm.agents.env.workflowClientLogLevel | quote }}
             - name: LITELLM_ADMIN_KEY
-              value: "sk-{{ .Values.llm.agents.env.litellmAdminPassword }}"
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: LITELLM_MASTER_KEY
             - name: MAX_BUDGET
               value: {{ .Values.llm.agents.env.maxBudget | quote }}
             - name: BUDGET_DURATION

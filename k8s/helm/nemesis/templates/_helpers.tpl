@@ -256,3 +256,67 @@ template gets the same value.
 {{- end -}}
 {{- index .Values.credentials.hasura "_resolvedAdminSecret" -}}
 {{- end }}
+
+{{/*
+Legacy LiteLLM password from llm.litellm.env.litellmAdminPassword (pre-credentials.litellm values), or "admin123",
+the value older releases used for both the LiteLLM master key and salt.
+*/}}
+{{- define "nemesis.litellmLegacyPassword" -}}
+{{- $llm := .Values.llm | default dict -}}
+{{- $litellm := $llm.litellm | default dict -}}
+{{- $env := $litellm.env | default dict -}}
+{{- $env.litellmAdminPassword | default "admin123" -}}
+{{- end }}
+
+{{/*
+LiteLLM master key ("sk-" + credentials.litellm.adminPassword). When unset or the old public default
+("admin123"), keeps the value already stored in nemesis-secrets or generates a random one.
+*/}}
+{{- define "nemesis.litellmMasterKey" -}}
+{{- if not (hasKey .Values.credentials.litellm "_resolvedMasterKey") -}}
+{{- $password := .Values.credentials.litellm.adminPassword | default (include "nemesis.litellmLegacyPassword" .) -}}
+{{- $key := "" -}}
+{{- if and (ne $password "") (ne $password "admin123") -}}
+{{- $key = printf "sk-%s" $password -}}
+{{- else -}}
+{{- $existing := lookup "v1" "Secret" (include "nemesis.namespace" .) "nemesis-secrets" -}}
+{{- if and $existing $existing.data (hasKey $existing.data "LITELLM_MASTER_KEY") -}}
+{{- $stored := index $existing.data "LITELLM_MASTER_KEY" | b64dec -}}
+{{- if and (ne $stored "") (ne $stored "sk-admin123") -}}
+{{- $key = $stored -}}
+{{- end -}}
+{{- end -}}
+{{- if eq $key "" -}}
+{{- $key = printf "sk-%s" (randAlphaNum 48) -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set .Values.credentials.litellm "_resolvedMasterKey" $key -}}
+{{- end -}}
+{{- index .Values.credentials.litellm "_resolvedMasterKey" -}}
+{{- end }}
+
+{{/*
+LiteLLM salt key. Uses credentials.litellm.saltKey when set; otherwise keeps the stored value. An
+existing release without a stored salt used its old master key (normally "sk-admin123") as its salt, and keeps
+it so credentials LiteLLM already encrypted stay readable; a fresh install gets a random salt.
+*/}}
+{{- define "nemesis.litellmSaltKey" -}}
+{{- if not (hasKey .Values.credentials.litellm "_resolvedSaltKey") -}}
+{{- $salt := .Values.credentials.litellm.saltKey | default "" -}}
+{{- if eq $salt "" -}}
+{{- $existing := lookup "v1" "Secret" (include "nemesis.namespace" .) "nemesis-secrets" -}}
+{{- if and $existing $existing.data -}}
+{{- if hasKey $existing.data "LITELLM_SALT_KEY" -}}
+{{- $salt = index $existing.data "LITELLM_SALT_KEY" | b64dec -}}
+{{- else -}}
+{{- $salt = printf "sk-%s" (include "nemesis.litellmLegacyPassword" .) -}}
+{{- end -}}
+{{- end -}}
+{{- if eq $salt "" -}}
+{{- $salt = printf "sk-%s" (randAlphaNum 48) -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set .Values.credentials.litellm "_resolvedSaltKey" $salt -}}
+{{- end -}}
+{{- index .Values.credentials.litellm "_resolvedSaltKey" -}}
+{{- end }}

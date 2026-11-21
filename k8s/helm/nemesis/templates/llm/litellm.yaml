@@ -66,9 +66,15 @@ spec:
             - name: AWS_SESSION_TOKEN
               value: {{ .Values.llm.litellm.env.awsSessionToken | quote }}
             - name: LITELLM_MASTER_KEY
-              value: "sk-{{ .Values.llm.litellm.env.litellmAdminPassword }}"
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: LITELLM_MASTER_KEY
             - name: LITELLM_SALT_KEY
-              value: "sk-{{ .Values.llm.litellm.env.litellmAdminPassword }}"
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: LITELLM_SALT_KEY
             - name: SERVER_ROOT_PATH
               value: "/llm"
             - name: PROXY_BASE_URL
