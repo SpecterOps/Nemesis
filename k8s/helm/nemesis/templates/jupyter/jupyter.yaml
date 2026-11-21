@@ -28,11 +28,7 @@ spec:
             - containerPort: {{ .Values.jupyter.port }}
               name: http
           env:
-            - name: HASURA_ADMIN_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: nemesis-secrets
-                  key: HASURA_ADMIN_SECRET
+            # No HASURA_ADMIN_SECRET: notebooks use Hasura's limited operator role
             - name: HASURA_GRAPHQL_URL
               value: "http://hasura:8080/v1/graphql"
             - name: JUPYTER_PASSWORD

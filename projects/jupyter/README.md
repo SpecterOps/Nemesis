@@ -15,5 +15,6 @@ Available at: `/jupyter/` when Nemesis is running
 
 ## Environment Variables
 
-- `HASURA_ADMIN_SECRET`: Admin secret for Hasura access
-- `HASURA_GRAPHQL_URL`: Hasura GraphQL endpoint URL
+- `HASURA_GRAPHQL_URL`: Hasura GraphQL endpoint URL. Notebooks connect without the admin secret and get
+  Hasura's limited `operator` role (the same role the web UI uses), which can query data and record triage
+  but cannot run SQL or change metadata.

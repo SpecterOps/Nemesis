@@ -394,7 +394,8 @@ services:
     image: ghcr.io/specterops/nemesis/jupyter:latest
     depends_on: [postgres, hasura]
     environment:
-      - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
+      # No HASURA_ADMIN_SECRET: notebooks use Hasura's limited operator role, so code running in
+      # Jupyter cannot reach admin-only APIs (run_sql, metadata).
       - HASURA_GRAPHQL_URL=http://hasura:8080/v1/graphql
       - JUPYTER_PASSWORD=${JUPYTER_PASSWORD:-}
     volumes:
@@ -1004,7 +1005,8 @@ services:
     image: grafana/grafana:12.3.4
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Editor
+      # Viewer, not Editor: Explore (ad-hoc Loki/Postgres queries over every container's logs) stays off
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       # - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-Qwerty12345}
       # - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-nemesis}
       - GF_SERVER_DOMAIN=${EXTERNAL_HOST:-https://localhost}

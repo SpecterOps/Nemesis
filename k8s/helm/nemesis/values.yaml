@@ -83,7 +83,8 @@ monitoring:
       storageClass: ""
     env:
       anonymousEnabled: "true"
-      anonymousOrgRole: "Editor"
+      # Viewer, not Editor: Explore (ad-hoc Loki/Postgres queries over all pod logs) stays off
+      anonymousOrgRole: "Viewer"
     resources:
       requests:
         cpu: 100m
