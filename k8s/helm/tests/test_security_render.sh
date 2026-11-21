@@ -80,6 +80,38 @@ check("jupyter still gets the Hasura URL", "HASURA_GRAPHQL_URL" in jupyter_env)
 grafana_env = container_env(find(default, "Deployment", "grafana"), "grafana")
 check("grafana anonymous users are not Editors", grafana_env["GF_AUTH_ANONYMOUS_ORG_ROLE"]["value"] == "Viewer")
 
+# --- NEM-SEC-007: Gotenberg must not reach Dapr/Kubernetes secrets ---
+deployments = [d for d in default if d["kind"] == "Deployment"]
+dapr_apps = {
+    d["spec"]["template"]["metadata"]["annotations"]["dapr.io/app-id"]
+    for d in deployments
+    if (d["spec"]["template"]["metadata"].get("annotations") or {}).get("dapr.io/enabled") == "true"
+}
+gotenberg = find(default, "Deployment", "gotenberg")
+gt_pod = gotenberg["spec"]["template"]
+gt_ann = gt_pod["metadata"]["annotations"]
+check("gotenberg sidecar has no secrets volume mount", "dapr.io/volume-mounts" not in gt_ann)
+check("gotenberg pod has no dapr-secrets volume", all(v["name"] != "dapr-secrets" for v in gt_pod["spec"].get("volumes", [])))
+check("gotenberg uses its own Dapr configuration", gt_ann["dapr.io/config"] == "gotenberg-dapr-config")
+check("gotenberg uses its own ServiceAccount", gt_pod["spec"].get("serviceAccountName") == "gotenberg")
+check("gotenberg ServiceAccount exists", any(d["kind"] == "ServiceAccount" and d["metadata"]["name"] == "gotenberg" for d in default))
+bindings = [d for d in default if d["kind"] in ("RoleBinding", "ClusterRoleBinding")]
+check(
+    "gotenberg ServiceAccount has no RBAC bindings",
+    all(s.get("name") != "gotenberg" for b in bindings for s in b.get("subjects", [])),
+)
+gt_config = find(default, "Configuration", "gotenberg-dapr-config")
+denied = {s["storeName"] for s in gt_config["spec"]["secrets"]["scopes"] if s["defaultAccess"] == "deny"}
+check("gotenberg Dapr config denies every secret store", denied == {"nemesis-secret-store", "kubernetes"})
+
+web_ann = find(default, "Deployment", "web-api")["spec"]["template"]["metadata"]["annotations"]
+check("other sidecars still mount the secrets file", web_ann.get("dapr.io/volume-mounts") == "dapr-secrets:/dapr/secrets")
+
+for component in ("nemesis-secret-store", "statestore"):
+    scopes = set(find(default, "Component", component).get("scopes") or [])
+    check(f"{component} is scoped and excludes gotenberg", scopes and "gotenberg" not in scopes)
+    check(f"{component} keeps every other Dapr app", scopes == dapr_apps - {"gotenberg"})
+
 if failures:
     print(f"{failures} check(s) failed")
     sys.exit(1)

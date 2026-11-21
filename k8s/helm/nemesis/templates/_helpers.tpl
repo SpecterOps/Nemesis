@@ -84,6 +84,7 @@ amqp://{{ .Values.credentials.rabbitmq.user }}:{{ .Values.credentials.rabbitmq.p
 {{/*
 Common Dapr annotations for a service
 Usage: {{ include "nemesis.daprAnnotations" (dict "appId" "web-api" "appPort" "8000" "config" "dapr-config" "maxRequestSize" "1Gi") }}
+Pass "mountSecrets" false to keep the Dapr secrets file out of the sidecar.
 */}}
 {{- define "nemesis.daprAnnotations" -}}
 dapr.io/enabled: "true"
@@ -96,7 +97,9 @@ dapr.io/enable-metrics: "true"
 dapr.io/metrics-port: {{ .metricsPort | default "9090" | quote }}
 dapr.io/graceful-shutdown-seconds: "5"
 dapr.io/log-level: {{ .logLevel | default "info" | quote }}
+{{- if ne (toString .mountSecrets) "false" }}
 dapr.io/volume-mounts: "dapr-secrets:/dapr/secrets"
+{{- end }}
 dapr.io/sidecar-cpu-request: {{ .sidecarCpuRequest | default "50m" | quote }}
 dapr.io/sidecar-memory-request: {{ .sidecarMemoryRequest | default "64Mi" | quote }}
 dapr.io/sidecar-cpu-limit: {{ .sidecarCpuLimit | default "300m" | quote }}
@@ -319,4 +322,19 @@ it so credentials LiteLLM already encrypted stay readable; a fresh install gets 
 {{- $_ := set .Values.credentials.litellm "_resolvedSaltKey" $salt -}}
 {{- end -}}
 {{- index .Values.credentials.litellm "_resolvedSaltKey" -}}
+{{- end }}
+
+{{/*
+Dapr app IDs allowed to load the secret store and the components that read from it (state store).
+Every Dapr app except gotenberg, which renders attacker-influenced HTML and must not reach secrets.
+*/}}
+{{- define "nemesis.daprSecretScopes" -}}
+- {{ .Values.webApi.dapr.appId }}
+- {{ .Values.fileEnrichment.dapr.appId }}
+- {{ .Values.documentConversion.dapr.appId }}
+- {{ .Values.titusScanner.dapr.appId }}
+- {{ .Values.dotnetService.dapr.appId }}
+- {{ .Values.alerting.dapr.appId }}
+- {{ .Values.housekeeping.dapr.appId }}
+- {{ .Values.llm.agents.dapr.appId }}
 {{- end }}

@@ -1,3 +1,12 @@
+# Dedicated ServiceAccount with no RBAC bindings, so Gotenberg's sidecar cannot read Kubernetes Secrets.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gotenberg
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,8 +27,10 @@ spec:
       labels:
         {{- include "nemesis.selectorLabels" (dict "name" "gotenberg" "context" .) | nindent 8 }}
       annotations:
-        {{- include "nemesis.daprAnnotations" (dict "appId" "gotenberg" "appPort" (toString .Values.gotenberg.port) "config" "dapr-config" "sidecarImage" .Values.dapr.sidecarImage) | nindent 8 }}
+        {{- include "nemesis.daprAnnotations" (dict "appId" "gotenberg" "appPort" (toString .Values.gotenberg.port) "config" "gotenberg-dapr-config" "sidecarImage" .Values.dapr.sidecarImage "mountSecrets" false) | nindent 8 }}
     spec:
+      # Own ServiceAccount: the default one is bound to dapr-secret-reader (Kubernetes Secrets)
+      serviceAccountName: gotenberg
       # Match the 180s API timeout (gotenberg.env.apiTimeout in values.yaml,
       # httpx client in document_conversion/activities/pdf_conversion.py) so
       # in-flight LibreOffice conversions finish before KEDA scale-down kills the pod.
@@ -75,8 +86,6 @@ spec:
             periodSeconds: 15
           resources:
             {{- toYaml .Values.gotenberg.resources | nindent 12 }}
-      volumes:
-        {{- include "nemesis.daprSecretsVolume" . | nindent 8 }}
 ---
 apiVersion: v1
 kind: Service

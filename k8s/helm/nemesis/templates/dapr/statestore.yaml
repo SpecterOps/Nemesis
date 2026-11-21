@@ -41,3 +41,6 @@ spec:
       value: "5m"
 auth:
   secretStore: nemesis-secret-store
+# Gotenberg is deliberately absent: its renderer must not reach secrets through its sidecar.
+scopes:
+  {{- include "nemesis.daprSecretScopes" . | nindent 2 }}
