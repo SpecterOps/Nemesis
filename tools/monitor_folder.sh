@@ -57,6 +57,7 @@ docker run \
   --rm \
   -ti \
   --network "$NEMESIS_NETWORK" \
+  -e NEMESIS_IGNORE_CERT_ERRORS \
   $DOCKER_VOLUME \
   "$NEMESIS_CLI_IMAGE" \
   monitor $MONITOR_PATH $CLI_OPTIONS

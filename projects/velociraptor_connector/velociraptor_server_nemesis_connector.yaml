@@ -14,6 +14,7 @@ sources:
       LET Project = "CONFIGURE_ME_PROJECT"  -- Replace with your project name, i.e., "INVESTIGATION-123"
       LET AgentID = "velociraptor_server"
       LET MaxSize = 100000000  -- Maximum file size in bytes (default: 100 MB)
+      LET IgnoreCertErrors = FALSE  -- Set to TRUE only if Nemesis uses a self-signed certificate (insecure)
       
       -- Check if configuration is complete
       LET IsConfigured = NOT (NemesisURL =~ "CONFIGURE_ME" OR NemesisUsername =~ "CONFIGURE_ME" OR NemesisPassword =~ "CONFIGURE_ME" OR Project =~ "CONFIGURE_ME")
@@ -49,7 +50,7 @@ sources:
               FROM http_client(
                 url=NemesisURL + "/api/files",
                 method="POST",
-                skip_verify=TRUE,
+                skip_verify=IgnoreCertErrors,
                 headers=dict(Authorization=AuthHeader),
                 files=[
                   dict(
@@ -83,7 +84,7 @@ sources:
             "Please configure NemesisURL, NemesisUsername, NemesisPassword, and Project before using this artifact" as UploadName,
             NemesisURL as HTTPStatus,
             format(format="Current values: URL=%s, Username=%s, Password=%s, Project=%s", 
-                   args=[NemesisURL, NemesisUsername, NemesisPassword, Project]) as HTTPResponse
+                   args=[NemesisURL, NemesisUsername, if(condition=NemesisPassword =~ "CONFIGURE_ME", then=NemesisPassword, else="<set>"), Project]) as HTTPResponse
           FROM scope()
         }
       )

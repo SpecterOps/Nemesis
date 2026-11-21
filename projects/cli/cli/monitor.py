@@ -25,6 +25,7 @@ class NewFileHandler(FileSystemEventHandler):
         logger: logging.Logger,
         container: bool = False,
         source: str | None = None,
+        verify_ssl: bool = True,
     ):
         self.host = host
         self.username = username
@@ -34,6 +35,7 @@ class NewFileHandler(FileSystemEventHandler):
         self.logger = logger
         self.container = container
         self.source = source
+        self.verify_ssl = verify_ssl
 
     def on_created(self, event):
         """Called when a file or directory is created"""
@@ -57,6 +59,7 @@ class NewFileHandler(FileSystemEventHandler):
                     agent_id=self.agent_id,
                     container=self.container,
                     source=self.source,
+                    verify_ssl=self.verify_ssl,
                 )
             except Exception as e:
                 self.logger.error(f"Failed to submit new file {file_path}: {e}")
@@ -80,6 +83,7 @@ class NewFileHandler(FileSystemEventHandler):
                     agent_id=self.agent_id,
                     container=self.container,
                     source=self.source,
+                    verify_ssl=self.verify_ssl,
                 )
             except Exception as e:
                 self.logger.error(f"Failed to submit moved file {file_path}: {e}")
@@ -97,6 +101,7 @@ def monitor_main(
     workers: int,
     container: bool,
     source: str | None = None,
+    verify_ssl: bool = True,
 ):
     """Monitor a folder for new files and submit them to Nemesis"""
     try:
@@ -128,6 +133,7 @@ def monitor_main(
                 agent_id=agent_id,
                 container=container,
                 source=source,
+                verify_ssl=verify_ssl,
             )
 
             if not success:
@@ -138,7 +144,9 @@ def monitor_main(
             logger.info("Skipping existing files (--only-monitor enabled)")
 
         # Set up file system watcher
-        event_handler = NewFileHandler(host, username, password, project, agent_id, logger, container, source)
+        event_handler = NewFileHandler(
+            host, username, password, project, agent_id, logger, container, source, verify_ssl=verify_ssl
+        )
         observer = Observer()
         observer.schedule(event_handler, str(folder_path), recursive=True)
 

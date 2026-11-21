@@ -12,6 +12,7 @@ Simply replace the following variables at the top of the Yaml file:
 - **NemesisPassword** - Your Nemesis password
 - **Project** - i.e., "INVESTIGATION-123"
 - **MaxSize** - optional, maximum file size (in bytes), default of 100MB
+- **IgnoreCertErrors** - optional, set to `TRUE` to skip HTTPS certificate verification (e.g., a self-signed Nemesis certificate). Default `FALSE`. Insecure: the upload and its credentials can be intercepted.
 
 Then Click "View Artifacts" on the left of the Velociraptor GUI, click the + to "Add an Artifact" and paste the Yaml in:
 

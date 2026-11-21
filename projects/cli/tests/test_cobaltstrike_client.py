@@ -114,7 +114,7 @@ class TestCobaltStrikeClientInit:
     def test_valid_url(self):
         client = CobaltStrikeClient("https://cs.local:50050")
         assert client.base_url == "https://cs.local:50050"
-        assert client.verify_ssl is False
+        assert client.verify_ssl is True
 
     def test_strips_trailing_slash(self):
         client = CobaltStrikeClient("https://cs.local:50050/")
@@ -138,9 +138,9 @@ class TestCobaltStrikeClientInit:
         assert client._access_token is None
         assert client._stored_credentials is None
 
-    def test_custom_verify_ssl(self):
-        client = CobaltStrikeClient("https://cs.local", verify_ssl=True)
-        assert client.verify_ssl is True
+    def test_verify_ssl_can_be_disabled(self):
+        client = CobaltStrikeClient("https://cs.local", verify_ssl=False)
+        assert client.verify_ssl is False
 
 
 class TestCobaltStrikeClientContextManager:

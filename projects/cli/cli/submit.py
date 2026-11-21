@@ -18,9 +18,6 @@ from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 from urllib3.util.retry import Retry
 
-# Disable SSL warnings for the submit functionality
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 # Set up colored logging
 handler = colorlog.StreamHandler()
 handler.setFormatter(
@@ -221,6 +218,7 @@ def submit_main(
     times: int = 1,
     folder: str | None = None,
     max_files: int | None = None,
+    verify_ssl: bool = True,
 ):
     """Submit files to Nemesis for processing.
 
@@ -243,6 +241,9 @@ def submit_main(
 
         # Upload with basic auth:
         main.py submit /etc/issue -u admin -p secret
+
+        # Upload to a server with a self-signed certificate (insecure):
+        main.py submit /etc/issue --ignore-cert-errors
 
         # Upload container with filters from file:
         main.py submit archive.zip --container --filters filters.json
@@ -310,6 +311,7 @@ def submit_main(
             times=times,
             folder=folder,
             max_files=max_files,
+            verify_ssl=verify_ssl,
         )
 
         if not success:
@@ -336,6 +338,7 @@ def submit_files(
     times: int = 1,
     folder: str | None = None,
     max_files: int | None = None,
+    verify_ssl: bool = True,
 ):
     """Submit files to Nemesis"""
 
@@ -351,10 +354,13 @@ def submit_files(
         logger.error("File filters can only be used with --container flag")
         return False
 
+    if not verify_ssl:
+        logger.warning("HTTPS certificate verification is disabled; the connection to Nemesis can be intercepted")
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     # Validate authentication before starting uploads
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     auth = (username, password) if username and password else None
-    if not validate_auth(host, auth):
+    if not validate_auth(host, auth, verify_ssl=verify_ssl):
         return False
 
     # Total submissions = times (which now represents total, not additional)
@@ -383,7 +389,7 @@ def submit_files(
     actual_workers = min(workers, total_operations)
 
     # Create session with retry logic and connection pooling sized for our workers
-    session = create_session_with_retries(max_workers=actual_workers)
+    session = create_session_with_retries(max_workers=actual_workers, verify_ssl=verify_ssl)
 
     # Create shared structures for concurrent submission
     overall_tracker = UploadTracker()
@@ -482,14 +488,14 @@ def stream_files(paths: list[Path], recursive: bool, file_queue: Queue, max_file
     return total_files
 
 
-def validate_auth(host_port: str, auth: tuple[str, str] | None = None) -> bool:
+def validate_auth(host_port: str, auth: tuple[str, str] | None = None, verify_ssl: bool = True) -> bool:
     """
     Validate authentication credentials before starting uploads.
     Returns True if auth is valid or not required, False otherwise.
     """
     try:
         # Try a GET request to /api/ endpoint to check auth
-        response = requests.get(f"https://{host_port}/api/system/info", auth=auth, verify=False)
+        response = requests.get(f"https://{host_port}/api/system/info", auth=auth, verify=verify_ssl)
         if response.status_code == 401:
             logger.error("Authentication failed. Please check your credentials.")
             return False
@@ -500,6 +506,13 @@ def validate_auth(host_port: str, auth: tuple[str, str] | None = None) -> bool:
             logger.error(f"Unexpected server error during auth check: {response.status_code}")
             return False
         return True
+    except requests.exceptions.SSLError as e:
+        logger.error(
+            f"HTTPS certificate verification failed for {host_port}: {e}. "
+            "If the server uses a self-signed certificate, pass --ignore-cert-errors "
+            "(or set NEMESIS_IGNORE_CERT_ERRORS=1)."
+        )
+        return False
     except requests.exceptions.ConnectionError:
         logger.error(f"Could not connect to server when testing authentication: {host_port}")
         return False
@@ -594,14 +607,16 @@ def create_metadata(
     return metadata
 
 
-def create_session_with_retries(max_workers: int = 20) -> requests.Session:
+def create_session_with_retries(max_workers: int = 20, verify_ssl: bool = True) -> requests.Session:
     """
     Create a requests session with retry logic and connection pooling.
 
     Args:
         max_workers: Maximum number of concurrent workers (used to size connection pool)
+        verify_ssl: Whether to verify the server's HTTPS certificate
     """
     session = requests.Session()
+    session.verify = verify_ssl
 
     # Configure retry strategy with exponential backoff
     retry_strategy = Retry(
@@ -669,7 +684,6 @@ def upload_file(
                     f"https://{host_port}{endpoint}",
                     files=files,
                     auth=auth,
-                    verify=False,
                     timeout=(30, 300),
                 )
                 response.raise_for_status()

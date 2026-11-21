@@ -100,7 +100,7 @@ class TestOutflankC2ClientInit:
     def test_valid_url(self):
         client = OutflankC2Client("https://outflank.local:8443")
         assert client.base_url == "https://outflank.local:8443"
-        assert client.verify_ssl is False
+        assert client.verify_ssl is True
 
     def test_strips_trailing_slash(self):
         client = OutflankC2Client("https://outflank.local/")
@@ -124,9 +124,9 @@ class TestOutflankC2ClientInit:
         assert client._access_token is None
         assert client._stored_credentials is None
 
-    def test_custom_verify_ssl(self):
-        client = OutflankC2Client("https://outflank.local", verify_ssl=True)
-        assert client.verify_ssl is True
+    def test_verify_ssl_can_be_disabled(self):
+        client = OutflankC2Client("https://outflank.local", verify_ssl=False)
+        assert client.verify_ssl is False
 
 
 class TestOutflankC2ClientContextManager:

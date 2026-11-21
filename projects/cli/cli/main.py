@@ -4,7 +4,7 @@ import sys
 
 import click
 from cli.cobaltstrike_connector.cobaltstrike_connector import run_cobaltstrike_connector
-from cli.config import load_config
+from cli.config import Config, load_config
 from cli.log import setup_logging
 from cli.monitor import monitor_main
 from cli.mythic_connector.mythic_connector import start
@@ -24,11 +24,32 @@ def get_default_config_file(tool_name: str) -> str:
         raise ValueError(f"Unknown tool name: {tool_name}")
 
 
+IGNORE_CERT_ERRORS_ENVVAR = "NEMESIS_IGNORE_CERT_ERRORS"
+
+ignore_cert_errors_option = click.option(
+    "--ignore-cert-errors",
+    is_flag=True,
+    default=False,
+    envvar=IGNORE_CERT_ERRORS_ENVVAR,
+    show_envvar=True,
+    help="Skip HTTPS certificate verification (e.g., for self-signed certificates). Insecure: allows interception.",
+)
+
+
+def apply_ignore_cert_errors(cfg: Config, ignore_cert_errors: bool) -> Config:
+    """Return the connector config with certificate verification disabled when requested."""
+    if ignore_cert_errors:
+        cfg.validate_https_certs = False
+    return cfg
+
+
 # Common options for commands that need config
 def connector_options(tool_name: str):
     """Decorator factory to add common options for connector commands"""
 
     def decorator(f):
+        f = ignore_cert_errors_option(f)
+
         f = click.option(
             "--showconfig",
             is_flag=True,
@@ -69,7 +90,7 @@ def cli():
 
 @cli.command()
 @connector_options("outflank")
-def connect_outflank(config: str, debug: bool, showconfig: bool, dry_run: bool):
+def connect_outflank(config: str, debug: bool, showconfig: bool, dry_run: bool, ignore_cert_errors: bool):
     """Ingest Outflank C2 data into Nemesis"""
 
     if showconfig:
@@ -83,7 +104,7 @@ def connect_outflank(config: str, debug: bool, showconfig: bool, dry_run: bool):
         abs_path = click.format_filename(config)
 
         logger.info("Starting Outflank connector using the config file: %s", abs_path)
-        cfg = load_config(config)
+        cfg = apply_ignore_cert_errors(load_config(config), ignore_cert_errors)
         asyncio.run(run_outflank_connector(cfg, logger, dry_run=dry_run))
     except Exception as e:
         logger.exception("Outflank connector failed: %s", e)
@@ -92,7 +113,7 @@ def connect_outflank(config: str, debug: bool, showconfig: bool, dry_run: bool):
 
 @cli.command()
 @connector_options("mythic")
-def connect_mythic(config: str, debug: bool, showconfig: bool, dry_run: bool) -> None:
+def connect_mythic(config: str, debug: bool, showconfig: bool, dry_run: bool, ignore_cert_errors: bool) -> None:
     """Mythic Sync - Synchronize data between Mythic and Nemesis."""
 
     if showconfig:
@@ -101,7 +122,7 @@ def connect_mythic(config: str, debug: bool, showconfig: bool, dry_run: bool) ->
         sys.exit(0)
 
     try:
-        asyncio.run(start(config, debug, dry_run=dry_run))
+        asyncio.run(start(config, debug, dry_run=dry_run, ignore_cert_errors=ignore_cert_errors))
     except KeyboardInterrupt:
         click.echo("Interrupted by user, shutting down...")
     except Exception as e:
@@ -111,7 +132,7 @@ def connect_mythic(config: str, debug: bool, showconfig: bool, dry_run: bool) ->
 
 @cli.command()
 @connector_options("cobaltstrike")
-def connect_cobaltstrike(config: str, debug: bool, showconfig: bool, dry_run: bool):
+def connect_cobaltstrike(config: str, debug: bool, showconfig: bool, dry_run: bool, ignore_cert_errors: bool):
     """Ingest Cobalt Strike data into Nemesis"""
 
     if showconfig:
@@ -125,7 +146,7 @@ def connect_cobaltstrike(config: str, debug: bool, showconfig: bool, dry_run: bo
         abs_path = click.format_filename(config)
 
         logger.info("Starting Cobalt Strike connector using the config file: %s", abs_path)
-        cfg = load_config(config)
+        cfg = apply_ignore_cert_errors(load_config(config), ignore_cert_errors)
         asyncio.run(run_cobaltstrike_connector(cfg, logger, dry_run=dry_run))
     except Exception as e:
         logger.exception("Cobalt Strike connector failed: %s", e)
@@ -211,6 +232,7 @@ def get_os_user_and_host_string() -> str:
     help="Maximum number of files to submit when recursively processing directories",
     show_default=False,
 )
+@ignore_cert_errors_option
 def submit(
     debug: bool,
     paths: tuple[str, ...],
@@ -230,6 +252,7 @@ def submit(
     times: int = 1,
     folder: str | None = None,
     max_files: int | None = None,
+    ignore_cert_errors: bool = False,
 ):
     """Submit files to Nemesis for processing"""
     pattern_type: str = "glob"  # only handle glob formats if passed manually, for now
@@ -253,6 +276,7 @@ def submit(
         times,
         folder,
         max_files,
+        verify_ssl=not ignore_cert_errors,
     )
 
 
@@ -270,6 +294,7 @@ def submit(
 @click.option("-w", "--workers", default=10, help="Number of worker threads for initial submission", show_default=True)
 @click.option("--only-monitor", is_flag=True, help="Only monitor for new files, don't submit existing files")
 @click.option("--container", is_flag=True, help="Submit files as containers to the /containers endpoint")
+@ignore_cert_errors_option
 def monitor(
     path: str,
     debug: bool,
@@ -282,6 +307,7 @@ def monitor(
     only_monitor: bool,
     container: bool,
     source: str | None = None,
+    ignore_cert_errors: bool = False,
 ):
     """Monitor a folder for new files and submit them to Nemesis"""
     monitor_main(
@@ -296,6 +322,7 @@ def monitor(
         workers,
         container,
         source,
+        verify_ssl=not ignore_cert_errors,
     )
 
 

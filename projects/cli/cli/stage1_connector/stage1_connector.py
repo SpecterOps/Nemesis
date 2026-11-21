@@ -20,6 +20,7 @@ async def run_outflank_connector(config: Config, logger: logging.Logger, dry_run
     """Main connector logic"""
 
     if not config.validate_https_certs:
+        logger.warning("HTTPS certificate verification is disabled; connections can be intercepted")
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     tasks = []

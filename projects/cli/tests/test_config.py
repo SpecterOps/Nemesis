@@ -297,7 +297,7 @@ class TestSettingsCobaltstrike:
     def test_root_fields(self, cfg):
         assert cfg.cache_db_path == Path("/tmp/nemesis_connectors")
         assert cfg.conn_timeout_sec == 5
-        assert cfg.validate_https_certs is False
+        assert cfg.validate_https_certs is True
 
     def test_nemesis_section(self, cfg):
         assert str(cfg.nemesis.url) == "https://nemesis.example.com"

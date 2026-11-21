@@ -103,13 +103,13 @@ class Download:
 
 
 class CobaltStrikeClient:
-    def __init__(self, base_url: str, verify_ssl: bool = False, validate_https: bool = True):
+    def __init__(self, base_url: str, verify_ssl: bool = True, validate_https: bool = True):
         """
         Initialize the Cobalt Strike C2 Client client.
 
         Args:
             base_url: The base URL of the API server (default: https://localhost:11000)
-            verify_ssl: Whether to verify SSL certificates (default: False)
+            verify_ssl: Whether to verify SSL certificates (default: True)
             validate_https: Whether to validate HTTPS usage (default: True)
 
         Raises:

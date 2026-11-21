@@ -38,6 +38,32 @@ uv sync
 uv run python -m cli <command>
 ```
 
+## HTTPS Certificate Verification
+
+The CLI and all connectors verify HTTPS certificates by default. Nemesis ships with a self-signed certificate
+(`infra/traefik/certs/server.crt`), so unless you have replaced it with a trusted certificate you must explicitly opt out
+of verification using either:
+
+- the `--ignore-cert-errors` flag (available on `submit`, `monitor`, `connect-mythic`, `connect-outflank`, and
+  `connect-cobaltstrike`), or
+- the `NEMESIS_IGNORE_CERT_ERRORS=1` environment variable. The `./tools/*.sh` helper scripts forward this variable into
+  the container.
+
+```bash
+./tools/submit.sh /path/to/file --ignore-cert-errors
+
+# or
+export NEMESIS_IGNORE_CERT_ERRORS=1
+./tools/submit.sh /path/to/file
+```
+
+For connectors, `--ignore-cert-errors` overrides the config file's `validate_https_certs` setting, which applies to both
+the Nemesis and C2 connections. The Mythic connector also honors
+`MYTHIC_SYNC_NETWORKING__VALIDATE_HTTPS_CERTS=false`.
+
+**Disabling verification is insecure:** anyone positioned on the network path can intercept the Basic-auth credentials
+and every uploaded file. Prefer installing a trusted certificate on Nemesis.
+
 ## File Submission
 
 Submit files to Nemesis for processing and enrichment.
@@ -123,6 +149,7 @@ Options:
 | `--source`    |                       | Source name (e.g., 'host://HOST1' or 'https://domain.com') for metadata |
 | `--agent-id`  | `submit<user>@<host>` | Agent ID for metadata                                                   |
 | `--debug`     | `false`               | Enable debug logging                                                    |
+| `--ignore-cert-errors` | `false`      | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
 
 ## Folder Monitoring
 
@@ -203,6 +230,7 @@ uv run python -m cli monitor /path/to/directory
 | `--workers`      | `10`                   | Number of upload threads for initial submission                         |
 | `--only-monitor` | `false`                | Skip existing files, only monitor for new ones                          |
 | `--debug`        | `false`                | Enable debug logging                                                    |
+| `--ignore-cert-errors` | `false`          | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
 
 
 ## Mythic Connector
@@ -427,7 +455,7 @@ docker run --rm \
 
 1. **Connection refused**: Check that Nemesis/Mythic/Outflank services are running and accessible
 2. **Permission denied**: Ensure Docker has permission to access mounted files/directories
-3. **SSL certificate errors**: Set `validate_https_certs: false` in config for self-signed certificates
+3. **SSL certificate errors**: For self-signed certificates, pass `--ignore-cert-errors` or set `NEMESIS_IGNORE_CERT_ERRORS=1` (connectors can also set `validate_https_certs: false` in their config). See [HTTPS Certificate Verification](#https-certificate-verification)
 4. **Large file uploads**: Adjust `max_file_size` and `--workers` for better performance
 
 ### Debug Mode

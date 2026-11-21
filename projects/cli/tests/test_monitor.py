@@ -75,6 +75,7 @@ class TestNewFileHandlerOnCreated:
             agent_id="agent-1",
             logger=logging.getLogger("test"),
             source="test-source",
+            verify_ssl=True,
         )
 
     @patch("cli.monitor.submit_files")
@@ -98,6 +99,7 @@ class TestNewFileHandlerOnCreated:
             agent_id="agent-1",
             container=False,
             source="test-source",
+            verify_ssl=True,
         )
 
     @patch("cli.monitor.submit_files")
@@ -174,6 +176,7 @@ class TestNewFileHandlerOnMoved:
             agent_id="agent-1",
             container=False,
             source=None,
+            verify_ssl=True,
         )
 
     @patch("cli.monitor.submit_files")

@@ -65,4 +65,4 @@ while [[ $i -lt ${#args[@]} ]]; do
 done
 
 # Run the Docker command
-docker run --network host --rm $DOCKER_ARGS "$NEMESIS_CLI_IMAGE" submit $SUBMIT_ARGS $CLI_OPTIONS
+docker run --network host --rm -e NEMESIS_IGNORE_CERT_ERRORS $DOCKER_ARGS "$NEMESIS_CLI_IMAGE" submit $SUBMIT_ARGS $CLI_OPTIONS

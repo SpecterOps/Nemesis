@@ -1,6 +1,6 @@
 cache_db_path: "/tmp/nemesis_connectors"
 conn_timeout_sec: 5
-validate_https_certs: false
+validate_https_certs: true
 
 nemesis:
   url: "https://nemesis.example.com"
