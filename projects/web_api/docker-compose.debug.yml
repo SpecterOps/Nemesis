@@ -41,10 +41,10 @@ services:
     # Expose the Dapr sidecar ports to the host so the app being debugged
     # can communicate with the sidecar running in the cluster
     ports:
-      - "3500:3500" # Sidecar HTTP port
-      - "50001:50001" # Sidecar GRPC port (Dapr Worfklows depends on it)
+      - "127.0.0.1:3500:3500" # Sidecar HTTP port
+      - "127.0.0.1:50001:50001" # Sidecar GRPC port (Dapr Worfklows depends on it)
 
   # Open up SeaweedFS so web-api being debugged can access it
   seaweedfs:
     ports:
-      - "8333:8333"
+      - "127.0.0.1:8333:8333"

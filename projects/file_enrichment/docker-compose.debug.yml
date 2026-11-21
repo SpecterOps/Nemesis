@@ -52,21 +52,21 @@ services:
     # Expose the Dapr sidecar ports to the host so the app being debugged
     # can communicate with the sidecar running in the cluster
     ports:
-      - "3503:3503" # Sidecar HTTP port
-      - "50003:50003" # Sidecar GRPC port (Dapr Worfklows depends on it)
+      - "127.0.0.1:3503:3503" # Sidecar HTTP port
+      - "127.0.0.1:50003:50003" # Sidecar GRPC port (Dapr Worfklows depends on it)
 
   # Open up SeaweedFS so file-enrichment being debugged can access it
   seaweedfs:
     ports:
-      - "8333:8333"
+      - "127.0.0.1:8333:8333"
 
   otel-collector:
     ports:
-      - "4317:4317"
+      - "127.0.0.1:4317:4317"
 
   postgres:
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
   # rabbitmq:
   #   ports:
