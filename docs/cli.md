@@ -38,6 +38,13 @@ uv sync
 uv run python -m cli <command>
 ```
 
+## Timestamps
+
+Times sent to Nemesis (file `timestamp`/`expiration` metadata, container metadata, and the cleanup `expiration`)
+must be ISO 8601 datetimes with a timezone, for example `2026-01-01T12:00:00Z` or `2026-01-01T14:00:00+02:00`.
+Times without a timezone are rejected; Nemesis stores everything in UTC. The CLI and connectors already send
+timezone-aware times.
+
 ## HTTPS Certificate Verification
 
 The CLI and all connectors verify HTTPS certificates by default, against the system trust store. Nemesis ships with a

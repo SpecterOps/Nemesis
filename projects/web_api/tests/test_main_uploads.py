@@ -91,7 +91,7 @@ class TestUploadFile:
         response = _post_file(client, _metadata(**{field: value}))
         assert response.status_code == 400
         detail = str(response.json()["detail"])
-        assert "too long" in detail or "at most 255 characters" in detail
+        assert "too long" in detail or "at most" in detail
         upload_storage.upload_uploadfile.assert_not_called()
 
     def test_metadata_at_limit_accepted(self, client, upload_storage, submit_mock):
@@ -347,3 +347,42 @@ class TestSubmitContainerErrorMapping:
         monkeypatch.setattr(main.container_processor, "process_container_from_path", fake_process)
         assert _post_container(client, metadata=_metadata(path="smb://host/share/a.zip")).status_code == 200
         assert seen["path"] == "smb://host/share/a.zip"
+
+
+class TestUploadTimesAndRejections:
+    @pytest.fixture
+    def issues(self, monkeypatch):
+        from common import data_issues
+
+        calls = []
+        monkeypatch.setattr(data_issues, "logger", type("L", (), {"warning": lambda self, e, **kw: calls.append(kw)})())
+        return calls
+
+    @pytest.mark.parametrize("field", ["timestamp", "expiration"])
+    def test_naive_time_rejected_and_logged(self, client, upload_storage, submit_mock, issues, field):
+        response = _post_file(client, _metadata(**{field: "2030-01-01T00:00:00"}))
+        assert response.status_code == 400
+        assert "timezone" in str(response.json()["detail"])
+        upload_storage.upload_uploadfile.assert_not_called()
+        assert any(c["kind"] == "rejected_input" and c["field"] == f"metadata.{field}" for c in issues)
+
+    def test_offset_time_normalized_to_utc(self, client, upload_storage, submit_mock):
+        response = _post_file(
+            client, _metadata(timestamp="2026-01-01T02:00:00+02:00", expiration="2030-01-01T00:00:00Z")
+        )
+        assert response.status_code == 200
+        file_model = submit_mock.await_args.args[0]
+        assert file_model.timestamp.utcoffset().total_seconds() == 0
+        assert file_model.timestamp.hour == 0
+
+    @pytest.mark.parametrize(("field", "value"), [("agent_id", ""), ("agent_id", "   "), ("source", "  ")])
+    def test_blank_agent_or_source_rejected_and_logged(self, client, upload_storage, submit_mock, issues, field, value):
+        response = _post_file(client, _metadata(**{field: value}))
+        assert response.status_code == 400
+        upload_storage.upload_uploadfile.assert_not_called()
+        assert any(c["field"] == f"metadata.{field}" for c in issues)
+
+    def test_past_expiration_logged(self, client, upload_storage, submit_mock, issues):
+        response = _post_file(client, _metadata(expiration="2001-01-01T00:00:00Z"))
+        assert response.status_code == 400
+        assert issues[-1]["field"] == "metadata.expiration" and issues[-1]["reason"] == "not in the future"

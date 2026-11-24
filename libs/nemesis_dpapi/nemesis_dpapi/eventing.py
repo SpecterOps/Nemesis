@@ -8,7 +8,7 @@ from typing import get_args
 from uuid import UUID
 
 from common.log_safety import mask
-from common.models2.api import ProjectName
+from common.models2.api import ProjectName, UTCDatetime
 from common.queues import DPAPI_EVENTS_TOPIC, DPAPI_PUBSUB
 from dapr.aio.clients import DaprClient
 from dapr.clients.grpc._response import TopicEventResponse, TopicEventResponseStatus
@@ -27,7 +27,7 @@ class NewEncryptedMasterKeyEvent(BaseModel):
 
     project: ProjectName
     masterkey_guid: UUID
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    timestamp: UTCDatetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class NewPlaintextMasterKeyEvent(BaseModel):
@@ -35,7 +35,7 @@ class NewPlaintextMasterKeyEvent(BaseModel):
 
     project: ProjectName
     masterkey_guid: UUID
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    timestamp: UTCDatetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class NewDomainBackupKeyEvent(BaseModel):
@@ -43,7 +43,7 @@ class NewDomainBackupKeyEvent(BaseModel):
 
     project: ProjectName
     backup_key_guid: UUID
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    timestamp: UTCDatetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class NewDpapiSystemCredentialEvent(BaseModel):
@@ -51,7 +51,7 @@ class NewDpapiSystemCredentialEvent(BaseModel):
 
     project: ProjectName
     credential: DpapiSystemCredential
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    timestamp: UTCDatetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class NewPasswordDerivedCredentialEvent(BaseModel):
@@ -62,7 +62,7 @@ class NewPasswordDerivedCredentialEvent(BaseModel):
     type: str
     credential: Password | NtlmHash | Sha1Hash | Pbkdf2Hash
     user_sid: Sid | None = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    timestamp: UTCDatetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @field_validator("type")
     @classmethod

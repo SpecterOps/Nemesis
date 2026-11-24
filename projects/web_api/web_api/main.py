@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import httpx
 import psycopg
+from common.data_issues import DataIssueKind, log_data_issue, log_rejected_validation
 from common.db import get_postgres_connection_str
 from common.helpers import get_drive_from_path
 from common.log_safety import mask
@@ -219,11 +220,8 @@ def validate_enrichment_name(enrichment_name: str) -> None:
         )
 
 
-# Metadata length limits, matching the VARCHAR columns in infra/postgres/01-schema.sql
-# (files / files_enriched / container_processing / workflows).
-MAX_AGENT_ID_LENGTH = 255
-MAX_PROJECT_LENGTH = 255
-MAX_SOURCE_LENGTH = 1000
+# Metadata length limits not covered by the FileMetadata model types (agent_id, project and source limits live on
+# the model; see common.models2.api), matching the columns in infra/postgres/01-schema.sql.
 MAX_FILENAME_LENGTH = 255  # files_enriched.file_name, workflows.filename, container_processing.original_filename
 MAX_PATH_LENGTH = 32767  # path is TEXT; cap at the Windows extended-length path maximum
 
@@ -231,26 +229,33 @@ MAX_PATH_LENGTH = 32767  # path is TEXT; cap at the Windows extended-length path
 def validate_file_metadata(file_metadata: FileMetadata, upload_filename: str | None = None) -> None:
     """Reject metadata that the database columns can't hold or that is already expired (HTTP 400)."""
     limits = [
-        ("agent_id", file_metadata.agent_id, MAX_AGENT_ID_LENGTH),
-        ("project", file_metadata.project, MAX_PROJECT_LENGTH),
-        ("source", file_metadata.source, MAX_SOURCE_LENGTH),
         ("path", file_metadata.path, MAX_PATH_LENGTH),
         ("path file name", PathLib(file_metadata.path.replace("\\", "/")).name, MAX_FILENAME_LENGTH),
         ("filename", upload_filename, MAX_FILENAME_LENGTH),
     ]
     for field, value, max_len in limits:
         if value is not None and len(value) > max_len:
+            log_data_issue(
+                DataIssueKind.REJECTED_INPUT,
+                field=f"metadata.{field}",
+                reason="too long",
+                length=len(value),
+                limit=max_len,
+                agent_id=file_metadata.agent_id,
+            )
             raise HTTPException(
                 status_code=400,
                 detail=f"Metadata field '{field}' is too long ({len(value)} characters, maximum is {max_len})",
             )
 
-    if file_metadata.expiration is not None:
-        expiration = file_metadata.expiration
-        if expiration.tzinfo is None:
-            expiration = expiration.replace(tzinfo=UTC)
-        if expiration <= datetime.now(UTC):
-            raise HTTPException(status_code=400, detail="Metadata 'expiration' must be in the future")
+    if file_metadata.expiration is not None and file_metadata.expiration <= datetime.now(UTC):
+        log_data_issue(
+            DataIssueKind.REJECTED_INPUT,
+            field="metadata.expiration",
+            reason="not in the future",
+            agent_id=file_metadata.agent_id,
+        )
+        raise HTTPException(status_code=400, detail="Metadata 'expiration' must be in the future")
 
 
 async def send_postgres_notify(channel: str, payload: str = ""):
@@ -324,6 +329,9 @@ def normalize_path(path: str) -> str:
     Upload a file using multipart/form-data with metadata.
     Returns an object_id for the uploaded file and submission_id for the metadata submission.
 
+    `timestamp` and `expiration` must be ISO 8601 datetimes with a timezone (`Z` or an offset such as
+    `+02:00`); times without one are rejected with 400. They are stored in UTC.
+
     Example:
     ```
     curl -k -u n:n -F "file=@example.txt" \
@@ -390,7 +398,7 @@ async def upload_file(
     except HTTPException:
         raise
     except ValidationError as e:
-        logger.warning("Validation error in file metadata", errors=e.errors())
+        log_rejected_validation(e, where="metadata")
         raise HTTPException(status_code=400, detail=e.errors(include_url=False, include_context=False)) from e
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Metadata is not valid JSON: {e}") from e

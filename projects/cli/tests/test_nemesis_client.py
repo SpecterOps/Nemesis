@@ -3,7 +3,7 @@
 import asyncio
 import io
 import threading
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -67,15 +67,18 @@ def make_config() -> NemesisConfig:
 
 def make_metadata() -> FileMetadata:
     return FileMetadata(
-        agent_id="agent", project="project", timestamp=datetime.now(), expiration=datetime.now(), path="file.txt"
+        agent_id="agent", project="project", timestamp=datetime.now(UTC), expiration=datetime.now(UTC), path="file.txt"
     )
 
 
 @pytest.mark.asyncio
 async def test_metadata_helper_is_synchronous():
-    metadata = NemesisClient(make_config()).create_file_metadata("x", "a", "p")
+    cfg = make_config()
+    metadata = NemesisClient(cfg).create_file_metadata("x", "a", "p")
     assert metadata.path == "x"
-    assert metadata.expiration.year > metadata.timestamp.year
+    assert metadata.timestamp is not None and metadata.expiration is not None
+    assert abs(metadata.expiration - metadata.timestamp - timedelta(days=cfg.expiration_days)) < timedelta(seconds=1)
+    assert metadata.timestamp.utcoffset() == timedelta(0)
 
 
 @pytest.mark.asyncio

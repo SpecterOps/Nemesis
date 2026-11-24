@@ -2,7 +2,7 @@
 import asyncio
 import base64
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import aiohttp
@@ -212,7 +212,7 @@ class WorkflowQueueMonitor:
                 "queues_without_consumers": queues_without_consumers,
                 "total_memory_bytes": sum(q.get("memory_bytes", 0) for q in queue_metrics.values()),
             },
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     async def check_queue_health(self, topics: list[str] | None = None) -> dict[str, str]:
@@ -372,7 +372,7 @@ class WorkflowQueueMonitor:
                 "failed_purges": len(topics) - successful_purges,
                 "total_messages_purged": total_purged,
             },
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     async def purge_single_queue(self, topic: str, confirm: bool = False) -> dict[str, Any]:
@@ -507,5 +507,5 @@ class WorkflowQueueMonitor:
                 "total_messages_purged": total_purged,
                 "excluded_system_queues": exclude_system_queues,
             },
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }

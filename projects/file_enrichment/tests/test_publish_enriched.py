@@ -1,7 +1,7 @@
 """Tests for publish_enriched activity functions."""
 
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 from common.models import FileEnriched, FileHashes
@@ -26,8 +26,8 @@ class TestShouldConvertDocument:
             object_id="test-object-123",
             agent_id="test-agent",
             project="test-project",
-            timestamp=datetime.now(),
-            expiration=datetime.now() + timedelta(days=30),
+            timestamp=datetime.now(UTC),
+            expiration=datetime.now(UTC) + timedelta(days=30),
             path="/test/path/file.txt",
             file_name="file.txt",
             extension="txt",

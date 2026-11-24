@@ -1,6 +1,6 @@
 """Tests for the file linking rules engine."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,8 +24,8 @@ def create_file_enriched(object_id: str, path: str, mime_type: str, magic_type: 
         object_id=object_id,
         agent_id="test-agent-id",
         project="test-project",
-        timestamp=datetime.now(),
-        expiration=datetime.now() + timedelta(days=30),
+        timestamp=datetime.now(UTC),
+        expiration=datetime.now(UTC) + timedelta(days=30),
         path=path,
         file_name=path.split("/")[-1],
         size=1024,

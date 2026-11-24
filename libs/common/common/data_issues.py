@@ -9,6 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from common.logger import get_logger
+from pydantic import ValidationError
 
 logger = get_logger("nemesis.data_issues")
 
@@ -38,3 +39,16 @@ def log_data_issue(kind: DataIssueKind, *, field: str, object_id: UUID | None = 
         object_id=str(object_id) if object_id is not None else None,
         **detail,
     )
+
+
+def log_rejected_validation(error: ValidationError, *, where: str, **detail: Any) -> None:
+    """Log one rejected_input data issue per field a Pydantic validation rejected."""
+    for item in error.errors(include_url=False, include_context=False, include_input=False):
+        loc = ".".join(str(part) for part in item["loc"])
+        log_data_issue(
+            DataIssueKind.REJECTED_INPUT,
+            field=f"{where}.{loc}" if loc else where,
+            reason=item["msg"],
+            error_type=item["type"],
+            **detail,
+        )

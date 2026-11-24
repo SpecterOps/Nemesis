@@ -2,11 +2,11 @@ import asyncio
 import hashlib
 import logging
 import os
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, BinaryIO, Protocol
 
 import httpx
+from cli.c2_metadata import collection_times
 from cli.config import NemesisConfig
 from cli.tls_trust import httpx_verify
 from common.models2.api import (
@@ -133,13 +133,13 @@ class NemesisClient:
             raise RuntimeError("NemesisClient must be used inside 'async with'")
 
     def create_file_metadata(self, path: str, agent_id: str, project: str, source: str | None = None) -> FileMetadata:
-        now = datetime.now(UTC)
+        timestamp, expiration = collection_times(None, self.cfg.expiration_days)
         return FileMetadata(
             agent_id=agent_id,
             source=source,
             project=project,
-            timestamp=now,
-            expiration=now.replace(year=now.year + 1),
+            timestamp=timestamp,
+            expiration=expiration,
             path=path,
         )
 

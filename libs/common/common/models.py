@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any
 
 from common.helpers import MAX_EXTENSION_LENGTH
-from common.models2.api import ProjectName
+from common.models2.api import AgentId, ProjectName, SourceName, UTCDatetime
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from .logger import get_logger
@@ -281,11 +281,11 @@ class File(BaseModel):
     )
 
     object_id: str
-    agent_id: str
-    source: str | None = None
+    agent_id: AgentId
+    source: SourceName | None = None
     project: ProjectName
-    timestamp: datetime
-    expiration: datetime
+    timestamp: UTCDatetime
+    expiration: UTCDatetime
     path: str  # | None = None
     originating_object_id: str | None = None
     originating_container_id: str | None = None

@@ -1,5 +1,4 @@
-from datetime import datetime
-
+from common.models2.api import UTCDatetime
 from pydantic import BaseModel, Field
 
 
@@ -66,7 +65,7 @@ class ActiveWorkflowDetail(BaseModel):
     status: str
     filename: str | None = None
     object_id: str | None = None
-    timestamp: datetime | None = None
+    timestamp: UTCDatetime | None = None
     runtime_seconds: float | None = None
     error: str | None = None
 
@@ -154,7 +153,7 @@ class SourceSummary(BaseModel):
     file_count: int
     finding_count: int
     verified_findings: int
-    last_activity: datetime | None = None
+    last_activity: UTCDatetime | None = None
 
 
 class RiskIndicators(BaseModel):
@@ -175,13 +174,13 @@ class TopFinding(BaseModel):
     severity: int
     triage_state: str | None = None
     file_path: str | None = None
-    created_at: datetime
+    created_at: UTCDatetime
 
 
 class SourceReport(BaseModel):
     report_type: str
     source: str
-    generated_at: datetime
+    generated_at: UTCDatetime
     summary: dict
     risk_indicators: RiskIndicators
     findings_detail: dict
@@ -192,7 +191,7 @@ class SourceReport(BaseModel):
 
 class SystemReport(BaseModel):
     report_type: str
-    generated_at: datetime
+    generated_at: UTCDatetime
     time_range: dict
     summary: dict
     sources: list[SourceSummary]

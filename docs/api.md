@@ -192,6 +192,9 @@ Upload file with metadata
 Upload a file using multipart/form-data with metadata.
     Returns an object_id for the uploaded file and submission_id for the metadata submission.
 
+    `timestamp` and `expiration` must be ISO 8601 datetimes with a timezone (`Z` or an offset such as
+    `+02:00`); times without one are rejected with 400. They are stored in UTC.
+
     Example:
     ```
     curl -k -u n:n -F "file=@example.txt"          -F 'metadata={"agent_id":"agent123","project":"proj1","timestamp":"2024-01-29T12:00:00Z","expiration":"2024-02-29T12:00:00Z","path":"/tmp/example.txt"}'          https://nemesis:7443/api/files

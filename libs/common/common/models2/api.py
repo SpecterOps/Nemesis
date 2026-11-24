@@ -43,13 +43,19 @@ class APIInfo(BaseModel):
 
 
 def ensure_utc_datetime(value) -> datetime:
+    """Parse an ISO 8601 string or datetime into an aware UTC datetime; naive values are rejected."""
     if isinstance(value, str):
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    else:
+        try:
+            dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError as e:
+            raise ValueError(f"must be an ISO 8601 datetime with a timezone: {e}") from e
+    elif isinstance(value, datetime):
         dt = value
+    else:
+        raise ValueError(f"must be an ISO 8601 datetime with a timezone, got {type(value).__name__}")
 
-    if dt.tzinfo is None:
-        raise ValueError("Datetime must be timezone-aware")
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        raise ValueError("datetime must include a timezone (e.g. 'Z' or '+00:00')")
 
     if dt.tzinfo != UTC:
         dt = dt.astimezone(UTC)
@@ -96,24 +102,32 @@ class FileFilters(BaseModel):
 
 
 # Column sizes shared by the upload models and other writers (see infra/postgres/01-schema.sql)
+MAX_AGENT_ID_LENGTH = 255
+MAX_PROJECT_LENGTH = 255
 MAX_SOURCE_LENGTH = 1000
 SOURCE_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
 
 # Every stored row belongs to a project: required, non-blank, and within the database column's 255 characters.
-ProjectName = Annotated[str, Field(min_length=1, max_length=255, pattern=r"\S")]
+ProjectName = Annotated[str, Field(min_length=1, max_length=MAX_PROJECT_LENGTH, pattern=r"\S")]
+# The agent/tool that submitted the file (VARCHAR(255)); required and non-blank.
+AgentId = Annotated[str, Field(min_length=1, max_length=MAX_AGENT_ID_LENGTH, pattern=r"\S")]
+# Where the file came from, e.g. "host://WS01" (VARCHAR(1000)); non-blank when given.
+SourceName = Annotated[str, Field(min_length=1, max_length=MAX_SOURCE_LENGTH, pattern=r"\S")]
 
 
 class FileMetadata(BaseModel):
     """Metadata model for file uploads"""
 
-    agent_id: str
-    source: str | None = None
+    agent_id: AgentId
+    source: SourceName | None = None
     project: ProjectName
-    timestamp: datetime | None = Field(
-        default=None, description="ISO 8601 formatted timestamp of when the data was collected"
+    timestamp: UTCDatetime | None = Field(
+        default=None,
+        description="ISO 8601 timestamp with a timezone (e.g. 'Z') of when the data was collected",
     )
-    expiration: datetime | None = Field(
-        default=None, description="ISO 8601 formatted expiration date (when the data should be deleted)"
+    expiration: UTCDatetime | None = Field(
+        default=None,
+        description="ISO 8601 expiration date with a timezone (e.g. 'Z'): when the data should be deleted",
     )
     path: str
     file_filters: FileFilters | None = Field(

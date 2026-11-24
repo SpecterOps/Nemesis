@@ -104,13 +104,48 @@ def test_default_expiration_is_timestamp_plus_default_days():
     assert datetime.fromisoformat(meta["expiration"]) == ts + timedelta(days=DEFAULT_EXPIRATION_DAYS)
 
 
-def test_default_expiration_accepts_datetime_and_naive_timestamp():
+def test_default_expiration_accepts_aware_datetime_timestamp():
     extractor = _extractor()
-    meta = {"agent_id": "a", "project": "p", "path": "/x.zip", "timestamp": datetime(2021, 6, 1)}
+    meta = {"agent_id": "a", "project": "p", "path": "/x.zip", "timestamp": datetime(2021, 6, 1, tzinfo=UTC)}
     extractor.set_container_info("cid", meta)
     assert datetime.fromisoformat(meta["expiration"]) == datetime(2021, 6, 1, tzinfo=UTC) + timedelta(
         days=DEFAULT_EXPIRATION_DAYS
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("timestamp", datetime(2021, 6, 1)),
+        ("timestamp", "2021-06-01T00:00:00"),
+        ("expiration", "2031-06-01T00:00:00"),
+        ("timestamp", "not a date"),
+    ],
+)
+def test_naive_or_invalid_times_are_rejected_and_logged(field, value, monkeypatch):
+    from common import data_issues
+
+    calls = []
+    monkeypatch.setattr(data_issues, "logger", type("L", (), {"warning": lambda self, e, **kw: calls.append(kw)})())
+    extractor = _extractor()
+    meta = {"agent_id": "a", "project": "p", "path": "/x.zip", field: value}
+    with pytest.raises(ContainerMetadataError, match=field):
+        extractor.set_container_info("cid", meta)
+    assert calls and calls[0]["kind"] == "rejected_input" and field in calls[0]["reason"]
+
+
+def test_aware_times_are_normalized_to_utc():
+    extractor = _extractor()
+    meta = {
+        "agent_id": "a",
+        "project": "p",
+        "path": "/x.zip",
+        "timestamp": "2021-06-01T02:00:00+02:00",
+        "expiration": "2031-06-01T00:00:00Z",
+    }
+    extractor.set_container_info("cid", meta)
+    assert meta["timestamp"] == "2021-06-01T00:00:00+00:00"
+    assert meta["expiration"] == "2031-06-01T00:00:00+00:00"
 
 
 def test_explicit_expiration_is_kept():

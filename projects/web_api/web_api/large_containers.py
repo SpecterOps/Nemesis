@@ -14,11 +14,18 @@ from urllib.parse import urlparse
 
 import psycopg
 import pytsk3
+from common.data_issues import DataIssueKind, log_data_issue
 from common.db import get_postgres_connection_str
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import File as FileModel
-from common.models2.api import FileFilters
+from common.models2.api import (
+    MAX_AGENT_ID_LENGTH,
+    MAX_PROJECT_LENGTH,
+    MAX_SOURCE_LENGTH,
+    FileFilters,
+    ensure_utc_datetime,
+)
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from common.storage import StorageS3
 from dapr.clients import DaprClient
@@ -33,7 +40,11 @@ MOUNTED_CONTAINER_PATH = os.getenv("MOUNTED_CONTAINER_PATH", "/mounted-container
 DEFAULT_EXPIRATION_DAYS = int(os.getenv("DEFAULT_EXPIRATION_DAYS", 100))
 
 # Column limits for container_processing (infra/postgres/01-schema.sql)
-CONTAINER_METADATA_MAX_LENGTHS = {"agent_id": 255, "project": 255, "source": 1000}
+CONTAINER_METADATA_MAX_LENGTHS = {
+    "agent_id": MAX_AGENT_ID_LENGTH,
+    "project": MAX_PROJECT_LENGTH,
+    "source": MAX_SOURCE_LENGTH,
+}
 ORIGINAL_FILENAME_MAX_LENGTH = 255
 REQUIRED_CONTAINER_METADATA_FIELDS = ("agent_id", "project")
 
@@ -85,12 +96,22 @@ def coerce_metadata_value(field: str, value: Any, required: bool = False) -> str
 
 
 def validate_container_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
-    """Validate/coerce agent_id, project and source in-place and return the metadata."""
-    for field in CONTAINER_METADATA_MAX_LENGTHS:
-        if field in metadata or field in REQUIRED_CONTAINER_METADATA_FIELDS:
-            metadata[field] = coerce_metadata_value(
-                field, metadata.get(field), required=field in REQUIRED_CONTAINER_METADATA_FIELDS
-            )
+    """Validate/coerce agent_id, project, source, timestamp and expiration in-place and return the metadata.
+
+    Rejections are logged as rejected_input data issues and raised as ContainerMetadataError.
+    """
+    try:
+        for field in CONTAINER_METADATA_MAX_LENGTHS:
+            if field in metadata or field in REQUIRED_CONTAINER_METADATA_FIELDS:
+                metadata[field] = coerce_metadata_value(
+                    field, metadata.get(field), required=field in REQUIRED_CONTAINER_METADATA_FIELDS
+                )
+        for field in ("timestamp", "expiration"):
+            if metadata.get(field) is not None:
+                metadata[field] = _parse_timestamp(field, metadata[field]).isoformat()
+    except ContainerMetadataError as e:
+        log_data_issue(DataIssueKind.REJECTED_INPUT, field="container_metadata", reason=str(e))
+        raise
     return metadata
 
 
@@ -123,14 +144,12 @@ def normalize_container_path(path: str) -> str:
     return path
 
 
-def _parse_timestamp(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        dt = value
-    else:
-        dt = datetime.fromisoformat(str(value))
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    return dt
+def _parse_timestamp(field: str, value: Any) -> datetime:
+    """Parse a container timestamp/expiration into aware UTC; values without a timezone are rejected."""
+    try:
+        return ensure_utc_datetime(value)
+    except ValueError as e:
+        raise ContainerMetadataError(f"Container metadata field '{field}' {e}") from e
 
 
 class ContainerStatus:
@@ -228,12 +247,7 @@ class BaseContainerExtractor:
 
         # Handle expiration - use timestamp + DEFAULT_EXPIRATION_DAYS if not provided (same as /files uploads)
         if self.file_metadata.get("expiration") is None:
-            try:
-                timestamp_dt = _parse_timestamp(self.file_metadata["timestamp"])
-            except (TypeError, ValueError) as e:
-                raise ContainerMetadataError(
-                    f"Container metadata field 'timestamp' is not a valid ISO 8601 datetime: {e}"
-                ) from e
+            timestamp_dt = _parse_timestamp("timestamp", self.file_metadata["timestamp"])
             expiration_dt = timestamp_dt + timedelta(days=DEFAULT_EXPIRATION_DAYS)
             self.file_metadata["expiration"] = expiration_dt.isoformat()
 
