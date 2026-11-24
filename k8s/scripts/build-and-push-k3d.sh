@@ -129,7 +129,7 @@ fi
 # Mirror external images into the local registry so k3d nodes can pull them.
 # These are third-party images referenced in values.yaml that aren't built from source.
 EXTERNAL_IMAGES=(
-    "docker.io/edoburu/pgbouncer:v1.26.1-p0:edoburu/pgbouncer"
+    "ghcr.io/cloudnative-pg/pgbouncer:1.26.1-202611051526-trixie:cloudnative-pg/pgbouncer"
 )
 
 if [[ ${#SELECTED_SERVICES[@]} -eq 0 ]]; then

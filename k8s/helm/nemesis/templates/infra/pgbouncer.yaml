@@ -1,4 +1,47 @@
 ---
+# CloudNativePG's pgbouncer image has no entrypoint script: it runs pgbouncer with the mounted
+# pgbouncer.ini. Only the Postgres admin account is in userlist.txt; other roles (e.g.
+# chatbot_readonly) are looked up in Postgres through auth_user and pgbouncer's default auth_query.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  pgbouncer.ini: |
+    [databases]
+    {{ .Values.postgres.database }} = host=postgres port={{ .Values.postgres.port }} auth_user={{ .Values.credentials.postgres.user }}
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = {{ .Values.pgbouncer.port }}
+    unix_socket_dir =
+    auth_type = scram-sha-256
+    auth_file = /etc/pgbouncer/auth/userlist.txt
+    admin_users = {{ .Values.credentials.postgres.user }}
+    pool_mode = {{ .Values.pgbouncer.poolMode }}
+    max_client_conn = {{ int .Values.pgbouncer.maxClientConn }}
+    default_pool_size = {{ int .Values.pgbouncer.defaultPoolSize }}
+    min_pool_size = {{ int .Values.pgbouncer.minPoolSize }}
+    reserve_pool_size = {{ int .Values.pgbouncer.reservePoolSize }}
+    ; asyncpg and psycopg send extra_float_digits, which pgbouncer would otherwise reject
+    ignore_startup_parameters = extra_float_digits
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pgbouncer-userlist
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- /* userlist.txt quotes both fields; a double quote inside is written twice */}}
+  userlist.txt: |
+    "{{ .Values.credentials.postgres.user | replace "\"" "\"\"" }}" "{{ .Values.credentials.postgres.password | replace "\"" "\"\"" }}"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,51 +61,39 @@ spec:
         {{- include "nemesis.selectorLabels" (dict "name" "pgbouncer" "context" .) | nindent 8 }}
       annotations:
         dapr.io/enabled: "false"
-        checksum/config: {{ printf "%s-%d-%d-%d-%d-%s" .Values.pgbouncer.poolMode (int .Values.pgbouncer.maxClientConn) (int .Values.pgbouncer.defaultPoolSize) (int .Values.pgbouncer.minPoolSize) (int .Values.pgbouncer.reservePoolSize) (default "" (ternary .Values.llm.agents.env.chatbotDbPassword "" .Values.llm.enabled)) | sha256sum }}
+        # Restart on config/credential changes (chatbot password: auth_query lookups)
+        checksum/config: {{ printf "%s-%s-%s-%s" .Values.postgres.database .Values.credentials.postgres.user .Values.credentials.postgres.password (toYaml .Values.pgbouncer) | sha256sum }}
+        checksum/chatbot: {{ default "" (ternary .Values.llm.agents.env.chatbotDbPassword "" .Values.llm.enabled) | sha256sum }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 998
+        runAsGroup: 996
+        fsGroup: 996
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         {{- include "nemesis.waitForPostgres" . | nindent 8 }}
       containers:
         - name: pgbouncer
           image: {{ include "nemesis.image" (dict "image" .Values.pgbouncer.image "context" .) }}
+          args: ["/etc/pgbouncer/pgbouncer.ini"]
           ports:
             - containerPort: {{ .Values.pgbouncer.port }}
               name: pgbouncer
-          # edoburu/pgbouncer settings. Other roles (e.g. chatbot_readonly) are looked up in Postgres
-          # through auth_user/auth_query, so no userlist entry is needed for them.
-          env:
-            - name: DB_HOST
-              value: "postgres"
-            - name: DB_PORT
-              value: {{ .Values.postgres.port | quote }}
-            - name: DB_NAME
-              value: {{ .Values.postgres.database | quote }}
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: nemesis-secrets
-                  key: POSTGRES_USER
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: nemesis-secrets
-                  key: POSTGRES_PASSWORD
-            - name: AUTH_TYPE
-              value: "scram-sha-256"
-            - name: LISTEN_PORT
-              value: {{ .Values.pgbouncer.port | quote }}
-            - name: POOL_MODE
-              value: {{ .Values.pgbouncer.poolMode | quote }}
-            - name: MAX_CLIENT_CONN
-              value: {{ .Values.pgbouncer.maxClientConn | quote }}
-            - name: DEFAULT_POOL_SIZE
-              value: {{ .Values.pgbouncer.defaultPoolSize | quote }}
-            - name: MIN_POOL_SIZE
-              value: {{ .Values.pgbouncer.minPoolSize | quote }}
-            - name: RESERVE_POOL_SIZE
-              value: {{ .Values.pgbouncer.reservePoolSize | quote }}
-            - name: ADMIN_USERS
-              value: {{ .Values.credentials.postgres.user | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pgbouncer/pgbouncer.ini
+              subPath: pgbouncer.ini
+              readOnly: true
+            - name: userlist
+              mountPath: /etc/pgbouncer/auth
+              readOnly: true
           readinessProbe:
             tcpSocket:
               port: pgbouncer
@@ -75,6 +106,14 @@ spec:
             periodSeconds: 15
           resources:
             {{- toYaml .Values.pgbouncer.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: pgbouncer-config
+        - name: userlist
+          secret:
+            secretName: pgbouncer-userlist
+            defaultMode: 0440
 ---
 apiVersion: v1
 kind: Service

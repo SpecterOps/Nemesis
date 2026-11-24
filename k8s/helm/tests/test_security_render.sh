@@ -18,6 +18,7 @@ render "$TMP/default.yaml"
 render "$TMP/explicit.yaml" --set credentials.litellm.adminPassword=custom --set credentials.litellm.saltKey=sk-salt
 render "$TMP/legacy.yaml" --set llm.litellm.env.litellmAdminPassword=legacy
 render "$TMP/hosted.yaml" --set ingress.host=nemesis.example
+render "$TMP/quoted.yaml" --set llm.enabled=false --set monitoring.enabled=false --set jupyter.enabled=false --set 'credentials.postgres.password=pa"ss'
 
 python3 - "$TMP" "$(cd "$CHART/../../.." && pwd)" <<'EOF'
 import sys
@@ -180,6 +181,21 @@ for script in ("setup-cluster-k3d.sh", "setup-cluster-k3s.sh", "setup-cluster-ek
     check(f"{script}: Dapr scheduler serves actor placement", "--set global.scheduler.placement.enabled=true" in text)
     check(f"{script}: Traefik metrics get a ClusterIP Service", '--set "metrics.prometheus.service.enabled=true"' in text)
     check(f"{script}: Traefik metrics port is not exposed on the public Service", "ports.metrics.expose" not in text)
+
+# --- pgbouncer: signed CloudNativePG image, config from files, no root ---
+pgb = find(default, "Deployment", "pgbouncer")["spec"]["template"]["spec"]
+pgb_c = pgb["containers"][0]
+check("pgbouncer uses the CloudNativePG image", pgb_c["image"].startswith("ghcr.io/cloudnative-pg/pgbouncer:1.26.1-"))
+check("pgbouncer gets no credentials through env", not pgb_c.get("env"))
+check("pgbouncer runs as non-root", pgb["securityContext"]["runAsNonRoot"] is True)
+check("pgbouncer root filesystem is read-only", pgb_c["securityContext"]["readOnlyRootFilesystem"] is True)
+check("pgbouncer userlist comes from a Secret", any(v.get("secret", {}).get("secretName") == "pgbouncer-userlist" for v in pgb["volumes"]))
+ini = find(default, "ConfigMap", "pgbouncer-config")["data"]["pgbouncer.ini"]
+check("pgbouncer uses SCRAM", "auth_type = scram-sha-256" in ini)
+check("pgbouncer config holds no password", "Qwerty" not in ini and "password" not in ini.lower())
+check("other roles resolve through auth_user", "auth_user=" in ini)
+quoted = docs("quoted.yaml")
+check("userlist escapes double quotes", find(quoted, "Secret", "pgbouncer-userlist")["stringData"]["userlist.txt"].strip().endswith('"pa""ss"'))
 
 # --- Prometheus pod discovery stays inside the Nemesis namespace ---
 prom_pod = find(default, "Deployment", "prometheus")["spec"]["template"]["spec"]

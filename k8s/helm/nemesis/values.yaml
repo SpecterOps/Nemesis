@@ -299,12 +299,15 @@ postgres:
 # ============================================
 pgbouncer:
   image:
-    # Maintained upstream image (Bitnami no longer publishes free versioned pgbouncer images).
-    # build-and-push-k3d.sh mirrors this to the k3d local registry; values-dev.yaml overrides the
-    # registry accordingly.
-    registry: "docker.io"
-    repository: edoburu/pgbouncer
-    tag: "v1.26.1-p0"
+    # CloudNativePG's image (CNCF): built in CI from PGDG packages, signed with cosign (keyless):
+    #   cosign verify ghcr.io/cloudnative-pg/pgbouncer:<tag> \
+    #     --certificate-identity-regexp '^https://github.com/cloudnative-pg/pgbouncer-containers/' \
+    #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+    # Timestamped tags are immutable. build-and-push-k3d.sh mirrors this to the k3d local registry;
+    # values-dev.yaml overrides the registry accordingly.
+    registry: "ghcr.io"
+    repository: cloudnative-pg/pgbouncer
+    tag: "1.26.1-202611051526-trixie"
   replicas: 1
   port: 5432
   poolMode: transaction
