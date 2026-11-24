@@ -11,6 +11,7 @@ import ssl
 from collections.abc import AsyncGenerator
 
 import aiohttp
+from cli import tls_trust
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql.transport.websockets import WebsocketsTransport
 from mythic import mythic_classes, mythic_utilities
@@ -22,7 +23,7 @@ _installed = False
 
 def verifying_context(ca_file: str | None = None) -> ssl.SSLContext:
     """Return a certificate-verifying context: the system trust store, or only the CAs in ``ca_file`` if given."""
-    return ssl.create_default_context(cafile=ca_file) if ca_file else ssl.create_default_context()
+    return tls_trust.verifying_context(ca_file)
 
 
 def client_ssl(use_tls: bool, verify: bool, ca_file: str | None = None) -> ssl.SSLContext | bool:

@@ -9,6 +9,8 @@ nemesis:
     password: "pass"
   expiration_days: 100
   max_file_size: 1000000000
+  # Optional PEM file of CAs to trust for Nemesis instead of the system trust store.
+  # ca_file: "~/nemesis-ca.pem"
 
 cobaltstrike:
   - url: "https://cobaltstrike.example.com:50443"
@@ -18,3 +20,5 @@ cobaltstrike:
     agent_id: "cobaltstrike"
     project: "my-assessment"
     poll_interval_sec: 3
+    # Optional PEM file of CAs to trust for this server instead of the system trust store.
+    # ca_file: "~/cobaltstrike-ca.pem"

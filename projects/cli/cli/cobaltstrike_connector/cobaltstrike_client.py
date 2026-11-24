@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 import aiohttp
 from cli.c2_download_state import DOWNLOAD_READ_TIMEOUT_SEC, download_timeout, stream_response_to_file
+from cli.tls_trust import aiohttp_ssl
 
 
 @dataclass
@@ -110,6 +111,7 @@ class CobaltStrikeClient:
         verify_ssl: bool = True,
         validate_https: bool = True,
         *,
+        ca_file: str | None = None,
         connect_timeout: float = 10,
         download_read_timeout: float = DOWNLOAD_READ_TIMEOUT_SEC,
     ):
@@ -139,6 +141,7 @@ class CobaltStrikeClient:
         # Ensure the base_url doesn't end with a slash
         self.base_url = base_url.rstrip("/")
         self.verify_ssl = verify_ssl
+        self.ca_file = ca_file
         # File downloads get no total time limit, only connect and read-inactivity limits.
         self.connect_timeout = connect_timeout
         self.download_timeout = download_timeout(connect_timeout, download_read_timeout)
@@ -151,17 +154,9 @@ class CobaltStrikeClient:
         # API requests: 30 seconds total. File downloads override this with self.download_timeout.
         timeout = aiohttp.ClientTimeout(total=30, connect=self.connect_timeout)
 
-        # Create SSL context based on verify_ssl setting
-        import ssl
-
-        ssl_context = ssl.create_default_context()
-        if not self.verify_ssl:
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-
         self._session = aiohttp.ClientSession(
             cookie_jar=aiohttp.CookieJar(),
-            connector=aiohttp.TCPConnector(ssl=ssl_context if self.verify_ssl else False),
+            connector=aiohttp.TCPConnector(ssl=aiohttp_ssl(self.verify_ssl, self.ca_file)),
             timeout=timeout,
         )
         return self

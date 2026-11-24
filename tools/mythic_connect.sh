@@ -6,6 +6,10 @@
 # $NEMESIS_CONNECTOR_STATE_VOLUME (default "nemesis-connector-state"), mounted at /state. The container is
 # removed after each run, so the state path is pinned to that volume and overrides any db.path in the
 # config file; otherwise every restart would upload every Mythic file again.
+#
+# CA files: set NEMESIS_CA_FILE (for Nemesis) and/or MYTHIC_CA_FILE (for Mythic) to a local PEM file. Each is
+# mounted read-only under /certs and overrides nemesis.ca_file / networking.ca_file in the config, whose
+# paths would otherwise refer to locations inside the container.
 
 NEMESIS_CLI_IMAGE="${NEMESIS_CLI_IMAGE:-ghcr.io/specterops/nemesis/cli:latest}"
 NEMESIS_NETWORK="${NEMESIS_NETWORK:-host}"
@@ -38,6 +42,22 @@ for arg in "$@"; do
     fi
 done
 
+ENV_ARGS=()
+add_ca_file() { # add_ca_file LOCAL_PATH CONTAINER_PATH DYNACONF_ENVVAR
+    if [[ ! -f "$1" ]]; then
+        echo "Error: CA file not found: $1"
+        exit 1
+    fi
+    DOCKER_VOLUMES+=(-v "$(realpath "$1"):$2:ro")
+    ENV_ARGS+=(-e "$3=$2")
+}
+if [[ -n "${NEMESIS_CA_FILE:-}" ]]; then
+    add_ca_file "$NEMESIS_CA_FILE" /certs/nemesis-ca.pem MYTHIC_SYNC_NEMESIS__CA_FILE
+fi
+if [[ -n "${MYTHIC_CA_FILE:-}" ]]; then
+    add_ca_file "$MYTHIC_CA_FILE" /certs/mythic-ca.pem MYTHIC_SYNC_NETWORKING__CA_FILE
+fi
+
 echo "Connector state is kept in the Docker volume '$NEMESIS_CONNECTOR_STATE_VOLUME' (/state in the container)" >&2
 
 # Run the Docker command
@@ -49,6 +69,7 @@ docker run \
   -e XDG_STATE_HOME=/state \
   -e MYTHIC_SYNC_DB__PATH=/state/nemesis/connectors \
   -v "$NEMESIS_CONNECTOR_STATE_VOLUME:/state" \
+  "${ENV_ARGS[@]}" \
   "${DOCKER_VOLUMES[@]}" \
   "$NEMESIS_CLI_IMAGE" \
   connect-mythic "${CLI_OPTIONS[@]}"

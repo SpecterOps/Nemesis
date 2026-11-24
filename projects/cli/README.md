@@ -143,8 +143,19 @@ subscriptions are open at once; further pending files are polled. A periodic che
 files the discovery stream skipped. Screenshots and files without a full path are uploaded
 under their file name alone.
 
-Mythic can trust a specific CA or self-signed certificate via `networking.ca_file` (a PEM file); by
-default the system trust store is used.
+### Certificate trust
+
+Certificates are verified against the system trust store unless a CA file (PEM) is given, which then
+replaces the system store for that connection:
+
+- `submit` and `monitor`: `--ca-file PATH` or `NEMESIS_CA_FILE`.
+- Connectors: `nemesis.ca_file` for Nemesis; `ca_file` on each Cobalt Strike or Outflank entry, or
+  `networking.ca_file` for Mythic.
+- Docker helpers mount the file for you: `tools/submit.sh --ca-file` / `NEMESIS_CA_FILE`,
+  `tools/monitor_folder.sh --ca-file`, and `tools/mythic_connect.sh` with `NEMESIS_CA_FILE` /
+  `MYTHIC_CA_FILE`.
+
+`--ignore-cert-errors` (or `validate_https_certs: false`) turns verification off and ignores CA files.
 
 All connectors verify the C2's TLS certificate unless `--ignore-cert-errors` is set, download
 without a total timeout (a stalled read fails after 300 seconds), send the C2's collection time as

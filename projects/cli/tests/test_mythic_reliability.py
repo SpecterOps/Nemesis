@@ -649,12 +649,26 @@ def test_config_ca_file_must_exist(tmp_path):
 # --- MYTHIC_SYNC_* environment overrides (used by tools/mythic_connect.sh) ---------------------------------------
 
 
-def test_env_override_db_path(tmp_path, monkeypatch):
+def test_env_overrides_db_path_and_ca_files(tmp_path, monkeypatch, ca_file):
     """Dynaconf keeps env-set keys upper case (DB__PATH -> {"PATH": ...}); they must still be read."""
     monkeypatch.setenv("MYTHIC_SYNC_DB__PATH", str(tmp_path / "state"))
+    monkeypatch.setenv("MYTHIC_SYNC_NEMESIS__CA_FILE", str(ca_file))
+    monkeypatch.setenv("MYTHIC_SYNC_NETWORKING__CA_FILE", str(ca_file))
     mythic_config.get_settings.cache_clear()
     try:
         settings = mythic_config.get_settings(write_settings(tmp_path, ""))
     finally:
         mythic_config.get_settings.cache_clear()
     assert settings.db.path == str(tmp_path / "state")
+    assert settings.nemesis.ca_file == str(ca_file.resolve())
+    assert settings.networking.ca_file == str(ca_file.resolve())
+
+
+def test_env_override_missing_ca_file_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("MYTHIC_SYNC_NEMESIS__CA_FILE", str(tmp_path / "missing.pem"))
+    mythic_config.get_settings.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="nemesis.ca_file not found"):
+            mythic_config.get_settings(write_settings(tmp_path, ""))
+    finally:
+        mythic_config.get_settings.cache_clear()

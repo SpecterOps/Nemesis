@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import ParseResult, urlparse
 
 from cli.config import default_state_dir
+from cli.tls_trust import resolve_ca_file
 from dynaconf import Dynaconf, Validator
 
 DEFAULT_PENDING_GIVE_UP_DAYS = 7
@@ -58,8 +59,11 @@ class NemesisConfig:
     credential: UsernamePasswordCredential
     expiration_days: int
     max_file_size: int
+    # PEM bundle of CAs to trust for Nemesis instead of the system store; None uses the system store.
+    ca_file: str | None = None
 
     def __post_init__(self):
+        self.ca_file = resolve_ca_file(self.ca_file, "nemesis.ca_file")
         # If a string was passed in, parse it
         if isinstance(self.url, str):
             self.url = urlparse(self.url)
@@ -84,6 +88,7 @@ class NemesisConfig:
             ),
             expiration_days=data["expiration_days"],
             max_file_size=data["max_file_size"],
+            ca_file=data.get("ca_file"),
         )
 
 
@@ -104,13 +109,7 @@ class NetworkingConfig:
     ca_file: str | None = None
 
     def __post_init__(self):
-        if self.ca_file is not None:
-            if not isinstance(self.ca_file, str) or not self.ca_file.strip():
-                raise ValueError("networking.ca_file must be a nonempty path")
-            path = Path(self.ca_file).expanduser()
-            if not path.is_file():
-                raise ValueError(f"networking.ca_file not found: {path}")
-            self.ca_file = str(path)
+        self.ca_file = resolve_ca_file(self.ca_file, "networking.ca_file")
 
     @classmethod
     def from_dict(cls, data: dict) -> "NetworkingConfig":

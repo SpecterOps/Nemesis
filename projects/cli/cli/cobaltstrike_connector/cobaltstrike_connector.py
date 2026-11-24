@@ -84,6 +84,7 @@ async def setup_cobaltstrike_monitor(
     async with CobaltStrikeClient(
         base_url=base_url,
         verify_ssl=config.validate_https_certs,
+        ca_file=cobaltstrike_config.ca_file,
         connect_timeout=config.conn_timeout_sec,
     ) as cobaltstrike_client:
         # Authenticate

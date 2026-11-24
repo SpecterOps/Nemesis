@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SUBMIT="$(dirname "$SCRIPT_DIR")/submit.sh"
-unset NEMESIS_PASSWORD
+unset NEMESIS_PASSWORD NEMESIS_CA_FILE
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -138,6 +138,22 @@ check "NEMESIS_PASSWORD set: forwarded by name with -e" has_arg NEMESIS_PASSWORD
 check "NEMESIS_PASSWORD set: value not on the docker command line" lacks_arg_containing "s3cret"
 check "NEMESIS_PASSWORD set: value reaches docker's environment" [ "$(< "$DOCKER_ARGV.env")" = "s3cret" ]
 check "NEMESIS_IGNORE_CERT_ERRORS still forwarded" has_arg NEMESIS_IGNORE_CERT_ERRORS
+
+# --- CA file ---
+echo "pem" > "$W/ca.pem"
+run_submit "$W/a/same.txt" --ca-file "$W/ca.pem"
+check "--ca-file: mounted read-only at its real path" \
+  has_arg "type=bind,\"source=$W/ca.pem\",\"target=$W/ca.pem\",readonly"
+check "--ca-file: CLI gets the mounted path" [ "$(after_image)" = "submit $W/a/same.txt --ca-file $W/ca.pem" ]
+NEMESIS_CA_FILE="$W/ca.pem" run_submit "$W/a/same.txt"
+check "NEMESIS_CA_FILE: mounted" has_arg "type=bind,\"source=$W/ca.pem\",\"target=$W/ca.pem\",readonly"
+check "NEMESIS_CA_FILE: container path passed with -e" has_arg "NEMESIS_CA_FILE=$W/ca.pem"
+check "NEMESIS_CA_FILE: not a submitted path" [ "$(after_image)" = "submit $W/a/same.txt" ]
+NEMESIS_CA_FILE="$W/missing.pem" run_submit "$W/a/same.txt"
+check "NEMESIS_CA_FILE missing: rejected before docker runs" [ "$RC" = 1 ]
+check "NEMESIS_CA_FILE missing: docker not invoked" [ "${#ARGV[@]}" = 0 ]
+run_submit "$W/a/same.txt"
+check "no CA file: NEMESIS_CA_FILE not passed" lacks_arg_containing "NEMESIS_CA_FILE"
 
 if [ "$FAILURES" -ne 0 ]; then
   echo "$FAILURES test(s) failed"

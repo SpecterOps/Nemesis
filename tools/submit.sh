@@ -9,6 +9,9 @@
 #
 # Set NEMESIS_PASSWORD in the environment to pass it to the container with `-e` instead of on the
 # command line (only takes effect with a CLI version that reads NEMESIS_PASSWORD).
+#
+# A CA file for Nemesis's certificate, given with --ca-file or NEMESIS_CA_FILE, is mounted read-only
+# into the container and passed on with its container path.
 
 # Default image, can be overridden with NEMESIS_CLI_IMAGE env var
 NEMESIS_CLI_IMAGE="${NEMESIS_CLI_IMAGE:-ghcr.io/specterops/nemesis/cli:latest}"
@@ -23,7 +26,7 @@ MOUNTED_TARGETS=()  # ...and where each is mounted in the container
 # Options that don't take a value (flags only)
 OPTIONS_WITHOUT_VALUES=("--debug" "--recursive" "-r" "--container" "--help")
 # Options whose value is a local file that must be mounted
-FILE_VALUE_OPTIONS=("--filters" "-f" "--file")
+FILE_VALUE_OPTIONS=("--filters" "-f" "--file" "--ca-file")
 # Where paths that can't keep their real location are mounted
 FALLBACK_ROOT=/nemesis-submit
 # Container trees a mount must not shadow (the CLI image lives in /src and /venv)
@@ -119,6 +122,14 @@ while [[ $i -lt ${#args[@]} ]]; do
 done
 
 ENV_ARGS=(-e NEMESIS_IGNORE_CERT_ERRORS)
+if [[ -n "${NEMESIS_CA_FILE:-}" ]]; then
+    if [[ ! -f "$NEMESIS_CA_FILE" ]]; then
+        echo "Error: NEMESIS_CA_FILE is not a file: $NEMESIS_CA_FILE" >&2
+        exit 1
+    fi
+    mount_path "$NEMESIS_CA_FILE"
+    ENV_ARGS+=(-e "NEMESIS_CA_FILE=$MOUNTED_PATH")
+fi
 if [[ -n "${NEMESIS_PASSWORD:-}" ]]; then
     # Passed by name, so the value stays off the docker command line
     ENV_ARGS+=(-e NEMESIS_PASSWORD)

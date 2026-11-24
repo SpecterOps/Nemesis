@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 import aiohttp
 from cli.c2_download_state import DOWNLOAD_READ_TIMEOUT_SEC, download_timeout, stream_response_to_file
+from cli.tls_trust import aiohttp_ssl
 
 
 @dataclass
@@ -90,6 +91,7 @@ class OutflankC2Client:
         verify_ssl: bool = True,
         validate_https: bool = True,
         *,
+        ca_file: str | None = None,
         connect_timeout: float = 10,
         download_read_timeout: float = DOWNLOAD_READ_TIMEOUT_SEC,
     ):
@@ -119,6 +121,7 @@ class OutflankC2Client:
         # Ensure the base_url doesn't end with a slash
         self.base_url = base_url.rstrip("/")
         self.verify_ssl = verify_ssl
+        self.ca_file = ca_file
         # File downloads get no total time limit, only connect and read-inactivity limits.
         self.download_timeout = download_timeout(connect_timeout, download_read_timeout)
         self._session = None
@@ -128,7 +131,8 @@ class OutflankC2Client:
     async def __aenter__(self):
         """Context manager entry - creates the aiohttp session."""
         self._session = aiohttp.ClientSession(
-            cookie_jar=aiohttp.CookieJar(), connector=aiohttp.TCPConnector(ssl=self.verify_ssl)
+            cookie_jar=aiohttp.CookieJar(),
+            connector=aiohttp.TCPConnector(ssl=aiohttp_ssl(self.verify_ssl, self.ca_file)),
         )
         return self
 

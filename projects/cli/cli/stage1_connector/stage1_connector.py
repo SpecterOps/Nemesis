@@ -86,6 +86,7 @@ async def setup_outflank_monitor(
     async with OutflankC2Client(
         base_url=base_url,
         verify_ssl=config.validate_https_certs,
+        ca_file=outflank_config.ca_file,
         connect_timeout=config.conn_timeout_sec,
     ) as outflank_client:
         # Authenticate

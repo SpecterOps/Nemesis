@@ -13,6 +13,7 @@ import click
 import colorlog
 import requests
 import urllib3
+from cli.tls_trust import requests_verify
 from common.log_safety import mask
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
@@ -219,6 +220,7 @@ def submit_main(
     folder: str | None = None,
     max_files: int | None = None,
     verify_ssl: bool = True,
+    ca_file: str | None = None,
 ):
     """Submit files to Nemesis for processing.
 
@@ -312,6 +314,7 @@ def submit_main(
             folder=folder,
             max_files=max_files,
             verify_ssl=verify_ssl,
+            ca_file=ca_file,
         )
 
         if not success:
@@ -339,8 +342,13 @@ def submit_files(
     folder: str | None = None,
     max_files: int | None = None,
     verify_ssl: bool = True,
+    ca_file: str | None = None,
 ):
-    """Submit files to Nemesis"""
+    """Submit files to Nemesis.
+
+    ``ca_file`` is a PEM bundle of CAs to trust for Nemesis instead of the system store; it is ignored when
+    ``verify_ssl`` is False.
+    """
 
     # Normalize host: strip scheme if provided (we always use https://)
     host = host.rstrip("/")
@@ -357,10 +365,13 @@ def submit_files(
     if not verify_ssl:
         logger.warning("HTTPS certificate verification is disabled; the connection to Nemesis can be intercepted")
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        if ca_file:
+            logger.warning("Ignoring the CA file because certificate verification is disabled")
+    tls_verify = requests_verify(verify_ssl, ca_file)
 
     # Validate authentication before starting uploads
     auth = (username, password) if username and password else None
-    if not validate_auth(host, auth, verify_ssl=verify_ssl):
+    if not validate_auth(host, auth, verify_ssl=tls_verify):
         return False
 
     # Total submissions = times (which now represents total, not additional)
@@ -389,7 +400,7 @@ def submit_files(
     actual_workers = min(workers, total_operations)
 
     # Create session with retry logic and connection pooling sized for our workers
-    session = create_session_with_retries(max_workers=actual_workers, verify_ssl=verify_ssl)
+    session = create_session_with_retries(max_workers=actual_workers, verify_ssl=tls_verify)
 
     # Create shared structures for concurrent submission
     overall_tracker = UploadTracker()
@@ -488,7 +499,7 @@ def stream_files(paths: list[Path], recursive: bool, file_queue: Queue, max_file
     return total_files
 
 
-def validate_auth(host_port: str, auth: tuple[str, str] | None = None, verify_ssl: bool = True) -> bool:
+def validate_auth(host_port: str, auth: tuple[str, str] | None = None, verify_ssl: bool | str = True) -> bool:
     """
     Validate authentication credentials before starting uploads.
     Returns True if auth is valid or not required, False otherwise.
@@ -607,13 +618,13 @@ def create_metadata(
     return metadata
 
 
-def create_session_with_retries(max_workers: int = 20, verify_ssl: bool = True) -> requests.Session:
+def create_session_with_retries(max_workers: int = 20, verify_ssl: bool | str = True) -> requests.Session:
     """
     Create a requests session with retry logic and connection pooling.
 
     Args:
         max_workers: Maximum number of concurrent workers (used to size connection pool)
-        verify_ssl: Whether to verify the server's HTTPS certificate
+        verify_ssl: requests' ``verify`` value: True (system trust store), a CA bundle path, or False
     """
     session = requests.Session()
     session.verify = verify_ssl

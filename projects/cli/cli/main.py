@@ -10,6 +10,7 @@ from cli.monitor import monitor_main
 from cli.mythic_connector.mythic_connector import start
 from cli.stage1_connector.stage1_connector import run_outflank_connector
 from cli.submit import submit_main
+from cli.tls_trust import CA_FILE_ENVVAR
 
 
 def get_default_config_file(tool_name: str) -> str:
@@ -33,6 +34,16 @@ ignore_cert_errors_option = click.option(
     envvar=IGNORE_CERT_ERRORS_ENVVAR,
     show_envvar=True,
     help="Skip HTTPS certificate verification (e.g., for self-signed certificates). Insecure: allows interception.",
+)
+
+
+ca_file_option = click.option(
+    "--ca-file",
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    default=None,
+    envvar=CA_FILE_ENVVAR,
+    show_envvar=True,
+    help="PEM file of CAs to trust for Nemesis instead of the system trust store (e.g. a self-signed certificate).",
 )
 
 
@@ -254,6 +265,7 @@ def get_os_user_and_host_string() -> str:
     show_default=False,
 )
 @ignore_cert_errors_option
+@ca_file_option
 def submit(
     debug: bool,
     paths: tuple[str, ...],
@@ -274,6 +286,7 @@ def submit(
     folder: str | None = None,
     max_files: int | None = None,
     ignore_cert_errors: bool = False,
+    ca_file: str | None = None,
 ):
     """Submit files to Nemesis for processing"""
     pattern_type: str = "glob"  # only handle glob formats if passed manually, for now
@@ -298,6 +311,7 @@ def submit(
         folder,
         max_files,
         verify_ssl=not ignore_cert_errors,
+        ca_file=ca_file,
     )
 
 
@@ -316,6 +330,7 @@ def submit(
 @click.option("--only-monitor", is_flag=True, help="Only monitor for new files, don't submit existing files")
 @click.option("--container", is_flag=True, help="Submit files as containers to the /containers endpoint")
 @ignore_cert_errors_option
+@ca_file_option
 def monitor(
     path: str,
     debug: bool,
@@ -329,6 +344,7 @@ def monitor(
     container: bool,
     source: str | None = None,
     ignore_cert_errors: bool = False,
+    ca_file: str | None = None,
 ):
     """Monitor a folder for new files and submit them to Nemesis"""
     monitor_main(
@@ -344,6 +360,7 @@ def monitor(
         container,
         source,
         verify_ssl=not ignore_cert_errors,
+        ca_file=ca_file,
     )
 
 

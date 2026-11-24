@@ -20,6 +20,8 @@ nemesis:
     password: "n"
   expiration_days: 100 # After how many days will uploaded files be deleted
   max_file_size: 1000000000 # 1GB
+  # Optional PEM file of CAs to trust for Nemesis instead of the system trust store.
+  # ca_file: "~/nemesis-ca.pem"
 
 # Directory for connector state (one LevelDB database per Mythic URL, project and agent_id).
 # Defaults to $XDG_STATE_HOME/nemesis/connectors or ~/.local/state/nemesis/connectors.

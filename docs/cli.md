@@ -40,9 +40,10 @@ uv run python -m cli <command>
 
 ## HTTPS Certificate Verification
 
-The CLI and all connectors verify HTTPS certificates by default. Nemesis ships with a self-signed certificate
-(`infra/traefik/certs/server.crt`), so unless you have replaced it with a trusted certificate you must explicitly opt out
-of verification using either:
+The CLI and all connectors verify HTTPS certificates by default, against the system trust store. Nemesis ships with a
+self-signed certificate (`infra/traefik/certs/server.crt`). The safest way to use it is to trust that certificate
+explicitly with a CA file (below). Otherwise you must either install a trusted certificate or opt out of verification
+using either:
 
 - the `--ignore-cert-errors` flag (available on `submit`, `monitor`, `connect-mythic`, `connect-outflank`, and
   `connect-cobaltstrike`), or
@@ -62,7 +63,33 @@ the Nemesis and C2 connections. The Mythic connector also honors
 `MYTHIC_SYNC_NETWORKING__VALIDATE_HTTPS_CERTS=false`.
 
 **Disabling verification is insecure:** anyone positioned on the network path can intercept the Basic-auth credentials
-and every uploaded file. Prefer installing a trusted certificate on Nemesis.
+and every uploaded file. Prefer a CA file or a trusted certificate on Nemesis.
+
+### Trusting a specific CA or self-signed certificate
+
+Every command can verify against a PEM file of CAs instead of the system trust store. The file replaces the system
+store for that connection, so you can pin Nemesis's (or a C2 server's) own self-signed certificate. When verification is
+turned off (`--ignore-cert-errors` or `validate_https_certs: false`), the CA file is ignored.
+
+| Command | Nemesis connection | C2 connection |
+|---------|--------------------|---------------|
+| `submit`, `monitor` | `--ca-file PATH` or `NEMESIS_CA_FILE=PATH` | — |
+| `connect-cobaltstrike`, `connect-outflank` | `nemesis.ca_file` in the config | `ca_file` on each `cobaltstrike`/`outflank` entry |
+| `connect-mythic` | `nemesis.ca_file` in the config | `networking.ca_file` in the config |
+
+```bash
+uv run python -m cli submit /path/to/file --ca-file infra/traefik/certs/server.crt
+
+# Docker helpers mount the file into the container for you
+NEMESIS_CA_FILE=infra/traefik/certs/server.crt ./tools/submit.sh /path/to/file
+./tools/monitor_folder.sh /path/to/folder --ca-file infra/traefik/certs/server.crt
+NEMESIS_CA_FILE=nemesis.crt MYTHIC_CA_FILE=mythic.crt ./tools/mythic_connect.sh settings_mythic.yaml
+```
+
+Config paths may use `~`; a missing file is rejected when the command starts. When running a connector with
+`docker run`, mount the CA file into the container and point the config at its container path. `mythic_connect.sh`
+does this for you through `NEMESIS_CA_FILE` and `MYTHIC_CA_FILE`, which override `nemesis.ca_file` and
+`networking.ca_file`.
 
 ## File Submission
 
@@ -150,6 +177,7 @@ Options:
 | `--agent-id`  | `submit<user>@<host>` | Agent ID for metadata                                                   |
 | `--debug`     | `false`               | Enable debug logging                                                    |
 | `--ignore-cert-errors` | `false`      | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
+| `--ca-file`            | system store | PEM file of CAs to trust for Nemesis (env: `NEMESIS_CA_FILE`) |
 
 ## Folder Monitoring
 
@@ -231,6 +259,7 @@ uv run python -m cli monitor /path/to/directory
 | `--only-monitor` | `false`                | Skip existing files, only monitor for new ones                          |
 | `--debug`        | `false`                | Enable debug logging                                                    |
 | `--ignore-cert-errors` | `false`          | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
+| `--ca-file`            | system store     | PEM file of CAs to trust for Nemesis (env: `NEMESIS_CA_FILE`) |
 
 
 ## Mythic Connector
@@ -264,6 +293,7 @@ nemesis:
     password: "nemesis_password"
   expiration_days: 100  # File retention period
   max_file_size: 1000000000  # 1GB limit
+  # ca_file: "~/nemesis-ca.pem"  # Optional: trust only these CAs for Nemesis (default: system trust store)
 
 # Optional: connector state directory (default: $XDG_STATE_HOME/nemesis/connectors
 # or ~/.local/state/nemesis/connectors)
@@ -352,6 +382,7 @@ nemesis:
     password: "connector_password"
   expiration_days: 100
   max_file_size: 1000000000
+  # ca_file: "~/nemesis-ca.pem"  # Optional: trust only these CAs for Nemesis (default: system trust store)
 
 cobaltstrike:
   - url: "https://cobaltstrike.example.com:50443"
@@ -362,6 +393,7 @@ cobaltstrike:
     project: "project name"
     agent_id: "cobaltstrike"  # Identifies this Cobalt Strike instance on uploaded files
     poll_interval_sec: 3
+    # ca_file: "~/cobaltstrike-ca.pem"  # Optional: trust only these CAs for this server
 ```
 
 ### Usage
@@ -406,6 +438,7 @@ nemesis:
     password: "connector_password"
   expiration_days: 100
   max_file_size: 1000000000
+  # ca_file: "~/nemesis-ca.pem"  # Optional: trust only these CAs for Nemesis (default: system trust store)
 
 outflank:
   - url: "https://stage1.example.com"
@@ -413,6 +446,7 @@ outflank:
       username: "nemesis_bot"
       password: "outflank_password"
     agent_id: "stage1"  # Identifies this Outflank instance on uploaded files
+    # ca_file: "~/stage1-ca.pem"  # Optional: trust only these CAs for this server
 
     # Optional: Read from disk instead of API
     # downloads_dir_path: "/opt/stage1/shared/downloads"
@@ -496,7 +530,7 @@ docker run --rm \
 
 1. **Connection refused**: Check that Nemesis/Mythic/Outflank services are running and accessible
 2. **Permission denied**: Ensure Docker has permission to access mounted files/directories
-3. **SSL certificate errors**: For self-signed certificates, pass `--ignore-cert-errors` or set `NEMESIS_IGNORE_CERT_ERRORS=1` (connectors can also set `validate_https_certs: false` in their config). See [HTTPS Certificate Verification](#https-certificate-verification)
+3. **SSL certificate errors**: For self-signed certificates, trust the certificate with `--ca-file`/`NEMESIS_CA_FILE` (or `ca_file` in connector configs), or as a last resort pass `--ignore-cert-errors` or set `NEMESIS_IGNORE_CERT_ERRORS=1`. See [HTTPS Certificate Verification](#https-certificate-verification)
 4. **Large file uploads**: Adjust `max_file_size` and `--workers` for better performance
 
 ### Debug Mode

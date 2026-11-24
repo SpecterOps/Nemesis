@@ -8,6 +8,7 @@ from typing import Any, BinaryIO, Protocol
 
 import httpx
 from cli.config import NemesisConfig
+from cli.tls_trust import httpx_verify
 from common.models2.api import (
     APIInfo,
     ErrorResponse,
@@ -87,11 +88,14 @@ class NemesisClient:
         cfg: NemesisConfig,
         *,
         verify_ssl: bool = True,
+        ca_file: str | None = None,
         connect_timeout: float = 10,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.cfg = cfg
         self.verify_ssl = verify_ssl
+        # An explicit ca_file wins over the config's nemesis.ca_file; either replaces the system trust store.
+        self.ca_file = ca_file or getattr(cfg, "ca_file", None)
         self.connect_timeout = connect_timeout
         self._transport = transport
         self._http: httpx.AsyncClient | None = None
@@ -101,7 +105,7 @@ class NemesisClient:
         limits = httpx.Limits(max_connections=10, max_keepalive_connections=5)
         self._http = httpx.AsyncClient(
             auth=(self.cfg.credential.username, self.cfg.credential.password),
-            verify=self.verify_ssl,
+            verify=httpx_verify(self.verify_ssl, self.ca_file),
             timeout=httpx.Timeout(
                 self.connect_timeout, connect=self.connect_timeout, read=520.0, write=520.0, pool=self.connect_timeout
             ),

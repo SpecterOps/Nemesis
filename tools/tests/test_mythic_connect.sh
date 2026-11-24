@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECT="$(dirname "$SCRIPT_DIR")/mythic_connect.sh"
-unset NEMESIS_CONNECTOR_STATE_VOLUME
+unset NEMESIS_CONNECTOR_STATE_VOLUME NEMESIS_CA_FILE MYTHIC_CA_FILE
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -92,6 +92,22 @@ run_connect "$TMP/cfg dir"
 check "directory rejected" [ "$RC" = 1 ]
 run_connect --debug
 check "NEMESIS_IGNORE_CERT_ERRORS forwarded by name" has_pair -e NEMESIS_IGNORE_CERT_ERRORS
+
+# --- CA files ---
+echo pem > "$TMP/nemesis ca.pem"
+echo pem > "$TMP/mythic-ca.pem"
+NEMESIS_CA_FILE="$TMP/nemesis ca.pem" MYTHIC_CA_FILE="$TMP/mythic-ca.pem" \
+  run_connect "$TMP/cfg dir/settings_mythic.yaml"
+check "Nemesis CA mounted read-only" has_pair -v "$TMP/nemesis ca.pem:/certs/nemesis-ca.pem:ro"
+check "Nemesis CA overrides nemesis.ca_file" has_pair -e "MYTHIC_SYNC_NEMESIS__CA_FILE=/certs/nemesis-ca.pem"
+check "Mythic CA mounted read-only" has_pair -v "$TMP/mythic-ca.pem:/certs/mythic-ca.pem:ro"
+check "Mythic CA overrides networking.ca_file" has_pair -e "MYTHIC_SYNC_NETWORKING__CA_FILE=/certs/mythic-ca.pem"
+check "CA files are not taken as the config" \
+  [ "$(after_image)" = "connect-mythic -c /config/settings_mythic.yaml" ]
+MYTHIC_CA_FILE="$TMP/missing.pem" run_connect "$TMP/cfg dir/settings_mythic.yaml"
+check "missing CA file rejected" [ "$RC" = 1 ]
+run_connect "$TMP/cfg dir/settings_mythic.yaml"
+check "no CA files: no CA overrides" bash -c '! grep -q CA_FILE "$1"' _ "$DOCKER_ARGV"
 
 if [ "$FAILURES" -ne 0 ]; then
   echo "$FAILURES test(s) failed"

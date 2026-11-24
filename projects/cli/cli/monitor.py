@@ -150,6 +150,7 @@ class NewFileHandler(FileSystemEventHandler):
         container: bool = False,
         source: str | None = None,
         verify_ssl: bool = True,
+        ca_file: str | None = None,
         *,
         quiet_period: float = DEFAULT_QUIET_PERIOD_SEC,
         poll_interval: float = DEFAULT_POLL_INTERVAL_SEC,
@@ -164,6 +165,7 @@ class NewFileHandler(FileSystemEventHandler):
         self.container = container
         self.source = source
         self.verify_ssl = verify_ssl
+        self.ca_file = ca_file
         self.poll_interval = poll_interval
         self.tracker = FileStabilityTracker(quiet_period=quiet_period, clock=clock)
         self._uploads: queue.Queue[Path | None] = queue.Queue()
@@ -226,6 +228,7 @@ class NewFileHandler(FileSystemEventHandler):
                 container=self.container,
                 source=self.source,
                 verify_ssl=self.verify_ssl,
+                ca_file=self.ca_file,
             )
         except Exception as e:
             self.logger.error(f"Failed to submit file {file_path}: {e}")
@@ -286,6 +289,7 @@ def monitor_main(
     container: bool,
     source: str | None = None,
     verify_ssl: bool = True,
+    ca_file: str | None = None,
 ):
     """Monitor a folder for new files and submit them to Nemesis"""
     try:
@@ -305,7 +309,16 @@ def monitor_main(
 
         # Set up the watcher before submitting existing files so files written meanwhile are not missed.
         event_handler = NewFileHandler(
-            host, username, password, project, agent_id, logger, container, source, verify_ssl=verify_ssl
+            host,
+            username,
+            password,
+            project,
+            agent_id,
+            logger,
+            container,
+            source,
+            verify_ssl=verify_ssl,
+            ca_file=ca_file,
         )
         observer = Observer()
         observer.schedule(event_handler, str(folder_path), recursive=True)
@@ -328,6 +341,7 @@ def monitor_main(
                     container=container,
                     source=source,
                     verify_ssl=verify_ssl,
+                    ca_file=ca_file,
                 )
 
                 if not success:

@@ -156,7 +156,10 @@ class SyncService:
             ),
         )
         return NemesisClient(
-            cfg, verify_ssl=self.cfg.networking.validate_https_certs, connect_timeout=self.cfg.networking.timeout_sec
+            cfg,
+            verify_ssl=self.cfg.networking.validate_https_certs,
+            ca_file=getattr(self.cfg.nemesis, "ca_file", None),
+            connect_timeout=self.cfg.networking.timeout_sec,
         )
 
     def initialize_handlers(self) -> None:

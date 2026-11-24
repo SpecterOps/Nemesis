@@ -2,18 +2,27 @@
 
 # Wrapper script to monitor a folder using the Nemesis CLI with Docker
 # Added into the tools/ dir for convenience (near project root)
+#
+# A CA file for Nemesis's certificate, given with --ca-file or NEMESIS_CA_FILE, is mounted read-only
+# at /certs/nemesis-ca.pem in the container.
 
 
 NEMESIS_CLI_IMAGE="${NEMESIS_CLI_IMAGE:-ghcr.io/specterops/nemesis/cli:latest}"
 NEMESIS_NETWORK="${NEMESIS_NETWORK:-host}"
+CONTAINER_CA_FILE=/certs/nemesis-ca.pem
 
 # Parse arguments to handle volume mounting and CLI options
-DOCKER_VOLUME=""
+DOCKER_VOLUMES=()
+ENV_ARGS=(-e NEMESIS_IGNORE_CERT_ERRORS)
 MONITOR_PATH=""
-CLI_OPTIONS=""
+CLI_OPTIONS=()
 FOUND_DIRECTORY=false
+CA_FILE="${NEMESIS_CA_FILE:-}"
 
-for arg in "$@"; do
+args=("$@")
+i=0
+while [[ $i -lt ${#args[@]} ]]; do
+    arg="${args[$i]}"
     # Check for help flags first
     if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
         # Pass help flag to the underlying CLI tool
@@ -24,6 +33,15 @@ for arg in "$@"; do
           "$NEMESIS_CLI_IMAGE" \
           monitor --help
         exit 0
+    elif [[ "$arg" == "--ca-file" ]]; then
+        i=$((i + 1))
+        CA_FILE="${args[$i]:-}"
+        if [[ -z "$CA_FILE" ]]; then
+            echo "Error: --ca-file requires a file path"
+            exit 1
+        fi
+    elif [[ "$arg" == --ca-file=* ]]; then
+        CA_FILE="${arg#--ca-file=}"
     # Check if argument is a directory path
     elif [[ -d "$arg" ]]; then
         # It's a directory - this is what we'll monitor
@@ -32,7 +50,7 @@ for arg in "$@"; do
             exit 1
         fi
         ABS_PATH=$(realpath "$arg")
-        DOCKER_VOLUME="$DOCKER_VOLUME -v $ABS_PATH:/data/$(basename "$ABS_PATH")"
+        DOCKER_VOLUMES+=(-v "$ABS_PATH:/data/$(basename "$ABS_PATH")")
         MONITOR_PATH="/data/$(basename "$ABS_PATH")"
         FOUND_DIRECTORY=true
     elif [[ -f "$arg" ]]; then
@@ -41,8 +59,9 @@ for arg in "$@"; do
         exit 1
     else
         # It's a CLI option
-        CLI_OPTIONS="$CLI_OPTIONS $arg"
+        CLI_OPTIONS+=("$arg")
     fi
+    i=$((i + 1))
 done
 
 # Check if a directory was provided
@@ -52,12 +71,21 @@ if [ "$FOUND_DIRECTORY" = false ]; then
     exit 1
 fi
 
+if [[ -n "$CA_FILE" ]]; then
+    if [[ ! -f "$CA_FILE" ]]; then
+        echo "Error: CA file not found: $CA_FILE"
+        exit 1
+    fi
+    DOCKER_VOLUMES+=(-v "$(realpath "$CA_FILE"):$CONTAINER_CA_FILE:ro")
+    ENV_ARGS+=(-e "NEMESIS_CA_FILE=$CONTAINER_CA_FILE")
+fi
+
 # Run the Docker command
 docker run \
   --rm \
   -ti \
   --network "$NEMESIS_NETWORK" \
-  -e NEMESIS_IGNORE_CERT_ERRORS \
-  $DOCKER_VOLUME \
+  "${ENV_ARGS[@]}" \
+  "${DOCKER_VOLUMES[@]}" \
   "$NEMESIS_CLI_IMAGE" \
-  monitor $MONITOR_PATH $CLI_OPTIONS
+  monitor "$MONITOR_PATH" "${CLI_OPTIONS[@]}"

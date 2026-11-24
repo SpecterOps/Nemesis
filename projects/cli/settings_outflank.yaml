@@ -9,6 +9,8 @@ nemesis:
     password: "pass"
   expiration_days: 100
   max_file_size: 1000000000
+  # Optional PEM file of CAs to trust for Nemesis instead of the system trust store.
+  # ca_file: "~/nemesis-ca.pem"
 
 outflank:
   - url: "https://stage1.example.com"
@@ -16,6 +18,8 @@ outflank:
       username: "nemesis_bot"
       password: "outflank_password"
     agent_id: "stage1"
+    # Optional PEM file of CAs to trust for this server instead of the system trust store.
+    # ca_file: "~/outflank-ca.pem"
 
     # Optional:
     #   When set, stage1 downloads are retrieved from disk instead of stage1's API.

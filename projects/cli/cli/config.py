@@ -4,11 +4,20 @@ from typing import Annotated
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from cli.tls_trust import resolve_ca_file
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 
 class BaseConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+# Optional PEM file of CAs to trust for a server instead of the system trust store; validated on load.
+CaFile = Annotated[
+    str | None,
+    AfterValidator(resolve_ca_file),
+    Field(description="Optional PEM file of CAs to trust for this server instead of the system trust store"),
+]
 
 
 class StrictHttpUrl(str):
@@ -60,6 +69,7 @@ class NemesisConfig(BaseConfig):
     credential: PasswordCredential
     expiration_days: Annotated[int, Field(gt=0, description="Days until uploaded files are deleted")] = 100
     max_file_size: Annotated[int, Field(gt=0, description="Maximum file size in bytes")] = 1_000_000_000
+    ca_file: CaFile = None
 
 
 class MythicConfig(BaseConfig):
@@ -90,6 +100,7 @@ class OutflankConfig(BaseConfig):
         description="Optional: Path to Outflank C2's upload directory where files will be pulled from instead of the Outflank API",
     )
     poll_interval_sec: Annotated[int, Field(gt=0, description="Polling interval of the Outflank API in seconds")] = 3
+    ca_file: CaFile = None
 
     @field_validator("downloads_dir_path")
     @classmethod
@@ -112,6 +123,7 @@ class CobaltStrikeConfig(BaseConfig):
     poll_interval_sec: Annotated[
         int, Field(gt=0, description="Polling interval of the Cobalt Strike API in seconds")
     ] = 3
+    ca_file: CaFile = None
 
 
 def default_state_dir() -> Path:
