@@ -4,6 +4,7 @@ import tempfile
 import xml.dom.minidom
 import zipfile
 from typing import Any
+from uuid import UUID
 
 import msoffcrypto
 import olefile
@@ -333,7 +334,7 @@ class OfficeAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file extension and type."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
@@ -402,7 +403,7 @@ class OfficeAnalyzer(EnrichmentModule):
 
                     displayable_parsed = Transform(
                         type="extracted_macros",
-                        object_id=f"{object_id}",
+                        object_id=object_id,
                         metadata={"file_name": "macros.vb", "display_type_in_dashboard": "monaco"},
                     )
                     enrichment_result.transforms = [displayable_parsed]
@@ -419,7 +420,7 @@ class OfficeAnalyzer(EnrichmentModule):
             logger.exception(message=f"Error analyzing Office document for {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Office file using the storage system.
 
         Args:

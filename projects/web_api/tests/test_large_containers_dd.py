@@ -8,6 +8,7 @@ import os
 import struct
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 from web_api.large_containers import (
@@ -15,6 +16,9 @@ from web_api.large_containers import (
     ContainerProgress,
     DDImageContainerExtractor,
 )
+
+CID = UUID(int=0xC1D)  # container_processing.container_id is a UUID
+
 
 SECTOR = 512
 FS_SECTORS = 2048
@@ -111,7 +115,7 @@ def storage():
     def _upload(path):
         with open(path, "rb") as f:
             uploaded.append((path, f.read()))
-        return f"obj-{len(uploaded)}"
+        return UUID(int=len(uploaded))
 
     s.upload_file.side_effect = _upload
     s.uploaded = uploaded
@@ -127,8 +131,8 @@ def make_extractor(storage, dapr, path="/mounted-containers/case1/disk.dd", **me
     tracker = ContainerProgress()
     extractor = DDImageContainerExtractor(storage, dapr, tracker)
     metadata = {"agent_id": "a1", "project": "p1", "source": "host1", "path": path, **meta}
-    extractor.set_container_info("cid-1", metadata)
-    tracker.initialize("cid-1", 0, 0)
+    extractor.set_container_info(CID, metadata)
+    tracker.initialize(CID, 0, 0)
     return extractor
 
 
@@ -306,5 +310,5 @@ def test_publish_failure_deletes_uploaded_object(tmp_path, storage, dapr):
 
     assert processed == 0
     deleted = sorted(c.args[0] for c in storage.delete_object.call_args_list)
-    assert deleted == sorted(f"obj-{i + 1}" for i in range(len(storage.uploaded)))
+    assert deleted == sorted(UUID(int=i + 1) for i in range(len(storage.uploaded)))
     assert all(not os.path.exists(p) for p, _ in storage.uploaded)

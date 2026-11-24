@@ -2,6 +2,7 @@
 import csv
 import sqlite3
 import tempfile
+from uuid import UUID
 
 import yara_x
 from chromium import convert_chromium_timestamp, process_chromium_history
@@ -65,7 +66,7 @@ rule Chrome_Downloads_Tables
 }
         """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -95,7 +96,7 @@ rule Chrome_Downloads_Tables
 
         return should_run
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome History database.
 
         Args:
@@ -168,7 +169,7 @@ rule Chrome_Downloads_Tables
                 transforms.append(
                     Transform(
                         type="finding_summary",
-                        object_id=f"{report_object_id}",
+                        object_id=report_object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}.md",
                             "display_type_in_dashboard": "markdown",
@@ -189,7 +190,7 @@ rule Chrome_Downloads_Tables
                 transforms.append(
                     Transform(
                         type="chromium_urls",
-                        object_id=f"{urls_object_id}",
+                        object_id=urls_object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_chromium_urls.csv",
                             "offer_as_download": True,
@@ -209,7 +210,7 @@ rule Chrome_Downloads_Tables
                 transforms.append(
                     Transform(
                         type="chromium_downloads",
-                        object_id=f"{downloads_object_id}",
+                        object_id=downloads_object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_chromium_downloads.csv",
                             "offer_as_download": True,

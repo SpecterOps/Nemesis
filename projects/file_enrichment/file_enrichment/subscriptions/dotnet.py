@@ -3,7 +3,6 @@
 import json
 import uuid
 from typing import Any
-from uuid import UUID
 
 import file_enrichment.global_vars as global_vars
 from common.helpers import jsonb_dumps
@@ -246,9 +245,8 @@ async def store_dotnet_results(
                 )
 
                 # Store main enrichment result
-                file_uuid = UUID(str(object_id))
                 results_escaped = jsonb_dumps(
-                    enrichment_result, column="enrichments.result_data", object_id=file_uuid, module="dotnet_service"
+                    enrichment_result, column="enrichments.result_data", object_id=object_id, module="dotnet_service"
                 )
                 await conn.execute(
                     """
@@ -274,7 +272,7 @@ async def store_dotnet_results(
                             jsonb_dumps(
                                 transform.metadata,
                                 column="transforms.metadata",
-                                object_id=file_uuid,
+                                object_id=object_id,
                                 module="dotnet_service",
                             )
                             if transform.metadata
@@ -285,7 +283,7 @@ async def store_dotnet_results(
                 for finding in findings_list:
                     # Each FileObject is stored as a JSON string (array of JSON strings)
                     data_as_strings = [
-                        jsonb_dumps(obj, column="findings.data", object_id=file_uuid, finding_name=finding.finding_name)
+                        jsonb_dumps(obj, column="findings.data", object_id=object_id, finding_name=finding.finding_name)
                         for obj in finding.data
                     ]
 
@@ -305,10 +303,10 @@ async def store_dotnet_results(
                         jsonb_dumps(
                             finding.raw_data,
                             column="findings.raw_data",
-                            object_id=file_uuid,
+                            object_id=object_id,
                             finding_name=finding.finding_name,
                         ),
-                        jsonb_dumps(data_as_strings, column="findings.data", object_id=file_uuid),
+                        jsonb_dumps(data_as_strings, column="findings.data", object_id=object_id),
                     )
 
         logger.info("Successfully stored DotNet results", object_id=object_id, has_findings=len(findings_list) > 0)

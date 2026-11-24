@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 import yara_x
 from chromium import convert_chromium_timestamp, process_chromium_cookies
@@ -77,7 +78,7 @@ rule Chrome_Cookies_Tables
 }
         """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -106,7 +107,7 @@ rule Chrome_Cookies_Tables
 
         return should_run
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome Cookies database.
 
         Args:
@@ -170,7 +171,7 @@ rule Chrome_Cookies_Tables
                 transforms.append(
                     Transform(
                         type="finding_summary",
-                        object_id=f"{report_object_id}",
+                        object_id=report_object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}.md",
                             "display_type_in_dashboard": "markdown",
@@ -227,7 +228,7 @@ rule Chrome_Cookies_Tables
                 transforms.append(
                     Transform(
                         type="chromium_cookies",
-                        object_id=f"{cookies_object_id}",
+                        object_id=cookies_object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_chromium_cookies.csv",
                             "offer_as_download": True,

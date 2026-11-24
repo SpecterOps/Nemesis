@@ -76,7 +76,7 @@ def is_encrypted_file(file_data: FileEnriched):
         raise S3Error(
             code="NoSuchKey",
             message=f"Object {file_data.object_id} does not exist",
-            resource=file_data.object_id,
+            resource=str(file_data.object_id),
             request_id="",
             host_id="",
             response=None,  # pyright: ignore[reportArgumentType]

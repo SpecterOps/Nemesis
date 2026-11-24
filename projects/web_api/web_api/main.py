@@ -13,12 +13,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path as PathLib
 from typing import Annotated, Any
 from urllib.parse import urlparse
+from uuid import UUID
 
 import httpx
 import psycopg
 from common.data_issues import DataIssueKind, log_data_issue, log_rejected_validation
 from common.db import get_postgres_connection_str
-from common.helpers import get_drive_from_path
+from common.helpers import as_uuid, get_drive_from_path
 from common.log_safety import mask
 from common.logger import get_logger
 from common.models import BulkEnrichmentEvent, CloudEvent
@@ -31,6 +32,7 @@ from common.models2.api import (
     YaraReloadResponse,
 )
 from common.models2.dpapi import DpapiCredentialRequest
+from common.models2.enrichments import EnrichmentRequest
 from common.queues import (
     FILES_BULK_ENRICHMENT_TASK_TOPIC,
     FILES_NEW_FILE_TOPIC,
@@ -55,7 +57,7 @@ from web_api.large_containers import (
     LargeContainerProcessor,
     normalize_container_path,
 )
-from web_api.models.requests import ChatbotRequest, CleanupRequest, EnrichmentRequest
+from web_api.models.requests import ChatbotRequest, CleanupRequest
 from web_api.models.responses import (
     ContainerStatusResponse,
     ContainerSubmissionResponse,
@@ -385,7 +387,7 @@ async def upload_file(
         logger.info("File uploaded to datalake", object_id=object_id)
 
         try:
-            file_model = FileModel.from_file_metadata(file_metadata, str(object_id))
+            file_model = FileModel.from_file_metadata(file_metadata, object_id)
             submission_id = await submit_file(file_model)
         except BaseException:
             # Publishing failed, so nothing will ever reference the uploaded object: remove it (best effort)
@@ -393,7 +395,7 @@ async def upload_file(
             raise
 
         logger.info("File metadata submitted", submission_id=str(submission_id), object_id=object_id)
-        return FileWithMetadataResponse(object_id=uuid.UUID(object_id), submission_id=submission_id)
+        return FileWithMetadataResponse(object_id=object_id, submission_id=submission_id)
 
     except HTTPException:
         raise
@@ -407,7 +409,7 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-async def _delete_orphaned_object(object_id: str) -> None:
+async def _delete_orphaned_object(object_id: UUID) -> None:
     """Best-effort removal of an uploaded object whose submission failed."""
     try:
         await asyncio.to_thread(storage.delete_object, object_id)
@@ -424,7 +426,7 @@ async def _delete_orphaned_object(object_id: str) -> None:
     description="Download a file by its object ID with optional raw format and custom filename",
 )
 async def download_file(
-    object_id: str = Path(..., description="Unique identifier of the file to download"),
+    object_id: UUID = Path(..., description="Unique identifier of the file to download"),
     raw: bool = Query(False, description="Whether to return the file in raw format"),
     name: str = Query("", description="Custom filename for the downloaded file"),
     offset: int = Query(0, ge=0, description="Byte offset to start reading from"),
@@ -535,7 +537,7 @@ async def submit_container(
             )
 
         # Generate container ID
-        container_id = str(uuid.uuid4())
+        container_id = uuid.uuid4()
 
         # Save uploaded file to temporary location
         temp_dir = os.getenv("TEMP_CONTAINER_PATH", "/tmp/containers")
@@ -639,7 +641,7 @@ CONTAINER_PROGRESS_MAX_AGE = timedelta(days=7)
 def _evict_stale_container_progress(max_age: timedelta = CONTAINER_PROGRESS_MAX_AGE) -> int:
     """Drop in-memory progress entries older than max_age. Returns the number evicted."""
     tracker = container_processor.progress_tracker
-    entries: dict[str, dict[str, Any]] = getattr(tracker, "_progress", {})
+    entries: dict[UUID, dict[str, Any]] = getattr(tracker, "_progress", {})
     cutoff = datetime.now(UTC) - max_age
     stale = [
         cid
@@ -660,7 +662,7 @@ def _evict_stale_container_progress(max_age: timedelta = CONTAINER_PROGRESS_MAX_
     description="Get the current processing status and progress of a submitted container",
 )
 async def get_container_status(
-    container_id: str = Path(..., description="Unique identifier of the container"),
+    container_id: UUID = Path(..., description="Unique identifier of the container"),
 ) -> ContainerStatusResponse:
     try:
         # Check database first (source of truth)
@@ -996,7 +998,7 @@ async def run_bulk_enrichment(
         async with DaprClient() as client:
             for object_id in object_ids:
                 # Create strongly-typed task model
-                task = BulkEnrichmentEvent(enrichment_name=enrichment_name, object_id=str(object_id))
+                task = BulkEnrichmentEvent(enrichment_name=enrichment_name, object_id=object_id)
 
                 await client.publish_event(
                     pubsub_name=FILES_PUBSUB,
@@ -1772,6 +1774,7 @@ async def process_workflow_completion(event: CloudEvent):
         if not object_id or not originating_container_id:
             logger.warning("Workflow completion event missing required fields", data=data)
             return
+        originating_container_id = as_uuid(originating_container_id)
 
         # Update container processing progress
         all_complete = await asyncio.to_thread(

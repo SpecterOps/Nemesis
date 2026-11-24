@@ -1,5 +1,6 @@
 import os
 from importlib.metadata import version
+from uuid import UUID
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -120,3 +121,8 @@ def get_tracer(module_name: str = "file_enrichment"):
     # Cache and return tracer
     _tracer = trace_provider.get_tracer(module_name)
     return _tracer
+
+
+def set_object_id_attribute(span, object_id: UUID, key: str = "object_id") -> None:
+    """Record an object ID on a span (OpenTelemetry attributes must be primitive types)."""
+    span.set_attribute(key, str(object_id))

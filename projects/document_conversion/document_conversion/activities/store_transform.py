@@ -1,9 +1,7 @@
 """Storage and publishing activities."""
 
-from uuid import UUID
-
 import document_conversion.global_vars as global_vars
-from common.helpers import jsonb_dumps
+from common.helpers import as_uuid, jsonb_dumps
 from common.logger import get_logger
 from common.workflows.setup import workflow_activity
 
@@ -16,7 +14,7 @@ async def store_transform(ctx, activity_input):
     assert global_vars.asyncpg_pool is not None, "asyncpg_pool must be initialized"
 
     try:
-        object_id = activity_input["object_id"]
+        object_id = as_uuid(activity_input["object_id"])
         transform = activity_input["transform"]
         transform_type = transform["type"]
 
@@ -28,8 +26,8 @@ async def store_transform(ctx, activity_input):
             """,
                 object_id,
                 transform["type"],
-                transform["object_id"],
-                jsonb_dumps(transform["metadata"], column="transforms.metadata", object_id=UUID(str(object_id)))
+                as_uuid(transform["object_id"]),
+                jsonb_dumps(transform["metadata"], column="transforms.metadata", object_id=object_id)
                 if transform.get("metadata")
                 else None,
             )

@@ -3,6 +3,7 @@ import re
 import tempfile
 import textwrap
 from pathlib import Path
+from uuid import UUID
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
@@ -28,7 +29,7 @@ class GitCredentialsParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
 
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
@@ -139,7 +140,7 @@ class GitCredentialsParser(EnrichmentModule):
 
                     displayable_parsed = Transform(
                         type="displayable_parsed",
-                        object_id=f"{object_id}",
+                        object_id=object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_analysis.txt",
                             "display_type_in_dashboard": "monaco",
@@ -154,7 +155,7 @@ class GitCredentialsParser(EnrichmentModule):
             logger.exception(message=f"Error analyzing Git credentials for {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Git credentials file and extract credentials.
 
         Args:

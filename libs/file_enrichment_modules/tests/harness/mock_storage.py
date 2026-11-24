@@ -5,6 +5,8 @@ import shutil
 import tempfile
 import uuid
 
+from .ids import label_key
+
 
 class MockStorageS3:
     """Mock implementation of StorageS3 for testing without S3 storage.
@@ -49,7 +51,7 @@ class MockStorageS3:
         """
         if not os.path.exists(local_path):
             raise FileNotFoundError(f"Cannot register non-existent file: {local_path}")
-        self._registered_files[object_id] = local_path
+        self._registered_files[label_key(object_id)] = local_path
 
     def download(self, file_uuid: str, delete: bool = True) -> tempfile._TemporaryFileWrapper:
         """Download a file by UUID, returning a temporary file handle.
@@ -62,20 +64,20 @@ class MockStorageS3:
             A NamedTemporaryFile containing the file contents
         """
         # Check registered files first
-        if file_uuid in self._registered_files:
-            source_path = self._registered_files[file_uuid]
-        elif file_uuid in self._uploaded_files:
+        if label_key(file_uuid) in self._registered_files:
+            source_path = self._registered_files[label_key(file_uuid)]
+        elif label_key(file_uuid) in self._uploaded_files:
             # Create temp file from uploaded bytes
             temp_file = tempfile.NamedTemporaryFile(
                 dir=self.data_download_dir,
                 delete=delete,
             )
-            temp_file.write(self._uploaded_files[file_uuid])
+            temp_file.write(self._uploaded_files[label_key(file_uuid)])
             temp_file.flush()
             temp_file.seek(0)
             return temp_file
-        elif file_uuid in self._upload_paths:
-            source_path = self._upload_paths[file_uuid]
+        elif label_key(file_uuid) in self._upload_paths:
+            source_path = self._upload_paths[label_key(file_uuid)]
         else:
             raise FileNotFoundError(f"No file registered for UUID: {file_uuid}")
 
@@ -99,17 +101,17 @@ class MockStorageS3:
             The requested bytes from the file
         """
         # Check uploaded bytes first
-        if file_uuid in self._uploaded_files:
-            data = self._uploaded_files[file_uuid]
+        if label_key(file_uuid) in self._uploaded_files:
+            data = self._uploaded_files[label_key(file_uuid)]
             if length > 0:
                 return data[offset : offset + length]
             return data[offset:]
 
         # Check registered files
-        if file_uuid in self._registered_files:
-            source_path = self._registered_files[file_uuid]
-        elif file_uuid in self._upload_paths:
-            source_path = self._upload_paths[file_uuid]
+        if label_key(file_uuid) in self._registered_files:
+            source_path = self._registered_files[label_key(file_uuid)]
+        elif label_key(file_uuid) in self._upload_paths:
+            source_path = self._upload_paths[label_key(file_uuid)]
         else:
             raise FileNotFoundError(f"No file registered for UUID: {file_uuid}")
 
@@ -130,16 +132,16 @@ class MockStorageS3:
         Yields:
             Chunks of file data
         """
-        if file_uuid in self._uploaded_files:
-            data = self._uploaded_files[file_uuid]
+        if label_key(file_uuid) in self._uploaded_files:
+            data = self._uploaded_files[label_key(file_uuid)]
             for i in range(0, len(data), chunk_size):
                 yield data[i : i + chunk_size]
             return
 
-        if file_uuid in self._registered_files:
-            source_path = self._registered_files[file_uuid]
-        elif file_uuid in self._upload_paths:
-            source_path = self._upload_paths[file_uuid]
+        if label_key(file_uuid) in self._registered_files:
+            source_path = self._registered_files[label_key(file_uuid)]
+        elif label_key(file_uuid) in self._upload_paths:
+            source_path = self._upload_paths[label_key(file_uuid)]
         else:
             raise FileNotFoundError(f"No file registered for UUID: {file_uuid}")
 
@@ -186,9 +188,9 @@ class MockStorageS3:
             True if the file exists, False otherwise
         """
         return (
-            object_name in self._registered_files
-            or object_name in self._uploaded_files
-            or object_name in self._upload_paths
+            label_key(object_name) in self._registered_files
+            or label_key(object_name) in self._uploaded_files
+            or label_key(object_name) in self._upload_paths
         )
 
     def get_object_stats(self, object_name: str) -> dict:
@@ -200,13 +202,13 @@ class MockStorageS3:
         Returns:
             Dict with basic stats (size)
         """
-        if object_name in self._uploaded_files:
-            return {"size": len(self._uploaded_files[object_name])}
+        if label_key(object_name) in self._uploaded_files:
+            return {"size": len(self._uploaded_files[label_key(object_name)])}
 
-        if object_name in self._registered_files:
-            path = self._registered_files[object_name]
-        elif object_name in self._upload_paths:
-            path = self._upload_paths[object_name]
+        if label_key(object_name) in self._registered_files:
+            path = self._registered_files[label_key(object_name)]
+        elif label_key(object_name) in self._upload_paths:
+            path = self._upload_paths[label_key(object_name)]
         else:
             raise FileNotFoundError(f"No file found for: {object_name}")
 
@@ -222,14 +224,14 @@ class MockStorageS3:
             True if deleted, False if not found
         """
         deleted = False
-        if object_id in self._registered_files:
-            del self._registered_files[object_id]
+        if label_key(object_id) in self._registered_files:
+            del self._registered_files[label_key(object_id)]
             deleted = True
-        if object_id in self._uploaded_files:
-            del self._uploaded_files[object_id]
+        if label_key(object_id) in self._uploaded_files:
+            del self._uploaded_files[label_key(object_id)]
             deleted = True
-        if object_id in self._upload_paths:
-            del self._upload_paths[object_id]
+        if label_key(object_id) in self._upload_paths:
+            del self._upload_paths[label_key(object_id)]
             deleted = True
         return deleted
 

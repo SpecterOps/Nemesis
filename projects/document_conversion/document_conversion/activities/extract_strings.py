@@ -5,6 +5,7 @@ import os
 import tempfile
 
 import document_conversion.global_vars as global_vars
+from common.helpers import as_uuid
 from common.logger import get_logger
 from common.models import Transform
 from common.state_helpers import get_file_enriched_async
@@ -23,7 +24,7 @@ async def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dic
 
     assert global_vars.tracking_service is not None, "tracking_service must be initialized"
 
-    object_id = file_input.get("object_id")
+    object_id = as_uuid(file_input.get("object_id"))
 
     try:
         file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
@@ -47,7 +48,7 @@ async def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dic
 
         transform = Transform(
             type="extracted_strings",
-            object_id=str(object_id),
+            object_id=object_id,
             metadata={
                 "file_name": "strings.txt",
                 "display_type_in_dashboard": "monaco",

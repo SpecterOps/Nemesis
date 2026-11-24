@@ -39,7 +39,7 @@
 #         # Allow whitespace/newlines within long sequences
 #         self.long_base64_pattern = re.compile(r"([A-Za-z0-9+/\s]{200,}={0,2})")
 
-#     async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+#     async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
 #         """Determine if this module should run on plaintext files.
 
 #         Args:
@@ -229,7 +229,7 @@
 #         )
 #         return candidates
 
-#     async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+#     async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
 #         """Process file to find and decode base64 content.
 
 #         Args:

@@ -64,7 +64,7 @@ class LsassDumpParser(EnrichmentModule):
         self.loop: asyncio.AbstractEventLoop = None  # type: ignore
         self.size_limit = 1024 * 1024 * 100  # 100 MB size limit for LSASS dumps
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         return "mini dump crash report" in file_enriched.magic_type.lower()
@@ -536,7 +536,7 @@ class LsassDumpParser(EnrichmentModule):
 
                 displayable_parsed = Transform(
                     type="displayable_parsed",
-                    object_id=f"{object_id}",
+                    object_id=object_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_lsass_analysis.txt",
                         "display_type_in_dashboard": "monaco",
@@ -547,7 +547,7 @@ class LsassDumpParser(EnrichmentModule):
 
         return enrichment_result
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
 
         logger.debug("Starting async processing of LSASS dump", object_id=object_id)

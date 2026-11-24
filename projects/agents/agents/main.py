@@ -4,6 +4,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
+from uuid import UUID
 
 import asyncpg
 import structlog
@@ -19,6 +20,7 @@ from agents.tasks.summarizer import summarize_text
 from agents.tasks.translate import translate_text
 from agents.triage_text import fit_triage_text
 from common.db import get_postgres_connection_str
+from common.helpers import as_uuid
 from common.log_safety import mask
 from dapr.clients import DaprClient
 
@@ -568,7 +570,7 @@ async def get_llm_spend_data():
         }
 
 
-async def _run_summarization_task(object_id: str):
+async def _run_summarization_task(object_id: UUID):
     """Background task for text summarization."""
     try:
         mock_ctx = type("MockContext", (), {})()
@@ -582,9 +584,9 @@ async def _run_summarization_task(object_id: str):
 async def run_text_summarizer(request: dict):
     """Run text summarization on a file (async, non-blocking)."""
     try:
-        object_id = request.get("object_id")
-        if not object_id:
+        if not request.get("object_id"):
             return {"success": False, "error": "object_id is required"}
+        object_id = as_uuid(request["object_id"])
 
         # Start background task
         asyncio.create_task(_run_summarization_task(object_id))
@@ -600,9 +602,9 @@ async def run_text_summarizer(request: dict):
 async def run_credential_analysis(request: dict):
     """Run credential analysis on a file (async, non-blocking)."""
     try:
-        object_id = request.get("object_id")
-        if not object_id:
+        if not request.get("object_id"):
             return {"success": False, "error": "object_id is required"}
+        object_id = as_uuid(request["object_id"])
 
         # Create a mock workflow context for compatibility
         mock_ctx = type("MockContext", (), {})()
@@ -621,9 +623,9 @@ async def run_credential_analysis(request: dict):
 async def run_dotnet_analysis(request: dict):
     """Run .NET assembly analysis on a file (async, non-blocking)."""
     try:
-        object_id = request.get("object_id")
-        if not object_id:
+        if not request.get("object_id"):
             return {"success": False, "error": "object_id is required"}
+        object_id = as_uuid(request["object_id"])
 
         # Create a mock workflow context for compatibility
         mock_ctx = type("MockContext", (), {})()
@@ -642,9 +644,9 @@ async def run_dotnet_analysis(request: dict):
 async def run_translation(request: dict):
     """Run text translation on a file (async, non-blocking)."""
     try:
-        object_id = request.get("object_id")
-        if not object_id:
+        if not request.get("object_id"):
             return {"success": False, "error": "object_id is required"}
+        object_id = as_uuid(request["object_id"])
 
         target_language = request.get("target_language", "English")
 

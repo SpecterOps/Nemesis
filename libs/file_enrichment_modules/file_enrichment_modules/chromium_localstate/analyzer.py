@@ -1,6 +1,7 @@
 # enrichment_modules/chromium_logins/analyzer.py
 
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 import yara_x
 from chromium import process_chromium_local_state
@@ -47,7 +48,7 @@ rule Chrome_Local_State
 }
         """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -74,7 +75,7 @@ rule Chrome_Local_State
 
         return should_run
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Async helper for process method."""
 
         try:

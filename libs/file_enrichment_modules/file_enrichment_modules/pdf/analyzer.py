@@ -2,6 +2,7 @@
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 import fitz  # PyMuPDF
 from common.logger import get_logger
@@ -553,7 +554,7 @@ class PDFAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         return "pdf document" in file_enriched.magic_type.lower()
@@ -607,7 +608,7 @@ The document is encrypted. Attempt to crack it using the following hash:
             logger.exception(message=f"Error analyzing PDF file for {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process PDF file.
 
         Args:

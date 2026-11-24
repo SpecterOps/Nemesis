@@ -7,7 +7,7 @@ from datetime import datetime
 
 import common.helpers as helpers
 import magic
-from common.helpers import get_file_extension, is_container
+from common.helpers import as_uuid, get_file_extension, is_container
 from common.logger import get_logger
 from common.workflows.setup import workflow_activity
 from common.workflows.tracking_service import WorkflowStatus
@@ -26,9 +26,7 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict) -> N
     This activity downloads the file, processes it to extract metadata,
     and saves the results to the database.
     """
-    object_id = file_dict.get("object_id")
-    if not object_id or not isinstance(object_id, str):
-        raise ValueError("file object_id is not a uuid string")
+    object_id = as_uuid(file_dict.get("object_id"))
 
     instance_id = ctx.workflow_id
 
@@ -86,7 +84,7 @@ def process_basic_analysis(temp_file_path: str, file_dict: dict) -> dict:
 
     basic_analysis = {
         "file_name": posixpath.basename(path),
-        "extension": get_file_extension(path, object_id=file_dict.get("object_id")),
+        "extension": get_file_extension(path, object_id=as_uuid(file_dict.get("object_id"))),
         "size": pathlib.Path(temp_file_path).stat().st_size,
         "hashes": {
             "md5": helpers.calculate_file_hash(temp_file_path, "md5"),

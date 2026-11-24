@@ -8,6 +8,7 @@ import os
 import zipfile
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 from web_api.large_containers import (
@@ -24,6 +25,9 @@ from web_api.large_containers import (
 )
 
 # --- coerce_metadata_value / validate_container_metadata ---------------------------------
+
+
+CID = UUID(int=0xC1D)  # container_processing.container_id is a UUID
 
 
 @pytest.mark.parametrize(
@@ -100,14 +104,14 @@ def test_default_expiration_is_timestamp_plus_default_days():
     ts = datetime(2020, 1, 1, tzinfo=UTC)
     extractor = _extractor()
     meta = {"agent_id": "a", "project": "p", "path": "/x.zip", "timestamp": ts.isoformat()}
-    extractor.set_container_info("cid", meta)
+    extractor.set_container_info(CID, meta)
     assert datetime.fromisoformat(meta["expiration"]) == ts + timedelta(days=DEFAULT_EXPIRATION_DAYS)
 
 
 def test_default_expiration_accepts_aware_datetime_timestamp():
     extractor = _extractor()
     meta = {"agent_id": "a", "project": "p", "path": "/x.zip", "timestamp": datetime(2021, 6, 1, tzinfo=UTC)}
-    extractor.set_container_info("cid", meta)
+    extractor.set_container_info(CID, meta)
     assert datetime.fromisoformat(meta["expiration"]) == datetime(2021, 6, 1, tzinfo=UTC) + timedelta(
         days=DEFAULT_EXPIRATION_DAYS
     )
@@ -130,7 +134,7 @@ def test_naive_or_invalid_times_are_rejected_and_logged(field, value, monkeypatc
     extractor = _extractor()
     meta = {"agent_id": "a", "project": "p", "path": "/x.zip", field: value}
     with pytest.raises(ContainerMetadataError, match=field):
-        extractor.set_container_info("cid", meta)
+        extractor.set_container_info(CID, meta)
     assert calls and calls[0]["kind"] == "rejected_input" and field in calls[0]["reason"]
 
 
@@ -143,7 +147,7 @@ def test_aware_times_are_normalized_to_utc():
         "timestamp": "2021-06-01T02:00:00+02:00",
         "expiration": "2031-06-01T00:00:00Z",
     }
-    extractor.set_container_info("cid", meta)
+    extractor.set_container_info(CID, meta)
     assert meta["timestamp"] == "2021-06-01T00:00:00+00:00"
     assert meta["expiration"] == "2031-06-01T00:00:00+00:00"
 
@@ -151,7 +155,7 @@ def test_aware_times_are_normalized_to_utc():
 def test_explicit_expiration_is_kept():
     extractor = _extractor()
     meta = {"agent_id": "a", "project": "p", "path": "/x.zip", "expiration": "2030-01-01T00:00:00+00:00"}
-    extractor.set_container_info("cid", meta)
+    extractor.set_container_info(CID, meta)
     assert meta["expiration"] == "2030-01-01T00:00:00+00:00"
 
 
@@ -159,32 +163,32 @@ def test_missing_timestamp_defaults_to_now():
     extractor = _extractor()
     meta = {"agent_id": "a", "project": "p", "path": "/x.zip"}
     before = datetime.now(UTC)
-    extractor.set_container_info("cid", meta)
+    extractor.set_container_info(CID, meta)
     assert datetime.fromisoformat(meta["timestamp"]) >= before
 
 
 def test_invalid_timestamp_raises_metadata_error():
     extractor = _extractor()
     with pytest.raises(ContainerMetadataError, match="timestamp"):
-        extractor.set_container_info("cid", {"agent_id": "a", "project": "p", "path": "/x", "timestamp": "nope"})
+        extractor.set_container_info(CID, {"agent_id": "a", "project": "p", "path": "/x", "timestamp": "nope"})
 
 
 def test_set_container_info_rejects_bad_types_before_extraction():
     extractor = _extractor()
     with pytest.raises(ContainerMetadataError, match="project"):
-        extractor.set_container_info("cid", {"agent_id": "a", "project": ["x"], "path": "/x.zip"})
+        extractor.set_container_info(CID, {"agent_id": "a", "project": ["x"], "path": "/x.zip"})
 
 
 def test_container_member_path_for_windows_container():
     extractor = _extractor()
-    extractor.set_container_info("cid", {"agent_id": "a", "project": "p", "path": "C:\\Users\\x\\a.zip"})
+    extractor.set_container_info(CID, {"agent_id": "a", "project": "p", "path": "C:\\Users\\x\\a.zip"})
     assert extractor.container_member_path("inner/file.txt") == "/C:/Users/x/inner/file.txt"
     assert extractor.container_member_path("inner\\b.txt") == "/C:/Users/x/inner/b.txt"
 
 
 def test_container_member_path_strips_mount_prefix():
     extractor = _extractor()
-    extractor.set_container_info("cid", {"agent_id": "a", "project": "p", "path": "/mounted-containers/c1/a.zip"})
+    extractor.set_container_info(CID, {"agent_id": "a", "project": "p", "path": "/mounted-containers/c1/a.zip"})
     assert extractor.container_member_path("d/f.txt") == "c1/d/f.txt"
 
 
@@ -209,7 +213,7 @@ def storage():
     def _upload(path):
         with open(path, "rb") as f:
             uploaded.append((path, f.read()))
-        return f"obj-{len(uploaded)}"
+        return UUID(int=len(uploaded))
 
     s.upload_file.side_effect = _upload
     s.uploaded = uploaded
@@ -219,9 +223,9 @@ def storage():
 def _zip_extractor(storage, dapr, **meta):
     extractor = ZipContainerExtractor(storage, dapr, ContainerProgress())
     extractor.set_container_info(
-        "cid", {"agent_id": "a", "project": 2024, "source": "s", "path": "C:\\loot\\test.zip", **meta}
+        CID, {"agent_id": "a", "project": 2024, "source": "s", "path": "C:\\loot\\test.zip", **meta}
     )
-    extractor.progress_tracker.initialize("cid", 0, 0)
+    extractor.progress_tracker.initialize(CID, 0, 0)
     return extractor
 
 
@@ -257,7 +261,7 @@ def test_zip_publish_failure_deletes_uploaded_objects(zip_path, storage):
 
     assert processed == 0
     assert extractor.filter_stats["files_skipped_by_error"] == 3
-    assert sorted(c.args[0] for c in storage.delete_object.call_args_list) == ["obj-1", "obj-2", "obj-3"]
+    assert sorted(c.args[0] for c in storage.delete_object.call_args_list) == [UUID(int=1), UUID(int=2), UUID(int=3)]
     assert all(not os.path.exists(p) for p, _ in storage.uploaded)
 
 
@@ -329,7 +333,7 @@ def _meta(**kw):
 
 
 def test_process_container_success(processor, mock_dapr, zip_path):
-    result = processor.process_container_from_path("cid", zip_path, _meta())
+    result = processor.process_container_from_path(CID, zip_path, _meta())
     assert result["success"] is True
     assert result["processed_files"] == 3
     assert result["error_message"] is None
@@ -339,7 +343,7 @@ def test_process_container_success(processor, mock_dapr, zip_path):
 
 def test_process_container_zero_files_is_not_success(processor, mock_dapr, zip_path):
     result = processor.process_container_from_path(
-        "cid", zip_path, _meta(file_filters={"pattern_type": "glob", "include": ["*.nomatch"]})
+        CID, zip_path, _meta(file_filters={"pattern_type": "glob", "include": ["*.nomatch"]})
     )
     assert result["success"] is False
     assert result["processed_files"] == 0
@@ -349,7 +353,7 @@ def test_process_container_zero_files_is_not_success(processor, mock_dapr, zip_p
 
 def test_process_container_file_errors_is_not_success(processor, mock_dapr, zip_path, storage):
     storage.upload_file.side_effect = ConnectionError("s3 down")
-    result = processor.process_container_from_path("cid", zip_path, _meta())
+    result = processor.process_container_from_path(CID, zip_path, _meta())
     assert result["success"] is False
     assert result["files_skipped_by_error"] == 3
     assert result["status"] == ContainerStatus.EXTRACTED
@@ -359,14 +363,14 @@ def test_process_container_extraction_error_marks_failed_and_raises(processor, m
     bad = tmp_path / "bad.zip"
     bad.write_bytes(b"garbage")
     with pytest.raises(ContainerExtractionError):
-        processor.process_container_from_path("cid", bad, _meta())
+        processor.process_container_from_path(CID, bad, _meta())
     processor.mark_container_failed.assert_called_once()
-    assert processor.mark_container_failed.call_args.args[0] == "cid"
+    assert processor.mark_container_failed.call_args.args[0] == CID
 
 
 def test_process_container_bad_metadata_raises_before_record(processor, mock_dapr, zip_path):
     with pytest.raises(ContainerMetadataError):
-        processor.process_container_from_path("cid", zip_path, _meta(project={"bad": 1}))
+        processor.process_container_from_path(CID, zip_path, _meta(project={"bad": 1}))
     processor.create_container_record.assert_not_called()
     processor.mark_container_failed.assert_not_called()
 
@@ -387,7 +391,7 @@ def test_create_container_record_truncates_long_filename():
     proc.postgres_connection_string = "postgresql://unused"
     conn, cursor = _patched_connect()
     with patch("web_api.large_containers.psycopg.connect", return_value=conn):
-        proc.create_container_record("cid", "zip", {"filename": "f" * 300 + ".zip", "agent_id": "a"}, 1, 1)
+        proc.create_container_record(CID, "zip", {"filename": "f" * 300 + ".zip", "agent_id": "a"}, 1, 1)
     params = cursor.execute.call_args.args[1]
     assert params[2] == "f" * 255
 
@@ -397,7 +401,7 @@ def test_create_container_record_uses_path_basename_when_no_filename():
     proc.postgres_connection_string = "postgresql://unused"
     conn, cursor = _patched_connect()
     with patch("web_api.large_containers.psycopg.connect", return_value=conn):
-        proc.create_container_record("cid", "zip", {"path": "/C:/loot/x.zip"}, 1, 1)
+        proc.create_container_record(CID, "zip", {"path": "/C:/loot/x.zip"}, 1, 1)
     assert cursor.execute.call_args.args[1][2] == "x.zip"
 
 
@@ -408,7 +412,7 @@ def test_create_container_record_db_error_raises():
         patch("web_api.large_containers.psycopg.connect", side_effect=RuntimeError("db down")),
         pytest.raises(RuntimeError),
     ):
-        proc.create_container_record("cid", "zip", {"filename": "x.zip"}, 1, 1)
+        proc.create_container_record(CID, "zip", {"filename": "x.zip"}, 1, 1)
 
 
 def test_mark_container_failed_sets_status_and_swallows_db_errors():
@@ -416,9 +420,9 @@ def test_mark_container_failed_sets_status_and_swallows_db_errors():
     proc.postgres_connection_string = "postgresql://unused"
     conn, cursor = _patched_connect()
     with patch("web_api.large_containers.psycopg.connect", return_value=conn):
-        proc.mark_container_failed("cid", "boom")
+        proc.mark_container_failed(CID, "boom")
     params = cursor.execute.call_args.args[1]
-    assert params[0] == ContainerStatus.FAILED and params[1] == "boom" and params[3] == "cid"
+    assert params[0] == ContainerStatus.FAILED and params[1] == "boom" and params[3] == CID
 
     with patch("web_api.large_containers.psycopg.connect", side_effect=RuntimeError("db down")):
-        proc.mark_container_failed("cid", "boom")  # does not raise
+        proc.mark_container_failed(CID, "boom")  # does not raise

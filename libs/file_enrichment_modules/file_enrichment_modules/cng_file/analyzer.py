@@ -69,7 +69,7 @@ rule is_cng_file
 }
 """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Check if this file should be processed as a CNG file.
 
         Args:
@@ -91,7 +91,7 @@ rule is_cng_file
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
         return should_run
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process CNG file.
 
         Args:

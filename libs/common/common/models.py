@@ -2,9 +2,11 @@
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any
+from uuid import UUID
 
 from common.helpers import MAX_EXTENSION_LENGTH
 from common.models2.api import AgentId, ProjectName, SourceName, UTCDatetime
+from common.models2.base import NemesisModel
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from .logger import get_logger
@@ -20,9 +22,9 @@ logger = get_logger(__name__)
 # Used for findings
 #
 ##########################################
-class FileObject(BaseModel):
+class FileObject(NemesisModel):
     type: str
-    object_id: str | None = None
+    object_id: UUID | None = None
     metadata: dict | None = None
 
 
@@ -43,12 +45,12 @@ class FindingOrigin(StrEnum):
     MANUAL = "manual"
 
 
-class Finding(BaseModel):
+class Finding(NemesisModel):
     category: FindingCategory
     finding_name: str
     origin_type: FindingOrigin
     origin_name: str
-    object_id: str
+    object_id: UUID
     severity: int = Field(ge=0, le=10)
     raw_data: dict[str, Any]
     data: list[FileObject]
@@ -59,7 +61,7 @@ class Finding(BaseModel):
 # Used for publishing alerts
 #
 ##########################################
-class Alert(BaseModel):
+class Alert(NemesisModel):
     body: str
     title: str | None = None  # title is optional, will have a default
     tag: str | None = None  # optional
@@ -76,8 +78,8 @@ class Alert(BaseModel):
 ##########################################
 
 
-class DotNetInput(BaseModel):
-    object_id: str
+class DotNetInput(NemesisModel):
+    object_id: UUID
 
 
 class DotNetMethodInfo(BaseModel):
@@ -117,11 +119,11 @@ class DotNetAssemblyAnalysis(BaseModel):
         return {} if v is None else v
 
 
-class DotNetOutput(BaseModel):
+class DotNetOutput(NemesisModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    object_id: str = Field(alias="objectId")
-    decompilation: str | None = None
+    object_id: UUID = Field(alias="objectId")
+    decompilation: UUID | None = None
     analysis: DotNetAssemblyAnalysis | None = None
 
     @field_validator("analysis", mode="before")
@@ -209,16 +211,16 @@ class ScanResults(BaseModel):
         return v
 
 
-class TitusInput(BaseModel):
-    object_id: str
+class TitusInput(NemesisModel):
+    object_id: UUID
     workflow_id: str
     original_path: str = ""
 
 
-class TitusOutput(BaseModel):
+class TitusOutput(NemesisModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
-    object_id: str
+    object_id: UUID
     workflow_id: str
     scan_result: ScanResults
 
@@ -232,7 +234,7 @@ class TitusOutput(BaseModel):
             logger.warning(f"Error creating TitusOutput from dict: {e}")
             # Try to construct with just the required fields
             return cls(
-                object_id=data.get("object_id", ""),
+                object_id=data["object_id"],
                 workflow_id=data.get("workflow_id", ""),
                 scan_result=ScanResults(
                     scan_duration_ms=data.get("scan_result", {}).get("scan_duration_ms", 0),
@@ -257,16 +259,16 @@ class TitusOutput(BaseModel):
 ##########################################
 
 
-class BulkEnrichmentEvent(BaseModel):
+class BulkEnrichmentEvent(NemesisModel):
     enrichment_name: str
-    object_id: str
+    object_id: UUID
 
 
-class SingleEnrichmentWorkflowInput(BaseModel):
+class SingleEnrichmentWorkflowInput(NemesisModel):
     """Input model for single enrichment workflows (bulk operations)."""
 
     enrichment_name: str
-    object_id: str
+    object_id: UUID
 
 
 ##########################################
@@ -274,21 +276,21 @@ class SingleEnrichmentWorkflowInput(BaseModel):
 # Model for files submitted to the API
 #
 ##########################################
-class File(BaseModel):
+class File(NemesisModel):
     model_config = ConfigDict(  # pyright: ignore[reportCallIssue]
         exclude_none=True,
         exclude_unset=True,
     )
 
-    object_id: str
+    object_id: UUID
     agent_id: AgentId
     source: SourceName | None = None
     project: ProjectName
     timestamp: UTCDatetime
     expiration: UTCDatetime
     path: str  # | None = None
-    originating_object_id: str | None = None
-    originating_container_id: str | None = None
+    originating_object_id: UUID | None = None
+    originating_container_id: UUID | None = None
     nesting_level: int | None = None
     creation_time: str | None = None
     access_time: str | None = None
@@ -307,7 +309,7 @@ class File(BaseModel):
         return dt.isoformat()
 
     @classmethod
-    def from_file_metadata(cls, metadata: "FileMetadata", object_id: str) -> "File":
+    def from_file_metadata(cls, metadata: "FileMetadata", object_id: UUID) -> "File":
         """
         Create a File instance from FileMetadata and object_id.
 
@@ -360,11 +362,11 @@ class File(BaseModel):
 #
 ##########################################
 class Transform(FileObject):
-    pass
+    object_id: UUID  # pyright: ignore[reportGeneralTypeIssues]  # required: transforms.transform_object_id is NOT NULL
 
 
 # what's returned by enrichment modules
-class EnrichmentResult(BaseModel):
+class EnrichmentResult(NemesisModel):
     module_name: str  # Keeping this from original model
     results: dict[str, Any] | None = None  # Raw parsed data
     transforms: list[Transform] = []

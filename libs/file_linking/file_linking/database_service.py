@@ -5,6 +5,7 @@ Handles all database operations for file_listings and file_linkings tables.
 """
 
 from enum import StrEnum
+from uuid import UUID
 
 import asyncpg
 from common.logger import get_logger
@@ -26,7 +27,7 @@ class FileLinkingDatabaseService:
         self.pool = connection_pool
 
     async def add_file_listing(
-        self, source: str, path: str, status: FileListingStatus, object_id: str | None = None, conn=None
+        self, source: str, path: str, status: FileListingStatus, object_id: UUID | None = None, conn=None
     ) -> bool:
         """
         Add or update entry in file_listings table.

@@ -2,6 +2,7 @@
 
 import sqlite3
 from contextlib import ExitStack
+from uuid import UUID
 
 import asyncpg
 from common.logger import get_logger
@@ -25,7 +26,7 @@ logger = get_logger(__name__)
 
 
 async def process_chromium_logins(
-    object_id: str,
+    object_id: UUID,
     file_path: str | None = None,
     dpapi_manager: DpapiManager | None = None,
     asyncpg_pool: asyncpg.Pool | None = None,

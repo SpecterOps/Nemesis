@@ -5,12 +5,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import pytest
 import web_api.main as main
 from fastapi import HTTPException
 
-OBJECT_ID = str(uuid.uuid4())
+OBJECT_ID = uuid.uuid4()
 
 
 def _metadata(**overrides) -> str:
@@ -40,7 +41,7 @@ class TestUploadFile:
     def test_happy_path_normalizes_path_and_submits(self, client, upload_storage, submit_mock):
         response = _post_file(client, _metadata())
         assert response.status_code == 200
-        assert response.json()["object_id"] == OBJECT_ID
+        assert response.json()["object_id"] == str(OBJECT_ID)
         file_model = submit_mock.await_args.args[0]
         assert file_model.path == "/C:/Users/bob/file.txt"
         assert file_model.expiration > datetime.now(UTC)
@@ -231,20 +232,22 @@ class TestSubmitContainer:
 class TestContainerProgressEviction:
     def test_evicts_only_stale_entries(self):
         tracker = main.container_processor.progress_tracker
-        tracker.initialize("old", 1, 1)
-        tracker.initialize("new", 1, 1)
-        tracker.get_progress("old")["started_at"] = datetime.now(UTC) - timedelta(days=8)
+        tracker.initialize(UUID("00000000-0000-0000-0000-0000000000a1"), 1, 1)
+        tracker.initialize(UUID("00000000-0000-0000-0000-0000000000a2"), 1, 1)
+        tracker.get_progress(UUID("00000000-0000-0000-0000-0000000000a1"))["started_at"] = datetime.now(
+            UTC
+        ) - timedelta(days=8)
         try:
             assert main._evict_stale_container_progress() == 1
-            assert tracker.get_progress("old") is None
-            assert tracker.get_progress("new") is not None
+            assert tracker.get_progress(UUID("00000000-0000-0000-0000-0000000000a1")) is None
+            assert tracker.get_progress(UUID("00000000-0000-0000-0000-0000000000a2")) is not None
         finally:
-            tracker.cleanup("old")
-            tracker.cleanup("new")
+            tracker.cleanup(UUID("00000000-0000-0000-0000-0000000000a1"))
+            tracker.cleanup(UUID("00000000-0000-0000-0000-0000000000a2"))
 
     def test_status_poll_cleans_up_finished_container(self, client, monkeypatch):
         tracker = main.container_processor.progress_tracker
-        tracker.initialize("c1", 1, 1)
+        tracker.initialize(UUID("00000000-0000-0000-0000-0000000000c1"), 1, 1)
         status = {
             "status": "workflows_complete",
             "workflows_total": 1,
@@ -255,15 +258,15 @@ class TestContainerProgressEviction:
             "processing_started_at": None,
         }
         monkeypatch.setattr(main.container_processor, "get_container_status", lambda cid: status)
-        response = client.get("/containers/c1/status")
+        response = client.get("/containers/00000000-0000-0000-0000-0000000000c1/status")
         assert response.status_code == 200
         assert response.json()["progress_percent_files"] == 100
-        assert tracker.get_progress("c1") is None
+        assert tracker.get_progress(UUID("00000000-0000-0000-0000-0000000000c1")) is None
 
     def test_status_poll_keeps_extracting_container(self, client, monkeypatch):
         tracker = main.container_processor.progress_tracker
-        tracker.initialize("c2", 2, 2)
-        tracker.update_file_progress("c2", "a.txt", 1)
+        tracker.initialize(UUID("00000000-0000-0000-0000-0000000000c2"), 2, 2)
+        tracker.update_file_progress(UUID("00000000-0000-0000-0000-0000000000c2"), "a.txt", 1)
         status = {
             "status": "extracting",
             "workflows_total": 0,
@@ -275,15 +278,15 @@ class TestContainerProgressEviction:
         }
         monkeypatch.setattr(main.container_processor, "get_container_status", lambda cid: status)
         try:
-            response = client.get("/containers/c2/status")
+            response = client.get("/containers/00000000-0000-0000-0000-0000000000c2/status")
             assert response.json()["current_file"] == "a.txt"
-            assert tracker.get_progress("c2") is not None
+            assert tracker.get_progress(UUID("00000000-0000-0000-0000-0000000000c2")) is not None
         finally:
-            tracker.cleanup("c2")
+            tracker.cleanup(UUID("00000000-0000-0000-0000-0000000000c2"))
 
     def test_status_unknown_container_404(self, client, monkeypatch):
         monkeypatch.setattr(main.container_processor, "get_container_status", lambda cid: None)
-        assert client.get("/containers/nope/status").status_code == 404
+        assert client.get("/containers/00000000-0000-0000-0000-0000000000ff/status").status_code == 404
 
 
 class TestSubmitContainerErrorMapping:

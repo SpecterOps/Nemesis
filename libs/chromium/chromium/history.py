@@ -3,6 +3,7 @@
 import sqlite3
 from collections.abc import Callable
 from contextlib import ExitStack
+from uuid import UUID
 
 import asyncpg
 from common.logger import get_logger
@@ -16,7 +17,7 @@ logger = get_logger(__name__)
 
 
 async def process_chromium_history(
-    object_id: str, file_path: str | None = None, asyncpg_pool: asyncpg.Pool | None = None
+    object_id: UUID, file_path: str | None = None, asyncpg_pool: asyncpg.Pool | None = None
 ) -> None:
     """Process Chromium History file and insert URLs and downloads into database.
 
@@ -58,7 +59,7 @@ def _table_reader(table: str, query: str) -> Callable[[sqlite3.Connection], list
 
 
 async def _insert_history_urls(
-    object_id: str, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool
+    object_id: UUID, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool
 ) -> None:
     """Extract URLs from History and insert into chromium.history table."""
     try:
@@ -112,7 +113,7 @@ async def _insert_history_urls(
 
 
 async def _insert_history_downloads(
-    object_id: str, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool
+    object_id: UUID, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool
 ) -> None:
     """Extract downloads from History and insert into chromium_downloads table."""
     try:

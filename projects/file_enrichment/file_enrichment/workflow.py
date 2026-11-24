@@ -1,7 +1,10 @@
 # src/workflow/workflow.py
 
+from uuid import UUID
+
 import dapr.ext.workflow as wf
 import file_enrichment.global_vars as global_vars
+from common.helpers import as_uuid, jsonable
 from common.logger import get_logger
 from common.models import File
 from common.workflows.setup import wf_runtime
@@ -68,7 +71,7 @@ def topological_sort(graph):
     return order
 
 
-def _await_each(ctx: wf.DaprWorkflowContext, named_tasks, object_id: str):
+def _await_each(ctx: wf.DaprWorkflowContext, named_tasks, object_id: UUID):
     """Wait for already-scheduled tasks one by one, tolerating individual failures.
 
     Used with ``yield from`` inside a workflow. The tasks were all scheduled before this is called, so they still run
@@ -126,9 +129,15 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
         # (e.g. plaintext indexing) doesn't skip the others or the publishing steps below; wf.when_all would raise on
         # the first failure and abandon the rest of the workflow.
         enrichment_tasks = [
-            ("run_enrichment_modules", ctx.call_activity(run_enrichment_modules, input={"object_id": object_id})),
-            ("check_file_linkings", ctx.call_activity(check_file_linkings, input={"object_id": object_id})),
-            ("handle_file_if_plaintext", ctx.call_activity(handle_file_if_plaintext, input={"object_id": object_id})),
+            (
+                "run_enrichment_modules",
+                ctx.call_activity(run_enrichment_modules, input=jsonable({"object_id": object_id})),
+            ),
+            ("check_file_linkings", ctx.call_activity(check_file_linkings, input=jsonable({"object_id": object_id}))),
+            (
+                "handle_file_if_plaintext",
+                ctx.call_activity(handle_file_if_plaintext, input=jsonable({"object_id": object_id})),
+            ),
         ]
         results, failed = yield from _await_each(ctx, enrichment_tasks, object_id)
 
@@ -144,8 +153,8 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
 
         # Always wait (also on replay), or finalize runs before the alerts are published
         final_tasks = [
-            ("publish_enriched_file", ctx.call_activity(publish_enriched_file, input=object_id)),
-            ("publish_findings_alerts", ctx.call_activity(publish_findings_alerts, input=object_id)),
+            ("publish_enriched_file", ctx.call_activity(publish_enriched_file, input=jsonable(object_id))),
+            ("publish_findings_alerts", ctx.call_activity(publish_findings_alerts, input=jsonable(object_id))),
         ]
         results, final_failed = yield from _await_each(ctx, final_tasks, object_id)
         failed += final_failed
@@ -237,7 +246,7 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
 
     try:
         enrichment_name = workflow_input["enrichment_name"]
-        object_id = workflow_input["object_id"]
+        object_id = as_uuid(workflow_input["object_id"])
 
         if not ctx.is_replaying:
             logger.debug(
@@ -253,7 +262,9 @@ def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict
             raise KeyError(f"Activity {activity_name} not registered")
 
         # Run the single enrichment activity
-        result = yield ctx.call_activity(global_vars.activity_functions[activity_name], input={"object_id": object_id})
+        result = yield ctx.call_activity(
+            global_vars.activity_functions[activity_name], input=jsonable({"object_id": object_id})
+        )
 
         if not ctx.is_replaying:
             logger.debug(

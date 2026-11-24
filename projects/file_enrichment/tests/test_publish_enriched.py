@@ -23,7 +23,7 @@ class TestShouldConvertDocument:
     ) -> FileEnriched:
         """Helper to create a FileEnriched object for testing."""
         return FileEnriched(
-            object_id="test-object-123",
+            object_id="00000000-0000-0000-0000-000000000123",
             agent_id="test-agent",
             project="test-project",
             timestamp=datetime.now(UTC),
@@ -64,7 +64,7 @@ class TestShouldConvertDocument:
         """
         file = self.create_file_enriched(
             is_plaintext=False,
-            originating_object_id="parent-123",
+            originating_object_id="00000000-0000-0000-0000-00000000a123",
             nesting_level=0,
         )
         assert should_convert_document(file) is False
@@ -75,7 +75,7 @@ class TestShouldConvertDocument:
         """
         file = self.create_file_enriched(
             is_plaintext=False,
-            originating_object_id="container-123",
+            originating_object_id="00000000-0000-0000-0000-00000000c123",
             nesting_level=1,
         )
         assert should_convert_document(file) is True
@@ -84,7 +84,7 @@ class TestShouldConvertDocument:
         """Test that deeply nested files (nesting_level > 1) should be converted."""
         file = self.create_file_enriched(
             is_plaintext=False,
-            originating_object_id="container-123",
+            originating_object_id="00000000-0000-0000-0000-00000000c123",
             nesting_level=3,
         )
         assert should_convert_document(file) is True
@@ -97,7 +97,7 @@ class TestShouldConvertDocument:
         # Even with nesting_level > 0, plaintext files should not convert
         file = self.create_file_enriched(
             is_plaintext=True,
-            originating_object_id="container-123",
+            originating_object_id="00000000-0000-0000-0000-00000000c123",
             nesting_level=2,
         )
         assert should_convert_document(file) is False

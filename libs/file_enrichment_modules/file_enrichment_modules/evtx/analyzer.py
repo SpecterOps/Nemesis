@@ -15,6 +15,7 @@ import re
 import tempfile
 from collections import defaultdict
 from datetime import datetime, timedelta
+from uuid import UUID
 
 import evtx as evtx_lib
 from common.logger import get_logger
@@ -161,7 +162,7 @@ class EVTXAnalyzer(EnrichmentModule):
         # EVTX magic bytes: "ElfFile\x00"
         self._magic = b"ElfFile\x00"
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
         # Extension check (fast path)
@@ -762,7 +763,7 @@ class EVTXAnalyzer(EnrichmentModule):
         result.transforms.append(
             Transform(
                 type="evtx_analysis",
-                object_id=str(summary_id),
+                object_id=summary_id,
                 metadata={
                     "file_name": f"{file_enriched.file_name}_analysis.md",
                     "display_type_in_dashboard": "markdown",
@@ -852,7 +853,7 @@ class EVTXAnalyzer(EnrichmentModule):
             result.transforms.append(
                 Transform(
                     type="evtx_group_changes",
-                    object_id=str(group_csv_id),
+                    object_id=group_csv_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_group_changes.csv",
                         "display_type_in_dashboard": "csv",
@@ -935,7 +936,7 @@ class EVTXAnalyzer(EnrichmentModule):
             result.transforms.append(
                 Transform(
                     type="evtx_account_changes",
-                    object_id=str(acct_csv_id),
+                    object_id=acct_csv_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_account_changes.csv",
                         "display_type_in_dashboard": "csv",
@@ -988,7 +989,7 @@ class EVTXAnalyzer(EnrichmentModule):
             result.transforms.append(
                 Transform(
                     type="evtx_task_changes",
-                    object_id=str(task_csv_id),
+                    object_id=task_csv_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_task_changes.csv",
                         "display_type_in_dashboard": "csv",
@@ -1051,7 +1052,7 @@ class EVTXAnalyzer(EnrichmentModule):
             result.transforms.append(
                 Transform(
                     type="evtx_explicit_credential_use",
-                    object_id=str(explicit_csv_id),
+                    object_id=explicit_csv_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_explicit_credential_use.csv",
                         "display_type_in_dashboard": "csv",
@@ -1103,7 +1104,7 @@ class EVTXAnalyzer(EnrichmentModule):
             result.transforms.append(
                 Transform(
                     type="evtx_process_creation",
-                    object_id=str(proc_csv_id),
+                    object_id=proc_csv_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_process_creation.csv",
                         "display_type_in_dashboard": "csv",
@@ -1143,7 +1144,7 @@ class EVTXAnalyzer(EnrichmentModule):
                             child_id = self.storage.upload_file(tmp.name)
 
                         file_message = File(
-                            object_id=str(child_id),
+                            object_id=child_id,
                             agent_id=file_enriched.agent_id,
                             project=file_enriched.project,
                             timestamp=file_enriched.timestamp,
@@ -1188,7 +1189,7 @@ class EVTXAnalyzer(EnrichmentModule):
 
         return result
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         try:
             file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 

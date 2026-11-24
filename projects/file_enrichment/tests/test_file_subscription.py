@@ -7,6 +7,7 @@ messages that can never succeed return DROP.
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import NAMESPACE_URL, uuid5
 
 import asyncpg
 import pytest
@@ -19,9 +20,16 @@ with patch("common.storage.StorageS3", MagicMock()):
     from file_enrichment.workflow_manager import WorkflowManager
 
 
+def label_id(label: str) -> str:
+    """Readable test label as a stable UUID string (file events carry UUID object IDs)."""
+    return str(uuid5(NAMESPACE_URL, f"nemesis-test:{label}"))
+
+
 def event(**file_overrides):
+    if "object_id" in file_overrides:
+        file_overrides["object_id"] = label_id(file_overrides["object_id"])
     data = {
-        "object_id": "obj-1",
+        "object_id": label_id("obj-1"),
         "agent_id": "agent",
         "project": "proj",
         "timestamp": "2026-01-01T00:00:00Z",

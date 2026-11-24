@@ -4,10 +4,12 @@ import asyncio
 import json
 import os
 from typing import Any
+from uuid import UUID
 
 import aiohttp
 import common.helpers as helpers
 from async_lru import alru_cache
+from common.helpers import as_uuid
 from common.logger import get_logger
 from common.models import Alert
 from common.queues import ALERTING_NEW_ALERT_TOPIC, ALERTING_PUBSUB
@@ -76,7 +78,7 @@ async def is_llm_enabled():
 
 
 async def publish_alerts_for_findings(
-    object_id: str, origin_include: list[str] | None = None, origin_exclude: list[str] | None = None
+    object_id: UUID, origin_include: list[str] | None = None, origin_exclude: list[str] | None = None
 ) -> None:
     """
     Core function to publish alerts for findings with optional origin filtering.
@@ -195,7 +197,7 @@ async def publish_alerts_for_findings(
 
 
 @workflow_activity
-async def publish_findings_alerts(ctx: WorkflowActivityContext, object_id: str):
+async def publish_findings_alerts(ctx: WorkflowActivityContext, activity_input: str):
     """
     Workflow activity to publish alerts for findings, excluding async service origins.
 
@@ -203,6 +205,7 @@ async def publish_findings_alerts(ctx: WorkflowActivityContext, object_id: str):
     from synchronous enrichment modules. Async services (dotnet, titus) handle
     their own alerting when their results arrive.
     """
+    object_id = as_uuid(activity_input)
     logger.info("Executing activity: publish_findings_alerts", object_id=object_id)
 
     # Exclude async service origins to prevent double-alerting

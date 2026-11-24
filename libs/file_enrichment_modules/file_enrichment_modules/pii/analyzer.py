@@ -3,6 +3,7 @@ import os
 import tempfile
 import threading
 from pathlib import Path
+from uuid import UUID
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
@@ -56,7 +57,7 @@ class PIIAnalyzer(EnrichmentModule):
         if hasattr(self._thread_local, "analyzer"):
             delattr(self._thread_local, "analyzer")
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if file should be processed based on plaintext detection.
 
         Args:
@@ -229,7 +230,7 @@ class PIIAnalyzer(EnrichmentModule):
 
                     displayable_parsed = Transform(
                         type="displayable_parsed",
-                        object_id=f"{object_id}",
+                        object_id=object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_pii_analysis.txt",
                             "display_type_in_dashboard": "monaco",
@@ -244,7 +245,7 @@ class PIIAnalyzer(EnrichmentModule):
             logger.exception(message=f"Error analyzing PII for {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file to detect PII using Microsoft Presidio.
 
         Args:

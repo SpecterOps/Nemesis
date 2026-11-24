@@ -10,7 +10,7 @@ from common.workflows.tracking_service import WorkflowStatus
 from dapr.ext.workflow.workflow_state import WorkflowStatus as DaprWorkflowStatus
 
 from . import global_vars
-from .tracing import get_tracer
+from .tracing import get_tracer, set_object_id_attribute
 from .workflow_completion import publish_workflow_completion
 
 logger = get_logger(__name__)
@@ -149,7 +149,7 @@ class WorkflowManager:
 
         with tracer.start_as_current_span("start_workflow") as current_span:
             current_span.set_attribute("workflow.type", "enrichment_workflow")
-            current_span.set_attribute("workflow.object_id", object_id)
+            set_object_id_attribute(current_span, object_id, "workflow.object_id")
 
             try:
                 # Start tracking workflow in database
@@ -213,7 +213,7 @@ class WorkflowManager:
         try:
             # Normalize input to SingleEnrichmentWorkflowInput if dict
             if isinstance(workflow_input, dict):
-                workflow_input = SingleEnrichmentWorkflowInput(**workflow_input)
+                workflow_input = SingleEnrichmentWorkflowInput.model_validate(workflow_input)
 
             # Extract metadata for tracking
             object_id = workflow_input.object_id
@@ -224,7 +224,7 @@ class WorkflowManager:
                 span.set_attribute("workflow.start", True)
                 span.set_attribute("workflow.type", "single_enrichment_workflow")
                 span.set_attribute("workflow.enrichment_name", enrichment_name)
-                span.set_attribute("workflow.object_id", object_id)
+                set_object_id_attribute(span, object_id, "workflow.object_id")
 
                 # Start tracking workflow in database
                 assert global_vars.tracking_service is not None

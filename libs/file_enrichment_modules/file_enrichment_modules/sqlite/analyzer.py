@@ -3,6 +3,7 @@ import base64
 import sqlite3
 import tempfile
 from typing import Any
+from uuid import UUID
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
@@ -121,7 +122,7 @@ class SqliteParser(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         should_run = (
@@ -158,7 +159,7 @@ class SqliteParser(EnrichmentModule):
 
                 displayable_parsed = Transform(
                     type="displayable_parsed",
-                    object_id=f"{object_id}",
+                    object_id=object_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}.txt",
                         "display_type_in_dashboard": "monaco",
@@ -173,7 +174,7 @@ class SqliteParser(EnrichmentModule):
             logger.exception(message=f"Error analyzing SQLite database for {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process SQLite database file using the state store.
 
         Args:

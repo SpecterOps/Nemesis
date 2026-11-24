@@ -1,7 +1,7 @@
 # src/workflow/workflow_tracking_service.py
 from datetime import UTC, datetime
 from enum import StrEnum
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import asyncpg
 from common.logger import get_logger
@@ -34,7 +34,7 @@ class WorkflowTrackingService:
         self.pool = pool
         self.workflow_client = workflow_client
 
-    def _create_instance_id(self, object_id: str) -> str:
+    def _create_instance_id(self, object_id: UUID) -> str:
         """Create a workflow instance ID.
 
         Args:
@@ -46,7 +46,7 @@ class WorkflowTrackingService:
         instance_uuid = uuid4().hex
         return f"{self._name}.{instance_uuid}.{object_id}"
 
-    async def register_workflow(self, object_id: str, filename: str | None = None) -> str:
+    async def register_workflow(self, object_id: UUID, filename: str | None = None) -> str:
         """Create initial workflow record with SCHEDULED status.
 
         Args:
@@ -267,7 +267,7 @@ class WorkflowTrackingService:
 
     async def update_enrichment_results_by_object_id(
         self,
-        object_id: str,
+        object_id: UUID,
         success_list: list[str] | None = None,
         failure_list: list[str] | None = None,
     ) -> None:

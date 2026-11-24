@@ -1,4 +1,5 @@
 import base64
+from uuid import UUID
 
 from common.logger import get_logger
 from impacket.dpapi import DPAPI_BLOB
@@ -34,7 +35,7 @@ async def parse_dpapi_blob(blob_bytes: bytes) -> ParsedDpapiBlob:
 
 
 async def carve_dpapi_blobs_from_bytes(
-    raw_bytes: bytes, file_name: str = "", object_id: str = "", base_offset: int = 0
+    raw_bytes: bytes, file_name: str = "", object_id: UUID | None = None, base_offset: int = 0
 ) -> list[ParsedDpapiBlob]:
     """
     Helper that _just_ carves raw DPAPI blobs from bytes,
@@ -62,7 +63,7 @@ async def carve_dpapi_blobs_from_bytes(
         try:
             blob = await parse_dpapi_blob(raw_bytes[current_pos:])
             if not blob.success:
-                if file_name != "" and object_id != "":
+                if file_name != "" and object_id is not None:
                     logger.warning(
                         "carve_dpapi_blobs_from_bytes: blob.rawData is None",
                         file_name=file_name,
@@ -122,7 +123,9 @@ async def carve_dpapi_blobs_from_bytes(
     return dpapi_blobs
 
 
-async def carve_dpapi_blobs_from_file(file_name: str, object_id: str = "", max_blobs: int = 1000) -> list[dict]:
+async def carve_dpapi_blobs_from_file(
+    file_name: str, object_id: UUID | None = None, max_blobs: int = 1000
+) -> list[dict]:
     """
     Helper that _just_ carves raw DPAPI blobs from a file,
     returning a list of dicts {dpapi_master_key_guid, dpapi_data_b64}

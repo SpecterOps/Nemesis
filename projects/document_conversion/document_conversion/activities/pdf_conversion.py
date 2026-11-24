@@ -4,7 +4,7 @@ import os
 
 import document_conversion.global_vars as global_vars
 import httpx
-from common.helpers import can_convert_to_pdf
+from common.helpers import as_uuid, can_convert_to_pdf
 from common.log_safety import mask
 from common.logger import get_logger
 from common.models import Transform
@@ -24,7 +24,7 @@ async def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict
     assert global_vars.gotenberg_url is not None, "gotenberg_url must be initialized"
     assert global_vars.tracking_service is not None, "tracking_service must be initialized"
 
-    object_id = file_input.get("object_id")
+    object_id = as_uuid(file_input.get("object_id"))
     result = None
 
     try:
@@ -70,7 +70,7 @@ async def convert_to_pdf(ctx: WorkflowActivityContext, file_input: dict) -> dict
 
                         transform = Transform(
                             type="converted_pdf",
-                            object_id=str(object_id),
+                            object_id=object_id,
                             metadata={
                                 "file_name": f"{file_enriched.file_name}.pdf",
                                 "display_type_in_dashboard": "pdf",

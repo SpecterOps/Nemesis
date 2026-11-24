@@ -1,5 +1,6 @@
 import base64
 import binascii
+from uuid import UUID
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
@@ -63,7 +64,7 @@ class YaraScanner(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Always returns True as Yara scanning should run on all files."""
         return True
 
@@ -174,7 +175,7 @@ class YaraScanner(EnrichmentModule):
             return enrichment_result
         return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file using Yara scanning.
 
         Args:

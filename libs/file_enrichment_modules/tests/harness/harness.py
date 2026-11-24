@@ -1,16 +1,28 @@
 # pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportReturnType=false
 """Main test harness for enrichment module testing."""
 
+import functools
 import os
 from contextlib import asynccontextmanager
 from typing import Any, TypeVar
 from unittest.mock import patch
 
 from .factories import FileEnrichedFactory
+from .ids import label_key, label_uuid
 from .mock_pool import MockAsyncpgPool
 from .mock_storage import MockStorageMinio
 
 T = TypeVar("T")
+
+
+def _with_uuid_object_id(method):
+    """Wrap process/should_process so a test label passed as object_id reaches the module as its UUID."""
+
+    @functools.wraps(method)
+    async def wrapper(object_id, *args, **kwargs):
+        return await method(label_uuid(object_id), *args, **kwargs)
+
+    return wrapper
 
 
 class ModuleTestHarness:
@@ -66,6 +78,8 @@ class ModuleTestHarness:
         if not os.path.exists(local_path):
             raise FileNotFoundError(f"Test file not found: {local_path}")
 
+        object_id = label_uuid(object_id)
+
         # Register with mock storage
         self.storage.register_file(object_id, local_path)
 
@@ -98,8 +112,10 @@ class ModuleTestHarness:
             data: Raw bytes of the file
             file_enriched: Dict of file_enriched data
         """
+        object_id = label_uuid(object_id)
+
         # Store bytes in mock storage's uploaded files dict
-        self.storage._uploaded_files[object_id] = data
+        self.storage._uploaded_files[label_key(object_id)] = data
 
         # Ensure object_id matches
         file_enriched["object_id"] = object_id
@@ -133,6 +149,12 @@ class ModuleTestHarness:
             module = module_class.create_enrichment_module()
         else:
             module = module_class()
+
+        # Tests address files by readable labels; the module only ever receives UUIDs
+        for name in ("process", "should_process"):
+            method = getattr(module, name, None)
+            if method is not None:
+                setattr(module, name, _with_uuid_object_id(method))
 
         # Replace storage with our mock (in case the module created its own)
         if hasattr(module, "storage"):

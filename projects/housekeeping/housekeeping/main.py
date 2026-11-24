@@ -2,6 +2,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from uuid import UUID
 
 import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -33,7 +34,7 @@ async def get_db_pool():
     return db_pool
 
 
-async def get_expired_object_ids(expiration_date: datetime | None = None) -> list[str]:
+async def get_expired_object_ids(expiration_date: datetime | None = None) -> list[UUID]:
     """
     Get a list of all object_ids from files, files_enriched, and files_enriched_dataset tables
     that have passed their expiration date.
@@ -63,14 +64,14 @@ async def get_expired_object_ids(expiration_date: datetime | None = None) -> lis
                 comparison_date,
                 comparison_date,
             )
-            return [str(record["object_id"]) for record in records]
+            return [record["object_id"] for record in records]
 
     except Exception:
         logger.exception(message="Error getting expired object IDs from database")
         return []
 
 
-async def get_transform_object_map(object_ids: list[str]) -> dict[str, list[str]] | None:
+async def get_transform_object_map(object_ids: list[UUID]) -> dict[UUID, list[UUID]] | None:
     """
     Map each of the given object_ids to the transform_object_ids derived from it.
 
@@ -91,9 +92,9 @@ async def get_transform_object_map(object_ids: list[str]) -> dict[str, list[str]
                 """,
                 object_ids,
             )
-        transform_map: dict[str, list[str]] = {}
+        transform_map: dict[UUID, list[UUID]] = {}
         for record in transform_records:
-            transform_map.setdefault(str(record["object_id"]), []).append(str(record["transform_object_id"]))
+            transform_map.setdefault(record["object_id"], []).append(record["transform_object_id"])
         return transform_map
     except Exception:
         logger.exception(message="Error getting transform object IDs from database")
@@ -101,8 +102,8 @@ async def get_transform_object_map(object_ids: list[str]) -> dict[str, list[str]
 
 
 def delete_expired_objects_from_storage(
-    expired_object_ids: list[str], transform_map: dict[str, list[str]]
-) -> tuple[list[str], list[str]]:
+    expired_object_ids: list[UUID], transform_map: dict[UUID, list[UUID]]
+) -> tuple[list[UUID], list[UUID]]:
     """
     Delete the storage objects of expired files and their transforms.
 
@@ -114,14 +115,15 @@ def delete_expired_objects_from_storage(
         raise RuntimeError("Storage not initialized")
     all_object_ids = list(dict.fromkeys(expired_object_ids + [t for ts in transform_map.values() for t in ts]))
     removed = storage.delete_objects_with_status(all_object_ids)
-    deletable, kept = [], []
+    deletable: list[UUID] = []
+    kept: list[UUID] = []
     for object_id in expired_object_ids:
         related = [object_id, *transform_map.get(object_id, [])]
         (deletable if all(r in removed for r in related) else kept).append(object_id)
     return deletable, kept
 
 
-async def delete_database_entries(object_ids: list[str]) -> bool:
+async def delete_database_entries(object_ids: list[UUID]) -> bool:
     """
     Delete expired entries from database tables.
     Return True if successful, False otherwise.
@@ -487,7 +489,7 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
             # Delete storage first, then only the database rows whose objects are gone. A failed storage delete keeps
             # its rows (and so its object IDs) for the next run; a database failure after the storage delete is
             # retried too, because objects that are already absent count as deleted.
-            deletable_object_ids: list[str] = []
+            deletable_object_ids: list[UUID] = []
             if expired_object_ids:
                 transform_map = await get_transform_object_map(expired_object_ids)
                 if transform_map is None:

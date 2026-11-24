@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 from common.models import FileEnriched, FileHashes
@@ -19,9 +20,9 @@ def mock_asyncpg_pool():
 
 
 def create_file_enriched(object_id: str, path: str, mime_type: str, magic_type: str) -> FileEnriched:
-    """Helper function to create a FileEnriched instance with all required fields."""
+    """Helper function to create a FileEnriched instance with all required fields (labels become stable UUIDs)."""
     return FileEnriched(
-        object_id=object_id,
+        object_id=uuid5(NAMESPACE_URL, object_id),
         agent_id="test-agent-id",
         project="test-project",
         timestamp=datetime.now(UTC),

@@ -3,6 +3,7 @@ import csv
 import sqlite3
 import tempfile
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 if TYPE_CHECKING:
     import asyncio
@@ -73,7 +74,7 @@ rule Chrome_Logins_Tables
 }
         """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -102,7 +103,7 @@ rule Chrome_Logins_Tables
 
         return should_run
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Chrome Login Data database.
 
         Args:
@@ -166,7 +167,7 @@ rule Chrome_Logins_Tables
                 transforms.append(
                     Transform(
                         type="finding_summary",
-                        object_id=f"{report_object_id}",
+                        object_id=report_object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}.md",
                             "display_type_in_dashboard": "markdown",
@@ -204,7 +205,7 @@ rule Chrome_Logins_Tables
                 transforms.append(
                     Transform(
                         type="chromium_logins",
-                        object_id=f"{logins_object_id}",
+                        object_id=logins_object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_chromium_logins.csv",
                             "offer_as_download": True,

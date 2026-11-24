@@ -1,6 +1,7 @@
 # enrichment_modules/container_contents/analyzer.py
 import os
 import tempfile
+from uuid import UUID
 
 from common.helpers import is_container
 from common.logger import get_logger
@@ -26,7 +27,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
 
         self.asyncpg_pool = None  # type: ignore
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
@@ -70,7 +71,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
 
         return "\n".join(summary_lines)
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process container file and extract its contents."""
         try:
             file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
@@ -106,7 +107,7 @@ class ContainerContentsAnalyzer(EnrichmentModule):
                     transforms.append(
                         Transform(
                             type="extraction_summary",
-                            object_id=str(summary_object_id),
+                            object_id=summary_object_id,
                             metadata={
                                 "file_name": "container_contents.md",
                                 "display_type_in_dashboard": "markdown",

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched_async
@@ -49,7 +51,7 @@ class FilenameScanner(EnrichmentModule):
             "phpinfo",
         ]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Always returns True as filename scanning should run on all files.
 
         Args:
@@ -58,7 +60,7 @@ class FilenameScanner(EnrichmentModule):
         """
         return True
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file by checking its filename for sensitive terms.
 
         Args:

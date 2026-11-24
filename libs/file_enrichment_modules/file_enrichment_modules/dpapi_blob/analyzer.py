@@ -3,6 +3,7 @@ import base64
 import csv
 import tempfile
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 import yara_x
 from common.logger import get_logger
@@ -68,7 +69,7 @@ rule has_dpapi_blob
             lines.append(f"{offset + i:08x}  {hex_part}  {ascii_part}")
         return "\n".join(lines)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Check if this file should be processed by scanning for DPAPI blobs.
 
         Args:
@@ -94,7 +95,7 @@ rule has_dpapi_blob
         should_run = len(self.yara_rule.scan(file_bytes).matching_rules) > 0
         return should_run
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Scans a file for DPAPI blobs.
 
         Args:
@@ -204,7 +205,7 @@ rule has_dpapi_blob
                     transforms.append(
                         Transform(
                             type="dpapi_blobs.csv",
-                            object_id=f"{csv_object_id}",
+                            object_id=csv_object_id,
                             metadata={
                                 "file_name": f"{file_enriched.file_name}_dpapi_blobs.csv",
                                 "offer_as_download": True,
@@ -247,7 +248,7 @@ rule has_dpapi_blob
                         transforms.append(
                             Transform(
                                 type="dpapi_decrypted_blobs",
-                                object_id=f"{md_object_id}",
+                                object_id=md_object_id,
                                 metadata={
                                     "file_name": f"{file_enriched.file_name}_decrypted_blobs.md",
                                     "display_type_in_dashboard": "markdown",

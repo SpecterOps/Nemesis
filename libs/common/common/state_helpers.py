@@ -1,10 +1,12 @@
 import json
 from functools import lru_cache
+from uuid import UUID
 
 import asyncpg
 import psycopg
 from async_lru import alru_cache
 from common.db import get_postgres_connection_str
+from common.helpers import require_uuid
 from common.models import FileEnriched
 
 from .logger import get_logger
@@ -38,7 +40,6 @@ def _transform_file_enriched_data(file_data: dict) -> dict:
     Transform raw database data into format suitable for FileEnriched model.
 
     Handles:
-    - UUID to string conversion
     - Datetime to ISO format conversion
     - JSON field parsing
     - None value removal
@@ -49,14 +50,6 @@ def _transform_file_enriched_data(file_data: dict) -> dict:
     Returns:
         Transformed dictionary ready for FileEnriched.model_validate()
     """
-    # Convert UUID to string
-    if "object_id" in file_data and file_data["object_id"]:
-        file_data["object_id"] = str(file_data["object_id"])
-    if "originating_object_id" in file_data and file_data["originating_object_id"]:
-        file_data["originating_object_id"] = str(file_data["originating_object_id"])
-    if "originating_container_id" in file_data and file_data["originating_container_id"]:
-        file_data["originating_container_id"] = str(file_data["originating_container_id"])
-
     # Convert datetime objects to ISO format strings
     datetime_fields = [
         "timestamp",
@@ -82,7 +75,7 @@ def _transform_file_enriched_data(file_data: dict) -> dict:
 
 
 @lru_cache(maxsize=1024)
-def get_file_enriched(object_id: str) -> FileEnriched:
+def get_file_enriched(object_id: UUID) -> FileEnriched:
     """
     Retrieve a file_enriched record from PostgreSQL (synchronous).
 
@@ -98,6 +91,7 @@ def get_file_enriched(object_id: str) -> FileEnriched:
         ValueError: If no record found for object_id
         Exception: For database or parsing errors
     """
+    require_uuid(object_id)
     try:
         with psycopg.connect(get_postgres_connection_str()) as conn:
             with conn.cursor() as cur:
@@ -127,7 +121,7 @@ def get_file_enriched(object_id: str) -> FileEnriched:
 
 
 @alru_cache(maxsize=1024)
-async def get_file_enriched_async(object_id: str, pool: asyncpg.Pool) -> FileEnriched:
+async def get_file_enriched_async(object_id: UUID, pool: asyncpg.Pool) -> FileEnriched:
     """
     Retrieve a file_enriched record from PostgreSQL (asynchronous using asyncpg).
 
@@ -144,6 +138,7 @@ async def get_file_enriched_async(object_id: str, pool: asyncpg.Pool) -> FileEnr
         ValueError: If no record found for object_id
         Exception: For database or parsing errors
     """
+    require_uuid(object_id)
     try:
         # Use the provided pool to fetch the record
         row = await pool.fetchrow(_FILE_ENRICHED_SELECT_QUERY_ASYNCPG, object_id)

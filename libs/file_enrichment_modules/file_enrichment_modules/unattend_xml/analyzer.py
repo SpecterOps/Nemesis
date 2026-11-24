@@ -3,6 +3,7 @@ import base64
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from uuid import UUID
 
 import yara_x
 from common.logger import get_logger
@@ -68,7 +69,7 @@ rule Detect_Windows_Unattend_XML {
 }
         """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
@@ -208,7 +209,7 @@ rule Detect_Windows_Unattend_XML {
 
                     displayable_parsed = Transform(
                         type="displayable_parsed",
-                        object_id=f"{object_id}",
+                        object_id=object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_analysis.txt",
                             "display_type_in_dashboard": "monaco",
@@ -256,7 +257,7 @@ rule Detect_Windows_Unattend_XML {
 
                     displayable_parsed = Transform(
                         type="displayable_parsed",
-                        object_id=f"{object_id}",
+                        object_id=object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_analysis.txt",
                             "display_type_in_dashboard": "monaco",
@@ -271,7 +272,7 @@ rule Detect_Windows_Unattend_XML {
             logger.exception(message=f"Error analyzing unattend.xml for {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process unattend.xml file and extract credentials.
 
         Args:

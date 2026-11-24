@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from common.models2.api import UTCDatetime
 from pydantic import BaseModel, Field
 
@@ -6,7 +8,7 @@ class EnrichmentResponse(BaseModel):
     status: str
     message: str
     instance_id: str
-    object_id: str
+    object_id: UUID
 
 
 class BulkEnrichmentResponse(BaseModel):
@@ -64,7 +66,7 @@ class ActiveWorkflowDetail(BaseModel):
     id: str
     status: str
     filename: str | None = None
-    object_id: str | None = None
+    object_id: UUID | None = None
     timestamp: UTCDatetime | None = None
     runtime_seconds: float | None = None
     error: str | None = None
@@ -86,7 +88,7 @@ class FailedWorkflowsResponse(BaseModel):
 
 
 class ContainerSubmissionResponse(BaseModel):
-    container_id: str
+    container_id: UUID
     message: str
     estimated_files: int
     estimated_size: int
@@ -96,7 +98,7 @@ class ContainerSubmissionResponse(BaseModel):
 
 
 class ContainerStatusResponse(BaseModel):
-    container_id: str
+    container_id: UUID
     status: str
     progress_percent_files: float | None = None
     progress_percent_bytes: float | None = None

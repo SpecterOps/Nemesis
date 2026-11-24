@@ -2,6 +2,7 @@
 
 import uuid
 
+from common.helpers import as_uuid
 from common.logger import get_logger
 from common.models import FileEnriched
 from common.queues import (
@@ -22,12 +23,13 @@ logger = get_logger(__name__)
 
 
 @workflow_activity
-async def publish_enriched_file(ctx: WorkflowActivityContext, object_id: str):
+async def publish_enriched_file(ctx: WorkflowActivityContext, activity_input: str):
     """
     Activity to publish enriched file data to pubsub after retrieving from state store.
     """
     from .. import global_vars
 
+    object_id = as_uuid(activity_input)
     file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)
     logger.info("Executing activity: publish_enriched_file", object_id=object_id)
 

@@ -10,7 +10,7 @@ from common.models import EnrichmentResult
 from common.workflows.setup import workflow_activity
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
-from ..tracing import get_tracer
+from ..tracing import get_tracer, set_object_id_attribute
 
 logger = get_logger(__name__)
 
@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: dict):
     """Activity that runs all enrichment modules for a file with single file download."""
 
-    object_id = activity_input["object_id"]
+    object_id = helpers.as_uuid(activity_input["object_id"])
     execution_order = global_vars.module_execution_order
 
     tracer = get_tracer()
@@ -29,7 +29,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
     logger.info("Executing activity: run_enrichment_modules", object_id=object_id)
 
     with tracer.start_as_current_span("run_enrichment_modules") as span:
-        span.set_attribute("object_id", object_id)
+        set_object_id_attribute(span, object_id)
         span.set_attribute("module_count", len(execution_order))
 
         results = []
@@ -39,7 +39,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
         try:
             # Download file as a separate span
             with tracer.start_as_current_span("download_file") as download_span:
-                download_span.set_attribute("object_id", object_id)
+                set_object_id_attribute(download_span, object_id)
                 temp_file = global_vars.storage.download(object_id)
                 temp_file.__enter__()
                 file_size = os.path.getsize(temp_file.name)
@@ -55,7 +55,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
             try:
                 # Determine modules to process as a separate span (sibling to download_file)
                 with tracer.start_as_current_span("determine_modules_to_process") as determine_span:
-                    determine_span.set_attribute("object_id", object_id)
+                    set_object_id_attribute(determine_span, object_id)
                     determine_span.set_attribute("total_modules", len(execution_order))
 
                     modules_to_process = await determine_modules_to_process(object_id, temp_file.name, execution_order)
@@ -74,7 +74,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
                     # Create a span for each module execution
                     with tracer.start_as_current_span(f"enrichment.{module_name}") as module_span:
                         module_span.set_attribute("module.name", module_name)
-                        module_span.set_attribute("object_id", object_id)
+                        set_object_id_attribute(module_span, object_id)
 
                         try:
                             result = await execute_enrichment_module(object_id, temp_file.name, module_name)
@@ -143,7 +143,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
         return results
 
 
-async def determine_modules_to_process(object_id: str, temp_file_path: str, execution_order: list[str]) -> list[str]:
+async def determine_modules_to_process(object_id: UUID, temp_file_path: str, execution_order: list[str]) -> list[str]:
     """First pass: determine which modules should process this file."""
     modules_to_process = []
 
@@ -164,7 +164,7 @@ async def determine_modules_to_process(object_id: str, temp_file_path: str, exec
     return modules_to_process
 
 
-async def execute_enrichment_module(object_id: str, temp_file_path: str, module_name: str) -> EnrichmentResult | None:
+async def execute_enrichment_module(object_id: UUID, temp_file_path: str, module_name: str) -> EnrichmentResult | None:
     """Second pass: process a single module and return its result."""
 
     logger.debug("Starting module processing", module_name=module_name)
@@ -175,15 +175,14 @@ async def execute_enrichment_module(object_id: str, temp_file_path: str, module_
     return result
 
 
-async def store_enrichment_results(object_id: str, module_name: str, result: EnrichmentResult):
+async def store_enrichment_results(object_id: UUID, module_name: str, result: EnrichmentResult):
     """Store enrichment results, transforms, and findings in the database."""
     assert global_vars.asyncpg_pool is not None
-    file_uuid = UUID(str(object_id))
     async with global_vars.asyncpg_pool.acquire() as conn:
         async with conn.transaction():
             # Store enrichment
             results_escaped = helpers.jsonb_dumps(
-                result, column="enrichments.result_data", object_id=file_uuid, module=module_name
+                result, column="enrichments.result_data", object_id=object_id, module=module_name
             )
             await conn.execute(
                 """
@@ -207,7 +206,7 @@ async def store_enrichment_results(object_id: str, module_name: str, result: Enr
                         transform.type,
                         transform.object_id,
                         helpers.jsonb_dumps(
-                            transform.metadata, column="transforms.metadata", object_id=file_uuid, module=module_name
+                            transform.metadata, column="transforms.metadata", object_id=object_id, module=module_name
                         )
                         if transform.metadata
                         else None,
@@ -232,17 +231,17 @@ async def store_enrichment_results(object_id: str, module_name: str, result: Enr
                         helpers.jsonb_dumps(
                             finding.raw_data,
                             column="findings.raw_data",
-                            object_id=file_uuid,
+                            object_id=object_id,
                             finding_name=finding.finding_name,
                         ),
                         helpers.jsonb_dumps(
                             [
                                 helpers.jsonb_dumps(
-                                    obj, column="findings.data", object_id=file_uuid, finding_name=finding.finding_name
+                                    obj, column="findings.data", object_id=object_id, finding_name=finding.finding_name
                                 )
                                 for obj in finding.data
                             ],
                             column="findings.data",
-                            object_id=file_uuid,
+                            object_id=object_id,
                         ),
                     )

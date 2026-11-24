@@ -1,6 +1,7 @@
 """Storage and publishing activities."""
 
 import document_conversion.global_vars as global_vars
+from common.helpers import as_uuid
 from common.logger import get_logger
 from common.models import File, Transform
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
@@ -16,7 +17,7 @@ logger = get_logger(__name__)
 async def publish_file_message(ctx: WorkflowActivityContext, activity_input: dict):
     """Publish a new file message for the transform as a Dapr activity."""
     try:
-        object_id = activity_input["object_id"]
+        object_id = as_uuid(activity_input["object_id"])
         transform = Transform.model_validate(activity_input["transform"])
 
         file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)

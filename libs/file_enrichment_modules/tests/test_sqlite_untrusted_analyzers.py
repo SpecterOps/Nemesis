@@ -133,12 +133,12 @@ async def test_real_cookies_report_and_csv(tmp_path):
     process_db.assert_awaited_once()
     assert result is not None
     assert [t.type for t in result.transforms] == ["finding_summary", "chromium_cookies"]
-    report = files[result.transforms[0].object_id]
+    report = files[str(result.transforms[0].object_id)]
     assert "Total cookies: 2" in report
     assert "Non-expired cookies (at time of processing): 2" in report
     # Most recent first, and pipes escaped
     assert report.index("a.example") < report.index("b\\|pipe.example")
-    rows = list(csv.reader(io.StringIO(files[result.transforms[1].object_id])))
+    rows = list(csv.reader(io.StringIO(files[str(result.transforms[1].object_id)])))
     assert rows[0][:3] == ["creation_utc", "host_key", "source_port"]
     assert {r[1] for r in rows[1:]} == {"a.example", "b|pipe.example"}
 
@@ -176,7 +176,7 @@ async def test_real_logins_report(tmp_path):
         async with harness.create_module(ChromeLoginsParser) as module:
             result = await module.process("real", path)
     assert [t.type for t in result.transforms] == ["finding_summary", "chromium_logins"]
-    report = files[result.transforms[0].object_id]
+    report = files[str(result.transforms[0].object_id)]
     assert "Total logins: 1" in report
     assert "Logins with saved passwords: 1" in report
     assert "| alice |" in report
@@ -214,9 +214,9 @@ async def test_real_history_report(tmp_path):
         async with harness.create_module(ChromeHistoryParser) as module:
             result = await module.process("real", path)
     assert [t.type for t in result.transforms] == ["finding_summary", "chromium_urls", "chromium_downloads"]
-    report = files[result.transforms[0].object_id]
+    report = files[str(result.transforms[0].object_id)]
     assert "Total URLs visited: 1" in report and "Total Downloads: 1" in report
-    downloads = list(csv.reader(io.StringIO(files[result.transforms[2].object_id])))
+    downloads = list(csv.reader(io.StringIO(files[str(result.transforms[2].object_id)])))
     assert downloads[1][0] == "C:\\f.exe" and downloads[1][4] == "app/x"
 
 

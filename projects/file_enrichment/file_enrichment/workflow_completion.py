@@ -1,6 +1,7 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
+from common.helpers import jsonable
 from common.logger import get_logger
 from common.queues import WORKFLOW_MONITOR_COMPLETED_TOPIC, WORKFLOW_MONITOR_PUBSUB
 from dapr.aio.clients import DaprClient
@@ -56,18 +57,18 @@ async def publish_workflow_completion(instance_id, completed=True):
         if object_id and originating_container_id:
             async with DaprClient(headers_callback=get_trace_injector()) as client:
                 completion_data = {
-                    "object_id": str(object_id),
-                    "originating_container_id": str(originating_container_id),
+                    "object_id": object_id,
+                    "originating_container_id": originating_container_id,
                     "workflow_id": instance_id,
                     "completed": completed,
                     "file_size": file_size,
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": datetime.now(UTC),
                 }
 
                 await client.publish_event(
                     pubsub_name=WORKFLOW_MONITOR_PUBSUB,
                     topic_name=WORKFLOW_MONITOR_COMPLETED_TOPIC,
-                    data=json.dumps(completion_data),
+                    data=json.dumps(jsonable(completion_data)),
                     data_content_type="application/json",
                 )
 

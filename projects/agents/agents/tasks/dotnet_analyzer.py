@@ -20,7 +20,7 @@ from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import DotNetAnalysisResponse
 from common.db import get_postgres_connection_str
-from common.helpers import jsonb_dumps
+from common.helpers import as_uuid, jsonb_dumps
 from common.state_helpers import get_file_enriched
 from common.storage import StorageS3
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
@@ -414,7 +414,7 @@ Provide analysis in markdown format with actionable security findings."""
             return [["Error: .NET analyzer not initialized"]]
         return self.dotnet_analyzer.get_call_flows_to_method(method_name, max_depth)
 
-    def _is_dotnet_file(self, object_id: str) -> bool:
+    def _is_dotnet_file(self, object_id: UUID) -> bool:
         """Check if the file is a .NET assembly."""
         try:
             file_enriched = get_file_enriched(object_id)
@@ -451,7 +451,7 @@ Provide analysis in markdown format with actionable security findings."""
 
     def execute(self, ctx: WorkflowActivityContext, activity_input: dict) -> dict:
         """Analyze .NET assembly content in the given file using interactive tools."""
-        object_id = activity_input.get("object_id", "")
+        object_id = as_uuid(activity_input.get("object_id"))
 
         logger.debug(".NET analysis activity started", object_id=object_id)
 
@@ -567,7 +567,7 @@ Prioritize findings by exploitability and business impact.
                                 object_id,
                                 "dotnet_analysis",
                                 analysis_id,
-                                jsonb_dumps(metadata, column="transforms.metadata", object_id=UUID(str(object_id))),
+                                jsonb_dumps(metadata, column="transforms.metadata", object_id=object_id),
                             ),
                         )
                     conn.commit()

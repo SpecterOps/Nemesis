@@ -3,6 +3,7 @@ import tarfile
 import tempfile
 import zipfile
 from datetime import UTC, datetime
+from uuid import UUID
 
 import py7zr
 from common.helpers import is_container
@@ -25,7 +26,7 @@ class ContainerAnalyzer(EnrichmentModule):
         self.asyncpg_pool = None  # type: ignore
         self.workflows = ["default"]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run.
 
         Args:
@@ -129,7 +130,7 @@ class ContainerAnalyzer(EnrichmentModule):
                 enrichment_result.transforms = [
                     Transform(
                         type="container_contents",
-                        object_id=f"{transform_object_id}",
+                        object_id=transform_object_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_contents.md",
                             "display_type_in_dashboard": "markdown",
@@ -144,7 +145,7 @@ class ContainerAnalyzer(EnrichmentModule):
 
         return enrichment_result
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process container file and list its contents without extraction.
 
         Args:

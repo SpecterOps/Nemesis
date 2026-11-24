@@ -3,6 +3,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+from uuid import UUID
 
 import asyncpg
 from common.logger import get_logger
@@ -22,7 +23,7 @@ class EnrichmentModule(Protocol):
     dependencies: list[str]
     asyncpg_pool: asyncpg.Pool | None  # Optional connection pool for database operations
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should process the given file.
 
         Args:
@@ -34,7 +35,7 @@ class EnrichmentModule(Protocol):
         """
         ...
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process the file and return enrichment results.
 
         Args:

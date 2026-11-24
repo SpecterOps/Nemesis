@@ -11,7 +11,7 @@ from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import CredentialAnalysisResponse, CredentialWithContext
 from common.db import get_postgres_connection_str
-from common.helpers import jsonb_dumps
+from common.helpers import as_uuid, jsonb_dumps
 from common.models import FileObject, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
 from common.storage import StorageS3
@@ -59,7 +59,7 @@ Return your findings as a structured list. If no credentials are found, return a
         self.storage = StorageS3()
         self.postgres_connection_url = get_postgres_connection_str()
 
-    def _get_text_content(self, object_id: str) -> str:
+    def _get_text_content(self, object_id: UUID) -> str:
         """Get text content from file or extracted_text transform."""
         try:
             file_enriched = get_file_enriched(object_id)
@@ -86,7 +86,6 @@ Return your findings as a structured list. If no credentials are found, return a
                     result = cur.fetchone()
                     transform_object_id = result[0] if result else None
             if transform_object_id:
-                transform_object_id = str(transform_object_id)
                 try:
                     transform_bytes = self.storage.download_bytes(transform_object_id)
                     return transform_bytes.decode("utf-8", errors="replace")
@@ -127,7 +126,7 @@ Return your findings as a structured list. If no credentials are found, return a
 
     def execute(self, ctx: WorkflowActivityContext, activity_input: dict) -> dict:
         """Analyze credentials in the given file."""
-        object_id = activity_input.get("object_id", "")
+        object_id = as_uuid(activity_input.get("object_id"))
 
         logger.debug("credential_analysis activity started", object_id=object_id)
 
@@ -205,7 +204,7 @@ Return your findings as a structured list. If no credentials are found, return a
                             object_id,
                             "llm_extracted_credentials",
                             credentials_id,
-                            jsonb_dumps(metadata, column="transforms.metadata", object_id=UUID(str(object_id))),
+                            jsonb_dumps(metadata, column="transforms.metadata", object_id=object_id),
                         ),
                     )
 
@@ -234,13 +233,13 @@ Return your findings as a structured list. If no credentials are found, return a
                                 jsonb_dumps(
                                     {"credentials": [cred.model_dump() for cred in credentials]},
                                     column="findings.raw_data",
-                                    object_id=UUID(str(object_id)),
+                                    object_id=object_id,
                                     finding_name="llm_extracted_credentials",
                                 ),
                                 jsonb_dumps(
                                     [display_data.model_dump()],
                                     column="findings.data",
-                                    object_id=UUID(str(object_id)),
+                                    object_id=object_id,
                                     finding_name="llm_extracted_credentials",
                                 ),
                             ),

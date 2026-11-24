@@ -12,6 +12,7 @@ Handles MAM-compressed prefetch files (Windows 10+) via libscca.
 """
 
 import tempfile
+from uuid import UUID
 
 import pyscca
 import yara_x
@@ -64,7 +65,7 @@ rule Windows_Prefetch_File
 }
         """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should process the file."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
@@ -219,7 +220,7 @@ rule Windows_Prefetch_File
             result.transforms.append(
                 Transform(
                     type="prefetch_analysis",
-                    object_id=str(report_id),
+                    object_id=report_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_analysis.md",
                         "display_type_in_dashboard": "markdown",
@@ -236,7 +237,7 @@ rule Windows_Prefetch_File
             logger.exception(message=f"Error analyzing prefetch file: {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process the prefetch file."""
         try:
             file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)

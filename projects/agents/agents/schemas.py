@@ -1,5 +1,6 @@
 from enum import StrEnum
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -32,7 +33,7 @@ class TriageRequest(BaseModel):
     finding_name: str = Field(..., description="Name/type of the finding")
     category: str | None = Field(None, description="Finding category")
     severity: int | str | None = Field(None, description="Finding severity level (0-10 or string)")
-    object_id: str = Field(..., description="Object storage ID")
+    object_id: UUID = Field(..., description="Object storage ID")
     origin_type: str | None = Field(None, description="Type of the finding's origin")
     origin_name: str | None = Field(None, description="Name of the finding's origin")
     data: list[str] = Field(..., description="Finding data payload")

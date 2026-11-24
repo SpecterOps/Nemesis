@@ -5,6 +5,7 @@ import asyncio
 import functools
 import json
 from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
 
 import httpx
 import pytest
@@ -77,35 +78,46 @@ class TestListEnrichments:
 class TestRunEnrichment:
     @pytest.mark.parametrize("name", ["..", "Yara", "a-b", "a.b", "%2e%2e", "yara%2F..", ""])
     def test_invalid_names_rejected_before_any_call(self, client, http_mock, mock_storage, name):
-        response = client.post(f"/enrichments/{name}", json={"object_id": "abc"})
+        response = client.post(f"/enrichments/{name}", json={"object_id": "00000000-0000-0000-0000-0000000000ab"})
         assert response.status_code in (400, 404, 405)
         http_mock.assert_not_called()
         mock_storage.check_file_exists.assert_not_called()
 
     def test_dotdot_returns_400(self, client, http_mock):
         # Starlette doesn't normalize an encoded "..", so it reaches the route and must be rejected there
-        response = client.post("/enrichments/%2E%2E", json={"object_id": "abc"})
+        response = client.post("/enrichments/%2E%2E", json={"object_id": "00000000-0000-0000-0000-0000000000ab"})
         assert response.status_code == 400
         http_mock.assert_not_called()
 
     def test_valid_name_forwards(self, client, http_mock, mock_storage):
         http_mock.return_value = _response(
-            json_body={"status": "ok", "message": "m", "instance_id": "i", "object_id": "abc"}
+            json_body={
+                "status": "ok",
+                "message": "m",
+                "instance_id": "i",
+                "object_id": "00000000-0000-0000-0000-0000000000ab",
+            }
         )
-        response = client.post("/enrichments/yara_scanner2", json={"object_id": "abc"})
+        response = client.post("/enrichments/yara_scanner2", json={"object_id": "00000000-0000-0000-0000-0000000000ab"})
         assert response.status_code == 200
         method, url = http_mock.await_args.args
         assert method == "POST"
         assert url.endswith("/method/enrichments/yara_scanner2")
-        assert http_mock.await_args.kwargs["json_body"] == {"object_id": "abc"}
+        assert http_mock.await_args.kwargs["json_body"] == {"object_id": "00000000-0000-0000-0000-0000000000ab"}
 
     def test_timeout_returns_504(self, client, http_mock, mock_storage):
         http_mock.side_effect = httpx.ReadTimeout("slow")
-        assert client.post("/enrichments/yara", json={"object_id": "abc"}).status_code == 504
+        assert (
+            client.post("/enrichments/yara", json={"object_id": "00000000-0000-0000-0000-0000000000ab"}).status_code
+            == 504
+        )
 
     def test_missing_file_returns_404(self, client, http_mock, mock_storage):
         mock_storage.check_file_exists.return_value = False
-        assert client.post("/enrichments/yara", json={"object_id": "abc"}).status_code == 404
+        assert (
+            client.post("/enrichments/yara", json={"object_id": "00000000-0000-0000-0000-0000000000ab"}).status_code
+            == 404
+        )
         http_mock.assert_not_called()
 
     def test_validate_enrichment_name_helper(self):
@@ -135,11 +147,19 @@ class TestAgentRoutes:
 
     def test_text_summarizer_timeout_returns_504(self, client, http_mock):
         http_mock.side_effect = httpx.ConnectTimeout("slow")
-        assert client.post("/agents/text_summarizer", json={"object_id": "x"}).status_code == 504
+        assert (
+            client.post(
+                "/agents/text_summarizer", json={"object_id": "00000000-0000-0000-0000-0000000000ab"}
+            ).status_code
+            == 504
+        )
 
     def test_translate_connect_error_returns_503(self, client, http_mock):
         http_mock.side_effect = httpx.ConnectError("refused")
-        assert client.post("/agents/translate", json={"object_id": "x"}).status_code == 503
+        assert (
+            client.post("/agents/translate", json={"object_id": "00000000-0000-0000-0000-0000000000ab"}).status_code
+            == 503
+        )
 
 
 class TestAvailableServices:
@@ -234,27 +254,42 @@ class TestWorkflowCompletion:
         cleanup = MagicMock()
         monkeypatch.setattr(main.container_processor, "update_container_workflow_progress", update)
         monkeypatch.setattr(main.container_processor.progress_tracker, "cleanup", cleanup)
-        data = {"object_id": "o", "originating_container_id": "c", "completed": True, "file_size": 5}
+        data = {
+            "object_id": "00000000-0000-0000-0000-00000000000a",
+            "originating_container_id": "00000000-0000-0000-0000-00000000000c",
+            "completed": True,
+            "file_size": 5,
+        }
 
         response = client.post(COMPLETION_ROUTE, json=_completion_event(data))
         assert response.status_code == 200
-        update.assert_called_once_with("c", file_size=5, increment_completed=True, increment_failed=False)
-        cleanup.assert_any_call("c")
+        update.assert_called_once_with(
+            UUID("00000000-0000-0000-0000-00000000000c"), file_size=5, increment_completed=True, increment_failed=False
+        )
+        cleanup.assert_any_call(UUID("00000000-0000-0000-0000-00000000000c"))
 
     def test_missing_fields_skips_update(self, client, monkeypatch):
         update = MagicMock()
         monkeypatch.setattr(main.container_processor, "update_container_workflow_progress", update)
-        response = client.post(COMPLETION_ROUTE, json=_completion_event({"object_id": "o"}))
+        response = client.post(
+            COMPLETION_ROUTE, json=_completion_event({"object_id": "00000000-0000-0000-0000-00000000000a"})
+        )
         assert response.status_code == 200
         update.assert_not_called()
 
     def test_db_error_is_swallowed(self, client, monkeypatch):
         update = MagicMock(side_effect=RuntimeError("db down"))
         monkeypatch.setattr(main.container_processor, "update_container_workflow_progress", update)
-        data = {"object_id": "o", "originating_container_id": "c", "completed": False}
+        data = {
+            "object_id": "00000000-0000-0000-0000-00000000000a",
+            "originating_container_id": "00000000-0000-0000-0000-00000000000c",
+            "completed": False,
+        }
         response = client.post(COMPLETION_ROUTE, json=_completion_event(data))
         assert response.status_code == 200
-        update.assert_called_once_with("c", file_size=0, increment_completed=False, increment_failed=True)
+        update.assert_called_once_with(
+            UUID("00000000-0000-0000-0000-00000000000c"), file_size=0, increment_completed=False, increment_failed=True
+        )
 
 
 class TestDpapiCredentials:

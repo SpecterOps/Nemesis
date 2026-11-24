@@ -7,6 +7,7 @@ import tempfile
 import textwrap
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from common.helpers import get_drive_from_path
 from common.log_safety import mask
@@ -102,7 +103,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
         self.dpapi_manager: DpapiManager = None  # type: ignore
         self.asyncpg_pool: asyncpg.Pool | None = None  # type: ignore
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run based on file type."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
         magic_type = file_enriched.magic_type.lower()
@@ -155,7 +156,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             logger.error(f"Failed to extract bootkey: {e}")
             return None
 
-    async def _find_existing_hive(self, file_enriched, target_hive_path: str) -> str | None:
+    async def _find_existing_hive(self, file_enriched, target_hive_path: str) -> UUID | None:
         """Find a hive to pair with ``file_enriched``: same project and source, never across projects.
 
         First match the expected path exactly (case-insensitive, either slash style). Failing that, take a registry
@@ -185,7 +186,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 )
 
                 if result:
-                    return str(result["object_id"])  # Convert UUID to string
+                    return result["object_id"]
 
                 # Fallback: a registry file of the target hive type in the same directory as this hive.
                 own_dir = _parent_dir(getattr(file_enriched, "path", None))
@@ -212,7 +213,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 )
                 for row in rows:
                     if _parent_dir(row["path"]) == own_dir:
-                        return str(row["object_id"])
+                        return row["object_id"]
 
         except Exception as e:
             logger.error(f"Failed to find existing hive {target_hive_path}: {e}")
@@ -1173,7 +1174,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         return summary
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process registry hive file and extract relevant information."""
         try:
             file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
@@ -1407,7 +1408,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
                 displayable_parsed = Transform(
                     type="displayable_parsed",
-                    object_id=str(display_object_id),
+                    object_id=display_object_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_{hive_type.lower()}_analysis.txt",
                         "display_type_in_dashboard": "monaco",

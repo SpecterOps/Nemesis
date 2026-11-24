@@ -2,6 +2,9 @@
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
+
+from .ids import label_key, label_uuid
 
 
 class MockRecord(dict):
@@ -49,7 +52,7 @@ class MockAsyncpgPool:
         """
         # Ensure required fields have defaults
         defaults = {
-            "object_id": object_id,
+            "object_id": label_uuid(object_id),
             "agent_id": "test-agent",
             "source": "test-source",
             "project": "test-project",
@@ -77,7 +80,8 @@ class MockAsyncpgPool:
             },
         }
         merged = {**defaults, **data}
-        self._file_enriched_data[object_id] = merged
+        merged["object_id"] = label_uuid(object_id)
+        self._file_enriched_data[label_key(object_id)] = merged
 
     async def fetchrow(self, query: str, *args) -> MockRecord | None:
         """Fetch a single row (mock implementation).
@@ -96,7 +100,7 @@ class MockAsyncpgPool:
 
         # Check if this is a files_enriched query
         if "files_enriched" in query.lower() and args:
-            object_id = str(args[0])
+            object_id = label_key(args[0]) if isinstance(args[0], str | UUID) else str(args[0])
             if object_id in self._file_enriched_data:
                 return MockRecord(self._file_enriched_data[object_id])
         return None
@@ -115,7 +119,7 @@ class MockAsyncpgPool:
 
         # For files_enriched queries, return matching records
         if "files_enriched" in query.lower() and args:
-            object_id = str(args[0])
+            object_id = label_key(args[0]) if isinstance(args[0], str | UUID) else str(args[0])
             if object_id in self._file_enriched_data:
                 return [MockRecord(self._file_enriched_data[object_id])]
         return []

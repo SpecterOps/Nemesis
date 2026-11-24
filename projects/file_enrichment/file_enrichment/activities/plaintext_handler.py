@@ -2,8 +2,9 @@
 
 import io
 import json
+from uuid import UUID
 
-from common.helpers import create_text_reader
+from common.helpers import as_uuid, create_text_reader
 from common.logger import get_logger
 from common.models import TitusInput
 from common.queues import TITUS_INPUT_TOPIC, TITUS_PUBSUB
@@ -34,7 +35,7 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
     Returns:
         {"indexed": bool, "titus_submitted": bool, "errors": [str, ...]}
     """
-    object_id = activity_input["object_id"]
+    object_id = as_uuid(activity_input["object_id"])
     result: dict = {"indexed": False, "titus_submitted": False, "errors": []}
 
     logger.info("Executing activity: handle_file_if_plaintext", object_id=object_id)
@@ -53,7 +54,7 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
             with global_vars.storage.download(object_id) as tmp_file:
                 with open(tmp_file.name, "rb") as binary_file:
                     with create_text_reader(binary_file) as text_file:
-                        await index_plaintext_content(f"{object_id}", text_file)
+                        await index_plaintext_content(object_id, text_file)
             result["indexed"] = True
         except Exception as e:
             logger.exception(message="Plaintext indexing failed; continuing with the Titus scan", object_id=object_id)
@@ -91,7 +92,7 @@ async def _record_failure(ctx: WorkflowActivityContext, name: str) -> None:
 
 
 async def index_plaintext_content(
-    object_id: str, file_obj: io.TextIOWrapper, max_chunk_bytes: int = PLAINTEXT_CHUNK_MAX_BYTES
+    object_id: UUID, file_obj: io.TextIOWrapper, max_chunk_bytes: int = PLAINTEXT_CHUNK_MAX_BYTES
 ):
     """Used to index plaintext content with byte-based chunking to avoid tsvector limits"""
     logger.debug(f"indexing plaintext for {object_id}")

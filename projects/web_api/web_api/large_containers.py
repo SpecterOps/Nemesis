@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import IO, Any
 from urllib.parse import urlparse
+from uuid import UUID
 
 import psycopg
 import pytsk3
@@ -174,9 +175,9 @@ class ContainerProgress:
     """In-memory progress tracking for container processing"""
 
     def __init__(self):
-        self._progress: dict[str, dict[str, Any]] = {}
+        self._progress: dict[UUID, dict[str, Any]] = {}
 
-    def initialize(self, container_id: str, total_files: int, total_bytes: int):
+    def initialize(self, container_id: UUID, total_files: int, total_bytes: int):
         """Initialize progress tracking for a container"""
         self._progress[container_id] = {
             "total_files": total_files,
@@ -187,7 +188,7 @@ class ContainerProgress:
             "started_at": datetime.now(UTC),
         }
 
-    def update_file_progress(self, container_id: str, filename: str, file_size: int):
+    def update_file_progress(self, container_id: UUID, filename: str, file_size: int):
         """Update progress for a processed file"""
         if container_id in self._progress:
             progress = self._progress[container_id]
@@ -195,19 +196,19 @@ class ContainerProgress:
             progress["processed_bytes"] += file_size
             progress["current_file"] = filename
 
-    def get_progress(self, container_id: str) -> dict[str, Any] | None:
+    def get_progress(self, container_id: UUID) -> dict[str, Any] | None:
         """Get current progress for a container"""
         return self._progress.get(container_id)
 
-    def cleanup(self, container_id: str):
+    def cleanup(self, container_id: UUID):
         """Clean up progress tracking for completed container"""
         self._progress.pop(container_id, None)
 
-    def get_container_info(self, container_id: str) -> dict[str, Any] | None:
+    def get_container_info(self, container_id: UUID) -> dict[str, Any] | None:
         """Get container info including originating container ID"""
         return self._progress.get(container_id, {}).get("container_info")
 
-    def set_container_info(self, container_id: str, container_info: dict[str, Any]):
+    def set_container_info(self, container_id: UUID, container_info: dict[str, Any]):
         """Set container info for tracking"""
         if container_id in self._progress:
             self._progress[container_id]["container_info"] = container_info
@@ -220,12 +221,12 @@ class BaseContainerExtractor:
         self.storage = storage
         self.dapr_client = dapr_client
         self.progress_tracker = progress_tracker
-        self.container_id: str | None = None
+        self.container_id: UUID | None = None
         self.file_metadata: dict[str, Any] | None = None
         self.file_filter = FilePathFilter()
         self.filter_stats = {"files_processed": 0, "files_skipped_by_filter": 0, "files_skipped_by_error": 0}
 
-    def set_container_info(self, container_id: str, file_metadata: dict[str, Any]):
+    def set_container_info(self, container_id: UUID, file_metadata: dict[str, Any]):
         """Set container processing information.
 
         Raises ContainerMetadataError if agent_id/project/source are missing, of the wrong type,
@@ -287,7 +288,7 @@ class BaseContainerExtractor:
         member_path = member_path.replace("\\", "/")
         return posixpath.join(base_dir, member_path).removeprefix(MOUNTED_CONTAINER_PATH)
 
-    def publish_file_message(self, temp_file_path: str, object_id: str, real_path: str):
+    def publish_file_message(self, temp_file_path: str, object_id: UUID, real_path: str):
         """Publish file message to the message bus"""
         if self.file_metadata is None or self.container_id is None:
             raise RuntimeError("container_id and file_metadata must be set via set_container_info before publishing")
@@ -338,7 +339,7 @@ class BaseContainerExtractor:
                 write_content(temp_extracted)
                 temp_extracted.flush()
 
-            object_id = str(self.storage.upload_file(temp_path))
+            object_id = self.storage.upload_file(temp_path)
 
             try:
                 self.publish_file_message(temp_path, object_id, real_path)
@@ -901,7 +902,7 @@ class LargeContainerProcessor:
 
     def create_container_record(
         self,
-        container_id: str,
+        container_id: UUID,
         container_type: str,
         file_metadata: dict[str, Any],
         estimated_files: int,
@@ -950,7 +951,7 @@ class LargeContainerProcessor:
             logger.error(f"Error creating container record: {e}", container_id=container_id)
             raise
 
-    def update_container_status(self, container_id: str, status: str) -> None:
+    def update_container_status(self, container_id: UUID, status: str) -> None:
         """Update container status in database
 
         Args:
@@ -974,7 +975,7 @@ class LargeContainerProcessor:
         except Exception as e:
             logger.error(f"Error updating container status: {e}", container_id=container_id)
 
-    def mark_container_failed(self, container_id: str, error_message: str) -> None:
+    def mark_container_failed(self, container_id: UUID, error_message: str) -> None:
         """Mark a container as failed and record the error message (best-effort)."""
         try:
             with psycopg.connect(self.postgres_connection_string) as conn:
@@ -991,7 +992,7 @@ class LargeContainerProcessor:
         except Exception as e:
             logger.error(f"Error marking container as failed: {e}", container_id=container_id)
 
-    def record_container_error_message(self, container_id: str, error_message: str) -> None:
+    def record_container_error_message(self, container_id: UUID, error_message: str) -> None:
         """Record an error message for a container without changing its status (best-effort)."""
         try:
             with psycopg.connect(self.postgres_connection_string) as conn:
@@ -1005,7 +1006,7 @@ class LargeContainerProcessor:
             logger.error(f"Error recording container error message: {e}", container_id=container_id)
 
     def update_container_extraction_progress(
-        self, container_id: str, total_files_extracted: int, total_bytes_extracted: int
+        self, container_id: UUID, total_files_extracted: int, total_bytes_extracted: int
     ) -> None:
         """Update container extraction completion in database (called when extraction is done)
 
@@ -1083,7 +1084,7 @@ class LargeContainerProcessor:
             )
 
     def update_container_workflow_progress(
-        self, container_id: str, file_size: int = 0, increment_completed: bool = False, increment_failed: bool = False
+        self, container_id: UUID, file_size: int = 0, increment_completed: bool = False, increment_failed: bool = False
     ) -> bool:
         """Update workflow completion progress and return True if all workflows are complete"""
         try:
@@ -1153,7 +1154,7 @@ class LargeContainerProcessor:
             logger.error(f"Error updating workflow progress: {e}", container_id=container_id)
             return False
 
-    def get_container_status(self, container_id: str) -> dict[str, Any] | None:
+    def get_container_status(self, container_id: UUID) -> dict[str, Any] | None:
         """Get container status from database"""
         try:
             with psycopg.connect(self.postgres_connection_string) as conn:
@@ -1227,7 +1228,7 @@ class LargeContainerProcessor:
 
         return None
 
-    def process_container_from_path(self, container_id: str, file_path: Path, metadata: dict) -> dict[str, Any]:
+    def process_container_from_path(self, container_id: UUID, file_path: Path, metadata: dict) -> dict[str, Any]:
         """Process a container file from a filesystem path.
 
         The returned dict has `success` = True only when at least one file was extracted and no
@@ -1339,7 +1340,7 @@ class LargeContainerProcessor:
                 self.mark_container_failed(container_id, str(e))
             raise
 
-    def get_container_progress(self, container_id: str) -> dict[str, Any]:
+    def get_container_progress(self, container_id: UUID) -> dict[str, Any]:
         """Get processing progress for a container"""
         progress = self.progress_tracker.get_progress(container_id)
         if not progress:

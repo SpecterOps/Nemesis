@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+from uuid import UUID
 
 import dnfile
 from common.logger import get_logger
@@ -117,7 +118,7 @@ class DotNetAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         # get the current `file_enriched` from the database backend
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
@@ -125,7 +126,7 @@ class DotNetAnalyzer(EnrichmentModule):
 
         return should_run
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file using the dotnet service."""
         try:
             # get the current `file_enriched` FileEnriched object from the database backend

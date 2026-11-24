@@ -11,7 +11,7 @@ from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import TranslationResponse
 from common.db import get_postgres_connection_str
-from common.helpers import jsonb_dumps
+from common.helpers import as_uuid, jsonb_dumps
 from common.state_helpers import get_file_enriched
 from common.storage import StorageS3
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
@@ -36,7 +36,7 @@ class TextTranslator(BaseAgent):
         self.storage = StorageS3()
         self.postgres_connection_url = get_postgres_connection_str()
 
-    def _get_text_content(self, object_id: str) -> str:
+    def _get_text_content(self, object_id: UUID) -> str:
         """Get text content from file or extracted_text transform."""
         try:
             file_enriched = get_file_enriched(object_id)
@@ -63,7 +63,6 @@ class TextTranslator(BaseAgent):
                     result = cur.fetchone()
                     transform_object_id = result[0] if result else None
             if transform_object_id:
-                transform_object_id = str(transform_object_id)
                 try:
                     transform_bytes = self.storage.download_bytes(transform_object_id)
                     return transform_bytes.decode("utf-8", errors="replace")
@@ -104,7 +103,7 @@ class TextTranslator(BaseAgent):
 
     def execute(self, ctx: WorkflowActivityContext, activity_input: dict) -> dict:
         """Translate text content in the given file to the specified target language."""
-        object_id = activity_input.get("object_id", "")
+        object_id = as_uuid(activity_input.get("object_id"))
         target_language = activity_input.get("target_language", "English")
 
         logger.debug("text_translation activity started", object_id=object_id, target_language=target_language)
@@ -180,7 +179,7 @@ class TextTranslator(BaseAgent):
                             object_id,
                             "text_translation",
                             translation_id,
-                            jsonb_dumps(metadata, column="transforms.metadata", object_id=UUID(str(object_id))),
+                            jsonb_dumps(metadata, column="transforms.metadata", object_id=object_id),
                         ),
                     )
                 conn.commit()

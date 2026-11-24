@@ -84,11 +84,13 @@ async def run_enrichment(
         assert global_vars.asyncpg_pool is not None
         if result:
             # Store enrichment result in database
-            file_uuid = uuid.UUID(str(enrichment_request.object_id))
             async with global_vars.asyncpg_pool.acquire() as conn:
                 # Store main enrichment result
                 results_escaped = helpers.jsonb_dumps(
-                    result, column="enrichments.result_data", object_id=file_uuid, module=enrichment_name
+                    result,
+                    column="enrichments.result_data",
+                    object_id=enrichment_request.object_id,
+                    module=enrichment_name,
                 )
                 await conn.execute(
                     """
@@ -114,7 +116,7 @@ async def run_enrichment(
                             helpers.jsonb_dumps(
                                 transform.metadata,
                                 column="transforms.metadata",
-                                object_id=file_uuid,
+                                object_id=enrichment_request.object_id,
                                 module=enrichment_name,
                             )
                             if transform.metadata
@@ -140,13 +142,13 @@ async def run_enrichment(
                             helpers.jsonb_dumps(
                                 finding.raw_data,
                                 column="findings.raw_data",
-                                object_id=file_uuid,
+                                object_id=enrichment_request.object_id,
                                 finding_name=finding.finding_name,
                             ),
                             helpers.jsonb_dumps(
                                 [obj.model_dump() for obj in finding.data],
                                 column="findings.data",
-                                object_id=file_uuid,
+                                object_id=enrichment_request.object_id,
                                 finding_name=finding.finding_name,
                             ),
                         )

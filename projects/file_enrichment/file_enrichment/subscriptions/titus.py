@@ -218,7 +218,7 @@ def create_finding_summary(match_info):
 
 
 async def store_titus_results(
-    object_id: str,
+    object_id: UUID,
     workflow_id: str,
     matches: list[MatchInfo],
     scan_stats: ScanStats,
@@ -310,9 +310,8 @@ async def store_titus_results(
         async with global_vars.asyncpg_pool.acquire() as conn:
             async with conn.transaction():
                 # Store main enrichment result
-                file_uuid = UUID(str(object_id))
                 results_escaped = jsonb_dumps(
-                    enrichment_result, column="enrichments.result_data", object_id=file_uuid, module="titus"
+                    enrichment_result, column="enrichments.result_data", object_id=object_id, module="titus"
                 )
                 await conn.execute(
                     """
@@ -328,7 +327,7 @@ async def store_titus_results(
                 for finding in findings_list:
                     # Each FileObject is stored as a JSON string (array of JSON strings)
                     data_as_strings = [
-                        jsonb_dumps(obj, column="findings.data", object_id=file_uuid, finding_name=finding.finding_name)
+                        jsonb_dumps(obj, column="findings.data", object_id=object_id, finding_name=finding.finding_name)
                         for obj in finding.data
                     ]
 
@@ -348,10 +347,10 @@ async def store_titus_results(
                         jsonb_dumps(
                             finding.raw_data,
                             column="findings.raw_data",
-                            object_id=file_uuid,
+                            object_id=object_id,
                             finding_name=finding.finding_name,
                         ),
-                        jsonb_dumps(data_as_strings, column="findings.data", object_id=file_uuid),
+                        jsonb_dumps(data_as_strings, column="findings.data", object_id=object_id),
                     )
 
         # Update workflow enrichment status

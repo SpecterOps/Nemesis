@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 async def process_chromium_local_state(
     dpapi_manager: DpapiManager,
-    object_id: str,
+    object_id: UUID,
     file_path: str | None = None,
     asyncpg_pool: asyncpg.Pool | None = None,
 ) -> dict | None:

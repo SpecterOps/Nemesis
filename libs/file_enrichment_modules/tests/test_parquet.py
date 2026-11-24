@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -67,7 +68,7 @@ async def run(path: Path):
 
 def transform_content(result, uploads, transform_type) -> str:
     transform = next(t for t in result.transforms if t.type == transform_type)
-    return uploads[transform.object_id].decode()
+    return uploads[str(transform.object_id)].decode()
 
 
 def test_module_does_not_import_pandas():
@@ -262,5 +263,5 @@ def test_sample_never_reads_whole_row_group(tmp_path, monkeypatch):
     module = ParquetFileParser.__new__(ParquetFileParser)
     module.name, module.dependencies = "parquet_file_parser", []
     uploaded = {}
-    module.storage = type("S", (), {"upload_file": lambda self, p: uploaded.setdefault(p, "id") and "id"})()
+    module.storage = type("S", (), {"upload_file": lambda self, p: uploaded.setdefault(p, uuid4())})()
     assert module._analyze_parquet(str(path), file_enriched) is not None

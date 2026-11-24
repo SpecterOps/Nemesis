@@ -464,7 +464,7 @@ class ContainerExtractor:
             nesting_level = (file_enriched.nesting_level or 0) + 1
 
             file_message = File(
-                object_id=str(object_id),
+                object_id=object_id,
                 agent_id=file_enriched.agent_id,
                 source=file_enriched.source,
                 project=file_enriched.project,

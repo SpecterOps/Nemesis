@@ -1,15 +1,16 @@
 """Tests for the download endpoint's range request (offset/length) support."""
 
 from unittest.mock import MagicMock
+from uuid import UUID
 
 
 class TestDownloadNoRangeParams:
     """When no offset/length params are given, backward-compatible streaming behavior."""
 
     def test_returns_streaming_response(self, client, mock_storage):
-        response = client.get("/files/test-object-id")
+        response = client.get("/files/00000000-0000-0000-0000-0000000000ab")
         assert response.status_code == 200
-        mock_storage.download_stream.assert_called_once_with("test-object-id")
+        mock_storage.download_stream.assert_called_once_with(UUID("00000000-0000-0000-0000-0000000000ab"))
         mock_storage.download_bytes.assert_not_called()
 
 
@@ -18,14 +19,14 @@ class TestDownloadWithLength:
 
     def test_returns_range_with_content_length(self, client, mock_storage):
         mock_storage.download_bytes.return_value = b"\xde\xad" * 50
-        response = client.get("/files/test-object-id?length=1048576")
+        response = client.get("/files/00000000-0000-0000-0000-0000000000ab?length=1048576")
         assert response.status_code == 200
-        mock_storage.download_bytes.assert_called_once_with("test-object-id", 0, 1048576)
+        mock_storage.download_bytes.assert_called_once_with(UUID("00000000-0000-0000-0000-0000000000ab"), 0, 1048576)
         assert response.headers["content-length"] == str(100)  # len(b"\xde\xad" * 50)
         assert response.content == b"\xde\xad" * 50
 
     def test_returns_octet_stream_content_type(self, client, mock_storage):
-        response = client.get("/files/test-object-id?length=100")
+        response = client.get("/files/00000000-0000-0000-0000-0000000000ab?length=100")
         assert response.headers["content-type"] == "application/octet-stream"
 
 
@@ -34,9 +35,9 @@ class TestDownloadWithOffsetAndLength:
 
     def test_correct_range_passed_to_storage(self, client, mock_storage):
         mock_storage.download_bytes.return_value = b"partial-data"
-        response = client.get("/files/test-object-id?offset=100&length=50")
+        response = client.get("/files/00000000-0000-0000-0000-0000000000ab?offset=100&length=50")
         assert response.status_code == 200
-        mock_storage.download_bytes.assert_called_once_with("test-object-id", 100, 50)
+        mock_storage.download_bytes.assert_called_once_with(UUID("00000000-0000-0000-0000-0000000000ab"), 100, 50)
         assert response.content == b"partial-data"
 
 
@@ -45,7 +46,7 @@ class TestDownloadOffsetBeyondFileSize:
 
     def test_returns_400(self, client, mock_storage):
         # File is 10MB, offset is 10MB (= size, so beyond valid range)
-        response = client.get(f"/files/test-object-id?offset={10 * 1024 * 1024}")
+        response = client.get(f"/files/00000000-0000-0000-0000-0000000000ab?offset={10 * 1024 * 1024}")
         assert response.status_code == 400
         assert "beyond file size" in response.json()["detail"].lower()
 
@@ -60,7 +61,7 @@ class TestDownloadLargeFileSmallRange:
         mock_storage.get_object_stats.return_value = stats
         mock_storage.download_bytes.return_value = b"x" * 1024
 
-        response = client.get("/files/test-object-id?length=1048576")
+        response = client.get("/files/00000000-0000-0000-0000-0000000000ab?length=1048576")
         assert response.status_code == 200
         mock_storage.download_bytes.assert_called_once()
 
@@ -70,7 +71,7 @@ class TestDownloadFileNotFound:
 
     def test_returns_404(self, client, mock_storage):
         mock_storage.check_file_exists.return_value = False
-        response = client.get("/files/nonexistent-id")
+        response = client.get("/files/00000000-0000-0000-0000-0000000000ff")
         assert response.status_code == 404
 
 
@@ -79,6 +80,6 @@ class TestDownloadRawWithLength:
 
     def test_returns_text_plain_content_type(self, client, mock_storage):
         mock_storage.download_bytes.return_value = b"raw text data"
-        response = client.get("/files/test-object-id?raw=True&length=100")
+        response = client.get("/files/00000000-0000-0000-0000-0000000000ab?raw=True&length=100")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/plain")

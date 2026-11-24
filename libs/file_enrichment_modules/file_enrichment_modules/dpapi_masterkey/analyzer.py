@@ -2,6 +2,7 @@
 import posixpath
 import re
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
@@ -44,7 +45,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             re.IGNORECASE,
         )
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Check if this file should be processed as a DPAPI masterkey file.
 
         Args:
@@ -64,7 +65,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         file_name_lower = file_enriched.file_name.lower() if file_enriched.file_name else ""
         return self.guid_pattern.match(file_name_lower) is not None
 
-    async def _find_existing_hive(self, file_enriched, target_hive_path: str) -> str | None:
+    async def _find_existing_hive(self, file_enriched, target_hive_path: str) -> UUID | None:
         """Find an existing hive by path."""
         if not self.asyncpg_pool:
             logger.warning("No connection pool available, cannot find existing hive")
@@ -87,7 +88,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 )
 
                 if result:
-                    return str(result["object_id"])  # Convert UUID to string
+                    return result["object_id"]
 
                 # Fallback query: look for registry files by magic_type and enrichment results
                 # Extract the hive type from the target path (e.g., SECURITY from .../Windows/System32/Config/SECURITY)
@@ -110,7 +111,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
                 )
 
                 if result:
-                    return str(result["object_id"])  # Convert UUID to string
+                    return result["object_id"]
 
         except Exception as e:
             logger.error(f"Failed to find existing hive {target_hive_path}: {e}")
@@ -184,7 +185,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         except Exception as e:
             logger.error(f"Failed to create proactive file linkings: {e}")
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process masterkey file and add to DPAPI manager.
 
         Args:

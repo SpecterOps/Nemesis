@@ -38,7 +38,7 @@ def test_schema_copies_match():
 def file_fields(**overrides):
     now = datetime.now(UTC)
     return {
-        "object_id": "o",
+        "object_id": "00000000-0000-0000-0000-000000000001",
         "agent_id": "a",
         "project": "op",
         "timestamp": now,

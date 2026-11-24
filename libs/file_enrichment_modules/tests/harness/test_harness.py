@@ -5,6 +5,8 @@ import tempfile
 
 import pytest
 
+from tests.harness.ids import label_key, label_uuid
+
 from .factories import FileEnrichedFactory
 from .harness import ModuleTestHarness
 from .mock_pool import MockAsyncpgPool, MockRecord
@@ -89,7 +91,7 @@ class TestMockStorageMinio:
 
         assert not storage.check_file_exists("nonexistent")
 
-        storage._uploaded_files["exists"] = b"data"
+        storage._uploaded_files[label_key("exists")] = b"data"
         assert storage.check_file_exists("exists")
 
     def test_file_not_found_raises(self):
@@ -125,7 +127,7 @@ class TestMockAsyncpgPool:
         assert row["file_name"] == "test.exe"
         assert row["size"] == 1024
         # Should have default values for required fields
-        assert row["object_id"] == "test-uuid"
+        assert row["object_id"] == label_uuid("test-uuid")
         assert row["agent_id"] == "test-agent"
 
     @pytest.mark.asyncio
@@ -246,7 +248,7 @@ class TestModuleTestHarness:
             assert harness.storage.check_file_exists("test-uuid")
 
             # Should be registered in pool
-            assert "test-uuid" in harness.pool._file_enriched_data
+            assert label_key("test-uuid") in harness.pool._file_enriched_data
         finally:
             os.unlink(temp_path)
 
@@ -265,7 +267,7 @@ class TestModuleTestHarness:
             )
 
             # Should have auto-generated metadata
-            data = harness.pool._file_enriched_data["test-uuid"]
+            data = harness.pool._file_enriched_data[label_key("test-uuid")]
             assert data["file_name"] == os.path.basename(temp_path)
             assert data["size"] == len(b"test data")
         finally:
@@ -283,7 +285,7 @@ class TestModuleTestHarness:
 
         # Should be accessible
         assert harness.storage.download_bytes("test-uuid") == b"binary data"
-        assert "test-uuid" in harness.pool._file_enriched_data
+        assert label_key("test-uuid") in harness.pool._file_enriched_data
 
     def test_clear(self):
         """Test clearing the harness."""

@@ -7,6 +7,7 @@ import zipfile
 from glob import glob
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import lief
 import yara_x
@@ -418,7 +419,7 @@ rule python_packed_executable
 }
         """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Uses a Yara run to determine if this module should run."""
         # Get the current file_enriched from the database backend
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
@@ -560,7 +561,7 @@ rule python_packed_executable
             # Create transform
             transform = Transform(
                 type="UnpackedPython",
-                object_id=str(zip_object_id),
+                object_id=zip_object_id,
                 metadata={
                     "file_name": "UnpackedPython.zip",
                     "offer_as_download": True,
@@ -571,7 +572,7 @@ rule python_packed_executable
 
             # Publish the unpacked file as a new file message so it gets tracked in the database
             file_message = File(
-                object_id=str(zip_object_id),
+                object_id=zip_object_id,
                 agent_id=file_enriched.agent_id,
                 project=file_enriched.project,
                 timestamp=file_enriched.timestamp,
@@ -610,7 +611,7 @@ rule python_packed_executable
             if output_dir:
                 shutil.rmtree(output_dir, ignore_errors=True)
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process file using.
 
         Args:

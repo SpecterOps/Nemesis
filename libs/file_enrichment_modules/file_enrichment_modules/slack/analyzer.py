@@ -3,6 +3,7 @@ import csv
 import json
 import tempfile
 from datetime import datetime
+from uuid import UUID
 
 import yara_x
 from common.logger import get_logger
@@ -55,7 +56,7 @@ rule Detect_Slack_RootState {
 }
         """)
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
@@ -136,7 +137,7 @@ rule Detect_Slack_RootState {
                 transforms.append(
                     Transform(
                         type="slack_workspaces",
-                        object_id=f"{workspaces_csv_id}",
+                        object_id=workspaces_csv_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_workspaces.csv",
                             "offer_as_download": True,
@@ -208,7 +209,7 @@ rule Detect_Slack_RootState {
                 transforms.append(
                     Transform(
                         type="slack_downloads",
-                        object_id=f"{downloads_csv_id}",
+                        object_id=downloads_csv_id,
                         metadata={
                             "file_name": f"{file_enriched.file_name}_downloads.csv",
                             "offer_as_download": True,
@@ -223,7 +224,7 @@ rule Detect_Slack_RootState {
             logger.exception(message=f"Error analyzing Slack root-state.json for {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process Slack root-state.json file.
 
         Args:

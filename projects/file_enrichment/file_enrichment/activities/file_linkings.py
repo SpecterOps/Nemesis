@@ -1,5 +1,6 @@
 """File linking activity."""
 
+from common.helpers import as_uuid
 from common.logger import get_logger
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
@@ -16,7 +17,7 @@ async def check_file_linkings(ctx: WorkflowActivityContext, activity_input):
     Check for file linkings using the rules engine and update database tables.
     """
 
-    object_id = activity_input["object_id"]
+    object_id = as_uuid(activity_input["object_id"])
     logger.info("Executing activity: check_file_linkings", object_id=object_id)
 
     file_enriched = await get_file_enriched_async(object_id, global_vars.asyncpg_pool)

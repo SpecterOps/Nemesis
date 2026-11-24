@@ -3,6 +3,7 @@ import struct
 import tempfile
 import uuid
 from typing import Any
+from uuid import UUID
 
 from common.logger import get_logger
 from common.models import EnrichmentResult, FileObject, Finding, FindingCategory, FindingOrigin, Transform
@@ -237,7 +238,7 @@ class KDBXAnalyzer(EnrichmentModule):
         # the workflows this module should automatically run in
         self.workflows = ["default"]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         # Get the current file_enriched from the database backend
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
@@ -307,7 +308,7 @@ class KDBXAnalyzer(EnrichmentModule):
 
                 displayable_parsed = Transform(
                     type="displayable_parsed",
-                    object_id=f"{object_id}",
+                    object_id=object_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}.md",
                         "display_type_in_dashboard": "markdown",
@@ -320,7 +321,7 @@ class KDBXAnalyzer(EnrichmentModule):
 
         return enrichment_result
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process KDBX file and extract encryption information.
 
         Args:

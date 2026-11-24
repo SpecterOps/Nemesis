@@ -144,7 +144,7 @@ async def _run_activity():
     wf_setup.workflow_loop = asyncio.get_running_loop()
     # The registered activity is a factory that returns the wrapped coroutine function
     activity = handler.handle_file_if_plaintext()
-    return await activity(SimpleNamespace(workflow_id="wf-1"), {"object_id": "obj"})
+    return await activity(SimpleNamespace(workflow_id="wf-1"), {"object_id": "00000000-0000-0000-0000-0000000000aa"})
 
 
 @pytest.mark.asyncio

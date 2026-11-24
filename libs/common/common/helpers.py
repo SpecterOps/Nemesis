@@ -159,6 +159,32 @@ def sanitize_file_path(file_path: str, num_chars=5):
     return f"{sanitized_base}.{extension[0]}" if extension else sanitized_base
 
 
+def require_uuid(value: UUID) -> UUID:
+    """Return ``value`` if it is a ``uuid.UUID``; raise TypeError otherwise.
+
+    Object IDs are ``UUID`` end to end. Used at boundaries (storage, DB lookups, caches) to catch a ``str`` that
+    slipped through an untyped path (e.g. a dict read) instead of silently using it.
+    """
+    if not isinstance(value, UUID):
+        raise TypeError(f"object IDs must be uuid.UUID, got {type(value).__name__}")
+    return value
+
+
+def as_uuid(value: object) -> UUID:
+    """Convert an object ID read from an untyped boundary (Dapr workflow/activity input, a JSON payload, a dict row)
+    into a ``UUID``. Raises ValueError for anything that isn't a UUID or a UUID string."""
+    if isinstance(value, UUID):
+        return value
+    if isinstance(value, str):
+        return UUID(value)
+    raise ValueError(f"expected a UUID or UUID string, got {type(value).__name__}")
+
+
+def jsonable(obj: Any) -> Any:
+    """JSON-compatible copy of ``obj`` (UUID → str, datetime → ISO, models → dicts) for Dapr inputs and payloads."""
+    return to_jsonable_python(obj)
+
+
 # files_enriched.extension is VARCHAR(50)
 MAX_EXTENSION_LENGTH = 50
 

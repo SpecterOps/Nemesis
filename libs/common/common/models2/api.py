@@ -192,7 +192,7 @@ class ContainerFromMountRequest(BaseModel):
 
 
 # class MetadataOnlyRequest(BaseModel):
-#     object_id: str = Field(..., description="Unique identifier of an existing file")
+#     object_id: UUID = Field(..., description="Unique identifier of an existing file")
 #     timestamp: Optional[str] = Field(None, description="Timestamp of the submission (ISO format)")
 #     expiration: Optional[str] = Field(None, description="Expiration date of the file (ISO format)")
 #     # Add other metadata fields as needed

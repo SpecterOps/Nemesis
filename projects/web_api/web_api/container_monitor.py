@@ -384,7 +384,7 @@ class ContainerMonitor:
                         continue
 
                     # Generate container ID
-                    container_id = str(uuid.uuid4())
+                    container_id = uuid.uuid4()
 
                     # Add file information to metadata
                     file_stats = file_path.stat()

@@ -2,6 +2,7 @@
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 from common.log_safety import mask
 from common.logger import get_logger
@@ -45,7 +46,7 @@ class CertificateAnalyzer(EnrichmentModule):
             "123123",
         ]
 
-    async def should_process(self, object_id: str, file_path: str | None = None) -> bool:
+    async def should_process(self, object_id: UUID, file_path: str | None = None) -> bool:
         """Determine if this module should run."""
         file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)
 
@@ -528,7 +529,7 @@ class CertificateAnalyzer(EnrichmentModule):
 
                 displayable_parsed = Transform(
                     type="displayable_parsed",
-                    object_id=f"{object_id}",
+                    object_id=object_id,
                     metadata={
                         "file_name": f"{file_enriched.file_name}_analysis.txt",
                         "display_type_in_dashboard": "monaco",
@@ -543,7 +544,7 @@ class CertificateAnalyzer(EnrichmentModule):
             logger.exception(message=f"Error analyzing certificate file for {file_enriched.file_name}")
             return None
 
-    async def process(self, object_id: str, file_path: str | None = None) -> EnrichmentResult | None:
+    async def process(self, object_id: UUID, file_path: str | None = None) -> EnrichmentResult | None:
         """Process certificate file."""
         try:
             file_enriched = await get_file_enriched_async(object_id, self.asyncpg_pool)

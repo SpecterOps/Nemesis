@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import pytest
 from common.storage import StorageS3
@@ -22,33 +23,45 @@ def storage():
     return instance
 
 
+A = UUID("00000000-0000-0000-0000-00000000000a")
+OK = UUID("00000000-0000-0000-0000-000000000001")
+BAD = UUID("00000000-0000-0000-0000-000000000002")
+GONE = UUID("00000000-0000-0000-0000-000000000003")
+
+
 def test_delete_object_success(storage):
-    assert storage.delete_object("a") is True
-    storage.minio_client.remove_object.assert_called_once_with("files", "a")
+    assert storage.delete_object(A) is True
+    storage.minio_client.remove_object.assert_called_once_with("files", str(A))
+
+
+def test_delete_object_rejects_str_ids(storage):
+    with pytest.raises(TypeError, match="uuid.UUID"):
+        storage.delete_object("00000000-0000-0000-0000-00000000000a")  # pyright: ignore[reportArgumentType]
+    storage.minio_client.remove_object.assert_not_called()
 
 
 def test_delete_object_already_absent_counts_as_deleted(storage):
     storage.minio_client.remove_object.side_effect = s3_error("NoSuchKey")
-    assert storage.delete_object("a") is True
+    assert storage.delete_object(A) is True
 
 
 @pytest.mark.parametrize("error", [s3_error("AccessDenied"), s3_error("NoSuchBucket"), ConnectionError("down")])
 def test_delete_object_failure(storage, error):
     storage.minio_client.remove_object.side_effect = error
-    assert storage.delete_object("a") is False
+    assert storage.delete_object(A) is False
 
 
 def test_delete_objects_with_status_reports_each_object(storage):
     def remove(_bucket, object_id):
-        if object_id == "bad":
+        if object_id == str(BAD):
             raise ConnectionError("down")
-        if object_id == "gone":
+        if object_id == str(GONE):
             raise s3_error("NoSuchKey")
 
     storage.minio_client.remove_object.side_effect = remove
-    assert storage.delete_objects_with_status(["ok", "bad", "gone", "ok"]) == {"ok", "gone"}
+    assert storage.delete_objects_with_status([OK, BAD, GONE, OK]) == {OK, GONE}
     assert storage.minio_client.remove_object.call_count == 3  # duplicates deleted once
-    assert storage.delete_objects(["ok", "bad", "gone"]) == 2
+    assert storage.delete_objects([OK, BAD, GONE]) == 2
 
 
 def test_delete_objects_modified_before_skips_new_objects(storage):
