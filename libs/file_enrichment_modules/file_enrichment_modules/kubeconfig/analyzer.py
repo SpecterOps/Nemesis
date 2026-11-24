@@ -14,6 +14,25 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 logger = get_logger(__name__)
 
 
+class NoAliasSafeLoader(yaml.SafeLoader):
+    """SafeLoader that rejects aliases (*name).
+
+    Aliases let a tiny file describe an exponentially large structure ("billion laughs") that blows up
+    when the results are serialized. Real kubeconfig files don't use them.
+    """
+
+    def compose_node(self, parent, index):
+        if self.check_event(yaml.AliasEvent):
+            raise yaml.composer.ComposerError(
+                None, None, "YAML aliases are not allowed in kubeconfig files", self.peek_event().start_mark
+            )
+        return super().compose_node(parent, index)
+
+
+def load_kubeconfig_yaml(content: str):
+    return yaml.load(content, Loader=NoAliasSafeLoader)
+
+
 class KubeconfigParser(EnrichmentModule):
     name: str = "kubeconfig_parser"
     dependencies: list[str] = []
@@ -417,7 +436,7 @@ rule Detect_Kubeconfig {
 
             # Parse YAML
             try:
-                kubeconfig = yaml.safe_load(content)
+                kubeconfig = load_kubeconfig_yaml(content)
             except yaml.YAMLError as e:
                 logger.error(f"Failed to parse kubeconfig YAML: {e}")
                 return None
