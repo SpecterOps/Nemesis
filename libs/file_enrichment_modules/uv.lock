@@ -1960,7 +1960,7 @@ wheels = [
 [[package]]
 name = "pydecipher"
 version = "1.0.0"
-source = { git = "https://github.com/HarmJ0y/pydecipher.git#8a39d696dfcc4de3a726738e291eda00a085a066" }
+source = { git = "https://github.com/HarmJ0y/pydecipher.git#15d1da7d95418166921964ba6fd1f8e6fc478c8f" }
 dependencies = [
     { name = "asn1crypto" },
     { name = "decompyle3" },
