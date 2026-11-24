@@ -1,8 +1,9 @@
 """Storage and publishing activities."""
 
-import json
+from uuid import UUID
 
 import document_conversion.global_vars as global_vars
+from common.helpers import jsonb_dumps
 from common.logger import get_logger
 from common.workflows.setup import workflow_activity
 
@@ -28,7 +29,9 @@ async def store_transform(ctx, activity_input):
                 object_id,
                 transform["type"],
                 transform["object_id"],
-                json.dumps(transform["metadata"]) if transform.get("metadata") else None,
+                jsonb_dumps(transform["metadata"], column="transforms.metadata", object_id=UUID(str(object_id)))
+                if transform.get("metadata")
+                else None,
             )
 
         logger.debug(f"Stored {transform_type} transform", object_id=object_id)

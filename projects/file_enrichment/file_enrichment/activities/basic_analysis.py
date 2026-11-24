@@ -86,7 +86,7 @@ def process_basic_analysis(temp_file_path: str, file_dict: dict) -> dict:
 
     basic_analysis = {
         "file_name": posixpath.basename(path),
-        "extension": get_file_extension(path),
+        "extension": get_file_extension(path, object_id=file_dict.get("object_id")),
         "size": pathlib.Path(temp_file_path).stat().st_size,
         "hashes": {
             "md5": helpers.calculate_file_hash(temp_file_path, "md5"),

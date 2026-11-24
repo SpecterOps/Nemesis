@@ -95,6 +95,10 @@ class FileFilters(BaseModel):
         return v
 
 
+# Column sizes shared by the upload models and other writers (see infra/postgres/01-schema.sql)
+MAX_SOURCE_LENGTH = 1000
+SOURCE_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+
 # Every stored row belongs to a project: required, non-blank, and within the database column's 255 characters.
 ProjectName = Annotated[str, Field(min_length=1, max_length=255, pattern=r"\S")]
 

@@ -17,6 +17,7 @@ from agents.tasks.credential_analyzer import analyze_credentials
 from agents.tasks.dotnet_analyzer import analyze_dotnet_assembly
 from agents.tasks.summarizer import summarize_text
 from agents.tasks.translate import translate_text
+from agents.triage_text import fit_triage_text
 from common.db import get_postgres_connection_str
 from common.log_safety import mask
 from dapr.clients import DaprClient
@@ -224,16 +225,13 @@ def insert_triage_result(ctx: WorkflowActivityContext, activity_input: dict):
                 "finding_id": finding_id,
                 "username": "automatation_agent",
                 "value": triage_result["decision"],
-                "explanation": triage_result["explanation"],
+                "explanation": fit_triage_text(triage_result["explanation"], "explanation", finding_id),
                 "confidence": triage_result["confidence"],
+                "true_positive_context": fit_triage_text(
+                    triage_result.get("true_positive_context"), "true_positive_context", finding_id
+                ),
                 "automated": True,
             }
-
-            # Add true_positive_context if it exists
-            if "true_positive_context" in triage_result:
-                variable_values["true_positive_context"] = triage_result["true_positive_context"]
-            else:
-                variable_values["true_positive_context"] = None
 
             session.execute(INSERT_TRIAGE, variable_values=variable_values)
 

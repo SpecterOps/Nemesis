@@ -44,3 +44,46 @@ def test_project_is_required(credential_type):
 def test_blank_project_is_rejected(credential_type, project):
     with pytest.raises(ValidationError, match="project"):
         ADAPTER.validate_python({**PAYLOADS[credential_type], "project": project})
+
+
+# --- chromium_app_bound_key.source fits chromium.state_keys.source VARCHAR(1000) -------------------------------
+
+
+@pytest.fixture
+def issues(monkeypatch):
+    from common import data_issues
+
+    calls = []
+    monkeypatch.setattr(data_issues, "logger", type("L", (), {"warning": lambda self, e, **kw: calls.append(kw)})())
+    return calls
+
+
+def abe(source):
+    return {**PAYLOADS["chromium_app_bound_key"], "project": "p1", "source": source}
+
+
+@pytest.mark.parametrize(
+    ("given", "stored"),
+    [
+        ("ws01", "host://ws01"),
+        ("  ws01  ", "host://ws01"),
+        ("host://ws01", "host://ws01"),
+        ("smb://srv/x", "smb://srv/x"),
+    ],
+)
+def test_abe_source_is_normalized_once(given, stored, issues):
+    assert ADAPTER.validate_python(abe(given)).source == stored
+    assert issues == []
+
+
+def test_abe_source_at_limit_accepted(issues):
+    assert len(ADAPTER.validate_python(abe("h" * 993)).source) == 1000
+    assert len(ADAPTER.validate_python(abe("host://" + "h" * 993)).source) == 1000
+
+
+@pytest.mark.parametrize(("source", "reason"), [("", "blank"), ("   ", "blank"), ("h" * 994, "too long")])
+def test_abe_source_rejected_and_logged(source, reason, issues):
+    with pytest.raises(ValidationError, match="source"):
+        ADAPTER.validate_python(abe(source))
+    assert issues and issues[-1]["kind"] == "rejected_input" and issues[-1]["reason"] == reason
+    assert issues[-1]["field"] == "chromium_app_bound_key.source"

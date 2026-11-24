@@ -4,8 +4,9 @@ import re
 from typing import Annotated, Literal
 from uuid import UUID
 
+from common.data_issues import DataIssueKind, log_data_issue
 from common.logger import get_logger
-from common.models2.api import ProjectName
+from common.models2.api import MAX_SOURCE_LENGTH, SOURCE_SCHEME_RE, ProjectName
 from nemesis_dpapi.types import Sid  # pyright: ignore[reportMissingImports]
 from pydantic import BaseModel, Discriminator, Field, Tag, field_serializer, field_validator
 
@@ -168,9 +169,30 @@ class ChromiumAppBoundKeyCredential(BaseModel):
     type: Literal["chromium_app_bound_key"]
     project: ProjectName
     value: str  # Hex string or Python escaped format (\\x5f\\x1a...)
-    source: str  # Required source identifier
+    source: str  # Required source identifier; "host://" is added when it has no scheme
     browser: Literal["chrome", "edge", "brave", "opera"] = "chrome"  # Browser type
     username: str = "UNKNOWN"  # Optional username, defaults to UNKNOWN
+
+    @field_validator("source")
+    @classmethod
+    def normalize_source(cls, v: str) -> str:
+        """Strip, add ``host://`` when there's no URI scheme, and require the result to fit chromium.state_keys."""
+        source = v.strip()
+        if not source:
+            log_data_issue(DataIssueKind.REJECTED_INPUT, field="chromium_app_bound_key.source", reason="blank")
+            raise ValueError("source must not be blank")
+        if not SOURCE_SCHEME_RE.match(source):
+            source = f"host://{source}"
+        if len(source) > MAX_SOURCE_LENGTH:
+            log_data_issue(
+                DataIssueKind.REJECTED_INPUT,
+                field="chromium_app_bound_key.source",
+                reason="too long",
+                length=len(source),
+                limit=MAX_SOURCE_LENGTH,
+            )
+            raise ValueError(f"source must be at most {MAX_SOURCE_LENGTH} characters including any host:// prefix")
+        return source
 
     @field_validator("value")
     @classmethod

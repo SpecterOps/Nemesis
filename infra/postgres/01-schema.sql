@@ -795,7 +795,7 @@ CREATE TABLE IF NOT EXISTS chromium.history (
 
     url TEXT,                                   -- extracted from the Chromium DB
     title TEXT,                                 -- extracted from the Chromium DB
-    visit_count INTEGER,                        -- extracted from the Chromium DB
+    visit_count BIGINT,                         -- extracted from the Chromium DB
     last_visit_time TIMESTAMP WITH TIME ZONE,   -- extracted from the Chromium DB
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
@@ -816,7 +816,7 @@ CREATE TABLE IF NOT EXISTS chromium.downloads (
     download_path TEXT,                         -- extracted from the Chromium DB `target_path` field
     start_time TIMESTAMP WITH TIME ZONE,        -- extracted from the Chromium DB
     end_time TIMESTAMP WITH TIME ZONE,          -- extracted from the Chromium DB
-    total_bytes INTEGER,                        -- extracted from the Chromium DB
+    total_bytes BIGINT,                         -- extracted from the Chromium DB
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
     UNIQUE (project, source, username, browser, url, download_path, start_time)
@@ -888,7 +888,7 @@ CREATE TABLE IF NOT EXISTS chromium.logins (
     date_created TIMESTAMP WITH TIME ZONE,              -- extracted from the Chromium DB
     date_last_used TIMESTAMP WITH TIME ZONE,            -- extracted from the Chromium DB
     date_password_modified TIMESTAMP WITH TIME ZONE,    -- extracted from the Chromium DB
-    times_used INTEGER,                                 -- extracted from the Chromium DB
+    times_used BIGINT,                                  -- extracted from the Chromium DB
 
     encryption_type TEXT,                               -- carved from the `password_value_enc` bytes - dpapi, key, or abe (app-bound-encryption)
     masterkey_guid UUID,                                -- if encryption_type == dpapi, associated masterkey GUID
@@ -923,7 +923,7 @@ CREATE TABLE IF NOT EXISTS chromium.cookies (
     is_httponly BOOLEAN,                                -- extracted from the Chromium DB
     is_persistent BOOLEAN,                              -- extracted from the Chromium DB
     samesite TEXT,                                      -- extracted from the Chromium DB, translated from int
-    source_port INTEGER,                                -- extracted from the Chromium DB
+    source_port BIGINT,                                 -- extracted from the Chromium DB
 
     encryption_type TEXT,                               -- carved from the `encrypted_value` field - dpapi, key, or abe (app-bound-encryption)
     masterkey_guid UUID,                                -- if encryption_type == dpapi, associated masterkey GUID

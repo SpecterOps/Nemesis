@@ -3,6 +3,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+# findings_triage_history.explanation / true_positive_context are VARCHAR(5000). LLM output is not rejected for
+# exceeding it (that would lose the triage); insert_triage_result truncates and logs instead.
+TRIAGE_TEXT_MAX_LENGTH = 5000
+
 
 class TriageCategory(StrEnum):
     """Triage decision categories"""
@@ -90,10 +94,17 @@ class ValidateResponse(BaseModel):
     decision: Literal["true_positive", "false_positive", "needs_review"] = Field(
         ..., description="Triage decision - MUST be exactly one of: true_positive, false_positive, needs_review"
     )
-    explanation: str = Field(..., description="Accurate but concise 1 sentence explanation for the decision")
+    explanation: str = Field(
+        ...,
+        description=f"Accurate but concise 1 sentence explanation for the decision (under {TRIAGE_TEXT_MAX_LENGTH} characters)",
+    )
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence score 0-1.0")
     true_positive_context: str | None = Field(
-        None, description="Context/risk for true_positive decisions. Only required for true_positive findings."
+        None,
+        description=(
+            "Context/risk for true_positive decisions. Only required for true_positive findings "
+            f"(under {TRIAGE_TEXT_MAX_LENGTH} characters)."
+        ),
     )
 
 

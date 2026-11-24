@@ -1,7 +1,7 @@
 """Text summarization agent using Pydantic AI."""
 
-import json
 import tempfile
+from uuid import UUID
 
 import psycopg
 import structlog
@@ -11,6 +11,7 @@ from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import SummaryResponse
 from common.db import get_postgres_connection_str
+from common.helpers import jsonb_dumps
 from common.state_helpers import get_file_enriched
 from common.storage import StorageS3
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
@@ -172,7 +173,12 @@ class TextSummarizer(BaseAgent):
                         INSERT INTO transforms (object_id, type, transform_object_id, metadata)
                         VALUES (%s, %s, %s, %s)
                         """,
-                        (object_id, "text_summary", summary_id, json.dumps(metadata)),
+                        (
+                            object_id,
+                            "text_summary",
+                            summary_id,
+                            jsonb_dumps(metadata, column="transforms.metadata", object_id=UUID(str(object_id))),
+                        ),
                     )
                 conn.commit()
 

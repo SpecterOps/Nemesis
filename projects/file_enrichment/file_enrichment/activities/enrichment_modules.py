@@ -1,7 +1,7 @@
 """Enrichment modules activity."""
 
-import json
 import os
+from uuid import UUID
 
 import common.helpers as helpers
 import file_enrichment.global_vars as global_vars
@@ -178,10 +178,13 @@ async def execute_enrichment_module(object_id: str, temp_file_path: str, module_
 async def store_enrichment_results(object_id: str, module_name: str, result: EnrichmentResult):
     """Store enrichment results, transforms, and findings in the database."""
     assert global_vars.asyncpg_pool is not None
+    file_uuid = UUID(str(object_id))
     async with global_vars.asyncpg_pool.acquire() as conn:
         async with conn.transaction():
             # Store enrichment
-            results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
+            results_escaped = helpers.jsonb_dumps(
+                result, column="enrichments.result_data", object_id=file_uuid, module=module_name
+            )
             await conn.execute(
                 """
                 INSERT INTO enrichments (object_id, module_name, result_data)
@@ -203,7 +206,11 @@ async def store_enrichment_results(object_id: str, module_name: str, result: Enr
                         object_id,
                         transform.type,
                         transform.object_id,
-                        json.dumps(transform.metadata) if transform.metadata else None,
+                        helpers.jsonb_dumps(
+                            transform.metadata, column="transforms.metadata", object_id=file_uuid, module=module_name
+                        )
+                        if transform.metadata
+                        else None,
                     )
 
             # Store any findings
@@ -222,6 +229,20 @@ async def store_enrichment_results(object_id: str, module_name: str, result: Enr
                         object_id,
                         finding.origin_type,
                         finding.origin_name,
-                        json.dumps(finding.raw_data),
-                        json.dumps([obj.model_dump_json() for obj in finding.data]),
+                        helpers.jsonb_dumps(
+                            finding.raw_data,
+                            column="findings.raw_data",
+                            object_id=file_uuid,
+                            finding_name=finding.finding_name,
+                        ),
+                        helpers.jsonb_dumps(
+                            [
+                                helpers.jsonb_dumps(
+                                    obj, column="findings.data", object_id=file_uuid, finding_name=finding.finding_name
+                                )
+                                for obj in finding.data
+                            ],
+                            column="findings.data",
+                            object_id=file_uuid,
+                        ),
                     )

@@ -1,8 +1,9 @@
 # src/common/models.py
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
+from common.helpers import MAX_EXTENSION_LENGTH
 from common.models2.api import ProjectName
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
@@ -379,7 +380,7 @@ class FileHashes(BaseModel):
 
 class FileEnriched(File):
     file_name: str
-    extension: str | None = None
+    extension: Annotated[str, Field(max_length=MAX_EXTENSION_LENGTH)] | None = None
     size: int
     hashes: FileHashes
     magic_type: str

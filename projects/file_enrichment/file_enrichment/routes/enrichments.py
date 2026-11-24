@@ -1,6 +1,5 @@
 """Enrichment module routes."""
 
-import json
 import os
 import uuid
 from typing import TYPE_CHECKING
@@ -85,9 +84,12 @@ async def run_enrichment(
         assert global_vars.asyncpg_pool is not None
         if result:
             # Store enrichment result in database
+            file_uuid = uuid.UUID(str(enrichment_request.object_id))
             async with global_vars.asyncpg_pool.acquire() as conn:
                 # Store main enrichment result
-                results_escaped = json.dumps(helpers.sanitize_for_jsonb(result.model_dump(mode="json")))
+                results_escaped = helpers.jsonb_dumps(
+                    result, column="enrichments.result_data", object_id=file_uuid, module=enrichment_name
+                )
                 await conn.execute(
                     """
                     INSERT INTO enrichments (object_id, module_name, result_data)
@@ -109,7 +111,14 @@ async def run_enrichment(
                             enrichment_request.object_id,
                             transform.type,
                             transform.object_id,
-                            json.dumps(transform.metadata) if transform.metadata else None,
+                            helpers.jsonb_dumps(
+                                transform.metadata,
+                                column="transforms.metadata",
+                                object_id=file_uuid,
+                                module=enrichment_name,
+                            )
+                            if transform.metadata
+                            else None,
                         )
 
                 # Store any findings
@@ -128,8 +137,18 @@ async def run_enrichment(
                             enrichment_request.object_id,
                             finding.origin_type,
                             finding.origin_name,
-                            json.dumps(finding.raw_data),
-                            json.dumps([obj.model_dump() for obj in finding.data]),
+                            helpers.jsonb_dumps(
+                                finding.raw_data,
+                                column="findings.raw_data",
+                                object_id=file_uuid,
+                                finding_name=finding.finding_name,
+                            ),
+                            helpers.jsonb_dumps(
+                                [obj.model_dump() for obj in finding.data],
+                                column="findings.data",
+                                object_id=file_uuid,
+                                finding_name=finding.finding_name,
+                            ),
                         )
 
         # Update workflow tracking by object_id (following dotnet.py pattern)

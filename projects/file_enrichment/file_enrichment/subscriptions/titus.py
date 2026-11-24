@@ -7,9 +7,10 @@ import time
 import uuid
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 import file_enrichment.global_vars as global_vars
-from common.helpers import sanitize_for_jsonb
+from common.helpers import jsonb_dumps
 from common.log_safety import mask
 from common.logger import get_logger
 from common.models import (
@@ -244,12 +245,8 @@ async def store_titus_results(
         # Create an enrichment result to store
         enrichment_result = EnrichmentResult(module_name="titus")
         enrichment_result.results = {
-            "matches": [
-                sanitize_for_jsonb(match.model_dump() if hasattr(match, "model_dump") else match) for match in matches
-            ],
-            "stats": sanitize_for_jsonb(
-                scan_stats.model_dump() if scan_stats and hasattr(scan_stats, "model_dump") else scan_stats
-            ),
+            "matches": [match.model_dump() if hasattr(match, "model_dump") else match for match in matches],
+            "stats": scan_stats.model_dump() if scan_stats and hasattr(scan_stats, "model_dump") else scan_stats,
         }
 
         # Create findings for each match
@@ -274,7 +271,7 @@ async def store_titus_results(
             # Create display data
             display_data = FileObject(
                 type="finding_summary",
-                metadata={"summary": sanitize_for_jsonb(summary_markdown)},
+                metadata={"summary": summary_markdown},
             )
 
             # Determine severity based on rule type and name
@@ -299,7 +296,7 @@ async def store_titus_results(
                 origin_name="titus",
                 object_id=object_id,
                 severity=severity,
-                raw_data=sanitize_for_jsonb({"match": match.model_dump() if hasattr(match, "model_dump") else match}),  # pyright: ignore[reportArgumentType]
+                raw_data={"match": match.model_dump() if hasattr(match, "model_dump") else match},
                 data=[display_data],
             )
 
@@ -313,7 +310,10 @@ async def store_titus_results(
         async with global_vars.asyncpg_pool.acquire() as conn:
             async with conn.transaction():
                 # Store main enrichment result
-                results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
+                file_uuid = UUID(str(object_id))
+                results_escaped = jsonb_dumps(
+                    enrichment_result, column="enrichments.result_data", object_id=file_uuid, module="titus"
+                )
                 await conn.execute(
                     """
                     INSERT INTO enrichments (object_id, module_name, result_data)
@@ -326,16 +326,11 @@ async def store_titus_results(
 
                 # Store any findings
                 for finding in findings_list:
-                    # Convert each FileObject to a JSON string
-                    data_as_strings = []
-                    for obj in finding.data:
-                        # Convert the model to a dict first
-                        if hasattr(obj, "model_dump"):
-                            obj_dict = obj.model_dump()
-                        else:
-                            obj_dict = obj
-                        sanitized_obj = sanitize_for_jsonb(obj_dict)
-                        data_as_strings.append(json.dumps(sanitized_obj))
+                    # Each FileObject is stored as a JSON string (array of JSON strings)
+                    data_as_strings = [
+                        jsonb_dumps(obj, column="findings.data", object_id=file_uuid, finding_name=finding.finding_name)
+                        for obj in finding.data
+                    ]
 
                     await conn.execute(
                         """
@@ -350,8 +345,13 @@ async def store_titus_results(
                         object_id,
                         finding.origin_type,
                         finding.origin_name,
-                        json.dumps(sanitize_for_jsonb(finding.raw_data)),
-                        json.dumps(data_as_strings),  # Store as array of JSON strings
+                        jsonb_dumps(
+                            finding.raw_data,
+                            column="findings.raw_data",
+                            object_id=file_uuid,
+                            finding_name=finding.finding_name,
+                        ),
+                        jsonb_dumps(data_as_strings, column="findings.data", object_id=file_uuid),
                     )
 
         # Update workflow enrichment status

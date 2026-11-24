@@ -3,9 +3,10 @@
 import json
 import uuid
 from typing import Any
+from uuid import UUID
 
 import file_enrichment.global_vars as global_vars
-from common.helpers import sanitize_for_jsonb
+from common.helpers import jsonb_dumps
 from common.logger import get_logger
 from common.models import (
     CloudEvent,
@@ -182,7 +183,7 @@ async def store_dotnet_results(
         findings_list = []
         if analysis:
             # Store the analysis results
-            enrichment_result.results["inspect_assembly"] = sanitize_for_jsonb(analysis.model_dump())
+            enrichment_result.results["inspect_assembly"] = analysis.model_dump()
 
             # Check if there was an error during analysis
             if analysis.Error:
@@ -213,7 +214,7 @@ async def store_dotnet_results(
                 # Create display data
                 display_data = FileObject(
                     type="finding_summary",
-                    metadata={"summary": sanitize_for_jsonb(summary_markdown)},
+                    metadata={"summary": summary_markdown},
                 )
 
                 # Create the finding
@@ -224,7 +225,7 @@ async def store_dotnet_results(
                     origin_name="dotnet_service",
                     object_id=object_id,
                     severity=8,
-                    raw_data=sanitize_for_jsonb(analysis.model_dump()),  # pyright: ignore[reportArgumentType]
+                    raw_data=analysis.model_dump(),
                     data=[display_data],
                 )
 
@@ -245,7 +246,10 @@ async def store_dotnet_results(
                 )
 
                 # Store main enrichment result
-                results_escaped = json.dumps(sanitize_for_jsonb(enrichment_result.model_dump(mode="json")))
+                file_uuid = UUID(str(object_id))
+                results_escaped = jsonb_dumps(
+                    enrichment_result, column="enrichments.result_data", object_id=file_uuid, module="dotnet_service"
+                )
                 await conn.execute(
                     """
                     INSERT INTO enrichments (object_id, module_name, result_data)
@@ -267,21 +271,23 @@ async def store_dotnet_results(
                             object_id,
                             transform.type,
                             transform.object_id,
-                            json.dumps(transform.metadata) if transform.metadata else None,
+                            jsonb_dumps(
+                                transform.metadata,
+                                column="transforms.metadata",
+                                object_id=file_uuid,
+                                module="dotnet_service",
+                            )
+                            if transform.metadata
+                            else None,
                         )
 
                 # Store any findings
                 for finding in findings_list:
-                    # Convert each FileObject to a JSON string
-                    data_as_strings = []
-                    for obj in finding.data:
-                        # Convert the model to a dict first
-                        if hasattr(obj, "model_dump"):
-                            obj_dict = obj.model_dump()
-                        else:
-                            obj_dict = obj
-                        sanitized_obj = sanitize_for_jsonb(obj_dict)
-                        data_as_strings.append(json.dumps(sanitized_obj))
+                    # Each FileObject is stored as a JSON string (array of JSON strings)
+                    data_as_strings = [
+                        jsonb_dumps(obj, column="findings.data", object_id=file_uuid, finding_name=finding.finding_name)
+                        for obj in finding.data
+                    ]
 
                     await conn.execute(
                         """
@@ -296,8 +302,13 @@ async def store_dotnet_results(
                         object_id,
                         finding.origin_type,
                         finding.origin_name,
-                        json.dumps(sanitize_for_jsonb(finding.raw_data)),
-                        json.dumps(data_as_strings),  # Store as array of JSON strings
+                        jsonb_dumps(
+                            finding.raw_data,
+                            column="findings.raw_data",
+                            object_id=file_uuid,
+                            finding_name=finding.finding_name,
+                        ),
+                        jsonb_dumps(data_as_strings, column="findings.data", object_id=file_uuid),
                     )
 
         logger.info("Successfully stored DotNet results", object_id=object_id, has_findings=len(findings_list) > 0)

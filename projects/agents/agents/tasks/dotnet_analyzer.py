@@ -4,13 +4,13 @@ Author: @dreadnode
 License: None
 """
 
-import json
 import os
 import sys
 import tempfile
 import typing as t
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID
 
 import psycopg
 import structlog
@@ -20,6 +20,7 @@ from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import DotNetAnalysisResponse
 from common.db import get_postgres_connection_str
+from common.helpers import jsonb_dumps
 from common.state_helpers import get_file_enriched
 from common.storage import StorageS3
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
@@ -562,7 +563,12 @@ Prioritize findings by exploitability and business impact.
                             INSERT INTO transforms (object_id, type, transform_object_id, metadata)
                             VALUES (%s, %s, %s, %s)
                             """,
-                            (object_id, "dotnet_analysis", analysis_id, json.dumps(metadata)),
+                            (
+                                object_id,
+                                "dotnet_analysis",
+                                analysis_id,
+                                jsonb_dumps(metadata, column="transforms.metadata", object_id=UUID(str(object_id))),
+                            ),
                         )
                     conn.commit()
 

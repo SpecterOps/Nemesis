@@ -159,7 +159,16 @@ def sanitize_file_path(file_path: str, num_chars=5):
     return f"{sanitized_base}.{extension[0]}" if extension else sanitized_base
 
 
-def get_file_extension(filepath):
+# files_enriched.extension is VARCHAR(50)
+MAX_EXTENSION_LENGTH = 50
+
+
+def get_file_extension(filepath: str, *, object_id: UUID | None = None) -> str:
+    """Return the file's extension including the dot (``".txt"``), or ``""`` if it has none.
+
+    A suffix longer than MAX_EXTENSION_LENGTH (e.g. ``report.2024-01-01_backup_copy_of_...``) is not a real extension
+    and would not fit the column, so it is treated as no extension and logged as an extension_too_long data issue.
+    """
     # Get just the final filename component of the path
     base_name = posixpath.basename(filepath)
 
@@ -167,10 +176,18 @@ def get_file_extension(filepath):
     if base_name.startswith(".") or "." not in base_name:
         return ""
 
-    name_parts = base_name.split(".")
-    if len(name_parts) > 1:
-        return "." + name_parts[-1]
-    return ""
+    extension = "." + base_name.rsplit(".", 1)[-1]
+    if len(extension) > MAX_EXTENSION_LENGTH:
+        log_data_issue(
+            DataIssueKind.EXTENSION_TOO_LONG,
+            field="files_enriched.extension",
+            object_id=object_id,
+            length=len(extension),
+            limit=MAX_EXTENSION_LENGTH,
+            prefix=extension[:20],
+        )
+        return ""
+    return extension
 
 
 def get_drive_from_path(path: str) -> str | None:

@@ -1,7 +1,7 @@
 """Credential analysis agent using Pydantic AI."""
 
-import json
 import tempfile
+from uuid import UUID
 
 import psycopg
 import structlog
@@ -11,6 +11,7 @@ from agents.model_manager import ModelManager
 from agents.prompt_manager import PromptManager
 from agents.schemas import CredentialAnalysisResponse, CredentialWithContext
 from common.db import get_postgres_connection_str
+from common.helpers import jsonb_dumps
 from common.models import FileObject, FindingCategory, FindingOrigin
 from common.state_helpers import get_file_enriched
 from common.storage import StorageS3
@@ -200,7 +201,12 @@ Return your findings as a structured list. If no credentials are found, return a
                         INSERT INTO transforms (object_id, type, transform_object_id, metadata)
                         VALUES (%s, %s, %s, %s)
                         """,
-                        (object_id, "llm_extracted_credentials", credentials_id, json.dumps(metadata)),
+                        (
+                            object_id,
+                            "llm_extracted_credentials",
+                            credentials_id,
+                            jsonb_dumps(metadata, column="transforms.metadata", object_id=UUID(str(object_id))),
+                        ),
                     )
 
                     # Create finding if credentials were found
@@ -225,8 +231,18 @@ Return your findings as a structured list. If no credentials are found, return a
                                 "credential_analyzer",
                                 object_id,
                                 8,
-                                json.dumps({"credentials": [cred.model_dump() for cred in credentials]}),
-                                json.dumps([display_data.model_dump()]),
+                                jsonb_dumps(
+                                    {"credentials": [cred.model_dump() for cred in credentials]},
+                                    column="findings.raw_data",
+                                    object_id=UUID(str(object_id)),
+                                    finding_name="llm_extracted_credentials",
+                                ),
+                                jsonb_dumps(
+                                    [display_data.model_dump()],
+                                    column="findings.data",
+                                    object_id=UUID(str(object_id)),
+                                    finding_name="llm_extracted_credentials",
+                                ),
                             ),
                         )
                 conn.commit()
