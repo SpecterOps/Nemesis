@@ -11,15 +11,16 @@ from urllib.parse import ParseResult, urlparse, urlunparse
 import aiohttp
 from cli.collector_state import collector_state_path
 from cli.config import NemesisConfig, PasswordCredential, StrictHttpUrl
+from cli.mythic_connector import tls
 from cli.mythic_connector.config import Settings, TokenCredential
 from cli.mythic_connector.db import Database, DatabaseError
 from cli.mythic_connector.handlers import FileHandler, PermanentMythicError
 from cli.mythic_connector.logger import get_logger
 from cli.nemesis_client import NemesisClient, PreviewNemesisClient, UploadClient
 from cli.preflight import check_nemesis_availability
-from gql.transport.exceptions import TransportClosed, TransportServerError
+from gql.transport.exceptions import TransportClosed, TransportQueryError, TransportServerError
 from mythic import mythic
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidStatus, InvalidStatusCode
 
 logger = get_logger(__name__)
 
@@ -55,13 +56,11 @@ class SyncService:
             Configuration and authentication failures are fatal; network failures are
             propagated for the reconnect supervisor to classify.
         """
-        self.db = Database(
-            str(
-                collector_state_path(
-                    self.cfg.db.path, "mythic", self.cfg.mythic.url, self.cfg.project, self.cfg.mythic.agent_id
-                )
-            )
+        state_path = collector_state_path(
+            self.cfg.db.path, "mythic", self.cfg.mythic.url, self.cfg.project, self.cfg.mythic.agent_id
         )
+        logger.info("Mythic connector state: %s", state_path.resolve())
+        self.db = Database(str(state_path))
         return True
 
     async def initialize_mythic(self) -> bool:
@@ -79,6 +78,8 @@ class SyncService:
             if not url.hostname:
                 raise ValueError(f"Invalid Mythic URL (missing hostname): {self.cfg.mythic.url}")
             port = url.port or (443 if ssl else 80)
+            # Route the mythic library's GraphQL, websocket and login requests through verified TLS.
+            tls.install(self.cfg.networking.validate_https_certs)
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=self.cfg.networking.timeout_sec)
             ) as session:
@@ -240,13 +241,50 @@ class SyncService:
                 self.db.close()
 
 
+_TRANSIENT_STATUSES = (408, 425, 429)
+_AUTH_ERROR_MARKERS = (
+    "access-denied",
+    "access denied",
+    "not authorized",
+    "unauthorized",
+    "forbidden",
+    "jwt",
+    "authentication",
+    "permission",
+    "invalid-headers",
+    "validation-failed",
+    "not found in type",
+)
+
+
+def _handshake_status(exc: InvalidHandshake) -> int | None:
+    if isinstance(exc, InvalidStatusCode):
+        return exc.status_code
+    if isinstance(exc, InvalidStatus):
+        return exc.response.status_code
+    return None
+
+
 def _is_transient_mythic_error(exc: Exception) -> bool:
     if isinstance(exc, aiohttp.ClientConnectorCertificateError):
         return False
     if isinstance(exc, (TransportClosed, ConnectionClosed)):
         return True
     if isinstance(exc, TransportServerError):
-        return exc.code is not None and (exc.code >= 500 or exc.code in (408, 425, 429))
+        # Hasura reports a failing auth webhook (e.g. mythic_server restarting) as a websocket
+        # "connection_error" with no HTTP status. Only explicit 401/403/4xx are permanent.
+        if exc.code is None:
+            return True
+        return exc.code >= 500 or exc.code in _TRANSIENT_STATUSES
+    if isinstance(exc, InvalidHandshake):
+        # A proxy 5xx during the websocket upgrade, or a malformed handshake while Mythic restarts.
+        status = _handshake_status(exc)
+        return status is None or status >= 500 or status in _TRANSIENT_STATUSES
+    if isinstance(exc, TransportQueryError):
+        # GraphQL errors: permissions and schema mismatches are permanent; anything else (database
+        # or webhook hiccups surfaced as GraphQL errors) is retried.
+        message = str(exc).lower()
+        return not any(marker in message for marker in _AUTH_ERROR_MARKERS)
     if isinstance(exc, (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError, asyncio.TimeoutError, OSError)):
         return True
     if isinstance(exc, aiohttp.ClientResponseError):

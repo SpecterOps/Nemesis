@@ -54,7 +54,7 @@ def mythic_settings(tmp_path, monkeypatch, agent_id):
     data["mythic"].pop("agent_id", None)
     if agent_id is not ...:
         data["mythic"]["agent_id"] = agent_id
-    data["db"]["path"] = str(tmp_path / "state")
+    data["db"] = {"path": str(tmp_path / "state")}
     path = tmp_path / "mythic.yaml"
     path.write_text(yaml.safe_dump(data))
     get_settings.cache_clear()
@@ -193,10 +193,14 @@ async def test_configured_collectors_upload_and_isolate_state(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_mythic_state_isolated_and_persistent(tmp_path, monkeypatch):
+async def test_mythic_state_isolated_and_persistent(tmp_path, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
     cfg = mythic_settings(tmp_path, monkeypatch, ...)
     first = SyncService(cfg)
     await first.initialize_db()
+    logged = [r.args[-1] for r in caplog.records if r.msg == "Mythic connector state: %s"]
+    expected = collector_state_path(cfg.db.path, "mythic", cfg.mythic.url, cfg.project, cfg.mythic.agent_id)
+    assert logged == [expected.resolve()]
     first.db.mset({"last_file_id": 100, "filemetafile-1": 1})
     cfg.mythic.url = "https://second.local:7443"
     second = SyncService(cfg)

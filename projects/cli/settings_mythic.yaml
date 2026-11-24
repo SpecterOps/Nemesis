@@ -21,9 +21,16 @@ nemesis:
   expiration_days: 100 # After how many days will uploaded files be deleted
   max_file_size: 1000000000 # 1GB
 
-db:
-  path: "mythic_sync.db"
+# Directory for connector state (one LevelDB database per Mythic URL, project and agent_id).
+# Defaults to $XDG_STATE_HOME/nemesis/connectors or ~/.local/state/nemesis/connectors.
+# tools/mythic_connect.sh keeps it in the "nemesis-connector-state" Docker volume.
+# db:
+#   path: "~/.local/state/nemesis/connectors"
 
 networking:
   timeout_sec: 30
   validate_https_certs: true
+
+sync:
+  pending_give_up_days: 7 # Stop waiting for a download that has made no progress for this many days
+  max_pending_subscriptions: 10 # Live-query websockets for unfinished downloads (100 each); the rest are polled

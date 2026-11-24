@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
+from cli.config import default_state_dir
 from cli.mythic_connector.config import (
     DatabaseConfig,
     MythicConfig,
@@ -532,7 +533,7 @@ networking:
     def test_db_section(self):
         get_settings.cache_clear()
         cfg = get_settings(str(SETTINGS_DIR / "settings_mythic.yaml"))
-        assert cfg.db.path == "mythic_sync.db"
+        assert cfg.db.path == str(default_state_dir())
 
     def test_networking_section(self):
         get_settings.cache_clear()

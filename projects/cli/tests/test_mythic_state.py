@@ -44,12 +44,15 @@ def test_discovery_ignores_legacy_cursor_and_preserves_success_markers(db):
     )
 
     assert db.get_strict(handler.state_prefix + "cursor") == b"11"
-    assert pending_value(db, handler, "new-file") == {
+    entry = pending_value(db, handler, "new-file")
+    assert {k: entry[k] for k in ("id", "uuid", "attempt", "retry_at", "chunks")} == {
         "id": 10,
         "uuid": "new-file",
         "attempt": 0,
         "retry_at": 0,
+        "chunks": None,
     }
+    assert entry["progress_at"] > 0
     assert db.get_strict(handler.state_prefix + "pending:already-done") is None
     assert db.get_strict("filemetaalready-done") == b"1"
     assert db.get_strict("last_file_id") == b"900"

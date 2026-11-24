@@ -265,13 +265,29 @@ nemesis:
   expiration_days: 100  # File retention period
   max_file_size: 1000000000  # 1GB limit
 
-db:
-  path: "mythic_sync.db"  # Local sync state database
+# Optional: connector state directory (default: $XDG_STATE_HOME/nemesis/connectors
+# or ~/.local/state/nemesis/connectors)
+# db:
+#   path: "~/.local/state/nemesis/connectors"
 
 networking:
   timeout_sec: 30
-  validate_https_certs: true
+  validate_https_certs: true  # Verifies Mythic's certificate for logins, GraphQL, websockets and downloads
+
+sync:
+  pending_give_up_days: 7  # Stop waiting for a download with no new chunks for this many days
+  max_pending_subscriptions: 10  # Websockets watching unfinished downloads (100 each); the rest are polled every 30 s
 ```
+
+The connector keeps its discovery cursor and which files it has uploaded in a LevelDB database under
+`db.path`. It logs the exact path at startup. Keep this directory between runs, or every Mythic file is
+uploaded again (see [Connector state in Docker](#connector-state-in-docker)).
+
+It syncs agent downloads and screenshots from every operation the Mythic user belongs to. Screenshots and
+downloads that Mythic stores without a full remote path are uploaded as `/<host>/screenshots/<name>` and
+`<name>` respectively. Collection time comes from Mythic, and files expire `nemesis.expiration_days` later.
+Mythic restarts and proxy errors are retried with backoff; rejected credentials or permissions stop the
+connector.
 
 ### Usage
 
@@ -280,11 +296,15 @@ networking:
 ./tools/mythic_connect.sh /path/to/settings_mythic.yaml
 ```
 
+The script keeps connector state in the `nemesis-connector-state` Docker volume (set
+`NEMESIS_CONNECTOR_STATE_VOLUME` to use another), overriding any `db.path` in the config file.
+
 **docker :**
 ```bash
 # Run with mounted config file
 docker run \
   --rm -ti \
+  -v nemesis-connector-state:/root/.local/state \
   -v /path/to/settings_mythic.yaml:/config/settings_mythic.yaml \
   ghcr.io/specterops/nemesis/cli \
   connect-mythic -c /config/settings_mythic.yaml
@@ -294,6 +314,7 @@ docker run --rm ghcr.io/specterops/nemesis/cli connect-mythic --showconfig
 
 # Enable debug logging
 docker run --rm -ti \
+  -v nemesis-connector-state:/root/.local/state \
   -v /path/to/settings_mythic.yaml:/config/settings_mythic.yaml \
   ghcr.io/specterops/nemesis/cli \
   connect-mythic -c /config/settings_mythic.yaml --debug
@@ -348,6 +369,7 @@ cobaltstrike:
 # Run with mounted config file
 docker run \
   --rm -ti \
+  -v nemesis-connector-state:/root/.local/state \
   -v /path/to/settings_cobaltstrike.yaml:/config/settings_cobaltstrike.yaml \
   ghcr.io/specterops/nemesis/cli \
   connect-cobaltstrike -c /config/settings_cobaltstrike.yaml
@@ -357,6 +379,7 @@ docker run --rm ghcr.io/specterops/nemesis/cli connect-cobaltstrike --showconfig
 
 # Enable debug logging
 docker run --rm \
+  -v nemesis-connector-state:/root/.local/state \
   -v /path/to/settings_cobaltstrike.yaml:/config/settings_cobaltstrike.yaml \
   ghcr.io/specterops/nemesis/cli \
   connect-cobaltstrike -c /config/settings_cobaltstrike.yaml --debug
@@ -391,7 +414,7 @@ outflank:
     agent_id: "stage1"  # Identifies this Outflank instance on uploaded files
 
     # Optional: Read from disk instead of API
-    # outflank_upload_path: "/opt/stage1/"
+    # downloads_dir_path: "/opt/stage1/shared/downloads"
 ```
 
 ### Usage
@@ -400,6 +423,7 @@ outflank:
 # Run with mounted config file
 docker run \
   --rm -ti \
+  -v nemesis-connector-state:/root/.local/state \
   -v /path/to/settings_outflank.yaml:/config/settings_outflank.yaml \
   ghcr.io/specterops/nemesis/cli \
   connect-outflank -c /config/settings_outflank.yaml
@@ -409,10 +433,23 @@ docker run --rm ghcr.io/specterops/nemesis/cli connect-outflank --showconfig
 
 # Enable debug logging
 docker run --rm \
+  -v nemesis-connector-state:/root/.local/state \
   -v /path/to/settings_outflank.yaml:/config/settings_outflank.yaml \
   ghcr.io/specterops/nemesis/cli \
   connect-outflank -c /config/settings_outflank.yaml --debug
 ```
+
+## Connector state in Docker
+
+The Mythic, Cobalt Strike and Outflank connectors record which downloads they have already uploaded. By
+default this lives in `~/.local/state/nemesis/connectors` (or `$XDG_STATE_HOME/nemesis/connectors`), set by
+`db.path` for Mythic and `cache_db_path` for the others. Each connector logs the exact path at startup, and
+`connect-* --help` shows the default.
+
+A `docker run --rm` container loses that directory when it exits, so the examples above mount the named
+volume `nemesis-connector-state` at `/root/.local/state`. Without it, every restart uploads every file again.
+If you set `db.path` or `cache_db_path` in the config file, point it inside the mounted volume. Dry runs
+(`--dry-run`) use a temporary directory and don't need the volume.
 
 ## Common Docker Patterns
 
@@ -484,5 +521,5 @@ cli submit /data/files --debug
 ### Connectors
 
 - Adjust `timeout_sec` based on network conditions
-- Use `outflank_upload_path` for better performance with Outflank
+- Use `downloads_dir_path` for better performance with Outflank
 

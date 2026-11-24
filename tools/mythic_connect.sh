@@ -1,14 +1,19 @@
 #!/bin/bash
 
 # Wrapper script to connect to Mythic using Docker
-
+#
+# Connector state (the discovery cursor and which files were uploaded) is kept in the Docker volume
+# $NEMESIS_CONNECTOR_STATE_VOLUME (default "nemesis-connector-state"), mounted at /state. The container is
+# removed after each run, so the state path is pinned to that volume and overrides any db.path in the
+# config file; otherwise every restart would upload every Mythic file again.
 
 NEMESIS_CLI_IMAGE="${NEMESIS_CLI_IMAGE:-ghcr.io/specterops/nemesis/cli:latest}"
 NEMESIS_NETWORK="${NEMESIS_NETWORK:-host}"
+NEMESIS_CONNECTOR_STATE_VOLUME="${NEMESIS_CONNECTOR_STATE_VOLUME:-nemesis-connector-state}"
 
 # Parse arguments to handle volume mounting and CLI options
-DOCKER_VOLUME=""
-CLI_OPTIONS=""
+DOCKER_VOLUMES=()
+CLI_OPTIONS=()
 CONFIG_FILE_FOUND=false
 
 for arg in "$@"; do
@@ -21,17 +26,19 @@ for arg in "$@"; do
         # It's a file - mount it to /config/ directory with original filename
         ABS_PATH=$(realpath "$arg")
         FILENAME=$(basename "$ABS_PATH")
-        DOCKER_VOLUME="$DOCKER_VOLUME -v $ABS_PATH:/config/$FILENAME"
-        CLI_OPTIONS="$CLI_OPTIONS -c /config/$FILENAME"
+        DOCKER_VOLUMES+=(-v "$ABS_PATH:/config/$FILENAME:ro")
+        CLI_OPTIONS+=(-c "/config/$FILENAME")
         CONFIG_FILE_FOUND=true
     elif [[ -d "$arg" ]]; then
         echo "Error: Directories are not supported. Please specify a configuration file."
         exit 1
     else
         # It's a CLI option (not a file or directory)
-        CLI_OPTIONS="$CLI_OPTIONS $arg"
+        CLI_OPTIONS+=("$arg")
     fi
 done
+
+echo "Connector state is kept in the Docker volume '$NEMESIS_CONNECTOR_STATE_VOLUME' (/state in the container)" >&2
 
 # Run the Docker command
 docker run \
@@ -39,6 +46,9 @@ docker run \
   -ti \
   --network "$NEMESIS_NETWORK" \
   -e NEMESIS_IGNORE_CERT_ERRORS \
-  $DOCKER_VOLUME \
+  -e XDG_STATE_HOME=/state \
+  -e MYTHIC_SYNC_DB__PATH=/state/nemesis/connectors \
+  -v "$NEMESIS_CONNECTOR_STATE_VOLUME:/state" \
+  "${DOCKER_VOLUMES[@]}" \
   "$NEMESIS_CLI_IMAGE" \
-  connect-mythic $CLI_OPTIONS
+  connect-mythic "${CLI_OPTIONS[@]}"

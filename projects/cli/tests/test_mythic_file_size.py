@@ -149,10 +149,9 @@ async def test_lying_content_length_is_still_enforced_while_streaming(handler, m
 
 
 @pytest.mark.asyncio
-async def test_known_metadata_size_skips_without_download(handler, nemesis, db, monkeypatch):
-    monkeypatch.setattr(
-        handlers.aiohttp, "ClientSession", lambda *a, **kw: pytest.fail("download must not start for oversized file")
-    )
+async def test_oversized_content_length_skips_upload(handler, nemesis, db, monkeypatch):
+    # Mythic's GraphQL filemeta has no size column, so the limit is enforced from the download response.
+    patch_session(monkeypatch, FakeResponse([b"x"], content_length=MAX_SIZE + 1))
     await handler.handle_file(file_meta(size=MAX_SIZE + 1))
     nemesis.post_file.assert_not_awaited()
     assert db.get_strict("filemetafile-1") == b"1"
