@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import plyvel
+from cli.c2_ids import is_safe_c2_id, safe_child_path
 from cli.nemesis_client import PreviewUploadResult, UploadClient
 from cli.stage1_connector.outflankc2_client import Download, Implant, OutflankC2Client
 from common.models2.api import FileMetadata, FileWithMetadataResponse
@@ -159,6 +160,11 @@ class OutflankDownloadProcessor:
             f"Processing Outflank download {download.uid} from implant {implant.hostname}. Path: {download.path}"
         )
 
+        if not is_safe_c2_id(download.uid):
+            logger.error(f"Skipping Outflank download with unsafe UID {download.uid!r} (path: {download.path})")
+            self.mark_processed(download, success=False)
+            return
+
         # Get the file from the downloads directory or API
         downloaded_file_info = await self._get_downloaded_file(download)
         if not downloaded_file_info.success:
@@ -211,8 +217,11 @@ class OutflankDownloadProcessor:
         """
         # Check local directory first if configured
         if self.outflank_downloads_dir_path:
-            file_path = self.outflank_downloads_dir_path / download.uid
-            if not file_path.exists():
+            file_path = safe_child_path(self.outflank_downloads_dir_path, download.uid)
+            if file_path is None:
+                logger.error(f"Refusing Outflank download UID {download.uid!r}: path escapes the downloads directory")
+                return DownloadedFileInfo(None, delete_after=False, success=False)
+            if not file_path.is_file():
                 logger.error(
                     f"Downloaded file not found locally. Local Path: {file_path}. Downloaded file path: {download.path}. Downlaod UID: {download.uid}"
                 )
@@ -232,6 +241,10 @@ class OutflankDownloadProcessor:
         if not self.outflank:
             raise ValueError("No OutflankC2Client configured for remote download")
 
+        if not is_safe_c2_id(download.uid):
+            logger.error(f"Refusing to download Outflank file with unsafe UID {download.uid!r}")
+            return DownloadedFileInfo(None, delete_after=False, success=False)
+
         temp_fd, temp_path = tempfile.mkstemp(prefix=f"nemesis_{download.uid}_")
         os.close(temp_fd)
         temp_file = Path(temp_path)
@@ -241,7 +254,7 @@ class OutflankDownloadProcessor:
 
         if not success:
             logger.error(
-                "Failed to download file from C2. Download UID: {download.uid}. Download Path: {download.path}"
+                f"Failed to download file from C2. Download UID: {download.uid}. Download Path: {download.path}"
             )
             return DownloadedFileInfo(temp_file, delete_after=True, success=False)
 

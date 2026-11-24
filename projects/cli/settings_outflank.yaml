@@ -1,4 +1,4 @@
-cache_db_path: "/tmp/nemesis_connectors"
+cache_db_path: "~/.local/state/nemesis/connectors"
 conn_timeout_sec: 5
 validate_https_certs: true
 
@@ -20,4 +20,4 @@ outflank:
     # Optional:
     #   When set, stage1 downloads are retrieved from disk instead of stage1's API.
     #   The connect must be able to read files from stage1's downloads folder.
-    # outflank_upload_path: "/opt/stage1/"
+    # downloads_dir_path: "/opt/stage1/shared/downloads"

@@ -61,6 +61,24 @@ SEVERITY_LEVEL_SQL = """
 """
 
 
+# Workflow statuses counted as "failed" in every report.
+FAILED_WORKFLOW_STATUSES_SQL = "('FAILED', 'failed', 'ERROR', 'error', 'TIMEOUT', 'timeout')"
+
+
+def _end_date_condition(column: str, end_date: date | datetime) -> tuple[str, Any]:
+    """Upper-bound filter on `column` that keeps the whole end day for date-only end dates.
+
+    A plain date (or a datetime at exactly midnight, which is how "2026-11-19" arrives through a
+    `datetime` query parameter) means "up to and including that day", so it becomes
+    `column < end_date + 1 day`; any other datetime is an inclusive instant bound.
+    """
+    if not isinstance(end_date, datetime):
+        return f"{column} < %s", end_date + timedelta(days=1)
+    if end_date.time() == datetime.min.time():
+        return f"{column} < %s", end_date + timedelta(days=1)
+    return f"{column} <= %s", end_date
+
+
 def _file_filters(
     project: str | None = None,
     start_date: datetime | None = None,
@@ -76,8 +94,9 @@ def _file_filters(
         conditions.append("fe.created_at >= %s")
         params.append(start_date)
     if end_date:
-        conditions.append("fe.created_at <= %s")
-        params.append(end_date)
+        condition, value = _end_date_condition("fe.created_at", end_date)
+        conditions.append(condition)
+        params.append(value)
     return conditions, params
 
 
@@ -284,7 +303,7 @@ def get_source_report_data(
                            {SEVERITY_LEVEL_SQL} AS severity_level,
                            f.origin_name,
                            lt.value AS triage_value,
-                           DATE(fe.created_at) AS day
+                           DATE(f.created_at) AS day
                     FROM files_enriched fe
                     JOIN findings f ON f.object_id = fe.object_id
                     {LATEST_TRIAGE_LATERAL}
@@ -385,11 +404,11 @@ def get_source_report_data(
 
             # --- Enrichment performance ---
             cur.execute(
-                """
+                f"""
                 SELECT
                     COUNT(*) as total_workflows,
                     COUNT(CASE WHEN status IN ('COMPLETED', 'completed') THEN 1 END) as completed,
-                    COUNT(CASE WHEN status IN ('FAILED', 'failed', 'ERROR', 'error', 'TIMEOUT', 'timeout') THEN 1 END) as failed,
+                    COUNT(CASE WHEN status IN {FAILED_WORKFLOW_STATUSES_SQL} THEN 1 END) as failed,
                     AVG(runtime_seconds) as avg_processing_time,
                     MAX(runtime_seconds) as max_processing_time
                 FROM workflows w
@@ -502,6 +521,9 @@ def get_system_report_data(
             total_size = sum(row[2] or 0 for row in source_rows)
             total_findings = sum(row[4] for row in source_rows)
             verified_true_positives = sum(row[5] for row in source_rows)
+            # Counted over every source, not just the `sources_limit` most recent ones listed below.
+            sources_with_findings = sum(1 for row in source_rows if row[0] is not None and row[4] > 0)
+            sources_with_verified_findings = sum(1 for row in source_rows if row[0] is not None and row[5] > 0)
 
             # Credentials summary
             cur.execute(
@@ -540,14 +562,15 @@ def get_system_report_data(
                     findings_by_severity[severity_level] = count
             findings_by_category = dict(sorted(by_category, key=lambda item: item[1], reverse=True))
 
-            # Timeline data (last 14 days): files submitted per day and findings on those files
-            # (two plain GROUP BYs are much cheaper than one join of all recent files to findings)
-            recent = f"fe.created_at >= CURRENT_DATE - {TIMELINE_DAYS - 1} AND {where}"
+            # Timeline data (last 14 days): files submitted per day and findings created per day
+            # (two plain GROUP BYs are much cheaper than one join of all recent files to findings).
+            # Findings are bucketed by their own creation time; the file filters still apply.
+            timeline_start = f"CURRENT_DATE - {TIMELINE_DAYS - 1}"
             cur.execute(
                 f"""
                 SELECT DATE(fe.created_at) AS day, COUNT(*)
                 FROM files_enriched fe
-                WHERE {recent}
+                WHERE fe.created_at >= {timeline_start} AND {where}
                 GROUP BY 1
                 """,
                 params,
@@ -555,10 +578,10 @@ def get_system_report_data(
             files_per_day: dict[date, int] = dict(cur.fetchall())
             cur.execute(
                 f"""
-                SELECT DATE(fe.created_at) AS day, COUNT(*)
+                SELECT DATE(f.created_at) AS day, COUNT(*)
                 FROM findings f
                 JOIN files_enriched fe ON fe.object_id = f.object_id
-                WHERE {recent}
+                WHERE f.created_at >= {timeline_start} AND {where}
                 GROUP BY 1
                 """,
                 params,
@@ -574,7 +597,7 @@ def get_system_report_data(
                 SELECT
                     COUNT(*) as total_workflows,
                     COUNT(CASE WHEN w.status IN ('COMPLETED', 'completed') THEN 1 END) as successful,
-                    COUNT(CASE WHEN w.status IN ('FAILED', 'failed', 'ERROR', 'error') THEN 1 END) as failed,
+                    COUNT(CASE WHEN w.status IN {FAILED_WORKFLOW_STATUSES_SQL} THEN 1 END) as failed,
                     AVG(w.runtime_seconds) as avg_processing_time
                 FROM workflows w
                 JOIN files_enriched fe ON w.object_id = fe.object_id
@@ -604,6 +627,8 @@ def get_system_report_data(
             "total_size_bytes": total_size,
             "total_findings": total_findings,
             "verified_true_positives": verified_true_positives,
+            "sources_with_findings": sources_with_findings,
+            "sources_with_verified_findings": sources_with_verified_findings,
             "total_credentials": creds_row[0] or 0,
             "decrypted_credentials": creds_row[1] or 0,
         },

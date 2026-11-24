@@ -36,6 +36,10 @@ class FileUnavailableError(FileNotFoundError):
     """A previously discovered Mythic file UUID is no longer downloadable."""
 
 
+class FileTooLargeError(ValueError):
+    """A Mythic file exceeds the configured Nemesis max_file_size."""
+
+
 def _canonical_mythic_url(value: str) -> str:
     parsed = urlparse(value)
     scheme = parsed.scheme.lower()
@@ -127,24 +131,21 @@ class FileHandler:
             "object_id": nemesis_id,
         }
 
-    def _check_file_size(self, file_meta: dict[str, Any]) -> bool:
-        """Check if the file size is within configured limits.
+    def _check_file_size(self, file_size: int | None) -> bool:
+        """Check if a known file size is within the configured Nemesis limit.
 
         Args:
-            file_meta: File metadata from Mythic
+            file_size: Size of the file in bytes, or None if unknown
 
         Returns:
-            True if file size is acceptable, False otherwise
+            True if the size is unknown or within limits, False if it exceeds max_file_size
         """
-        # try:
-        #     chunk_size = int(file_meta["chunk_size"])
-        #     chunks_received = int(file_meta["chunks_received"])
-        #     estimated_size = chunk_size * chunks_received
-
-        #     return estimated_size <= self.cfg.max_file_size
-        # except (KeyError, ValueError, TypeError):
-        #     # If we can't determine the size, err on the side of processing
-        return True
+        if file_size is None or isinstance(file_size, bool):
+            return True
+        try:
+            return int(file_size) <= self.cfg.nemesis.max_file_size
+        except (TypeError, ValueError):
+            return True
 
     def _is_file_processed(self, agent_file_id: str) -> bool:
         cache_key = f"filemeta{agent_file_id}"
@@ -381,7 +382,16 @@ class FileHandler:
                             )
                         if response.status != 200:
                             raise PermanentMythicError(f"Mythic download rejected ({response.status})")
+                        max_size = self.cfg.nemesis.max_file_size
+                        if not self._check_file_size(response.content_length):
+                            raise FileTooLargeError(
+                                f"Mythic file is {response.content_length} bytes (limit {max_size} bytes)"
+                            )
+                        written = 0
                         async for chunk in response.content.iter_chunked(512_000):
+                            written += len(chunk)
+                            if not self._check_file_size(written):
+                                raise FileTooLargeError(f"Mythic file exceeds limit of {max_size} bytes")
                             temp_file.write(chunk)
                 temp_file.flush()
 
@@ -416,10 +426,11 @@ class FileHandler:
                 return
 
             # Check file size before downloading
-            if not self._check_file_size(file_meta):
+            if not self._check_file_size(file_meta.get("size")):
                 logger.warning(
                     f"Skipping uploading file '{file_name}' (UUID: {agent_file_id}). Exceeds Nemesis max size limit of {self.cfg.nemesis.max_file_size} bytes"
                 )
+                self._mark_processed(agent_file_id)
                 return
 
             # Download and process file
@@ -469,6 +480,9 @@ class FileHandler:
             raise
         except (DatabaseError, PermanentMythicError):
             raise
+        except FileTooLargeError as e:
+            logger.warning(f"Skipping uploading file '{file_name}' (UUID: {agent_file_id}): {e}")
+            self._mark_processed(agent_file_id)
         except FileUnavailableError:
             refreshed = await self._refresh_pending([{"id": file_id, "uuid": agent_file_id}])
             if any(row.get("agent_file_id") == agent_file_id and row.get("deleted") for row in refreshed):

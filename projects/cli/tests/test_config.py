@@ -253,9 +253,25 @@ class TestConfig:
         cfg = Config(nemesis=self._nemesis_cfg(), mythic=None)
         assert cfg.mythic == []
 
-    def test_cache_db_path_default(self):
+    def test_cache_db_path_default(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
         cfg = Config(nemesis=self._nemesis_cfg())
-        assert cfg.cache_db_path == Path("/tmp/connectors")
+        assert cfg.cache_db_path == tmp_path / ".local" / "state" / "nemesis" / "connectors"
+
+    def test_cache_db_path_default_honours_xdg_state_home(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg"))
+        cfg = Config(nemesis=self._nemesis_cfg())
+        assert cfg.cache_db_path == tmp_path / "xdg" / "nemesis" / "connectors"
+
+    def test_cache_db_path_default_is_not_shared_tmp(self):
+        cfg = Config(nemesis=self._nemesis_cfg())
+        assert not str(cfg.cache_db_path).startswith("/tmp/")
+
+    def test_cache_db_path_expands_user(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        cfg = Config(nemesis=self._nemesis_cfg(), cache_db_path="~/state")
+        assert cfg.cache_db_path == tmp_path / "state"
 
     def test_cache_db_path_custom(self):
         cfg = Config(nemesis=self._nemesis_cfg(), cache_db_path="/custom/path")
@@ -307,7 +323,7 @@ class TestSettingsCobaltstrike:
         assert isinstance(cfg, Config)
 
     def test_root_fields(self, cfg):
-        assert cfg.cache_db_path == Path("/tmp/nemesis_connectors")
+        assert cfg.cache_db_path == Path("~/.local/state/nemesis/connectors").expanduser()
         assert cfg.conn_timeout_sec == 5
         assert cfg.validate_https_certs is True
 
@@ -345,7 +361,7 @@ class TestSettingsOutflank:
         assert isinstance(cfg, Config)
 
     def test_root_fields(self, cfg):
-        assert cfg.cache_db_path == Path("/tmp/nemesis_connectors")
+        assert cfg.cache_db_path == Path("~/.local/state/nemesis/connectors").expanduser()
         assert cfg.conn_timeout_sec == 5
         assert cfg.validate_https_certs is True
 

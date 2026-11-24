@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
@@ -113,8 +114,18 @@ class CobaltStrikeConfig(BaseConfig):
     ] = 3
 
 
+def default_state_dir() -> Path:
+    """Per-user connector state directory: $XDG_STATE_HOME/nemesis/connectors or ~/.local/state/nemesis/connectors.
+
+    A per-user default avoids a shared, predictable /tmp path that another local user could pre-create to read,
+    poison or block connector state.
+    """
+    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(base) / "nemesis" / "connectors"
+
+
 class Config(BaseConfig):
-    cache_db_path: Path = Field(default_factory=lambda: Path("/tmp/connectors"), description="LevelDB cache path")
+    cache_db_path: Path = Field(default_factory=default_state_dir, description="LevelDB cache path")
     conn_timeout_sec: Annotated[int, Field(gt=0, description="Connection timeout in seconds")] = 30
     validate_https_certs: bool = Field(True, description="Whether to validate HTTPS certificates")
 
@@ -135,7 +146,7 @@ class Config(BaseConfig):
     @field_validator("cache_db_path", mode="before")
     @classmethod
     def validate_cache_path(cls, v):
-        return Path(v)
+        return Path(v).expanduser()
 
 
 def load_config(config_path: str) -> Config:

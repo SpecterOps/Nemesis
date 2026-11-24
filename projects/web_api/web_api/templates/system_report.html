@@ -293,11 +293,11 @@
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-label">Sources with Findings</div>
-                    <div class="stat-value">{{ sources|selectattr('finding_count', 'gt', 0)|list|length }}</div>
+                    <div class="stat-value">{{ summary.sources_with_findings if summary.sources_with_findings is defined else sources|selectattr('finding_count', 'gt', 0)|list|length }}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Sources with Verified Findings</div>
-                    <div class="stat-value danger">{{ sources|selectattr('verified_findings', 'gt', 0)|list|length }}</div>
+                    <div class="stat-value danger">{{ summary.sources_with_verified_findings if summary.sources_with_verified_findings is defined else sources|selectattr('verified_findings', 'gt', 0)|list|length }}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Avg Findings per Source</div>

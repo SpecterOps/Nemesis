@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EnrichmentResponse(BaseModel):
@@ -92,6 +92,8 @@ class ContainerSubmissionResponse(BaseModel):
     estimated_files: int
     estimated_size: int
     filter_config: dict | None = None
+    success: bool = True
+    error_message: str | None = None
 
 
 class ContainerStatusResponse(BaseModel):
@@ -208,3 +210,10 @@ class LLMSynthesisResponse(BaseModel):
     recommendations: list[str] = []
     token_usage: int | None = None
     error: str | None = None
+
+
+class SystemHealthResponse(BaseModel):
+    status: str = Field(description="'healthy' when all dependencies are reachable, otherwise 'degraded'")
+    checks: dict[str, str] = Field(
+        default_factory=dict, description="Per-dependency result: 'ok', 'error' or 'timeout'"
+    )

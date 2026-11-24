@@ -3,23 +3,75 @@
 # Values are never printed; only the affected line of the env file is touched.
 
 # Print the (unquoted) value of NAME from ENV_FILE, or nothing when unset.
+# Follows the docker compose .env rules for comments: in an unquoted value, " #" (whitespace then #)
+# starts an inline comment, while a "#" with no whitespace before it is part of the value; a quoted
+# value keeps every "#" inside the quotes, and a comment may follow the closing quote.
 env_file_value() {
-  local env_file=$1 name=$2
+  local env_file=$1 name=$2 raw value
   # (|| true: no matching line is fine under set -euo pipefail)
-  { grep -E "^[[:space:]]*${name}=" "$env_file" || true; } | tail -n 1 | cut -d= -f2- \
-    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+  raw="$({ grep -E "^[[:space:]]*${name}=" "$env_file" || true; } | tail -n 1 | cut -d= -f2-)"
+  # Strip leading/trailing whitespace
+  value="${raw#"${raw%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ "$value" =~ ^\"([^\"]*)\"[[:space:]]*(#.*)?$ ]] || [[ "$value" =~ ^\'([^\']*)\'[[:space:]]*(#.*)?$ ]]; then
+    value="${BASH_REMATCH[1]}"
+  elif [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then
+    # Quotes inside a quoted value: keep everything between the outer quotes
+    value="${BASH_REMATCH[1]}"
+  elif [[ "$raw" =~ ^[[:space:]]+# ]]; then
+    # NAME= # comment -> empty
+    value=""
+  else
+    # Unquoted: drop an inline " # comment" and the whitespace before it
+    value="${value%%[[:space:]]#*}"
+    value="${value%"${value##*[![:space:]]}"}"
+  fi
+  printf '%s\n' "$value"
 }
 
-# Set NAME="VALUE" in ENV_FILE, rewriting an existing line or appending a new one.
+# Restrict ENV_FILE (which holds every deployment secret) to its owner. A failure (e.g. a file owned by
+# another user) is reported but not fatal.
+restrict_env_file_permissions() {
+  local env_file=$1
+  if ! chmod 600 "$env_file" 2> /dev/null; then
+    echo "Warning: could not restrict permissions on ${env_file}; run: chmod 600 ${env_file}" >&2
+  fi
+  return 0
+}
+
+# Warn (without changing anything) when ENV_FILE is readable or writable by group/others. Files this
+# script writes to are restricted automatically; an untouched .env is left to the operator, since some
+# deployments share it deliberately.
+warn_if_env_file_shared() {
+  local env_file=$1 mode
+  [ -f "$env_file" ] || return 0
+  mode="$(stat -c %a "$env_file" 2> /dev/null || stat -f %Lp "$env_file" 2> /dev/null)" || return 0
+  [[ "$mode" =~ ^[0-7]+$ ]] || return 0
+  if (((8#$mode & 8#077) != 0)); then
+    echo "Warning: ${env_file} (mode ${mode}) is accessible to other users and holds secrets; consider: chmod 600 ${env_file}" >&2
+  fi
+  return 0
+}
+
+# Set NAME="VALUE" in ENV_FILE, rewriting an existing line or appending a new one, then restrict the
+# file to mode 0600.
 set_env_file_value() {
-  local env_file=$1 name=$2 value=$3
+  local env_file=$1 name=$2 value=$3 tmp
   if grep -qE "^[[:space:]]*${name}=" "$env_file"; then
-    # Rewrite in place (cat > keeps the file's owner and permissions)
-    awk -v n="$name" -v v="$value" '$0 ~ "^[[:space:]]*" n "=" { print n "=\"" v "\""; next } { print }' \
-      "$env_file" > "${env_file}.tmp" && cat "${env_file}.tmp" > "$env_file" && rm -f "${env_file}.tmp"
+    # The temporary copy holds every secret: mktemp creates it with mode 0600, next to the env file.
+    tmp="$(umask 077 && mktemp "${env_file}.XXXXXX")" || return 1
+    # Rewrite in place (cat > keeps the file's owner)
+    if awk -v n="$name" -v v="$value" '$0 ~ "^[[:space:]]*" n "=" { print n "=\"" v "\""; next } { print }' \
+      "$env_file" > "$tmp" && cat "$tmp" > "$env_file"; then
+      rm -f "$tmp"
+    else
+      rm -f "$tmp"
+      return 1
+    fi
   else
     printf '\n%s="%s"\n' "$name" "$value" >> "$env_file"
   fi
+  restrict_env_file_permissions "$env_file"
 }
 
 random_secret() {
@@ -118,4 +170,21 @@ export_url_encoded_credentials() {
     echo "Error: ${bad[*]} contain(s) '\$', which docker compose expands inside .env values. Use a value without '\$'." >&2
     return 1
   fi
+}
+
+# For `stop`/`clean`: docker compose interpolates the whole file even for `down`, and refuses to run when a
+# required (${NAME:?}) value is missing. Export a throwaway value for each NAME that has no value in the
+# environment or ENV_FILE, so a deployment that never started (or has no .env) can still be torn down.
+# Nothing is written to ENV_FILE and nothing is generated there.
+# Usage: export_placeholders_for_compose_down ENV_FILE NAME...
+export_placeholders_for_compose_down() {
+  local env_file=$1 name value
+  shift
+  for name in "$@"; do
+    [ -n "${!name:-}" ] && continue
+    value=""
+    [ -f "$env_file" ] && value="$(env_file_value "$env_file" "$name")"
+    [ -n "$value" ] && continue
+    export "${name}=unused-by-compose-down"
+  done
 }

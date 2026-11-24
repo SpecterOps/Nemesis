@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Configurable `agent_id` for the Mythic, Outflank, and Cobalt Strike connectors to distinguish C2 instances (#111, #112 by @IC3-512)
+
+### Changed
+
+- The Cobalt Strike connector's default `agent_id` is now `cobaltstrike` (was `Cobalt Strike`)
+- Connector processing state is now kept per framework, URL, project, and `agent_id`, and defaults to `~/.local/state/nemesis/connectors`. After upgrading, previously collected downloads may be uploaded once more.
+
 ## [2.2.3]
 
 ### Changed

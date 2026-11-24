@@ -1,5 +1,7 @@
 # src/workflow/queue_monitor.py
+import asyncio
 import base64
+import threading
 from datetime import datetime
 from typing import Any
 
@@ -8,6 +10,41 @@ from common.logger import get_logger
 from dapr.clients import DaprClient
 
 logger = get_logger(__name__)
+
+# The RabbitMQ management credentials are fetched from the Dapr secret store once per process
+# (it is a blocking call) and reused by every WorkflowQueueMonitor.
+_auth_header: str | None = None
+_auth_header_lock = threading.Lock()
+
+
+def _fetch_rabbitmq_auth_header() -> str:
+    """Build the Basic auth header from the Dapr secret store (blocking)."""
+    with DaprClient() as client:
+        secret = client.get_secret(store_name="nemesis-secret-store", key="RABBITMQ_USER")
+        rabbitmq_user = secret.secret["RABBITMQ_USER"]
+        secret = client.get_secret(store_name="nemesis-secret-store", key="RABBITMQ_PASSWORD")
+        rabbitmq_password = secret.secret["RABBITMQ_PASSWORD"]
+
+    credentials = f"{rabbitmq_user}:{rabbitmq_password}"
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+    return f"Basic {encoded_credentials}"
+
+
+def get_rabbitmq_auth_header() -> str:
+    """Return the cached RabbitMQ auth header, fetching it on first use (blocking on first call only)."""
+    global _auth_header
+    if _auth_header is None:
+        with _auth_header_lock:
+            if _auth_header is None:
+                _auth_header = _fetch_rabbitmq_auth_header()
+    return _auth_header
+
+
+def clear_rabbitmq_auth_cache() -> None:
+    """Forget the cached credentials (e.g. after a password rotation)."""
+    global _auth_header
+    with _auth_header_lock:
+        _auth_header = None
 
 
 class WorkflowQueueMonitor:
@@ -33,19 +70,13 @@ class WorkflowQueueMonitor:
     def __init__(self):
         self.management_url = "http://rabbitmq:15672/rabbitmq"
         self._session = None
-
-        with DaprClient() as client:
-            secret = client.get_secret(store_name="nemesis-secret-store", key="RABBITMQ_USER")
-            rabbitmq_user = secret.secret["RABBITMQ_USER"]
-            secret = client.get_secret(store_name="nemesis-secret-store", key="RABBITMQ_PASSWORD")
-            rabbitmq_password = secret.secret["RABBITMQ_PASSWORD"]
-
-        credentials = f"{rabbitmq_user}:{rabbitmq_password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        self.auth_header = f"Basic {encoded_credentials}"
+        self.auth_header: str | None = _auth_header
 
     async def __aenter__(self):
         """Async context manager for connection pooling"""
+        if self.auth_header is None:
+            # First use in this process: fetch the secret off the event loop
+            self.auth_header = await asyncio.to_thread(get_rabbitmq_auth_header)
         self._session = aiohttp.ClientSession(
             headers={"Authorization": self.auth_header}, timeout=aiohttp.ClientTimeout(total=10)
         )

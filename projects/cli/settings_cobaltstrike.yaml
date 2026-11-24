@@ -1,4 +1,4 @@
-cache_db_path: "/tmp/nemesis_connectors"
+cache_db_path: "~/.local/state/nemesis/connectors"
 conn_timeout_sec: 5
 validate_https_certs: true
 

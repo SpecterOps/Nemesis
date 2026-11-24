@@ -232,3 +232,18 @@ def test_legacy_database_is_retained(tmp_path):
         db.put(b"download:1", b"instance record")
     with plyvel.DB(str(root)) as db:
         assert db.get(b"download:1") == b"legacy record"
+
+
+def test_new_state_root_is_private(tmp_path):
+    root = tmp_path / "fresh" / "state"
+    collector_state_path(root, "outflank", "https://c2.local", "assessment", "stage1")
+    assert root.is_dir()
+    assert (root.stat().st_mode & 0o777) == 0o700
+
+
+def test_existing_state_root_permissions_untouched(tmp_path):
+    root = tmp_path / "existing"
+    root.mkdir(mode=0o755)
+    root.chmod(0o755)
+    collector_state_path(root, "outflank", "https://c2.local", "assessment", "stage1")
+    assert (root.stat().st_mode & 0o777) == 0o755

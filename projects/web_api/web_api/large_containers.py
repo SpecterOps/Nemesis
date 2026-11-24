@@ -1,15 +1,21 @@
 import json
+import ntpath
 import os
+import posixpath
 import re
+import shutil
 import tempfile
 import zipfile
-from datetime import UTC, datetime, timedelta
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
+from urllib.parse import urlparse
 
 import psycopg
 import pytsk3
 from common.db import get_postgres_connection_str
+from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import File as FileModel
 from common.models2.api import FileFilters
@@ -25,6 +31,106 @@ DAPR_STORE_NAME = "container_processing"
 
 MOUNTED_CONTAINER_PATH = os.getenv("MOUNTED_CONTAINER_PATH", "/mounted-containers/")
 DEFAULT_EXPIRATION_DAYS = int(os.getenv("DEFAULT_EXPIRATION_DAYS", 100))
+
+# Column limits for container_processing (infra/postgres/01-schema.sql)
+CONTAINER_METADATA_MAX_LENGTHS = {"agent_id": 255, "project": 255, "source": 1000}
+ORIGINAL_FILENAME_MAX_LENGTH = 255
+REQUIRED_CONTAINER_METADATA_FIELDS = ("agent_id", "project")
+
+# Chunk size used when copying extracted file content to temp files
+EXTRACT_CHUNK_SIZE = 1024 * 1024
+
+
+class ContainerMetadataError(ValueError):
+    """Raised when container metadata is invalid (wrong type, missing, or too long)."""
+
+
+class ContainerExtractionError(Exception):
+    """Raised when a container cannot be extracted at all (e.g. no readable filesystem)."""
+
+
+def coerce_metadata_value(field: str, value: Any, required: bool = False) -> str | None:
+    """Coerce a scalar metadata value (e.g. a YAML int like `project: 2024`) to str.
+
+    Raises ContainerMetadataError for missing required values, non-scalar values
+    (lists/dicts), booleans (usually a YAML ambiguity such as `project: yes`), and
+    values exceeding the container_processing column limit.
+    """
+    if value is None:
+        if required:
+            raise ContainerMetadataError(f"Container metadata field '{field}' is required")
+        return None
+
+    if isinstance(value, bool):
+        raise ContainerMetadataError(
+            f"Container metadata field '{field}' must be a string, got boolean {value!r} (quote it in the config)"
+        )
+    if isinstance(value, str):
+        coerced = value
+    elif isinstance(value, int | float | date):
+        coerced = value.isoformat() if isinstance(value, date) else str(value)
+    else:
+        raise ContainerMetadataError(f"Container metadata field '{field}' must be a string, got {type(value).__name__}")
+
+    if required and not coerced.strip():
+        raise ContainerMetadataError(f"Container metadata field '{field}' must not be empty")
+
+    max_len = CONTAINER_METADATA_MAX_LENGTHS.get(field)
+    if max_len is not None and len(coerced) > max_len:
+        raise ContainerMetadataError(
+            f"Container metadata field '{field}' is too long ({len(coerced)} > {max_len} characters)"
+        )
+
+    return coerced
+
+
+def validate_container_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Validate/coerce agent_id, project and source in-place and return the metadata."""
+    for field in CONTAINER_METADATA_MAX_LENGTHS:
+        if field in metadata or field in REQUIRED_CONTAINER_METADATA_FIELDS:
+            metadata[field] = coerce_metadata_value(
+                field, metadata.get(field), required=field in REQUIRED_CONTAINER_METADATA_FIELDS
+            )
+    return metadata
+
+
+def _is_valid_uri(uri: str) -> bool:
+    try:
+        result = urlparse(uri)
+        return all([result.scheme, result.netloc])
+    except Exception:
+        return False
+
+
+def normalize_container_path(path: str) -> str:
+    """Normalize a container path the same way web_api.main.normalize_path does for /files uploads.
+
+    Backslashes become forward slashes and Windows drive paths become "/C:/...", so that
+    `posixpath.dirname` works and extracted member paths line up with uploaded file paths.
+    """
+    if not path or _is_valid_uri(path):
+        return path
+
+    if ntpath.isabs(path):
+        path = ntpath.abspath(path)
+
+    path = path.replace("\\", "/")
+
+    drive = get_drive_from_path(path)
+    if drive is not None and len(drive) == 2 and drive[1] == ":":
+        path = "/" + path
+
+    return path
+
+
+def _parse_timestamp(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        dt = datetime.fromisoformat(str(value))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
 
 
 class ContainerStatus:
@@ -101,18 +207,34 @@ class BaseContainerExtractor:
         self.filter_stats = {"files_processed": 0, "files_skipped_by_filter": 0, "files_skipped_by_error": 0}
 
     def set_container_info(self, container_id: str, file_metadata: dict[str, Any]):
-        """Set container processing information"""
+        """Set container processing information.
+
+        Raises ContainerMetadataError if agent_id/project/source are missing, of the wrong type,
+        or too long, so that a bad config fails up front instead of every extracted file failing.
+        """
+        validate_container_metadata(file_metadata)
+
         self.container_id = container_id
         self.file_metadata = file_metadata
+
+        # Normalize the container path (Windows paths -> "/C:/..."), matching /files uploads
+        if self.file_metadata.get("path"):
+            self.file_metadata["path"] = normalize_container_path(str(self.file_metadata["path"]))
 
         # Handle timestamp - use current UTC time if not provided
         if self.file_metadata.get("timestamp") is None:
             current_utc = datetime.now(UTC)
             self.file_metadata["timestamp"] = current_utc.isoformat()
 
-        # Handle expiration - use timestamp + DEFAULT_EXPIRATION_DAYS if not provided
+        # Handle expiration - use timestamp + DEFAULT_EXPIRATION_DAYS if not provided (same as /files uploads)
         if self.file_metadata.get("expiration") is None:
-            expiration_dt = datetime.now(UTC) + timedelta(days=DEFAULT_EXPIRATION_DAYS)
+            try:
+                timestamp_dt = _parse_timestamp(self.file_metadata["timestamp"])
+            except (TypeError, ValueError) as e:
+                raise ContainerMetadataError(
+                    f"Container metadata field 'timestamp' is not a valid ISO 8601 datetime: {e}"
+                ) from e
+            expiration_dt = timestamp_dt + timedelta(days=DEFAULT_EXPIRATION_DAYS)
             self.file_metadata["expiration"] = expiration_dt.isoformat()
 
         # Initialize file filter if provided
@@ -130,25 +252,26 @@ class BaseContainerExtractor:
         else:
             self.file_filter = FilePathFilter()  # No filters
 
-    def should_process_file(self, file_path: str) -> bool:
-        """Check if a file should be processed based on filters"""
+    def should_process_file(self, file_path: str, record_skip: bool = True) -> bool:
+        """Check if a file should be processed based on filters.
+
+        `record_skip=False` is used by the estimate pass so files are not counted twice in
+        files_skipped_by_filter (once while estimating and again while extracting).
+        """
         should_include = self.file_filter.should_include_file(file_path)
 
-        if not should_include:
+        if not should_include and record_skip:
             self.filter_stats["files_skipped_by_filter"] += 1
-        #     logger.debug(
-        #         "File skipped by filter",
-        #         container_id=self.container_id,
-        #         file_path=file_path
-        #     )
-        # else:
-        #     logger.debug(
-        #         "File included by filter",
-        #         container_id=self.container_id,
-        #         file_path=file_path
-        #     )
 
         return should_include
+
+    def container_member_path(self, member_path: str) -> str:
+        """Build the real path of a file extracted from this container."""
+        if self.file_metadata is None:
+            raise RuntimeError("file_metadata must be set via set_container_info before building paths")
+        base_dir = posixpath.dirname(str(self.file_metadata.get("path", "")))
+        member_path = member_path.replace("\\", "/")
+        return posixpath.join(base_dir, member_path).removeprefix(MOUNTED_CONTAINER_PATH)
 
     def publish_file_message(self, temp_file_path: str, object_id: str, real_path: str):
         """Publish file message to the message bus"""
@@ -168,6 +291,8 @@ class BaseContainerExtractor:
         )
 
         data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
+        file_size = os.path.getsize(temp_file_path)
+
         self.dapr_client.publish_event(
             pubsub_name=FILES_PUBSUB,
             topic_name=FILES_NEW_FILE_TOPIC,
@@ -176,7 +301,6 @@ class BaseContainerExtractor:
         )
 
         # Update progress and stats
-        file_size = os.path.getsize(temp_file_path)
         self.progress_tracker.update_file_progress(self.container_id, os.path.basename(real_path), file_size)
         self.filter_stats["files_processed"] += 1
 
@@ -186,6 +310,48 @@ class BaseContainerExtractor:
             object_id=object_id,
             path=real_path,
         )
+
+    def _upload_and_publish(self, write_content: Callable[[IO[bytes]], None], real_path: str) -> None:
+        """Write content to a temp file, upload it, and publish the file message.
+
+        The temp file is always removed. If publishing fails after the upload succeeded, the
+        uploaded object is deleted (best-effort) so it is not orphaned in storage.
+        """
+        temp_path: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False) as temp_extracted:
+                temp_path = temp_extracted.name
+                write_content(temp_extracted)
+                temp_extracted.flush()
+
+            object_id = str(self.storage.upload_file(temp_path))
+
+            try:
+                self.publish_file_message(temp_path, object_id, real_path)
+            except Exception:
+                try:
+                    self.storage.delete_object(object_id)
+                    logger.info(
+                        "Deleted uploaded object after publish failure",
+                        container_id=self.container_id,
+                        object_id=object_id,
+                    )
+                except Exception as delete_error:
+                    logger.warning(
+                        "Failed to delete orphaned object after publish failure",
+                        container_id=self.container_id,
+                        object_id=object_id,
+                        error=str(delete_error),
+                    )
+                raise
+        finally:
+            if temp_path is not None:
+                try:
+                    os.unlink(temp_path)
+                except FileNotFoundError:
+                    pass
+                except Exception as cleanup_error:
+                    logger.warning(f"Error removing temporary file {temp_path}: {cleanup_error}")
 
     def get_processing_stats(self) -> dict:
         """Get processing statistics including filter stats"""
@@ -356,8 +522,8 @@ class ZipContainerExtractor(BaseContainerExtractor):
                     if len(os.path.basename(info.filename)) > 255:
                         continue
 
-                    # Apply file filters
-                    if not self.should_process_file(info.filename):
+                    # Apply file filters (don't record skips; extraction records them)
+                    if not self.should_process_file(info.filename, record_skip=False):
                         continue
 
                     file_count += 1
@@ -396,30 +562,22 @@ class ZipContainerExtractor(BaseContainerExtractor):
                         continue  # Skip this file due to filter
 
                     try:
-                        # Extract single file to temporary location
-                        with tempfile.NamedTemporaryFile(delete=False) as temp_extracted:
-                            temp_extracted.write(zip_ref.read(info))
-                            temp_extracted.flush()
 
-                            # Upload to storage
-                            object_id = self.storage.upload_file(temp_extracted.name)
+                        def write_member(dest: IO[bytes], info: zipfile.ZipInfo = info) -> None:
+                            with zip_ref.open(info) as src:
+                                shutil.copyfileobj(src, dest, EXTRACT_CHUNK_SIZE)
 
-                            # Calculate real path
-                            base_dir = os.path.dirname(self.file_metadata["path"])
-                            real_path = os.path.join(base_dir, info.filename).removeprefix(MOUNTED_CONTAINER_PATH)
-
-                            # Publish file message
-                            self.publish_file_message(temp_extracted.name, str(object_id), real_path)
-                            processed_count += 1
+                        real_path = self.container_member_path(info.filename)
+                        self._upload_and_publish(write_member, real_path)
+                        processed_count += 1
 
                     except Exception as e:
                         logger.warning(f"Error processing file {info.filename}: {e}")
                         self.filter_stats["files_skipped_by_error"] += 1
-                    finally:
-                        # Clean up temporary file
-                        if "temp_extracted" in locals() and os.path.exists(temp_extracted.name):
-                            os.unlink(temp_extracted.name)
 
+        except zipfile.BadZipFile as e:
+            logger.exception(f"Error extracting ZIP file: {e}")
+            raise ContainerExtractionError(f"Could not read ZIP file: {e}") from e
         except Exception as e:
             logger.exception(f"Error extracting ZIP file: {e}")
             raise
@@ -434,86 +592,148 @@ class ZipContainerExtractor(BaseContainerExtractor):
 class DDImageContainerExtractor(BaseContainerExtractor):
     """DD disk image extractor that processes files from filesystem structures"""
 
+    @staticmethod
+    def _is_allocated_partition(part: Any) -> bool:
+        flags = getattr(part, "flags", None)
+        try:
+            return bool(int(flags) & int(pytsk3.TSK_VS_PART_FLAG_ALLOC))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return flags == pytsk3.TSK_VS_PART_FLAG_ALLOC
+
+    def _open_filesystems(self, img_info: pytsk3.Img_Info) -> list[tuple[str, pytsk3.FS_Info]]:
+        """Open every readable filesystem in the image.
+
+        Tries a filesystem at offset 0 first (a bare partition/volume image). If that fails,
+        parses the partition table (MBR/GPT/...) with pytsk3.Volume_Info and opens the filesystem
+        of each allocated partition at `part.start * block_size`.
+
+        Returns a list of (path_prefix, fs_info). path_prefix is "" when there is a single
+        filesystem, otherwise "partition<addr>" so files from different partitions don't collide.
+
+        Raises ContainerExtractionError when no filesystem can be opened.
+        """
+        try:
+            return [("", pytsk3.FS_Info(img_info, offset=0))]
+        except Exception as e:
+            fs_error = e
+            logger.info(
+                "No filesystem at offset 0, trying partition table", container_id=self.container_id, error=str(e)
+            )
+
+        try:
+            volume = pytsk3.Volume_Info(img_info)
+        except Exception as vol_error:
+            raise ContainerExtractionError(
+                f"Could not open a filesystem at offset 0 ({fs_error}) or parse a partition table ({vol_error})"
+            ) from vol_error
+
+        block_size = volume.info.block_size
+        filesystems: list[tuple[str, pytsk3.FS_Info]] = []
+        for part in volume:
+            if not self._is_allocated_partition(part):
+                continue
+            offset = part.start * block_size
+            try:
+                fs_info = pytsk3.FS_Info(img_info, offset=offset)
+            except Exception as e:
+                logger.info(
+                    "Could not open filesystem in partition",
+                    container_id=self.container_id,
+                    partition=part.addr,
+                    description=getattr(part, "desc", b""),
+                    offset=offset,
+                    error=str(e),
+                )
+                continue
+            filesystems.append((f"partition{part.addr}", fs_info))
+
+        if not filesystems:
+            raise ContainerExtractionError(
+                f"No readable filesystem found at offset 0 ({fs_error}) or in any allocated partition"
+            )
+
+        if len(filesystems) == 1:
+            return [("", filesystems[0][1])]
+        return filesystems
+
     def estimate_container_contents(self, container_file_path: Path) -> tuple[int, int]:
         """Estimate DD image contents by parsing filesystem with filtering"""
         try:
             # Open the image file directly
             img_info = pytsk3.Img_Info(str(container_file_path))
 
-            # Try to open the filesystem
             try:
-                fs_info = pytsk3.FS_Info(img_info)
-
-                # Walk the filesystem to count files and calculate size
-                file_count = 0
-                total_size = 0
-
-                def walk_directory(directory, path="", stack=None):
-                    """Recursively walk directory to count files with filtering"""
-                    nonlocal file_count, total_size
-
-                    if stack is None:
-                        stack = []
-
-                    for entry in directory:
-                        # Skip . and .. entries
-                        if entry.info.name.name in [b".", b".."]:
-                            continue
-
-                        # Skip if entry doesn't have metadata
-                        if not hasattr(entry.info.meta, "type"):
-                            continue
-
-                        try:
-                            # Get the file name
-                            filename = entry.info.name.name.decode("utf-8", errors="replace")
-                            file_path = os.path.join(path, filename)
-
-                            # If it's a directory, recurse
-                            if entry.info.meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
-                                try:
-                                    sub_directory = entry.as_directory()
-                                    # Prevent infinite loops
-                                    inode = entry.info.meta.addr
-                                    if inode not in stack:
-                                        walk_directory(sub_directory, file_path, stack + [inode])
-                                except Exception:
-                                    # Some directories might not be accessible
-                                    pass
-                            # If it's a regular file, count it with filtering
-                            elif entry.info.meta.type == pytsk3.TSK_FS_META_TYPE_REG:
-                                # Security checks (same as extraction)
-                                if file_path.startswith("/") or ".." in file_path:
-                                    continue
-
-                                if len(os.path.basename(filename)) > 255:
-                                    continue
-
-                                # Apply file filters
-                                if not self.should_process_file(file_path):
-                                    continue
-
-                                # Skip empty files (same as extraction)
-                                if entry.info.meta.size == 0:
-                                    continue
-
-                                # logger.debug(f"file_path: {file_path}")
-                                file_count += 1
-                                if hasattr(entry.info.meta, "size"):
-                                    total_size += entry.info.meta.size
-
-                        except Exception:
-                            # Skip entries that can't be processed
-                            continue
-
-                # Start walking from root
-                root_dir = fs_info.open_dir(path="/")
-                walk_directory(root_dir)
-
-            except Exception as e:
+                filesystems = self._open_filesystems(img_info)
+            except ContainerExtractionError as e:
                 logger.warning(f"Could not parse filesystem, will return 0 estimates: {e}")
-                file_count = 0
-                total_size = 0
+                return 0, 0
+
+            # Walk the filesystem to count files and calculate size
+            file_count = 0
+            total_size = 0
+
+            def walk_directory(directory, path="", stack=None):
+                """Recursively walk directory to count files with filtering"""
+                nonlocal file_count, total_size
+
+                if stack is None:
+                    stack = []
+
+                for entry in directory:
+                    # Skip . and .. entries
+                    if entry.info.name.name in [b".", b".."]:
+                        continue
+
+                    # Skip if entry doesn't have metadata
+                    if not hasattr(entry.info.meta, "type"):
+                        continue
+
+                    try:
+                        # Get the file name
+                        filename = entry.info.name.name.decode("utf-8", errors="replace")
+                        file_path = posixpath.join(path, filename)
+
+                        # If it's a directory, recurse
+                        if entry.info.meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
+                            try:
+                                sub_directory = entry.as_directory()
+                                # Prevent infinite loops
+                                inode = entry.info.meta.addr
+                                if inode not in stack:
+                                    walk_directory(sub_directory, file_path, stack + [inode])
+                            except Exception:
+                                # Some directories might not be accessible
+                                pass
+                        # If it's a regular file, count it with filtering
+                        elif entry.info.meta.type == pytsk3.TSK_FS_META_TYPE_REG:
+                            # Security checks (same as extraction)
+                            if file_path.startswith("/") or ".." in file_path:
+                                continue
+
+                            if len(os.path.basename(filename)) > 255:
+                                continue
+
+                            # Apply file filters (don't record skips; extraction records them)
+                            if not self.should_process_file(file_path, record_skip=False):
+                                continue
+
+                            # Skip empty files (same as extraction)
+                            if entry.info.meta.size == 0:
+                                continue
+
+                            file_count += 1
+                            if hasattr(entry.info.meta, "size"):
+                                total_size += entry.info.meta.size
+
+                    except Exception:
+                        # Skip entries that can't be processed
+                        continue
+
+            for _prefix, fs_info in filesystems:
+                try:
+                    walk_directory(fs_info.open_dir(path="/"))
+                except Exception as e:
+                    logger.warning(f"Error walking filesystem for estimate: {e}")
 
             return file_count, total_size
 
@@ -522,7 +742,11 @@ class DDImageContainerExtractor(BaseContainerExtractor):
             return 0, 0
 
     def extract_and_process(self, container_file_path: Path) -> int:
-        """Extract DD image and process each file individually with filtering"""
+        """Extract DD image and process each file individually with filtering.
+
+        Raises ContainerExtractionError if no filesystem in the image can be opened or read,
+        so callers never treat an unreadable image as successfully processed.
+        """
         if self.file_metadata is None:
             raise RuntimeError("file_metadata must be set via set_container_info before extraction")
         processed_count = 0
@@ -530,32 +754,37 @@ class DDImageContainerExtractor(BaseContainerExtractor):
         try:
             # Open the image file directly
             img_info = pytsk3.Img_Info(str(container_file_path))
-
-            try:
-                # Try to open the filesystem
-                fs_info = pytsk3.FS_Info(img_info)
-
-                # Process files from the filesystem
-                processed_count = self._process_filesystem(fs_info, img_info)
-
-            except Exception as e:
-                logger.exception(f"Could not parse filesystem: {e}")
-
         except Exception as e:
-            logger.exception(f"Error extracting DD image: {e}")
-            raise
+            logger.exception(f"Error opening DD image: {e}")
+            raise ContainerExtractionError(f"Could not open disk image: {e}") from e
+
+        filesystems = self._open_filesystems(img_info)
+
+        readable_filesystems = 0
+        for prefix, fs_info in filesystems:
+            try:
+                processed_count += self._process_filesystem(fs_info, img_info, prefix)
+                readable_filesystems += 1
+            except ContainerExtractionError as e:
+                logger.error(str(e), container_id=self.container_id, partition=prefix or None)
+                self.filter_stats["files_skipped_by_error"] += 1
 
         # Log final statistics
         stats = self.get_processing_stats()
         logger.info("Container extraction completed", container_id=self.container_id, stats=stats)
 
+        if readable_filesystems == 0:
+            raise ContainerExtractionError("Could not read the root directory of any filesystem in the disk image")
+
         return processed_count
 
-    def _process_filesystem(self, fs_info: pytsk3.FS_Info, img_info: pytsk3.Img_Info) -> int:
-        """Process files from a parsed filesystem"""
+    def _process_filesystem(self, fs_info: pytsk3.FS_Info, img_info: pytsk3.Img_Info, path_prefix: str = "") -> int:
+        """Process files from a parsed filesystem.
+
+        Raises ContainerExtractionError if the root directory cannot be opened.
+        """
         if self.file_metadata is None:
             raise RuntimeError("file_metadata must be set via set_container_info before processing")
-        file_metadata = self.file_metadata
         processed_count = 0
 
         def process_directory(directory, path=""):
@@ -574,7 +803,7 @@ class DDImageContainerExtractor(BaseContainerExtractor):
                 try:
                     # Get the file name
                     filename = entry.info.name.name.decode("utf-8", errors="replace")
-                    file_path = os.path.join(path, filename)
+                    file_path = posixpath.join(path, filename)
 
                     # If it's a directory, recurse
                     if entry.info.meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
@@ -602,32 +831,26 @@ class DDImageContainerExtractor(BaseContainerExtractor):
                             continue
 
                         # Skip empty files
-                        if entry.info.meta.size == 0:
+                        file_size = entry.info.meta.size
+                        if file_size == 0:
                             logger.debug(f"Skipping empty file: {file_path}")
                             continue
 
                         try:
-                            # Read file content
-                            file_content = entry.read_random(0, entry.info.meta.size)
 
-                            # Save to temporary file and upload
-                            with tempfile.NamedTemporaryFile(delete=False) as temp_extracted:
-                                temp_extracted.write(file_content)
-                                temp_extracted.flush()
+                            def write_entry(dest: IO[bytes], entry=entry, file_size=file_size) -> None:
+                                offset = 0
+                                while offset < file_size:
+                                    chunk = entry.read_random(offset, min(EXTRACT_CHUNK_SIZE, file_size - offset))
+                                    if not chunk:
+                                        break
+                                    dest.write(chunk)
+                                    offset += len(chunk)
 
-                                # Upload to storage
-                                object_id = self.storage.upload_file(temp_extracted.name)
-
-                                # Calculate real path
-                                base_dir = os.path.dirname(file_metadata["path"])
-                                real_path = os.path.join(base_dir, file_path).removeprefix(MOUNTED_CONTAINER_PATH)
-
-                                # Publish file message
-                                self.publish_file_message(temp_extracted.name, str(object_id), real_path)
-                                processed_count += 1
-
-                                # Clean up temporary file
-                                os.unlink(temp_extracted.name)
+                            member_path = posixpath.join(path_prefix, file_path) if path_prefix else file_path
+                            real_path = self.container_member_path(member_path)
+                            self._upload_and_publish(write_entry, real_path)
+                            processed_count += 1
 
                         except Exception as e:
                             logger.warning(f"Error processing file {file_path}: {e}")
@@ -640,9 +863,10 @@ class DDImageContainerExtractor(BaseContainerExtractor):
         # Start processing from root
         try:
             root_dir = fs_info.open_dir(path="/")
-            process_directory(root_dir)
         except Exception as e:
-            logger.error(f"Error opening root directory: {e}")
+            raise ContainerExtractionError(f"Error opening root directory: {e}") from e
+
+        process_directory(root_dir)
 
         return processed_count
 
@@ -670,6 +894,14 @@ class LargeContainerProcessor:
         estimated_size: int,
     ) -> None:
         """Create initial container processing record in database"""
+        original_filename = file_metadata.get("filename") or posixpath.basename(str(file_metadata.get("path", "")))
+        if original_filename and len(original_filename) > ORIGINAL_FILENAME_MAX_LENGTH:
+            logger.warning(
+                "Truncating container filename to fit container_processing.original_filename",
+                container_id=container_id,
+                length=len(original_filename),
+            )
+            original_filename = original_filename[:ORIGINAL_FILENAME_MAX_LENGTH]
         try:
             with psycopg.connect(self.postgres_connection_string) as conn:
                 with conn.cursor() as cur:
@@ -684,7 +916,7 @@ class LargeContainerProcessor:
                         (
                             container_id,
                             container_type,
-                            file_metadata.get("filename", os.path.basename(file_metadata.get("path", ""))),
+                            original_filename,
                             file_metadata.get("size", 0),
                             file_metadata.get("agent_id"),
                             file_metadata.get("source"),
@@ -727,6 +959,36 @@ class LargeContainerProcessor:
             logger.debug("Updated container status", container_id=container_id, status=status)
         except Exception as e:
             logger.error(f"Error updating container status: {e}", container_id=container_id)
+
+    def mark_container_failed(self, container_id: str, error_message: str) -> None:
+        """Mark a container as failed and record the error message (best-effort)."""
+        try:
+            with psycopg.connect(self.postgres_connection_string) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE container_processing
+                        SET status = %s, error_message = %s, processing_completed_at = %s
+                        WHERE container_id = %s
+                    """,
+                        (ContainerStatus.FAILED, error_message, datetime.now(), container_id),
+                    )
+                    conn.commit()
+        except Exception as e:
+            logger.error(f"Error marking container as failed: {e}", container_id=container_id)
+
+    def record_container_error_message(self, container_id: str, error_message: str) -> None:
+        """Record an error message for a container without changing its status (best-effort)."""
+        try:
+            with psycopg.connect(self.postgres_connection_string) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE container_processing SET error_message = %s WHERE container_id = %s",
+                        (error_message, container_id),
+                    )
+                    conn.commit()
+        except Exception as e:
+            logger.error(f"Error recording container error message: {e}", container_id=container_id)
 
     def update_container_extraction_progress(
         self, container_id: str, total_files_extracted: int, total_bytes_extracted: int
@@ -952,7 +1214,17 @@ class LargeContainerProcessor:
         return None
 
     def process_container_from_path(self, container_id: str, file_path: Path, metadata: dict) -> dict[str, Any]:
-        """Process a container file from a filesystem path."""
+        """Process a container file from a filesystem path.
+
+        The returned dict has `success` = True only when at least one file was extracted and no
+        file/filesystem errors occurred. Callers must not delete the source container unless
+        `success` is True.
+
+        Raises:
+            ContainerMetadataError: metadata is invalid (checked before anything is extracted).
+            ContainerExtractionError: the container could not be read at all (e.g. no filesystem).
+        """
+        record_created = False
         try:
             # Detect container type
             container_type = self.detect_container_type(metadata.get("filename", file_path.name), file_path)
@@ -961,7 +1233,6 @@ class LargeContainerProcessor:
                 raise HTTPException(status_code=400, detail="Unsupported container type")
 
             # Get appropriate extractor
-            #   TODO: error if the container isn't detected properly?
             extractor_class = self.extractors[container_type]
 
             with DaprClient() as dapr_client:
@@ -974,6 +1245,7 @@ class LargeContainerProcessor:
                 logger.debug(f"Estimated container contents: {file_count} files, {total_size} bytes")
 
                 self.create_container_record(container_id, container_type, metadata, file_count, total_size)
+                record_created = True
 
                 # Initialize in-memory progress tracking
                 self.progress_tracker.initialize(container_id, file_count, total_size)
@@ -1015,17 +1287,42 @@ class LargeContainerProcessor:
                     # Still try to update status to extracted even if we don't have byte counts
                     self.update_container_status(container_id, ContainerStatus.EXTRACTED)
 
+                stats = extractor.get_processing_stats()
+                files_with_errors = stats.get("files_skipped_by_error", 0)
+
+                error_message = None
+                if files_with_errors:
+                    error_message = f"{files_with_errors} file(s)/filesystem(s) failed to extract"
+                elif processed_files == 0:
+                    error_message = "No files were extracted from the container"
+
+                success = error_message is None
+                if not success:
+                    logger.warning(
+                        "Container extraction incomplete",
+                        container_id=container_id,
+                        processed_files=processed_files,
+                        error_message=error_message,
+                    )
+                    self.record_container_error_message(container_id, error_message)
+
                 return {
                     "container_id": container_id,
                     "container_type": container_type,
                     "processed_files": processed_files,
                     "estimated_files": file_count,
                     "estimated_size": total_size,
+                    "files_skipped_by_filter": stats.get("files_skipped_by_filter", 0),
+                    "files_skipped_by_error": files_with_errors,
                     "status": ContainerStatus.EXTRACTED,
+                    "success": success,
+                    "error_message": error_message,
                 }
 
         except Exception as e:
             logger.exception(f"Error processing container {container_id}: {e}")
+            if record_created:
+                self.mark_container_failed(container_id, str(e))
             raise
 
     def get_container_progress(self, container_id: str) -> dict[str, Any]:

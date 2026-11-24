@@ -321,3 +321,134 @@ def test_system_report_template_renders_report_data():
     report = rr.get_system_report_data(FakePool(_system_results(_source_rows())))
     html = render_system_report_html(report.model_dump())
     assert "HOST-B" in html
+
+
+# ---------------------------------------------------------------- report consistency fixes (#169, #170)
+
+
+def test_end_date_at_midnight_includes_whole_day():
+    """A date-only end date ("2026-11-19" parses to midnight) must keep the whole end day."""
+    end = datetime(2026, 11, 19, tzinfo=UTC)
+    conditions, params = rr._file_filters(end_date=end)
+    assert conditions == ["fe.created_at < %s"]
+    assert params == [end + timedelta(days=1)]
+
+
+def test_end_date_naive_midnight_and_plain_date_include_whole_day():
+    assert rr._end_date_condition("c", datetime(2026, 11, 19)) == ("c < %s", datetime(2026, 11, 20))
+    assert rr._end_date_condition("c", date(2026, 11, 19)) == ("c < %s", date(2026, 11, 20))
+
+
+def test_end_date_with_time_is_inclusive_instant():
+    end = datetime(2026, 11, 19, 0, 0, 1, tzinfo=UTC)
+    assert rr._file_filters(end_date=end) == (["fe.created_at <= %s"], [end])
+
+
+def test_source_report_date_only_end_date_is_inclusive():
+    file_rows = [(3, None, None, 0, None, None, None)]
+    finding_rows = [(0b11111, None, None, None, None, None, 0)]
+    pool = FakePool(_source_report_results(file_rows, finding_rows))
+    end = datetime(2026, 11, 19, tzinfo=UTC)
+    rr.get_source_report_data(pool, "x", end_date=end)
+    sql, params = pool.executed[0]
+    assert "fe.created_at < %s" in sql and "fe.created_at <= %s" not in sql
+    assert params == ["X", datetime(2026, 11, 20, tzinfo=UTC)]
+
+
+def test_source_report_findings_timeline_uses_finding_created_at():
+    file_rows = [(3, None, None, 0, None, None, None)]
+    finding_rows = [(0b11111, None, None, None, None, None, 0)]
+    pool = FakePool(_source_report_results(file_rows, finding_rows))
+    rr.get_source_report_data(pool, "x")
+    findings_sql = pool.executed[1][0]
+    assert "DATE(f.created_at) AS day" in findings_sql
+    assert "DATE(fe.created_at)" not in findings_sql
+
+
+def test_source_and_system_reports_count_timeout_as_failed():
+    file_rows = [(3, None, None, 0, None, None, None)]
+    finding_rows = [(0b11111, None, None, None, None, None, 0)]
+    source_pool = FakePool(_source_report_results(file_rows, finding_rows))
+    rr.get_source_report_data(source_pool, "x")
+    system_pool = FakePool(_system_results([]))
+    rr.get_system_report_data(system_pool)
+    source_workflow_sql = source_pool.executed[6][0]
+    system_workflow_sql = system_pool.executed[6][0]
+    for sql in (source_workflow_sql, system_workflow_sql):
+        assert "FROM workflows w" in sql
+        assert "'TIMEOUT', 'timeout'" in sql
+        assert "{FAILED_WORKFLOW_STATUSES_SQL}" not in sql  # f-string actually interpolated
+
+
+def test_system_report_findings_timeline_uses_finding_created_at():
+    pool = FakePool(_system_results([]))
+    rr.get_system_report_data(pool, project="p")
+    files_sql, files_params = pool.executed[3]
+    findings_sql, findings_params = pool.executed[4]
+    assert "fe.created_at >= CURRENT_DATE" in files_sql
+    assert "DATE(f.created_at) AS day" in findings_sql
+    assert "f.created_at >= CURRENT_DATE" in findings_sql
+    assert "DATE(fe.created_at)" not in findings_sql
+    # the file filters still apply to the findings timeline
+    assert "fe.project = %s" in findings_sql
+    assert files_params == findings_params == ["p"]
+
+
+def test_system_report_sources_with_findings_counts_all_sources():
+    """The counts cover every source, not only the `sources_limit` most recent ones."""
+    rows = [(f"H{i}", 1, 1, NOW - timedelta(minutes=i), 1 if i >= 60 else 0, 1 if i >= 75 else 0) for i in range(80)]
+    rows.append((None, 3, 0, NOW - timedelta(days=9), 5, 5))  # NULL source is not a source
+    report = rr.get_system_report_data(FakePool(_system_results(rows)))
+    assert len(report.sources) == 50
+    assert all(s.finding_count == 0 for s in report.sources)  # the listed 50 have no findings
+    assert report.summary["sources_with_findings"] == 20
+    assert report.summary["sources_with_verified_findings"] == 5
+
+
+def test_system_report_sources_with_findings_empty():
+    report = rr.get_system_report_data(FakePool(_system_results([])))
+    assert report.summary["sources_with_findings"] == 0
+    assert report.summary["sources_with_verified_findings"] == 0
+
+
+def test_system_report_template_uses_summary_source_counts():
+    from web_api.pdf_generator import render_system_report_html
+
+    rows = [(f"H{i}", 1, 1, NOW - timedelta(minutes=i), 1 if i >= 60 else 0, 1 if i >= 77 else 0) for i in range(80)]
+    report = rr.get_system_report_data(FakePool(_system_results(rows)))
+    html = render_system_report_html(report.model_dump())
+    assert '<div class="stat-value">20</div>' in html
+    assert '<div class="stat-value danger">3</div>' in html
+
+
+def test_system_report_template_falls_back_to_listed_sources_without_summary_counts():
+    from web_api.pdf_generator import render_system_report_html
+
+    data = rr.get_system_report_data(FakePool(_system_results(_source_rows()))).model_dump()
+    del data["summary"]["sources_with_findings"]
+    del data["summary"]["sources_with_verified_findings"]
+    html = render_system_report_html(data)
+    assert "Sources with Findings" in html
+    assert '<div class="stat-value">1</div>' in html  # only HOST-B has findings
+
+
+def test_source_report_template_shows_untriaged_count():
+    from web_api.pdf_generator import render_source_report_html
+
+    file_rows = [(3, None, None, 2, Decimal(10), NOW, NOW)]
+    finding_rows = [(0b11111, None, None, None, None, None, 9), (0b11101, None, None, None, None, None, 7)]
+    report = rr.get_source_report_data(FakePool(_source_report_results(file_rows, finding_rows)), "host")
+    assert report.summary["untriaged_findings"] == 7
+    html = render_source_report_html(report.model_dump())
+    assert '<div class="stat-value warning">7</div>' in html
+
+
+def test_source_report_template_untriaged_zero_is_shown_not_blank():
+    from web_api.pdf_generator import render_source_report_html
+
+    file_rows = [(3, None, None, 0, None, None, None)]
+    finding_rows = [(0b11111, None, None, None, None, None, 0)]
+    report = rr.get_source_report_data(FakePool(_source_report_results(file_rows, finding_rows)), "host")
+    html = render_source_report_html(report.model_dump())
+    assert '<div class="stat-value warning">0</div>' in html
+    assert '<div class="stat-value warning"></div>' not in html

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import plyvel
+from cli.c2_ids import is_safe_c2_id
 from cli.cobaltstrike_connector.cobaltstrike_client import Beacon, CobaltStrikeClient, Download
 from cli.nemesis_client import PreviewUploadResult, UploadClient
 from common.models2.api import FileMetadata, FileWithMetadataResponse
@@ -144,6 +145,11 @@ class CobaltStrikeDownloadProcessor:
             f"Processing Cobalt Strike download {download.id} from beacon {beacon.computer}. Path: {download.path}"
         )
 
+        if not is_safe_c2_id(download.id):
+            logger.error(f"Skipping Cobalt Strike download with unsafe ID {download.id!r} (path: {download.path})")
+            self.mark_processed(download, success=False)
+            return
+
         # Get the file from the downloads directory or API
         downloaded_file_info = await self._get_downloaded_file(download)
         if not downloaded_file_info.success:
@@ -205,6 +211,10 @@ class CobaltStrikeDownloadProcessor:
         """
         if not self.cobalt_strike:
             raise ValueError("No CobaltStrikeClient configured for remote download")
+
+        if not is_safe_c2_id(download.id):
+            logger.error(f"Refusing to download Cobalt Strike file with unsafe ID {download.id!r}")
+            return DownloadedFileInfo(None, delete_after=False, success=False)
 
         temp_fd, temp_path = tempfile.mkstemp(prefix=f"nemesis_{download.id}_")
         os.close(temp_fd)

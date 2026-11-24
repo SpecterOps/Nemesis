@@ -148,6 +148,93 @@ printf 'OTHER=1\n' > "$TMP/.env"
 out="$(export_url_encoded_credentials "$TMP/.env" POSTGRES_PASSWORD; printf '%s' "${POSTGRES_PASSWORD_URLENC-unset}")"
 check "unset credential: nothing exported (compose reports it)" [ "$out" = "unset" ]
 
+# --- env_file_value: inline comments (issue #158d) ---
+printf 'A=value # a comment\n' > "$TMP/.env"
+check "unquoted value: inline ' # comment' stripped" [ "$(value A)" = "value" ]
+printf 'A=value\t# tab comment\n' > "$TMP/.env"
+check "unquoted value: tab before # starts a comment" [ "$(value A)" = "value" ]
+printf 'A=pa#ss\n' > "$TMP/.env"
+check "unquoted value: # with no whitespace before it is kept" [ "$(value A)" = "pa#ss" ]
+printf 'A=pa#ss # c # d\n' > "$TMP/.env"
+check "unquoted value: only the first ' #' starts the comment" [ "$(value A)" = "pa#ss" ]
+printf 'A="p #ss" # comment\n' > "$TMP/.env"
+check "double-quoted value: # kept inside, trailing comment stripped" [ "$(value A)" = "p #ss" ]
+printf "A='p #ss' # comment\n" > "$TMP/.env"
+check "single-quoted value: # kept inside, trailing comment stripped" [ "$(value A)" = "p #ss" ]
+printf 'A="p # ss"\n' > "$TMP/.env"
+check "double-quoted value with ' # ' inside: kept whole" [ "$(value A)" = "p # ss" ]
+printf 'A="say "hi""\n' > "$TMP/.env"
+check "double-quoted value with inner quotes: outer quotes removed" [ "$(value A)" = 'say "hi"' ]
+printf 'A= # only a comment\n' > "$TMP/.env"
+check "comment-only value: empty" [ -z "$(value A)" ]
+printf 'A=  spaced  \n' > "$TMP/.env"
+check "unquoted value: surrounding whitespace trimmed" [ "$(value A)" = "spaced" ]
+printf 'POSTGRES_PASSWORD=p@ss # rotated 2026\n' > "$TMP/.env"
+out="$(export_url_encoded_credentials "$TMP/.env" POSTGRES_PASSWORD; printf '%s' "$POSTGRES_PASSWORD_URLENC")"
+check "URL-encoded copy matches the value without its inline comment" [ "$out" = "p%40ss" ]
+printf 'LITELLM_ADMIN_PASSWORD= # set me\n' > "$TMP/.env"
+ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123 > /dev/null
+check "comment-only secret is treated as unset and generated" is_random "$(value LITELLM_ADMIN_PASSWORD)"
+
+# --- permissions of the env file and its temporary copy (issue #158b) ---
+printf 'X=\nY=1\n' > "$TMP/.env"
+chmod 644 "$TMP/.env"
+ensure_random_env_secret "$TMP/.env" X admin123 > /dev/null
+check "rewrite: env file restricted to 0600" [ "$(stat -c %a "$TMP/.env")" = "600" ]
+check "rewrite: no temporary copy left behind" [ -z "$(find "$TMP" -name '.env.*')" ]
+
+printf 'Y=1\n' > "$TMP/.env"
+chmod 644 "$TMP/.env"
+ensure_random_env_secret "$TMP/.env" X admin123 > /dev/null
+check "append: env file restricted to 0600" [ "$(stat -c %a "$TMP/.env")" = "600" ]
+
+printf 'X=keep\n' > "$TMP/.env"
+chmod 644 "$TMP/.env"
+ensure_random_env_secret "$TMP/.env" X admin123 > /dev/null
+check "nothing written: permissions left alone" [ "$(stat -c %a "$TMP/.env")" = "644" ]
+
+# Record the temporary copy's mode while it exists (cat reads it back into the env file)
+printf 'X=\n' > "$TMP/.env"
+TMP_MODES=()
+cat() {
+  case "${1:-}" in "$TMP"/.env.*) TMP_MODES+=("$(stat -c %a "$1")") ;; esac
+  command cat "$@"
+}
+(umask 022 && ensure_random_env_secret "$TMP/.env" X admin123 > /dev/null; printf '%s' "${TMP_MODES[*]}" > "$TMP/modes")
+unset -f cat
+check "temporary copy is created next to the env file with mode 0600 under umask 022" [ "$(< "$TMP/modes")" = "600" ]
+
+printf 'X=\n' > "$TMP/.env"
+chmod() { return 1; }
+out="$(ensure_random_env_secret "$TMP/.env" X admin123 2>&1)" && rc=0 || rc=$?
+unset -f chmod
+check "chmod not permitted: write still succeeds" [ "$rc" = 0 ]
+check "chmod not permitted: value written" is_random "$(value X)"
+check "chmod not permitted: warns" contains "$out" "could not restrict permissions"
+
+printf 'X=1\n' > "$TMP/.env"
+chmod 640 "$TMP/.env"
+out="$(warn_if_env_file_shared "$TMP/.env" 2>&1)"
+check "warn_if_env_file_shared: warns for a group-readable file" contains "$out" "chmod 600"
+check "warn_if_env_file_shared: never changes the mode" [ "$(stat -c %a "$TMP/.env")" = "640" ]
+chmod 600 "$TMP/.env"
+check "warn_if_env_file_shared: quiet for 0600" [ -z "$(warn_if_env_file_shared "$TMP/.env" 2>&1)" ]
+check "warn_if_env_file_shared: missing file is fine" warn_if_env_file_shared "$TMP/missing"
+
+# --- export_placeholders_for_compose_down (issue #158a) ---
+printf 'HASURA_ADMIN_SECRET="real"\n' > "$TMP/.env"
+before="$(sha256sum < "$TMP/.env")"
+out="$(export_placeholders_for_compose_down "$TMP/.env" HASURA_ADMIN_SECRET LITELLM_SALT_KEY; \
+  printf '%s|%s' "${HASURA_ADMIN_SECRET-unset}" "${LITELLM_SALT_KEY-unset}")"
+check "placeholders: value in .env not overridden" [ "${out%%|*}" = "unset" ]
+check "placeholders: missing value gets a throwaway in the environment" [ "${out#*|}" = "unused-by-compose-down" ]
+check "placeholders: .env not modified" [ "$(sha256sum < "$TMP/.env")" = "$before" ]
+out="$(export LITELLM_SALT_KEY=from-shell; export_placeholders_for_compose_down "$TMP/.env" LITELLM_SALT_KEY; printf '%s' "$LITELLM_SALT_KEY")"
+check "placeholders: value exported in the shell kept" [ "$out" = "from-shell" ]
+out="$(export_placeholders_for_compose_down "$TMP/missing.env" HASURA_ADMIN_SECRET; printf '%s' "$HASURA_ADMIN_SECRET")"
+check "placeholders: missing env file is fine" [ "$out" = "unused-by-compose-down" ]
+check "placeholders: missing env file not created" [ ! -e "$TMP/missing.env" ]
+
 if [ "$FAILURES" -ne 0 ]; then
   echo "$FAILURES test(s) failed"
   exit 1

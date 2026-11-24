@@ -246,6 +246,7 @@ Create a configuration file (e.g., `settings_mythic.yaml`):
 ```yaml
 mythic:
   url: "https://mythic.local:7443"
+  agent_id: "mythic"  # Identifies this Mythic instance on uploaded files
 
   # Password authentication
   credential:
@@ -318,7 +319,7 @@ Ingest data from Cobalt Strike into Nemesis.
 Create a configuration file (e.g., `settings_cobaltstrike.yaml`):
 
 ```yaml
-cache_db_path: "/tmp/nemesis_connectors"
+cache_db_path: "~/.local/state/nemesis/connectors"
 conn_timeout_sec: 5
 validate_https_certs: true
 
@@ -337,6 +338,7 @@ cobaltstrike:
       password: "cobaltstrike_password"
 
     project: "project name"
+    agent_id: "cobaltstrike"  # Identifies this Cobalt Strike instance on uploaded files
     poll_interval_sec: 3
 ```
 
@@ -369,7 +371,7 @@ Ingest data from Outflank Stage1 C2 into Nemesis.
 Create a configuration file (e.g., `settings_outflank.yaml`):
 
 ```yaml
-cache_db_path: "/tmp/nemesis_connectors"
+cache_db_path: "~/.local/state/nemesis/connectors"
 conn_timeout_sec: 5
 validate_https_certs: true
 
@@ -386,6 +388,7 @@ outflank:
     credential:
       username: "nemesis_bot"
       password: "outflank_password"
+    agent_id: "stage1"  # Identifies this Outflank instance on uploaded files
 
     # Optional: Read from disk instead of API
     # outflank_upload_path: "/opt/stage1/"

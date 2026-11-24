@@ -13,7 +13,12 @@ import yaml
 from common.logger import get_logger
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from web_api.large_containers import LargeContainerProcessor
+from web_api.large_containers import (
+    ContainerExtractionError,
+    ContainerMetadataError,
+    LargeContainerProcessor,
+    coerce_metadata_value,
+)
 
 logger = get_logger(__name__)
 
@@ -24,6 +29,8 @@ CLEANUP_CONTAINERS_AFTER_PROCESSING = os.getenv("CLEANUP_CONTAINERS_AFTER_PROCES
     "yes",
 )
 COMPLETED_FOLDER = "completed"
+# Containers that could not be fully extracted are moved here instead of being deleted
+FAILED_FOLDER = "failed"
 
 
 def is_container_file(file_path: Path) -> bool:
@@ -175,6 +182,11 @@ def wait_for_file_stability(file_path: Path, max_wait_seconds: int = (60 * 60), 
 def parse_config_file(config_path: Path | None, container_file: Path) -> dict[str, Any]:
     """
     Parse config file and return metadata with defaults.
+
+    Raises ContainerMetadataError if the config file can't be parsed or its metadata has invalid
+    types (e.g. a list or boolean). Scalar values such as `project: 2024` are coerced to str.
+    A broken config must not silently fall back to defaults, because the container would then
+    be ingested under the wrong project (and the source deleted afterwards).
     """
     metadata = {
         "agent_id": "mounted_container",
@@ -189,32 +201,41 @@ def parse_config_file(config_path: Path | None, container_file: Path) -> dict[st
     try:
         with open(config_path) as f:
             config = yaml.safe_load(f)
+    except Exception as e:
+        raise ContainerMetadataError(f"Error parsing config file {config_path}: {e}") from e
 
-        if not config:
-            return metadata
+    if not config:
+        return metadata
 
-        # Extract metadata section
-        if "metadata" in config:
-            meta_section = config["metadata"]
-            if "agent_id" in meta_section:
-                metadata["agent_id"] = meta_section["agent_id"]
-            if "project" in meta_section:
-                metadata["project"] = meta_section["project"]
-            if "source" in meta_section:
-                metadata["source"] = meta_section["source"]
+    if not isinstance(config, dict):
+        raise ContainerMetadataError(f"Config file {config_path} must contain a mapping at the top level")
 
-        # Extract file_filters section
-        if "file_filters" in config:
-            filters = config["file_filters"]
+    # Extract metadata section
+    if "metadata" in config:
+        meta_section = config["metadata"]
+        if meta_section is not None and not isinstance(meta_section, dict):
+            raise ContainerMetadataError(f"Config file {config_path}: 'metadata' must be a mapping")
+        for field in ("agent_id", "project", "source"):
+            if meta_section and field in meta_section:
+                try:
+                    metadata[field] = coerce_metadata_value(
+                        field, meta_section[field], required=field in ("agent_id", "project")
+                    )
+                except ContainerMetadataError as e:
+                    raise ContainerMetadataError(f"Config file {config_path}: {e}") from e
+
+    # Extract file_filters section
+    if "file_filters" in config:
+        filters = config["file_filters"]
+        if filters is not None:
+            if not isinstance(filters, dict):
+                raise ContainerMetadataError(f"Config file {config_path}: 'file_filters' must be a mapping")
             # Set default pattern_type to 'regex' if not specified
             if "pattern_type" not in filters:
                 filters["pattern_type"] = "regex"
-            metadata["file_filters"] = filters
+        metadata["file_filters"] = filters
 
-        logger.info(f"Parsed config from {config_path}", metadata=metadata)
-
-    except Exception as e:
-        logger.warning(f"Error parsing config file {config_path}: {e}")
+    logger.info(f"Parsed config from {config_path}", metadata=metadata)
 
     return metadata
 
@@ -226,16 +247,18 @@ class ContainerFileHandler(FileSystemEventHandler):
         self.container_queue = container_queue
         self.root_path = root_path
         self.completed_path = root_path / COMPLETED_FOLDER
+        self.failed_path = root_path / FAILED_FOLDER
 
     def _should_ignore_path(self, file_path: Path) -> bool:
-        """Check if a path should be ignored (e.g., in completed folder)"""
-        try:
-            # Check if the file is in the completed folder
-            file_path.resolve().relative_to(self.completed_path.resolve())
-            return True
-        except ValueError:
-            # File is not in completed folder
-            return False
+        """Check if a path should be ignored (e.g., in completed or failed folder)"""
+        resolved = file_path.resolve()
+        for ignored in (self.completed_path, self.failed_path):
+            try:
+                resolved.relative_to(ignored.resolve())
+                return True
+            except ValueError:
+                continue
+        return False
 
     def on_created(self, event):
         """Called when a file is created"""
@@ -252,7 +275,7 @@ class ContainerFileHandler(FileSystemEventHandler):
         try:
             # Ignore files in completed folder
             if self._should_ignore_path(file_path):
-                logger.debug(f"Ignoring file in completed folder: {file_path}")
+                logger.debug(f"Ignoring file in completed/failed folder: {file_path}")
                 return
 
             # Small delay to let file creation settle
@@ -271,7 +294,11 @@ class ContainerFileHandler(FileSystemEventHandler):
                 config_path = find_config_file(file_path.parent, self.root_path)
 
                 # Parse config and create metadata
-                metadata = parse_config_file(config_path, file_path)
+                try:
+                    metadata = parse_config_file(config_path, file_path)
+                except ContainerMetadataError as e:
+                    logger.error(f"Invalid container config, not processing {file_path}: {e}")
+                    return
 
                 # Add to processing queue
                 self.container_queue.put({"file_path": file_path, "metadata": metadata})
@@ -288,6 +315,7 @@ class ContainerMonitor:
     def __init__(self):
         self.mounted_path = Path(MOUNTED_CONTAINER_PATH)
         self.completed_path = self.mounted_path / COMPLETED_FOLDER
+        self.failed_path = self.mounted_path / FAILED_FOLDER
         self.container_queue = Queue()
         self.processor = LargeContainerProcessor()
         self.observer = None
@@ -305,29 +333,32 @@ class ContainerMonitor:
         except Exception as e:
             logger.error(f"Error deleting file {file_path}: {e}")
 
-    def _move_to_completed(self, file_path: Path):
-        """Move a container file to the completed folder"""
+    def _move_to_folder(self, file_path: Path, dest_folder: Path):
+        """Move a container file into dest_folder, avoiding name conflicts"""
         try:
-            # Create completed folder if it doesn't exist
-            self.completed_path.mkdir(exist_ok=True)
+            dest_folder.mkdir(exist_ok=True)
 
-            # Calculate destination path
-            dest_path = self.completed_path / file_path.name
+            dest_path = dest_folder / file_path.name
 
             # Handle name conflicts by adding a counter
             counter = 1
             while dest_path.exists():
-                stem = file_path.stem
-                suffix = file_path.suffix
-                dest_path = self.completed_path / f"{stem}_{counter}{suffix}"
+                dest_path = dest_folder / f"{file_path.stem}_{counter}{file_path.suffix}"
                 counter += 1
 
-            # Move the file
             shutil.move(str(file_path), str(dest_path))
-            logger.info(f"Moved completed container to: {dest_path}")
+            logger.info(f"Moved container to: {dest_path}")
 
         except Exception as e:
-            logger.error(f"Error moving file {file_path} to completed folder: {e}")
+            logger.error(f"Error moving file {file_path} to {dest_folder}: {e}")
+
+    def _move_to_completed(self, file_path: Path):
+        """Move a container file to the completed folder"""
+        self._move_to_folder(file_path, self.completed_path)
+
+    def _move_to_failed(self, file_path: Path):
+        """Move a container that was not fully extracted to the failed folder (never delete it)"""
+        self._move_to_folder(file_path, self.failed_path)
 
     def _process_containers(self):
         """Background thread function to process containers one at a time"""
@@ -375,11 +406,22 @@ class ContainerMonitor:
                         f"Container processing completed: {file_path}", container_id=container_id, result=result
                     )
 
-                    # Clean up or move the source file
-                    if CLEANUP_CONTAINERS_AFTER_PROCESSING:
+                    # Only delete the source when extraction fully succeeded; otherwise keep the evidence
+                    if not (isinstance(result, dict) and result.get("success") is True):
+                        logger.error(
+                            f"Container was not fully extracted, keeping source in {self.failed_path}: {file_path}",
+                            container_id=container_id,
+                            error_message=result.get("error_message") if isinstance(result, dict) else None,
+                        )
+                        self._move_to_failed(file_path)
+                    elif CLEANUP_CONTAINERS_AFTER_PROCESSING:
                         self._delete_source_file(file_path)
                     else:
                         self._move_to_completed(file_path)
+
+                except ContainerExtractionError as e:
+                    logger.error(f"Could not extract container, keeping source in {self.failed_path}: {file_path}: {e}")
+                    self._move_to_failed(file_path)
 
                 except Exception as e:
                     logger.exception(f"Error processing container {file_path}: {e}")
@@ -398,8 +440,8 @@ class ContainerMonitor:
             logger.info(f"Scanning for existing container files in: {self.mounted_path}")
 
             for file_path in self.mounted_path.rglob("*"):
-                # Skip files in completed folder
-                if self.completed_path in file_path.parents or file_path == self.completed_path:
+                # Skip files in completed/failed folders
+                if any(folder in file_path.parents or file_path == folder for folder in self._ignored_folders()):
                     continue
 
                 # Check if it's a container file
@@ -410,13 +452,20 @@ class ContainerMonitor:
                     config_path = find_config_file(file_path.parent, self.mounted_path)
 
                     # Parse config and create metadata
-                    metadata = parse_config_file(config_path, file_path)
+                    try:
+                        metadata = parse_config_file(config_path, file_path)
+                    except ContainerMetadataError as e:
+                        logger.error(f"Invalid container config, not processing {file_path}: {e}")
+                        continue
 
                     # Add to processing queue
                     self.container_queue.put({"file_path": file_path, "metadata": metadata})
 
         except Exception as e:
             logger.exception(f"Error scanning existing files: {e}")
+
+    def _ignored_folders(self) -> tuple[Path, Path]:
+        return (self.completed_path, self.failed_path)
 
     def start(self):
         """Start the container monitor"""
@@ -486,6 +535,7 @@ class ContainerMonitor:
             "running": self.running,
             "mounted_path": str(self.mounted_path),
             "completed_path": str(self.completed_path),
+            "failed_path": str(self.failed_path),
             "queue_size": self.container_queue.qsize(),
             "processing_thread_alive": self.processing_thread.is_alive() if self.processing_thread else False,
         }

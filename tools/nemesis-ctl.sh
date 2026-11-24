@@ -112,19 +112,31 @@ if [ "$ACTION" = "start" ]; then
   fi
 fi
 
-# --- Secrets: generate random values for any that are unset (values already in .env are kept) ---
+# --- Secrets ---
 # shellcheck source=lib/env_secrets.sh
 source "${SCRIPT_DIR}/lib/env_secrets.sh"
-ensure_random_env_secret .env HASURA_ADMIN_SECRET pass456
-# The salt must be settled before the admin password: it falls back to the old default only when
-# this deployment already has data that may have been encrypted with it.
-POSTGRES_DATA_EXISTS=false
-if docker volume inspect nemesis_postgres_data > /dev/null 2>&1; then
-  POSTGRES_DATA_EXISTS=true
+# Secrets the compose files require (${NAME:?}) that nemesis-ctl generates when unset
+GENERATED_SECRETS=(HASURA_ADMIN_SECRET LITELLM_SALT_KEY LITELLM_ADMIN_PASSWORD)
+if [ "$ACTION" = "start" ]; then
+  # Generate random values for any that are unset (values already in .env are kept)
+  ensure_random_env_secret .env HASURA_ADMIN_SECRET pass456
+  # The salt must be settled before the admin password: it falls back to the old default only when
+  # this deployment already has data that may have been encrypted with it.
+  POSTGRES_DATA_EXISTS=false
+  if docker volume inspect nemesis_postgres_data > /dev/null 2>&1; then
+    POSTGRES_DATA_EXISTS=true
+  fi
+  ensure_litellm_salt_key .env "$POSTGRES_DATA_EXISTS"
+  ensure_random_env_secret .env LITELLM_ADMIN_PASSWORD admin123
+  warn_if_env_file_shared .env
+  export_url_encoded_credentials .env POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD || exit 1
+else
+  # stop/clean never generate or write secrets (a `clean` must not settle a salt for a volume it is
+  # about to delete) and don't need the URL-encoded credentials, which only matter to running services.
+  # `down` still interpolates the compose file, so supply throwaway values for required secrets that
+  # were never generated.
+  export_placeholders_for_compose_down .env "${GENERATED_SECRETS[@]}"
 fi
-ensure_litellm_salt_key .env "$POSTGRES_DATA_EXISTS"
-ensure_random_env_secret .env LITELLM_ADMIN_PASSWORD admin123
-export_url_encoded_credentials .env POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD || exit 1
 
 # --- Build Command ---
 declare -a DOCKER_CMD=("docker" "compose")

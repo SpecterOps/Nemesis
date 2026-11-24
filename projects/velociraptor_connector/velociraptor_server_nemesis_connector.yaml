@@ -2,89 +2,162 @@ name: Server.Monitor.NemesisUploadForwarder
 description: |
   This monitoring artifact watches for completed file uploads from clients
   and automatically forwards them to a Nemesis server using HTTP POST.
-  
+
+  Configure the parameters when adding this artifact under "Server Events"
+  (NemesisURL, NemesisUsername, NemesisPassword and Project are required).
+  The password is a parameter with no default, so it is not stored in the
+  artifact definition.
+
+  Every upload produces one output row: forwarded, failed after all retries,
+  or skipped because it is larger than MaxSize.
+
 type: SERVER_EVENT
+
+parameters:
+  - name: NemesisURL
+    description: Nemesis URL reachable from the Velociraptor server, e.g. https://nemesis:7443
+    default: ""
+  - name: NemesisUsername
+    description: Nemesis username
+    default: ""
+  - name: NemesisPassword
+    description: Nemesis password (no default; set it when enabling the artifact)
+    default: ""
+  - name: Project
+    description: Nemesis project name, e.g. INVESTIGATION-123
+    default: ""
+  - name: AgentID
+    description: Agent ID recorded in the Nemesis metadata
+    default: velociraptor_server
+  - name: MaxSize
+    description: Maximum file size in bytes to forward (default 100 MB); larger uploads get a "Skipped" row
+    type: int
+    default: "100000000"
+  - name: MaxAttempts
+    description: Number of times to try the upload before reporting a failure
+    type: int
+    default: "3"
+  - name: RetryDelay
+    description: Seconds to wait between upload attempts
+    type: int
+    default: "10"
+  - name: IgnoreCertErrors
+    description: Skip HTTPS certificate verification (only for a self-signed Nemesis certificate; insecure)
+    type: bool
+    default: "N"
 
 sources:
   - query: |
-      -- Configuration - MUST BE CONFIGURED BEFORE USE
-      LET NemesisURL = "CONFIGURE_ME_NEMESIS_URL"  -- Replace with your Nemesis URL, i.e., "https://nemesis:7443"
-      LET NemesisUsername = "CONFIGURE_ME_USERNAME"  -- Replace with your Nemesis username
-      LET NemesisPassword = "CONFIGURE_ME_PASSWORD"  -- Replace with your Nemesis password
-      LET Project = "CONFIGURE_ME_PROJECT"  -- Replace with your project name, i.e., "INVESTIGATION-123"
-      LET AgentID = "velociraptor_server"
-      LET MaxSize = 100000000  -- Maximum file size in bytes (default: 100 MB)
-      LET IgnoreCertErrors = FALSE  -- Set to TRUE only if Nemesis uses a self-signed certificate (insecure)
-      
       -- Check if configuration is complete
-      LET IsConfigured = NOT (NemesisURL =~ "CONFIGURE_ME" OR NemesisUsername =~ "CONFIGURE_ME" OR NemesisPassword =~ "CONFIGURE_ME" OR Project =~ "CONFIGURE_ME")
-      
+      LET IsConfigured = NemesisURL AND NemesisUsername AND NemesisPassword AND Project
+
       LET AuthHeader = "Basic " + base64encode(string=NemesisUsername + ":" + NemesisPassword)
-      
+
+      -- Nemesis records the origin of a file as host://<hostname>, like the other connectors
+      LET SourceFor(ClientId) = "host://" + (client_info(client_id=ClientId).os_info.hostname || ClientId)
+
+      -- At least one attempt, whatever MaxAttempts is set to
+      LET TotalAttempts = if(condition=MaxAttempts > 0, then=MaxAttempts, else=1)
+
+      -- One upload attempt
+      LET PostOnce(ClientId, VFSPath, UploadName, Attempt) = SELECT
+          Attempt,
+          Response,
+          Content
+        FROM http_client(
+          url=NemesisURL + "/api/files",
+          method="POST",
+          skip_verify=IgnoreCertErrors,
+          headers=dict(Authorization=AuthHeader),
+          files=[
+            dict(
+              file=split(string=file_store(path=VFSPath), sep="/")[-1] || "unknown_file",
+              key="file",
+              path=file_store(path=VFSPath),
+              accessor="file"
+            )
+          ],
+          params=dict(
+            metadata=serialize(
+              format="json",
+              item=dict(
+                agent_id=AgentID,
+                source=SourceFor(ClientId=ClientId),
+                path=UploadName,
+                project=Project,
+                timestamp=timestamp(epoch=now()),
+                expiration=timestamp(epoch=now() + 365 * 86400)
+              )
+            )
+          )
+        )
+
+      -- Try up to MaxAttempts times, waiting RetryDelay seconds before each retry. Attempts run one at a
+      -- time and LIMIT 1 stops at the first success, or at the last attempt when every one failed.
+      LET PostWithRetry(ClientId, VFSPath, UploadName) = SELECT * FROM foreach(
+          row={
+            SELECT _value AS Attempt FROM range(start=0, end=TotalAttempts, step=1)
+            WHERE _value = 0 OR sleep(time=RetryDelay) OR TRUE
+          },
+          query={
+            SELECT * FROM PostOnce(ClientId=ClientId, VFSPath=VFSPath, UploadName=UploadName, Attempt=Attempt)
+          })
+        WHERE Response =~ "^20[0-9]$" OR Attempt >= TotalAttempts - 1
+        LIMIT 1
+
       -- Main query that watches for uploads and forwards them
       SELECT * FROM if(
         condition=IsConfigured,
         then={
           SELECT * FROM foreach(
             row={
-              SELECT 
+              SELECT
                 ClientId,
-                VFSPath,  
-                file_store(path=VFSPath) as HostFilePath,
+                VFSPath,
                 UploadName,
-                Size,
-                timestamp(epoch=now()) as Timestamp
+                Size
               FROM watch_monitoring(artifact="System.Upload.Completion")
-              WHERE Size <= MaxSize
             },
             query={
-              SELECT 
-                ClientId,
-                UploadName,
-                Size,
-                Response as HTTPStatus,
-                Content as HTTPResponse,
-                if(condition=Response=~"^20[0-9]$", 
-                   then="✅ Successfully forwarded to Nemesis",
-                   else="❌ Failed to forward to Nemesis") as Status
-              FROM http_client(
-                url=NemesisURL + "/api/files",
-                method="POST",
-                skip_verify=IgnoreCertErrors,
-                headers=dict(Authorization=AuthHeader),
-                files=[
-                  dict(
-                    file=split(string=file_store(path=VFSPath), sep="/")[-1] || "unknown_file",
-                    key="file",
-                    path=file_store(path=VFSPath),
-                    accessor="file"
-                  )
-                ],
-                params=dict(
-                  metadata=serialize(
-                    format="json", 
-                    item=dict(
-                      agent_id=AgentID,
-                      source=ClientId,
-                      path=UploadName,
-                      project=Project,
-                      timestamp=timestamp(epoch=now()),
-                      expiration=timestamp(epoch=now() + 365 * 86400)
-                    )
-                  )
-                )
-              )
+              SELECT * FROM if(
+                condition=Size > MaxSize,
+                then={
+                  SELECT
+                    ClientId,
+                    SourceFor(ClientId=ClientId) AS Source,
+                    UploadName,
+                    Size,
+                    0 AS Attempts,
+                    NULL AS HTTPStatus,
+                    format(format="File is %v bytes; MaxSize is %v", args=[Size, MaxSize]) AS HTTPResponse,
+                    "Skipped: larger than MaxSize, not forwarded to Nemesis" AS Status
+                  FROM scope()
+                },
+                else={
+                  SELECT
+                    ClientId,
+                    SourceFor(ClientId=ClientId) AS Source,
+                    UploadName,
+                    Size,
+                    Attempt + 1 AS Attempts,
+                    Response AS HTTPStatus,
+                    Content AS HTTPResponse,
+                    if(condition=Response =~ "^20[0-9]$",
+                       then="Forwarded to Nemesis",
+                       else="Failed to forward to Nemesis after all attempts") AS Status
+                  FROM PostWithRetry(ClientId=ClientId, VFSPath=VFSPath, UploadName=UploadName)
+                })
             }
           )
         },
         else={
-          SELECT 
-            "ERROR" as Status,
-            "CONFIGURATION REQUIRED" as ClientId,
-            "Please configure NemesisURL, NemesisUsername, NemesisPassword, and Project before using this artifact" as UploadName,
-            NemesisURL as HTTPStatus,
-            format(format="Current values: URL=%s, Username=%s, Password=%s, Project=%s", 
-                   args=[NemesisURL, NemesisUsername, if(condition=NemesisPassword =~ "CONFIGURE_ME", then=NemesisPassword, else="<set>"), Project]) as HTTPResponse
+          SELECT
+            "ERROR" AS Status,
+            "CONFIGURATION REQUIRED" AS ClientId,
+            "Set the NemesisURL, NemesisUsername, NemesisPassword and Project parameters when adding this artifact under Server Events" AS UploadName,
+            NemesisURL AS HTTPStatus,
+            format(format="Current values: URL=%s, Username=%s, Password=%s, Project=%s",
+                   args=[NemesisURL, NemesisUsername, if(condition=NemesisPassword, then="<set>", else="<not set>"), Project]) AS HTTPResponse
           FROM scope()
         }
       )

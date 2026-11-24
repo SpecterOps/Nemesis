@@ -3,17 +3,19 @@ import fcntl
 import json
 import ntpath
 import os
+import re
+import shutil
+import time
 import urllib.parse
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path as PathLib
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 import httpx
 import psycopg
-import requests
 from common.db import get_postgres_connection_str
 from common.helpers import get_drive_from_path
 from common.log_safety import mask
@@ -25,7 +27,6 @@ from common.models2.api import (
     ErrorResponse,
     FileMetadata,
     FileWithMetadataResponse,
-    HealthResponse,
     YaraReloadResponse,
 )
 from common.models2.dpapi import DpapiCredentialRequest
@@ -40,14 +41,19 @@ from common.storage import StorageS3
 from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import Body, FastAPI, File, Form, HTTPException, Path, Query, Request, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from psycopg import Connection
 from psycopg.rows import TupleRow
 from psycopg_pool import ConnectionPool
 from pydantic import ValidationError
 from web_api.container_monitor import get_monitor, start_monitor, stop_monitor
 from web_api.cross_site import CrossSiteRequestBlocker
-from web_api.large_containers import LargeContainerProcessor
+from web_api.large_containers import (
+    ContainerExtractionError,
+    ContainerMetadataError,
+    LargeContainerProcessor,
+    normalize_container_path,
+)
 from web_api.models.requests import ChatbotRequest, CleanupRequest, EnrichmentRequest
 from web_api.models.responses import (
     ContainerStatusResponse,
@@ -60,6 +66,7 @@ from web_api.models.responses import (
     SingleQueueResponse,
     SourceReport,
     SourceSummary,
+    SystemHealthResponse,
     SystemReport,
     WorkflowStatusResponse,
 )
@@ -158,7 +165,9 @@ async def timeout_middleware(request: Request, call_next):
             timeout = 60
         return await asyncio.wait_for(call_next(request), timeout=timeout)
     except TimeoutError:
-        raise HTTPException(status_code=504, detail="Request timeout") from None
+        # HTTPException raised inside @app.middleware bypasses FastAPI's exception handlers (-> 500),
+        # so build the 504 response directly.
+        return JSONResponse(status_code=504, content={"detail": "Request timeout"})
 
 
 storage = StorageS3()
@@ -180,6 +189,68 @@ def get_db_pool() -> ConnectionPool[Connection[TupleRow]]:
     if _db_pool is None:
         _db_pool = ConnectionPool(get_postgres_connection_str(), min_size=1, max_size=5)
     return _db_pool
+
+
+# Upstream HTTP calls (Dapr service invocation, Traefik) use httpx.AsyncClient so a slow or hung
+# dependency never blocks the worker's event loop. Every call carries an explicit timeout.
+DAPR_CONNECT_TIMEOUT = 5.0
+# Errors that mean "the upstream service could not be reached or answered garbage"
+# (the requests-based code treated a bad JSON body as a RequestException too).
+UPSTREAM_ERRORS = (httpx.HTTPError, json.JSONDecodeError)
+
+
+async def _http_request(method: str, url: str, *, timeout: float, json_body: Any = None) -> httpx.Response:
+    """Make a non-blocking HTTP request with a total timeout of `timeout` seconds."""
+    client_timeout = httpx.Timeout(timeout, connect=min(DAPR_CONNECT_TIMEOUT, timeout))
+    async with httpx.AsyncClient(timeout=client_timeout) as client:
+        return await client.request(method, url, json=json_body)
+
+
+# Enrichment module names are plain identifiers; anything else (e.g. "..") could be normalized
+# into a different Dapr method path.
+ENRICHMENT_NAME_RE = re.compile(r"^[a-z0-9_]+$")
+
+
+def validate_enrichment_name(enrichment_name: str) -> None:
+    if not ENRICHMENT_NAME_RE.fullmatch(enrichment_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid enrichment name: only lowercase letters, digits and underscores are allowed",
+        )
+
+
+# Metadata length limits, matching the VARCHAR columns in infra/postgres/01-schema.sql
+# (files / files_enriched / container_processing / workflows).
+MAX_AGENT_ID_LENGTH = 255
+MAX_PROJECT_LENGTH = 255
+MAX_SOURCE_LENGTH = 1000
+MAX_FILENAME_LENGTH = 255  # files_enriched.file_name, workflows.filename, container_processing.original_filename
+MAX_PATH_LENGTH = 32767  # path is TEXT; cap at the Windows extended-length path maximum
+
+
+def validate_file_metadata(file_metadata: FileMetadata, upload_filename: str | None = None) -> None:
+    """Reject metadata that the database columns can't hold or that is already expired (HTTP 400)."""
+    limits = [
+        ("agent_id", file_metadata.agent_id, MAX_AGENT_ID_LENGTH),
+        ("project", file_metadata.project, MAX_PROJECT_LENGTH),
+        ("source", file_metadata.source, MAX_SOURCE_LENGTH),
+        ("path", file_metadata.path, MAX_PATH_LENGTH),
+        ("path file name", PathLib(file_metadata.path.replace("\\", "/")).name, MAX_FILENAME_LENGTH),
+        ("filename", upload_filename, MAX_FILENAME_LENGTH),
+    ]
+    for field, value, max_len in limits:
+        if value is not None and len(value) > max_len:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Metadata field '{field}' is too long ({len(value)} characters, maximum is {max_len})",
+            )
+
+    if file_metadata.expiration is not None:
+        expiration = file_metadata.expiration
+        if expiration.tzinfo is None:
+            expiration = expiration.replace(tzinfo=UTC)
+        if expiration <= datetime.now(UTC):
+            raise HTTPException(status_code=400, detail="Metadata 'expiration' must be in the future")
 
 
 async def send_postgres_notify(channel: str, payload: str = ""):
@@ -276,6 +347,8 @@ async def upload_file(
         # Parse the metadata string into FileMetadata model
         logger.debug("Metadata received", metadata=metadata)
         metadata_dict = json.loads(metadata)
+        if not isinstance(metadata_dict, dict):
+            raise HTTPException(status_code=400, detail="Metadata must be a JSON object")
 
         # Handle timestamp - use current UTC time if not provided
         if metadata_dict.get("timestamp") is None:
@@ -283,13 +356,12 @@ async def upload_file(
             metadata_dict["timestamp"] = current_utc.isoformat()
 
         file_metadata = FileMetadata(**metadata_dict)
+        file_metadata.path = normalize_path(file_metadata.path)
+
+        # Validate before anything is written to storage
+        validate_file_metadata(file_metadata)
 
         logger.debug("Received file upload request")
-
-        object_id = await asyncio.to_thread(storage.upload_uploadfile, file)
-        logger.info("File uploaded to datalake", object_id=object_id)
-
-        file_metadata.path = normalize_path(file_metadata.path)
 
         # Handle expiration - use timestamp + default_expiration_days if not provided
         if file_metadata.expiration is None:
@@ -301,15 +373,39 @@ async def upload_file(
             file_metadata.expiration = expiration_dt
             logger.debug("Set default expiration", expiration=file_metadata.expiration.isoformat())
 
-        file_model = FileModel.from_file_metadata(file_metadata, str(object_id))
-        submission_id = await submit_file(file_model)
+        object_id = await asyncio.to_thread(storage.upload_uploadfile, file)
+        logger.info("File uploaded to datalake", object_id=object_id)
+
+        try:
+            file_model = FileModel.from_file_metadata(file_metadata, str(object_id))
+            submission_id = await submit_file(file_model)
+        except BaseException:
+            # Publishing failed, so nothing will ever reference the uploaded object: remove it (best effort)
+            await _delete_orphaned_object(object_id)
+            raise
 
         logger.info("File metadata submitted", submission_id=str(submission_id), object_id=object_id)
         return FileWithMetadataResponse(object_id=uuid.UUID(object_id), submission_id=submission_id)
 
+    except HTTPException:
+        raise
+    except ValidationError as e:
+        logger.warning("Validation error in file metadata", errors=e.errors())
+        raise HTTPException(status_code=400, detail=e.errors(include_url=False, include_context=False)) from e
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Metadata is not valid JSON: {e}") from e
     except Exception as e:
         logger.exception(message="Error processing file upload")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+async def _delete_orphaned_object(object_id: str) -> None:
+    """Best-effort removal of an uploaded object whose submission failed."""
+    try:
+        await asyncio.to_thread(storage.delete_object, object_id)
+        logger.info("Deleted orphaned object after failed submission", object_id=object_id)
+    except Exception:
+        logger.exception("Failed to delete orphaned object", object_id=object_id)
 
 
 @app.get(
@@ -327,10 +423,10 @@ async def download_file(
     length: int = Query(0, ge=0, description="Number of bytes to read (0 = entire file)"),
 ):
     try:
-        if not storage.check_file_exists(object_id):
+        if not await asyncio.to_thread(storage.check_file_exists, object_id):
             raise HTTPException(status_code=404, detail=f"File {object_id} not found")
 
-        file_data = storage.get_object_stats(object_id)
+        file_data = await asyncio.to_thread(storage.get_object_stats, object_id)
 
         if not file_data:
             raise HTTPException(status_code=404, detail=f"File data for {object_id} not retrieved")
@@ -404,7 +500,14 @@ async def submit_container(
         # Parse the metadata string into FileMetadata model
         logger.debug("Container metadata received", metadata=metadata)
         metadata_dict = json.loads(metadata)
+        if not isinstance(metadata_dict, dict):
+            raise HTTPException(status_code=400, detail="Metadata must be a JSON object")
         file_metadata = FileMetadata(**metadata_dict)
+
+        # Normalize the path like upload_file does, so extracted files keep their directory
+        # (e.g. C:\Users\x\a.zip -> /C:/Users/x/a.zip) and match file_listings / file_linkings paths.
+        file_metadata.path = normalize_container_path(file_metadata.path)
+        validate_file_metadata(file_metadata, upload_filename=file.filename)
 
         logger.info(
             "Received container submission request",
@@ -430,32 +533,45 @@ async def submit_container(
         temp_dir = os.getenv("TEMP_CONTAINER_PATH", "/tmp/containers")
         os.makedirs(temp_dir, exist_ok=True)
 
-        temp_file_path = os.path.join(temp_dir, f"{container_id}_{file.filename}")
-
-        with open(temp_file_path, "wb") as temp_file:
-            file.file.seek(0)
-            while chunk := file.file.read(8192):  # Read in 8KB chunks
-                temp_file.write(chunk)
+        # Never use the client-supplied filename in the temp path; the original name travels in the
+        # processing metadata (used for container type detection) instead.
+        temp_file_path = os.path.join(temp_dir, f"{container_id}.bin")
 
         try:
+            # The copy is inside the try so a partially written temp file is removed on failure
+            await asyncio.to_thread(_copy_upload_to_path, file, temp_file_path)
+
             # Prepare file metadata for processing
             processing_metadata = file_metadata.model_dump()
             processing_metadata["filename"] = file.filename
             processing_metadata["content_type"] = file.content_type
             processing_metadata["size"] = file.size
 
-            # Process the container from file path
-            result = container_processor.process_container_from_path(
-                container_id, PathLib(temp_file_path), processing_metadata
+            # Process the container from file path (sync extraction + DB + S3 work, so keep it off the event loop)
+            result = await asyncio.to_thread(
+                container_processor.process_container_from_path,
+                container_id,
+                PathLib(temp_file_path),
+                processing_metadata,
             )
 
             logger.info("Container extraction + file submission completed", container_id=container_id, result=result)
 
+            # Older processors didn't report success; treat a missing key as success
+            success = result.get("success", True)
+            error_message = result.get("error_message")
+            if success:
+                message = "Files extracted from container and processing initiated"
+            else:
+                message = f"Container extraction failed or was partial: {error_message or 'unknown error'}"
+
             response = ContainerSubmissionResponse(
                 container_id=container_id,
-                message="Files extracted from container and processing initiated",
+                message=message,
                 estimated_files=result["estimated_files"],
                 estimated_size=result["estimated_size"],
+                success=success,
+                error_message=error_message,
             )
 
             # Add filter configuration to response if filters were used
@@ -471,18 +587,60 @@ async def submit_container(
             return response
 
         finally:
+            # Extraction is finished (or failed): the in-memory progress is only read while extracting
+            container_processor.progress_tracker.cleanup(container_id)
+
             # Clean up temporary file
             try:
                 os.unlink(temp_file_path)
+            except FileNotFoundError:
+                pass
             except Exception as cleanup_error:
                 logger.warning(f"Error cleaning up temporary file {temp_file_path}: {cleanup_error}")
 
+    except HTTPException:
+        raise
     except ValidationError as e:
         logger.error("Validation error in container metadata", errors=e.errors())
-        raise HTTPException(status_code=400, detail=e.errors()) from e
+        raise HTTPException(status_code=400, detail=e.errors(include_url=False, include_context=False)) from e
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Metadata is not valid JSON: {e}") from e
+    except ContainerMetadataError as e:
+        logger.warning("Invalid container metadata", error=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ContainerExtractionError as e:
+        logger.warning("Container could not be extracted", error=str(e))
+        raise HTTPException(status_code=422, detail=f"Container could not be extracted: {e}") from e
     except Exception as e:
         logger.exception(message="Error processing container submission")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def _copy_upload_to_path(file: UploadFile, dest_path: str) -> None:
+    """Copy an uploaded file's spooled contents to dest_path (blocking; run in a thread)."""
+    file.file.seek(0)
+    with open(dest_path, "wb") as temp_file:
+        shutil.copyfileobj(file.file, temp_file, length=1024 * 1024)
+
+
+# In-memory container progress lives per worker. Entries are removed when extraction finishes, when a
+# status poll sees the container is no longer extracting, and as a last resort once they are this old.
+CONTAINER_PROGRESS_MAX_AGE = timedelta(days=7)
+
+
+def _evict_stale_container_progress(max_age: timedelta = CONTAINER_PROGRESS_MAX_AGE) -> int:
+    """Drop in-memory progress entries older than max_age. Returns the number evicted."""
+    tracker = container_processor.progress_tracker
+    entries: dict[str, dict[str, Any]] = getattr(tracker, "_progress", {})
+    cutoff = datetime.now() - max_age
+    stale = [
+        cid
+        for cid, progress in list(entries.items())
+        if isinstance(progress.get("started_at"), datetime) and progress["started_at"] < cutoff
+    ]
+    for cid in stale:
+        tracker.cleanup(cid)
+    return len(stale)
 
 
 @app.get(
@@ -498,7 +656,7 @@ async def get_container_status(
 ) -> ContainerStatusResponse:
     try:
         # Check database first (source of truth)
-        db_status = container_processor.get_container_status(container_id)
+        db_status = await asyncio.to_thread(container_processor.get_container_status, container_id)
         if not db_status:
             raise HTTPException(status_code=404, detail="Container not found")
 
@@ -521,6 +679,10 @@ async def get_container_status(
             progress = container_processor.get_container_progress(container_id)
             if progress and "error" not in progress:
                 current_file = progress.get("current_file")
+        else:
+            # Finished/failed containers no longer need this worker's in-memory progress
+            container_processor.progress_tracker.cleanup(container_id)
+        _evict_stale_container_progress()
 
         return ContainerStatusResponse(
             container_id=container_id,
@@ -711,13 +873,15 @@ async def list_enrichments():
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/file-enrichment/method/enrichments"
 
-        response = requests.get(url)
+        response = await _http_request("GET", url, timeout=30)
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=f"Error listing enrichments: {response.text}")
 
         return response.json()
 
-    except requests.RequestException as e:
+    except HTTPException:
+        raise
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to enrichment service")
         raise HTTPException(status_code=503, detail="Enrichment service unavailable") from e
     except Exception as e:
@@ -738,9 +902,10 @@ async def run_enrichment(
     request: EnrichmentRequest = Body(..., description="The enrichment request containing the object ID"),
 ):
     """Run a specific enrichment module by forwarding the request to file-enrichment service."""
+    validate_enrichment_name(enrichment_name)
     try:
         # First verify the file exists in our storage
-        if not storage.check_file_exists(request.object_id):
+        if not await asyncio.to_thread(storage.check_file_exists, request.object_id):
             raise HTTPException(status_code=404, detail=f"File {request.object_id} not found")
 
         # Forward the request to the enrichment service
@@ -748,11 +913,7 @@ async def run_enrichment(
 
         logger.info("Forwarding enrichment request", enrichment_name=enrichment_name, object_id=request.object_id)
 
-        response = requests.post(
-            url,
-            json=request.model_dump(),
-            timeout=30,  # Add reasonable timeout
-        )
+        response = await _http_request("POST", url, json_body=request.model_dump(), timeout=30)
 
         # Handle various response status codes
         if response.status_code == 404:
@@ -766,10 +927,10 @@ async def run_enrichment(
 
         return response.json()
 
-    except requests.Timeout as e:
+    except httpx.TimeoutException as e:
         logger.error("Timeout connecting to enrichment service", enrichment_name=enrichment_name)
         raise HTTPException(status_code=504, detail="Request to enrichment service timed out") from e
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to enrichment service")
         raise HTTPException(status_code=503, detail="Enrichment service unavailable") from e
     except HTTPException:
@@ -790,13 +951,14 @@ async def run_bulk_enrichment(
     enrichment_name: str = Path(..., description="Name of the enrichment module to run"),
 ):
     """Start bulk enrichment for a specific module by publishing individual tasks to pub/sub."""
+    validate_enrichment_name(enrichment_name)
     raise HTTPException(status_code=500, detail="Currently disabled")
 
     try:
         # First verify enrichment module exists
         enrichments_url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/file-enrichment/method/enrichments"
 
-        enrichments_response = requests.get(enrichments_url, timeout=10)
+        enrichments_response = await _http_request("GET", enrichments_url, timeout=10)
         if enrichments_response.status_code != 200:
             raise HTTPException(status_code=503, detail="Enrichment service unavailable")
 
@@ -911,11 +1073,7 @@ async def submit_dpapi_credential(
         has_user_sid = hasattr(request, "user_sid")
         logger.info("Forwarding DPAPI credential request", credential_type=request.type, has_user_sid=has_user_sid)
 
-        response = requests.post(
-            url,
-            json=request.model_dump(),
-            timeout=30,
-        )
+        response = await _http_request("POST", url, json_body=request.model_dump(), timeout=30)
 
         # Handle various response status codes
         if response.status_code == 400:
@@ -929,10 +1087,10 @@ async def submit_dpapi_credential(
 
         return response.json()
 
-    except requests.Timeout as e:
+    except httpx.TimeoutException as e:
         logger.error("Timeout connecting to file enrichment service for DPAPI credential")
         raise HTTPException(status_code=504, detail="Request to file enrichment service timed out") from e
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to file enrichment service")
         raise HTTPException(status_code=503, detail="File enrichment service unavailable") from e
     except HTTPException:
@@ -1054,11 +1212,7 @@ async def trigger_cleanup(request: CleanupRequest = Body(default=None, descripti
         housekeeping_url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/housekeeping/method/trigger-cleanup"
         logger.info("Forwarding cleanup request to housekeeping service", expiration=payload.get("expiration"))
 
-        housekeeping_response = requests.post(
-            housekeeping_url,
-            json=payload,
-            timeout=30,  # Add reasonable timeout
-        )
+        housekeeping_response = await _http_request("POST", housekeeping_url, json_body=payload, timeout=30)
 
         # 3.5 Handle housekeeping response
         if housekeeping_response.status_code != 200:
@@ -1081,16 +1235,11 @@ async def trigger_cleanup(request: CleanupRequest = Body(default=None, descripti
         # Return combined results
         return {"status": "completed", "services": results, "timestamp": datetime.now(UTC).isoformat()}
 
-    except requests.Timeout as e:
-        service = getattr(e, "request", None)
-        if service and hasattr(service, "url"):
-            service_name = "housekeeping" if "housekeeping" in service.url else "file-enrichment"
-            logger.error(f"Timeout connecting to {service_name} service")
-            raise HTTPException(status_code=504, detail=f"Request to {service_name} service timed out") from e
-        else:
-            logger.error("Timeout connecting to services")
-            raise HTTPException(status_code=504, detail="Request to services timed out") from e
-    except requests.RequestException as e:
+    except httpx.TimeoutException as e:
+        # The housekeeping call is the only HTTP request made by this route
+        logger.error("Timeout connecting to housekeeping service")
+        raise HTTPException(status_code=504, detail="Request to housekeeping service timed out") from e
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to services")
         raise HTTPException(status_code=503, detail="One or more services unavailable") from e
     except HTTPException:
@@ -1100,15 +1249,62 @@ async def trigger_cleanup(request: CleanupRequest = Body(default=None, descripti
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+# Per-dependency budget for /system/health. Kept under the default 1s Kubernetes probe timeout.
+HEALTH_CHECK_TIMEOUT = 0.8
+# Cache the result briefly so frequent probes can't pile up threads against a hung dependency.
+HEALTH_CACHE_SECONDS = 5.0
+_health_cache: tuple[float, dict[str, Any]] | None = None
+
+
+def _check_database() -> None:
+    with get_db_pool().connection(timeout=HEALTH_CHECK_TIMEOUT) as conn:
+        conn.execute("SELECT 1")
+
+
+def _check_storage() -> None:
+    if not storage.minio_client.bucket_exists(storage.bucket_name):
+        raise RuntimeError(f"Bucket '{storage.bucket_name}' does not exist")
+
+
+async def _run_health_check(name: str, check) -> str:
+    try:
+        await asyncio.wait_for(asyncio.to_thread(check), timeout=HEALTH_CHECK_TIMEOUT)
+        return "ok"
+    except TimeoutError:
+        logger.warning("Health check timed out", dependency=name)
+        return "timeout"
+    except Exception as e:
+        logger.warning("Health check failed", dependency=name, error=str(e))
+        return "error"
+
+
 @app.get(
     "/system/health",
-    response_model=HealthResponse,
+    response_model=SystemHealthResponse,
     tags=["system"],
     summary="Health check",
-    description="Health check endpoint for Docker healthcheck",
+    description="Reports 'healthy' when PostgreSQL and object storage are reachable, otherwise 'degraded' "
+    "(always HTTP 200 so liveness probes don't restart the API over a dependency outage).",
 )
-@app.head("/healthz", include_in_schema=False)
 async def healthcheck():
+    global _health_cache
+    now = time.monotonic()
+    if _health_cache is not None and now - _health_cache[0] < HEALTH_CACHE_SECONDS:
+        return _health_cache[1]
+
+    db_result, storage_result = await asyncio.gather(
+        _run_health_check("database", _check_database),
+        _run_health_check("storage", _check_storage),
+    )
+    checks = {"database": db_result, "storage": storage_result}
+    result = {"status": "healthy" if all(v == "ok" for v in checks.values()) else "degraded", "checks": checks}
+    _health_cache = (now, result)
+    return result
+
+
+@app.head("/healthz", include_in_schema=False)
+async def liveness():
+    """Liveness only (Docker healthcheck): the process is up and serving requests."""
     return {"status": "healthy"}
 
 
@@ -1137,7 +1333,7 @@ async def get_apprise_info():
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/alerting/method/apprise-info"
 
-        response = requests.get(url, timeout=10)
+        response = await _http_request("GET", url, timeout=10)
         if response.status_code != 200:
             logger.error(f"Error from alerting service: {response.status_code}")
             raise HTTPException(
@@ -1146,10 +1342,10 @@ async def get_apprise_info():
 
         return response.json()
 
-    except requests.Timeout as e:
+    except httpx.TimeoutException as e:
         logger.error("Timeout connecting to alerting service")
         raise HTTPException(status_code=504, detail="Request to alerting service timed out") from e
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to alerting service")
         raise HTTPException(status_code=503, detail="Alerting service unavailable") from e
     except HTTPException:
@@ -1159,7 +1355,7 @@ async def get_apprise_info():
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-def _scan_agent_metadata():
+async def _scan_agent_metadata():
     """
     Scan agent files to extract metadata (name, description, has_prompt).
     This function queries the agents service to get the agent information.
@@ -1167,17 +1363,17 @@ def _scan_agent_metadata():
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/metadata"
 
-        response = requests.get(url, timeout=5)  # Short timeout to prevent blocking
+        response = await _http_request("GET", url, timeout=5)  # Short timeout to prevent blocking
         if response.status_code == 200:
             return response.json().get("agents", [])
         else:
             logger.warning(f"Failed to get agent metadata from agents service: {response.status_code}")
             return []
 
-    except requests.Timeout:
+    except httpx.TimeoutException:
         logger.warning("Timeout getting agent metadata (agents service may be busy)")
         return []
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.warning(f"Could not connect to agents service for metadata: {e}")
         return []
 
@@ -1195,7 +1391,7 @@ async def get_available_agents():
     """
     try:
         # Get agent metadata from the agents service
-        agents = await asyncio.to_thread(_scan_agent_metadata)
+        agents = await _scan_agent_metadata()
 
         # If agents service is unavailable, return empty list
         if not agents:
@@ -1227,7 +1423,7 @@ async def get_agents_spend_data():
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/spend-data"
 
-        response = requests.get(url, timeout=10)
+        response = await _http_request("GET", url, timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
@@ -1243,7 +1439,7 @@ async def get_agents_spend_data():
                 "timestamp": datetime.now(UTC).isoformat(),
             }
 
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.warning(f"Could not connect to agents service for spend data: {e}")
         # Return default values if service is unavailable
         return {
@@ -1271,17 +1467,17 @@ async def run_text_summarizer(request: dict = Body(..., description="Request con
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/text_summarizer"
 
-        response = requests.post(url, json=request, timeout=10)  # Short timeout since it returns immediately
+        response = await _http_request("POST", url, json_body=request, timeout=10)  # Returns immediately
         if response.status_code == 200:
             return response.json()
         else:
             logger.warning(f"Failed to start text summarizer: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
-    except requests.Timeout as e:
+    except httpx.TimeoutException as e:
         logger.error("Timeout starting text summarizer")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to agents service")
         raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
@@ -1302,17 +1498,17 @@ async def run_llm_credential_analysis(request: dict = Body(..., description="Req
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/llm_credential_analysis"
 
-        response = requests.post(url, json=request, timeout=10)  # Short timeout since it returns immediately
+        response = await _http_request("POST", url, json_body=request, timeout=10)  # Returns immediately
         if response.status_code == 200:
             return response.json()
         else:
             logger.warning(f"Failed to start credential analysis: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
 
-    except requests.Timeout as e:
+    except httpx.TimeoutException as e:
         logger.error("Timeout starting credential analysis")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to agents service")
         raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
@@ -1332,16 +1528,16 @@ async def run_dotnet_analysis(request: dict = Body(..., description="Request con
     """Trigger .NET assembly analysis in agents service (returns immediately)."""
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/dotnet_analysis"
-        response = requests.post(url, json=request, timeout=10)  # Short timeout since it returns immediately
+        response = await _http_request("POST", url, json_body=request, timeout=10)  # Returns immediately
         if response.status_code == 200:
             return response.json()
         else:
             logger.warning(f"Failed to start .NET analysis: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
-    except requests.Timeout as e:
+    except httpx.TimeoutException as e:
         logger.error("Timeout starting .NET analysis")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to agents service")
         raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
@@ -1363,16 +1559,16 @@ async def run_translation(
     """Trigger text translation in agents service (returns immediately)."""
     try:
         url = f"http://localhost:{DAPR_PORT}/v1.0/invoke/agents/method/agents/translate"
-        response = requests.post(url, json=request, timeout=10)  # Short timeout since it returns immediately
+        response = await _http_request("POST", url, json_body=request, timeout=10)  # Returns immediately
         if response.status_code == 200:
             return response.json()
         else:
             logger.warning(f"Failed to start translation: {response.status_code}")
             raise HTTPException(status_code=response.status_code, detail=f"Error from agents service: {response.text}")
-    except requests.Timeout as e:
+    except httpx.TimeoutException as e:
         logger.error("Timeout starting translation")
         raise HTTPException(status_code=504, detail="Request to agents service timed out") from e
-    except requests.RequestException as e:
+    except UPSTREAM_ERRORS as e:
         logger.exception(message="Error connecting to agents service")
         raise HTTPException(status_code=503, detail="Agents service unavailable") from e
     except HTTPException:
@@ -1452,9 +1648,9 @@ async def get_available_services():
         traefik_api_url = "http://traefik:8080/api/http/routers"
 
         try:
-            response = requests.get(traefik_api_url, timeout=5)
+            response = await _http_request("GET", traefik_api_url, timeout=5)
             response.raise_for_status()
-        except requests.RequestException as e:
+        except httpx.HTTPError as e:
             logger.warning(f"Failed to query Traefik API: {e}")
             # Return all services if we can't determine what's available
             return {
@@ -1521,7 +1717,7 @@ async def submit_file(file_data: FileModel) -> uuid.UUID:
     Returns a submission ID.
     """
     try:
-        if not storage.check_file_exists(file_data.object_id):
+        if not await asyncio.to_thread(storage.check_file_exists, file_data.object_id):
             logger.error("File doesn't exist", object_id=file_data.object_id)
             raise HTTPException(status_code=400, detail=f"File {file_data.object_id} doesn't exist")
 
@@ -1570,8 +1766,12 @@ async def process_workflow_completion(event: CloudEvent):
             return
 
         # Update container processing progress
-        all_complete = container_processor.update_container_workflow_progress(
-            originating_container_id, file_size=file_size, increment_completed=completed, increment_failed=not completed
+        all_complete = await asyncio.to_thread(
+            container_processor.update_container_workflow_progress,
+            originating_container_id,
+            file_size=file_size,
+            increment_completed=completed,
+            increment_failed=not completed,
         )
 
         if all_complete:
@@ -1581,6 +1781,10 @@ async def process_workflow_completion(event: CloudEvent):
             logger.info(
                 "Container processing completed", container_id=originating_container_id, final_object_id=object_id
             )
+
+        # The completion event may land on a worker that never tracked this container; bound what
+        # other workers keep around.
+        _evict_stale_container_progress()
 
     except Exception:
         logger.exception(message="Error processing workflow completion event", cloud_event=event)
@@ -1765,6 +1969,10 @@ async def synthesize_source_report(
     source: str = Query(..., description="Source name (supports URLs and special characters, case-insensitive)"),
     include_findings_details: bool = Query(True, description="Include detailed findings in the analysis"),
     max_tokens: int = Query(150000, description="Maximum tokens for LLM analysis"),
+    start_date: datetime | None = Query(
+        None, description="Filter by start date (same filter as the source report/PDF)"
+    ),
+    end_date: datetime | None = Query(None, description="Filter by end date (same filter as the source report/PDF)"),
 ):
     """
     Generate LLM-based risk assessment for a source.
@@ -1776,7 +1984,8 @@ async def synthesize_source_report(
         # First get the source report data
         from web_api.reporting_routes import get_source_report_data
 
-        report = await asyncio.to_thread(get_source_report_data, get_db_pool(), source)
+        # Apply the same date filters as the report/PDF the synthesis is embedded in
+        report = await asyncio.to_thread(get_source_report_data, get_db_pool(), source, start_date, end_date)
 
         # Convert report to dict for passing to agent (mode='json' handles datetime serialization)
         report_data = report.model_dump(mode="json")
@@ -1790,7 +1999,7 @@ async def synthesize_source_report(
             "max_tokens": max_tokens,
         }
 
-        response = requests.post(url, json=request_data, timeout=120)
+        response = await _http_request("POST", url, json_body=request_data, timeout=120)
 
         if response.status_code != 200:
             logger.error("Error calling agents service", status_code=response.status_code, response=mask(response.text))
@@ -1867,7 +2076,7 @@ async def synthesize_system_report(
             "max_tokens": max_tokens,
         }
 
-        response = requests.post(url, json=request_data, timeout=120)
+        response = await _http_request("POST", url, json_body=request_data, timeout=120)
 
         if response.status_code != 200:
             logger.error("Error calling agents service", status_code=response.status_code, response=mask(response.text))
