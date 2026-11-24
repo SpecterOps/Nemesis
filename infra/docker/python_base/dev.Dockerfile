@@ -1,6 +1,6 @@
 # This is the development image for python projects
 # It is a slim image with dev tools/programs installed
-FROM python:3.13.2-slim
+FROM python:3.13.18-slim
 
 RUN apt-get update && \
     apt-get install --no-install-suggests --no-install-recommends --yes \
@@ -9,7 +9,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv from official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /uvx /bin/
 
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1

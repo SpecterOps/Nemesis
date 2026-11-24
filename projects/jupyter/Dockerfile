@@ -1,5 +1,5 @@
 # Pinned release: JupyterLab 4.6.6, Notebook 7.6.5, Python 3.13.18, Ubuntu 26.04
-FROM quay.io/jupyter/scipy-notebook:2026-11-16
+FROM quay.io/jupyter/scipy-notebook:2026-11-23
 
 USER root
 

@@ -9,15 +9,20 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     ARCH=$(dpkg --print-architecture) && \
-    wget https://go.dev/dl/go1.25.4.linux-${ARCH}.tar.gz && \
-    tar -C /usr/local -xzf go1.25.4.linux-${ARCH}.tar.gz && \
-    rm go1.25.4.linux-${ARCH}.tar.gz
+    wget https://go.dev/dl/go1.27.4.linux-${ARCH}.tar.gz && \
+    tar -C /usr/local -xzf go1.27.4.linux-${ARCH}.tar.gz && \
+    rm go1.27.4.linux-${ARCH}.tar.gz
 
 
 # Install genai-toolbox for chatbot MCP functionality
 ENV GOPATH=/go \
     PATH=/usr/local/go/bin:/go/bin:$PATH
-RUN go install github.com/googleapis/genai-toolbox@v0.18.0
+# The project moved to github.com/googleapis/mcp-toolbox, and its go.mod has replace directives,
+# so `go install pkg@version` is refused: build the tagged source. Keep the binary name the chatbot runs.
+ARG MCP_TOOLBOX_VERSION=v1.18.0
+RUN git clone --depth 1 --branch ${MCP_TOOLBOX_VERSION} https://github.com/googleapis/mcp-toolbox.git /tmp/mcp-toolbox && \
+    cd /tmp/mcp-toolbox && go build -o /go/bin/genai-toolbox . && \
+    cd / && rm -rf /tmp/mcp-toolbox
 
 
 # Install .NET Runtime
@@ -25,7 +30,7 @@ ENV DOTNET_ROOT=/usr/local/dotnet \
     PATH=/usr/local/dotnet:$PATH
 
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin \
-    --channel 8.0 \
+    --channel 11.0 \
     --runtime aspnetcore \
     --install-dir /usr/local/dotnet \
     && chmod +x /usr/local/dotnet/dotnet
@@ -89,7 +94,7 @@ FROM ${PYTHON_BASE_PROD_IMAGE} AS prod
 
 # Install runtime dependencies for psycopg and .NET
 RUN apt-get update && \
-    apt-get install -y libpq5 libicu72 && \
+    apt-get install -y libpq5 libicu76 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

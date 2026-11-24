@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS base
+FROM node:24.22.3-alpine AS base
 
 RUN apk add --no-cache wget
 
@@ -40,7 +40,7 @@ RUN npm run build && \
     fi
 
 
-FROM nginx:alpine AS prod
+FROM nginx:1.31.10-alpine AS prod
 RUN apk add --no-cache wget
 
 COPY --from=bundle /app/dist /usr/share/nginx/html
