@@ -1,8 +1,16 @@
 import hashlib
 import io
+import json
+import math
 import posixpath
 import re
-from typing import BinaryIO
+from dataclasses import asdict, dataclass
+from typing import Any, BinaryIO
+from uuid import UUID
+
+from common.data_issues import DataIssueKind, log_data_issue
+from pydantic import BaseModel
+from pydantic_core import to_jsonable_python
 
 
 def calculate_file_hash(file_path: str, hash_type: str) -> str:
@@ -307,3 +315,96 @@ def sanitize_for_jsonb(obj):
     else:
         # Return non-string primitives as-is
         return obj
+
+
+@dataclass
+class SanitizeReport:
+    """Counts of what sanitize_for_jsonb_report changed; all zero means the data was stored unchanged."""
+
+    nul_bytes: int = 0
+    control_chars: int = 0
+    surrogates: int = 0
+    non_json_values: int = 0
+
+    @property
+    def changed(self) -> bool:
+        return any(asdict(self).values())
+
+    def as_dict(self) -> dict[str, int]:
+        return asdict(self)
+
+
+_JSON_SCALARS = (str, int, float, bool, type(None))
+
+
+def _clean_string(value: str, report: SanitizeReport) -> str:
+    out = []
+    for char in value:
+        code = ord(char)
+        if code == 0:
+            report.nul_bytes += 1
+        elif 0xD800 <= code <= 0xDFFF:
+            report.surrogates += 1
+        elif char < " " and char not in "\n\r\t":
+            report.control_chars += 1
+        else:
+            out.append(char)
+    return "".join(out)
+
+
+def _sanitize(obj: Any, report: SanitizeReport) -> Any:
+    if isinstance(obj, BaseModel):
+        return _sanitize(obj.model_dump(mode="json"), report)
+    if isinstance(obj, dict):
+        clean = {}
+        for key, value in obj.items():
+            if not isinstance(key, str):
+                report.non_json_values += 1
+                key = str(key)
+            clean[_clean_string(key, report)] = _sanitize(value, report)
+        return clean
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        return [_sanitize(item, report) for item in obj]
+    if isinstance(obj, str):
+        return _clean_string(obj, report)
+    if isinstance(obj, float) and not math.isfinite(obj):
+        # NaN/Infinity are not valid JSON and PostgreSQL rejects them in JSONB
+        report.non_json_values += 1
+        return None
+    if isinstance(obj, _JSON_SCALARS):
+        return obj
+    if isinstance(obj, (bytes, bytearray, memoryview)):
+        report.non_json_values += 1
+        return bytes(obj).hex()
+    try:
+        # UUID, datetime, date, Enum, Decimal, Path, ... have a standard JSON form
+        return _sanitize(to_jsonable_python(obj), report)
+    except Exception:
+        report.non_json_values += 1
+        return _clean_string(str(obj), report)
+
+
+def sanitize_for_jsonb_report(obj: Any) -> tuple[Any, SanitizeReport]:
+    """Return a JSON-compatible copy of ``obj`` that PostgreSQL JSONB accepts, plus what had to change.
+
+    Removes NUL bytes, control characters (other than newline, carriage return and tab) and lone surrogates from
+    strings; converts models, UUIDs, datetimes and enums to their JSON form; hex-encodes bytes; turns NaN/Infinity
+    into null; stringifies anything else and non-string dict keys.
+    """
+    report = SanitizeReport()
+    return _sanitize(obj, report), report
+
+
+def jsonb_dumps(obj: Any, *, column: str, object_id: UUID | None = None, **context: Any) -> str:
+    """Serialize ``obj`` for a JSONB column, logging a jsonb_sanitized data issue if anything had to change.
+
+    Args:
+        obj: Value to store (dict, list, model, ...).
+        column: Destination column, e.g. ``findings.raw_data`` (used in the log).
+        object_id: File the value belongs to, for the log.
+        context: Extra log context (e.g. ``finding_name``).
+    """
+    clean, report = sanitize_for_jsonb_report(obj)
+    if report.changed:
+        log_data_issue(DataIssueKind.JSONB_SANITIZED, field=column, object_id=object_id, **report.as_dict(), **context)
+    return json.dumps(clean)
