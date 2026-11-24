@@ -25,8 +25,6 @@ services:
         "3500",
         "--dapr-grpc-port",
         "50001",
-        "--placement-host-address",
-        "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
         "--resources-path",
