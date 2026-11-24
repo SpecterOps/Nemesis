@@ -129,12 +129,10 @@ class TestMonitorVerification:
         handler = NewFileHandler("h:1", "u", "p", "proj", "agent", MagicMock())
         assert handler.verify_ssl is True
 
-    @patch("cli.monitor.time")
     @patch("cli.monitor.submit_files")
-    def test_handler_passes_setting_to_submit(self, mock_submit, _mock_time):
+    def test_handler_passes_setting_to_submit(self, mock_submit):
         handler = NewFileHandler("h:1", "u", "p", "proj", "agent", MagicMock(), verify_ssl=False)
-        event = MagicMock(is_directory=False, src_path="/tmp/new.txt")
-        handler.on_created(event)
+        handler.submit_path(Path("/tmp/new.txt"))
         assert mock_submit.call_args.kwargs["verify_ssl"] is False
 
     @patch("cli.monitor.Observer")
