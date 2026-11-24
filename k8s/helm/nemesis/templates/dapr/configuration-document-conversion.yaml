@@ -6,6 +6,12 @@ metadata:
   labels:
     {{- include "nemesis.labels" . | nindent 4 }}
 spec:
+  # Workflow activities and timers are driven in the sidecar instead of through scheduler reminders.
+  # Don't add spec.workflow concurrency limits here: Dapr turns the fast path off when they're set.
+  # Limits live in the Python SDK (WORKFLOW_MAX_CONCURRENT_* in libs/common/common/workflows/setup.py).
+  features:
+    - name: WorkflowsFastPath
+      enabled: true
   metric:
     enabled: true
   {{- if .Values.monitoring.enabled }}

@@ -58,6 +58,19 @@ You may need to scale the Dapr infrastructure if you considerably increase the p
 
 If this is the case, first try increasing the number of scheduler instances ([example](https://github.com/olitomlinson/dapr-workflow-testing/blob/main/compose-1-3.yml#L111-L152)). Dapr does not support more than 3 scheduler instances unless you migrate to using [an external etcd store](https://docs.dapr.io/concepts/dapr-services/scheduler/#external-etcd-database). If Postgres begins to be the bottleneck, you may consider using a separate Postgres instance to store Dapr state.
 
+## Workflow worker limits
+file_enrichment, document_conversion and agents enable Dapr's `WorkflowsFastPath` feature in their Dapr configurations (`infra/dapr/configuration/`), so the sidecar drives activities and timers itself instead of round-tripping through scheduler reminders. Don't add `spec.workflow` concurrency limits to those configurations: Dapr turns the fast path off when they are set.
+
+Workflow activities run as native async activities, so a running activity does not hold a thread. The Python workflow worker's limits are set with these environment variables (defaults in parentheses):
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `WORKFLOW_MAX_CONCURRENT_ACTIVITIES` | 100 | Activities a service runs at once |
+| `WORKFLOW_MAX_CONCURRENT_ORCHESTRATIONS` | 100 | Workflow (orchestrator) steps a service runs at once |
+| `WORKFLOW_THREAD_POOL_WORKERS` | 16 | Threads for orchestrator replays and for sending results to the sidecar |
+
+The number of files processed at once is still set by `ENRICHMENT_MAX_PARALLEL_WORKFLOWS` and `DOCUMENTCONVERSION_MAX_PARALLEL_WORKFLOWS`.
+
 Additional resources:
 - [Tuning Dapr Scheduler for Production](https://www.diagrid.io/blog/tuning-dapr-scheduler-for-production)
 - [Dapr Scheduler control plane service overview](https://docs.dapr.io/concepts/dapr-services/scheduler/)
