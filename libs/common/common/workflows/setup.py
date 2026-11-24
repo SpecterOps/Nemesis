@@ -44,7 +44,6 @@ def workflow_activity(fn: Callable | None = None, *, name: str | None = None) ->
         # if settings.pytest_running:
         #     return func
 
-        @wf_runtime.activity(name=name)  # pyright: ignore[reportCallIssue]
         @wraps(func)
         def wrapped_fn(*args, **kwargs) -> Any:  # type: ignore
             logger.debug(f"Executing activity: {name or func.__name__}")
@@ -57,7 +56,12 @@ def workflow_activity(fn: Callable | None = None, *, name: str | None = None) ->
                 raise RuntimeError("FastAPI event loop is not set.")
             return asyncio.run_coroutine_threadsafe(result, workflow_loop).result()
 
-        return wrapped_fn
+        # The Dapr SDK (>= 1.19) treats an activity as async when inspect.unwrap() reaches a coroutine
+        # function, then awaits its return value. This wrapper is synchronous (it runs the coroutine
+        # on the FastAPI loop and returns the result), so hide the original async function from it.
+        del wrapped_fn.__wrapped__
+
+        return wf_runtime.activity(name=name)(wrapped_fn)  # pyright: ignore[reportCallIssue]
 
     # If called without parentheses, fn will be the function
     if fn is not None:

@@ -9,7 +9,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "impacket>=0.13.0,<0.14.0",
     "asyncpg>=0.30.0,<0.31.0",
-    "dapr==1.16.0",
+    "dapr==1.19.0",
     "structlog>=20.0.0,<30.0.0",
     "nemesis_dpapi",
     "file_linking",

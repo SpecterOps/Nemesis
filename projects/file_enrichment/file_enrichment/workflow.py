@@ -5,7 +5,7 @@ import file_enrichment.global_vars as global_vars
 from common.logger import get_logger
 from common.models import File
 from common.workflows.setup import wf_runtime
-from durabletask.task import TaskFailedError
+from dapr.ext.workflow import TaskFailedError
 from file_enrichment_modules.module_loader import ModuleLoader
 from nemesis_dpapi import DpapiManager
 

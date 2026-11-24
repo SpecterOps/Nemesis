@@ -25,7 +25,7 @@ dependencies = [
     "requests-toolbelt>=1.0.0,<2.0.0",
     "httpx>=0.28.1,<0.29.0",
     "watchdog>=6.0.0,<7.0.0",
-    "dapr==1.16.0",
+    "dapr==1.19.0",
     "plyvel-ci>=1.5.1,<2.0.0",
     "pytest>=9.0.3",
 ]
