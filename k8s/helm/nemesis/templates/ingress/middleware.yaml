@@ -22,6 +22,36 @@ type: Opaque
 stringData:
   users: {{ .Values.credentials.basicAuthUsers | quote }}
 ---
+# /rabbitmq: the Nemesis users plus the RabbitMQ account. The RabbitMQ UI (4.4+) logs in with the RabbitMQ
+# credentials and then sends them in the Authorization header that basic auth reads.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-rabbitmq-auth
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  basicAuth:
+    secret: nemesis-rabbitmq-auth-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nemesis-rabbitmq-auth-secret
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  users: |
+    {{- range (splitList "," .Values.credentials.basicAuthUsers) }}
+    {{- if trim . }}
+    {{ trim . }}
+    {{- end }}
+    {{- end }}
+    {{ htpasswd .Values.credentials.rabbitmq.user .Values.credentials.rabbitmq.password }}
+---
 # Answers every request with 403: no client address is in this range (used for cross-site requests)
 apiVersion: traefik.io/v1alpha1
 kind: Middleware

@@ -128,7 +128,10 @@ def mw_names(r):
 
 
 rmq = route("PathPrefix(`/rabbitmq`)")
-check("rabbitmq route needs the Nemesis login first", mw_names(rmq)[:1] == ["nemesis-basic-auth"])
+check("rabbitmq route needs a login first", mw_names(rmq)[:1] == ["nemesis-rabbitmq-auth"])
+rmq_users = find(default, "Secret", "nemesis-rabbitmq-auth-secret")["stringData"]["users"].split()
+check("rabbitmq login accepts the Nemesis users", find(default, "Secret", "nemesis-basic-auth-secret")["stringData"]["users"] in rmq_users)
+check("rabbitmq login accepts the RabbitMQ account (bcrypt)", any(u.startswith("nemesis:$2a$") for u in rmq_users))
 check("rabbitmq route swaps in the RabbitMQ credentials", "nemesis-rabbitmq-credentials" in mw_names(rmq))
 creds = find(default, "Middleware", "nemesis-rabbitmq-credentials")["spec"]["headers"]["customRequestHeaders"]
 check(
@@ -141,7 +144,7 @@ check("public rabbitmq route wins over the prefix route", public["priority"] > r
 check("public rabbitmq route strips credentials", mw_names(public) == ["nemesis-rabbitmq-anonymous"])
 anon = find(default, "Middleware", "nemesis-rabbitmq-anonymous")["spec"]["headers"]["customRequestHeaders"]
 check("anonymous middleware removes Authorization", anon == {"Authorization": ""})
-check("every other route needs the Nemesis login", all("nemesis-basic-auth" in mw_names(r) for r in routes if r is not public and "Sec-Fetch-Site" not in r["match"]))
+check("every other route needs the Nemesis login", all("nemesis-basic-auth" in mw_names(r) for r in routes if r not in (public, rmq) and "Sec-Fetch-Site" not in r["match"]))
 
 # --- cross-site (CSRF) block, same rule as Compose ---
 compose_rule = " ".join(

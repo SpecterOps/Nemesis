@@ -1,10 +1,23 @@
-# The RabbitMQ management UI sends its own credentials in the Authorization header, which is also the
-# header Traefik's Nemesis basic auth checks. So the /rabbitmq route checks the Nemesis login, then this
-# middleware replaces the header with the RabbitMQ credentials: log in to the RabbitMQ UI with your
-# Nemesis username and password. Only /api/version and /api/auth, which RabbitMQ serves to anyone and the UI
-# loads before showing its login form, skip the Nemesis login; they get no credentials.
+# RabbitMQ management UI behind the Nemesis login.
+#
+# The UI (4.4+) logs in by POSTing the typed username/password to /api/login, which RabbitMQ checks
+# against its own users, then sends the returned token in the Authorization header - the same header
+# Traefik's basic auth reads. So the /rabbitmq route accepts the Nemesis users *and* the RabbitMQ account
+# (rabbitmq-auth): log in to the RabbitMQ UI with the RabbitMQ credentials (RABBITMQ_USER / RABBITMQ_PASSWORD).
+# rabbitmq-credentials then sends RabbitMQ the RabbitMQ credentials whichever login was used, so API calls
+# made with the Nemesis login also work. Only /api/version and /api/auth, which RabbitMQ serves to anyone
+# and the UI loads before its login form, skip the login; they get no credentials (rabbitmq-anonymous).
 http:
   middlewares:
+    rabbitmq-auth:
+      basicAuth:
+        users:
+{{- range $user := splitList "," (env "BASIC_AUTH_USERS") }}
+{{- if trim $user }}
+          - {{ trim $user | quote }}
+{{- end }}
+{{- end }}
+          - {{ htpasswd (env "RABBITMQ_USER") (env "RABBITMQ_PASSWORD") | quote }}
     rabbitmq-credentials:
       headers:
         customRequestHeaders:

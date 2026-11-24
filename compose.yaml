@@ -758,7 +758,7 @@ services:
       - "traefik.http.services.rabbitmq-ui.loadbalancer.server.port=15672"
       - "traefik.http.routers.rabbitmq-ui.rule=PathPrefix(`/rabbitmq`)"
       # Nemesis login, then Traefik swaps in the RabbitMQ credentials (infra/traefik/config/rabbitmq.yml)
-      - "traefik.http.routers.rabbitmq-ui.middlewares=auth@file,rabbitmq-credentials@file"
+      - "traefik.http.routers.rabbitmq-ui.middlewares=rabbitmq-auth@file,rabbitmq-credentials@file"
       # The UI fetches these two public endpoints before its login form exists, sending "Authorization: null"
       - "traefik.http.routers.rabbitmq-ui-public.rule=Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`)"
       - "traefik.http.routers.rabbitmq-ui-public.priority=100"

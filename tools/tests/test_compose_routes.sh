@@ -35,7 +35,7 @@ middlewares = {r: labels.get(f"traefik.http.routers.{r}.middlewares", "").split(
 # Only these two read-only RabbitMQ endpoints may skip the login (the UI loads them before its login form)
 PUBLIC = {"rabbitmq-ui-public"}
 for router in sorted(routers - PUBLIC):
-    check(f"router {router} requires the Nemesis login", middlewares[router][:1] == ["auth@file"])
+    check(f"router {router} requires a login", middlewares[router][:1] == (["rabbitmq-auth@file"] if router == "rabbitmq-ui" else ["auth@file"]))
 
 check(
     "public RabbitMQ router matches only api/version and api/auth",
@@ -45,11 +45,13 @@ check(
 check("public RabbitMQ router strips credentials", middlewares["rabbitmq-ui-public"] == ["rabbitmq-anonymous@file"])
 check(
     "RabbitMQ UI gets the RabbitMQ credentials after the Nemesis login",
-    middlewares["rabbitmq-ui"] == ["auth@file", "rabbitmq-credentials@file"],
+    middlewares["rabbitmq-ui"] == ["rabbitmq-auth@file", "rabbitmq-credentials@file"],
 )
 
 traefik_file = (root / "infra/traefik/config/rabbitmq.yml").read_text()
-dynamic = yaml.safe_load(traefik_file)["http"]["middlewares"]
+# Drop the Go-template lines (users list) so the rest parses as plain YAML
+plain = "\n".join(line for line in traefik_file.splitlines() if "{{" not in line)
+dynamic = yaml.safe_load(plain)["http"]["middlewares"]
 check(
     "credentials middleware is built from RABBITMQ_USER/RABBITMQ_PASSWORD",
     'env "RABBITMQ_USER"' in traefik_file and 'env "RABBITMQ_PASSWORD"' in traefik_file and "b64enc" in traefik_file,
@@ -65,6 +67,10 @@ check("cross-site router matches Sec-Fetch-Site cross-site/same-site", "cross-si
 check("cross-site router matches Origin null", "HeaderRegexp(`Origin`" in block["rule"])
 check("cross-site router uses the deny middleware", block["middlewares"] == ["deny-all"] and block["service"] == "noop@internal")
 check("deny middleware allows no address", cross["middlewares"]["deny-all"]["ipAllowList"]["sourceRange"] == ["255.255.255.255/32"])
+check(
+    "RabbitMQ route accepts the Nemesis users and the RabbitMQ account",
+    'env "BASIC_AUTH_USERS"' in traefik_file and 'htpasswd (env "RABBITMQ_USER") (env "RABBITMQ_PASSWORD")' in traefik_file,
+)
 traefik_env = compose["services"]["traefik"]["environment"]
 
 # --- nothing reachable over plain HTTP, and no unauthenticated Traefik routers or API ---

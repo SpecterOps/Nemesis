@@ -68,7 +68,7 @@ spec:
       kind: Rule
       priority: 10
       middlewares:
-        - name: nemesis-basic-auth
+        - name: nemesis-rabbitmq-auth
           namespace: {{ include "nemesis.namespace" . }}
         - name: nemesis-rabbitmq-credentials
           namespace: {{ include "nemesis.namespace" . }}
