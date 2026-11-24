@@ -18,11 +18,17 @@ render "$TMP/default.yaml"
 render "$TMP/explicit.yaml" --set credentials.litellm.adminPassword=custom --set credentials.litellm.saltKey=sk-salt
 render "$TMP/legacy.yaml" --set llm.litellm.env.litellmAdminPassword=legacy
 render "$TMP/hosted.yaml" --set ingress.host=nemesis.example
-render "$TMP/quoted.yaml" --set llm.enabled=false --set monitoring.enabled=false --set jupyter.enabled=false --set 'credentials.postgres.password=pa"ss'
+# Credentials with every character that breaks YAML quoting or URL parsing
+render "$TMP/quoted.yaml" --set-string 'credentials.postgres.password=pa"ss w@rd:/#%?&+\\' \
+  --set-string 'credentials.rabbitmq.password=r@bbit:/#%"+ x'
 
 python3 - "$TMP" "$(cd "$CHART/../../.." && pwd)" <<'EOF'
 import sys
 from pathlib import Path
+
+import json
+import re
+from urllib.parse import unquote, urlsplit
 
 import yaml
 
@@ -192,10 +198,41 @@ check("pgbouncer root filesystem is read-only", pgb_c["securityContext"]["readOn
 check("pgbouncer userlist comes from a Secret", any(v.get("secret", {}).get("secretName") == "pgbouncer-userlist" for v in pgb["volumes"]))
 ini = find(default, "ConfigMap", "pgbouncer-config")["data"]["pgbouncer.ini"]
 check("pgbouncer uses SCRAM", "auth_type = scram-sha-256" in ini)
+check("pgbouncer handles asyncpg prepared statements in transaction mode", "max_prepared_statements = 200" in ini)
 check("pgbouncer config holds no password", "Qwerty" not in ini and "password" not in ini.lower())
 check("other roles resolve through auth_user", "auth_user=" in ini)
 quoted = docs("quoted.yaml")
-check("userlist escapes double quotes", find(quoted, "Secret", "pgbouncer-userlist")["stringData"]["userlist.txt"].strip().endswith('"pa""ss"'))
+PG_PW = 'pa"ss w@rd:/#%?&+\\'
+RMQ_PW = 'r@bbit:/#%"+ x'
+check("userlist escapes double quotes", find(quoted, "Secret", "pgbouncer-userlist")["stringData"]["userlist.txt"].strip().endswith('"' + PG_PW.replace('"', '""') + '"'))
+
+
+def url_password(url):
+    return unquote(urlsplit(url).password)
+
+
+# Every connection URL in the rendered chart decodes back to the real password
+urls = []
+for d in quoted:
+    if d["kind"] == "Secret":
+        for k, v in d.get("stringData", {}).items():
+            if k == "secrets.json":
+                urls += [x for x in json.loads(v).values() if "://" in str(x)]
+            elif "://" in str(v):
+                urls.append(v)
+    if d["kind"] == "ConfigMap":
+        for v in d.get("data", {}).values():
+            urls += re.findall(r'"((?:postgresql|amqp)://[^"]+)"', v)
+    if d["kind"] in ("Deployment", "StatefulSet"):
+        for c in d["spec"]["template"]["spec"]["containers"]:
+            urls += [e["value"] for e in c.get("env", []) if "://" in str(e.get("value", "")) and "@" in str(e.get("value", ""))]
+pg_urls = [u for u in urls if u.startswith("postgresql://")]
+amqp_urls = [u for u in urls if u.startswith("amqp://")]
+check("found postgres URLs with credentials", len(pg_urls) >= 6)
+check("found amqp URLs with credentials", len(amqp_urls) >= 2)
+check("every postgres URL decodes to the password", all(url_password(u) == PG_PW for u in pg_urls))
+check("every amqp URL decodes to the password", all(url_password(u) == RMQ_PW for u in amqp_urls))
+check("no URL is built with $(VAR) expansion", not any("$(" in u for u in urls))
 
 # --- Prometheus pod discovery stays inside the Nemesis namespace ---
 prom_pod = find(default, "Deployment", "prometheus")["spec"]["template"]["spec"]

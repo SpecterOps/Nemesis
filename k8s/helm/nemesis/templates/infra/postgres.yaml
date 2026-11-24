@@ -85,9 +85,9 @@ spec:
               command:
                 - pg_isready
                 - -U
-                - {{ .Values.credentials.postgres.user }}
+                - {{ .Values.credentials.postgres.user | quote }}
                 - -d
-                - {{ .Values.postgres.database }}
+                - {{ .Values.postgres.database | quote }}
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
@@ -95,9 +95,9 @@ spec:
               command:
                 - pg_isready
                 - -U
-                - {{ .Values.credentials.postgres.user }}
+                - {{ .Values.credentials.postgres.user | quote }}
                 - -d
-                - {{ .Values.postgres.database }}
+                - {{ .Values.postgres.database | quote }}
             initialDelaySeconds: 30
             periodSeconds: 10
           resources:

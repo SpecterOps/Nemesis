@@ -5,6 +5,7 @@ import asyncio
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 import structlog
@@ -134,7 +135,7 @@ This order ensures you check the most relevant credential sources first before f
 
     def _get_chatbot_connection_string(self) -> str:
         """Get PostgreSQL connection string for chatbot read-only user."""
-        chatbot_password = os.getenv("CHATBOT_DB_PASSWORD", "chatbot_pass_change_me")
+        chatbot_password = quote(os.getenv("CHATBOT_DB_PASSWORD", "chatbot_pass_change_me"), safe="")
         postgres_host = os.getenv("POSTGRES_HOST", "postgres")
         postgres_port = os.getenv("POSTGRES_PORT", "5432")
         postgres_db = os.getenv("POSTGRES_DB", "enrichment")

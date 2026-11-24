@@ -3,7 +3,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from functools import lru_cache
-from urllib.parse import quote_plus
+from urllib.parse import quote
 
 import asyncpg
 from dapr.aio.clients import DaprClient as AsyncDaprClient
@@ -57,9 +57,10 @@ def get_postgres_connection_str(dapr_client: DaprClient | None = None) -> str:
             secrets = fetch_secrets(client)
 
     # Build the connection string from individual parameters
-    # URL-encode user and password to handle special characters like @, :, /, etc.
-    user = quote_plus(secrets["POSTGRES_USER"])
-    password = quote_plus(secrets["POSTGRES_PASSWORD"])
+    # Percent-encode user and password (@ : / ? # % and spaces); quote_plus would turn a space into "+",
+    # which libpq reads as a literal plus
+    user = quote(secrets["POSTGRES_USER"], safe="")
+    password = quote(secrets["POSTGRES_PASSWORD"], safe="")
     host = secrets["POSTGRES_HOST"]
     port = secrets["POSTGRES_PORT"]
     db = secrets["POSTGRES_DB"]

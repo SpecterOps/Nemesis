@@ -68,7 +68,7 @@ spec:
             - name: PHOENIX_ENDPOINT
               value: "http://phoenix:6006/v1/traces"
             - name: PHOENIX_SQL_DATABASE_URL
-              value: "postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/phoenix"
+              value: {{ include "nemesis.postgresUrl" (dict "context" . "host" "postgres" "database" "phoenix") | quote }}
             {{- if .Values.monitoring.enabled }}
             - name: NEMESIS_MONITORING
               value: "enabled"

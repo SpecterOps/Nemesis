@@ -71,14 +71,30 @@ Namespace
 PostgreSQL connection string
 */}}
 {{- define "nemesis.postgresConnectionString" -}}
-postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@pgbouncer:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}
+{{ include "nemesis.postgresUrl" (dict "context" . "host" "pgbouncer" "database" .Values.postgres.database "parameters" true) }}
+{{- end }}
+
+{{/*
+Percent-encode a value for the user or password part of a URL ("p@ss word" -> "p%40ss%20word").
+urlquery writes a space as "+", which libpq and amqp clients would read as a literal plus.
+*/}}
+{{- define "nemesis.urlEncode" -}}
+{{ toString . | urlquery | replace "+" "%20" }}
+{{- end }}
+
+{{/*
+postgresql:// URL with encoded credentials. dict: context, host, database, parameters (bool)
+*/}}
+{{- define "nemesis.postgresUrl" -}}
+{{- $v := .context.Values -}}
+postgresql://{{ include "nemesis.urlEncode" $v.credentials.postgres.user }}:{{ include "nemesis.urlEncode" $v.credentials.postgres.password }}@{{ .host }}:{{ $v.postgres.port }}/{{ .database }}{{ if .parameters }}?{{ $v.postgres.parameters }}{{ end }}
 {{- end }}
 
 {{/*
 RabbitMQ connection string
 */}}
 {{- define "nemesis.rabbitmqConnectionString" -}}
-amqp://{{ .Values.credentials.rabbitmq.user }}:{{ .Values.credentials.rabbitmq.password }}@rabbitmq:5672
+amqp://{{ include "nemesis.urlEncode" .Values.credentials.rabbitmq.user }}:{{ include "nemesis.urlEncode" .Values.credentials.rabbitmq.password }}@rabbitmq:5672
 {{- end }}
 
 {{/*

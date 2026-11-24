@@ -26,6 +26,9 @@ data:
     default_pool_size = {{ int .Values.pgbouncer.defaultPoolSize }}
     min_pool_size = {{ int .Values.pgbouncer.minPoolSize }}
     reserve_pool_size = {{ int .Values.pgbouncer.reservePoolSize }}
+    ; asyncpg uses protocol-level prepared statements; pgbouncer tracks them across transaction-mode
+    ; server connections (1.26 default, pinned so a default change cannot break the apps)
+    max_prepared_statements = 200
     ; asyncpg and psycopg send extra_float_digits, which pgbouncer would otherwise reject
     ignore_startup_parameters = extra_float_digits
 ---

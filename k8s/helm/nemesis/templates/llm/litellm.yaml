@@ -57,7 +57,7 @@ spec:
               name: http
           env:
             - name: DATABASE_URL
-              value: "postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/litellm"
+              value: {{ include "nemesis.postgresUrl" (dict "context" . "host" "postgres" "database" "litellm") | quote }}
             - name: STORE_MODEL_IN_DB
               value: {{ .Values.llm.litellm.env.storeModelInDb | quote }}
             - name: AWS_ACCESS_KEY_ID

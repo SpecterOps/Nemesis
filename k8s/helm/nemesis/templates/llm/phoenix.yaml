@@ -54,7 +54,7 @@ spec:
             - name: PHOENIX_HOST_ROOT_PATH
               value: "/phoenix"
             - name: PHOENIX_SQL_DATABASE_URL
-              value: "postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/phoenix"
+              value: {{ include "nemesis.postgresUrl" (dict "context" . "host" "postgres" "database" "phoenix") | quote }}
             - name: PHOENIX_DEFAULT_RETENTION_POLICY_DAYS
               value: {{ .Values.llm.phoenix.env.retentionPolicyDays | quote }}
           volumeMounts:

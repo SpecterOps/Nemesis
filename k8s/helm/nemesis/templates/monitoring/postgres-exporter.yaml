@@ -29,7 +29,7 @@ spec:
               name: metrics
           env:
             - name: DATA_SOURCE_NAME
-              value: "postgresql://{{ .Values.credentials.postgres.user }}:{{ .Values.credentials.postgres.password }}@postgres:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?{{ .Values.postgres.parameters }}"
+              value: {{ include "nemesis.postgresUrl" (dict "context" . "host" "postgres" "database" .Values.postgres.database "parameters" true) | quote }}
           readinessProbe:
             httpGet:
               path: /metrics

@@ -43,20 +43,17 @@ spec:
             - containerPort: 8080
               name: http
           env:
-            - name: POSTGRES_USER
-              valueFrom:
-                secretKeyRef:
-                  name: nemesis-secrets
-                  key: POSTGRES_USER
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: nemesis-secrets
-                  key: POSTGRES_PASSWORD
+            # Built in the Secret with URL-encoded credentials ($(VAR) expansion here could not encode them)
             - name: HASURA_GRAPHQL_DATABASE_URL
-              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@pgbouncer:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}"
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: HASURA_DATABASE_URL
             - name: HASURA_GRAPHQL_METADATA_DATABASE_URL
-              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@pgbouncer:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}"
+              valueFrom:
+                secretKeyRef:
+                  name: nemesis-secrets
+                  key: HASURA_DATABASE_URL
             - name: HASURA_GRAPHQL_ENABLE_CONSOLE
               value: {{ .Values.hasura.enableConsole | quote }}
             - name: HASURA_GRAPHQL_ADMIN_SECRET
