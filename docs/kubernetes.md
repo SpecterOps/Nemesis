@@ -166,7 +166,7 @@ Options:
 | Aspect | Docker Compose | Kubernetes |
 |--------|---------------|------------|
 | Dapr sidecars | Manual `-dapr` containers | Operator-injected via pod annotations |
-| Dapr control plane | Standalone placement + scheduler | Helm-installed Dapr operator |
+| Dapr control plane | Standalone scheduler (also serves actor placement) | Helm-installed Dapr (scheduler serves placement) |
 | Secrets | `.env` file + `secretstores.local.env` | K8s Secrets + `secretstores.kubernetes` |
 | Reverse proxy | Traefik container with Docker provider | Traefik with IngressRoute CRDs |
 | Autoscaling | Manual `docker compose up --scale` | KEDA ScaledObjects on RabbitMQ queue depth |
@@ -178,8 +178,8 @@ Options:
 Both `setup-cluster-k3d.sh` and `setup-cluster-k3s.sh` install the same Helm components:
 
 - **Traefik** (Helm chart v42.4.2, Traefik v3.7.20) — reverse proxy with TLS termination
-- **Dapr** (Helm chart v1.17.7) — sidecar injection, pub/sub, workflows, secrets
-- **KEDA** (Helm chart v2.16.1) — event-driven autoscaling from RabbitMQ queue depth
+- **Dapr** (Helm chart v1.19.2) — sidecar injection, pub/sub, workflows, secrets
+- **KEDA** (Helm chart v2.21.1) — event-driven autoscaling from RabbitMQ queue depth
 
 All versions are pinned for reproducibility.
 

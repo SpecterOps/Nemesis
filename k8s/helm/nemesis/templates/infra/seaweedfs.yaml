@@ -75,6 +75,8 @@ spec:
             - -s3.port=8333
             - -s3.config=/etc/seaweedfs/s3.json
             - -master.port=9333
+            # 1 GB volumes so -volume.max=0 (sized from free disk) leaves a volume per bucket/collection
+            - -master.volumeSizeLimitMB=1024
             - -volume.port=8080
             - -volume.max=0
             - -metricsPort=9324
@@ -168,7 +170,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: seaweedfs-init
-          image: amazon/aws-cli:2.27.28
+          image: amazon/aws-cli:2.42.2
           command:
             - /bin/sh
             - -c

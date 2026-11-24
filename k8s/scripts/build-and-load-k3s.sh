@@ -142,7 +142,7 @@ fi
 # Import external images into k3s containerd.
 # These are third-party images referenced in values.yaml that aren't built from source.
 EXTERNAL_IMAGES=(
-    "public.ecr.aws/bitnami/pgbouncer:1.25.1"
+    "docker.io/edoburu/pgbouncer:v1.26.1-p0"
 )
 
 if [[ ${#SELECTED_SERVICES[@]} -eq 0 ]]; then

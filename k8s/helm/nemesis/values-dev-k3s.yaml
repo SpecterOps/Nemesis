@@ -5,7 +5,7 @@ global:
   imagePullPolicy: Never
 
 # pgbouncer: no override needed — the image is imported into containerd with its
-# original ECR tag (public.ecr.aws/bitnami/pgbouncer:1.25.1) which matches values.yaml.
+# original tag (docker.io/edoburu/pgbouncer:v1.26.1-p0) which matches values.yaml.
 
 nemesis:
   logLevel: DEBUG

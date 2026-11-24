@@ -672,7 +672,7 @@ services:
   # Infrastructure Services
   ############################
   seaweedfs:
-    image: chrislusf/seaweedfs:4.15
+    image: chrislusf/seaweedfs:4.55
     environment:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?}
@@ -680,7 +680,9 @@ services:
       - seaweedfs_data:/data
       - ./infra/seaweedfs/entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/entrypoint.sh"]
-    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.port=9333 -volume.port=8080 -volume.max=0 -metricsPort=9324 -dir=/data
+    # 1 GB volumes: -volume.max=0 sizes the volume count from free disk / volume size, and each bucket
+    # (collection) needs its own volume, so the 30 GB default left too few volumes on smaller disks
+    command: server -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.port=9333 -master.volumeSizeLimitMB=1024 -volume.port=8080 -volume.max=0 -metricsPort=9324 -dir=/data
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8333/status"]
       interval: 30s
@@ -688,7 +690,7 @@ services:
       retries: 3
 
   seaweedfs-init:
-    image: amazon/aws-cli:2.27.28
+    image: amazon/aws-cli:2.42.2
     depends_on:
       seaweedfs: { condition: service_healthy }
     environment:
@@ -704,8 +706,7 @@ services:
     restart: "no"
 
   rabbitmq:
-    # image: rabbitmq:4.2.0-management
-    image: rabbitmq:4.2.4-management
+    image: rabbitmq:4.4.1-management
     hostname: rabbitmq-node # have to do this for persistence reasons
     environment:
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?}
@@ -738,7 +739,7 @@ services:
       - "traefik.http.routers.rabbitmq-ui-public.middlewares=rabbitmq-anonymous@file"
 
   postgres:
-    image: postgres:18.1
+    image: postgres:18.7
     command:
       [
         "postgres",
@@ -777,7 +778,7 @@ services:
 
   postgres-exporter:
     profiles: ["monitoring"]
-    image: prometheuscommunity/postgres-exporter:v0.18.1
+    image: prometheuscommunity/postgres-exporter:v0.21.1
     environment:
       DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}"
     volumes:
@@ -786,8 +787,14 @@ services:
       postgres: { condition: service_healthy }
 
   hasura:
-    #image: hasura/graphql-engine:v2.48.6.cli-migrations-v2
-    image: hasura/graphql-engine:v2.48.12.cli-migrations-v2
+    image: hasura/graphql-engine:v2.51.9.cli-migrations-v2
+    # The image no longer ships a HEALTHCHECK (it did up to v2.48); services wait on service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     depends_on:
       postgres: { condition: service_healthy }
     environment:
@@ -892,7 +899,7 @@ services:
 
   otel-collector:
     profiles: ["monitoring"]
-    image: otel/opentelemetry-collector:0.139.0
+    image: otel/opentelemetry-collector:0.165.0
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./infra/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -900,8 +907,7 @@ services:
 
   jaeger:
     profiles: ["monitoring"]
-    # image: jaegertracing/jaeger:2.11.0 # v2.x image
-    image: jaegertracing/jaeger:2.15.1
+    image: jaegertracing/jaeger:2.23.0
     user: "0:0"
     deploy:
       resources:
@@ -936,8 +942,7 @@ services:
 
   loki:
     profiles: ["monitoring"]
-    # image: grafana/loki:3.3.2
-    image: grafana/loki:3.5.11
+    image: grafana/loki:3.7.10
     command:
       ["-config.file=/etc/loki/local-config.yaml", "-config.expand-env=true"]
     environment:
@@ -947,18 +952,12 @@ services:
       - ./infra/loki:/etc/loki:ro
       - loki_data:/loki
     depends_on: [seaweedfs-init]
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1",
-        ]
-      interval: 10s
+    # No healthcheck: the Loki 3.7 image is distroless (no shell, wget or curl), and nothing
+    # waits on Loki being healthy. Kubernetes probes /ready over HTTP instead.
 
   promtail:
     profiles: ["monitoring"]
-    # image: grafana/promtail:3.3.2
-    image: grafana/promtail:3.5.11
+    image: grafana/promtail:3.6.11
     user: "0:0"
     volumes:
       - ./infra/promtail:/etc/promtail:ro
@@ -970,8 +969,7 @@ services:
 
   grafana:
     profiles: ["monitoring"]
-    # image: grafana/grafana:11.4.0
-    image: grafana/grafana:12.3.4
+    image: grafana/grafana:13.3.1
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       # Viewer, not Editor: Explore (ad-hoc Loki/Postgres queries over every container's logs) stays off
@@ -1000,8 +998,7 @@ services:
 
   prometheus:
     profiles: ["monitoring"]
-    # image: prom/prometheus:v3.1.0
-    image: prom/prometheus:v3.10.0
+    image: prom/prometheus:v3.16.0
     volumes:
       - ./infra/prometheus:/etc/prometheus:ro
       - prometheus_data:/prometheus
@@ -1031,7 +1028,7 @@ services:
 
   node-exporter:
     profiles: ["monitoring"]
-    image: prom/node-exporter:v1.10.2
+    image: prom/node-exporter:v1.13.1
     restart: unless-stopped
     volumes:
       - /proc:/host/proc:ro
@@ -1047,7 +1044,7 @@ services:
 
   cadvisor:
     profiles: ["monitoring"]
-    image: ghcr.io/google/cadvisor:v0.53.0
+    image: ghcr.io/google/cadvisor:v0.61.1
     restart: unless-stopped
     privileged: true
     command:
@@ -1195,8 +1192,7 @@ services:
 
   phoenix:
     profiles: ["llm"]
-    # image: arizephoenix/phoenix:11.24.1
-    image: arizephoenix/phoenix:13.3.0
+    image: arizephoenix/phoenix:22.0.1
     environment:
       - PHOENIX_WORKING_DIR=/data
       - PHOENIX_HOST_ROOT_PATH=/phoenix

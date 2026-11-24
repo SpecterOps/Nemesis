@@ -28,45 +28,41 @@ spec:
           ports:
             - containerPort: {{ .Values.pgbouncer.port }}
               name: pgbouncer
+          # edoburu/pgbouncer settings. Other roles (e.g. chatbot_readonly) are looked up in Postgres
+          # through auth_user/auth_query, so no userlist entry is needed for them.
           env:
-            - name: POSTGRESQL_HOST
+            - name: DB_HOST
               value: "postgres"
-            - name: POSTGRESQL_PORT
+            - name: DB_PORT
               value: {{ .Values.postgres.port | quote }}
-            - name: POSTGRESQL_DATABASE
+            - name: DB_NAME
               value: {{ .Values.postgres.database | quote }}
-            - name: POSTGRESQL_USERNAME
+            - name: DB_USER
               valueFrom:
                 secretKeyRef:
                   name: nemesis-secrets
                   key: POSTGRES_USER
-            - name: POSTGRESQL_PASSWORD
+            - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: nemesis-secrets
                   key: POSTGRES_PASSWORD
-            - name: PGBOUNCER_PORT
+            - name: AUTH_TYPE
+              value: "scram-sha-256"
+            - name: LISTEN_PORT
               value: {{ .Values.pgbouncer.port | quote }}
-            - name: PGBOUNCER_DATABASE
-              value: {{ .Values.postgres.database | quote }}
-            - name: PGBOUNCER_POOL_MODE
+            - name: POOL_MODE
               value: {{ .Values.pgbouncer.poolMode | quote }}
-            - name: PGBOUNCER_MAX_CLIENT_CONN
+            - name: MAX_CLIENT_CONN
               value: {{ .Values.pgbouncer.maxClientConn | quote }}
-            - name: PGBOUNCER_DEFAULT_POOL_SIZE
+            - name: DEFAULT_POOL_SIZE
               value: {{ .Values.pgbouncer.defaultPoolSize | quote }}
-            - name: PGBOUNCER_MIN_POOL_SIZE
+            - name: MIN_POOL_SIZE
               value: {{ .Values.pgbouncer.minPoolSize | quote }}
-            - name: PGBOUNCER_RESERVE_POOL_SIZE
+            - name: RESERVE_POOL_SIZE
               value: {{ .Values.pgbouncer.reservePoolSize | quote }}
-            - name: PGBOUNCER_INIT_MAX_SLEEP
-              value: "10"
-            - name: PGBOUNCER_ADMIN_USERS
+            - name: ADMIN_USERS
               value: {{ .Values.credentials.postgres.user | quote }}
-            {{- if .Values.llm.enabled }}
-            - name: PGBOUNCER_USERLIST
-              value: '"chatbot_readonly" "{{ .Values.llm.agents.env.chatbotDbPassword }}"'
-            {{- end }}
           readinessProbe:
             tcpSocket:
               port: pgbouncer

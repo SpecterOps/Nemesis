@@ -180,7 +180,7 @@ Usage: {{ include "nemesis.waitForPostgres" . | nindent 8 }}
 */}}
 {{- define "nemesis.waitForPostgres" -}}
 - name: wait-for-postgres
-  image: busybox:1.37
+  image: busybox:1.38.0
   command: ['sh', '-c', 'until nc -z postgres 5432; do echo "Waiting for PostgreSQL..."; sleep 2; done']
 {{- end }}
 
@@ -190,7 +190,7 @@ Usage: {{ include "nemesis.waitForRabbitmq" . | nindent 8 }}
 */}}
 {{- define "nemesis.waitForRabbitmq" -}}
 - name: wait-for-rabbitmq
-  image: busybox:1.37
+  image: busybox:1.38.0
   command: ['sh', '-c', 'until nc -z rabbitmq 5672; do echo "Waiting for RabbitMQ..."; sleep 2; done']
 {{- end }}
 
@@ -200,7 +200,7 @@ Usage: {{ include "nemesis.waitForPgbouncer" . | nindent 8 }}
 */}}
 {{- define "nemesis.waitForPgbouncer" -}}
 - name: wait-for-pgbouncer
-  image: busybox:1.37
+  image: busybox:1.38.0
   command: ['sh', '-c', 'until nc -z pgbouncer 5432; do echo "Waiting for PgBouncer..."; sleep 2; done']
 {{- end }}
 

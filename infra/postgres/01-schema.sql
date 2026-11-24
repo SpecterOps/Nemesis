@@ -773,6 +773,9 @@ CREATE TABLE IF NOT EXISTS container_processing (
 -- Create phoenix database
 CREATE DATABASE phoenix;
 
+-- Create litellm database
+CREATE DATABASE litellm;
+
 
 -----------------------
 -- Chromium schema/tables

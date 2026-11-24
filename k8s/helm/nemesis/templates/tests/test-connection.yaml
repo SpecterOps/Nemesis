@@ -12,7 +12,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: test
-      image: busybox:1.37
+      image: busybox:1.38.0
       command: ['sh', '-c']
       args:
         - |

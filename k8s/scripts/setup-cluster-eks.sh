@@ -448,7 +448,7 @@ install_keda() {
     helm install keda kedacore/keda \
         --namespace keda \
         --create-namespace \
-        --version 2.16.1 \
+        --version 2.21.1 \
         --wait
 
     log "KEDA installed"

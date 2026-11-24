@@ -60,7 +60,7 @@ monitoring:
   prometheus:
     image:
       repository: prom/prometheus
-      tag: "v3.10.0"
+      tag: "v3.16.0"
     port: 9090
     storage:
       size: 10Gi
@@ -76,7 +76,7 @@ monitoring:
   grafana:
     image:
       repository: grafana/grafana
-      tag: "12.3.4"
+      tag: "13.3.1"
     port: 3000
     storage:
       size: 5Gi
@@ -96,7 +96,7 @@ monitoring:
   loki:
     image:
       repository: grafana/loki
-      tag: "3.5.11"
+      tag: "3.7.10"
     port: 3100
     storage:
       size: 10Gi
@@ -112,7 +112,7 @@ monitoring:
   promtail:
     image:
       repository: grafana/promtail
-      tag: "3.5.11"
+      tag: "3.6.11"
     resources:
       requests:
         cpu: 50m
@@ -124,7 +124,7 @@ monitoring:
   jaeger:
     image:
       repository: jaegertracing/jaeger
-      tag: "2.15.1"
+      tag: "2.23.0"
     port: 16686
     storage:
       size: 10Gi
@@ -140,7 +140,7 @@ monitoring:
   otelCollector:
     image:
       repository: otel/opentelemetry-collector
-      tag: "0.139.0"
+      tag: "0.165.0"
     resources:
       requests:
         cpu: 100m
@@ -152,7 +152,7 @@ monitoring:
   nodeExporter:
     image:
       repository: prom/node-exporter
-      tag: "v1.10.2"
+      tag: "v1.13.1"
     port: 9100
     resources:
       requests:
@@ -165,7 +165,7 @@ monitoring:
   postgresExporter:
     image:
       repository: prometheuscommunity/postgres-exporter
-      tag: "v0.18.1"
+      tag: "v0.21.1"
     port: 9187
     resources:
       requests:
@@ -213,7 +213,7 @@ llm:
   litellm:
     image:
       repository: ghcr.io/berriai/litellm
-      tag: "v1.91.1"
+      tag: "v1.110.2"
     port: 4000
     env:
       storeModelInDb: "True"
@@ -232,7 +232,7 @@ llm:
   phoenix:
     image:
       repository: arizephoenix/phoenix
-      tag: "13.3.0"
+      tag: "22.0.1"
     port: 6006
     storage:
       size: 5Gi
@@ -274,7 +274,7 @@ jupyter:
 postgres:
   image:
     repository: postgres
-    tag: "18.1"
+    tag: "18.7"
   # User/password sourced from credentials.postgres above — these are for non-secret config only
   database: enrichment
   port: "5432"
@@ -299,11 +299,12 @@ postgres:
 # ============================================
 pgbouncer:
   image:
-    # Use upstream ECR directly. build-and-push-k3d.sh mirrors this to the
-    # k3d local registry; values-dev.yaml overrides the registry accordingly.
-    registry: "public.ecr.aws/bitnami"
-    repository: pgbouncer
-    tag: "1.25.1"
+    # Maintained upstream image (Bitnami no longer publishes free versioned pgbouncer images).
+    # build-and-push-k3d.sh mirrors this to the k3d local registry; values-dev.yaml overrides the
+    # registry accordingly.
+    registry: "docker.io"
+    repository: edoburu/pgbouncer
+    tag: "v1.26.1-p0"
   replicas: 1
   port: 5432
   poolMode: transaction
@@ -325,7 +326,7 @@ pgbouncer:
 rabbitmq:
   image:
     repository: rabbitmq
-    tag: "4.2.0-management"
+    tag: "4.4.1-management"
   # User/password sourced from credentials.rabbitmq above
   hostname: rabbitmq-node
   storage:
@@ -345,7 +346,7 @@ rabbitmq:
 seaweedfs:
   image:
     repository: chrislusf/seaweedfs
-    tag: "4.15"
+    tag: "4.55"
   buckets:
     - files
     - loki-data
@@ -366,7 +367,7 @@ seaweedfs:
 hasura:
   image:
     repository: hasura/graphql-engine
-    tag: "v2.48.6.cli-migrations-v2"
+    tag: "v2.51.9.cli-migrations-v2"
   logLevel: warn
   enableConsole: true
   resources:
@@ -593,7 +594,7 @@ housekeeping:
 gotenberg:
   image:
     repository: gotenberg/gotenberg
-    tag: "9.9.0"
+    tag: "9.9.3"
   replicas: 1
   port: 3000
   metricsPort: 9464
