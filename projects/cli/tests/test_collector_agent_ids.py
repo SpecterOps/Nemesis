@@ -78,12 +78,14 @@ async def test_mythic_id_reaches_upload(tmp_path, monkeypatch, agent_id):
     svc = SyncService(cfg)
     await svc.initialize_db()
     nemesis = MagicMock()
-    nemesis.post_file.return_value = FileWithMetadataResponse(object_id=uuid4(), submission_id=uuid4())
+    nemesis.post_file = AsyncMock(return_value=FileWithMetadataResponse(object_id=uuid4(), submission_id=uuid4()))
 
-    async def chunks(**kwargs):
-        yield b"downloaded content"
+    async def fake_download(self, _file_id, callback):
+        path = tmp_path / "downloaded.bin"
+        path.write_bytes(b"downloaded content")
+        await callback(str(path))
 
-    monkeypatch.setattr("cli.mythic_connector.handlers.mythic.download_file_chunked", chunks)
+    monkeypatch.setattr(FileHandler, "download_file", fake_download)
     meta = {
         "id": 1,
         "agent_file_id": "file-1",
@@ -145,8 +147,7 @@ async def test_configured_collectors_upload_and_isolate_state(tmp_path, monkeypa
     cache.initialize = AsyncMock()
     monkeypatch.setattr(module, "ImplantCache", MagicMock(return_value=cache))
     nemesis = MagicMock()
-    nemesis.post_file.return_value = FileWithMetadataResponse(object_id=uuid4(), submission_id=uuid4())
-    monkeypatch.setattr(module, "NemesisClient", MagicMock(return_value=nemesis))
+    nemesis.post_file = AsyncMock(return_value=FileWithMetadataResponse(object_id=uuid4(), submission_id=uuid4()))
     processors = []
     ready = asyncio.Event()
     download = SimpleNamespace(id="1", uid="1", bid="beacon", implant_uid="implant", path="C:/data", name="test.txt")
@@ -176,7 +177,7 @@ async def test_configured_collectors_upload_and_isolate_state(tmp_path, monkeypa
         monitor_factory,
     )
     setup = module.setup_cobaltstrike_monitor if framework == "cobaltstrike" else module.setup_outflank_monitor
-    await asyncio.gather(*(setup(item, cfg, logging.getLogger(__name__)) for item in getattr(cfg, framework)))
+    await asyncio.gather(*(setup(item, cfg, logging.getLogger(__name__), nemesis) for item in getattr(cfg, framework)))
     assert nemesis.post_file.call_count == 2
     expected_id = f"{framework}-initial" if custom else ("cobaltstrike" if framework == "cobaltstrike" else "stage1")
     assert all(call.args[1].agent_id == expected_id for call in nemesis.post_file.call_args_list)
