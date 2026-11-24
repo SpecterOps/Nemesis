@@ -10,8 +10,8 @@ c.ServerApp.ip = "0.0.0.0"
 c.ServerApp.port = 8888
 c.ServerApp.open_browser = False
 c.ServerApp.base_url = "/jupyter"
-c.ServerApp.allow_origin = "*"
-c.ServerApp.disable_check_xsrf = True
+# Keep Jupyter's own cross-site protections on (XSRF token on API writes, same-origin websockets):
+# the UI is only used same-origin through Traefik, which also refuses cross-site requests.
 c.ServerApp.token = ""
 
 # Set password from environment variable or generate random one

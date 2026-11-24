@@ -164,4 +164,4 @@ services:
   postgres:
     # expose the port locally
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"

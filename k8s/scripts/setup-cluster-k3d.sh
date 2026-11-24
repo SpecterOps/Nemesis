@@ -87,11 +87,12 @@ install_traefik() {
 
     helm install traefik traefik/traefik \
         --namespace kube-system \
-        --version 34.3.0 \
+        --version 42.4.2 \
+        --set "image.tag=v3.7.20" \
         --set "ports.websecure.nodePort=30443" \
         --set "ports.websecure.expose.default=true" \
-        --set "ports.web.redirections.entryPoint.to=websecure" \
-        --set "ports.web.redirections.entryPoint.scheme=https" \
+        --set "ports.web=null" \
+        --set "api.dashboard=false" \
         --set "ingressRoute.dashboard.enabled=false" \
         --set "providers.kubernetesIngress.enabled=true" \
         --set "providers.kubernetesCRD.enabled=true" \

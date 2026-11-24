@@ -22,6 +22,19 @@ type: Opaque
 stringData:
   users: {{ .Values.credentials.basicAuthUsers | quote }}
 ---
+# Answers every request with 403: no client address is in this range (used for cross-site requests)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-deny-all
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  ipAllowList:
+    sourceRange:
+      - 255.255.255.255/32
+---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:

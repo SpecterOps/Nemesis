@@ -1,0 +1,29 @@
+# Refuse requests that a page on another site makes a logged-in browser send (CSRF).
+#
+# Browsers attach the cached Nemesis basic-auth login to requests other sites trigger: a form POST,
+# a script-loaded resource, a WebSocket. Every modern browser labels those with
+# `Sec-Fetch-Site: cross-site` (or `same-site` for a sibling subdomain); the Nemesis UI's own requests
+# are `same-origin`, and typed URLs and bookmarks are `none`. `Origin: null` comes from sandboxed
+# frames and data: URLs. API clients (CLI, connectors, curl) send neither header and are unaffected.
+#
+# Plain link-clicks into the UI (GET/HEAD navigations) stay allowed so links from chat or docs still
+# open Nemesis. They can't change anything: /api is excluded from that allowance (web-api also runs the
+# full check itself, see projects/web_api/web_api/cross_site.py), and other routes' writes need POST.
+http:
+  routers:
+    block-cross-site:
+      entryPoints: [websecure]
+      tls: {}
+      rule: >-
+        (HeaderRegexp(`Sec-Fetch-Site`, `(?i)^\s*(cross-site|same-site)\s*$`) || HeaderRegexp(`Origin`, `(?i)^\s*null\s*$`))
+        && !((Method(`GET`) || Method(`HEAD`)) && Header(`Sec-Fetch-Mode`, `navigate`) && !PathPrefix(`/api`))
+      # Above every other router, so it is checked before the login and before any service
+      priority: 100000
+      middlewares: [deny-all]
+      service: noop@internal
+
+  middlewares:
+    deny-all:
+      # No client address is in this range, so every request gets 403 Forbidden
+      ipAllowList:
+        sourceRange: ["255.255.255.255/32"]

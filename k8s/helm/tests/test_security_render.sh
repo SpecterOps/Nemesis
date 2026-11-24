@@ -17,8 +17,9 @@ render() { # render OUTFILE [helm args...]
 render "$TMP/default.yaml"
 render "$TMP/explicit.yaml" --set credentials.litellm.adminPassword=custom --set credentials.litellm.saltKey=sk-salt
 render "$TMP/legacy.yaml" --set llm.litellm.env.litellmAdminPassword=legacy
+render "$TMP/hosted.yaml" --set ingress.host=nemesis.example
 
-python3 - "$TMP" <<'EOF'
+python3 - "$TMP" "$(cd "$CHART/../../.." && pwd)" <<'EOF'
 import sys
 from pathlib import Path
 
@@ -140,7 +141,39 @@ check("public rabbitmq route wins over the prefix route", public["priority"] > r
 check("public rabbitmq route strips credentials", mw_names(public) == ["nemesis-rabbitmq-anonymous"])
 anon = find(default, "Middleware", "nemesis-rabbitmq-anonymous")["spec"]["headers"]["customRequestHeaders"]
 check("anonymous middleware removes Authorization", anon == {"Authorization": ""})
-check("every other route needs the Nemesis login", all("nemesis-basic-auth" in mw_names(r) for r in routes if r is not public))
+check("every other route needs the Nemesis login", all("nemesis-basic-auth" in mw_names(r) for r in routes if r is not public and "Sec-Fetch-Site" not in r["match"]))
+
+# --- cross-site (CSRF) block, same rule as Compose ---
+compose_rule = " ".join(
+    yaml.safe_load(Path(sys.argv[2], "infra/traefik/config/cross-site.yml").read_text())["http"]["routers"]["block-cross-site"]["rule"].split()
+)
+block = route("Sec-Fetch-Site")
+check("cross-site route uses the same rule as Compose", " ".join(block["match"].split()) == compose_rule)
+check("cross-site route outranks every other route", block["priority"] > max(r.get("priority", 0) for r in routes if r is not block))
+check("cross-site route refuses with the deny middleware", mw_names(block) == ["nemesis-deny-all"])
+check("cross-site route avoids cross-provider references", all("@" not in s["name"] for s in block["services"]))
+deny = find(default, "Middleware", "nemesis-deny-all")["spec"]
+check("deny middleware allows no address", deny == {"ipAllowList": {"sourceRange": ["255.255.255.255/32"]}})
+hosted = find(docs("hosted.yaml"), "IngressRoute", "nemesis-ingress")["spec"]["routes"]
+hosted_block = next(r for r in hosted if "Sec-Fetch-Site" in r["match"])
+check("with ingress.host the rule is grouped after Host()", hosted_block["match"].startswith("Host(`nemesis.example`) && (HeaderRegexp("))
+
+# --- nothing reachable over plain HTTP or outside the cluster except the HTTPS ingress ---
+check("no Service is exposed outside the cluster", all(d["spec"].get("type", "ClusterIP") == "ClusterIP" for d in default if d["kind"] == "Service"))
+check("IngressRoutes only use the websecure entrypoint", all(d["spec"]["entryPoints"] == ["websecure"] for d in default if d["kind"] == "IngressRoute"))
+check("no other ingress kinds", not [d for d in default if d["kind"] in ("Ingress", "IngressRouteTCP", "IngressRouteUDP")])
+pod_specs = [d["spec"]["template"]["spec"] for d in default if d["kind"] in ("Deployment", "StatefulSet", "DaemonSet")]
+check("no pod uses the host network", not any(ps.get("hostNetwork") for ps in pod_specs))
+check(
+    "no container binds a host port",
+    not any(p.get("hostPort") for ps in pod_specs for c in ps["containers"] for p in c.get("ports", [])),
+)
+repo = Path(sys.argv[2])
+for script in ("setup-cluster-k3d.sh", "setup-cluster-k3s.sh", "setup-cluster-eks.sh"):
+    text = (repo / "k8s/scripts" / script).read_text()
+    check(f"{script}: Traefik has no plain-HTTP entrypoint", '--set "ports.web=null"' in text)
+    check(f"{script}: Traefik dashboard/API disabled", '--set "api.dashboard=false"' in text)
+    check(f"{script}: Traefik pinned to v3.7.20", '--set "image.tag=v3.7.20"' in text)
 
 llm = route("PathPrefix(`/llm`)")
 check("llm route needs the Nemesis login", "nemesis-basic-auth" in mw_names(llm))

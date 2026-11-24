@@ -50,7 +50,7 @@ services:
       - "traefik.http.services.web-api.loadbalancer.server.port=8000"
       - "traefik.http.routers.web-api.entrypoints=websecure"
       - "traefik.http.routers.web-api.tls=true"
-      - "traefik.http.routers.web-api.middlewares=auth"
+      - "traefik.http.routers.web-api.middlewares=auth@file"
   web-api-dapr:
     image: "daprio/daprd:1.17.7"
     command:
@@ -387,7 +387,7 @@ services:
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls=true"
-      - "traefik.http.routers.frontend.middlewares=auth"
+      - "traefik.http.routers.frontend.middlewares=auth@file"
 
   jupyter:
     profiles: ["jupyter"]
@@ -411,7 +411,7 @@ services:
       - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
       - "traefik.http.routers.jupyter.entrypoints=websecure"
       - "traefik.http.routers.jupyter.tls=true"
-      - "traefik.http.routers.jupyter.middlewares=auth"
+      - "traefik.http.routers.jupyter.middlewares=auth@file"
 
   alerting:
     image: ghcr.io/specterops/nemesis/alerting:latest
@@ -758,7 +758,7 @@ services:
       - "traefik.http.services.rabbitmq-ui.loadbalancer.server.port=15672"
       - "traefik.http.routers.rabbitmq-ui.rule=PathPrefix(`/rabbitmq`)"
       # Nemesis login, then Traefik swaps in the RabbitMQ credentials (infra/traefik/config/rabbitmq.yml)
-      - "traefik.http.routers.rabbitmq-ui.middlewares=auth,rabbitmq-credentials@file"
+      - "traefik.http.routers.rabbitmq-ui.middlewares=auth@file,rabbitmq-credentials@file"
       # The UI fetches these two public endpoints before its login form exists, sending "Authorization: null"
       - "traefik.http.routers.rabbitmq-ui-public.rule=Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`)"
       - "traefik.http.routers.rabbitmq-ui-public.priority=100"
@@ -845,34 +845,32 @@ services:
       - "traefik.http.routers.hasura.rule=PathPrefix(`/hasura`)"
       - "traefik.http.services.hasura.loadbalancer.server.port=8080"
       # Same Traefik login as the rest of Nemesis (the UI calls /hasura from the same origin)
-      - "traefik.http.routers.hasura.middlewares=auth,graphql-stripprefix"
+      - "traefik.http.routers.hasura.middlewares=auth@file,graphql-stripprefix"
       - "traefik.http.middlewares.graphql-stripprefix.stripprefix.prefixes=/hasura"
       - "traefik.http.routers.hasura.entrypoints=websecure"
       - "traefik.http.routers.hasura.tls=true"
 
   traefik:
-    # image: traefik:v3.6.1
-    image: traefik:v3.6.9
+    image: traefik:v3.7.20
     command:
-      - "--api.insecure=true"
       # - "--log.level=DEBUG"
       - "--log.level=WARN"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      # Only route this Compose project's containers, not other stacks on the same Docker host
+      - "--providers.docker.constraints=Label(`com.docker.compose.project`,`nemesis`)"
       - "--providers.file=true"
       - "--providers.file.directory=/config"
       - "--providers.file.watch=true"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
+      # Metrics for Prometheus on an internal-only entrypoint (not published); no API/dashboard is served
+      - "--entrypoints.metrics.address=:8082"
       - "--metrics.prometheus=true"
+      - "--metrics.prometheus.entrypoint=metrics"
       - "--metrics.prometheus.addrouterslabels=true"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.middlewares.auth.basicauth.users=${BASIC_AUTH_USERS:-n:$$apr1$$RbnOjtKr$$S706SPJ3KzCKIref.gRFT.}"
-      - "traefik.http.routers.dashboard.tls=true"
     environment:
+      # Used by infra/traefik/config/auth.yml (the Nemesis login)
+      - BASIC_AUTH_USERS=${BASIC_AUTH_USERS:-n:$$apr1$$RbnOjtKr$$S706SPJ3KzCKIref.gRFT.}
       - NEMESIS_PORT=${NEMESIS_PORT:-7443}
       # Used by infra/traefik/config/rabbitmq.yml to log the RabbitMQ UI in behind the Nemesis login
       - RABBITMQ_USER=${RABBITMQ_USER:?}
@@ -965,7 +963,7 @@ services:
       - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
       - "traefik.http.routers.jaeger.entrypoints=websecure"
       - "traefik.http.routers.jaeger.tls=true"
-      - "traefik.http.routers.jaeger.middlewares=auth"
+      - "traefik.http.routers.jaeger.middlewares=auth@file"
     healthcheck:
       test:
         [
@@ -1036,7 +1034,7 @@ services:
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls=true"
-      - "traefik.http.routers.grafana.middlewares=auth"
+      - "traefik.http.routers.grafana.middlewares=auth@file"
     healthcheck:
       test: ["CMD", "curl", "-sSf", "http://localhost:3000/"]
       interval: 10s
@@ -1070,7 +1068,7 @@ services:
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
       - "traefik.http.routers.prometheus.entrypoints=websecure"
       - "traefik.http.routers.prometheus.tls=true"
-      - "traefik.http.routers.prometheus.middlewares=auth"
+      - "traefik.http.routers.prometheus.middlewares=auth@file"
 
   node-exporter:
     profiles: ["monitoring"]
@@ -1149,7 +1147,7 @@ services:
       - "traefik.http.services.mcp.loadbalancer.server.port=5000"
       - "traefik.http.routers.mcp.entrypoints=websecure"
       - "traefik.http.routers.mcp.tls=true"
-      - "traefik.http.routers.mcp.middlewares=auth"
+      - "traefik.http.routers.mcp.middlewares=auth@file"
   agents-dapr:
     profiles: ["llm"]
     image: "daprio/daprd:1.17.7"
@@ -1239,7 +1237,7 @@ services:
       - "traefik.http.services.litellm.loadbalancer.server.port=4000"
       - "traefik.http.routers.litellm.entrypoints=websecure"
       - "traefik.http.routers.litellm.tls=true"
-      - "traefik.http.routers.litellm.middlewares=auth"
+      - "traefik.http.routers.litellm.middlewares=auth@file"
 
   phoenix:
     profiles: ["llm"]
@@ -1260,7 +1258,7 @@ services:
       - "traefik.http.routers.phoenix.rule=PathPrefix(`/phoenix`)"
       - "traefik.http.routers.phoenix.entrypoints=websecure"
       - "traefik.http.routers.phoenix.tls=true"
-      - "traefik.http.routers.phoenix.middlewares=auth,phoenix-stripprefix"
+      - "traefik.http.routers.phoenix.middlewares=auth@file,phoenix-stripprefix"
       - "traefik.http.middlewares.phoenix-stripprefix.stripprefix.prefixes=/phoenix"
     depends_on:
       postgres: { condition: service_healthy }

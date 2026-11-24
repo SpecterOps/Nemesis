@@ -19,7 +19,9 @@ spec:
       annotations:
         dapr.io/enabled: "false"
     spec:
-      hostNetwork: true
+      # No hostNetwork/hostPort: those served the unauthenticated metrics on every node's network
+      # interfaces. Prometheus scrapes the pod through the node-exporter Service instead. Host network
+      # interface metrics are reported for the pod's network namespace only.
       hostPID: true
       containers:
         - name: node-exporter
@@ -33,7 +35,6 @@ spec:
           ports:
             - containerPort: 9100
               name: metrics
-              hostPort: 9100
           volumeMounts:
             - name: proc
               mountPath: /host/proc

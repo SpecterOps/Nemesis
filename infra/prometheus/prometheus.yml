@@ -6,7 +6,7 @@ scrape_configs:
   - job_name: 'traefik'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['traefik:8080']
+      - targets: ['traefik:8082']
 
   - job_name: 'seaweedfs'
     metrics_path: /metrics

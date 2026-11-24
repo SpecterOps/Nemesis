@@ -14,6 +14,20 @@ spec:
   {{- $hostMatch = printf "Host(`%s`) && " .Values.ingress.host }}
   {{- end }}
   routes:
+    # Refuse requests another site makes a logged-in browser send (CSRF); see
+    # infra/traefik/config/cross-site.yml. Plain link-clicks into the UI (outside /api) stay allowed.
+    - match: {{ $hostMatch }}(HeaderRegexp(`Sec-Fetch-Site`, `(?i)^\s*(cross-site|same-site)\s*$`) || HeaderRegexp(`Origin`, `(?i)^\s*null\s*$`)) && !((Method(`GET`) || Method(`HEAD`)) && Header(`Sec-Fetch-Mode`, `navigate`) && !PathPrefix(`/api`))
+      kind: Rule
+      priority: 100000
+      middlewares:
+        - name: nemesis-deny-all
+          namespace: {{ include "nemesis.namespace" . }}
+      # Never reached (the middleware answers 403); an in-namespace service, because the Traefik chart
+      # rejects cross-provider references such as noop@internal by default (crossProviderNamespaces: [])
+      services:
+        - name: frontend
+          port: {{ .Values.frontend.port }}
+
     # Frontend (root)
     - match: {{ $hostMatch }}PathPrefix(`/`)
       kind: Rule

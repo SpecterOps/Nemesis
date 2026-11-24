@@ -110,11 +110,13 @@ install_traefik() {
     # k3s has built-in ServiceLB (Klipper), so we use LoadBalancer service type
     helm install traefik traefik/traefik \
         --namespace kube-system \
-        --version 34.3.0 \
-        --set "service.type=LoadBalancer" \
+        --version 42.4.2 \
+        --set "image.tag=v3.7.20" \
+        --set "service.spec.type=LoadBalancer" \
         --set "ports.websecure.expose.default=true" \
         --set "ports.websecure.exposedPort=7443" \
-        --set "ports.web.expose.default=false" \
+        --set "ports.web=null" \
+        --set "api.dashboard=false" \
         --set "ingressRoute.dashboard.enabled=false" \
         --set "providers.kubernetesIngress.enabled=true" \
         --set "providers.kubernetesCRD.enabled=true" \
