@@ -90,6 +90,16 @@ for name, svc in compose["services"].items():
         continue
     published = [str(p) for p in svc.get("ports", [])]
     check(f"{name} publishes no port on all interfaces", all(p.startswith("127.0.0.1:") for p in published))
+# Dapr 1.19: the Scheduler serves actor placement; there is no Placement service
+services = compose["services"]
+check("no Dapr placement service", "placement" not in services)
+check("scheduler serves placement", "--placement-enabled=true" in services["scheduler"]["command"])
+sidecars = {n: s for n, s in services.items() if n.endswith("-dapr")}
+check("no sidecar points at a placement service", sidecars and all("--placement-host-address" not in s.get("command", []) for s in sidecars.values()))
+check(
+    "workflow sidecars use the scheduler",
+    all("--scheduler-host-address" in sidecars[f"{n}-dapr"]["command"] for n in ("file-enrichment", "document-conversion", "agents")),
+)
 jupyter_config = (root / "projects/jupyter/jupyter_config.py").read_text()
 check("Jupyter keeps its XSRF check", "disable_check_xsrf" not in jupyter_config)
 check("Jupyter does not allow every origin", "allow_origin" not in jupyter_config)

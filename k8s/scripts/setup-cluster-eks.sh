@@ -426,8 +426,9 @@ install_dapr() {
     helm install dapr dapr/dapr \
         --namespace dapr-system \
         --create-namespace \
-        --version 1.17.7 \
+        --version 1.19.2 \
         --set global.logAsJson=true \
+        --set global.scheduler.placement.enabled=true \
         --wait --timeout 5m
 
     log "Dapr installed"

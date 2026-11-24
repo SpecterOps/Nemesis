@@ -95,11 +95,6 @@ scrape_configs:
     static_configs:
       - targets: ['gotenberg:9464']
 
-  - job_name: 'nemesis-placement'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['placement:9090']
-
   - job_name: 'nemesis-scheduler'
     metrics_path: '/metrics'
     static_configs:

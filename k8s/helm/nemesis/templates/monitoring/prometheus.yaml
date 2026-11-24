@@ -62,7 +62,6 @@ data:
       - job_name: "dapr-system"
         static_configs:
           - targets:
-              - "placement:9090"
               - "scheduler:9090"
 
       - job_name: "gotenberg"

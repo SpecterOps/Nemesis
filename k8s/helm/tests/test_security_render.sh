@@ -177,6 +177,7 @@ for script in ("setup-cluster-k3d.sh", "setup-cluster-k3s.sh", "setup-cluster-ek
     check(f"{script}: Traefik has no plain-HTTP entrypoint", '--set "ports.web=null"' in text)
     check(f"{script}: Traefik dashboard/API disabled", '--set "api.dashboard=false"' in text)
     check(f"{script}: Traefik pinned to v3.7.20", '--set "image.tag=v3.7.20"' in text)
+    check(f"{script}: Dapr scheduler serves actor placement", "--set global.scheduler.placement.enabled=true" in text)
 
 llm = route("PathPrefix(`/llm`)")
 check("llm route needs the Nemesis login", "nemesis-basic-auth" in mw_names(llm))

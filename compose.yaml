@@ -42,7 +42,6 @@ services:
       options: { max-size: "10m", max-file: "3" }
     depends_on:
       postgres: { condition: service_started }
-      placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     labels:
       - "traefik.enable=true"
@@ -52,7 +51,7 @@ services:
       - "traefik.http.routers.web-api.tls=true"
       - "traefik.http.routers.web-api.middlewares=auth@file"
   web-api-dapr:
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -66,8 +65,6 @@ services:
         "3500",
         "--dapr-grpc-port",
         "50001",
-        "--placement-host-address",
-        "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
         "--resources-path",
@@ -99,7 +96,6 @@ services:
       - RABBITMQ_USER=${RABBITMQ_USER:?}
     depends_on:
       web-api: { condition: service_started }
-      placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:web-api"
@@ -140,7 +136,7 @@ services:
           cpus: "1"
           memory: 2G
   titus-scanner-dapr:
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -154,8 +150,6 @@ services:
         "http",
         "--dapr-http-port",
         "3513",
-        "--placement-host-address",
-        "placement:50006",
         "--resources-path",
         "/dapr/components",
         "--log-level",
@@ -174,7 +168,7 @@ services:
       - ./infra/dapr/components/pubsub/titus.yaml:/dapr/components/titus.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
-    depends_on: [titus-scanner, placement]
+    depends_on: [titus-scanner]
     network_mode: "service:titus-scanner"
 
   dotnet-service:
@@ -199,7 +193,7 @@ services:
     expose:
       - "5000"
   dotnet-service-dapr:
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -215,8 +209,6 @@ services:
         "3514",
         "--dapr-grpc-port",
         "50014",
-        "--placement-host-address",
-        "placement:50006",
         "--resources-path",
         "/dapr/components",
         "--log-level",
@@ -235,7 +227,7 @@ services:
       - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
-    depends_on: [dotnet-service, placement]
+    depends_on: [dotnet-service]
     network_mode: "service:dotnet-service"
 
   file-enrichment: &file-enrichment-template
@@ -270,11 +262,10 @@ services:
     logging: *logging-config
     depends_on: &file-enrichment-depends-on
       postgres: { condition: service_started }
-      placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
   file-enrichment-dapr: &file-enrichment-dapr-template
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -288,8 +279,6 @@ services:
         "3503",
         "--dapr-grpc-port",
         "50003",
-        "--placement-host-address",
-        "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
         "--log-level",
@@ -326,7 +315,6 @@ services:
       MAX_PARALLEL_WORKFLOWS: ${MAX_PARALLEL_WORKFLOWS:-5}
     depends_on: &file-enrichment-dapr-depends-on
       file-enrichment: { condition: service_started }
-      placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:file-enrichment"
@@ -340,7 +328,6 @@ services:
   #   <<: *file-enrichment-dapr-template
   #   depends_on:
   #     file-enrichment-1: { condition: service_started }
-  #     placement: { condition: service_started }
   #     scheduler: { condition: service_started }
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-1"
@@ -354,7 +341,6 @@ services:
   #   <<: *file-enrichment-dapr-template
   #   depends_on:
   #     file-enrichment-2: { condition: service_started }
-  #     placement: { condition: service_started }
   #     scheduler: { condition: service_started }
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-2"
@@ -368,7 +354,6 @@ services:
   #   <<: *file-enrichment-dapr-template
   #   depends_on:
   #     file-enrichment-3: { condition: service_started }
-  #     placement: { condition: service_started }
   #     scheduler: { condition: service_started }
   #     rabbitmq: { condition: service_healthy }
   #   network_mode: "service:file-enrichment-3"
@@ -424,7 +409,6 @@ services:
     logging: *logging-config
     depends_on:
       postgres: { condition: service_healthy }
-      placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
       hasura: { condition: service_healthy }
     healthcheck: &healthcheck-python-svc
@@ -434,7 +418,7 @@ services:
       retries: 5
       start_period: 20s
   alerting-dapr:
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -448,8 +432,6 @@ services:
         "3508",
         "--dapr-grpc-port",
         "50008",
-        "--placement-host-address",
-        "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
         "--resources-path",
@@ -471,7 +453,6 @@ services:
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
     depends_on:
       alerting: { condition: service_started }
-      placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:alerting"
@@ -487,11 +468,10 @@ services:
     logging: *logging-config
     depends_on:
       postgres: { condition: service_healthy }
-      placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     healthcheck: *healthcheck-python-svc
   housekeeping-dapr:
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -505,8 +485,6 @@ services:
         "3510",
         "--dapr-grpc-port",
         "50011",
-        "--placement-host-address",
-        "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
         "--resources-path",
@@ -534,7 +512,6 @@ services:
       - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
     depends_on:
       housekeeping: { condition: service_started }
-      placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:housekeeping"
@@ -566,14 +543,13 @@ services:
     logging: *logging-config
     depends_on:
       postgres: { condition: service_started }
-      placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     deploy:
       resources:
         limits:
           cpus: "2"
   document-conversion-dapr:
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -587,8 +563,6 @@ services:
         "3501",
         "--dapr-grpc-port",
         "50002",
-        "--placement-host-address",
-        "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
         "--resources-path",
@@ -619,14 +593,13 @@ services:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     depends_on:
       document-conversion: { condition: service_started }
-      placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:document-conversion"
 
   gotenberg:
     # 9.x drops the bundled JRE (Java4Shell, CVE-2026-114938)
-    image: gotenberg/gotenberg:9.9.0
+    image: gotenberg/gotenberg:9.9.3
     command:
       [
         "gotenberg",
@@ -659,7 +632,7 @@ services:
       timeout: 10s
       retries: 3
   gotenberg-dapr:
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -673,8 +646,6 @@ services:
         "3505",
         "--dapr-grpc-port",
         "50005",
-        "--placement-host-address",
-        "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
         "--resources-path",
@@ -693,7 +664,6 @@ services:
 
     depends_on:
       gotenberg: { condition: service_started }
-      placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:gotenberg"
@@ -882,22 +852,8 @@ services:
       - ./infra/traefik/certs:/certs:ro
       - ./infra/traefik/config:/config:ro
 
-  placement:
-    image: "daprio/dapr:1.17.7"
-    command:
-      [
-        "./placement",
-        "-port",
-        "50006",
-        "--enable-metrics",
-        "--log-level",
-        "${DAPR_LOG_LEVEL:-info}",
-      ]
-    depends_on:
-      postgres: { condition: service_healthy }
-
   scheduler-init:
-    image: busybox:1.37.0
+    image: busybox:1.38.0
     user: "0:0"
     command: >
       sh -c "
@@ -910,12 +866,15 @@ services:
     restart: "no"
 
   scheduler:
-    image: "daprio/scheduler:1.17.7"
+    image: "daprio/scheduler:1.19.2"
     command:
       [
         "./scheduler",
         "--port",
         "50007",
+        # Dapr 1.19: the Scheduler also places actors (workflows run on actors), so there is no
+        # separate Placement service; sidecars learn this from the Scheduler
+        "--placement-enabled=true",
         "--etcd-data-dir=/data",
         "--enable-metrics",
         "--log-level",
@@ -1136,7 +1095,6 @@ services:
     logging: *logging-config
     depends_on:
       postgres: { condition: service_healthy }
-      placement: { condition: service_started }
       rabbitmq: { condition: service_healthy }
       hasura: { condition: service_healthy }
       litellm: { condition: service_healthy }
@@ -1150,7 +1108,7 @@ services:
       - "traefik.http.routers.mcp.middlewares=auth@file"
   agents-dapr:
     profiles: ["llm"]
-    image: "daprio/daprd:1.17.7"
+    image: "daprio/daprd:1.19.2"
     command:
       [
         "./daprd",
@@ -1164,8 +1122,6 @@ services:
         "3509",
         "--dapr-grpc-port",
         "50009",
-        "--placement-host-address",
-        "placement:50006",
         "--scheduler-host-address",
         "scheduler:50007",
         "--resources-path",
@@ -1193,15 +1149,13 @@ services:
       - S3_SECRET_KEY=${S3_SECRET_KEY:?}
     depends_on:
       agents: { condition: service_started }
-      placement: { condition: service_started }
       scheduler: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     network_mode: "service:agents"
 
   litellm:
     profiles: ["llm"]
-    # image: ghcr.io/berriai/litellm:v1.74.0-stable
-    image: ghcr.io/berriai/litellm:v1.91.1
+    image: ghcr.io/berriai/litellm:v1.110.2
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
       - STORE_MODEL_IN_DB=True
