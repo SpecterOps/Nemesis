@@ -227,7 +227,7 @@ Return your findings as a structured list. If no credentials are found, return a
                             (
                                 FindingCategory.CREDENTIAL.value,
                                 "llm_extracted_credentials",
-                                FindingOrigin.ENRICHMENT_MODULE.value,
+                                FindingOrigin.AI_AGENT.value,
                                 "credential_analyzer",
                                 object_id,
                                 8,

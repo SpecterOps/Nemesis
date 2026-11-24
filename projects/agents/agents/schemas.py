@@ -145,7 +145,7 @@ class TriageResult(BaseModel):
     """Schema for the result returned by finding_triage_workflow()"""
 
     finding_id: int = Field(..., description="ID of the finding that was triaged")
-    decision: str = Field(..., description="Triage decision made")
+    decision: TriageCategory = Field(..., description="Triage decision made")
     explanation: str = Field(..., description="Explanation for the triage decision")
     confidence: float | None = Field(None, ge=0.0, le=1.0, description="Confidence score 0-1.0 (optional)")
     true_positive_context: str | None = Field(None, description="Context/risk for true_positive decisions")
