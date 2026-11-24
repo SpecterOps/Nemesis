@@ -86,6 +86,7 @@ async def setup_outflank_monitor(
     async with OutflankC2Client(
         base_url=base_url,
         verify_ssl=config.validate_https_certs,
+        connect_timeout=config.conn_timeout_sec,
     ) as outflank_client:
         # Authenticate
         if not await outflank_client.authenticate(username, password):
@@ -103,6 +104,7 @@ async def setup_outflank_monitor(
         state_path = collector_state_path(
             config.cache_db_path, "outflank", base_url, project["name"], outflank_config.agent_id
         )
+        logger.info("Outflank connector state for %s: %s", base_url, state_path.resolve())
 
         # Initialize processor with the client
         if outflank_config.downloads_dir_path:
@@ -112,6 +114,8 @@ async def setup_outflank_monitor(
                 nemesis_client,
                 project["name"],
                 agent_id=outflank_config.agent_id,
+                max_file_size=config.nemesis.max_file_size,
+                expiration_days=config.nemesis.expiration_days,
                 outflank_downloads_dir_path=outflank_config.downloads_dir_path,
             )
         else:
@@ -121,6 +125,8 @@ async def setup_outflank_monitor(
                 nemesis_client,
                 project["name"],
                 agent_id=outflank_config.agent_id,
+                max_file_size=config.nemesis.max_file_size,
+                expiration_days=config.nemesis.expiration_days,
                 outflank=outflank_client,
             )
 

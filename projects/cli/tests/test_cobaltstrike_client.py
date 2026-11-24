@@ -1,6 +1,6 @@
 """Tests for cli.cobaltstrike_connector.cobaltstrike_client module."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
@@ -103,8 +103,9 @@ class TestDownload:
     def test_timestamp_converted_from_ms(self):
         data = self._sample_download_dict()
         dl = Download.from_dict(data)
-        expected = datetime.fromtimestamp(1705311000000 / 1000)
+        expected = datetime.fromtimestamp(1705311000000 / 1000, UTC)
         assert dl.timestamp == expected
+        assert dl.timestamp.tzinfo is UTC
 
 
 # --- CobaltStrikeClient ---

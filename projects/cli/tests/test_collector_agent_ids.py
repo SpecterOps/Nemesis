@@ -108,7 +108,8 @@ async def test_mythic_id_reaches_upload(tmp_path, monkeypatch, agent_id):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["cobaltstrike", "outflank-api", "outflank-directory"])
 @pytest.mark.parametrize("custom", [False, True])
-async def test_configured_collectors_upload_and_isolate_state(tmp_path, monkeypatch, mode, custom):
+async def test_configured_collectors_upload_and_isolate_state(tmp_path, monkeypatch, caplog, mode, custom):
+    caplog.set_level(logging.INFO)
     framework = "cobaltstrike" if mode == "cobaltstrike" else "outflank"
     module = cs if framework == "cobaltstrike" else stage1
     data = yaml.safe_load((SETTINGS_DIR / f"settings_{framework}.yaml").read_text())
@@ -131,7 +132,7 @@ async def test_configured_collectors_upload_and_isolate_state(tmp_path, monkeypa
     client.authenticate = AsyncMock(return_value=True)
     client.get_project_info = AsyncMock(return_value={"name": "assessment"})
 
-    async def download_file(_id, path):
+    async def download_file(_id, path, **_kwargs):
         Path(path).write_bytes(b"downloaded content")
         return True
 
@@ -182,6 +183,9 @@ async def test_configured_collectors_upload_and_isolate_state(tmp_path, monkeypa
     expected_id = f"{framework}-initial" if custom else ("cobaltstrike" if framework == "cobaltstrike" else "stage1")
     assert all(call.args[1].agent_id == expected_id for call in nemesis.post_file.call_args_list)
     assert len(list((tmp_path / "cache").iterdir())) == 2
+    # Each instance logs the resolved location of its own state database.
+    logged = {r.args[-1] for r in caplog.records if "connector state for" in r.msg}
+    assert logged == {d.resolve() for d in (tmp_path / "cache").iterdir()}
     # Setup closes the databases; both reopen with their own persisted records.
     for directory in (tmp_path / "cache").iterdir():
         with plyvel.DB(str(directory)) as db:

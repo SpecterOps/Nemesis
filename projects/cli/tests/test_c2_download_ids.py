@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from cli.c2_download_state import PermanentDownloadError
 from cli.c2_ids import is_safe_c2_id, safe_child_path
 from cli.cobaltstrike_connector.cobaltstrike_client import Download as CSDownload
 from cli.cobaltstrike_connector.download_processor import CobaltStrikeDownloadProcessor
@@ -132,12 +133,15 @@ async def test_outflank_symlink_escape_is_refused(outflank_dir_processor, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_outflank_missing_local_file_fails_cleanly(outflank_dir_processor):
+async def test_outflank_missing_local_file_is_retried_later(outflank_dir_processor):
     processor, client, _ = outflank_dir_processor
     download = outflank_download("missing")
     await processor.process_outflank_download(download, SimpleNamespace(hostname="ws01", uid="implant-1"))
     client.post_file.assert_not_awaited()
-    assert processor.is_processed(download)
+    # The file may still be on its way into the downloads directory: retry instead of giving up.
+    assert not processor.is_processed(download)
+    assert processor.state.retry_state("missing")["attempts"] == 1
+    assert not processor.is_due(download)
 
 
 @pytest.mark.asyncio
@@ -148,9 +152,8 @@ async def test_outflank_api_mode_rejects_unsafe_uid_before_mkstemp(tmp_path, mon
     monkeypatch.setattr(tempfile, "mkstemp", mkstemp)
     processor = OutflankDownloadProcessor(tmp_path / "db", preview_client(), "proj", outflank=outflank)
     try:
-        info = await processor._download_from_c2(outflank_download("../../etc/cron.d/x"))
-        assert not info.success
-        assert info.file_path is None
+        with pytest.raises(PermanentDownloadError):
+            await processor._download_from_c2(outflank_download("../../etc/cron.d/x"))
         outflank.download_file.assert_not_awaited()
     finally:
         processor.close()
@@ -160,7 +163,7 @@ async def test_outflank_api_mode_rejects_unsafe_uid_before_mkstemp(tmp_path, mon
 async def test_outflank_api_mode_valid_uid_uses_temp_dir(tmp_path):
     seen = {}
 
-    async def fake_download(uid, dest):
+    async def fake_download(uid, dest, **_kwargs):
         seen["dest"] = dest
         Path(dest).write_bytes(b"data")
         return True
@@ -214,8 +217,8 @@ async def test_cobaltstrike_unsafe_id_is_skipped(cs_processor, monkeypatch, down
 async def test_cobaltstrike_direct_download_rejects_unsafe_id(cs_processor):
     processor, _, cobalt_strike = cs_processor
     cobalt_strike.download_file = AsyncMock(return_value=True)
-    info = await processor._download_from_c2(cs_download("../x"))
-    assert not info.success
+    with pytest.raises(PermanentDownloadError):
+        await processor._download_from_c2(cs_download("../x"))
     cobalt_strike.download_file.assert_not_awaited()
 
 
@@ -224,7 +227,7 @@ async def test_cobaltstrike_valid_id_is_downloaded_and_uploaded(cs_processor):
     processor, client, cobalt_strike = cs_processor
     seen = {}
 
-    async def fake_download(download_id, dest):
+    async def fake_download(download_id, dest, **_kwargs):
         seen["dest"] = dest
         Path(dest).write_bytes(b"data")
         return True

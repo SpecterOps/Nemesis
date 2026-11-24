@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
+from cli.c2_download_state import DOWNLOAD_READ_TIMEOUT_SEC, download_timeout, stream_response_to_file
 
 
 @dataclass
@@ -57,6 +58,15 @@ class Download:
     implant_username: str
     implant_hostname: str
 
+    @property
+    def is_complete(self) -> bool:
+        """True once the implant has finished transferring the file.
+
+        The API's progress scale is not documented: accept a 0-1 fraction (1.0) or a percentage (100).
+        The processor also checks the fetched file against ``size`` before uploading.
+        """
+        return self.progress >= 100 or self.progress == 1
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Download":
         return cls(
@@ -74,7 +84,15 @@ class Download:
 
 
 class OutflankC2Client:
-    def __init__(self, base_url: str, verify_ssl: bool = True, validate_https: bool = True):
+    def __init__(
+        self,
+        base_url: str,
+        verify_ssl: bool = True,
+        validate_https: bool = True,
+        *,
+        connect_timeout: float = 10,
+        download_read_timeout: float = DOWNLOAD_READ_TIMEOUT_SEC,
+    ):
         """
         Initialize the Outflank C2 Client client.
 
@@ -101,6 +119,8 @@ class OutflankC2Client:
         # Ensure the base_url doesn't end with a slash
         self.base_url = base_url.rstrip("/")
         self.verify_ssl = verify_ssl
+        # File downloads get no total time limit, only connect and read-inactivity limits.
+        self.download_timeout = download_timeout(connect_timeout, download_read_timeout)
         self._session = None
         self._access_token = None
         self._stored_credentials = None  # Store credentials for reauthentication
@@ -288,13 +308,14 @@ class OutflankC2Client:
             raise
 
     @requires_auth
-    async def download_file(self, download_uid: str, output_path: str) -> bool:
+    async def download_file(self, download_uid: str, output_path: str, *, max_bytes: int | None = None) -> bool:
         """
         Download a file using its UID and save it to the specified path.
 
         Args:
             download_uid: The UID of the download
             output_path: The local path where the file should be saved
+            max_bytes: Reject the download (FileTooLargeError) once it exceeds this many bytes
 
         Returns:
             bool: True if download was successful
@@ -302,6 +323,7 @@ class OutflankC2Client:
         Raises:
             aiohttp.ClientResponseError: If the server returns an error response
             IOError: If there's an error writing the file
+            FileTooLargeError: If the download exceeds max_bytes
         """
         if not self._session:
             raise RuntimeError("Client session not established")
@@ -310,12 +332,10 @@ class OutflankC2Client:
             self.logger.debug(f"Downloading file with UID: {download_uid}")
             download_url = urljoin(self.base_url, f"/api/downloads/{download_uid}")
 
-            async with self._session.get(download_url) as response:
+            async with self._session.get(download_url, timeout=self.download_timeout) as response:
                 if response.status == 200:
-                    with open(output_path, "wb") as f:
-                        # Stream the download to avoid loading entire file into memory
-                        async for chunk in response.content.iter_chunked(8192):
-                            f.write(chunk)
+                    # Stream the download to avoid loading entire file into memory
+                    await stream_response_to_file(response, output_path, max_bytes)
 
                     self.logger.debug(f"Successfully downloaded file to: {output_path}")
                     return True

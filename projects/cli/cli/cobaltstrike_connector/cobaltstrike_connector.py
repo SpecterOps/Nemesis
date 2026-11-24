@@ -84,6 +84,7 @@ async def setup_cobaltstrike_monitor(
     async with CobaltStrikeClient(
         base_url=base_url,
         verify_ssl=config.validate_https_certs,
+        connect_timeout=config.conn_timeout_sec,
     ) as cobaltstrike_client:
         # Authenticate
         try:
@@ -99,19 +100,24 @@ async def setup_cobaltstrike_monitor(
         implant_cache = ImplantCache(cobaltstrike_client)
         await implant_cache.initialize()
 
+        state_path = collector_state_path(
+            config.cache_db_path,
+            "cobaltstrike",
+            base_url,
+            cobaltstrike_config.project,
+            cobaltstrike_config.agent_id,
+        )
+        logger.info("Cobalt Strike connector state for %s: %s", base_url, state_path.resolve())
+
         # Initialize processor with the client
         nemesis_file_processor = CobaltStrikeDownloadProcessor(
-            collector_state_path(
-                config.cache_db_path,
-                "cobaltstrike",
-                base_url,
-                cobaltstrike_config.project,
-                cobaltstrike_config.agent_id,
-            ),
+            state_path,
             nemesis_client,
             cobaltstrike_config.project,
             agent_id=cobaltstrike_config.agent_id,
             cobalt_strike=cobaltstrike_client,
+            max_file_size=config.nemesis.max_file_size,
+            expiration_days=config.nemesis.expiration_days,
         )
 
         monitor = CobaltStrikeDownloadMonitor(

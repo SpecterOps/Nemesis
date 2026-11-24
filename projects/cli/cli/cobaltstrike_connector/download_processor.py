@@ -1,13 +1,22 @@
-import json
+import asyncio
 import logging
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 import plyvel
+from cli.c2_download_state import (
+    DownloadStateStore,
+    PermanentDownloadError,
+    TransientDownloadError,
+    classify_download_error,
+    classify_upload_error,
+    ensure_complete_size,
+    remote_file_path,
+)
 from cli.c2_ids import is_safe_c2_id
+from cli.c2_metadata import collection_times, join_remote_path
 from cli.cobaltstrike_connector.cobaltstrike_client import Beacon, CobaltStrikeClient, Download
 from cli.nemesis_client import PreviewUploadResult, UploadClient
 from common.models2.api import FileMetadata, FileWithMetadataResponse
@@ -33,9 +42,9 @@ class CobaltStrikeDownloadProcessor:
 
     This class handles the lifecycle of downloads from Cobalt Strike:
     - Retrieves files directly from the Cobalt Strike REST API
-    - Tracks processed downloads to prevent duplicate processing
+    - Records finished downloads so they are never processed twice
+    - Schedules retries with backoff for transient failures
     - Uploads files to Nemesis
-
     """
 
     def __init__(
@@ -46,6 +55,8 @@ class CobaltStrikeDownloadProcessor:
         cobalt_strike: CobaltStrikeClient | None = None,
         *,
         agent_id: str = "cobaltstrike",
+        max_file_size: int | None = None,
+        expiration_days: int = 100,
     ):
         """Initialize with LevelDB path and optional components
 
@@ -54,6 +65,9 @@ class CobaltStrikeDownloadProcessor:
             nemesis: Configured NemesisClient instance
             project: Name of the project
             cobalt_strike: Configured CobaltStrikeClient instance
+            agent_id: Agent identifier sent with uploads
+            max_file_size: Skip downloads larger than this many bytes
+            expiration_days: Days after collection until Nemesis deletes the file
         """
 
         # Check that cobalt_strike client is configured
@@ -67,36 +81,48 @@ class CobaltStrikeDownloadProcessor:
 
         self.project = project
         self.agent_id = agent_id
+        self.max_file_size = max_file_size
+        self.expiration_days = expiration_days
         self.client = nemesis
         self.cobalt_strike = cobalt_strike
         self.db = plyvel.DB(str(db_path), create_if_missing=True)
+        self.state = DownloadStateStore(self.db)
 
     def is_processed(self, download: Download) -> bool:
-        """Check if download has been processed"""
-        key = f"download:{download.id}".encode()
-        return self.db.get(key) is not None
+        """True once the download is finished: uploaded, or failed permanently."""
+        return self.state.is_finished(download.id)
+
+    def is_due(self, download: Download) -> bool:
+        """True if the download should be queued now (not finished and not waiting out a retry delay)."""
+        return self.state.is_due(download.id)
 
     def mark_processed(
         self,
         download: Download,
         success: bool = True,
         response: FileWithMetadataResponse | PreviewUploadResult | None = None,
+        error: str | None = None,
     ):
-        """Mark download as processed"""
-        key = f"download:{download.id}".encode()
-        value = json.dumps(
+        """Record the download as finished so it is never queued again."""
+        uploaded = isinstance(response, FileWithMetadataResponse)
+        self.state.mark_finished(
+            download.id,
             {
-                "timestamp": datetime.now().isoformat(),
                 "download_info": f"{download.id} - {download.bid}",
                 "success": success,
                 "file_path": str(download.id),
-                "object_id": str(response.object_id) if isinstance(response, FileWithMetadataResponse) else None,
-                "submission_id": str(response.submission_id)
-                if isinstance(response, FileWithMetadataResponse)
-                else None,
-            }
-        ).encode()
-        self.db.put(key, value)
+                "object_id": str(response.object_id) if uploaded else None,
+                "submission_id": str(response.submission_id) if uploaded else None,
+                "error": error,
+            },
+        )
+
+    def record_retry(self, download: Download, error: str) -> None:
+        """Schedule another attempt after a transient failure."""
+        state = self.state.record_transient_failure(download.id, error)
+        logger.warning(
+            "Cobalt Strike download %s failed (attempt %s); retrying later: %s", download.id, state["attempts"], error
+        )
 
     async def upload_file(
         self,
@@ -134,40 +160,54 @@ class CobaltStrikeDownloadProcessor:
                 except Exception as e:
                     logger.error(f"Failed to delete temporary file {file_path} in upload_file finally block: {e}")
 
-    async def process_cobaltstrike_download(self, download: Download, beacon: Beacon) -> None:
-        """Process a download by either retrieving from local directory or downloading from C2.
+    async def process_cobaltstrike_download(self, download: Download, beacon: Beacon | None) -> None:
+        """Download a file from Cobalt Strike and upload it to Nemesis.
+
+        Success and permanent failures finish the download; transient failures schedule a retry.
 
         Args:
             download: Download object containing download information
-            beacon: Beacon object containing host information
+            beacon: Beacon the download came from, or None if Cobalt Strike no longer lists it
         """
-        logger.debug(
-            f"Processing Cobalt Strike download {download.id} from beacon {beacon.computer}. Path: {download.path}"
-        )
+        logger.debug(f"Processing Cobalt Strike download {download.id}. Path: {download.path}")
+
+        if self.is_processed(download):
+            return
 
         if not is_safe_c2_id(download.id):
             logger.error(f"Skipping Cobalt Strike download with unsafe ID {download.id!r} (path: {download.path})")
-            self.mark_processed(download, success=False)
+            self.mark_processed(download, success=False, error="unsafe download ID")
             return
 
-        # Get the file from the downloads directory or API
-        downloaded_file_info = await self._get_downloaded_file(download)
-        if not downloaded_file_info.success:
-            self.mark_processed(download, success=False)
+        size = getattr(download, "size", None)
+        if self.max_file_size is not None and isinstance(size, int) and size > self.max_file_size:
+            logger.warning(
+                "Skipping Cobalt Strike download %s: %s bytes exceeds max_file_size %s",
+                download.id,
+                size,
+                self.max_file_size,
+            )
+            self.mark_processed(download, success=False, error="file exceeds max_file_size")
             return
 
-        # Upload the file to Nemesis
+        downloaded_file_info: DownloadedFileInfo | None = None
         try:
+            downloaded_file_info = await self._get_downloaded_file(download)
+            if not downloaded_file_info.success or downloaded_file_info.file_path is None:
+                raise TransientDownloadError(f"Cobalt Strike download {download.id} is not available yet")
+            ensure_complete_size(downloaded_file_info.file_path, getattr(download, "size", None))
+
             # Use the beacon computer as the source identifier
-            source = f"host://{beacon.computer}" if beacon.computer else None
+            source = f"host://{beacon.computer}" if beacon and beacon.computer else None
+            timestamp, expiration = collection_times(getattr(download, "timestamp", None), self.expiration_days)
 
             metadata = FileMetadata(
                 agent_id=self.agent_id,
                 source=source,
                 project=self.project,
-                timestamp=datetime.now(UTC),
-                expiration=datetime.now(UTC).replace(year=datetime.now().year + 1),
-                path=f"{download.path}/{download.name}",
+                timestamp=timestamp,
+                expiration=expiration,
+                path=remote_file_path(download.path, download.name, join_remote_path),
             )
             success, error, response = await self.upload_file(
                 str(downloaded_file_info.file_path),
@@ -175,57 +215,68 @@ class CobaltStrikeDownloadProcessor:
                 delete_after=downloaded_file_info.delete_after,
             )
 
-            if success and response:
-                if isinstance(response, PreviewUploadResult):
-                    logger.info("Dry run preview complete for %s", downloaded_file_info.file_path)
-                else:
-                    logger.info(
-                        f"Successfully uploaded {downloaded_file_info.file_path} - "
-                        f"Object ID: {response.object_id}, Submission ID: {response.submission_id}"
-                    )
-                self.mark_processed(download, success=True, response=response)
-            else:
-                logger.error(f"Failed to upload {downloaded_file_info.file_path}: {error}")
-                self.mark_processed(download, success=False)
+            if not (success and response):
+                raise classify_upload_error(error)(f"Failed to upload {downloaded_file_info.file_path}: {error}")
 
+            if isinstance(response, PreviewUploadResult):
+                logger.info("Dry run preview complete for %s", downloaded_file_info.file_path)
+            else:
+                logger.info(
+                    f"Successfully uploaded {downloaded_file_info.file_path} - "
+                    f"Object ID: {response.object_id}, Submission ID: {response.submission_id}"
+                )
+            self.mark_processed(download, success=True, response=response)
+
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            logger.error(f"Error in process_download: {e}")
-            self.mark_processed(download, success=False)
+            if classify_download_error(e) is PermanentDownloadError:
+                logger.error(f"Cobalt Strike download {download.id} failed permanently: {e}")
+                self.mark_processed(download, success=False, error=str(e))
+            else:
+                self.record_retry(download, str(e) or type(e).__name__)
         finally:
-            self._cleanup_temp_file(downloaded_file_info.temp_file)
+            if downloaded_file_info is not None:
+                self._cleanup_temp_file(downloaded_file_info.temp_file)
 
     async def _get_downloaded_file(self, download: Download) -> DownloadedFileInfo:
         """Get the download file from C2 API.
 
         Returns:
-            FileInfo containing file path, whether to delete after, and success status
+            FileInfo containing the downloaded file path
+
+        Raises:
+            PermanentDownloadError / TransientDownloadError, or the client's exception
         """
         # Use the API to download the file
         return await self._download_from_c2(download)
 
     async def _download_from_c2(self, download: Download) -> DownloadedFileInfo:
-        """Download file from C2 server to temporary location.
+        """Download file from C2 server to a temporary location, removing it if the download fails.
 
         Returns:
-            FileInfo containing temporary file path and success status
+            FileInfo containing temporary file path
         """
         if not self.cobalt_strike:
             raise ValueError("No CobaltStrikeClient configured for remote download")
 
         if not is_safe_c2_id(download.id):
-            logger.error(f"Refusing to download Cobalt Strike file with unsafe ID {download.id!r}")
-            return DownloadedFileInfo(None, delete_after=False, success=False)
+            raise PermanentDownloadError(f"Refusing to download Cobalt Strike file with unsafe ID {download.id!r}")
 
         temp_fd, temp_path = tempfile.mkstemp(prefix=f"nemesis_{download.id}_")
         os.close(temp_fd)
         temp_file = Path(temp_path)
 
         logger.info(f"Downloading file from C2 to {temp_file}")
-        success = await self.cobalt_strike.download_file(download.id, str(temp_file))
-
-        if not success:
-            logger.error(f"Failed to download file from C2. Download ID: {download.id}. Download Path: {download.path}")
-            return DownloadedFileInfo(temp_file, delete_after=True, success=False)
+        try:
+            success = await self.cobalt_strike.download_file(download.id, str(temp_file), max_bytes=self.max_file_size)
+            if not success:
+                raise TransientDownloadError(
+                    f"Failed to download file from C2. Download ID: {download.id}. Download Path: {download.path}"
+                )
+        except BaseException:
+            self._cleanup_temp_file(temp_file)
+            raise
 
         return DownloadedFileInfo(temp_file, delete_after=True, success=True)
 
@@ -237,7 +288,7 @@ class CobaltStrikeDownloadProcessor:
             try:
                 temp_file.unlink(missing_ok=True)
             except Exception as e:
-                logger.warn(f"Note: Temporary file {temp_file} cleanup error: {e}")
+                logger.warning(f"Note: Temporary file {temp_file} cleanup error: {e}")
 
     def close(self):
         """Close the LevelDB connection"""
