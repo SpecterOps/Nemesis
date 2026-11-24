@@ -4,7 +4,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO, Protocol
 
 import httpx
 from cli.config import NemesisConfig
@@ -28,6 +28,14 @@ class PreviewUploadResult:
         self.sha256 = sha256
 
 
+class UploadClient(Protocol):
+    """Upload interface shared by the real Nemesis client and the dry-run preview backend."""
+
+    async def post_file(
+        self, file: BinaryIO | str | Path, metadata: FileMetadata
+    ) -> FileWithMetadataResponse | ErrorResponse | PreviewUploadResult: ...
+
+
 class PreviewNemesisClient:
     """Upload-compatible local preview backend used by connector dry runs."""
 
@@ -39,9 +47,6 @@ class PreviewNemesisClient:
 
     async def aclose(self) -> None:
         return None
-
-    async def get_health(self, timeout: float = 10) -> HealthResponse:
-        raise RuntimeError("PreviewNemesisClient has no Nemesis health endpoint")
 
     async def post_file(self, file: BinaryIO | str | Path, metadata: FileMetadata) -> PreviewUploadResult:
         path = Path(file) if isinstance(file, (str, Path)) else None
@@ -134,7 +139,7 @@ class NemesisClient:
             path=path,
         )
 
-    async def _request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
+    async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         for attempt in range(3):
             try:
                 return await self.http.request(method, url, **kwargs)

@@ -14,7 +14,7 @@ from cli.mythic_connector.config import Settings, TokenCredential
 from cli.mythic_connector.db import Database, DatabaseError
 from cli.mythic_connector.handlers import FileHandler, PermanentMythicError
 from cli.mythic_connector.logger import get_logger
-from cli.nemesis_client import NemesisClient, PreviewNemesisClient
+from cli.nemesis_client import NemesisClient, PreviewNemesisClient, UploadClient
 from cli.preflight import check_nemesis_availability
 from gql.transport.exceptions import TransportClosed, TransportServerError
 from mythic import mythic
@@ -42,8 +42,8 @@ class SyncService:
         self.cfg = config
         self.db = None
         self.mythic = None
-        self.nemesis = None
-        self.file_handler = None
+        self.nemesis: UploadClient | None = None
+        self.file_handler: FileHandler | None = None
         self.browser_handler = None
         self.dry_run = False
 
@@ -170,10 +170,19 @@ class SyncService:
         with tempfile.TemporaryDirectory(prefix="nemesis-mythic-dryrun-") if dry_run else nullcontext() as tempdir:
             try:
                 if dry_run:
+                    if tempdir is None:
+                        raise RuntimeError("Dry run requires a temporary cache directory")
                     self.cfg.db.path = str(Path(tempdir) / "state.db")
-                client = PreviewNemesisClient() if dry_run else self._create_nemesis_client()
+                real_client = None if dry_run else self._create_nemesis_client()
+                client = PreviewNemesisClient() if real_client is None else real_client
                 async with client:
                     self.nemesis = client
+                    if real_client is not None:
+                        await check_nemesis_availability(
+                            real_client, timeout=self.cfg.networking.timeout_sec, logger=logger
+                        )
+                    else:
+                        logger.info("Dry run enabled; Nemesis preflight and uploads are disabled")
                     await self._run_with_nemesis()
             finally:
                 self.cfg.db.path = original_path
@@ -184,10 +193,8 @@ class SyncService:
         This method manages the lifecycle of the service, including initialization,
         maintaining connections, and handling errors.
         """
-        if not self.dry_run:
-            await check_nemesis_availability(self.nemesis, timeout=self.cfg.networking.timeout_sec, logger=logger)
-        else:
-            logger.info("Dry run enabled; Nemesis preflight and uploads are disabled")
+        if self.nemesis is None:
+            raise RuntimeError("Nemesis client not initialized")
         if not await self.initialize_db():
             raise RuntimeError("Database initialization failed")
         delay_index = 0
@@ -199,7 +206,10 @@ class SyncService:
                         raise RuntimeError("Mythic authentication or preflight failed")
                     self.initialize_handlers()
                     logger.info("Starting data synchronization")
-                    await self.file_handler.subscribe()
+                    handler = self.file_handler
+                    if handler is None:
+                        raise RuntimeError("Mythic file handler not initialized")
+                    await handler.subscribe()
                     logger.warning("Mythic subscription ended; reconnecting")
                 except asyncio.CancelledError:
                     raise

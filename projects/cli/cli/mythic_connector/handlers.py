@@ -16,7 +16,7 @@ from cli.mythic_connector.db import Database, DatabaseError
 from cli.mythic_connector.logger import get_logger
 
 # from cli.mythic_connector.nemesis import NemesisClient
-from cli.nemesis_client import NemesisClient, PreviewUploadResult
+from cli.nemesis_client import PreviewUploadResult, UploadClient
 from common.models2.api import FileMetadata, FileWithMetadataResponse
 from gql.transport.exceptions import TransportClosed
 from mythic import mythic, mythic_classes
@@ -55,7 +55,7 @@ class FileHandler:
     in real-time and processes them sequentially.
     """
 
-    def __init__(self, mythic: mythic_classes.Mythic, nemesis: NemesisClient, db: Database, config: Settings):
+    def __init__(self, mythic: mythic_classes.Mythic, nemesis: UploadClient, db: Database, config: Settings):
         """Initialize the file handler.
 
         Args:
@@ -489,7 +489,7 @@ class FileHandler:
 #     information by agent ID to minimize API calls to Nemesis.
 #     """
 
-#     def __init__(self, mythic: mythic_classes.Mythic, nemesis: NemesisClient, db: Database, config: Settings):
+#     def __init__(self, mythic: mythic_classes.Mythic, nemesis: UploadClient, db: Database, config: Settings):
 #         """Initialize the file browser handler.
 
 #         Args:

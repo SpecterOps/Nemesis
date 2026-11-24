@@ -2,11 +2,12 @@
 import asyncio
 import logging
 import tempfile
+from pathlib import Path
 
 import urllib3
 from cli.config import Config, OutflankConfig
 from cli.log import setup_logging
-from cli.nemesis_client import NemesisClient, PreviewNemesisClient
+from cli.nemesis_client import NemesisClient, PreviewNemesisClient, UploadClient
 from cli.preflight import check_nemesis_availability
 from cli.stage1_connector.cache import ImplantCache
 from cli.stage1_connector.download_monitor import OutflankDownloadMonitor
@@ -34,17 +35,18 @@ async def run_outflank_connector(config: Config, logger: logging.Logger, dry_run
         try:
             if dry_run:
                 tempdir = tempfile.TemporaryDirectory(prefix="nemesis-outflank-dryrun-")
-                config.cache_db_path = tempdir.name + "/state.db"
-            client = (
-                PreviewNemesisClient()
+                config.cache_db_path = Path(tempdir.name) / "state.db"
+            real_client = (
+                None
                 if dry_run
                 else NemesisClient(
                     config.nemesis, verify_ssl=config.validate_https_certs, connect_timeout=config.conn_timeout_sec
                 )
             )
+            client = PreviewNemesisClient() if real_client is None else real_client
             async with client as nemesis_client:
-                if not dry_run:
-                    await check_nemesis_availability(nemesis_client, timeout=config.conn_timeout_sec, logger=logger)
+                if real_client is not None:
+                    await check_nemesis_availability(real_client, timeout=config.conn_timeout_sec, logger=logger)
                 for outflank_config in config.outflank:
                     tasks.append(
                         asyncio.create_task(setup_outflank_monitor(outflank_config, config, logger, nemesis_client))
@@ -69,7 +71,7 @@ async def run_outflank_connector(config: Config, logger: logging.Logger, dry_run
 
 
 async def setup_outflank_monitor(
-    outflank_config: OutflankConfig, config: Config, logger: logging.Logger, nemesis_client: NemesisClient
+    outflank_config: OutflankConfig, config: Config, logger: logging.Logger, nemesis_client: UploadClient
 ):
     """Set up and run a single Outflank C2 manager instance"""
     base_url = str(outflank_config.url)

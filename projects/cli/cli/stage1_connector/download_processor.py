@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import plyvel
-from cli.nemesis_client import NemesisClient, PreviewUploadResult
+from cli.nemesis_client import PreviewUploadResult, UploadClient
 from cli.stage1_connector.outflankc2_client import Download, Implant, OutflankC2Client
 from common.models2.api import FileMetadata, FileWithMetadataResponse
 
@@ -44,7 +44,7 @@ class OutflankDownloadProcessor:
     def __init__(
         self,
         db_path: Path,
-        nemesis: NemesisClient,
+        nemesis: UploadClient,
         project: str,
         outflank_downloads_dir_path: Path | None = None,
         outflank: OutflankC2Client | None = None,
@@ -88,7 +88,10 @@ class OutflankDownloadProcessor:
         return self.db.get(key) is not None
 
     def mark_processed(
-        self, download: Download, success: bool = True, response: FileWithMetadataResponse | None = None
+        self,
+        download: Download,
+        success: bool = True,
+        response: FileWithMetadataResponse | PreviewUploadResult | None = None,
     ):
         """Mark download as processed"""
         key = f"download:{download.uid}".encode()
@@ -111,7 +114,7 @@ class OutflankDownloadProcessor:
         file_path: Path | str,
         metadata: FileMetadata,
         delete_after: bool = False,
-    ) -> tuple[bool, str | None, FileWithMetadataResponse | None]:
+    ) -> tuple[bool, str | None, FileWithMetadataResponse | PreviewUploadResult | None]:
         """Upload file with metadata to the API endpoint"""
         if not self.client:
             raise ValueError("NemesisClient is required")

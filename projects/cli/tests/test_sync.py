@@ -388,6 +388,7 @@ class TestSyncServiceRun:
     @pytest.mark.asyncio
     async def test_reconnect_backoff_resets_after_long_session(self, monkeypatch):
         svc = SyncService(_make_settings())
+        svc.nemesis = MagicMock()  # run() sets the client before entering the reconnect loop.
         state_db = MagicMock()
         svc.initialize_db = AsyncMock(side_effect=lambda: setattr(svc, "db", state_db) or True)
         svc.initialize_mythic = AsyncMock(side_effect=asyncio.TimeoutError)
@@ -401,10 +402,7 @@ class TestSyncServiceRun:
                 raise asyncio.CancelledError
 
         monkeypatch.setattr("cli.mythic_connector.sync.asyncio.sleep", stop_after_second_delay)
-        with (
-            patch("cli.mythic_connector.sync.check_nemesis_availability", new_callable=AsyncMock),
-            pytest.raises(asyncio.CancelledError),
-        ):
+        with pytest.raises(asyncio.CancelledError):
             await svc._run_with_nemesis()
 
         assert delays == [1, 2]
@@ -539,3 +537,22 @@ networking:
         cfg = get_settings(str(SETTINGS_DIR / "settings_mythic.yaml"))
         assert cfg.networking.timeout_sec == 30
         assert cfg.networking.validate_https_certs is True
+
+
+@pytest.mark.asyncio
+async def test_reconnect_loop_rejects_missing_client_before_initializing_database():
+    service = SyncService(_make_settings())
+    service.initialize_db = AsyncMock()
+    with pytest.raises(RuntimeError, match="Nemesis client not initialized"):
+        await service._run_with_nemesis()
+    service.initialize_db.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_dry_run_skips_preflight():
+    svc = SyncService(_make_settings())
+    svc._run_with_nemesis = AsyncMock()
+    with patch("cli.mythic_connector.sync.check_nemesis_availability", new_callable=AsyncMock) as preflight:
+        await svc.run(dry_run=True)
+    preflight.assert_not_awaited()
+    svc._run_with_nemesis.assert_awaited_once()

@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import tempfile
+from pathlib import Path
 
 import urllib3
 from cli.cobaltstrike_connector.cache import ImplantCache
@@ -10,7 +11,7 @@ from cli.cobaltstrike_connector.download_monitor import CobaltStrikeDownloadMoni
 from cli.cobaltstrike_connector.download_processor import CobaltStrikeDownloadProcessor
 from cli.config import CobaltStrikeConfig, Config
 from cli.log import setup_logging
-from cli.nemesis_client import NemesisClient, PreviewNemesisClient
+from cli.nemesis_client import NemesisClient, PreviewNemesisClient, UploadClient
 from cli.preflight import check_nemesis_availability
 
 setup_logging()
@@ -34,17 +35,18 @@ async def run_cobaltstrike_connector(config: Config, logger: logging.Logger, dry
         try:
             if dry_run:
                 tempdir = tempfile.TemporaryDirectory(prefix="nemesis-cobaltstrike-dryrun-")
-                config.cache_db_path = tempdir.name + "/state.db"
-            client = (
-                PreviewNemesisClient()
+                config.cache_db_path = Path(tempdir.name) / "state.db"
+            real_client = (
+                None
                 if dry_run
                 else NemesisClient(
                     config.nemesis, verify_ssl=config.validate_https_certs, connect_timeout=config.conn_timeout_sec
                 )
             )
+            client = PreviewNemesisClient() if real_client is None else real_client
             async with client as nemesis_client:
-                if not dry_run:
-                    await check_nemesis_availability(nemesis_client, timeout=config.conn_timeout_sec, logger=logger)
+                if real_client is not None:
+                    await check_nemesis_availability(real_client, timeout=config.conn_timeout_sec, logger=logger)
                 for cobaltstrike_config in config.cobaltstrike:
                     tasks.append(
                         asyncio.create_task(
@@ -71,7 +73,7 @@ async def run_cobaltstrike_connector(config: Config, logger: logging.Logger, dry
 
 
 async def setup_cobaltstrike_monitor(
-    cobaltstrike_config: CobaltStrikeConfig, config: Config, logger: logging.Logger, nemesis_client: NemesisClient
+    cobaltstrike_config: CobaltStrikeConfig, config: Config, logger: logging.Logger, nemesis_client: UploadClient
 ):
     """Set up and run a single Cobalt Strike manager instance"""
     base_url = str(cobaltstrike_config.url)

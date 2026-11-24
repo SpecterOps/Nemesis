@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Mapping
 
 import plyvel
 
@@ -75,7 +76,7 @@ class Database:
         except Exception as exc:
             raise DatabaseError(f"LevelDB read failed for key {key!r}") from exc
 
-    def write_batch(self, puts: dict[str, str | bytes], deletes: list[str] | None = None) -> None:
+    def write_batch(self, puts: Mapping[str, str | bytes], deletes: list[str] | None = None) -> None:
         """Atomically apply string/byte values and deletions, raising on failure."""
         try:
             with self.db.write_batch(transaction=True, sync=True) as batch:

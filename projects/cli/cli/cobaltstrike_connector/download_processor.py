@@ -8,7 +8,7 @@ from pathlib import Path
 
 import plyvel
 from cli.cobaltstrike_connector.cobaltstrike_client import Beacon, CobaltStrikeClient, Download
-from cli.nemesis_client import NemesisClient, PreviewUploadResult
+from cli.nemesis_client import PreviewUploadResult, UploadClient
 from common.models2.api import FileMetadata, FileWithMetadataResponse
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class CobaltStrikeDownloadProcessor:
     def __init__(
         self,
         db_path: Path,
-        nemesis: NemesisClient,
+        nemesis: UploadClient,
         project: str,
         cobalt_strike: CobaltStrikeClient | None = None,
     ):
@@ -73,7 +73,10 @@ class CobaltStrikeDownloadProcessor:
         return self.db.get(key) is not None
 
     def mark_processed(
-        self, download: Download, success: bool = True, response: FileWithMetadataResponse | None = None
+        self,
+        download: Download,
+        success: bool = True,
+        response: FileWithMetadataResponse | PreviewUploadResult | None = None,
     ):
         """Mark download as processed"""
         key = f"download:{download.id}".encode()
@@ -96,7 +99,7 @@ class CobaltStrikeDownloadProcessor:
         file_path: Path | str,
         metadata: FileMetadata,
         delete_after: bool = False,
-    ) -> tuple[bool, str | None, FileWithMetadataResponse | None]:
+    ) -> tuple[bool, str | None, FileWithMetadataResponse | PreviewUploadResult | None]:
         """Upload file with metadata to the API endpoint"""
         if not self.client:
             raise ValueError("NemesisClient is required")
