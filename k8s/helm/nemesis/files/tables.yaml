@@ -166,15 +166,6 @@
       filter: {}
       check: {}
 - table:
-    name: files_enriched_dataset
-    schema: public
-  select_permissions:
-  - role: operator
-    permission:
-      columns: '*'
-      filter: {}
-      allow_aggregations: true
-- table:
     name: files_feedback
     schema: public
   object_relationships:

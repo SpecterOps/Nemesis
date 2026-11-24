@@ -6,12 +6,12 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 -----------------------
 CREATE TABLE IF NOT EXISTS files (
     object_id UUID PRIMARY KEY,
-    agent_id VARCHAR(255),
+    agent_id VARCHAR(255) NOT NULL,
     source VARCHAR(1000),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
-    timestamp TIMESTAMP WITH TIME ZONE,
-    expiration TIMESTAMP WITH TIME ZONE,
-    path TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    expiration TIMESTAMP WITH TIME ZONE NOT NULL,
+    path TEXT NOT NULL,
     originating_object_id UUID,
     originating_container_id UUID, -- for large container processing
     nesting_level INTEGER,
@@ -29,19 +29,19 @@ CREATE TABLE IF NOT EXISTS files (
 -----------------------
 CREATE TABLE IF NOT EXISTS files_enriched (
     object_id UUID PRIMARY KEY,
-    agent_id VARCHAR(255),
+    agent_id VARCHAR(255) NOT NULL,
     source VARCHAR(1000),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
-    timestamp TIMESTAMP WITH TIME ZONE,
-    expiration TIMESTAMP WITH TIME ZONE,
-    path TEXT,
-    file_name VARCHAR(255),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    expiration TIMESTAMP WITH TIME ZONE NOT NULL,
+    path TEXT NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
     extension VARCHAR(50),
-    size BIGINT,
-    magic_type TEXT,
-    mime_type TEXT,
-    is_plaintext BOOLEAN,
-    is_container BOOLEAN,
+    size BIGINT NOT NULL,
+    magic_type TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    is_plaintext BOOLEAN NOT NULL,
+    is_container BOOLEAN NOT NULL,
     originating_object_id UUID,
     originating_container_id UUID, -- for large container processing
     nesting_level INTEGER,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS files_enriched (
     file_access_time TIMESTAMP WITH TIME ZONE,
     file_modification_time TIMESTAMP WITH TIME ZONE,
     security_info JSONB,
-    hashes JSONB,
+    hashes JSONB NOT NULL,
     file_tags TEXT[] DEFAULT '{}',
     -- Number of findings for this file, kept current by the findings_count triggers on findings
     findings_count INTEGER NOT NULL DEFAULT 0,
@@ -107,62 +107,17 @@ CREATE TABLE IF NOT EXISTS files_feedback (
 
 
 -----------------------
--- Extracted File Features
------------------------
-CREATE TABLE IF NOT EXISTS files_enriched_dataset (
-    object_id UUID PRIMARY KEY,
-    agent_id VARCHAR(255),
-    source VARCHAR(1000),
-    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
-    timestamp TIMESTAMP WITH TIME ZONE,
-    expiration TIMESTAMP WITH TIME ZONE,
-    path TEXT,
-    file_creation_time TIMESTAMP WITH TIME ZONE,
-    file_access_time TIMESTAMP WITH TIME ZONE,
-    file_modification_time TIMESTAMP WITH TIME ZONE,
-    features_version VARCHAR(255),
-    individual_features JSONB,          -- individual features
-    sibling_features JSONB,             -- features based on files in the same folder (and same agent)
-    agent_population_features JSONB,    -- population features segmented per agent_id
-    global_population_features JSONB,   -- global population features
-    labels JSONB,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create a GiST index for path matching
-CREATE INDEX idx_files_enriched_dataset_path_trgm ON files_enriched_dataset USING gist (path gist_trgm_ops);
-
--- Create indexes for finding siblings (composite index with agent_id and path)
-CREATE INDEX idx_files_enriched_dataset_siblings ON files_enriched_dataset(agent_id, path);
-
--- helper for pulling out 'sibling' files
-CREATE OR REPLACE FUNCTION get_parent_path(path text)
-RETURNS text AS $$
-BEGIN
-    -- Handle both Windows and Unix paths
-    RETURN regexp_replace(
-        path,
-        '[\\/][^\\/]*$',
-        ''
-    );
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
--- Then you can find siblings with queries like:
--- SELECT * FROM files_enriched_dataset
--- WHERE agent_id = $1
--- AND get_parent_path(path) = get_parent_path($2);
-
-
------------------------
 -- FINDINGS
 -----------------------
 CREATE TABLE IF NOT EXISTS findings (
     finding_id BIGSERIAL PRIMARY KEY,
     finding_name VARCHAR(255) NOT NULL,
-    category VARCHAR(255) NOT NULL,
-    severity INTEGER NOT NULL,
+    category VARCHAR(255) NOT NULL CHECK (category IN (
+        'credential', 'extracted_hash', 'extracted_data', 'vulnerability', 'yara_match', 'pii', 'misc', 'informational'
+    )),
+    severity INTEGER NOT NULL CHECK (severity BETWEEN 0 AND 10),
     object_id UUID NOT NULL,
-    origin_type VARCHAR(255) NOT NULL,
+    origin_type VARCHAR(255) NOT NULL CHECK (origin_type IN ('enrichment_module', 'ai_agent', 'manual')),
     origin_name VARCHAR(255) NOT NULL,
     raw_data JSONB NOT NULL,
     data JSONB NOT NULL,
@@ -171,7 +126,8 @@ CREATE TABLE IF NOT EXISTS findings (
     -- Latest findings_triage_history entry, denormalized and kept current by the
     -- findings_triage_history_set_latest trigger so list filters/sorts don't join the history
     triage_id BIGINT,
-    triage_value VARCHAR(255),
+    -- NULL until the finding is first triaged
+    triage_value VARCHAR(255) CHECK (triage_value IN ('true_positive', 'false_positive', 'needs_review', 'not_triaged', 'error')),
     triage_automated BOOLEAN,
     -- Copy of files_enriched.path (findings_set_file_path / files_enriched_propagate_path triggers) so
     -- the Findings list can sort and search by path without joining files_enriched
@@ -183,7 +139,7 @@ CREATE TABLE IF NOT EXISTS findings_triage_history (
     finding_id BIGINT NOT NULL,
     username VARCHAR(255) NOT NULL,
     automated BOOLEAN,
-    value VARCHAR(255) NOT NULL,
+    value VARCHAR(255) NOT NULL CHECK (value IN ('true_positive', 'false_positive', 'needs_review', 'not_triaged', 'error')),
     explanation VARCHAR(5000),
     confidence REAL,
     true_positive_context VARCHAR(5000),
@@ -233,7 +189,6 @@ CREATE INDEX IF NOT EXISTS idx_files_enriched_path_trgm ON files_enriched USING 
 CREATE INDEX IF NOT EXISTS idx_findings_data_gin ON findings USING GIN (data);
 CREATE INDEX IF NOT EXISTS idx_files_view_history_username ON files_view_history(username);
 CREATE INDEX IF NOT EXISTS idx_files_view_history_composite ON files_view_history(object_id, username, timestamp);
-CREATE INDEX IF NOT EXISTS idx_files_enriched_dataset_agent_id ON files_enriched_dataset(agent_id);
 
 -- Performance indexes for findings and workflow tracking
 -- Used by GraphQL subscription ordering (FindingsList.jsx: order_by created_at desc)
@@ -670,11 +625,6 @@ CREATE OR REPLACE TRIGGER update_findings_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE OR REPLACE TRIGGER update_files_enriched_dataset_updated_at
-    BEFORE UPDATE ON files_enriched_dataset
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
 CREATE OR REPLACE TRIGGER update_file_linkings_updated_at
     BEFORE UPDATE ON file_linkings
     FOR EACH ROW
@@ -749,24 +699,26 @@ ALTER TABLE dapr_state SET (
 -----------------------
 CREATE TABLE IF NOT EXISTS container_processing (
     container_id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
-    container_type VARCHAR(50) NOT NULL,
+    container_type VARCHAR(50) NOT NULL CHECK (container_type IN ('zip', 'dd_image')),
     original_filename VARCHAR(255),
     original_size BIGINT,
-    agent_id VARCHAR(255),
+    agent_id VARCHAR(255) NOT NULL,
     source VARCHAR(1000),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
-    status VARCHAR(50) NOT NULL DEFAULT 'submitted',
-    total_files_extracted INTEGER DEFAULT 0,
-    total_bytes_extracted BIGINT DEFAULT 0,
+    status VARCHAR(50) NOT NULL DEFAULT 'submitted' CHECK (status IN (
+        'submitted', 'processing', 'extracting', 'extracted', 'workflows_complete', 'failed'
+    )),
+    total_files_extracted INTEGER NOT NULL DEFAULT 0,
+    total_bytes_extracted BIGINT NOT NULL DEFAULT 0,
     submitted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     expiration TIMESTAMP WITH TIME ZONE,
     processing_started_at TIMESTAMP WITH TIME ZONE,
     processing_completed_at TIMESTAMP WITH TIME ZONE,
     error_message TEXT,
-    workflows_completed INTEGER DEFAULT 0,
-    workflows_failed INTEGER DEFAULT 0,
-    workflows_total INTEGER DEFAULT 0,
-    total_bytes_processed BIGINT DEFAULT 0
+    workflows_completed INTEGER NOT NULL DEFAULT 0,
+    workflows_failed INTEGER NOT NULL DEFAULT 0,
+    workflows_total INTEGER NOT NULL DEFAULT 0,
+    total_bytes_processed BIGINT NOT NULL DEFAULT 0
 );
 
 
@@ -950,7 +902,7 @@ CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
     plaintext_key BYTEA,
     plaintext_key_sha1 BYTEA,
     backup_key_guid TEXT,
-    masterkey_type TEXT DEFAULT 'unknown',
+    masterkey_type TEXT NOT NULL DEFAULT 'unknown' CHECK (masterkey_type IN ('unknown', 'user', 'system', 'system_user')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (project, guid)

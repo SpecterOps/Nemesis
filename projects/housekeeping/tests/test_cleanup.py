@@ -153,7 +153,7 @@ async def test_database_failure_after_storage_delete_is_reported(conn, storage, 
     """Rows stay; the next run deletes them because already-absent objects count as deleted."""
     monkeypatch.setattr(hk, "get_expired_object_ids", AsyncMock(return_value=["a"]))
     monkeypatch.setattr(hk, "get_transform_object_map", AsyncMock(return_value={}))
-    conn.fail_on = "DELETE FROM files_enriched_dataset"
+    conn.fail_on = "DELETE FROM files_enriched\n"
     assert await hk.delete_database_entries(["a"]) is False
 
 

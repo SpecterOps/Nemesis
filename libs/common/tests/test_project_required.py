@@ -20,7 +20,7 @@ def project_columns(schema: str) -> list[str]:
 @pytest.mark.parametrize("path", SCHEMAS, ids=lambda p: p.parent.name)
 def test_every_project_column_is_required_and_non_blank(path):
     columns = project_columns(path.read_text())
-    assert len(columns) >= 13
+    assert len(columns) >= 12
     for column in columns:
         assert "NOT NULL" in column, column
         assert "CHECK (btrim(project) <> '')" in column, column

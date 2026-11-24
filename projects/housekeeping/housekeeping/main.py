@@ -36,8 +36,8 @@ async def get_db_pool():
 
 async def get_expired_object_ids(expiration_date: datetime | None = None) -> list[UUID]:
     """
-    Get a list of all object_ids from files, files_enriched, and files_enriched_dataset tables
-    that have passed their expiration date.
+    Get a list of all object_ids from the files and files_enriched tables that have passed their
+    expiration date.
 
     Args:
         expiration_date: Optional date to use for comparison instead of current datetime.
@@ -55,13 +55,9 @@ async def get_expired_object_ids(expiration_date: datetime | None = None) -> lis
                 FROM (
                     SELECT object_id FROM files WHERE expiration < $1
                     UNION
-                    SELECT object_id FROM files_enriched WHERE expiration < $2
-                    UNION
-                    SELECT object_id FROM files_enriched_dataset WHERE expiration < $3
+                    SELECT object_id FROM files_enriched WHERE expiration < $1
                 ) AS expired
                 """,
-                comparison_date,
-                comparison_date,
                 comparison_date,
             )
             return [record["object_id"] for record in records]
@@ -138,15 +134,6 @@ async def delete_database_entries(object_ids: list[UUID]) -> bool:
             async with conn.transaction():
                 # The CASCADE delete should handle related records in other tables due to the foreign key constraints
                 # defined in the schema
-
-                # Delete from files_enriched_dataset
-                await conn.execute(
-                    """
-                    DELETE FROM files_enriched_dataset
-                    WHERE object_id = ANY($1::uuid[])
-                    """,
-                    object_ids,
-                )
 
                 # Delete from files_enriched (will cascade to transforms, enrichments, etc.)
                 await conn.execute(
