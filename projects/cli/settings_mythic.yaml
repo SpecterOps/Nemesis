@@ -30,6 +30,9 @@ nemesis:
 networking:
   timeout_sec: 30
   validate_https_certs: true
+  # Optional PEM file of CAs to trust for Mythic (e.g. Mythic's own self-signed certificate) instead of the
+  # system trust store.
+  # ca_file: "~/mythic-ca.pem"
 
 sync:
   pending_give_up_days: 7 # Stop waiting for a download that has made no progress for this many days

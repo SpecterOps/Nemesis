@@ -94,12 +94,24 @@ class DatabaseConfig:
 class NetworkingConfig:
     timeout_sec: int
     validate_https_certs: bool
+    # PEM bundle of CAs to trust for Mythic instead of the system store; None uses the system store.
+    ca_file: str | None = None
+
+    def __post_init__(self):
+        if self.ca_file is not None:
+            if not isinstance(self.ca_file, str) or not self.ca_file.strip():
+                raise ValueError("networking.ca_file must be a nonempty path")
+            path = Path(self.ca_file).expanduser()
+            if not path.is_file():
+                raise ValueError(f"networking.ca_file not found: {path}")
+            self.ca_file = str(path)
 
     @classmethod
     def from_dict(cls, data: dict) -> "NetworkingConfig":
         return cls(
             timeout_sec=data["timeout_sec"],
             validate_https_certs=data["validate_https_certs"],
+            ca_file=data.get("ca_file"),
         )
 
 

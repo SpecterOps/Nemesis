@@ -143,6 +143,9 @@ subscriptions are open at once; further pending files are polled. A periodic che
 files the discovery stream skipped. Screenshots and files without a full path are uploaded
 under their file name alone.
 
+Mythic can trust a specific CA or self-signed certificate via `networking.ca_file` (a PEM file); by
+default the system trust store is used.
+
 All connectors verify the C2's TLS certificate unless `--ignore-cert-errors` is set, download
 without a total timeout (a stalled read fails after 300 seconds), send the C2's collection time as
 the upload timestamp, and set expiration to that time plus `nemesis.expiration_days`.

@@ -16,7 +16,20 @@ from gql.transport.websockets import WebsocketsTransport
 from mythic import mythic_classes, mythic_utilities
 
 _verify_certificates = True
+_ca_file: str | None = None
 _installed = False
+
+
+def verifying_context(ca_file: str | None = None) -> ssl.SSLContext:
+    """Return a certificate-verifying context: the system trust store, or only the CAs in ``ca_file`` if given."""
+    return ssl.create_default_context(cafile=ca_file) if ca_file else ssl.create_default_context()
+
+
+def client_ssl(use_tls: bool, verify: bool, ca_file: str | None = None) -> ssl.SSLContext | bool:
+    """``ssl`` argument for the connector's own aiohttp requests to Mythic (preflight and file downloads)."""
+    if not use_tls or not verify:
+        return False
+    return verifying_context(ca_file)
 
 
 def ssl_setting(mythic: mythic_classes.Mythic, *, websocket: bool = False) -> ssl.SSLContext | bool:
@@ -28,7 +41,7 @@ def ssl_setting(mythic: mythic_classes.Mythic, *, websocket: bool = False) -> ss
     if not mythic.ssl:
         return False
     if _verify_certificates:
-        return ssl.create_default_context()
+        return verifying_context(_ca_file)
     if not websocket:
         return False
     # websockets treats ssl=False on a wss:// URL as "use the default verifying context", so an explicit
@@ -101,13 +114,15 @@ _REPLACEMENTS = {
 }
 
 
-def install(verify_certificates: bool) -> None:
+def install(verify_certificates: bool, ca_file: str | None = None) -> None:
     """Route the mythic library's connections through this module, verifying certificates unless disabled.
 
-    The setting is process-wide: the connector runs one Mythic instance per process.
+    ``ca_file`` replaces the system trust store with the CAs in that PEM file. The settings are process-wide: the
+    connector runs one Mythic instance per process.
     """
-    global _verify_certificates, _installed
+    global _verify_certificates, _ca_file, _installed
     _verify_certificates = bool(verify_certificates)
+    _ca_file = ca_file
     if not _installed:
         for name, replacement in _REPLACEMENTS.items():
             if not hasattr(mythic_utilities, name):

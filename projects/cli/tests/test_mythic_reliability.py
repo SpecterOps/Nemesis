@@ -6,6 +6,7 @@ import json
 import ssl
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -120,6 +121,7 @@ class FakeSession:
         return False
 
     def get(self, *args, **kwargs):
+        self.get_kwargs = kwargs
         return self._response
 
 
@@ -149,6 +151,7 @@ def restore_tls():
         setattr(mythic_utilities, name, value)
     tls._installed = False
     tls._verify_certificates = True
+    tls._ca_file = None
 
 
 def mythic_instance(use_ssl: bool):
@@ -527,3 +530,117 @@ def test_sync_settings_are_read(tmp_path):
 def test_invalid_sync_settings_rejected(values):
     with pytest.raises(ValueError):
         mythic_config.SyncConfig(**values)
+
+
+# --- networking.ca_file ----------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def ca_file(tmp_path):
+    import certifi
+
+    path = tmp_path / "mythic-ca.pem"
+    path.write_bytes(Path(certifi.where()).read_bytes())
+    return path
+
+
+@pytest.fixture
+def recorded_cafiles(monkeypatch):
+    """Record the cafile each verifying context is built with, while still building a real context."""
+    seen = []
+    real = ssl.create_default_context
+
+    def create(*args, **kwargs):
+        seen.append(kwargs.get("cafile"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(tls.ssl, "create_default_context", create)
+    return seen
+
+
+def test_verifying_context_defaults_to_system_store(recorded_cafiles):
+    context = tls.verifying_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+    assert recorded_cafiles == [None]
+
+
+def test_verifying_context_loads_only_the_ca_file(ca_file, recorded_cafiles):
+    context = tls.verifying_context(str(ca_file))
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+    assert recorded_cafiles == [str(ca_file)]
+    assert context.cert_store_stats()["x509_ca"] > 0
+
+
+def test_verifying_context_rejects_invalid_ca_file(tmp_path):
+    bad = tmp_path / "bad.pem"
+    bad.write_text("not a certificate")
+    with pytest.raises(ssl.SSLError):
+        tls.verifying_context(str(bad))
+
+
+@pytest.mark.asyncio
+async def test_installed_transports_use_ca_file(restore_tls, ca_file, recorded_cafiles):
+    tls.install(True, str(ca_file))
+    instance = mythic_instance(True)
+    for transport in (
+        await mythic_utilities.get_http_transport(instance),
+        await mythic_utilities.get_ws_transport(instance),
+    ):
+        assert transport.ssl.verify_mode == ssl.CERT_REQUIRED
+    assert recorded_cafiles == [str(ca_file), str(ca_file)]
+
+
+@pytest.mark.asyncio
+async def test_ca_file_ignored_when_verification_disabled(restore_tls, ca_file, recorded_cafiles):
+    tls.install(False, str(ca_file))
+    assert (await mythic_utilities.get_http_transport(mythic_instance(True))).ssl is False
+    assert str(ca_file) not in recorded_cafiles
+
+
+@pytest.mark.parametrize(
+    ("use_tls", "verify", "expected"),
+    [(False, True, False), (True, False, False)],
+)
+def test_client_ssl_without_verification(use_tls, verify, expected, ca_file):
+    assert tls.client_ssl(use_tls, verify, str(ca_file)) is expected
+
+
+def test_client_ssl_uses_ca_file(ca_file, recorded_cafiles):
+    context = tls.client_ssl(True, True, str(ca_file))
+    assert isinstance(context, ssl.SSLContext) and context.verify_mode == ssl.CERT_REQUIRED
+    assert recorded_cafiles == [str(ca_file)]
+
+
+@pytest.mark.asyncio
+async def test_download_uses_ca_file(db, nemesis, monkeypatch, ca_file, recorded_cafiles):
+    handler = make_handler(db, nemesis)
+    handler.cfg.mythic.url = "https://mythic:7443"
+    handler.cfg.networking.ca_file = str(ca_file)
+    patch_session(monkeypatch, FakeResponse())
+    await handler.handle_file(file_meta())
+    used = FakeSession.instances[-1].get_kwargs["ssl"]
+    assert isinstance(used, ssl.SSLContext) and used.verify_mode == ssl.CERT_REQUIRED
+    assert recorded_cafiles == [str(ca_file)]
+
+
+def test_config_ca_file_defaults_to_none():
+    assert mythic_config.NetworkingConfig(timeout_sec=5, validate_https_certs=True).ca_file is None
+
+
+def test_config_ca_file_expands_user(tmp_path, monkeypatch, ca_file):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    networking = mythic_config.NetworkingConfig.from_dict(
+        {"timeout_sec": 5, "validate_https_certs": True, "ca_file": "~/mythic-ca.pem"}
+    )
+    assert networking.ca_file == str(ca_file)
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_config_ca_file_rejects_empty(value):
+    with pytest.raises(ValueError, match="nonempty"):
+        mythic_config.NetworkingConfig(timeout_sec=5, validate_https_certs=True, ca_file=value)
+
+
+def test_config_ca_file_must_exist(tmp_path):
+    with pytest.raises(ValueError, match="not found"):
+        mythic_config.NetworkingConfig(timeout_sec=5, validate_https_certs=True, ca_file=str(tmp_path / "missing.pem"))

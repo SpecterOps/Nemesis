@@ -273,6 +273,7 @@ nemesis:
 networking:
   timeout_sec: 30
   validate_https_certs: true  # Verifies Mythic's certificate for logins, GraphQL, websockets and downloads
+  # ca_file: "/path/to/mythic-ca.pem"  # Optional: trust only these CAs for Mythic (default: system trust store)
 
 sync:
   pending_give_up_days: 7  # Stop waiting for a download with no new chunks for this many days

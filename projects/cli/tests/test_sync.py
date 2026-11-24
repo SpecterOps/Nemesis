@@ -1,6 +1,7 @@
 """Tests for Mythic connector startup, authentication, and supervision."""
 
 import asyncio
+import ssl as ssl_module
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -141,7 +142,11 @@ class TestSyncServiceInitializeMythic:
         assert client.current_operation_id == 42
         timeout = session_ctor.call_args.kwargs["timeout"]
         assert timeout.total == 17
-        session.get.assert_called_once_with(cfg.mythic.url, ssl=True)
+        session.get.assert_called_once()
+        assert session.get.call_args.args == (cfg.mythic.url,)
+        preflight_ssl = session.get.call_args.kwargs["ssl"]
+        assert isinstance(preflight_ssl, ssl_module.SSLContext)
+        assert preflight_ssl.verify_mode == ssl_module.CERT_REQUIRED
         mythic_api.login.assert_awaited_once_with(
             username="admin",
             password="pass",

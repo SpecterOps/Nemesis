@@ -79,13 +79,13 @@ class SyncService:
                 raise ValueError(f"Invalid Mythic URL (missing hostname): {self.cfg.mythic.url}")
             port = url.port or (443 if ssl else 80)
             # Route the mythic library's GraphQL, websocket and login requests through verified TLS.
-            tls.install(self.cfg.networking.validate_https_certs)
+            tls.install(self.cfg.networking.validate_https_certs, self.cfg.networking.ca_file)
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=self.cfg.networking.timeout_sec)
             ) as session:
                 async with session.get(
                     self.cfg.mythic.url,
-                    ssl=self.cfg.networking.validate_https_certs if ssl else False,
+                    ssl=tls.client_ssl(ssl, self.cfg.networking.validate_https_certs, self.cfg.networking.ca_file),
                 ) as resp:
                     if resp.status >= 500:
                         raise aiohttp.ClientResponseError(resp.request_info, resp.history, status=resp.status)

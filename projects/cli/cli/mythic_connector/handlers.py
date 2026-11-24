@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 import aiohttp
 import urllib3
 from cli.c2_metadata import collection_times
+from cli.mythic_connector import tls
 from cli.mythic_connector.config import (
     DEFAULT_MAX_PENDING_SUBSCRIPTIONS,
     DEFAULT_PENDING_GIVE_UP_DAYS,
@@ -530,9 +531,11 @@ class FileHandler:
                 async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                     async with session.get(
                         f"{base}/direct/download/{mythic_file_id}",
-                        ssl=self.cfg.networking.validate_https_certs
-                        if self.cfg.mythic.url.startswith("https:")
-                        else False,
+                        ssl=tls.client_ssl(
+                            self.cfg.mythic.url.startswith("https:"),
+                            self.cfg.networking.validate_https_certs,
+                            getattr(self.cfg.networking, "ca_file", None),
+                        ),
                         allow_redirects=False,
                     ) as response:
                         if response.status in (404, 410):
