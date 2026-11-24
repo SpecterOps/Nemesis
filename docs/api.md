@@ -311,6 +311,8 @@ Generate AI-based risk assessment synthesis for a specific source. NOT CACHED - 
 - `source` (string, **required**): Source name (supports URLs and special characters, case-insensitive)
 - `include_findings_details` (boolean, optional): Include detailed findings in the analysis
 - `max_tokens` (integer, optional): Maximum tokens for LLM analysis
+- `start_date` (unknown, optional): Filter by start date (same filter as the source report/PDF)
+- `end_date` (unknown, optional): Filter by end date (same filter as the source report/PDF)
 
 **Returns:** 200 on success
 
@@ -499,7 +501,7 @@ Get the status of the container file monitor
 
 Health check
 
-Health check endpoint for Docker healthcheck
+Reports 'healthy' when PostgreSQL and object storage are reachable, otherwise 'degraded' (always HTTP 200 so liveness probes don't restart the API over a dependency outage).
 
 **Returns:** 200 on success
 

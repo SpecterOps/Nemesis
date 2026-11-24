@@ -901,7 +901,7 @@
           "system"
         ],
         "summary": "Health check",
-        "description": "Health check endpoint for Docker healthcheck",
+        "description": "Reports 'healthy' when PostgreSQL and object storage are reachable, otherwise 'degraded' (always HTTP 200 so liveness probes don't restart the API over a dependency outage).",
         "operationId": "healthcheck_system_health_get",
         "responses": {
           "200": {
@@ -909,7 +909,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
+                  "$ref": "#/components/schemas/SystemHealthResponse"
                 }
               }
             }
@@ -1804,6 +1804,44 @@
               "title": "Max Tokens"
             },
             "description": "Maximum tokens for LLM analysis"
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by start date (same filter as the source report/PDF)",
+              "title": "Start Date"
+            },
+            "description": "Filter by start date (same filter as the source report/PDF)"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by end date (same filter as the source report/PDF)",
+              "title": "End Date"
+            },
+            "description": "Filter by end date (same filter as the source report/PDF)"
           }
         ],
         "responses": {
@@ -2308,6 +2346,13 @@
             "const": "chromium_app_bound_key",
             "title": "Type"
           },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Project",
+            "description": "Project the credential belongs to"
+          },
           "value": {
             "type": "string",
             "title": "Value"
@@ -2337,6 +2382,7 @@
         "type": "object",
         "required": [
           "type",
+          "project",
           "value",
           "source"
         ],
@@ -2494,6 +2540,22 @@
               }
             ],
             "title": "Filter Config"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
           }
         },
         "type": "object",
@@ -2511,6 +2573,13 @@
             "type": "string",
             "const": "domain_backup_key",
             "title": "Type"
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Project",
+            "description": "Project the credential belongs to"
           },
           "value": {
             "type": "string",
@@ -2536,6 +2605,7 @@
         "type": "object",
         "required": [
           "type",
+          "project",
           "value",
           "guid"
         ],
@@ -2549,6 +2619,13 @@
             "const": "dpapi_system",
             "title": "Type"
           },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Project",
+            "description": "Project the credential belongs to"
+          },
           "value": {
             "type": "string",
             "pattern": "^[0-9a-fA-F]{80}$",
@@ -2560,6 +2637,7 @@
         "type": "object",
         "required": [
           "type",
+          "project",
           "value"
         ],
         "title": "DpapiSystemCredentialRequest",
@@ -2698,21 +2776,6 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "HealthResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "Health status of the service"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status"
-        ],
-        "title": "HealthResponse",
-        "description": "Model representing health check response"
-      },
       "LLMSynthesisResponse": {
         "properties": {
           "success": {
@@ -2817,6 +2880,13 @@
             "const": "master_key_guid_pair",
             "title": "Type"
           },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Project",
+            "description": "Project the credential belongs to"
+          },
           "value": {
             "items": {
               "$ref": "#/components/schemas/MasterKeyGuidPair"
@@ -2829,6 +2899,7 @@
         "type": "object",
         "required": [
           "type",
+          "project",
           "value"
         ],
         "title": "MasterKeyGuidPairList",
@@ -2840,6 +2911,13 @@
             "type": "string",
             "const": "cred_key_ntlm",
             "title": "Type"
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Project",
+            "description": "Project the credential belongs to"
           },
           "value": {
             "type": "string",
@@ -2854,6 +2932,7 @@
         "type": "object",
         "required": [
           "type",
+          "project",
           "value",
           "user_sid"
         ],
@@ -2867,6 +2946,13 @@
             "const": "password",
             "title": "Type"
           },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Project",
+            "description": "Project the credential belongs to"
+          },
           "value": {
             "type": "string",
             "title": "Value"
@@ -2880,6 +2966,7 @@
         "type": "object",
         "required": [
           "type",
+          "project",
           "value",
           "user_sid"
         ],
@@ -2893,6 +2980,13 @@
             "const": "cred_key_pbkdf2",
             "title": "Type"
           },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Project",
+            "description": "Project the credential belongs to"
+          },
           "value": {
             "type": "string",
             "title": "Value"
@@ -2906,6 +3000,7 @@
         "type": "object",
         "required": [
           "type",
+          "project",
           "value",
           "user_sid"
         ],
@@ -3082,6 +3177,13 @@
             "const": "cred_key_sha1",
             "title": "Type"
           },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Project",
+            "description": "Project the credential belongs to"
+          },
           "value": {
             "type": "string",
             "title": "Value"
@@ -3095,6 +3197,7 @@
         "type": "object",
         "required": [
           "type",
+          "project",
           "value",
           "user_sid"
         ],
@@ -3222,6 +3325,28 @@
           "verified_findings"
         ],
         "title": "SourceSummary"
+      },
+      "SystemHealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "'healthy' when all dependencies are reachable, otherwise 'degraded'"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Checks",
+            "description": "Per-dependency result: 'ok', 'error' or 'timeout'"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "SystemHealthResponse"
       },
       "SystemReport": {
         "properties": {
