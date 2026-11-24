@@ -4,8 +4,9 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
+from common.data_issues import DataIssueKind, log_data_issue
 from common.helpers import MAX_EXTENSION_LENGTH
-from common.models2.api import AgentId, ProjectName, SecurityInfo, SourceName, UTCDatetime
+from common.models2.api import AgentId, ProjectName, SecurityInfo, SourceName, UTCDatetime, is_known_source
 from common.models2.base import NemesisModel
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
@@ -284,7 +285,7 @@ class File(NemesisModel):
 
     object_id: UUID
     agent_id: AgentId
-    source: SourceName | None = None
+    source: SourceName
     project: ProjectName
     timestamp: UTCDatetime
     expiration: UTCDatetime
@@ -324,6 +325,10 @@ class File(NemesisModel):
         """
         assert metadata.timestamp is not None, "FileMetadata.timestamp must not be None"
         assert metadata.expiration is not None, "FileMetadata.expiration must not be None"
+        if not is_known_source(metadata.source):
+            log_data_issue(
+                DataIssueKind.SOURCE_DEFAULTED, field="files.source", object_id=object_id, source=metadata.source
+            )
         return cls(
             object_id=object_id,
             agent_id=metadata.agent_id,

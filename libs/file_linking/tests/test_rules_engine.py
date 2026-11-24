@@ -24,6 +24,7 @@ def create_file_enriched(object_id: str, path: str, mime_type: str, magic_type: 
     return FileEnriched(
         object_id=uuid5(NAMESPACE_URL, object_id),
         agent_id="test-agent-id",
+        source="host://test-host",
         project="test-project",
         timestamp=datetime.now(UTC),
         expiration=datetime.now(UTC) + timedelta(days=30),

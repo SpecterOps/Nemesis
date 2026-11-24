@@ -19,7 +19,7 @@ from cli.c2_ids import is_safe_c2_id, safe_child_path
 from cli.c2_metadata import collection_times, join_remote_path
 from cli.nemesis_client import PreviewUploadResult, UploadClient
 from cli.stage1_connector.outflankc2_client import Download, Implant, OutflankC2Client
-from common.models2.api import FileMetadata, FileWithMetadataResponse
+from common.models2.api import UNKNOWN_SOURCE, FileMetadata, FileWithMetadataResponse
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +214,7 @@ class OutflankDownloadProcessor:
 
             # Use the implant hostname as the source identifier, falling back to the download's own record
             hostname = (implant.hostname if implant else None) or getattr(download, "implant_hostname", None)
-            source = f"host://{hostname}" if hostname else None
+            source = f"host://{hostname}" if hostname else UNKNOWN_SOURCE
             timestamp, expiration = collection_times(getattr(download, "timestamp", None), self.expiration_days)
 
             metadata = FileMetadata(

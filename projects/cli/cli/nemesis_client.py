@@ -10,6 +10,7 @@ from cli.c2_metadata import collection_times
 from cli.config import NemesisConfig
 from cli.tls_trust import httpx_verify
 from common.models2.api import (
+    UNKNOWN_SOURCE,
     APIInfo,
     ErrorResponse,
     FileMetadata,
@@ -132,7 +133,9 @@ class NemesisClient:
         if self._http is None:
             raise RuntimeError("NemesisClient must be used inside 'async with'")
 
-    def create_file_metadata(self, path: str, agent_id: str, project: str, source: str | None = None) -> FileMetadata:
+    def create_file_metadata(
+        self, path: str, agent_id: str, project: str, source: str = UNKNOWN_SOURCE
+    ) -> FileMetadata:
         timestamp, expiration = collection_times(None, self.cfg.expiration_days)
         return FileMetadata(
             agent_id=agent_id,

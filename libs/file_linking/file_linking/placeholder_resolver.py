@@ -9,6 +9,7 @@ import re
 from dataclasses import dataclass
 
 from common.logger import get_logger
+from common.models2.api import is_known_source
 
 from file_linking.database_service import FileLinkingDatabaseService
 
@@ -200,7 +201,7 @@ class PlaceholderResolver:
             Real file arrives: '/C:/Users/john.doe/AppData/.../abc123'
             → Updates placeholder entry to use real path
         """
-        if not file_path or not source:
+        if not file_path or not is_known_source(source):
             return 0
 
         # Query for placeholder entries for this source
@@ -274,7 +275,7 @@ class PlaceholderResolver:
             Real file exists:   '/C:/Users/john.doe/AppData/.../abc123'
             → Returns the real path instead of creating placeholder entry
         """
-        if not placeholder_path or not source:
+        if not placeholder_path or not is_known_source(source):
             return None
 
         # Only process if path contains placeholders

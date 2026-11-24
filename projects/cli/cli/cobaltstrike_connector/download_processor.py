@@ -19,7 +19,7 @@ from cli.c2_ids import is_safe_c2_id
 from cli.c2_metadata import collection_times, join_remote_path
 from cli.cobaltstrike_connector.cobaltstrike_client import Beacon, CobaltStrikeClient, Download
 from cli.nemesis_client import PreviewUploadResult, UploadClient
-from common.models2.api import FileMetadata, FileWithMetadataResponse
+from common.models2.api import UNKNOWN_SOURCE, FileMetadata, FileWithMetadataResponse
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +198,7 @@ class CobaltStrikeDownloadProcessor:
             ensure_complete_size(downloaded_file_info.file_path, getattr(download, "size", None))
 
             # Use the beacon computer as the source identifier
-            source = f"host://{beacon.computer}" if beacon and beacon.computer else None
+            source = f"host://{beacon.computer}" if beacon and beacon.computer else UNKNOWN_SOURCE
             timestamp, expiration = collection_times(getattr(download, "timestamp", None), self.expiration_days)
 
             metadata = FileMetadata(

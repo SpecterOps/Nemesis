@@ -25,8 +25,10 @@ from common.models2.api import (
     MAX_AGENT_ID_LENGTH,
     MAX_PROJECT_LENGTH,
     MAX_SOURCE_LENGTH,
+    UNKNOWN_SOURCE,
     FileFilters,
     ensure_utc_datetime,
+    is_known_source,
 )
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from common.storage import StorageS3
@@ -111,6 +113,9 @@ def validate_container_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         for field in ("timestamp", "expiration"):
             if metadata.get(field) is not None:
                 metadata[field] = _parse_timestamp(field, metadata[field]).isoformat()
+        if metadata.get("source") is None:
+            # An omitted source means "origin unknown" (see common.models2.api.UNKNOWN_SOURCE)
+            metadata["source"] = UNKNOWN_SOURCE
     except ContainerMetadataError as e:
         log_data_issue(DataIssueKind.REJECTED_INPUT, field="container_metadata", reason=str(e))
         raise
@@ -234,6 +239,13 @@ class BaseContainerExtractor:
         or too long, so that a bad config fails up front instead of every extracted file failing.
         """
         validate_container_metadata(file_metadata)
+        if not is_known_source(file_metadata["source"]):
+            log_data_issue(
+                DataIssueKind.SOURCE_DEFAULTED,
+                field="container_processing.source",
+                object_id=container_id,
+                source=file_metadata["source"],
+            )
 
         self.container_id = container_id
         self.file_metadata = file_metadata

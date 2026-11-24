@@ -155,6 +155,7 @@ async def store_dotnet_results(
                 file_message = File(
                     object_id=decompilation_object_id,
                     agent_id=file_enriched.agent_id,
+                    source=file_enriched.source,
                     project=file_enriched.project,
                     timestamp=file_enriched.timestamp,
                     expiration=file_enriched.expiration,

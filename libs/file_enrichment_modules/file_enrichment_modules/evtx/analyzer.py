@@ -1146,6 +1146,7 @@ class EVTXAnalyzer(EnrichmentModule):
                         file_message = File(
                             object_id=child_id,
                             agent_id=file_enriched.agent_id,
+                            source=file_enriched.source,
                             project=file_enriched.project,
                             timestamp=file_enriched.timestamp,
                             expiration=file_enriched.expiration,

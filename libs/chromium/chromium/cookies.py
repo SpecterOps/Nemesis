@@ -257,7 +257,7 @@ async def _insert_cookies(
                  source_port, encryption_type, masterkey_guid, state_key_id,
                  is_decrypted, value_enc, value_dec)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-                ON CONFLICT (project, source, username, browser, host_key, name, path)
+                ON CONFLICT (project, source, username, browser, host_key, name, path) WHERE source <> 'unknown://unknown'
                 DO UPDATE SET
                     host_key = EXCLUDED.host_key,
                     name = EXCLUDED.name,

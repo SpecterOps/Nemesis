@@ -23,7 +23,7 @@ from cli.mythic_connector.logger import get_logger
 
 # from cli.mythic_connector.nemesis import NemesisClient
 from cli.nemesis_client import PreviewUploadResult, UploadClient
-from common.models2.api import FileMetadata, FileWithMetadataResponse
+from common.models2.api import UNKNOWN_SOURCE, FileMetadata, FileWithMetadataResponse
 from gql.transport.exceptions import TransportClosed
 from mythic import mythic, mythic_classes
 
@@ -618,8 +618,9 @@ class FileHandler:
                 """Callback to upload the downloaded file to Nemesis."""
 
                 self._total_files_count += 1
-                # Use the host field as the source identifier
-                source = f"host://{file_meta.get('host', 'unknown')}"
+                # Use the host field as the source identifier; without one the origin is unknown
+                host = str(file_meta.get("host") or "").strip()
+                source = f"host://{host}" if host else UNKNOWN_SOURCE
 
                 timestamp, expiration = collection_times(
                     _parse_mythic_timestamp(file_meta.get("timestamp")), self.cfg.nemesis.expiration_days

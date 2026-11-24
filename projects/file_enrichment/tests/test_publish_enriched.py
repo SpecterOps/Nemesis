@@ -25,6 +25,7 @@ class TestShouldConvertDocument:
         return FileEnriched(
             object_id="00000000-0000-0000-0000-000000000123",
             agent_id="test-agent",
+            source="host://ws01",
             project="test-project",
             timestamp=datetime.now(UTC),
             expiration=datetime.now(UTC) + timedelta(days=30),

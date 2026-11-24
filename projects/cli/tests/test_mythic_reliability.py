@@ -672,3 +672,16 @@ def test_env_override_missing_ca_file_rejected(tmp_path, monkeypatch):
             mythic_config.get_settings(write_settings(tmp_path, ""))
     finally:
         mythic_config.get_settings.cache_clear()
+
+
+# --- source fallback ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("host", "expected"), [("WS01", "host://WS01"), (None, "unknown://unknown"), ("  ", "unknown://unknown")]
+)
+@pytest.mark.asyncio
+async def test_source_from_host_or_unknown(handler, nemesis, monkeypatch, host, expected):
+    patch_session(monkeypatch, FakeResponse())
+    await handler.handle_file(file_meta(host=host))
+    assert nemesis.post_file.await_args.args[1].source == expected

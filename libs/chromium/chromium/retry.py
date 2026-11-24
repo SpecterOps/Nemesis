@@ -135,7 +135,7 @@ def _pending_rows_query(table: str, value_column: str, state_key_scope: tuple | 
     """
     if state_key_scope is not None:
         return select + (
-            "AND encryption_type IN ('key', 'abe') AND source = $1 AND username = $2 AND browser = $3 AND project = $4"
+            "AND encryption_type IN ('key', 'abe') AND source = $1 AND source <> 'unknown://unknown' AND username = $2 AND browser = $3 AND project = $4"
         )
     return (
         select
@@ -255,7 +255,7 @@ async def _retry_decrypt_cookies(
                             state_key_row = await conn.fetchrow(
                                 """
                                 SELECT id FROM chromium.state_keys
-                                WHERE project = $6 AND source = $1 AND username = $2 AND browser = $3
+                                WHERE project = $6 AND source = $1 AND source <> 'unknown://unknown' AND username = $2 AND browser = $3
                                 AND (
                                     (key_is_decrypted = TRUE AND $4 = 'key')
                                     OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
@@ -437,7 +437,7 @@ async def _retry_decrypt_logins(
                                 state_key_row = await conn.fetchrow(
                                     """
                                     SELECT id FROM chromium.state_keys
-                                    WHERE project = $6 AND source = $1 AND username = $2 AND browser = $3
+                                    WHERE project = $6 AND source = $1 AND source <> 'unknown://unknown' AND username = $2 AND browser = $3
                                     AND (
                                         (key_is_decrypted = TRUE AND $4 = 'key')
                                         OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
@@ -455,7 +455,7 @@ async def _retry_decrypt_logins(
                                 state_key_row = await conn.fetchrow(
                                     """
                                     SELECT id FROM chromium.state_keys
-                                    WHERE project = $4 AND source = $1
+                                    WHERE project = $4 AND source = $1 AND source <> 'unknown://unknown'
                                     AND (
                                         (key_is_decrypted = TRUE AND $2 = 'key')
                                         OR (app_bound_key_is_decrypted = TRUE AND $3 = 'abe')

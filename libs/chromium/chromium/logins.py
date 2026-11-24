@@ -233,7 +233,7 @@ async def _insert_logins(
                  date_password_modified, times_used, encryption_type, masterkey_guid,
                  state_key_id, is_decrypted, password_value_enc, password_value_dec)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-                ON CONFLICT (project, source, username, browser, origin_url, username_value)
+                ON CONFLICT (project, source, username, browser, origin_url, username_value) WHERE source <> 'unknown://unknown'
                 DO UPDATE SET
                     origin_url = EXCLUDED.origin_url,
                     username_value = EXCLUDED.username_value,

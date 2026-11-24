@@ -200,6 +200,18 @@ def validate_filters(file_filters: dict) -> None:
         raise ValueError("At least one of 'include' or 'exclude' patterns must be specified")
 
 
+UNKNOWN_SOURCE_WARNING = (
+    "No --source given: Nemesis will record these files as 'unknown://unknown', and they won't be correlated with "
+    "other files (registry hive pairing, Chromium key lookups, file listings). Pass e.g. --source host://WS01."
+)
+
+
+def warn_if_source_missing(source: str | None) -> None:
+    """Warn once per command when the operator didn't say where the files came from."""
+    if not source:
+        logger.warning(UNKNOWN_SOURCE_WARNING)
+
+
 def submit_main(
     debug: bool,
     paths: tuple[str, ...],
@@ -288,6 +300,8 @@ def submit_main(
         if max_files is not None and max_files <= 0:
             logger.error("Max files must be a positive integer")
             sys.exit(1)
+
+        warn_if_source_missing(source)
 
         # Validate filter options
         file_filters = None

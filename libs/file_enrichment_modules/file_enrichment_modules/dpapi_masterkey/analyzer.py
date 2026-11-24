@@ -7,6 +7,7 @@ from uuid import UUID
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import EnrichmentResult
+from common.models2.api import is_known_source
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
@@ -69,6 +70,9 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
         """Find an existing hive by path."""
         if not self.asyncpg_pool:
             logger.warning("No connection pool available, cannot find existing hive")
+            return None
+        if not is_known_source(file_enriched.source):
+            # Hives from an unknown origin may come from different machines: never pair them
             return None
 
         try:
@@ -148,7 +152,7 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
 
     async def _create_proactive_file_linkings(self, file_enriched):
         """Create proactive file linkings for the related registry hives."""
-        if not file_enriched.source or not file_enriched.path:
+        if not is_known_source(file_enriched.source) or not file_enriched.path:
             return
 
         drive = get_drive_from_path(file_enriched.path) or ""

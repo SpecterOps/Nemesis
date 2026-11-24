@@ -31,6 +31,7 @@ def event(**file_overrides):
     data = {
         "object_id": label_id("obj-1"),
         "agent_id": "agent",
+        "source": "host://ws01",
         "project": "proj",
         "timestamp": "2026-01-01T00:00:00Z",
         "expiration": "2027-01-01T00:00:00Z",

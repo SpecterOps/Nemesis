@@ -137,7 +137,7 @@ async def get_state_key_id(
         async with asyncpg_pool.acquire() as conn:
             result = await conn.fetchrow(
                 """SELECT id FROM chromium.state_keys
-                   WHERE project = $1 AND source = $2 AND username = $3 AND browser = $4""",
+                   WHERE project = $1 AND source = $2 AND source <> 'unknown://unknown' AND username = $3 AND browser = $4""",
                 project,
                 source,
                 username,
@@ -197,7 +197,7 @@ async def get_all_state_keys_from_source(source: str, asyncpg_pool: asyncpg.Pool
             results = await conn.fetch(
                 """SELECT id, username, browser, key_bytes_dec, key_is_decrypted,
                           app_bound_key_dec, app_bound_key_is_decrypted
-                   FROM chromium.state_keys WHERE project = $1 AND source = $2""",
+                   FROM chromium.state_keys WHERE project = $1 AND source = $2 AND source <> 'unknown://unknown'""",
                 project,
                 source,
             )

@@ -145,7 +145,7 @@ async def _get_chromekey_from_source(source: str, asyncpg_pool: asyncpg.Pool, *,
         async with asyncpg_pool.acquire() as conn:
             result = await conn.fetchrow(
                 """SELECT key_bytes_dec FROM chromium.chrome_keys
-                   WHERE project = $1 AND source = $2 AND key_is_decrypted = TRUE""",
+                   WHERE project = $1 AND source = $2 AND source <> 'unknown://unknown' AND key_is_decrypted = TRUE""",
                 project,
                 source,
             )
@@ -363,7 +363,7 @@ async def _insert_state_keys(
                  app_bound_key_user_masterkey_guid, app_bound_key_system_dec, app_bound_key_user_dec,
                  app_bound_key_dec, app_bound_key_is_decrypted)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-                ON CONFLICT (project, source, username, browser)
+                ON CONFLICT (project, source, username, browser) WHERE source <> 'unknown://unknown'
                 DO UPDATE SET
                     key_masterkey_guid = EXCLUDED.key_masterkey_guid,
                     key_bytes_enc = EXCLUDED.key_bytes_enc,
@@ -402,7 +402,7 @@ async def _insert_state_keys(
             # Get the inserted state key ID
             result = await conn.fetchrow(
                 """SELECT id FROM chromium.state_keys
-                   WHERE project = $1 AND source = $2 AND username = $3 AND browser = $4""",
+                   WHERE project = $1 AND source = $2 AND source <> 'unknown://unknown' AND username = $3 AND browser = $4""",
                 state_key_project,
                 file_enriched.source,
                 username,
@@ -415,7 +415,7 @@ async def _insert_state_keys(
                     """
                     UPDATE chromium.logins
                     SET state_key_id = $1
-                    WHERE project = $5 AND source = $2 AND username = $3 AND browser = $4
+                    WHERE project = $5 AND source = $2 AND source <> 'unknown://unknown' AND username = $3 AND browser = $4
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                 """,
@@ -430,7 +430,7 @@ async def _insert_state_keys(
                     """
                     UPDATE chromium.cookies
                     SET state_key_id = $1
-                    WHERE project = $5 AND source = $2 AND username = $3 AND browser = $4
+                    WHERE project = $5 AND source = $2 AND source <> 'unknown://unknown' AND username = $3 AND browser = $4
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                 """,
@@ -726,7 +726,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     """
                     UPDATE chromium.logins
                     SET state_key_id = $1
-                    WHERE project = $5 AND source = $2 AND username = $3 AND browser = $4
+                    WHERE project = $5 AND source = $2 AND source <> 'unknown://unknown' AND username = $3 AND browser = $4
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                     """,
@@ -741,7 +741,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     """
                     UPDATE chromium.cookies
                     SET state_key_id = $1
-                    WHERE project = $5 AND source = $2 AND username = $3 AND browser = $4
+                    WHERE project = $5 AND source = $2 AND source <> 'unknown://unknown' AND username = $3 AND browser = $4
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                     """,
@@ -902,7 +902,7 @@ async def retry_decrypt_state_keys_for_chromekey(
                        app_bound_key_user_masterkey_guid
                 FROM chromium.state_keys
                 WHERE project = $2
-                AND source = $1
+                AND source = $1 AND source <> 'unknown://unknown'
                 AND app_bound_key_is_decrypted = FALSE
                 AND app_bound_key_user_dec IS NOT NULL
                 AND length(app_bound_key_user_dec) > 0
@@ -964,7 +964,7 @@ async def retry_decrypt_state_keys_for_chromekey(
                                 """
                                 UPDATE chromium.logins
                                 SET state_key_id = $1
-                                WHERE project = $5 AND source = $2 AND username = $3 AND browser = $4
+                                WHERE project = $5 AND source = $2 AND source <> 'unknown://unknown' AND username = $3 AND browser = $4
                                 AND state_key_id IS NULL
                                 AND encryption_type IN ('key', 'abe')
                                 """,
@@ -979,7 +979,7 @@ async def retry_decrypt_state_keys_for_chromekey(
                                 """
                                 UPDATE chromium.cookies
                                 SET state_key_id = $1
-                                WHERE project = $5 AND source = $2 AND username = $3 AND browser = $4
+                                WHERE project = $5 AND source = $2 AND source <> 'unknown://unknown' AND username = $3 AND browser = $4
                                 AND state_key_id IS NULL
                                 AND encryption_type IN ('key', 'abe')
                                 """,

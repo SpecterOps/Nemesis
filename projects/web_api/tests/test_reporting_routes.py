@@ -20,11 +20,11 @@ def _source_rows():
     return [
         ("HOST-B", 10, Decimal(1000), NOW, 4, 1),
         ("HOST-A", 5, Decimal(500), NOW - timedelta(days=1), 0, 0),
-        (None, 3, None, NOW - timedelta(days=2), 2, 0),
+        ("UNKNOWN://UNKNOWN", 3, None, NOW - timedelta(days=2), 2, 0),
     ]
 
 
-def test_sources_list_maps_rows_and_drops_null_source():
+def test_sources_list_maps_rows_and_leaves_out_unknown_source():
     pool = FakePool([_source_rows()])
     sources = rr.get_sources_list(pool)
     assert [s.source for s in sources] == ["HOST-B", "HOST-A"]
@@ -397,7 +397,7 @@ def test_system_report_findings_timeline_uses_finding_created_at():
 def test_system_report_sources_with_findings_counts_all_sources():
     """The counts cover every source, not only the `sources_limit` most recent ones."""
     rows = [(f"H{i}", 1, 1, NOW - timedelta(minutes=i), 1 if i >= 60 else 0, 1 if i >= 75 else 0) for i in range(80)]
-    rows.append((None, 3, 0, NOW - timedelta(days=9), 5, 5))  # NULL source is not a source
+    rows.append(("UNKNOWN://UNKNOWN", 3, 0, NOW - timedelta(days=9), 5, 5))  # unknown origin is not a source
     report = rr.get_system_report_data(FakePool(_system_results(rows)))
     assert len(report.sources) == 50
     assert all(s.finding_count == 0 for s in report.sources)  # the listed 50 have no findings

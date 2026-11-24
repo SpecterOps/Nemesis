@@ -15,6 +15,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from common.logger import get_logger
+from common.models2.api import UNKNOWN_SOURCE
 from psycopg import Connection
 from psycopg.rows import TupleRow
 from psycopg_pool import ConnectionPool
@@ -108,17 +109,16 @@ def _timeline_days(today: date) -> list[date]:
     return [today - timedelta(days=offset) for offset in range(TIMELINE_DAYS - 1, -1, -1)]
 
 
-def _source_stats(
-    cur, conditions: list[str], params: list[Any]
-) -> list[tuple[str | None, int, int | None, Any, int, int]]:
-    """Per-source (UPPER(source), NULL included) file and finding statistics in two table scans.
+def _source_stats(cur, conditions: list[str], params: list[Any]) -> list[tuple[str, int, int | None, Any, int, int]]:
+    """Per-source (UPPER(source)) file and finding statistics in two table scans.
+
+    Files without a known origin are stored as ``unknown://unknown`` and appear as that one bucket.
 
     Returns rows of (source, file_count, total_size, last_activity, finding_count, verified_findings).
     """
     where = _where(conditions)
-    # Join key that is never NULL (so the two aggregates hash-join; IS NOT DISTINCT FROM would force
-    # a nested loop over sources x sources) while keeping NULL and '' sources apart.
-    source_key = "CASE WHEN fe.source IS NULL THEN 'N' ELSE 'S' || UPPER(fe.source) END"
+    # source is NOT NULL, so the case-insensitive source itself is the join key (the two aggregates hash-join).
+    source_key = "UPPER(fe.source)"
     cur.execute(
         f"""
         WITH {LATEST_TRIAGE_CTE},
@@ -153,6 +153,11 @@ def _source_stats(
     return cur.fetchall()
 
 
+def _is_listed_source(upper_source: str) -> bool:
+    """Per-source lists and counts leave out the unknown-origin bucket: those files may come from many machines."""
+    return upper_source != UNKNOWN_SOURCE.upper()
+
+
 def _to_source_summaries(rows, limit: int | None = None) -> list[SourceSummary]:
     sources = [
         SourceSummary(
@@ -163,7 +168,7 @@ def _to_source_summaries(rows, limit: int | None = None) -> list[SourceSummary]:
             last_activity=row[3],
         )
         for row in rows
-        if row[0] is not None
+        if _is_listed_source(row[0])
     ]
     return sources[:limit] if limit is not None else sources
 
@@ -518,14 +523,14 @@ def get_system_report_data(
         with conn.cursor() as cur:
             # Per-source stats (NULL source included) -> overall summary + top 50 sources
             source_rows = _source_stats(cur, conditions, params)
-            total_sources = sum(1 for row in source_rows if row[0] is not None)
+            total_sources = sum(1 for row in source_rows if _is_listed_source(row[0]))
             total_files = sum(row[1] for row in source_rows)
             total_size = sum(row[2] or 0 for row in source_rows)
             total_findings = sum(row[4] for row in source_rows)
             verified_true_positives = sum(row[5] for row in source_rows)
             # Counted over every source, not just the `sources_limit` most recent ones listed below.
-            sources_with_findings = sum(1 for row in source_rows if row[0] is not None and row[4] > 0)
-            sources_with_verified_findings = sum(1 for row in source_rows if row[0] is not None and row[5] > 0)
+            sources_with_findings = sum(1 for row in source_rows if _is_listed_source(row[0]) and row[4] > 0)
+            sources_with_verified_findings = sum(1 for row in source_rows if _is_listed_source(row[0]) and row[5] > 0)
 
             # Credentials summary
             cur.execute(

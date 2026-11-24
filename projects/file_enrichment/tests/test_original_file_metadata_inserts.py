@@ -46,6 +46,7 @@ def make_file(**overrides) -> File:
     return File(
         object_id=uuid4(),
         agent_id="a",
+        source="host://ws01",
         project="p",
         timestamp=now,
         expiration=now + timedelta(days=1),

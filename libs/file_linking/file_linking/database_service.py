@@ -9,6 +9,7 @@ from uuid import UUID
 
 import asyncpg
 from common.logger import get_logger
+from common.models2.api import is_known_source
 
 logger = get_logger(__name__)
 
@@ -42,7 +43,8 @@ class FileLinkingDatabaseService:
         Returns:
             bool: True if successful, False otherwise
         """
-        if source and path:
+        # Files from an unknown origin are never grouped as one host's listing
+        if is_known_source(source) and path:
             try:
                 # Use single upsert query for better performance
                 # UPDATE only executes on actual conflicts, not on every call
@@ -104,7 +106,8 @@ class FileLinkingDatabaseService:
         Returns:
             bool: True if successful, False otherwise
         """
-        if source and file_path_1 and file_path_2:
+        # Files from an unknown origin are never linked as if from one host
+        if is_known_source(source) and file_path_1 and file_path_2:
             try:
                 # Use single upsert query for better performance
                 # UPDATE only executes on actual conflicts, not on every call

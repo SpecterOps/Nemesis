@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE TABLE IF NOT EXISTS files (
     object_id UUID PRIMARY KEY,
     agent_id VARCHAR(255) NOT NULL,
-    source VARCHAR(1000),
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     expiration TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE TABLE IF NOT EXISTS files_enriched (
     object_id UUID PRIMARY KEY,
     agent_id VARCHAR(255) NOT NULL,
-    source VARCHAR(1000),
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     expiration TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -353,7 +353,7 @@ AS $$
             AND (project_name IS NULL OR ef.project = project_name)
             AND (start_date IS NULL OR ef."timestamp" >= start_date)
             AND (end_date IS NULL OR ef."timestamp" <= end_date)
-            AND (source_pattern IS NULL OR ef.source IS NULL OR ef.source LIKE source_pattern)
+            AND (source_pattern IS NULL OR ef.source LIKE source_pattern)
         ORDER BY ef."timestamp" DESC
         LIMIT max_results
     )
@@ -433,7 +433,8 @@ CREATE TABLE IF NOT EXISTS alert_settings (
 -----------------------
 CREATE TABLE IF NOT EXISTS file_linkings (
     linking_id BIGSERIAL PRIMARY KEY,
-    source VARCHAR(1000) NOT NULL,
+    -- Only known sources: unknown-origin files are never grouped as one host
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> '' AND source <> 'unknown://unknown'),
     file_path_1 TEXT NOT NULL,
     file_path_2 TEXT NOT NULL,
     link_type VARCHAR(255),  -- Optional: to specify the type of relationship
@@ -453,7 +454,8 @@ CREATE INDEX IF NOT EXISTS idx_file_linkings_source ON file_linkings(source);
 -----------------------
 CREATE TABLE IF NOT EXISTS file_listings (
     listing_id BIGSERIAL PRIMARY KEY,
-    source VARCHAR(1000) NOT NULL,
+    -- Only known sources: unknown-origin files are never grouped as one host
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> '' AND source <> 'unknown://unknown'),
     path TEXT NOT NULL,
     object_id UUID,
     status VARCHAR(50) NOT NULL CHECK (status IN ('needs_to_be_collected', 'not_exists', 'collected', 'not_wanted')),
@@ -703,7 +705,7 @@ CREATE TABLE IF NOT EXISTS container_processing (
     original_filename VARCHAR(255),
     original_size BIGINT,
     agent_id VARCHAR(255) NOT NULL,
-    source VARCHAR(1000),
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     status VARCHAR(50) NOT NULL DEFAULT 'submitted' CHECK (status IN (
         'submitted', 'processing', 'extracting', 'extracted', 'workflows_complete', 'failed'
@@ -740,7 +742,7 @@ CREATE TABLE IF NOT EXISTS chromium.history (
     id SERIAL PRIMARY KEY,
     originating_object_id UUID,
     agent_id VARCHAR(255),
-    source VARCHAR(1000),
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                              -- username extracted from user data directory, if applicable
     browser TEXT,                               -- browser name extracted from user data directory, if applicable
@@ -750,16 +752,18 @@ CREATE TABLE IF NOT EXISTS chromium.history (
     visit_count BIGINT,                         -- extracted from the Chromium DB
     last_visit_time TIMESTAMP WITH TIME ZONE,   -- extracted from the Chromium DB
 
-    FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE (project, source, username, browser, url, title, last_visit_time)
+    FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE
 );
+-- Rows from an unknown source never merge: they may come from different machines.
+CREATE UNIQUE INDEX IF NOT EXISTS chromium_history_source_key ON chromium.history (project, source, username, browser, url, title, last_visit_time)
+    WHERE source <> 'unknown://unknown';
 
 -- "downloads" table in "History" file
 CREATE TABLE IF NOT EXISTS chromium.downloads (
     id SERIAL PRIMARY KEY,
     originating_object_id UUID,
     agent_id VARCHAR(255),
-    source VARCHAR(1000),
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                              -- username extracted from user data directory, if applicable
     browser TEXT,                               -- browser name extracted from user data directory, if applicable
@@ -770,16 +774,18 @@ CREATE TABLE IF NOT EXISTS chromium.downloads (
     end_time TIMESTAMP WITH TIME ZONE,          -- extracted from the Chromium DB
     total_bytes BIGINT,                         -- extracted from the Chromium DB
 
-    FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE (project, source, username, browser, url, download_path, start_time)
+    FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE
 );
+-- Rows from an unknown source never merge: they may come from different machines.
+CREATE UNIQUE INDEX IF NOT EXISTS chromium_downloads_source_key ON chromium.downloads (project, source, username, browser, url, download_path, start_time)
+    WHERE source <> 'unknown://unknown';
 
 -- extracted from a Chromium "Local State" file
 CREATE TABLE chromium.state_keys (
     id SERIAL PRIMARY KEY,
     originating_object_id UUID,
     agent_id VARCHAR(255),
-    source VARCHAR(1000),
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                                      -- username extracted from user data directory, if applicable
     browser TEXT,                                       -- browser name extracted from user data directory, if applicable
@@ -797,9 +803,11 @@ CREATE TABLE chromium.state_keys (
     app_bound_key_dec BYTEA,                            -- completely dec value
     app_bound_key_is_decrypted BOOLEAN,
 
-    FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE (project, source, username, browser)
+    FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE
 );
+-- Rows from an unknown source never merge: they may come from different machines.
+CREATE UNIQUE INDEX IF NOT EXISTS chromium_state_keys_source_key ON chromium.state_keys (project, source, username, browser)
+    WHERE source <> 'unknown://unknown';
 
 -- AES keys extracted from a CNG "Google Chromekey1" CNG file from C:\ProgramData\Microsoft\Crypto\SystemKeys\
 --      Used in v3 of the Chromium ABE decryption
@@ -807,7 +815,7 @@ CREATE TABLE chromium.chrome_keys (
     id SERIAL PRIMARY KEY,
     originating_object_id UUID,
     agent_id VARCHAR(255),
-    source VARCHAR(1000),                               -- should only be one key per host/source
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),                               -- should only be one key per host/source
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
 
     key_masterkey_guid UUID,                            -- associated _system_ masterkey GUID for key_bytes_enc
@@ -829,7 +837,7 @@ CREATE TABLE IF NOT EXISTS chromium.logins (
     id SERIAL PRIMARY KEY,
     originating_object_id UUID,
     agent_id VARCHAR(255),
-    source VARCHAR(1000),
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                                      -- username extracted from user data directory, if applicable
     browser TEXT,                                       -- browser name extracted from user data directory, if applicable
@@ -850,16 +858,18 @@ CREATE TABLE IF NOT EXISTS chromium.logins (
     password_value_dec TEXT,
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL,
-    UNIQUE (project, source, username, browser, origin_url, username_value)
+    FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL
 );
+-- Rows from an unknown source never merge: they may come from different machines.
+CREATE UNIQUE INDEX IF NOT EXISTS chromium_logins_source_key ON chromium.logins (project, source, username, browser, origin_url, username_value)
+    WHERE source <> 'unknown://unknown';
 
 -- "cookies" table in "Cookies" file
 CREATE TABLE IF NOT EXISTS chromium.cookies (
     id SERIAL PRIMARY KEY,
     originating_object_id UUID,
     agent_id VARCHAR(255),
-    source VARCHAR(1000),
+    source VARCHAR(1000) NOT NULL CHECK (btrim(source) <> ''),
     project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                                      -- username extracted from user data directory, if applicable
     browser TEXT,                                       -- browser name extracted from user data directory, if applicable
@@ -885,9 +895,11 @@ CREATE TABLE IF NOT EXISTS chromium.cookies (
     value_dec TEXT,
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL,
-    UNIQUE (project, source, username, browser, host_key, name, path)
+    FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL
 );
+-- Rows from an unknown source never merge: they may come from different machines.
+CREATE UNIQUE INDEX IF NOT EXISTS chromium_cookies_source_key ON chromium.cookies (project, source, username, browser, host_key, name, path)
+    WHERE source <> 'unknown://unknown';
 
 -- DPAPI tables
 CREATE SCHEMA dpapi;

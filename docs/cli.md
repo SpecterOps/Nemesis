@@ -180,11 +180,16 @@ Options:
 | `--username`  | `n`                   | Basic auth username                                                     |
 | `--password`  | `n`                   | Basic auth password                                                     |
 | `--project`   | `assess-test`         | Project name for metadata                                               |
-| `--source`    |                       | Source name (e.g., 'host://HOST1' or 'https://domain.com') for metadata |
+| `--source`    | `unknown://unknown`   | Source name (e.g., 'host://HOST1' or 'https://domain.com') for metadata; see note below |
 | `--agent-id`  | `submit<user>@<host>` | Agent ID for metadata                                                   |
 | `--debug`     | `false`               | Enable debug logging                                                    |
 | `--ignore-cert-errors` | `false`      | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
 | `--ca-file`            | system store | PEM file of CAs to trust for Nemesis (env: `NEMESIS_CA_FILE`) |
+
+**Source:** every file Nemesis stores has a source. When `--source` is omitted the CLI logs a warning and Nemesis records
+`unknown://unknown`. Files with that source are never correlated with each other — registry hive pairing, Chromium key
+lookups and decryption linking, file listings and linkings all skip them — because they may come from different
+machines. Pass the real origin (e.g. `--source host://WS01`) whenever you know it.
 
 ### Original file times and ownership
 
@@ -270,7 +275,7 @@ uv run python -m cli monitor /path/to/directory
 | `--username`     | `n`                    | Basic auth username                                                     |
 | `--password`     | `n`                    | Basic auth password                                                     |
 | `--project`      | `assess-test`          | Project name for metadata                                               |
-| `--source`       |                        | Source name (e.g., 'host://HOST1' or 'https://domain.com') for metadata |
+| `--source`       | `unknown://unknown`    | Source name (e.g., 'host://HOST1' or 'https://domain.com') for metadata; see note below |
 | `--agent-id`     | `monitor<user>@<host>` | Agent ID for metadata                                                   |
 | `--workers`      | `10`                   | Number of upload threads for initial submission                         |
 | `--only-monitor` | `false`                | Skip existing files, only monitor for new ones                          |

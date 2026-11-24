@@ -460,8 +460,18 @@ async def test_missing_owner_still_uploads(harness):
     await harness.process(download, None)
     metadata = harness.nemesis.post_file.await_args.args[1]
     # Outflank downloads carry the implant hostname themselves; Cobalt Strike downloads do not.
-    assert metadata.source == ("host://ws01" if harness.kind == "outflank" else None)
+    assert metadata.source == ("host://ws01" if harness.kind == "outflank" else "unknown://unknown")
     assert harness.processor.is_processed(download)
+
+
+@pytest.mark.asyncio
+async def test_outflank_without_any_hostname_uses_unknown_source(harness):
+    if harness.kind != "outflank":
+        pytest.skip("Outflank only")
+    download = harness.download()
+    download.implant_hostname = ""
+    await harness.process(download, None)
+    assert harness.nemesis.post_file.await_args.args[1].source == "unknown://unknown"
 
 
 # --- monitors ---

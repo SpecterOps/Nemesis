@@ -40,6 +40,7 @@ def file_fields(**overrides):
     return {
         "object_id": "00000000-0000-0000-0000-000000000001",
         "agent_id": "a",
+        "source": "host://ws01",
         "project": "op",
         "timestamp": now,
         "expiration": now + timedelta(days=1),

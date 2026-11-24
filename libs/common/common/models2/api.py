@@ -111,8 +111,27 @@ SOURCE_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
 ProjectName = Annotated[str, Field(min_length=1, max_length=MAX_PROJECT_LENGTH, pattern=r"\S")]
 # The agent/tool that submitted the file (VARCHAR(255)); required and non-blank.
 AgentId = Annotated[str, Field(min_length=1, max_length=MAX_AGENT_ID_LENGTH, pattern=r"\S")]
-# Where the file came from, e.g. "host://WS01" (VARCHAR(1000)); non-blank when given.
+# Where the file came from, e.g. "host://WS01" (VARCHAR(1000)); required and non-blank.
 SourceName = Annotated[str, Field(min_length=1, max_length=MAX_SOURCE_LENGTH, pattern=r"\S")]
+
+# Stored when an upload doesn't say where the file came from. Files with this source are never correlated with each
+# other (registry hive pairing, Chromium key lookups, file listings/linkings, per-source reports), because they may
+# come from different machines.
+UNKNOWN_SOURCE = "unknown://unknown"
+
+
+def is_known_source(source: str) -> bool:
+    """True unless ``source`` is the unknown-origin placeholder."""
+    return source != UNKNOWN_SOURCE
+
+
+def _default_missing_source(value: Any) -> Any:
+    """An omitted or null source means "origin unknown"."""
+    return UNKNOWN_SOURCE if value is None else value
+
+
+# Upload input: omitted/null becomes UNKNOWN_SOURCE; blank or too long is rejected.
+SourceInput = Annotated[SourceName, BeforeValidator(_default_missing_source)]
 
 
 class SecurityInfo(BaseModel):
@@ -130,7 +149,10 @@ class FileMetadata(BaseModel):
     """Metadata model for file uploads"""
 
     agent_id: AgentId
-    source: SourceName | None = None
+    source: SourceInput = Field(
+        default=UNKNOWN_SOURCE,
+        description=f"Where the file came from, e.g. 'host://WS01'. Omitted or null means '{UNKNOWN_SOURCE}'.",
+    )
     project: ProjectName
     timestamp: UTCDatetime | None = Field(
         default=None,

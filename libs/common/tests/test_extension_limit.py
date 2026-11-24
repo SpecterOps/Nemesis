@@ -51,6 +51,7 @@ def enriched(extension):
     return {
         "object_id": str(uuid4()),
         "agent_id": "a",
+        "source": "host://ws01",
         "project": "p",
         "timestamp": "2026-01-01T00:00:00Z",
         "expiration": "2027-01-01T00:00:00Z",

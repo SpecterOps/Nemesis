@@ -67,7 +67,8 @@ def test_source_length_limit_is_1000():
 def test_validate_container_metadata_coerces_in_place():
     meta = {"agent_id": 7, "project": 2024, "source": None, "path": "/x"}
     validate_container_metadata(meta)
-    assert meta == {"agent_id": "7", "project": "2024", "source": None, "path": "/x"}
+    # A null source means the origin is unknown
+    assert meta == {"agent_id": "7", "project": "2024", "source": "unknown://unknown", "path": "/x"}
 
 
 def test_validate_container_metadata_requires_agent_and_project():
@@ -426,3 +427,36 @@ def test_mark_container_failed_sets_status_and_swallows_db_errors():
 
     with patch("web_api.large_containers.psycopg.connect", side_effect=RuntimeError("db down")):
         proc.mark_container_failed(CID, "boom")  # does not raise
+
+
+# --- source: an omitted source means unknown://unknown, logged against the container -----------------------------
+
+
+@pytest.fixture
+def source_issues(monkeypatch):
+    from common import data_issues
+
+    calls = []
+    monkeypatch.setattr(data_issues, "logger", type("L", (), {"warning": lambda self, e, **kw: calls.append(kw)})())
+    return calls
+
+
+def test_missing_container_source_defaults_to_unknown_and_is_logged(source_issues):
+    meta = {"agent_id": "a", "project": "p", "path": "/x.zip"}
+    _extractor().set_container_info(CID, meta)
+    assert meta["source"] == "unknown://unknown"
+    assert [i for i in source_issues if i["kind"] == "source_defaulted"] == [
+        {
+            "kind": "source_defaulted",
+            "field": "container_processing.source",
+            "object_id": str(CID),
+            "source": "unknown://unknown",
+        }
+    ]
+
+
+def test_given_container_source_is_kept_and_not_logged(source_issues):
+    meta = {"agent_id": "a", "project": "p", "path": "/x.zip", "source": "host://WS01"}
+    _extractor().set_container_info(CID, meta)
+    assert meta["source"] == "host://WS01"
+    assert not [i for i in source_issues if i["kind"] == "source_defaulted"]

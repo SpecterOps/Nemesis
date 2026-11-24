@@ -19,7 +19,7 @@ from pathlib import Path
 
 import click
 from cli.log import setup_logging
-from cli.submit import submit_files
+from cli.submit import UNKNOWN_SOURCE_WARNING, submit_files
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -294,6 +294,8 @@ def monitor_main(
     """Monitor a folder for new files and submit them to Nemesis"""
     try:
         logger = setup_logging(debug)
+        if not source:
+            logger.warning(UNKNOWN_SOURCE_WARNING)
 
         # Validate that path is a directory
         folder_path = Path(path)

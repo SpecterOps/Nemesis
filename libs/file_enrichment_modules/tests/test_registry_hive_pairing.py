@@ -163,3 +163,28 @@ async def test_database_error_returns_none(make_analyzer):
 )
 def test_parent_dir(path, expected):
     assert _parent_dir(path) == expected
+
+
+# --- unknown origin: files from unknown://unknown may come from different machines -------------------------------
+
+
+@pytest.mark.asyncio
+async def test_unknown_source_hives_are_never_paired(make_analyzer):
+    analyzer, conn = make_analyzer(
+        [hive("C:\\Windows\\System32\\Config\\SAM", project="proj-b", source="unknown://unknown")]
+    )
+    found = await analyzer._find_existing_hive(
+        uploaded("C:\\Windows\\System32\\Config\\SYSTEM", source="unknown://unknown"), "C:/Windows/System32/Config/SAM"
+    )
+    assert found is None
+    assert conn.queries == []  # not even looked up
+
+
+@pytest.mark.asyncio
+async def test_unknown_source_gets_no_proactive_linkings(make_analyzer):
+    analyzer, _ = make_analyzer([])
+    with patch("file_enrichment_modules.registry_hive.analyzer.add_file_linking") as add_linking:
+        await analyzer._create_proactive_file_linkings(
+            uploaded("C:\\Windows\\System32\\Config\\SYSTEM", source="unknown://unknown"), "SYSTEM"
+        )
+    add_linking.assert_not_called()

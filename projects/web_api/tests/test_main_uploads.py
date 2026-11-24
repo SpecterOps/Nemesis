@@ -129,6 +129,7 @@ class TestSubmitFile:
         file_model = FileModel(
             object_id=OBJECT_ID,
             agent_id="a",
+            source="host://ws01",
             project="p",
             timestamp=datetime.now(UTC),
             expiration=datetime.now(UTC) + timedelta(days=1),
@@ -415,5 +416,34 @@ class TestUploadOriginalFileDetails:
 
     def test_invalid_security_info_rejected(self, client, upload_storage, submit_mock):
         response = _post_file(client, _metadata(security_info={"owner": "a", "unexpected": True}))
+        assert response.status_code == 400
+        upload_storage.upload_uploadfile.assert_not_called()
+
+
+class TestUploadSource:
+    @pytest.fixture
+    def issues(self, monkeypatch):
+        from common import data_issues
+
+        calls = []
+        monkeypatch.setattr(data_issues, "logger", type("L", (), {"warning": lambda self, e, **kw: calls.append(kw)})())
+        return calls
+
+    @pytest.mark.parametrize("extra", [{}, {"source": None}])
+    def test_missing_source_stored_as_unknown_and_logged(self, client, upload_storage, submit_mock, issues, extra):
+        response = _post_file(client, _metadata(**extra))
+        assert response.status_code == 200
+        assert submit_mock.await_args.args[0].source == "unknown://unknown"
+        assert any(c["kind"] == "source_defaulted" and c["field"] == "files.source" for c in issues)
+
+    def test_given_source_kept(self, client, upload_storage, submit_mock, issues):
+        response = _post_file(client, _metadata(source="host://WS01"))
+        assert response.status_code == 200
+        assert submit_mock.await_args.args[0].source == "host://WS01"
+        assert not any(c["kind"] == "source_defaulted" for c in issues)
+
+    @pytest.mark.parametrize("source", ["", "   "])
+    def test_blank_source_rejected(self, client, upload_storage, submit_mock, source):
+        response = _post_file(client, _metadata(source=source))
         assert response.status_code == 400
         upload_storage.upload_uploadfile.assert_not_called()
