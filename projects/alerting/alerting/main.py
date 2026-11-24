@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import aiohttp
 import apprise
 import common.helpers as helpers
+from alerting.mentions import neutralize_mentions
 from common.log_safety import mask
 from common.logger import get_logger
 from common.models import Alert, CloudEvent
@@ -675,12 +676,14 @@ async def send_alert_with_retries(alert) -> str:
         logger.info("Alert filtered", reason=mask(reason), alert_title=mask(alert.title))
         return "filtered"
 
-    # Prepare the alert parameters
+    # Prepare the alert parameters. Title and body carry collected data (file names, projects), which
+    # must not ping people in Slack/Discord.
     title = alert.title
     if alert.service:
         title = f"[{alert.service}] {alert.title}"
+    title = neutralize_mentions(title)
 
-    kwargs = {"body": alert.body, "title": title, "notify_type": apprise.NotifyType.WARNING}
+    kwargs = {"body": neutralize_mentions(alert.body), "title": title, "notify_type": apprise.NotifyType.WARNING}
 
     if alert.tag:
         kwargs["tag"] = alert.tag

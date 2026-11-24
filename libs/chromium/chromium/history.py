@@ -2,6 +2,7 @@
 
 import sqlite3
 from collections.abc import Callable
+from contextlib import ExitStack
 
 import asyncpg
 from common.logger import get_logger
@@ -32,20 +33,19 @@ async def process_chromium_history(
     username, browser = parse_chromium_file_path(file_enriched.path or "")
     logger.debug("[process_chromium_history]", username=username, browser=browser)
 
-    # Get database file
-    if file_path:
-        db_path = file_path
-    else:
-        storage = StorageMinio()
-        with storage.download(file_enriched.object_id) as temp_file:
-            db_path = temp_file.name
+    # Get database file. A download must stay open until parsing is done: the temp file is deleted on close.
+    with ExitStack() as stack:
+        if file_path:
+            db_path = file_path
+        else:
+            db_path = stack.enter_context(StorageMinio().download(file_enriched.object_id)).name
 
-    # Process both tables
-    assert asyncpg_pool is not None, "asyncpg_pool is required for history processing"
-    await _insert_history_urls(object_id, file_enriched, username, browser, db_path, asyncpg_pool)
-    await _insert_history_downloads(object_id, file_enriched, username, browser, db_path, asyncpg_pool)
+        # Process both tables
+        assert asyncpg_pool is not None, "asyncpg_pool is required for history processing"
+        await _insert_history_urls(object_id, file_enriched, username, browser, db_path, asyncpg_pool)
+        await _insert_history_downloads(object_id, file_enriched, username, browser, db_path, asyncpg_pool)
 
-    logger.debug("Completed processing Chromium History", object_id=object_id)
+        logger.debug("Completed processing Chromium History", object_id=object_id)
 
 
 def _table_reader(table: str, query: str) -> Callable[[sqlite3.Connection], list[tuple]]:

@@ -177,3 +177,94 @@ async def test_empty_cookies_table_inserts_nothing(tmp_path):
     pool = FakePool()
     await _insert_cookies(FILE, None, "chrome", db, None, pool)
     assert pool.inserted == []
+
+
+# --- without file_path, the helpers download the file and must parse it before it is deleted ---
+
+
+class FakeStorage:
+    """Stands in for StorageMinio: download() returns a self-deleting temp copy, like the real one."""
+
+    def __init__(self, source_path):
+        self.source_path = source_path
+        self.downloaded = []
+
+    def download(self, object_id):
+        import shutil
+        import tempfile
+
+        temp = tempfile.NamedTemporaryFile(delete=True)  # noqa: SIM115 - the caller closes it, as with StorageMinio
+        with open(self.source_path, "rb") as src:
+            shutil.copyfileobj(src, temp)
+        temp.flush()
+        self.downloaded.append(temp.name)
+        return temp
+
+
+async def run_downloaded(module, process, db, *extra):
+    import os
+    from unittest.mock import AsyncMock, patch
+
+    storage = FakeStorage(db)
+    pool = FakePool()
+    file_enriched = SimpleNamespace(
+        **{**vars(FILE), "path": "C:/Users/alice/AppData/Local/Google/Chrome/User Data/Default/x"}
+    )
+    with (
+        patch(f"chromium.{module}.StorageMinio", return_value=storage),
+        patch(f"chromium.{module}.get_file_enriched_async", new=AsyncMock(return_value=file_enriched)),
+    ):
+        await process("obj-1", None, *extra, pool)
+    assert len(storage.downloaded) == 1
+    assert not os.path.exists(storage.downloaded[0])  # cleaned up afterwards
+    return pool
+
+
+@pytest.mark.asyncio
+async def test_downloaded_cookies_are_parsed(tmp_path):
+    from chromium.cookies import process_chromium_cookies
+
+    db = make_db(
+        tmp_path / "Cookies",
+        table("cookies", COOKIE_COLUMNS),
+        "INSERT INTO cookies VALUES ('example.com', 'sid', '/', 0, 0, 0, 0, 1, 1, 1, 1, 443, x'')",
+    )
+    pool = await run_downloaded("cookies", process_chromium_cookies, db, None)
+    assert [r[6] for r in pool.inserted] == ["example.com"]
+
+
+@pytest.mark.asyncio
+async def test_downloaded_logins_are_parsed(tmp_path):
+    from chromium.logins import process_chromium_logins
+
+    db = make_db(
+        tmp_path / "Login Data",
+        table("logins", LOGIN_COLUMNS),
+        "INSERT INTO logins VALUES ('https://example.com', 'alice', 'https://example.com', 0, 0, 0, 1, x'')",
+    )
+    pool = await run_downloaded("logins", process_chromium_logins, db, None)
+    assert [r[7] for r in pool.inserted] == ["alice"]
+
+
+@pytest.mark.asyncio
+async def test_downloaded_history_is_parsed(tmp_path):
+    from chromium.history import process_chromium_history
+
+    db = make_db(
+        tmp_path / "History",
+        table("urls", URL_COLUMNS),
+        table("downloads", DOWNLOAD_COLUMNS),
+        "INSERT INTO urls VALUES ('https://example.com', 'Example', 1, 0)",
+    )
+    pool = await run_downloaded("history", process_chromium_history, db)
+    assert [r[6] for r in pool.inserted] == ["https://example.com"]
+
+
+@pytest.mark.asyncio
+async def test_downloaded_non_sqlite_file_is_skipped(tmp_path):
+    from chromium.cookies import process_chromium_cookies
+
+    path = tmp_path / "Cookies"
+    path.write_bytes(b"not a database")
+    pool = await run_downloaded("cookies", process_chromium_cookies, str(path), None)
+    assert pool.inserted == []

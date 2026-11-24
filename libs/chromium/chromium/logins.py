@@ -1,6 +1,7 @@
 """Chromium Login Data file parsing and database operations."""
 
 import sqlite3
+from contextlib import ExitStack
 
 import asyncpg
 from common.logger import get_logger
@@ -45,24 +46,23 @@ async def process_chromium_logins(
     username, browser = parse_chromium_file_path(file_enriched.path or "")
     logger.debug("[process_chromium_logins]", username=username, browser=browser)
 
-    # Get database file
-    if file_path:
-        db_path = file_path
-    else:
-        storage = StorageMinio()
-        with storage.download(file_enriched.object_id) as temp_file:
-            db_path = temp_file.name
+    # Get database file. A download must stay open until parsing is done: the temp file is deleted on close.
+    with ExitStack() as stack:
+        if file_path:
+            db_path = file_path
+        else:
+            db_path = stack.enter_context(StorageMinio().download(file_enriched.object_id)).name
 
-    if is_sqlite3(db_path) is False:
-        logger.warning(
-            "Login Data file is not a valid SQLite3 database", object_id=object_id, file_path=file_enriched.path
-        )
-        return
+        if is_sqlite3(db_path) is False:
+            logger.warning(
+                "Login Data file is not a valid SQLite3 database", object_id=object_id, file_path=file_enriched.path
+            )
+            return
 
-    assert asyncpg_pool is not None, "asyncpg_pool is required for login processing"
-    await _insert_logins(file_enriched, username, browser, db_path, dpapi_manager, asyncpg_pool)
+        assert asyncpg_pool is not None, "asyncpg_pool is required for login processing"
+        await _insert_logins(file_enriched, username, browser, db_path, dpapi_manager, asyncpg_pool)
 
-    logger.debug("Completed processing Chromium Login Data", object_id=object_id)
+        logger.debug("Completed processing Chromium Login Data", object_id=object_id)
 
 
 def _read_login_rows(conn: sqlite3.Connection) -> list[tuple]:
