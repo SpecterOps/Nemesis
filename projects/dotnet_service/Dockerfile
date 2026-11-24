@@ -1,6 +1,6 @@
 
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 
 WORKDIR /src
 
@@ -18,7 +18,7 @@ FROM build AS publish
 RUN dotnet publish ILSpyDecompilerService.csproj -c Release -o /app/publish
 
 # Development stage (for hot reload and debugging)
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS dev
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS dev
 WORKDIR /app
 COPY ./projects/dotnet_service/ .
 RUN dotnet restore
@@ -26,7 +26,7 @@ EXPOSE 5000
 ENTRYPOINT ["dotnet", "run", "--urls", "http://0.0.0.0:5000"]
 
 # Production runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS prod
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS prod
 WORKDIR /app
 
 RUN apt-get update && \

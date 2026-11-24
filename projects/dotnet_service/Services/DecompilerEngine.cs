@@ -39,7 +39,7 @@ namespace ILSpyDecompilerService
                     UseNestedDirectoriesForNamespaces = false,
                 };
 
-                var decompiler = new WholeProjectDecompiler(decompilerSettings, resolver, resolver, null);
+                var decompiler = new WholeProjectDecompiler(decompilerSettings, resolver, projectWriter: null, assemblyReferenceClassifier: resolver, debugInfoProvider: null);
                 
                 Directory.CreateDirectory(outputDirectory);
                 
