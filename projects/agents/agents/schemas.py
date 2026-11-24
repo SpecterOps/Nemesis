@@ -36,7 +36,7 @@ class TriageRequest(BaseModel):
     object_id: UUID = Field(..., description="Object storage ID")
     origin_type: str | None = Field(None, description="Type of the finding's origin")
     origin_name: str | None = Field(None, description="Name of the finding's origin")
-    data: list[str] = Field(..., description="Finding data payload")
+    data: list[dict[str, Any]] = Field(..., description="Finding data payload: findings.data, one object per item")
     raw_data: dict[str, Any] | None = Field(None, description="Raw finding data")
     file_path: str = Field(..., description="Path of the file associated with finding")
 

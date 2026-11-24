@@ -1,6 +1,5 @@
 # projects/agents/agents/main.py
 import asyncio
-import json
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -9,6 +8,7 @@ from uuid import UUID
 import asyncpg
 import structlog
 from agents.agent_manager import agent_manager
+from agents.finding_data import extract_summary_from_triage_request
 from agents.helpers import check_triage_consensus, fetch_finding_details, get_litellm_token
 from agents.model_manager import ModelManager
 from agents.phoenix_cost_sync import sync_pricing_to_phoenix
@@ -249,31 +249,6 @@ def insert_triage_result(ctx: WorkflowActivityContext, activity_input: dict):
         raise
 
 
-def extract_summary_from_triage_request(triage_request: TriageRequest) -> str | None:
-    """
-    Extract the summary from a TriageRequest's data field.
-
-    Args:
-        triage_request: The triage request containing finding data
-
-    Returns:
-        The summary string if found, None otherwise
-    """
-    if not triage_request.data or len(triage_request.data) == 0:
-        return None
-
-    first_data = triage_request.data[0]
-    try:
-        if isinstance(first_data, str):
-            first_data = json.loads(first_data)
-        if isinstance(first_data, dict) and "metadata" in first_data:
-            return first_data["metadata"].get("summary")
-    except json.JSONDecodeError:
-        logger.error("Failed to parse finding data as JSON")
-
-    return None
-
-
 @workflow_runtime.workflow
 def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
     """Main workflow for triaging findings."""
@@ -442,15 +417,6 @@ async def handle_findings_subscription():
                         object_id = finding_details["files_enriched"]["object_id"]
 
                         try:
-                            # Convert data objects to JSON strings if they're dicts
-                            data_strings = []
-                            if finding_details.get("data"):
-                                for item in finding_details["data"]:
-                                    if isinstance(item, dict):
-                                        data_strings.append(json.dumps(item))
-                                    else:
-                                        data_strings.append(str(item))
-
                             triage_request = TriageRequest(
                                 finding_id=finding_id,
                                 finding_name=finding_details["finding_name"],
@@ -459,7 +425,7 @@ async def handle_findings_subscription():
                                 object_id=object_id,
                                 origin_type=finding_details["origin_type"],
                                 origin_name=finding_details["origin_name"],
-                                data=data_strings,
+                                data=finding_details.get("data") or [],
                                 raw_data=finding_details["raw_data"],
                                 file_path=file_path,
                             )

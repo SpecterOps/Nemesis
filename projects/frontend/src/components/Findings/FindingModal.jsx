@@ -19,38 +19,15 @@ const FindingModal = ({
 
   if (!isOpen || !finding) return null;
 
-  // The list doesn't download finding data; it is loaded when the modal opens (undefined until then)
-  const parseJson = (s) => {
-    try {
-      return JSON.parse(s);
-    } catch {
-      return { type: 'string', data: s };
-    }
-  };
-  const parsedData = finding.data === undefined
-    ? { type: 'string', data: 'Loading...' }
-    : finding.data ?
-      (typeof finding.data === 'string' ? parseJson(finding.data) : finding.data)
-      : { type: 'string', data: 'No data available' };
-
-  // Handle case where data is an array (common format) - take first element
-  let findingData = Array.isArray(parsedData) ? parsedData[0] : parsedData;
-
-  // Handle double JSON encoding - if findingData is still a string, parse it again
-  if (typeof findingData === 'string') {
-    try {
-      findingData = JSON.parse(findingData);
-    } catch {
-      // If parsing fails, treat it as plain text
-      findingData = { type: 'string', data: findingData };
-    }
-  }
-
-  // Anything that isn't a data object (empty array, null, number, ...) is shown as text
-  if (findingData === undefined || findingData === null || (Array.isArray(parsedData) && parsedData.length === 0)) {
+  // The list doesn't download finding data; it is loaded when the modal opens (undefined until then).
+  // findings.data is an array of objects (one per FileObject); the first one is shown.
+  let findingData;
+  if (finding.data === undefined) {
+    findingData = { type: 'string', data: 'Loading...' };
+  } else if (Array.isArray(finding.data) && finding.data[0] && typeof finding.data[0] === 'object') {
+    findingData = finding.data[0];
+  } else {
     findingData = { type: 'string', data: 'No data available' };
-  } else if (typeof findingData !== 'object') {
-    findingData = { type: 'string', data: String(findingData) };
   }
 
   const readableData = findingData.type === 'finding_summary'

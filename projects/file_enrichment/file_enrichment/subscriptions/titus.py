@@ -325,11 +325,8 @@ async def store_titus_results(
 
                 # Store any findings
                 for finding in findings_list:
-                    # Each FileObject is stored as a JSON string (array of JSON strings)
-                    data_as_strings = [
-                        jsonb_dumps(obj, column="findings.data", object_id=object_id, finding_name=finding.finding_name)
-                        for obj in finding.data
-                    ]
+                    # findings.data is an array of objects (one per FileObject)
+                    data_objects = [obj.model_dump(mode="json") for obj in finding.data]
 
                     await conn.execute(
                         """
@@ -350,7 +347,12 @@ async def store_titus_results(
                             object_id=object_id,
                             finding_name=finding.finding_name,
                         ),
-                        jsonb_dumps(data_as_strings, column="findings.data", object_id=object_id),
+                        jsonb_dumps(
+                            data_objects,
+                            column="findings.data",
+                            object_id=object_id,
+                            finding_name=finding.finding_name,
+                        ),
                     )
 
         # Update workflow enrichment status

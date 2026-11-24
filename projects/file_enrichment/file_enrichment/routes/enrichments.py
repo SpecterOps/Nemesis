@@ -146,7 +146,7 @@ async def run_enrichment(
                                 finding_name=finding.finding_name,
                             ),
                             helpers.jsonb_dumps(
-                                [obj.model_dump() for obj in finding.data],
+                                [obj.model_dump(mode="json") for obj in finding.data],
                                 column="findings.data",
                                 object_id=enrichment_request.object_id,
                                 finding_name=finding.finding_name,

@@ -234,14 +234,11 @@ async def store_enrichment_results(object_id: UUID, module_name: str, result: En
                             object_id=object_id,
                             finding_name=finding.finding_name,
                         ),
+                        # findings.data is an array of objects (one per FileObject)
                         helpers.jsonb_dumps(
-                            [
-                                helpers.jsonb_dumps(
-                                    obj, column="findings.data", object_id=object_id, finding_name=finding.finding_name
-                                )
-                                for obj in finding.data
-                            ],
+                            [obj.model_dump(mode="json") for obj in finding.data],
                             column="findings.data",
                             object_id=object_id,
+                            finding_name=finding.finding_name,
                         ),
                     )

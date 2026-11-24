@@ -97,3 +97,36 @@ async def test_clean_result_logs_nothing(monkeypatch, issues):
     result = EnrichmentResult(module_name="m", results={"text": "ok"})
     await enrichment_modules.store_enrichment_results(str(uuid4()), "m", result)
     assert issues == []
+
+
+@pytest.mark.asyncio
+async def test_findings_data_is_stored_as_array_of_objects(monkeypatch, issues):
+    conn = FakeConn()
+    monkeypatch.setattr(global_vars, "asyncpg_pool", FakePool(conn))
+    object_id = str(uuid4())
+    result = EnrichmentResult(
+        module_name="m",
+        findings=[
+            Finding(
+                category=FindingCategory.MISC,
+                finding_name="f",
+                origin_type=FindingOrigin.ENRICHMENT_MODULE,
+                origin_name="m",
+                object_id=object_id,
+                severity=3,
+                raw_data={},
+                data=[
+                    FileObject(type="finding_summary", metadata={"summary": "one"}),
+                    FileObject(type="finding_summary", metadata={"summary": "two"}),
+                ],
+            )
+        ],
+    )
+
+    await enrichment_modules.store_enrichment_results(object_id, "m", result)
+
+    findings_params = next(p for q, p in conn.executed if "INSERT INTO findings" in q)
+    data = json.loads(findings_params[7])
+    assert isinstance(data, list) and all(isinstance(item, dict) for item in data)
+    assert [item["metadata"]["summary"] for item in data] == ["one", "two"]
+    assert data[0]["type"] == "finding_summary"

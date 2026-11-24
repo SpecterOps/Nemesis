@@ -237,7 +237,7 @@ Return your findings as a structured list. If no credentials are found, return a
                                     finding_name="llm_extracted_credentials",
                                 ),
                                 jsonb_dumps(
-                                    [display_data.model_dump()],
+                                    [display_data.model_dump(mode="json")],
                                     column="findings.data",
                                     object_id=object_id,
                                     finding_name="llm_extracted_credentials",
