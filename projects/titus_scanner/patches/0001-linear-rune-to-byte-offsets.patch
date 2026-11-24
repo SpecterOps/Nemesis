@@ -1,0 +1,272 @@
+diff --git a/pkg/matcher/regexp.go b/pkg/matcher/regexp.go
+index 86a02e6..946d476 100644
+--- a/pkg/matcher/regexp.go
++++ b/pkg/matcher/regexp.go
+@@ -77,6 +77,7 @@ func (m *RegexpMatcher) MatchWithBlobID(content []byte, blobID types.BlobID) ([]
+ 	var matches []*types.Match
+ 	dedup := NewDeduplicator()
+ 	contentStr := string(content)
++	ri := newRuneIndex(content)
+ 
+ 	for _, rule := range m.rules {
+ 		re := m.regexCache[rule.Pattern]
+@@ -101,7 +102,7 @@ func (m *RegexpMatcher) MatchWithBlobID(content []byte, blobID types.BlobID) ([]
+ 		for match != nil {
+ 			// regexp2's Match.Index and Match.Length are rune-based, not byte-based
+ 			matchedText := []byte(match.String())
+-			start, end := runeSpanToByteSpan(content, match.Index, match.Length)
++			start, end := ri.span(match.Index, match.Length)
+ 
+ 			// Extract capture groups (positional, for backwards compatibility)
+ 			var groups [][]byte
+diff --git a/pkg/matcher/regexp_helpers.go b/pkg/matcher/regexp_helpers.go
+index 3f0540f..76bd573 100644
+--- a/pkg/matcher/regexp_helpers.go
++++ b/pkg/matcher/regexp_helpers.go
+@@ -79,9 +79,10 @@ func buildMatchResult(
+ 	namedGroups map[string][]byte,
+ 	content []byte,
+ 	contextLines int,
++	ri *runeIndex,
+ ) *types.Match {
+ 	// Convert rune-based span to byte-based span
+-	start, end := runeSpanToByteSpan(content, runeStart, runeLength)
++	start, end := ri.span(runeStart, runeLength)
+ 
+ 	var before, after []byte
+ 	if contextLines > 0 {
+@@ -115,3 +116,70 @@ func buildMatchResult(
+ 
+ 	return result
+ }
++
++// runeIndexStride is how many runes apart runeIndex keeps a byte-offset checkpoint.
++const runeIndexStride = 1024
++
++// runeIndex converts regexp2's rune offsets to byte offsets for one content buffer.
++//
++// runeSpanToByteSpan walks the content from the start on every call, which makes scanning a
++// buffer with many matches quadratic. runeIndex is built once per buffer in O(n): pure-ASCII
++// content (the common case) maps rune offsets to byte offsets directly, and other content keeps
++// a checkpoint every runeIndexStride runes, so each lookup decodes at most runeIndexStride runes.
++// It is read-only after construction and safe to share between goroutines.
++type runeIndex struct {
++	content     []byte
++	ascii       bool
++	checkpoints []int // byte offset of rune k*runeIndexStride
++}
++
++func newRuneIndex(content []byte) *runeIndex {
++	ri := &runeIndex{content: content, ascii: true}
++	for _, b := range content {
++		if b >= utf8.RuneSelf {
++			ri.ascii = false
++			break
++		}
++	}
++	if ri.ascii {
++		return ri
++	}
++	runeIdx := 0
++	for byteIdx := 0; byteIdx < len(content); runeIdx++ {
++		if runeIdx%runeIndexStride == 0 {
++			ri.checkpoints = append(ri.checkpoints, byteIdx)
++		}
++		_, size := utf8.DecodeRune(content[byteIdx:])
++		byteIdx += size
++	}
++	if runeIdx%runeIndexStride == 0 {
++		ri.checkpoints = append(ri.checkpoints, len(content))
++	}
++	return ri
++}
++
++// byteOffset returns the byte offset of the rune at runeIdx, or len(content) past the end.
++func (ri *runeIndex) byteOffset(runeIdx int) int {
++	if runeIdx < 0 {
++		return len(ri.content)
++	}
++	if ri.ascii {
++		return min(runeIdx, len(ri.content))
++	}
++	k := runeIdx / runeIndexStride
++	if k >= len(ri.checkpoints) {
++		return len(ri.content)
++	}
++	byteIdx := ri.checkpoints[k]
++	for i := k * runeIndexStride; i < runeIdx && byteIdx < len(ri.content); i++ {
++		_, size := utf8.DecodeRune(ri.content[byteIdx:])
++		byteIdx += size
++	}
++	return byteIdx
++}
++
++// span converts a rune-based span (regexp2 Match.Index/Length) to a byte-based span,
++// with the same results as runeSpanToByteSpan.
++func (ri *runeIndex) span(runeStart, runeLength int) (byteStart, byteEnd int) {
++	return ri.byteOffset(runeStart), ri.byteOffset(runeStart + runeLength)
++}
+diff --git a/pkg/matcher/regexp_portable.go b/pkg/matcher/regexp_portable.go
+index 0ec7f91..7caedf6 100644
+--- a/pkg/matcher/regexp_portable.go
++++ b/pkg/matcher/regexp_portable.go
+@@ -151,6 +151,7 @@ func (m *PortableRegexpMatcher) matchSequential(content []byte, blobID types.Blo
+ 	// secret values into one finding happens downstream via FindingID.
+ 	dedup := NewDeduplicator()
+ 	contentRunes := []rune(string(content))
++	ri := newRuneIndex(content)
+ 
+ 	for _, rule := range m.rules {
+ 		re := m.regexCache[rule.Pattern]
+@@ -181,7 +182,7 @@ func (m *PortableRegexpMatcher) matchSequential(content []byte, blobID types.Blo
+ 			namedGroups := extractNamedGroups(match, m.groupNameCache[rule.Pattern])
+ 
+ 			// Build match result (convert rune-based Index/Length to byte offsets)
+-			result := buildMatchResult(blobID, rule, match.Index, match.Length, []byte(match.String()), groups, namedGroups, content, m.contextLines)
++			result := buildMatchResult(blobID, rule, match.Index, match.Length, []byte(match.String()), groups, namedGroups, content, m.contextLines, ri)
+ 
+ 			// Deduplicate
+ 			if !dedup.IsDuplicate(result) {
+@@ -212,6 +213,7 @@ func (m *PortableRegexpMatcher) matchSequential(content []byte, blobID types.Blo
+ func (m *PortableRegexpMatcher) matchParallel(content []byte, blobID types.BlobID) ([]*types.Match, error) {
+ 	numWorkers := runtime.GOMAXPROCS(0)
+ 	contentRunes := []rune(string(content))
++	ri := newRuneIndex(content)
+ 
+ 	// Job channel for distributing rules to workers
+ 	type job struct {
+@@ -275,7 +277,7 @@ func (m *PortableRegexpMatcher) matchParallel(content []byte, blobID types.BlobI
+ 					// Extract capture groups and build result (convert rune-based Index/Length to byte offsets)
+ 					groups := extractCaptureGroups(match)
+ 					namedGroups := extractNamedGroups(match, m.groupNameCache[rule.Pattern])
+-					matchResult := buildMatchResult(blobID, rule, match.Index, match.Length, []byte(match.String()), groups, namedGroups, content, m.contextLines)
++					matchResult := buildMatchResult(blobID, rule, match.Index, match.Length, []byte(match.String()), groups, namedGroups, content, m.contextLines, ri)
+ 					workerMatches = append(workerMatches, matchResult)
+ 
+ 					// Find next match
+@@ -465,6 +467,7 @@ func (m *PortableRegexpMatcher) DrainTimedOut() ([]*types.Match, error) {
+ 			defer func() { re.MatchTimeout = orig }()
+ 
+ 			contentRunes := []rune(string(j.content))
++			ri := newRuneIndex(j.content)
+ 
+ 			match, err := re.FindRunesMatch(contentRunes)
+ 			if err != nil {
+@@ -488,7 +491,7 @@ func (m *PortableRegexpMatcher) DrainTimedOut() ([]*types.Match, error) {
+ 				lastEnd = match.Index + match.Length
+ 				groups := extractCaptureGroups(match)
+ 				namedGroups := extractNamedGroups(match, m.groupNameCache[j.rule.Pattern])
+-				result := buildMatchResult(j.blobID, j.rule, match.Index, match.Length, []byte(match.String()), groups, namedGroups, j.content, m.contextLines)
++				result := buildMatchResult(j.blobID, j.rule, match.Index, match.Length, []byte(match.String()), groups, namedGroups, j.content, m.contextLines, ri)
+ 				// Compute line/col here since we have access to the original content.
+ 				startLine, startCol := types.ComputeLineColumn(j.content, int(result.Location.Offset.Start))
+ 				endLine, endCol := types.ComputeLineColumn(j.content, int(result.Location.Offset.End))
+diff --git a/pkg/matcher/rune_index_test.go b/pkg/matcher/rune_index_test.go
+new file mode 100644
+index 0000000..980d96b
+--- /dev/null
++++ b/pkg/matcher/rune_index_test.go
+@@ -0,0 +1,31 @@
++package matcher
++
++import (
++	"strings"
++	"testing"
++	"unicode/utf8"
++)
++
++// runeIndex must agree with the reference runeSpanToByteSpan on every span.
++func TestRuneIndexMatchesReference(t *testing.T) {
++	inputs := map[string][]byte{
++		"empty":   {},
++		"ascii":   []byte(strings.Repeat("abc def\n", 700)),
++		"utf8":    []byte(strings.Repeat("héllo wörld ✓ 日本語 🔑 ", 300)),
++		"invalid": append([]byte(strings.Repeat("x\xff\xfe€", 600)), 0xe2, 0x82), // invalid and truncated sequences
++		"stride":  []byte(strings.Repeat("é", runeIndexStride*3)),               // checkpoints land exactly at the end
++	}
++	for name, content := range inputs {
++		ri := newRuneIndex(content)
++		runes := utf8.RuneCount(content) + 2 // include spans past the end
++		for start := -1; start <= runes; start += 7 {
++			for _, length := range []int{0, 1, 5, 1500} {
++				ws, we := runeSpanToByteSpan(content, start, length)
++				gs, ge := ri.span(start, length)
++				if start >= 0 && (ws != gs || we != ge) {
++					t.Fatalf("%s: span(%d,%d) = (%d,%d), want (%d,%d)", name, start, length, gs, ge, ws, we)
++				}
++			}
++		}
++	}
++}
+diff --git a/pkg/matcher/vectorscan.go b/pkg/matcher/vectorscan.go
+index 0c6fc2b..f859f75 100644
+--- a/pkg/matcher/vectorscan.go
++++ b/pkg/matcher/vectorscan.go
+@@ -621,6 +621,7 @@ func (m *VectorscanMatcher) matchChunk(content []byte, blobID types.BlobID, opts
+ 	ruleStats := make(map[string]RuleStat)
+ 	dedup := NewDeduplicator()
+ 	contentRunes := []rune(string(content))
++	ri := newRuneIndex(content)
+ 
+ 	// For each Hyperscan-identified rule, use regexp2 to find precise match locations.
+ 	for ruleIdx := range matchedRuleIDs {
+@@ -683,7 +684,7 @@ func (m *VectorscanMatcher) matchChunk(content []byte, blobID types.BlobID, opts
+ 
+ 			lastEnd = end
+ 
+-			newMatch := m.buildMatchFromRegexp2(content, blobID, rule, match)
++			newMatch := m.buildMatchFromRegexp2(content, ri, blobID, rule, match)
+ 
+ 			// Deduplicate
+ 			if !dedup.IsDuplicate(newMatch) {
+@@ -814,6 +815,7 @@ func (m *VectorscanMatcher) matchChunked(content []byte, chunks []Chunk, blobID
+ // by both matchChunk and matchFallbackRules.
+ func (m *VectorscanMatcher) buildMatchFromRegexp2(
+ 	content []byte,
++	ri *runeIndex,
+ 	blobID types.BlobID,
+ 	rule *types.Rule,
+ 	re2match *regexp2.Match,
+@@ -821,7 +823,7 @@ func (m *VectorscanMatcher) buildMatchFromRegexp2(
+ 	// regexp2's Match.Index and Match.Length are rune-based, not byte-based.
+ 	// Convert to byte offsets for correct slicing.
+ 	matchedText := []byte(re2match.String())
+-	start, end := runeSpanToByteSpan(content, re2match.Index, re2match.Length)
++	start, end := ri.span(re2match.Index, re2match.Length)
+ 
+ 	// Extract positional and named capture groups
+ 	groups, namedGroups := m.extractGroupsFromMatch(re2match, rule)
+@@ -890,6 +892,7 @@ func (m *VectorscanMatcher) extractGroupsFromMatch(match *regexp2.Match, rule *t
+ func (m *VectorscanMatcher) matchFallbackRules(content []byte, blobID types.BlobID) []*types.Match {
+ 	var matches []*types.Match
+ 	contentRunes := []rune(string(content))
++	ri := newRuneIndex(content)
+ 
+ 	// Use prefilter to determine which fallback rules might match
+ 	// This dramatically reduces the number of regex executions
+@@ -949,7 +952,7 @@ func (m *VectorscanMatcher) matchFallbackRules(content []byte, blobID types.Blob
+ 
+ 			lastEnd = end
+ 
+-			newMatch := m.buildMatchFromRegexp2(content, blobID, rule, match)
++			newMatch := m.buildMatchFromRegexp2(content, ri, blobID, rule, match)
+ 			matches = append(matches, newMatch)
+ 
+ 			match, err = re.FindNextMatch(match)
+@@ -1071,6 +1074,7 @@ func (m *VectorscanMatcher) DrainTimedOut() ([]*types.Match, error) {
+ 			defer func() { re.MatchTimeout = orig }()
+ 
+ 			contentRunes := []rune(string(j.content))
++			ri := newRuneIndex(j.content)
+ 
+ 			match, err := re.FindRunesMatch(contentRunes)
+ 			if err != nil {
+@@ -1092,7 +1096,7 @@ func (m *VectorscanMatcher) DrainTimedOut() ([]*types.Match, error) {
+ 					break
+ 				}
+ 				lastEnd = match.Index + match.Length
+-				newMatch := m.buildMatchFromRegexp2(j.content, j.blobID, j.rule, match)
++				newMatch := m.buildMatchFromRegexp2(j.content, ri, j.blobID, j.rule, match)
+ 				startLine, startCol := types.ComputeLineColumn(j.content, int(newMatch.Location.Offset.Start))
+ 				endLine, endCol := types.ComputeLineColumn(j.content, int(newMatch.Location.Offset.End))
+ 				newMatch.Location.Source.Start.Line = startLine
