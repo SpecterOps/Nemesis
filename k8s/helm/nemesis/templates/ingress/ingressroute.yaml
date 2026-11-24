@@ -49,12 +49,25 @@ spec:
         - name: hasura
           port: 8080
 
-    # RabbitMQ Management
+    # RabbitMQ Management: Nemesis login, then the RabbitMQ credentials are swapped in
     - match: {{ $hostMatch }}PathPrefix(`/rabbitmq`)
       kind: Rule
       priority: 10
       middlewares:
         - name: nemesis-basic-auth
+          namespace: {{ include "nemesis.namespace" . }}
+        - name: nemesis-rabbitmq-credentials
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: rabbitmq
+          port: 15672
+
+    # Public RabbitMQ endpoints the UI loads before its login form; they get no credentials
+    - match: {{ $hostMatch }}(Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`))
+      kind: Rule
+      priority: 20
+      middlewares:
+        - name: nemesis-rabbitmq-anonymous
           namespace: {{ include "nemesis.namespace" . }}
       services:
         - name: rabbitmq

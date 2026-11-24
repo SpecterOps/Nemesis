@@ -5,6 +5,7 @@ import os
 import asyncpg
 import httpx
 import structlog
+from agents.litellm_startup import litellm_auth_headers
 from dapr.clients import DaprClient
 
 logger = structlog.get_logger(__name__)
@@ -23,7 +24,7 @@ async def fetch_litellm_model_info(admin_key: str) -> dict | None:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                "http://litellm:4000/model/info", headers={"Authorization": f"Bearer {admin_key}"}, timeout=10.0
+                "http://litellm:4000/model/info", headers=litellm_auth_headers(admin_key), timeout=10.0
             )
             response.raise_for_status()
             return response.json()

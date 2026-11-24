@@ -2,6 +2,7 @@
 
 import structlog
 from agents.helpers import create_rate_limit_client
+from agents.litellm_startup import litellm_auth_headers
 from agents.logger import setup_phoenix_llm_tracing
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -54,7 +55,9 @@ class ModelManager:
                 cls._model = OpenAIModel(
                     model_name=cls._model_name,  # pyright: ignore[reportArgumentType]
                     provider=OpenAIProvider(
-                        base_url=cls._base_url, api_key=cls._token, http_client=create_rate_limit_client()
+                        base_url=cls._base_url,
+                        api_key=cls._token,
+                        http_client=create_rate_limit_client(headers=litellm_auth_headers(cls._token)),
                     ),
                 )
                 logger.info(f"Created model instance: {cls._model_name}")

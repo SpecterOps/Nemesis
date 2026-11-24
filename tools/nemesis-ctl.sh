@@ -112,7 +112,7 @@ if [ "$ACTION" = "start" ]; then
   fi
 fi
 
-# --- Secrets: generate random values when unset or still a public default ---
+# --- Secrets: generate random values for any that are unset (values already in .env are kept) ---
 # shellcheck source=lib/env_secrets.sh
 source "${SCRIPT_DIR}/lib/env_secrets.sh"
 ensure_random_env_secret .env HASURA_ADMIN_SECRET pass456

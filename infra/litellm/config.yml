@@ -18,3 +18,6 @@ model_list:
 general_settings:
   database_connection_pool_limit: 30
   database_connection_timeout: 60
+  # The /llm route is behind the Nemesis basic auth, which uses the Authorization header, so LiteLLM
+  # clients (UI included) send their key as "x-litellm-api-key: Bearer sk-..." instead.
+  litellm_key_header_name: x-litellm-api-key

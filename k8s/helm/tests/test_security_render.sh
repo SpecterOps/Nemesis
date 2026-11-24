@@ -112,6 +112,42 @@ for component in ("nemesis-secret-store", "statestore"):
     check(f"{component} is scoped and excludes gotenberg", scopes and "gotenberg" not in scopes)
     check(f"{component} keeps every other Dapr app", scopes == dapr_apps - {"gotenberg"})
 
+# --- /rabbitmq and /llm behind the Nemesis login ---
+import base64
+
+routes = find(default, "IngressRoute", "nemesis-ingress")["spec"]["routes"]
+
+
+def route(match_part):
+    return next(r for r in routes if match_part in r["match"])
+
+
+def mw_names(r):
+    return [m["name"] for m in r.get("middlewares", [])]
+
+
+rmq = route("PathPrefix(`/rabbitmq`)")
+check("rabbitmq route needs the Nemesis login first", mw_names(rmq)[:1] == ["nemesis-basic-auth"])
+check("rabbitmq route swaps in the RabbitMQ credentials", "nemesis-rabbitmq-credentials" in mw_names(rmq))
+creds = find(default, "Middleware", "nemesis-rabbitmq-credentials")["spec"]["headers"]["customRequestHeaders"]
+check(
+    "credentials middleware carries user:password from values",
+    base64.b64decode(creds["Authorization"].removeprefix("Basic ")).decode() == "nemesis:Qwerty12345",
+)
+public = route("/rabbitmq/api/version")
+check("public rabbitmq route covers only version and auth", public["match"].count("Path(") == 2 and "PathPrefix" not in public["match"])
+check("public rabbitmq route wins over the prefix route", public["priority"] > rmq["priority"])
+check("public rabbitmq route strips credentials", mw_names(public) == ["nemesis-rabbitmq-anonymous"])
+anon = find(default, "Middleware", "nemesis-rabbitmq-anonymous")["spec"]["headers"]["customRequestHeaders"]
+check("anonymous middleware removes Authorization", anon == {"Authorization": ""})
+check("every other route needs the Nemesis login", all("nemesis-basic-auth" in mw_names(r) for r in routes if r is not public))
+
+llm = route("PathPrefix(`/llm`)")
+check("llm route needs the Nemesis login", "nemesis-basic-auth" in mw_names(llm))
+litellm_cfg = yaml.safe_load(find(default, "ConfigMap", "litellm-config")["data"]["config.yml"])
+check("litellm reads keys from x-litellm-api-key", litellm_cfg["general_settings"]["litellm_key_header_name"] == "x-litellm-api-key")
+check("litellm trusts forwarded proto", litellm_env["FORWARDED_ALLOW_IPS"]["value"] == "*")
+
 if failures:
     print(f"{failures} check(s) failed")
     sys.exit(1)

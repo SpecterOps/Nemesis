@@ -88,7 +88,7 @@ const allServices = [
     link: '/rabbitmq/#/queues',
     title: 'RabbitMQ Dashboard',
     description: 'Monitor and manage message queues and exchanges',
-    credential: 'RABBITMQ_USER:RABBITMQ_PASSWORD',
+    credential: 'Your Nemesis login (BASIC_AUTH_USERS)',
     alwaysShow: true  // Core service, always available
   },
   {

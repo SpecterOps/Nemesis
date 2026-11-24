@@ -1,7 +1,7 @@
 """Rate limit handling for HTTP clients with Retry-After support."""
 
 import openai
-from agents.litellm_startup import litellm_startup
+from agents.litellm_startup import litellm_auth_headers, litellm_startup
 from common.logger import get_logger
 from gql import gql
 from httpx import AsyncClient, HTTPStatusError
@@ -11,8 +11,12 @@ from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponenti
 logger = get_logger(__name__)
 
 
-def create_rate_limit_client():
-    """Create a client that respects Retry-After headers from rate limiting responses."""
+def create_rate_limit_client(headers: dict[str, str] | None = None):
+    """Create a client that respects Retry-After headers from rate limiting responses.
+
+    Args:
+        headers: Default headers sent with every request (e.g. LiteLLM auth).
+    """
 
     def validator(response):
         """Safely validate response."""
@@ -42,7 +46,7 @@ def create_rate_limit_client():
         validate_response=validator,
     )
 
-    return AsyncClient(transport=transport)
+    return AsyncClient(transport=transport, headers=headers)
 
 
 async def get_litellm_token():
@@ -68,7 +72,11 @@ async def get_litellm_token():
         models = []
         if litellm_token:
             try:
-                client = openai.OpenAI(base_url="http://litellm:4000/", api_key=litellm_token)
+                client = openai.OpenAI(
+                    base_url="http://litellm:4000/",
+                    api_key=litellm_token,
+                    default_headers=litellm_auth_headers(litellm_token),
+                )
                 models = [model.id for model in client.models.list().data]
             except Exception as e:
                 logger.error(f"Error initializing OpenAI client for https://litellm:4000: {e}")

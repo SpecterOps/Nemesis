@@ -27,6 +27,15 @@ RETRY_DELAY = 5
 # Token key for Dapr state store
 TOKEN_KEY = "litellm_token"
 
+# LiteLLM reads keys only from this header (general_settings.litellm_key_header_name in its config), because
+# its /llm route sits behind the Nemesis basic auth, which uses the Authorization header.
+LITELLM_KEY_HEADER = "x-litellm-api-key"
+
+
+def litellm_auth_headers(key: str | None) -> dict[str, str]:
+    """Headers that authenticate a request to LiteLLM with KEY."""
+    return {LITELLM_KEY_HEADER: f"Bearer {key}"}
+
 
 async def wait_for_litellm() -> bool:
     """Wait for LiteLLM API to be available"""
@@ -37,7 +46,7 @@ async def wait_for_litellm() -> bool:
             try:
                 async with session.get(
                     f"{LITELLM_API_URL}/health",
-                    headers={"Authorization": f"Bearer {LITELLM_ADMIN_KEY}"},
+                    headers=litellm_auth_headers(LITELLM_ADMIN_KEY),
                     timeout=aiohttp.ClientTimeout(total=5),
                 ) as response:
                     if response.status == 200:
@@ -104,7 +113,7 @@ async def validate_token(token: str) -> bool:
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 f"{LITELLM_API_URL}/models",
-                headers={"Authorization": f"Bearer {token}"},
+                headers=litellm_auth_headers(token),
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
                 if response.status == 200:
@@ -137,7 +146,7 @@ async def create_new_token() -> str | None:
             async with session.post(
                 f"{LITELLM_API_URL}/user/new",
                 json=create_payload,
-                headers={"Authorization": f"Bearer {LITELLM_ADMIN_KEY}", "Content-Type": "application/json"},
+                headers={**litellm_auth_headers(LITELLM_ADMIN_KEY), "Content-Type": "application/json"},
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
                 if response.status == 200:
@@ -154,7 +163,7 @@ async def create_new_token() -> str | None:
             async with session.post(
                 f"{LITELLM_API_URL}/key/generate",
                 json=key_payload,
-                headers={"Authorization": f"Bearer {LITELLM_ADMIN_KEY}", "Content-Type": "application/json"},
+                headers={**litellm_auth_headers(LITELLM_ADMIN_KEY), "Content-Type": "application/json"},
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as response:
                 if response.status == 200:

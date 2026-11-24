@@ -5,6 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/env_secrets.sh
 source "${SCRIPT_DIR}/../lib/env_secrets.sh"
+# Values exported in the shell take precedence over .env; keep them out of these tests.
+unset HASURA_ADMIN_SECRET LITELLM_ADMIN_PASSWORD LITELLM_SALT_KEY X
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -40,28 +42,40 @@ check "empty value: replaced with a random value" is_random "$(value LITELLM_ADM
 check "empty value: rewritten in place, not duplicated" [ "$(line_count LITELLM_ADMIN_PASSWORD)" = "1" ]
 
 printf 'A=1\nLITELLM_ADMIN_PASSWORD=admin123\nB=2\n' > "$TMP/.env"
-out="$(ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123)"
-check "public default: replaced with a random value" is_random "$(value LITELLM_ADMIN_PASSWORD)"
-check "public default: message says replaced" contains "$out" "Replaced the default"
+out="$(ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123 2>&1)"
+check "public default: kept, never replaced" [ "$(value LITELLM_ADMIN_PASSWORD)" = "admin123" ]
+check "public default: warns" contains "$out" "public default"
 check "public default: surrounding lines kept" [ "$(value A)$(value B)" = "12" ]
-check "value is never printed" not_contains "$out" "$(value LITELLM_ADMIN_PASSWORD)"
 
 printf "LITELLM_ADMIN_PASSWORD='admin123'\n" > "$TMP/.env"
-ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123 > /dev/null
-check "single-quoted default: replaced" is_random "$(value LITELLM_ADMIN_PASSWORD)"
+out="$(ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123 2>&1)"
+check "single-quoted default: kept" [ "$(value LITELLM_ADMIN_PASSWORD)" = "admin123" ]
+check "single-quoted default: warns" contains "$out" "public default"
+
+printf 'LITELLM_ADMIN_PASSWORD=""\n' > "$TMP/.env"
+out="$(ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123)"
+check "generated value is never printed" not_contains "$out" "$(value LITELLM_ADMIN_PASSWORD)"
+
+printf 'OTHER=1\n' > "$TMP/.env"
+LITELLM_ADMIN_PASSWORD=from-shell ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123 > /dev/null
+check "value exported in the shell: .env left alone" [ -z "$(value LITELLM_ADMIN_PASSWORD)" ]
 
 printf 'LITELLM_ADMIN_PASSWORD="my-own-secret"\n' > "$TMP/.env"
 out="$(ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123)"
 check "custom value: kept" [ "$(value LITELLM_ADMIN_PASSWORD)" = "my-own-secret" ]
 check "custom value: nothing printed" [ -z "$out" ]
 
-printf 'HASURA_ADMIN_SECRET=pass456\nLITELLM_ADMIN_PASSWORD=keep\n' > "$TMP/.env"
+printf 'HASURA_ADMIN_SECRET=\nLITELLM_ADMIN_PASSWORD=keep\n' > "$TMP/.env"
 ensure_random_env_secret "$TMP/.env" HASURA_ADMIN_SECRET pass456 > /dev/null
 check "only the named variable changes" [ "$(value LITELLM_ADMIN_PASSWORD)" = "keep" ]
-check "hasura default replaced" is_random "$(value HASURA_ADMIN_SECRET)"
+check "empty hasura secret generated" is_random "$(value HASURA_ADMIN_SECRET)"
+
+printf 'HASURA_ADMIN_SECRET=pass456\n' > "$TMP/.env"
+ensure_random_env_secret "$TMP/.env" HASURA_ADMIN_SECRET pass456 > /dev/null 2>&1
+check "hasura public default kept" [ "$(value HASURA_ADMIN_SECRET)" = "pass456" ]
 
 chmod 600 "$TMP/.env"
-printf 'X=admin123\n' > "$TMP/.env"
+printf 'X=\n' > "$TMP/.env"
 ensure_random_env_secret "$TMP/.env" X admin123 > /dev/null
 check "file permissions preserved" [ "$(stat -c %a "$TMP/.env")" = "600" ]
 
@@ -87,13 +101,21 @@ printf 'LITELLM_SALT_KEY="sk-mine"\n' > "$TMP/.env"
 ensure_litellm_salt_key "$TMP/.env" false > /dev/null
 check "explicit salt: kept" [ "$(value LITELLM_SALT_KEY)" = "sk-mine" ]
 
-# The salt must be settled before the password rotates, as nemesis-ctl.sh does.
-printf 'LITELLM_ADMIN_PASSWORD=admin123\n' > "$TMP/.env"
+printf 'OTHER=1\n' > "$TMP/.env"
+LITELLM_ADMIN_PASSWORD=shellpw ensure_litellm_salt_key "$TMP/.env" true > /dev/null
+check "existing data, password exported in the shell: keeps that old salt" [ "$(value LITELLM_SALT_KEY)" = "sk-shellpw" ]
+
+printf 'OTHER=1\n' > "$TMP/.env"
+LITELLM_SALT_KEY=sk-shell ensure_litellm_salt_key "$TMP/.env" false > /dev/null
+check "salt exported in the shell: .env left alone" [ -z "$(value LITELLM_SALT_KEY)" ]
+
+# The salt must be settled before a missing password is generated, as nemesis-ctl.sh does.
+printf 'OTHER=1\n' > "$TMP/.env"
 ensure_litellm_salt_key "$TMP/.env" true > /dev/null
 ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123 > /dev/null
-check "upgrade: salt keeps old value while password rotates" \
+check "upgrade: salt keeps the old default while the missing password is generated" \
   [ "$(value LITELLM_SALT_KEY)" = "sk-admin123" ]
-check "upgrade: password rotated" is_random "$(value LITELLM_ADMIN_PASSWORD)"
+check "upgrade: password generated" is_random "$(value LITELLM_ADMIN_PASSWORD)"
 
 if [ "$FAILURES" -ne 0 ]; then
   echo "$FAILURES test(s) failed"

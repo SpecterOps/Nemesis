@@ -21,6 +21,9 @@ data:
     general_settings:
       database_connection_pool_limit: 30
       database_connection_timeout: 60
+      # The /llm route is behind the Nemesis basic auth, which uses the Authorization header, so LiteLLM
+      # clients (UI included) send their key as "x-litellm-api-key: Bearer sk-..." instead.
+      litellm_key_header_name: x-litellm-api-key
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -81,6 +84,9 @@ spec:
               value: {{ .Values.nemesis.url | quote }}
             - name: UI_BASE_PATH
               value: "/llm/ui"
+            # Trust the ingress's X-Forwarded-Proto so LiteLLM's redirects stay on https
+            - name: FORWARDED_ALLOW_IPS
+              value: "*"
           volumeMounts:
             - name: config
               mountPath: /app/config.yml

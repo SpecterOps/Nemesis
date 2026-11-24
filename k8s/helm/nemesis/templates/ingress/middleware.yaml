@@ -33,6 +33,34 @@ spec:
   stripPrefix:
     prefixes:
       - /hasura
+---
+# The RabbitMQ management UI sends its own credentials in the Authorization header, which is also the header
+# the Nemesis basic auth checks. So /rabbitmq checks the Nemesis login, then this middleware swaps in the
+# RabbitMQ credentials: log in to the RabbitMQ UI with your Nemesis username and password.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-rabbitmq-credentials
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  headers:
+    customRequestHeaders:
+      Authorization: {{ printf "Basic %s" (printf "%s:%s" .Values.credentials.rabbitmq.user .Values.credentials.rabbitmq.password | b64enc) | quote }}
+---
+# For the two public endpoints the RabbitMQ UI loads before its login form (sending "Authorization: null")
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-rabbitmq-anonymous
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  headers:
+    customRequestHeaders:
+      Authorization: ""
 {{- if .Values.llm.enabled }}
 ---
 apiVersion: traefik.io/v1alpha1

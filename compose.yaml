@@ -757,6 +757,15 @@ services:
       - "traefik.http.routers.rabbitmq-ui.tls=true"
       - "traefik.http.services.rabbitmq-ui.loadbalancer.server.port=15672"
       - "traefik.http.routers.rabbitmq-ui.rule=PathPrefix(`/rabbitmq`)"
+      # Nemesis login, then Traefik swaps in the RabbitMQ credentials (infra/traefik/config/rabbitmq.yml)
+      - "traefik.http.routers.rabbitmq-ui.middlewares=auth,rabbitmq-credentials@file"
+      # The UI fetches these two public endpoints before its login form exists, sending "Authorization: null"
+      - "traefik.http.routers.rabbitmq-ui-public.rule=Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`)"
+      - "traefik.http.routers.rabbitmq-ui-public.priority=100"
+      - "traefik.http.routers.rabbitmq-ui-public.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq-ui-public.tls=true"
+      - "traefik.http.routers.rabbitmq-ui-public.service=rabbitmq-ui"
+      - "traefik.http.routers.rabbitmq-ui-public.middlewares=rabbitmq-anonymous@file"
 
   postgres:
     image: postgres:18.1
@@ -865,6 +874,9 @@ services:
       - "traefik.http.routers.dashboard.tls=true"
     environment:
       - NEMESIS_PORT=${NEMESIS_PORT:-7443}
+      # Used by infra/traefik/config/rabbitmq.yml to log the RabbitMQ UI in behind the Nemesis login
+      - RABBITMQ_USER=${RABBITMQ_USER:?}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?}
     ports: ["${NEMESIS_PORT:-7443}:443"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -1203,6 +1215,8 @@ services:
       - SERVER_ROOT_PATH=/llm
       - PROXY_BASE_URL=${NEMESIS_URL:?}
       - UI_BASE_PATH=/llm/ui
+      # Trust Traefik's X-Forwarded-Proto so LiteLLM's redirects stay on https (the port is not published)
+      - FORWARDED_ALLOW_IPS=*
     volumes:
       - ./infra/litellm/config.yml:/app/config.yml:ro
     command: ["--config", "/app/config.yml"]
@@ -1212,7 +1226,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python3 -c \"import urllib.request,json; r=urllib.request.urlopen(urllib.request.Request('http://localhost:4000/health',headers={'Authorization':'Bearer sk-${LITELLM_ADMIN_PASSWORD}'})); d=json.load(r); exit(0 if d.get('healthy_count',0)>0 and d.get('unhealthy_count',0)==0 else 1)\"",
+          "python3 -c \"import urllib.request,json; r=urllib.request.urlopen(urllib.request.Request('http://localhost:4000/health',headers={'x-litellm-api-key':'Bearer sk-${LITELLM_ADMIN_PASSWORD}'})); d=json.load(r); exit(0 if d.get('healthy_count',0)>0 and d.get('unhealthy_count',0)==0 else 1)\"",
         ]
       interval: 30s
       timeout: 10s
@@ -1225,6 +1239,7 @@ services:
       - "traefik.http.services.litellm.loadbalancer.server.port=4000"
       - "traefik.http.routers.litellm.entrypoints=websecure"
       - "traefik.http.routers.litellm.tls=true"
+      - "traefik.http.routers.litellm.middlewares=auth"
 
   phoenix:
     profiles: ["llm"]

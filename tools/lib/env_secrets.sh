@@ -26,19 +26,23 @@ random_secret() {
   openssl rand -hex 24 2>/dev/null || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n'
 }
 
-# Generate a random NAME in ENV_FILE when it is unset/empty or equals one of the public DEFAULTS.
+# Generate a random NAME in ENV_FILE only when it has no value there (or in the environment). A value the
+# operator set is always used as-is; if it is one of the public DEFAULTS, print a warning and keep it.
 # Usage: ensure_random_env_secret ENV_FILE NAME [DEFAULT...]
 ensure_random_env_secret() {
   local env_file=$1 name=$2 current new default
   shift 2
   [ -f "$env_file" ] || return 0
-  current="$(env_file_value "$env_file" "$name")"
+  # docker compose prefers a value exported in the shell over .env
+  current="${!name:-}"
+  [ -n "$current" ] || current="$(env_file_value "$env_file" "$name")"
   if [ -n "$current" ]; then
-    local is_default=false
     for default in "$@"; do
-      [ "$current" = "$default" ] && is_default=true
+      if [ "$current" = "$default" ]; then
+        echo "Warning: ${name} is set to the public default value; change it to a random value." >&2
+      fi
     done
-    [ "$is_default" = "true" ] || return 0
+    return 0
   fi
   new="$(random_secret)"
   if [ -z "$new" ]; then
@@ -46,11 +50,7 @@ ensure_random_env_secret() {
     return 1
   fi
   set_env_file_value "$env_file" "$name" "$new"
-  if [ -n "$current" ]; then
-    echo "Replaced the default ${name} in .env with a random one."
-  else
-    echo "Generated a random ${name} in .env."
-  fi
+  echo "Generated a random ${name} in .env."
 }
 
 # LiteLLM encrypts provider credentials stored in its database with LITELLM_SALT_KEY, which used to
@@ -60,10 +60,12 @@ ensure_random_env_secret() {
 ensure_litellm_salt_key() {
   local env_file=$1 existing_data=$2 new old_password
   [ -f "$env_file" ] || return 0
+  [ -n "${LITELLM_SALT_KEY:-}" ] && return 0
   [ -n "$(env_file_value "$env_file" LITELLM_SALT_KEY)" ] && return 0
   if [ "$existing_data" = "true" ]; then
     # The salt used to be "sk-${LITELLM_ADMIN_PASSWORD:-admin123}"
-    old_password="$(env_file_value "$env_file" LITELLM_ADMIN_PASSWORD)"
+    old_password="${LITELLM_ADMIN_PASSWORD:-}"
+    [ -n "$old_password" ] || old_password="$(env_file_value "$env_file" LITELLM_ADMIN_PASSWORD)"
     set_env_file_value "$env_file" LITELLM_SALT_KEY "sk-${old_password:-admin123}"
     echo "Kept the previous LITELLM_SALT_KEY in .env so existing LiteLLM credentials stay readable."
     return 0
