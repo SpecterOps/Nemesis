@@ -124,6 +124,7 @@ if docker volume inspect nemesis_postgres_data > /dev/null 2>&1; then
 fi
 ensure_litellm_salt_key .env "$POSTGRES_DATA_EXISTS"
 ensure_random_env_secret .env LITELLM_ADMIN_PASSWORD admin123
+export_url_encoded_credentials .env POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD || exit 1
 
 # --- Build Command ---
 declare -a DOCKER_CMD=("docker" "compose")

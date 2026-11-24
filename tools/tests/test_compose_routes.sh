@@ -100,6 +100,12 @@ check(
     "workflow sidecars use the scheduler",
     all("--scheduler-host-address" in sidecars[f"{n}-dapr"]["command"] for n in ("file-enrichment", "document-conversion", "agents")),
 )
+# Credentials inside connection URLs use nemesis-ctl's URL-encoded copies (issue #81)
+compose_text = (root / "compose.yaml").read_text()
+url_lines = [line for line in compose_text.splitlines() if "://" in line and not line.strip().startswith("#")]
+raw_cred = re.compile(r"(?<!_URLENC:-)\$\{(POSTGRES|RABBITMQ)_(USER|PASSWORD)(:\?)?\}")
+check("connection URLs only use URL-encoded credentials", not any(raw_cred.search(line.replace("_URLENC:-${", "_URLENC:-{")) for line in url_lines))
+check("found the credential URLs", sum("_URLENC" in line for line in url_lines) >= 14)
 jupyter_config = (root / "projects/jupyter/jupyter_config.py").read_text()
 check("Jupyter keeps its XSRF check", "disable_check_xsrf" not in jupyter_config)
 check("Jupyter does not allow every origin", "allow_origin" not in jupyter_config)

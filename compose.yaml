@@ -85,7 +85,7 @@ services:
     environment:
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
       - S3_SECRET_KEY=${S3_SECRET_KEY:?}
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER_URLENC:-${RABBITMQ_USER}}:${RABBITMQ_PASSWORD_URLENC:-${RABBITMQ_PASSWORD}}@rabbitmq:5672
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
@@ -163,7 +163,7 @@ services:
         "5",
       ]
     environment:
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER_URLENC:-${RABBITMQ_USER}}:${RABBITMQ_PASSWORD_URLENC:-${RABBITMQ_PASSWORD}}@rabbitmq:5672
     volumes:
       - ./infra/dapr/components/pubsub/titus.yaml:/dapr/components/titus.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
@@ -222,7 +222,7 @@ services:
         "5",
       ]
     environment:
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER_URLENC:-${RABBITMQ_USER}}:${RABBITMQ_PASSWORD_URLENC:-${RABBITMQ_PASSWORD}}@rabbitmq:5672
     volumes:
       - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
@@ -305,11 +305,13 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      # Dapr state store: a URL with encoded credentials (its separate user/password fields are not escaped)
+      POSTGRES_STATESTORE_URL: postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-enrichment}
       POSTGRES_PARAMETERS: ${POSTGRES_PARAMETERS:-sslmode=disable}
-      RABBITMQ_CONNECTION_STRING: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RABBITMQ_CONNECTION_STRING: amqp://${RABBITMQ_USER_URLENC:-${RABBITMQ_USER}}:${RABBITMQ_PASSWORD_URLENC:-${RABBITMQ_PASSWORD}}@rabbitmq:5672
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?}
       MAX_PARALLEL_WORKFLOWS: ${MAX_PARALLEL_WORKFLOWS:-5}
@@ -449,7 +451,7 @@ services:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
     environment:
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER_URLENC:-${RABBITMQ_USER}}:${RABBITMQ_PASSWORD_URLENC:-${RABBITMQ_PASSWORD}}@rabbitmq:5672
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
     depends_on:
       alerting: { condition: service_started }
@@ -506,6 +508,8 @@ services:
       - S3_SECRET_KEY=${S3_SECRET_KEY:?}
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      # Dapr state store: a URL with encoded credentials (its separate user/password fields are not escaped)
+      - POSTGRES_STATESTORE_URL=postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
       - POSTGRES_DB=${POSTGRES_DB:-enrichment}
@@ -586,11 +590,13 @@ services:
       - S3_SECRET_KEY=${S3_SECRET_KEY:?}
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      # Dapr state store: a URL with encoded credentials (its separate user/password fields are not escaped)
+      - POSTGRES_STATESTORE_URL=postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
       - POSTGRES_DB=${POSTGRES_DB:-enrichment}
       - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER_URLENC:-${RABBITMQ_USER}}:${RABBITMQ_PASSWORD_URLENC:-${RABBITMQ_PASSWORD}}@rabbitmq:5672
     depends_on:
       document-conversion: { condition: service_started }
       scheduler: { condition: service_started }
@@ -780,7 +786,7 @@ services:
     profiles: ["monitoring"]
     image: prometheuscommunity/postgres-exporter:v0.21.1
     environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}"
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER:?}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD:?}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}"
     volumes:
       - ./infra/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro
     depends_on:
@@ -800,13 +806,13 @@ services:
     environment:
       HASURA_GRAPHQL_ADMIN_SECRET: "${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}"
       HASURA_GRAPHQL_BASE_PATH: "/hasura"
-      HASURA_GRAPHQL_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
       HASURA_GRAPHQL_ENABLE_METADATA_SYNC: "true"
       HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
       HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
       HASURA_GRAPHQL_LOG_LEVEL: "warn"
-      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}
       HASURA_GRAPHQL_METADATA_DIR: /hasura-metadata
       # Requests without the admin secret (the web UI) get the restricted `operator` role defined in
       # infra/hasura/metadata/tables.yaml: read access plus the UI's own writes, no SQL/metadata API.
@@ -979,7 +985,7 @@ services:
       - GF_SERVER_DOMAIN=${EXTERNAL_HOST:-https://localhost}
       - GF_SERVER_ROOT_URL=${EXTERNAL_HOST:-https://localhost}/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}
+      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
@@ -1082,7 +1088,7 @@ services:
       # Phoenix LLM tracing configuration
       - PHOENIX_ENABLED=${PHOENIX_ENABLED:-false}
       - PHOENIX_ENDPOINT=${PHOENIX_ENDPOINT:-http://phoenix:6006/v1/traces}
-      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
       - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT_INSECURE=true
@@ -1136,12 +1142,14 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:?}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      # Dapr state store: a URL with encoded credentials (its separate user/password fields are not escaped)
+      - POSTGRES_STATESTORE_URL=postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-enrichment}?${POSTGRES_PARAMETERS:-sslmode=disable}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
       - POSTGRES_DB=${POSTGRES_DB:-enrichment}
       - POSTGRES_PARAMETERS=${POSTGRES_PARAMETERS:-sslmode=disable}
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
-      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER_URLENC:-${RABBITMQ_USER}}:${RABBITMQ_PASSWORD_URLENC:-${RABBITMQ_PASSWORD}}@rabbitmq:5672
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
       - S3_SECRET_KEY=${S3_SECRET_KEY:?}
     depends_on:
@@ -1154,7 +1162,7 @@ services:
     profiles: ["llm"]
     image: ghcr.io/berriai/litellm:v1.110.2
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
+      - DATABASE_URL=postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
       - STORE_MODEL_IN_DB=True
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
@@ -1196,7 +1204,7 @@ services:
     environment:
       - PHOENIX_WORKING_DIR=/data
       - PHOENIX_HOST_ROOT_PATH=/phoenix
-      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
+      - PHOENIX_SQL_DATABASE_URL=postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/phoenix
       - PHOENIX_DEFAULT_RETENTION_POLICY_DAYS=100
     volumes:
       - phoenix_data:/data

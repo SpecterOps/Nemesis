@@ -78,3 +78,44 @@ ensure_litellm_salt_key() {
   set_env_file_value "$env_file" LITELLM_SALT_KEY "sk-${new}"
   echo "Generated a random LITELLM_SALT_KEY in .env."
 }
+
+# Percent-encode a value for the user or password part of a URL (bytes, so UTF-8 works too).
+url_encode() {
+  local LC_ALL=C value=$1 out="" char hex i
+  for ((i = 0; i < ${#value}; i++)); do
+    char="${value:i:1}"
+    case "$char" in
+      [A-Za-z0-9._~-]) out+="$char" ;;
+      *)
+        printf -v hex '%%%02X' "'$char"
+        out+="$hex"
+        ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+# compose.yaml builds connection URLs (postgresql://user:pass@host, amqp://...) from
+# ${NAME_URLENC:-${NAME}}. Export NAME_URLENC for each credential so passwords with @ : / # % or
+# spaces work (issue #81); a plain `docker compose` without them still works for URL-safe values.
+# Values are never printed. A "$" is refused: compose expands it inside .env values, so the
+# encoded copy would no longer match what compose passes to Postgres/RabbitMQ.
+# Usage: export_url_encoded_credentials ENV_FILE NAME...
+export_url_encoded_credentials() {
+  local env_file=$1 name value bad=()
+  shift
+  for name in "$@"; do
+    value="${!name:-}"
+    [ -n "$value" ] || value="$(env_file_value "$env_file" "$name")"
+    [ -n "$value" ] || continue
+    if [[ "$value" == *'$'* ]]; then
+      bad+=("$name")
+      continue
+    fi
+    export "${name}_URLENC=$(url_encode "$value")"
+  done
+  if [ ${#bad[@]} -gt 0 ]; then
+    echo "Error: ${bad[*]} contain(s) '\$', which docker compose expands inside .env values. Use a value without '\$'." >&2
+    return 1
+  fi
+}

@@ -6,7 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/env_secrets.sh
 source "${SCRIPT_DIR}/../lib/env_secrets.sh"
 # Values exported in the shell take precedence over .env; keep them out of these tests.
-unset HASURA_ADMIN_SECRET LITELLM_ADMIN_PASSWORD LITELLM_SALT_KEY X
+unset HASURA_ADMIN_SECRET LITELLM_ADMIN_PASSWORD LITELLM_SALT_KEY X POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD \
+  POSTGRES_USER_URLENC POSTGRES_PASSWORD_URLENC RABBITMQ_USER_URLENC RABBITMQ_PASSWORD_URLENC
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -116,6 +117,36 @@ ensure_random_env_secret "$TMP/.env" LITELLM_ADMIN_PASSWORD admin123 > /dev/null
 check "upgrade: salt keeps the old default while the missing password is generated" \
   [ "$(value LITELLM_SALT_KEY)" = "sk-admin123" ]
 check "upgrade: password generated" is_random "$(value LITELLM_ADMIN_PASSWORD)"
+
+# --- url_encode / export_url_encoded_credentials (issue #81) ---
+check "url_encode keeps unreserved characters" [ "$(url_encode 'Az09-_.~')" = "Az09-_.~" ]
+check "url_encode escapes URL delimiters" [ "$(url_encode 'p@ss:w/rd?#%[]')" = "p%40ss%3Aw%2Frd%3F%23%25%5B%5D" ]
+check "url_encode escapes spaces, plus and quotes" [ "$(url_encode "a b+\"'\\")" = "a%20b%2B%22%27%5C" ]
+check "url_encode encodes UTF-8 bytes" [ "$(url_encode 'é')" = "%C3%A9" ]
+check "url_encode of empty is empty" [ -z "$(url_encode '')" ]
+# Round trip through Python's decoder, as libpq/amqp clients decode
+pw='p@ss w:rd/#?%&=+"\'"'"'é!*'
+check "url_encode round-trips" [ "$(python3 -c 'import sys,urllib.parse; print(urllib.parse.unquote(sys.argv[1]))' "$(url_encode "$pw")")" = "$pw" ]
+
+printf 'POSTGRES_USER="nemesis"\nPOSTGRES_PASSWORD="p@ss:w/rd#1"\nRABBITMQ_USER=nemesis\nRABBITMQ_PASSWORD="r@bbit %%"\n' > "$TMP/.env"
+out="$(export_url_encoded_credentials "$TMP/.env" POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD 2>&1; \
+  printf '%s|%s|%s|%s' "$POSTGRES_USER_URLENC" "$POSTGRES_PASSWORD_URLENC" "$RABBITMQ_USER_URLENC" "$RABBITMQ_PASSWORD_URLENC")"
+check "exports encoded credentials from .env" [ "$out" = "nemesis|p%40ss%3Aw%2Frd%231|nemesis|r%40bbit%20%25" ]
+
+out="$(POSTGRES_PASSWORD='sh@ll' export_url_encoded_credentials "$TMP/.env" POSTGRES_PASSWORD; printf '%s' "$POSTGRES_PASSWORD_URLENC")"
+check "a value exported in the shell wins over .env" [ "$out" = "sh%40ll" ]
+
+out="$(export_url_encoded_credentials "$TMP/.env" POSTGRES_PASSWORD 2>&1)"
+check "prints nothing" [ -z "$out" ]
+
+printf 'POSTGRES_PASSWORD="ab$cd"\n' > "$TMP/.env"
+out="$(export_url_encoded_credentials "$TMP/.env" POSTGRES_PASSWORD 2>&1)" && rc=0 || rc=$?
+check "refuses a \$ (compose expands it in .env)" [ "$rc" = 1 ]
+check "names the variable, not the value" bash -c '[[ "$1" == *POSTGRES_PASSWORD* && "$1" != *abcd* && "$1" != *'"'"'ab$cd'"'"'* ]]' _ "$out"
+
+printf 'OTHER=1\n' > "$TMP/.env"
+out="$(export_url_encoded_credentials "$TMP/.env" POSTGRES_PASSWORD; printf '%s' "${POSTGRES_PASSWORD_URLENC-unset}")"
+check "unset credential: nothing exported (compose reports it)" [ "$out" = "unset" ]
 
 if [ "$FAILURES" -ne 0 ]; then
   echo "$FAILURES test(s) failed"
