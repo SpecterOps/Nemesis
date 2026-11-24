@@ -31,10 +31,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 PENDING_BATCH_SIZE = 100
 RETRY_DELAYS_SEC = (5, 10, 20, 40, 80, 160, 300)
-# Columns read for every file record; is_screenshot/chunks_received are selectable by every Mythic role.
+# Columns read for every file record; chunks_received/total_chunks are selectable by every Mythic role.
 FILE_FIELDS = (
-    "id agent_file_id deleted complete filename_text full_remote_path_text host timestamp "
-    "is_screenshot chunks_received total_chunks"
+    "id agent_file_id deleted complete filename_text full_remote_path_text host timestamp chunks_received total_chunks"
 )
 # Allow this long without a byte before a download stalls; the whole transfer has no total limit.
 DOWNLOAD_READ_TIMEOUT_SEC = 300
@@ -70,13 +69,8 @@ def _decode_text(value: str | None) -> str:
 
 def _remote_path(file_meta: dict[str, Any], file_name: str, full_path: str) -> str:
     """Path to report to Nemesis. Mythic leaves full_remote_path empty for screenshots and for agents that send
-    only a file name, so fall back to the file name (under a per-host screenshots folder for screenshots)."""
-    if full_path:
-        return full_path
-    if file_meta.get("is_screenshot"):
-        host = file_meta.get("host") or "unknown"
-        return f"/{host}/screenshots/{file_name or file_meta.get('agent_file_id', 'screenshot')}"
-    return file_name
+    only a file name, so fall back to the file name (or the agent file ID if Mythic has no name either)."""
+    return full_path or file_name or str(file_meta.get("agent_file_id") or "")
 
 
 def _parse_mythic_timestamp(value: Any) -> datetime | None:

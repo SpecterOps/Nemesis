@@ -263,13 +263,10 @@ def test_transient_classification(exc, transient):
     ("extra", "expected"),
     [
         ({}, "C:\\Users\\bob\\report.txt"),
-        (
-            {"full_remote_path_text": "", "is_screenshot": True, "filename_text": b64("shot.png")},
-            "/ws01/screenshots/shot.png",
-        ),
+        ({"full_remote_path_text": "", "is_screenshot": True, "filename_text": b64("shot.png")}, "shot.png"),
         (
             {"full_remote_path_text": None, "is_screenshot": True, "filename_text": b64("shot.png"), "host": None},
-            "/unknown/screenshots/shot.png",
+            "shot.png",
         ),
         ({"full_remote_path_text": b64(""), "filename_text": b64("notes.txt")}, "notes.txt"),
     ],

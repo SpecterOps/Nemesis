@@ -284,8 +284,8 @@ The connector keeps its discovery cursor and which files it has uploaded in a Le
 uploaded again (see [Connector state in Docker](#connector-state-in-docker)).
 
 It syncs agent downloads and screenshots from every operation the Mythic user belongs to. Screenshots and
-downloads that Mythic stores without a full remote path are uploaded as `/<host>/screenshots/<name>` and
-`<name>` respectively. Collection time comes from Mythic, and files expire `nemesis.expiration_days` later.
+downloads that Mythic stores without a full remote path are uploaded under their file name alone.
+Collection time comes from Mythic, and files expire `nemesis.expiration_days` later.
 Mythic restarts and proxy errors are retried with backoff; rejected credentials or permissions stop the
 connector.
 

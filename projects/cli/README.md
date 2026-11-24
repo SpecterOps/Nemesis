@@ -140,8 +140,8 @@ Mythic retries transient errors, including Mythic restarts, and stops only on au
 permission or schema errors. Downloads that make no progress for `sync.pending_give_up_days`
 (default 7) are given up, and at most `sync.max_pending_subscriptions` (default 10) live
 subscriptions are open at once; further pending files are polled. A periodic check picks up
-files the discovery stream skipped. Screenshots and files without a full path are named
-`/<host>/screenshots/<file>` or `<file>`.
+files the discovery stream skipped. Screenshots and files without a full path are uploaded
+under their file name alone.
 
 All connectors verify the C2's TLS certificate unless `--ignore-cert-errors` is set, download
 without a total timeout (a stalled read fails after 300 seconds), send the C2's collection time as
