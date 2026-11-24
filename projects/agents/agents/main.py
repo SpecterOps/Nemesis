@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI):
         logger.info("Agent prompts initialized in database")
 
         # Start findings subscription
-        asyncio.create_task(handle_findings_subscription())
+        app.state.findings_subscription = asyncio.create_task(handle_findings_subscription())
         logger.debug("Started findings subscription handler")
 
         # Start MCP server for chatbot
@@ -466,7 +466,10 @@ async def handle_findings_subscription():
 
                             instance_id = f"agents-triage-{finding_id}"
                             assert workflow_client is not None
-                            workflow_client.schedule_new_workflow(
+                            # In a thread: a blocking gRPC call here stalls the event loop, and at startup
+                            # daprd waits for the app port before it answers, so the two deadlock.
+                            await asyncio.to_thread(
+                                workflow_client.schedule_new_workflow,
                                 workflow=finding_triage_workflow,
                                 instance_id=instance_id,
                                 input=triage_request.model_dump(),
