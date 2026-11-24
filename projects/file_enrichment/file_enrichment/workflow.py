@@ -124,8 +124,9 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
             ctx.call_activity(publish_findings_alerts, input=object_id),
         ]
 
+        # Always wait (also on replay), or finalize runs before the alerts are published
+        results = yield wf.when_all(final_tasks)
         if not ctx.is_replaying:
-            results = yield wf.when_all(final_tasks)
             for r in results:
                 logger.debug(f"final_tasks result: {r}")
 
