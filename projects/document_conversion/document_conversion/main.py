@@ -14,6 +14,7 @@ from common.workflows.setup import set_workflow_runtime_loop, wf_runtime
 from common.workflows.workflow_purger import WorkflowPurger
 from dapr.ext.fastapi import DaprApp
 from dapr.ext.workflow import DaprWorkflowClient
+from dapr.ext.workflow.aio import DaprWorkflowClient as AsyncDaprWorkflowClient
 from dapr.ext.workflow.logger.options import LoggerOptions
 from fastapi import FastAPI
 
@@ -81,6 +82,9 @@ async def lifespan(app: FastAPI):
         stack.callback(wf_runtime.shutdown)
 
         global_vars.workflow_client = DaprWorkflowClient(
+            logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
+        )
+        global_vars.async_workflow_client = AsyncDaprWorkflowClient(
             logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
         )
 
