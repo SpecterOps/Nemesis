@@ -10,6 +10,12 @@ DEFAULT_PENDING_GIVE_UP_DAYS = 7
 DEFAULT_MAX_PENDING_SUBSCRIPTIONS = 10
 
 
+def _lower_keys(data: dict) -> dict:
+    """Lowercase keys recursively. Dynaconf keeps keys set by MYTHIC_SYNC_<SECTION>__<KEY> environment variables in
+    upper case (e.g. ``CA_FILE``), while keys from the YAML file keep their own case."""
+    return {str(k).lower(): _lower_keys(v) if isinstance(v, dict) else v for k, v in data.items()}
+
+
 @dataclass
 class UsernamePasswordCredential:
     username: str
@@ -155,11 +161,11 @@ class Settings:
         sync = dynaconf.get("sync")
         return cls(
             project=dynaconf.project,
-            mythic=MythicConfig.from_dict(dynaconf.mythic.to_dict()),
-            nemesis=NemesisConfig.from_dict(dynaconf.nemesis.to_dict()),
-            db=DatabaseConfig.from_dict(dynaconf.db.to_dict()),
-            networking=NetworkingConfig.from_dict(dynaconf.networking.to_dict()),
-            sync=SyncConfig.from_dict(sync.to_dict() if sync is not None else None),
+            mythic=MythicConfig.from_dict(_lower_keys(dynaconf.mythic.to_dict())),
+            nemesis=NemesisConfig.from_dict(_lower_keys(dynaconf.nemesis.to_dict())),
+            db=DatabaseConfig.from_dict(_lower_keys(dynaconf.db.to_dict())),
+            networking=NetworkingConfig.from_dict(_lower_keys(dynaconf.networking.to_dict())),
+            sync=SyncConfig.from_dict(_lower_keys(sync.to_dict()) if sync is not None else None),
         )
 
 

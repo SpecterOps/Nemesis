@@ -644,3 +644,17 @@ def test_config_ca_file_rejects_empty(value):
 def test_config_ca_file_must_exist(tmp_path):
     with pytest.raises(ValueError, match="not found"):
         mythic_config.NetworkingConfig(timeout_sec=5, validate_https_certs=True, ca_file=str(tmp_path / "missing.pem"))
+
+
+# --- MYTHIC_SYNC_* environment overrides (used by tools/mythic_connect.sh) ---------------------------------------
+
+
+def test_env_override_db_path(tmp_path, monkeypatch):
+    """Dynaconf keeps env-set keys upper case (DB__PATH -> {"PATH": ...}); they must still be read."""
+    monkeypatch.setenv("MYTHIC_SYNC_DB__PATH", str(tmp_path / "state"))
+    mythic_config.get_settings.cache_clear()
+    try:
+        settings = mythic_config.get_settings(write_settings(tmp_path, ""))
+    finally:
+        mythic_config.get_settings.cache_clear()
+    assert settings.db.path == str(tmp_path / "state")
