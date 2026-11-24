@@ -39,7 +39,7 @@ def test_project_is_required(credential_type):
         ADAPTER.validate_python(PAYLOADS[credential_type])
 
 
-@pytest.mark.parametrize("project", ["", "   ", "\t"])
+@pytest.mark.parametrize("project", ["", "   ", "\t", None, "p" * 256])
 @pytest.mark.parametrize("credential_type", ["password", "dpapi_system", "domain_backup_key"])
 def test_blank_project_is_rejected(credential_type, project):
     with pytest.raises(ValidationError, match="project"):

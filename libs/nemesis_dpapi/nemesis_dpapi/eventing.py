@@ -8,6 +8,7 @@ from typing import get_args
 from uuid import UUID
 
 from common.log_safety import mask
+from common.models2.api import ProjectName
 from common.queues import DPAPI_EVENTS_TOPIC, DPAPI_PUBSUB
 from dapr.aio.clients import DaprClient
 from dapr.clients.grpc._response import TopicEventResponse, TopicEventResponseStatus
@@ -24,7 +25,7 @@ logger = getLogger(__name__)
 class NewEncryptedMasterKeyEvent(BaseModel):
     """Event emitted when a new encrypted master key is added"""
 
-    project: str
+    project: ProjectName
     masterkey_guid: UUID
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -32,7 +33,7 @@ class NewEncryptedMasterKeyEvent(BaseModel):
 class NewPlaintextMasterKeyEvent(BaseModel):
     """Event emitted when a new plaintext master key is added"""
 
-    project: str
+    project: ProjectName
     masterkey_guid: UUID
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -40,7 +41,7 @@ class NewPlaintextMasterKeyEvent(BaseModel):
 class NewDomainBackupKeyEvent(BaseModel):
     """Event emitted when a new domain backup key is added"""
 
-    project: str
+    project: ProjectName
     backup_key_guid: UUID
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -48,7 +49,7 @@ class NewDomainBackupKeyEvent(BaseModel):
 class NewDpapiSystemCredentialEvent(BaseModel):
     """Event emitted when a new DPAPI system credential is added"""
 
-    project: str
+    project: ProjectName
     credential: DpapiSystemCredential
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -57,7 +58,7 @@ class NewPasswordDerivedCredentialEvent(BaseModel):
     """Event emitted when a new password-derived credential is added. This includes
     Password, NTLM hash, SHA1 hash, and PBKDF2 hash credentials."""
 
-    project: str
+    project: ProjectName
     type: str
     credential: Password | NtlmHash | Sha1Hash | Pbkdf2Hash
     user_sid: Sid | None = None

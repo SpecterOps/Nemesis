@@ -158,3 +158,19 @@ class TestEventProject:
         event = NewDomainBackupKeyEvent(project="proj-b", backup_key_guid=uuid4())
         restored = TypedDpapiEvent(**TypedDpapiEvent(type_name="NewDomainBackupKeyEvent", evnt=event).model_dump())
         assert restored.evnt.project == "proj-b"
+
+
+@pytest.mark.parametrize("project", ["", "   ", None, "p" * 256])
+@pytest.mark.parametrize(
+    ("event_cls", "fields"),
+    [
+        (NewEncryptedMasterKeyEvent, {"masterkey_guid": uuid4()}),
+        (NewPlaintextMasterKeyEvent, {"masterkey_guid": uuid4()}),
+        (NewDomainBackupKeyEvent, {"backup_key_guid": uuid4()}),
+    ],
+)
+def test_event_rejects_missing_blank_or_oversized_project(event_cls, fields, project):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        event_cls(**fields, project=project)
