@@ -482,7 +482,8 @@ documentConversion:
     appId: document-conversion
     config: document-conversion-config
   env:
-    tikaConfig: /tika-config.xml
+    # Tika 4 JSON config; empty picks /tika-config-tesseract.json when tikaUseOcr is true, else /tika-config.json
+    tikaConfig: ""
     tikaOcrLanguages: eng
     tikaUseOcr: false
     maxParallelWorkflows: "5"

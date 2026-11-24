@@ -1,0 +1,18 @@
+{
+  // Tika 4.x configuration (JSON). Default: no OCR.
+  // Component names: java -jar tika-app.jar --list-parser-names
+  "parsers": [
+    { "default-parser": {} },
+    {
+      "pdf-parser": {
+        "extractInlineImages": false,
+        "extractFontNames": false,
+        // Prevent OOM on large PDFs - 512M
+        "maxMainMemoryBytes": 536870912,
+        "pages": { "text": "extract" }
+      }
+    }
+  ],
+  // No OCR engine: images and scanned PDF pages are not OCR'd
+  "text-recognizers": []
+}

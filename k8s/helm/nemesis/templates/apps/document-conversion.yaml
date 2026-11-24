@@ -41,7 +41,8 @@ spec:
             - name: NEMESIS_URL
               value: {{ .Values.nemesis.url | quote }}
             - name: TIKA_CONFIG
-              value: {{ .Values.documentConversion.env.tikaConfig | quote }}
+              {{- $tikaOcr := eq (toString .Values.documentConversion.env.tikaUseOcr) "true" }}
+              value: {{ .Values.documentConversion.env.tikaConfig | default (ternary "/tika-config-tesseract.json" "/tika-config.json" $tikaOcr) | quote }}
             - name: TIKA_OCR_LANGUAGES
               value: {{ .Values.documentConversion.env.tikaOcrLanguages | quote }}
             - name: TIKA_USE_OCR
@@ -62,11 +63,11 @@ spec:
                   key: HASURA_ADMIN_SECRET
           volumeMounts:
             - name: tika-config
-              mountPath: /tika-config.xml
-              subPath: tika-config.xml
+              mountPath: /tika-config.json
+              subPath: tika-config.json
             - name: tika-config
-              mountPath: /tika-config-tesseract.xml
-              subPath: tika-config-tesseract.xml
+              mountPath: /tika-config-tesseract.json
+              subPath: tika-config-tesseract.json
           readinessProbe:
             httpGet:
               path: /healthz

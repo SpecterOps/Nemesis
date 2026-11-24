@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "nemesis.labels" . | nindent 4 }}
 data:
-  tika-config.xml: |
-{{ .Files.Get "files/tika-config.xml" | indent 4 }}
-  tika-config-tesseract.xml: |
-{{ .Files.Get "files/tika-config-tesseract.xml" | indent 4 }}
+  tika-config.json: |
+{{ .Files.Get "files/tika-config.json" | indent 4 }}
+  tika-config-tesseract.json: |
+{{ .Files.Get "files/tika-config-tesseract.json" | indent 4 }}

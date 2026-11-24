@@ -7,7 +7,10 @@ ARG MIN_OPENJDK_VERSION="21.0.13.1+2-1~deb13u1"
 FROM ${PYTHON_BASE_DEV_IMAGE} AS base
 
 ARG TIKA_OCR_LANGUAGES="eng"
-ARG TIKA_VERSION="3.4.0"
+# Tika 4 ships tika-app as a zip (thin launcher jar + lib/). The checksum is the release's .sha512,
+# whose signature was checked against https://downloads.apache.org/tika/KEYS when it was pinned.
+ARG TIKA_VERSION="4.2.0"
+ARG TIKA_SHA512="a9966e238fc0178a4ba3e7dd870c7b59894a16ec7759fc5582d62d0ecf9006b84e8ec97270ec2c3c0171acd57ef6ed351d55fa6884a4e52f2635fd148652bf0f"
 ARG MIN_OPENJDK_VERSION
 
 # Install dependencies including multiple Tesseract language packs
@@ -31,8 +34,11 @@ RUN apt-get update && \
     JDK_VERSION="$(dpkg-query -W -f='${Version}' openjdk-21-jre-headless)" && \
     { dpkg --compare-versions "${JDK_VERSION}" ge "${MIN_OPENJDK_VERSION}" || \
         { echo "ERROR: openjdk-21-jre-headless ${JDK_VERSION} < ${MIN_OPENJDK_VERSION} (CVE-2026-114938)"; exit 1; }; } && \
-    # Download Tika server
-    wget https://archive.apache.org/dist/tika/${TIKA_VERSION}/tika-server-standard-${TIKA_VERSION}.jar -O /tika-server-standard.jar && \
+    # Download and verify Tika (used in-process through JPype; classpath /opt/tika/lib/*)
+    wget -q https://archive.apache.org/dist/tika/${TIKA_VERSION}/tika-app-${TIKA_VERSION}.zip -O /tmp/tika.zip && \
+    echo "${TIKA_SHA512}  /tmp/tika.zip" | sha512sum -c - && \
+    python3 -m zipfile -e /tmp/tika.zip /opt/tika && \
+    rm /tmp/tika.zip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -128,8 +134,8 @@ ENV PATH="$JAVA_HOME/bin:$PATH" \
 
 # Copy only the virtual environment from the bundle stage
 COPY --from=bundle /venv /venv
-# Copy the Tika JAR from base so we don't download again
-COPY --from=base /tika-server-standard.jar /tika-server-standard.jar
+# Copy Tika from base so we don't download again
+COPY --from=base /opt/tika/lib /opt/tika/lib
 
 # TODO: Re-enable when we're ready for release
 # USER nemesis

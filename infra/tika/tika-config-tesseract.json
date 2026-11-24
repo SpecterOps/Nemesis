@@ -1,0 +1,32 @@
+{
+  // Tika 4.x configuration (JSON) with Tesseract OCR (TIKA_USE_OCR).
+  // document_conversion replaces "eng" below with TIKA_OCR_LANGUAGES.
+  "parsers": [
+    { "default-parser": {} },
+    {
+      "pdf-parser": {
+        "extractInlineImages": true,
+        "extractFontNames": true,
+        // Prevent OOM on large PDFs - 512M
+        "maxMainMemoryBytes": 536870912,
+        // OCR a page only when it has little or no extractable text
+        "pages": { "text": "auto" }
+      }
+    }
+  ],
+  // OCR engine used by the image and PDF parsers (https://tika.apache.org -> TesseractOCRParser)
+  "text-recognizers": [
+    {
+      "tesseract-ocr-parser": {
+        // Multi-language: join with '+' (e.g. eng+spa+fra)
+        "language": "eng",
+        // Page segmentation mode: 3 is fully automatic
+        "pageSegMode": "3",
+        "timeoutMillis": 300000,
+        // Deskew/rotate with ImageMagick before OCR
+        "applyRotation": true,
+        "imageMagickPath": "/usr/bin/"
+      }
+    }
+  ]
+}

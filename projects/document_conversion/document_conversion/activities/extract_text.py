@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import re
 import tempfile
 from types import SimpleNamespace
 
@@ -200,27 +201,27 @@ def can_extract_plaintext(mime_type: str) -> bool:
     return mime_type in supported_mime_types
 
 
+TIKA_CLASSPATH = os.getenv("TIKA_CLASSPATH", "/opt/tika/lib/*")
+DEFAULT_TIKA_CONFIG = "/tika-config.json"
+_LANGUAGE_PLACEHOLDER = '"language": "eng"'
+_OCR_LANGUAGES = re.compile(r"^[A-Za-z0-9_/]+(\+[A-Za-z0-9_/]+)*$")
+
+
 def init_jvm():
     """Initialize Java Virtual Machine and load Java classes."""
     if not jpype.isJVMStarted():
         logger.info("Starting JVM")
-        jpype.startJVM(
-            # "-Dorg.slf4j.simpleLogger.defaultLogLevel=debug",
-            "-Dorg.slf4j.simpleLogger.showDateTime=true",
-            "-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd HH:mm:ss:SSS",
-            "-Dorg.slf4j.simpleLogger.showLogName=true",
-            "-Dorg.slf4j.simpleLogger.logFile=System.out",  # Write to stdout instead of stderr
-            classpath=["/tika-server-standard.jar"],
-        )
+        jpype.startJVM(classpath=[TIKA_CLASSPATH])
         logger.info("JVM started successfully")
     else:
         logger.info("JVM already running")
 
     java.Logger = jpype.JClass("java.util.logging.Logger")
     java.Level = jpype.JClass("java.util.logging.Level")
-    java.TikaConfig = jpype.JClass("org.apache.tika.config.TikaConfig")
+    java.TikaLoader = jpype.JClass("org.apache.tika.config.loader.TikaLoader")
     java.Tika = jpype.JClass("org.apache.tika.Tika")
     java.File = jpype.JClass("java.io.File")
+    java.Paths = jpype.JClass("java.nio.file.Paths")
 
     pdfbox_logger = java.Logger.getLogger("org.apache.pdfbox")
     pdfbox_logger.setLevel(java.Level.SEVERE)
@@ -228,35 +229,43 @@ def init_jvm():
     logger.info("Java classes loaded and configured")
 
 
+def ocr_languages_from_env() -> str:
+    """TIKA_OCR_LANGUAGES ("eng chi_sim", "eng+deu") as Tesseract's '+'-joined list."""
+    #   Note: Use underscores for language types, not hyphens (chi_sim not chi-sim)
+    raw = os.getenv("TIKA_OCR_LANGUAGES", "eng").strip() or "eng"
+    languages = "+".join(raw.replace("-", "_").replace("+", " ").split())
+    if not _OCR_LANGUAGES.match(languages):
+        raise ValueError(f"TIKA_OCR_LANGUAGES has an invalid language name: {raw!r}")
+    return languages
+
+
+def render_tika_config(config_json: str, ocr_languages: str) -> str:
+    """Put the OCR languages into a Tika JSON config (a no-op for configs without OCR)."""
+    return config_json.replace(_LANGUAGE_PLACEHOLDER, f'"language": "{ocr_languages}"')
+
+
 def init_tika():
-    """Initialize Tika with OCR configuration."""
+    """Initialize Tika from its JSON config (TIKA_CONFIG), with the OCR languages substituted."""
     global tika_instance
     init_jvm()
 
-    # Get OCR language from environment variable
-    #   Note: Use underscores for language types, not hyphens (chi_sim not chi-sim)
-    ocr_languages = os.getenv("TIKA_OCR_LANGUAGES", "eng").replace("-", "_").replace(" ", "+")
-    logger.info(f"Configuring Tika with OCR languages: {ocr_languages}")
+    config_path = os.getenv("TIKA_CONFIG", DEFAULT_TIKA_CONFIG)
+    ocr_languages = ocr_languages_from_env()
+    logger.info("Configuring Tika", config=config_path, ocr_languages=ocr_languages)
 
-    # Read the static XML config and substitute the language parameter
-    with open("/tika-config.xml") as f:
-        config_xml = f.read()
+    with open(config_path) as f:
+        config_json = render_tika_config(f.read(), ocr_languages)
 
-    # Replace the hardcoded language with the environment variable value
-    config_xml = config_xml.replace(">eng<", f">{ocr_languages}<")
-
-    # Write the modified config to a temporary file
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as temp_config:
-        temp_config.write(config_xml)
-        temp_config.flush()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as temp_config:
+        temp_config.write(config_json)
         temp_config_path = temp_config.name
 
     try:
-        config = java.TikaConfig(java.File(temp_config_path))
-        tika_instance = java.Tika(config)
-        logger.info(
-            "Tika initialized successfully with OCR languages", config=temp_config_path, ocr_languages=ocr_languages
-        )
+        loader = java.TikaLoader.load(java.Paths.get(temp_config_path))
+        tika_instance = java.Tika(loader.loadDetectors(), loader.loadAutoDetectParser())
+        logger.info("Tika initialized successfully", config=config_path, ocr_languages=ocr_languages)
     except Exception as e:
-        logger.exception("Failed to load Tika config", ocr_languages=ocr_languages, config_xml=config_xml)
+        logger.exception("Failed to load Tika config", config=config_path, ocr_languages=ocr_languages)
         raise e
+    finally:
+        os.unlink(temp_config_path)
