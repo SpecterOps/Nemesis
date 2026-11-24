@@ -1,6 +1,7 @@
 import os
 import tempfile
 import uuid
+from datetime import datetime
 from io import BytesIO
 
 from dapr.clients import DaprClient
@@ -212,19 +213,36 @@ class StorageS3:
     def delete_object(self, object_id: str) -> bool:
         """Delete a single object from S3 storage.
 
+        An object that is already gone (``NoSuchKey``) counts as deleted, so a cleanup interrupted after its storage
+        deletes can be retried safely.
+
         Args:
             object_id (str): The ID of the object to delete
 
         Returns:
-            bool: True if deletion was successful, False otherwise
+            bool: True if the object no longer exists, False if the delete failed
         """
         try:
             self.minio_client.remove_object(self.bucket_name, object_id)
             logger.debug("Deleted object from storage", object_id=object_id, bucket=self.bucket_name)
             return True
+        except S3Error as err:
+            if err.code == "NoSuchKey":
+                logger.debug("Object already absent from storage", object_id=object_id, bucket=self.bucket_name)
+                return True
+            logger.exception(message="Failed to delete object from storage", object_id=object_id)
+            return False
         except Exception:
             logger.exception(message="Failed to delete object from storage", object_id=object_id)
             return False
+
+    def delete_objects_with_status(self, object_ids: list[str]) -> set[str]:
+        """Delete multiple objects and return the IDs that no longer exist (deleted or already absent).
+
+        Callers should only drop their own references (e.g. database rows) to the returned IDs; the rest failed and
+        should be kept so a later run can retry them.
+        """
+        return {object_id for object_id in dict.fromkeys(object_ids) if self.delete_object(object_id)}
 
     def delete_objects(self, object_ids: list[str]) -> int:
         """Delete multiple objects from S3 storage.
@@ -233,13 +251,30 @@ class StorageS3:
             object_ids (List[str]): List of object IDs to delete
 
         Returns:
-            int: Count of successfully deleted objects
+            int: Count of objects that no longer exist (deleted or already absent)
         """
-        success_count = 0
-        for object_id in object_ids:
-            if self.delete_object(object_id):
-                success_count += 1
-        return success_count
+        return len(self.delete_objects_with_status(object_ids))
+
+    def delete_objects_modified_before(self, cutoff: datetime) -> tuple[int, int]:
+        """Delete every object in the bucket last modified before ``cutoff`` (an aware datetime).
+
+        Objects are listed and deleted one at a time, so memory stays bounded however large the bucket is. Objects
+        written after ``cutoff`` (e.g. uploads that arrive while a cleanup runs) are left alone.
+
+        Returns:
+            (deleted, failed) counts.
+        """
+        deleted = failed = 0
+        for obj in self.minio_client.list_objects(self.bucket_name, recursive=True):
+            if obj.object_name is None or obj.is_dir:
+                continue
+            if obj.last_modified is not None and obj.last_modified >= cutoff:
+                continue
+            if self.delete_object(obj.object_name):
+                deleted += 1
+            else:
+                failed += 1
+        return deleted, failed
 
     def delete_all_files(self) -> bool:
         """

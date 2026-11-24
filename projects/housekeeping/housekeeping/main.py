@@ -1,7 +1,7 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,7 +17,8 @@ logger = get_logger(__name__)
 # Global variables
 scheduler = AsyncIOScheduler()
 is_initialized = False
-storage = StorageS3()
+# Created at startup (lifespan): StorageS3 reads its credentials from Dapr, which isn't available at import time.
+storage: StorageS3 | None = None
 background_tasks = set()
 db_pool = None
 
@@ -67,32 +68,55 @@ async def get_expired_object_ids(expiration_date: datetime | None = None) -> lis
         return []
 
 
-async def get_transform_object_ids(object_ids: list[str]) -> list[str]:
+async def get_transform_object_map(object_ids: list[str]) -> dict[str, list[str]] | None:
     """
-    Get all transform_object_ids that relate to the given object_ids.
+    Map each of the given object_ids to the transform_object_ids derived from it.
+
+    Returns None if the lookup failed: deleting a file's rows without knowing its transforms would cascade away the
+    transforms rows and orphan their storage objects, so callers must skip the round instead.
     """
     if not object_ids:
-        return []
+        return {}
 
     try:
         pool = await get_db_pool()
         async with pool.acquire() as conn:
-            # Get all transform_object_ids related to the expired object_ids
             transform_records = await conn.fetch(
                 """
-                SELECT transform_object_id
+                SELECT object_id, transform_object_id
                 FROM transforms
                 WHERE object_id = ANY($1::uuid[])
                 """,
                 object_ids,
             )
-
-            # Extract and return the transform_object_ids
-            transform_object_ids = [str(record["transform_object_id"]) for record in transform_records]
-            return transform_object_ids
+        transform_map: dict[str, list[str]] = {}
+        for record in transform_records:
+            transform_map.setdefault(str(record["object_id"]), []).append(str(record["transform_object_id"]))
+        return transform_map
     except Exception:
         logger.exception(message="Error getting transform object IDs from database")
-        return []
+        return None
+
+
+def delete_expired_objects_from_storage(
+    expired_object_ids: list[str], transform_map: dict[str, list[str]]
+) -> tuple[list[str], list[str]]:
+    """
+    Delete the storage objects of expired files and their transforms.
+
+    Returns (deletable, kept): an expired object_id is deletable from the database only when its own object and every
+    transform object derived from it no longer exist in storage. The rest keep their database rows, so the next run
+    finds them again and retries; deleting the rows would lose the only record of the objects.
+    """
+    if storage is None:
+        raise RuntimeError("Storage not initialized")
+    all_object_ids = list(dict.fromkeys(expired_object_ids + [t for ts in transform_map.values() for t in ts]))
+    removed = storage.delete_objects_with_status(all_object_ids)
+    deletable, kept = [], []
+    for object_id in expired_object_ids:
+        related = [object_id, *transform_map.get(object_id, [])]
+        (deletable if all(r in removed for r in related) else kept).append(object_id)
+    return deletable, kept
 
 
 async def delete_database_entries(object_ids: list[str]) -> bool:
@@ -186,9 +210,21 @@ async def delete_expired_chromium_data(expiration_date: datetime | None = None) 
         return False
 
 
+# file_listings and file_linkings have no expiration of their own: they describe a source (host) and only exist
+# because files from that source were collected. They are deleted once no unexpired file from that source remains.
+# (A created_at < now() rule would wipe every row on each nightly run.)
+_SOURCE_HAS_LIVE_FILES = """
+    EXISTS (SELECT 1 FROM files WHERE files.source = {table}.source AND files.expiration >= $1)
+    OR EXISTS (SELECT 1 FROM files_enriched fe WHERE fe.source = {table}.source AND fe.expiration >= $1)
+"""
+
+
 async def delete_expired_file_listings(expiration_date: datetime | None = None) -> bool:
     """
-    Delete expired entries from the file_listings table based on their created_at timestamp.
+    Delete file_listings rows whose source has no unexpired files left.
+
+    Listings tied to a collected file (object_id) are also removed by ON DELETE CASCADE with that file; this removes
+    the rest (paths still to be collected, not present, or not wanted).
 
     Args:
         expiration_date: Optional date to use for comparison instead of current datetime.
@@ -207,9 +243,9 @@ async def delete_expired_file_listings(expiration_date: datetime | None = None) 
             # Use DELETE...RETURNING to get count in a single query
             if expiration_date != datetime.max:
                 deleted_records = await conn.fetch(
-                    """
+                    f"""
                     DELETE FROM file_listings
-                    WHERE created_at < $1
+                    WHERE NOT ({_SOURCE_HAS_LIVE_FILES.format(table="file_listings")})
                     RETURNING listing_id
                     """,
                     comparison_date,
@@ -242,7 +278,7 @@ async def delete_expired_file_listings(expiration_date: datetime | None = None) 
 
 async def delete_expired_file_linkings(expiration_date: datetime | None = None) -> bool:
     """
-    Delete expired entries from the file_linkings table based on their created_at timestamp.
+    Delete file_linkings rows whose source has no unexpired files left (they hold file paths from that host).
 
     Args:
         expiration_date: Optional date to use for comparison instead of current datetime.
@@ -261,9 +297,9 @@ async def delete_expired_file_linkings(expiration_date: datetime | None = None) 
             # Use DELETE...RETURNING to get count in a single query
             if expiration_date != datetime.max:
                 deleted_records = await conn.fetch(
-                    """
+                    f"""
                     DELETE FROM file_linkings
-                    WHERE created_at < $1
+                    WHERE NOT ({_SOURCE_HAS_LIVE_FILES.format(table="file_linkings")})
                     RETURNING linking_id
                     """,
                     comparison_date,
@@ -296,7 +332,12 @@ async def delete_expired_file_linkings(expiration_date: datetime | None = None) 
 
 async def delete_expired_dpapi_data(expiration_date: datetime | None = None) -> bool:
     """
-    Delete expired entries from the dpapi tables based on their created_at timestamp.
+    Delete DPAPI masterkeys, domain backup keys and system credentials once no unexpired files remain.
+
+    These tables record neither a source, a project nor the file a key came from, and keys from one upload decrypt
+    blobs from others, so they cannot expire per file. They are kept while any file is still within its retention
+    and deleted (rows last updated before the comparison date) once every file has expired. (A created_at < now()
+    rule would delete every key on each nightly run while their files are still being analysed.)
 
     Args:
         expiration_date: Optional date to use for comparison instead of current datetime.
@@ -315,32 +356,19 @@ async def delete_expired_dpapi_data(expiration_date: datetime | None = None) -> 
             # Delete all dpapi tables in a transaction
             async with conn.transaction():
                 if expiration_date != datetime.max:
-                    # Delete dpapi.masterkeys
-                    await conn.execute(
+                    live_files = await conn.fetchval(
                         """
-                        DELETE FROM dpapi.masterkeys
-                        WHERE created_at < $1
+                        SELECT EXISTS (SELECT 1 FROM files WHERE expiration >= $1)
+                            OR EXISTS (SELECT 1 FROM files_enriched WHERE expiration >= $1)
                         """,
                         comparison_date,
                     )
-
-                    # Delete dpapi.domain_backup_keys
-                    await conn.execute(
-                        """
-                        DELETE FROM dpapi.domain_backup_keys
-                        WHERE created_at < $1
-                        """,
-                        comparison_date,
-                    )
-
-                    # Delete dpapi.system_credentials
-                    await conn.execute(
-                        """
-                        DELETE FROM dpapi.system_credentials
-                        WHERE created_at < $1
-                        """,
-                        comparison_date,
-                    )
+                    if live_files:
+                        logger.info("Keeping DPAPI data - unexpired files remain")
+                        return True
+                    for table in ("dpapi.masterkeys", "dpapi.domain_backup_keys", "dpapi.system_credentials"):
+                        await conn.execute(f"DELETE FROM {table} WHERE updated_at < $1", comparison_date)
+                    logger.info("Deleted DPAPI data - no unexpired files remain")
                 else:
                     # Delete all records from dpapi tables
                     await conn.execute("DELETE FROM dpapi.masterkeys")
@@ -435,9 +463,12 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
 
     logger.info("Starting cleanup job", custom_expiration=expiration_date is not None, expiration_date=expiration_date)
 
-    if not is_initialized:
+    if not is_initialized or storage is None:
         logger.error("Cleanup job aborted - service not initialized")
         return
+
+    # Objects written after this point (uploads arriving during the job) are never swept.
+    job_started = datetime.now(UTC)
 
     try:
         # Run cleanup three times over a minute to catch processing edge cases
@@ -446,32 +477,52 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
             expired_object_ids = await get_expired_object_ids(expiration_date)
             logger.info("Found expired objects", count=len(expired_object_ids), round=round_num)
 
-            # Process file objects if any were found
+            # Delete storage first, then only the database rows whose objects are gone. A failed storage delete keeps
+            # its rows (and so its object IDs) for the next run; a database failure after the storage delete is
+            # retried too, because objects that are already absent count as deleted.
+            deletable_object_ids: list[str] = []
             if expired_object_ids:
-                transform_object_ids = await get_transform_object_ids(expired_object_ids)
-                logger.info("Found related transform objects", count=len(transform_object_ids), round=round_num)
-
-                all_object_ids = list(set(expired_object_ids + transform_object_ids))
-                deleted_count = storage.delete_objects(all_object_ids)
-                logger.info(
-                    "Deleted objects from data lake", count=deleted_count, total=len(all_object_ids), round=round_num
-                )
+                transform_map = await get_transform_object_map(expired_object_ids)
+                if transform_map is None:
+                    logger.error("Skipping file deletion this round - transform lookup failed", round=round_num)
+                else:
+                    logger.info(
+                        "Found related transform objects",
+                        count=sum(len(t) for t in transform_map.values()),
+                        round=round_num,
+                    )
+                    deletable_object_ids, kept_object_ids = await asyncio.to_thread(
+                        delete_expired_objects_from_storage, expired_object_ids, transform_map
+                    )
+                    logger.info(
+                        "Deleted objects from data lake",
+                        files=len(deletable_object_ids),
+                        total=len(expired_object_ids),
+                        round=round_num,
+                    )
+                    if kept_object_ids:
+                        logger.warning(
+                            "Storage delete failed; keeping database rows for retry",
+                            count=len(kept_object_ids),
+                            round=round_num,
+                        )
 
             # Run database deletions in parallel
             logger.info("Starting parallel database cleanup operations", round=round_num)
-            # db_result, container_result, dpapi_result, chromium_result, file_listings_result, file_linkings_result = await asyncio.gather(
-            #     delete_database_entries(expired_object_ids),
-            #     delete_expired_containers(expiration_date),
-            #     delete_expired_dpapi_data(expiration_date),
-            #     delete_expired_chromium_data(expiration_date),
-            #     delete_expired_file_listings(expiration_date),
-            #     delete_expired_file_linkings(expiration_date),
-            #     return_exceptions=True,
-            # )
-
-            db_result, container_result = await asyncio.gather(
-                delete_database_entries(expired_object_ids),
+            (
+                db_result,
+                container_result,
+                dpapi_result,
+                chromium_result,
+                file_listings_result,
+                file_linkings_result,
+            ) = await asyncio.gather(
+                delete_database_entries(deletable_object_ids),
                 delete_expired_containers(expiration_date),
+                delete_expired_dpapi_data(expiration_date),
+                delete_expired_chromium_data(expiration_date),
+                delete_expired_file_listings(expiration_date),
+                delete_expired_file_linkings(expiration_date),
                 return_exceptions=True,
             )
 
@@ -485,16 +536,37 @@ async def run_cleanup_job(expiration_date: datetime | None = None):
                 "Failed to delete container entries",
                 round_num,
             )
-            # _log_cleanup_result(dpapi_result, "Successfully deleted dpapi data", "Failed to delete dpapi data", round_num)
-            # _log_cleanup_result(chromium_result, "Successfully deleted chromium data", "Failed to delete chromium data", round_num)
-            # _log_cleanup_result(file_listings_result, "Successfully deleted file_listings", "Failed to delete file_listings", round_num)
-            # _log_cleanup_result(file_linkings_result, "Successfully deleted file_linkings", "Failed to delete file_linkings", round_num)
+            _log_cleanup_result(
+                dpapi_result, "Successfully deleted dpapi data", "Failed to delete dpapi data", round_num
+            )
+            _log_cleanup_result(
+                chromium_result, "Successfully deleted chromium data", "Failed to delete chromium data", round_num
+            )
+            _log_cleanup_result(
+                file_listings_result,
+                "Successfully deleted file_listings",
+                "Failed to delete file_listings",
+                round_num,
+            )
+            _log_cleanup_result(
+                file_linkings_result,
+                "Successfully deleted file_linkings",
+                "Failed to delete file_linkings",
+                round_num,
+            )
 
             logger.info(f"Cleanup job round {round_num} complete")
 
             if round_num < _CLEANUP_RETRY_COUNT - 1:
                 logger.info(f"Waiting {_CLEANUP_RETRY_DELAY} seconds before next cleanup round")
                 await asyncio.sleep(_CLEANUP_RETRY_DELAY)
+
+        if expiration_date == datetime.max:
+            # "all": also remove objects no database row points to any more (e.g. from failed deletes in earlier
+            # versions, or uploads whose processing never recorded them). Only in this mode: an ordinary run can't
+            # tell an orphan from a file still waiting in the processing queue.
+            swept, sweep_failed = await asyncio.to_thread(storage.delete_objects_modified_before, job_started)
+            logger.info("Swept remaining storage objects", deleted=swept, failed=sweep_failed)
 
         logger.info("Cleanup completed!")
 
@@ -518,6 +590,8 @@ async def lifespan(app: FastAPI):
             command_timeout=60,
         )
         logger.info("Database connection pool initialized", min_size=2, max_size=10)
+
+        storage = StorageS3()
 
         # Get the cron schedule from environment or use default (midnight every day)
         cron_schedule = os.getenv("CLEANUP_SCHEDULE", "0 0 * * *")
