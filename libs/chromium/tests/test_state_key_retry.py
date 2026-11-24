@@ -100,7 +100,7 @@ async def test_query_is_scoped_to_profile_and_undecrypted_key_rows(decrypts):
     assert len(conn.fetch_calls) == 2
     for query, params in conn.fetch_calls:
         assert params == (SOURCE, USER, BROWSER, PROJECT)
-        assert "project IS NOT DISTINCT FROM $4" in query
+        assert "project = $4" in query
         assert "is_decrypted = FALSE" in query
         assert "encryption_type IN ('key', 'abe')" in query
         assert "dpapi" not in query  # DPAPI rows wait for their masterkey
@@ -232,7 +232,7 @@ async def test_state_key_fallback_lookup_is_project_scoped(monkeypatch):
     conn.fetchrow = recording_fetchrow
     await retry.retry_decrypt_chromium_data_for_state_key(SOURCE, USER, BROWSER, FakePool(conn), project=PROJECT)
     ((query, params),) = queries
-    assert "project IS NOT DISTINCT FROM $6" in query and params[-1] == PROJECT
+    assert "project = $6" in query and params[-1] == PROJECT
 
 
 def test_patch_targets_exist():

@@ -119,7 +119,7 @@ def detect_encryption_type(encrypted_value: bytes) -> tuple[str, str | None]:
 
 
 async def get_state_key_id(
-    source: str, username: str | None, browser: str, asyncpg_pool: asyncpg.Pool, *, project: str | None
+    source: str, username: str | None, browser: str, asyncpg_pool: asyncpg.Pool, *, project: str
 ) -> int | None:
     """Get a project's state key ID for key/abe encryption types using asyncpg.
 
@@ -137,7 +137,7 @@ async def get_state_key_id(
         async with asyncpg_pool.acquire() as conn:
             result = await conn.fetchrow(
                 """SELECT id FROM chromium.state_keys
-                   WHERE project IS NOT DISTINCT FROM $1 AND source = $2 AND username = $3 AND browser = $4""",
+                   WHERE project = $1 AND source = $2 AND username = $3 AND browser = $4""",
                 project,
                 source,
                 username,
@@ -179,7 +179,7 @@ async def get_state_key_bytes(state_key_id: int, encryption_type: str, asyncpg_p
         return None
 
 
-async def get_all_state_keys_from_source(source: str, asyncpg_pool: asyncpg.Pool, *, project: str | None) -> list[dict]:
+async def get_all_state_keys_from_source(source: str, asyncpg_pool: asyncpg.Pool, *, project: str) -> list[dict]:
     """Get all decrypted state keys from the same project and source using asyncpg.
 
     Args:
@@ -197,7 +197,7 @@ async def get_all_state_keys_from_source(source: str, asyncpg_pool: asyncpg.Pool
             results = await conn.fetch(
                 """SELECT id, username, browser, key_bytes_dec, key_is_decrypted,
                           app_bound_key_dec, app_bound_key_is_decrypted
-                   FROM chromium.state_keys WHERE project IS NOT DISTINCT FROM $1 AND source = $2""",
+                   FROM chromium.state_keys WHERE project = $1 AND source = $2""",
                 project,
                 source,
             )
@@ -217,7 +217,7 @@ async def get_all_state_keys_from_source(source: str, asyncpg_pool: asyncpg.Pool
 
 
 async def try_decrypt_with_all_keys(
-    encrypted_value: bytes, source: str, encryption_type: str, asyncpg_pool: asyncpg.Pool, *, project: str | None
+    encrypted_value: bytes, source: str, encryption_type: str, asyncpg_pool: asyncpg.Pool, *, project: str
 ) -> tuple[bytes | None, int | None]:
     """Try to decrypt with all available state keys from the same project and source using asyncpg.
 

@@ -95,12 +95,16 @@ class FileFilters(BaseModel):
         return v
 
 
+# Every stored row belongs to a project: required, non-blank, and within the database column's 255 characters.
+ProjectName = Annotated[str, Field(min_length=1, max_length=255, pattern=r"\S")]
+
+
 class FileMetadata(BaseModel):
     """Metadata model for file uploads"""
 
     agent_id: str
     source: str | None = None
-    project: str
+    project: ProjectName
     timestamp: datetime | None = Field(
         default=None, description="ISO 8601 formatted timestamp of when the data was collected"
     )

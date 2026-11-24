@@ -84,7 +84,7 @@ async def test_standard_path_in_another_project_is_not_paired(make_analyzer):
     assert found is None
     # Both lookups were scoped to the uploading file's project.
     assert all(params[1] == "proj-b" for _, params in conn.queries)
-    assert all("project IS NOT DISTINCT FROM" in query for query, _ in conn.queries)
+    assert all("project =" in query for query, _ in conn.queries)
 
 
 @pytest.mark.asyncio

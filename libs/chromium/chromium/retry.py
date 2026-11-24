@@ -81,7 +81,7 @@ async def retry_decrypt_chromium_data(
 
 
 async def retry_decrypt_chromium_data_for_state_key(
-    source: str, username: str | None, browser: str | None, asyncpg_pool: asyncpg.Pool, *, project: str | None
+    source: str, username: str | None, browser: str | None, asyncpg_pool: asyncpg.Pool, *, project: str
 ) -> dict:
     """Decrypt pending key/abe cookies and logins for one source, username and browser.
 
@@ -135,8 +135,7 @@ def _pending_rows_query(table: str, value_column: str, state_key_scope: tuple | 
     """
     if state_key_scope is not None:
         return select + (
-            "AND encryption_type IN ('key', 'abe') AND source = $1 AND username = $2 AND browser = $3 "
-            "AND project IS NOT DISTINCT FROM $4"
+            "AND encryption_type IN ('key', 'abe') AND source = $1 AND username = $2 AND browser = $3 AND project = $4"
         )
     return (
         select
@@ -153,7 +152,7 @@ async def _retry_decrypt_cookies(
     dpapi_manager: DpapiManager | None,
     asyncpg_pool: asyncpg.Pool,
     *,
-    project: str | None,
+    project: str,
     state_key_scope: tuple[str, str, str] | None = None,
 ) -> dict:
     """Retry decrypting cookies that previously failed.
@@ -256,7 +255,7 @@ async def _retry_decrypt_cookies(
                             state_key_row = await conn.fetchrow(
                                 """
                                 SELECT id FROM chromium.state_keys
-                                WHERE project IS NOT DISTINCT FROM $6 AND source = $1 AND username = $2 AND browser = $3
+                                WHERE project = $6 AND source = $1 AND username = $2 AND browser = $3
                                 AND (
                                     (key_is_decrypted = TRUE AND $4 = 'key')
                                     OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
@@ -333,7 +332,7 @@ async def _retry_decrypt_logins(
     dpapi_manager: DpapiManager | None,
     asyncpg_pool: asyncpg.Pool,
     *,
-    project: str | None,
+    project: str,
     state_key_scope: tuple[str, str, str] | None = None,
 ) -> dict:
     """Retry decrypting logins that previously failed.
@@ -438,7 +437,7 @@ async def _retry_decrypt_logins(
                                 state_key_row = await conn.fetchrow(
                                     """
                                     SELECT id FROM chromium.state_keys
-                                    WHERE project IS NOT DISTINCT FROM $6 AND source = $1 AND username = $2 AND browser = $3
+                                    WHERE project = $6 AND source = $1 AND username = $2 AND browser = $3
                                     AND (
                                         (key_is_decrypted = TRUE AND $4 = 'key')
                                         OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
@@ -456,7 +455,7 @@ async def _retry_decrypt_logins(
                                 state_key_row = await conn.fetchrow(
                                     """
                                     SELECT id FROM chromium.state_keys
-                                    WHERE project IS NOT DISTINCT FROM $4 AND source = $1
+                                    WHERE project = $4 AND source = $1
                                     AND (
                                         (key_is_decrypted = TRUE AND $2 = 'key')
                                         OR (app_bound_key_is_decrypted = TRUE AND $3 = 'abe')

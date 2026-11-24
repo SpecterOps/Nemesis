@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 
 async def _retry_state_keys_for_chromekey_after_decrypt(
-    source: str, chromekey: bytes, asyncpg_pool: asyncpg.Pool, project: str | None
+    source: str, chromekey: bytes, asyncpg_pool: asyncpg.Pool, project: str
 ):
     """Helper to retry the project's state key decryption after a chromekey is decrypted.
 

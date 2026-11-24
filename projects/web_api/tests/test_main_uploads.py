@@ -90,7 +90,8 @@ class TestUploadFile:
     def test_metadata_too_long_rejected(self, client, upload_storage, submit_mock, field, value):
         response = _post_file(client, _metadata(**{field: value}))
         assert response.status_code == 400
-        assert "too long" in response.json()["detail"]
+        detail = str(response.json()["detail"])
+        assert "too long" in detail or "at most 255 characters" in detail
         upload_storage.upload_uploadfile.assert_not_called()
 
     def test_metadata_at_limit_accepted(self, client, upload_storage, submit_mock):

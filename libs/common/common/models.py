@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from common.models2.api import ProjectName
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from .logger import get_logger
@@ -281,7 +282,7 @@ class File(BaseModel):
     object_id: str
     agent_id: str
     source: str | None = None
-    project: str
+    project: ProjectName
     timestamp: datetime
     expiration: datetime
     path: str  # | None = None

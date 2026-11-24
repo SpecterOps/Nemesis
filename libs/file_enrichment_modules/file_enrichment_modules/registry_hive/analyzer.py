@@ -174,7 +174,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     SELECT object_id
                     FROM files_enriched
                     WHERE source = $1
-                    AND project IS NOT DISTINCT FROM $2
+                    AND project = $2
                     AND LOWER(REPLACE(path, '\\', '/')) = LOWER($3)
                     ORDER BY timestamp DESC
                     LIMIT 1
@@ -199,7 +199,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     FROM files_enriched fe
                     JOIN enrichments e ON fe.object_id = e.object_id
                     WHERE fe.source = $1
-                    AND fe.project IS NOT DISTINCT FROM $2
+                    AND fe.project = $2
                     AND fe.magic_type = 'MS Windows registry file, NT/2000 or above'
                     AND e.module_name = 'registry_hive'
                     AND e.result_data->'results'->'hive_type' = $3

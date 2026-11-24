@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS files (
     object_id UUID PRIMARY KEY,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     timestamp TIMESTAMP WITH TIME ZONE,
     expiration TIMESTAMP WITH TIME ZONE,
     path TEXT,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS files_enriched (
     object_id UUID PRIMARY KEY,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     timestamp TIMESTAMP WITH TIME ZONE,
     expiration TIMESTAMP WITH TIME ZONE,
     path TEXT,
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS files_enriched_dataset (
     object_id UUID PRIMARY KEY,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     timestamp TIMESTAMP WITH TIME ZONE,
     expiration TIMESTAMP WITH TIME ZONE,
     path TEXT,
@@ -754,7 +754,7 @@ CREATE TABLE IF NOT EXISTS container_processing (
     original_size BIGINT,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     status VARCHAR(50) NOT NULL DEFAULT 'submitted',
     total_files_extracted INTEGER DEFAULT 0,
     total_bytes_extracted BIGINT DEFAULT 0,
@@ -789,7 +789,7 @@ CREATE TABLE IF NOT EXISTS chromium.history (
     originating_object_id UUID,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                              -- username extracted from user data directory, if applicable
     browser TEXT,                               -- browser name extracted from user data directory, if applicable
 
@@ -799,7 +799,7 @@ CREATE TABLE IF NOT EXISTS chromium.history (
     last_visit_time TIMESTAMP WITH TIME ZONE,   -- extracted from the Chromium DB
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE NULLS NOT DISTINCT (project, source, username, browser, url, title, last_visit_time)
+    UNIQUE (project, source, username, browser, url, title, last_visit_time)
 );
 
 -- "downloads" table in "History" file
@@ -808,7 +808,7 @@ CREATE TABLE IF NOT EXISTS chromium.downloads (
     originating_object_id UUID,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                              -- username extracted from user data directory, if applicable
     browser TEXT,                               -- browser name extracted from user data directory, if applicable
 
@@ -819,7 +819,7 @@ CREATE TABLE IF NOT EXISTS chromium.downloads (
     total_bytes INTEGER,                        -- extracted from the Chromium DB
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE NULLS NOT DISTINCT (project, source, username, browser, url, download_path, start_time)
+    UNIQUE (project, source, username, browser, url, download_path, start_time)
 );
 
 -- extracted from a Chromium "Local State" file
@@ -828,7 +828,7 @@ CREATE TABLE chromium.state_keys (
     originating_object_id UUID,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                                      -- username extracted from user data directory, if applicable
     browser TEXT,                                       -- browser name extracted from user data directory, if applicable
 
@@ -846,7 +846,7 @@ CREATE TABLE chromium.state_keys (
     app_bound_key_is_decrypted BOOLEAN,
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE NULLS NOT DISTINCT (project, source, username, browser)
+    UNIQUE (project, source, username, browser)
 );
 
 -- AES keys extracted from a CNG "Google Chromekey1" CNG file from C:\ProgramData\Microsoft\Crypto\SystemKeys\
@@ -856,7 +856,7 @@ CREATE TABLE chromium.chrome_keys (
     originating_object_id UUID,
     agent_id VARCHAR(255),
     source VARCHAR(1000),                               -- should only be one key per host/source
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
 
     key_masterkey_guid UUID,                            -- associated _system_ masterkey GUID for key_bytes_enc
     key_bytes_enc BYTEA,                                -- the raw DPAPI blob bytes from the CNG file
@@ -864,7 +864,7 @@ CREATE TABLE chromium.chrome_keys (
     key_is_decrypted BOOLEAN,
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE NULLS NOT DISTINCT (project, key_masterkey_guid)
+    UNIQUE (project, key_masterkey_guid)
 );
 
 -- Create indexes for masterkey GUID lookups on state_keys
@@ -878,7 +878,7 @@ CREATE TABLE IF NOT EXISTS chromium.logins (
     originating_object_id UUID,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                                      -- username extracted from user data directory, if applicable
     browser TEXT,                                       -- browser name extracted from user data directory, if applicable
 
@@ -899,7 +899,7 @@ CREATE TABLE IF NOT EXISTS chromium.logins (
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
     FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL,
-    UNIQUE NULLS NOT DISTINCT (project, source, username, browser, origin_url, username_value)
+    UNIQUE (project, source, username, browser, origin_url, username_value)
 );
 
 -- "cookies" table in "Cookies" file
@@ -908,7 +908,7 @@ CREATE TABLE IF NOT EXISTS chromium.cookies (
     originating_object_id UUID,
     agent_id VARCHAR(255),
     source VARCHAR(1000),
-    project VARCHAR(255),
+    project VARCHAR(255) NOT NULL CHECK (btrim(project) <> ''),
     username TEXT,                                      -- username extracted from user data directory, if applicable
     browser TEXT,                                       -- browser name extracted from user data directory, if applicable
 
@@ -934,7 +934,7 @@ CREATE TABLE IF NOT EXISTS chromium.cookies (
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
     FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL,
-    UNIQUE NULLS NOT DISTINCT (project, source, username, browser, host_key, name, path)
+    UNIQUE (project, source, username, browser, host_key, name, path)
 );
 
 -- DPAPI tables
@@ -943,7 +943,7 @@ CREATE SCHEMA dpapi;
 -- Every DPAPI table is scoped to a project: key material from one engagement never decrypts data in another.
 CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
     id SERIAL PRIMARY KEY,
-    project TEXT NOT NULL,
+    project TEXT NOT NULL CHECK (btrim(project) <> ''),
     guid TEXT NOT NULL,
     encrypted_key_usercred BYTEA,
     encrypted_key_backup BYTEA,
@@ -958,7 +958,7 @@ CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
 
 CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (
     id SERIAL PRIMARY KEY,
-    project TEXT NOT NULL,
+    project TEXT NOT NULL CHECK (btrim(project) <> ''),
     guid TEXT NOT NULL,
     key_data BYTEA NOT NULL,
     domain_controller TEXT,
@@ -969,7 +969,7 @@ CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (
 
 CREATE TABLE IF NOT EXISTS dpapi.system_credentials (
     id SERIAL PRIMARY KEY,
-    project TEXT NOT NULL,
+    project TEXT NOT NULL CHECK (btrim(project) <> ''),
     user_key BYTEA NOT NULL,
     machine_key BYTEA NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
