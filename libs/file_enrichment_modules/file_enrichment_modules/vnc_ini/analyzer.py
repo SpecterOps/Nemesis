@@ -12,6 +12,16 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
 
+# VNC obfuscates stored passwords with DES under the fixed key 17 52 6B 06 23 4E 58 07, applied with each key byte's
+# bits reversed (the d3des convention). For a standard DES implementation the key is therefore e8 4a d6 60 c4 72 1a e0.
+VNC_DES_KEY = bytes.fromhex("e84ad660c4721ae0")
+
+# (section, key) pairs holding obfuscated passwords, matched case-insensitively.
+#   RealVNC/TightVNC-style ini: [Server] Password
+#   UltraVNC ultravnc.ini: [ultravnc] passwd (full access) and passwd2 (view-only); 18 hex digits = 9 bytes, of which
+#   only the first 8 are the DES block.
+PASSWORD_FIELDS = (("server", "password"), ("ultravnc", "passwd"), ("ultravnc", "passwd2"))
+
 # Port of https://github.com/NetSPI/PowerHuntShares/blob/46238ba37dc85f65f2c1d7960f551ea3d80c236a/Scripts/ConfigParsers/parser-vnc.ini.ps1
 #   Original Author: Scott Sutherland, NetSPI (@_nullbind / nullbind)
 #   License: BSD 3-clause
@@ -26,8 +36,7 @@ class VncParser(EnrichmentModule):
 
         self.asyncpg_pool = None  # type: ignore
 
-        # Define the fixed DES key used by VNC
-        self.des_key = bytes([0x23, 0x52, 0x6A, 0x3B, 0x58, 0x92, 0x67, 0x34])
+        self.des_key = VNC_DES_KEY
 
         # the workflows this module should automatically run in
         self.workflows = ["default"]
@@ -45,22 +54,21 @@ class VncParser(EnrichmentModule):
     def _decrypt_password(self, encrypted_hex: str) -> str | None:
         """Decrypt the VNC password using the fixed DES key."""
         try:
-            # Convert hex string to bytes
             encrypted_bytes = bytes.fromhex(encrypted_hex.strip())
-
-            # Create DES cipher in ECB mode with no padding
-            cipher = DES.new(self.des_key, DES.MODE_ECB)
-
-            # Decrypt the password
-            decrypted_bytes = cipher.decrypt(encrypted_bytes)
-
-            # Convert to string and remove null padding
-            decrypted_password = decrypted_bytes.decode("ascii").rstrip("\0")
-
-            return decrypted_password
-        except Exception as e:
-            logger.error(f"Error decrypting password: {str(e)}")
+        except ValueError as e:
+            logger.warning(f"VNC password is not valid hex: {e}")
             return None
+        if len(encrypted_bytes) < 8:
+            logger.warning(f"VNC password is too short to decrypt ({len(encrypted_bytes)} bytes)")
+            return None
+
+        # VNC passwords are at most 8 characters: one DES block. UltraVNC appends a ninth byte, which is ignored.
+        cipher = DES.new(self.des_key, DES.MODE_ECB)
+        decrypted_bytes = cipher.decrypt(encrypted_bytes[:8]).rstrip(b"\0")
+        if not decrypted_bytes:
+            return None
+        # Non-ASCII bytes (e.g. a corrupted value) are kept visible rather than dropping the finding.
+        return decrypted_bytes.decode("latin-1")
 
     def _create_finding_summary(self, config: dict, decrypted_password: str) -> str:
         """Creates a markdown summary for the VNC password finding."""
@@ -70,10 +78,10 @@ class VncParser(EnrichmentModule):
         for section, values in config.items():
             summary += f"\n## {section}\n"
             for key, value in values.items():
-                if key == "Password":
-                    summary += f"* **Encrypted Password**: `{value}`\n"
-                elif key == "DecryptedPassword":
-                    summary += f"* **Decrypted Password**: `{value}`\n"
+                if (section.lower(), key.lower()) in PASSWORD_FIELDS:
+                    summary += f"* **Encrypted {key}**: `{value}`\n"
+                elif key.startswith("Decrypted"):
+                    summary += f"* **{key}**: `{value}`\n"
                 else:
                     summary += f"* **{key}**: {value}\n"
 
@@ -88,7 +96,7 @@ class VncParser(EnrichmentModule):
             line = line.strip()
 
             # Skip empty lines and comments
-            if not line or line.startswith("#"):
+            if not line or line.startswith(("#", ";")):
                 continue
 
             # Check for section headers
@@ -104,6 +112,19 @@ class VncParser(EnrichmentModule):
 
         return config
 
+    def _decrypt_config_passwords(self, config: dict) -> list[str]:
+        """Decrypt each known password field in place, adding a ``Decrypted<Key>`` entry next to it."""
+        decrypted = []
+        for section, values in config.items():
+            for key in list(values):
+                if (section.lower(), key.lower()) not in PASSWORD_FIELDS:
+                    continue
+                password = self._decrypt_password(values[key])
+                if password:
+                    values[f"Decrypted{key[:1].upper()}{key[1:]}"] = password
+                    decrypted.append(password)
+        return decrypted
+
     def _analyze_vnc_config(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze VNC config file and generate enrichment result.
 
@@ -117,40 +138,36 @@ class VncParser(EnrichmentModule):
         enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
         try:
-            content = Path(file_path).read_text(encoding="utf-8")
+            content = Path(file_path).read_text(encoding="utf-8", errors="replace")
 
             # Parse the configuration
             config = self._parse_vnc_config(content)
 
-            # Extract and decrypt password if present
-            server_config = config.get("Server", {})
-            if "Password" in server_config:
-                decrypted_password = self._decrypt_password(server_config["Password"])
-                if decrypted_password:
-                    server_config["DecryptedPassword"] = decrypted_password
+            # Extract and decrypt every stored password
+            decrypted_passwords = self._decrypt_config_passwords(config)
+            if decrypted_passwords:
+                # Create finding summary
+                summary_markdown = self._create_finding_summary(config, decrypted_passwords[0])
 
-                    # Create finding summary
-                    summary_markdown = self._create_finding_summary(config, decrypted_password)
+                # Create display data
+                display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
 
-                    # Create display data
-                    display_data = FileObject(type="finding_summary", metadata={"summary": summary_markdown})
+                # Create finding
+                finding = Finding(
+                    category=FindingCategory.CREDENTIAL,
+                    finding_name="vnc_password_detected",
+                    origin_type=FindingOrigin.ENRICHMENT_MODULE,
+                    origin_name=self.name,
+                    object_id=file_enriched.object_id,
+                    severity=7,
+                    raw_data={"config": config},
+                    data=[display_data],
+                )
 
-                    # Create finding
-                    finding = Finding(
-                        category=FindingCategory.CREDENTIAL,
-                        finding_name="vnc_password_detected",
-                        origin_type=FindingOrigin.ENRICHMENT_MODULE,
-                        origin_name=self.name,
-                        object_id=file_enriched.object_id,
-                        severity=7,
-                        raw_data={"config": config},
-                        data=[display_data],
-                    )
-
-                    # Add finding to enrichment result
-                    if not enrichment_result.findings:
-                        enrichment_result.findings = []
-                    enrichment_result.findings.append(finding)
+                # Add finding to enrichment result
+                if not enrichment_result.findings:
+                    enrichment_result.findings = []
+                enrichment_result.findings.append(finding)
 
             enrichment_result.results = config
 
@@ -165,7 +182,7 @@ class VncParser(EnrichmentModule):
                     yaml_output.append(f"{section}:")
                     for key, value in values.items():
                         # Highlight the decrypted password if present
-                        if key == "DecryptedPassword":
+                        if key.startswith("Decrypted"):
                             yaml_output.append(f"   {key}: !!! {value} !!!")
                         else:
                             yaml_output.append(f"   {key}: {value}")

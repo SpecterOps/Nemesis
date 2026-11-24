@@ -261,3 +261,78 @@ class TestPrefetchAnalyzerEdgeCases:
         async with harness.create_module(PrefetchAnalyzer) as module:
             result = await module.process("test-v26", CMD_PREFETCH)
             assert result.results["windows_version"] == "Windows 8/8.1"
+
+
+class FakeScca:
+    """Stand-in for pyscca.file with a given format version and number of stored run times."""
+
+    def __init__(self, format_version: int, stored_times: int):
+        from datetime import datetime
+
+        self.format_version = format_version
+        self.executable_filename = "CMD.EXE"
+        self.prefetch_hash = 0x4A81B364
+        self.run_count = 3
+        self.volumes = []
+        self.filenames = ["\\WINDOWS\\SYSTEM32\\NTDLL.DLL"]
+        self._times = [datetime(2024, 1, i + 1, 12, 0, 0) for i in range(stored_times)]
+        self.requested: list[int] = []
+
+    def open(self, path):
+        pass
+
+    def close(self):
+        pass
+
+    def get_last_run_time(self, index):
+        self.requested.append(index)
+        if index >= len(self._times):
+            raise OSError("pyscca_file_get_last_run_time: unable to retrieve last run time: out of bounds")
+        return self._times[index]
+
+
+class TestPrefetchRunTimes:
+    """Audit #107: XP (v17) and Vista/7 (v23) store one run time; reading index 1 must not lose the result."""
+
+    @pytest.mark.parametrize("version", [17, 23])
+    def test_single_run_time_formats(self, monkeypatch, version):
+        fake = FakeScca(version, stored_times=1)
+        monkeypatch.setattr("file_enrichment_modules.prefetch.analyzer.pyscca.file", lambda: fake)
+        data = PrefetchAnalyzer.__new__(PrefetchAnalyzer)._parse_prefetch("ignored.pf")
+        assert data["last_run_times"] == ["2024-01-01T12:00:00"]
+        assert fake.requested == [0]
+        assert data["executable_name"] == "CMD.EXE"
+
+    @pytest.mark.parametrize("version", [26, 30, 31])
+    def test_eight_run_time_formats(self, monkeypatch, version):
+        fake = FakeScca(version, stored_times=8)
+        monkeypatch.setattr("file_enrichment_modules.prefetch.analyzer.pyscca.file", lambda: fake)
+        data = PrefetchAnalyzer.__new__(PrefetchAnalyzer)._parse_prefetch("ignored.pf")
+        assert len(data["last_run_times"]) == 8
+
+    def test_out_of_range_index_stops_without_losing_result(self, monkeypatch):
+        # An unknown/odd version that holds fewer than 8 slots: keep what was read.
+        fake = FakeScca(99, stored_times=3)
+        monkeypatch.setattr("file_enrichment_modules.prefetch.analyzer.pyscca.file", lambda: fake)
+        data = PrefetchAnalyzer.__new__(PrefetchAnalyzer)._parse_prefetch("ignored.pf")
+        assert len(data["last_run_times"]) == 3
+        assert fake.requested == [0, 1, 2, 3]
+        assert data["filenames"] == ["\\WINDOWS\\SYSTEM32\\NTDLL.DLL"]
+
+    @pytest.mark.asyncio
+    async def test_process_v17_returns_result(self, monkeypatch):
+        fake = FakeScca(17, stored_times=1)
+        monkeypatch.setattr("file_enrichment_modules.prefetch.analyzer.pyscca.file", lambda: fake)
+        harness = ModuleTestHarness()
+        harness.register_file(
+            object_id="test-xp-pf",
+            local_path=CMD_PREFETCH,
+            file_enriched=FileEnrichedFactory.create(
+                object_id="test-xp-pf", file_name="CMD.EXE-4A81B364.pf", size=os.path.getsize(CMD_PREFETCH)
+            ),
+        )
+        async with harness.create_module(PrefetchAnalyzer) as module:
+            result = await module.process("test-xp-pf", CMD_PREFETCH)
+        assert result is not None
+        assert result.results["windows_version"] == "Windows XP/2003"
+        assert result.results["last_run_times"] == ["2024-01-01T12:00:00"]

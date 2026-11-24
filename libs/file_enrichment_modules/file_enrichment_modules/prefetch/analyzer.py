@@ -23,6 +23,10 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
 
+# Formats before Windows 8 (XP v17, Vista/7 v23) record a single last-run time; later formats record up to 8.
+SINGLE_RUN_TIME_VERSIONS = (17, 23)
+MAX_RUN_TIMES = 8
+
 # Mapping of prefetch format versions to Windows versions
 FORMAT_VERSION_MAP = {
     17: "Windows XP/2003",
@@ -102,11 +106,7 @@ rule Windows_Prefetch_File
                 "filenames": [],
             }
 
-            # Extract last run times (up to 8 on Windows 8+)
-            for i in range(8):
-                ts = pf.get_last_run_time(i)
-                if ts and ts.year > 1601:  # Filter out null timestamps
-                    data["last_run_times"].append(ts.isoformat())
+            data["last_run_times"] = self._last_run_times(pf)
 
             # Extract volume information
             for vol in pf.volumes:
@@ -132,6 +132,25 @@ rule Windows_Prefetch_File
 
         finally:
             pf.close()
+
+    @staticmethod
+    def _last_run_times(pf) -> list[str]:
+        """Return the recorded last-run times (one on v17/v23, up to 8 on Windows 8+).
+
+        libscca raises for an index past the format's slot count, so stop at the first out-of-range index instead of
+        losing the whole result.
+        """
+        count = 1 if pf.format_version in SINGLE_RUN_TIME_VERSIONS else MAX_RUN_TIMES
+        times = []
+        for i in range(count):
+            try:
+                ts = pf.get_last_run_time(i)
+            except (OSError, IndexError, ValueError) as e:
+                logger.debug(f"No last-run time at index {i} (format v{pf.format_version}): {e}")
+                break
+            if ts and ts.year > 1601:  # Filter out null timestamps
+                times.append(ts.isoformat())
+        return times
 
     def _analyze_prefetch_file(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze prefetch file and generate enrichment result."""

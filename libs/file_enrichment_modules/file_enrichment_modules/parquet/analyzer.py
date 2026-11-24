@@ -11,6 +11,27 @@ from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
 
+SAMPLE_ROWS = 10
+CSV_BATCH_ROWS = 100_000
+
+
+def _batch_rows(batch):
+    """Yield the rows of a pyarrow RecordBatch/Table as lists, in column order (pyarrow only, no pandas).
+
+    Columns are read positionally, so the values always line up with the schema's column names, including
+    pandas index columns such as ``__index_level_0__`` and duplicate names.
+    """
+    columns = [batch.column(i).to_pylist() for i in range(batch.num_columns)]
+    return zip(*columns, strict=True)
+
+
+def _markdown_cell(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
 
 class ParquetFileParser(EnrichmentModule):
     name: str = "parquet_file_parser"
@@ -78,29 +99,16 @@ class ParquetFileParser(EnrichmentModule):
             for field in schema_info:
                 report_lines.append(f"| {field['name']} | {field['type']} | {field['nullable']} |")
 
-            # Sample data - first 10 rows
-            first_rows = parquet_file.read_row_group(0).to_pandas().head(10)
-            report_lines.append("\n## Sample Data (First 10 rows)")
+            # Sample data - first rows of the first row group
+            report_lines.append(f"\n## Sample Data (First {SAMPLE_ROWS} rows)")
+            first_rows = parquet_file.read_row_group(0).slice(0, SAMPLE_ROWS) if num_row_groups else None
 
             # Manually create markdown table to avoid tabulate dependency
-            if not first_rows.empty:
-                # Add column headers
-                report_lines.append("\n| " + " | ".join(str(col) for col in first_rows.columns) + " |")
-                # Add separator line
-                report_lines.append("| " + " | ".join(["---"] * len(first_rows.columns)) + " |")
-                # Add data rows
-                for _, row in first_rows.iterrows():
-                    # Handle different data types and null values
-                    row_values = []
-                    for val in row:
-                        if val is None:
-                            row_values.append("")
-                        elif isinstance(val, (int, float, bool)):
-                            row_values.append(str(val))
-                        else:
-                            # Escape pipe characters in string values
-                            row_values.append(str(val).replace("|", "\\|"))
-                    report_lines.append("| " + " | ".join(row_values) + " |")
+            if first_rows is not None and first_rows.num_rows:
+                report_lines.append("\n| " + " | ".join(_markdown_cell(col) for col in first_rows.column_names) + " |")
+                report_lines.append("| " + " | ".join(["---"] * first_rows.num_columns) + " |")
+                for row in _batch_rows(first_rows):
+                    report_lines.append("| " + " | ".join(_markdown_cell(val) for val in row) + " |")
             else:
                 report_lines.append("\n*No data available*")
 
@@ -134,22 +142,19 @@ class ParquetFileParser(EnrichmentModule):
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_csv:
                 writer = csv.writer(tmp_csv)
 
-                # Write header (column names)
-                writer.writerow([field.name for field in schema])
+                # Write header (column names); every row below is written in this same column order
+                header = [field.name for field in schema]
+                writer.writerow(header)
 
                 # Process each row group to handle large files
-                chunksize = 100000  # Number of rows to process at a time
                 for i in range(num_row_groups):
-                    # Read a row group
                     table = parquet_file.read_row_group(i)
+                    if table.column_names != header:
+                        raise ValueError(f"Row group {i} columns {table.column_names} do not match schema {header}")
 
                     # Process in batches to minimize memory usage
-                    for batch in table.to_batches(max_chunksize=chunksize):
-                        # Convert to pandas for easier row iteration
-                        batch_df = batch.to_pandas()
-
-                        # Write rows
-                        writer.writerows(batch_df.values.tolist())
+                    for batch in table.to_batches(max_chunksize=CSV_BATCH_ROWS):
+                        writer.writerows(_batch_rows(batch))
 
                     # Free memory
                     del table
