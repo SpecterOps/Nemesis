@@ -165,7 +165,7 @@ class ContainerProgress:
             "processed_files": 0,
             "processed_bytes": 0,
             "current_file": None,
-            "started_at": datetime.now(),
+            "started_at": datetime.now(UTC),
         }
 
     def update_file_progress(self, container_id: str, filename: str, file_size: int):
@@ -923,7 +923,7 @@ class LargeContainerProcessor:
                             file_metadata.get("project"),
                             ContainerStatus.PROCESSING,
                             estimated_files,
-                            datetime.now(),
+                            datetime.now(UTC),
                             file_metadata.get("expiration"),
                         ),
                     )
@@ -971,7 +971,7 @@ class LargeContainerProcessor:
                         SET status = %s, error_message = %s, processing_completed_at = %s
                         WHERE container_id = %s
                     """,
-                        (ContainerStatus.FAILED, error_message, datetime.now(), container_id),
+                        (ContainerStatus.FAILED, error_message, datetime.now(UTC), container_id),
                     )
                     conn.commit()
         except Exception as e:
@@ -1118,7 +1118,7 @@ class LargeContainerProcessor:
                                 SET status = %s, processing_completed_at = %s
                                 WHERE container_id = %s
                             """,
-                                (ContainerStatus.WORKFLOWS_COMPLETE, datetime.now(), container_id),
+                                (ContainerStatus.WORKFLOWS_COMPLETE, datetime.now(UTC), container_id),
                             )
 
                             logger.info(

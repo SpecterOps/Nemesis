@@ -233,7 +233,7 @@ class TestContainerProgressEviction:
         tracker = main.container_processor.progress_tracker
         tracker.initialize("old", 1, 1)
         tracker.initialize("new", 1, 1)
-        tracker.get_progress("old")["started_at"] = datetime.now() - timedelta(days=8)
+        tracker.get_progress("old")["started_at"] = datetime.now(UTC) - timedelta(days=8)
         try:
             assert main._evict_stale_container_progress() == 1
             assert tracker.get_progress("old") is None

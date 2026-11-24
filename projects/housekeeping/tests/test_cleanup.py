@@ -1,5 +1,6 @@
 """Housekeeping cleanup: storage/database ordering (#199) and the DPAPI, listing and linking cleanups (#200)."""
 
+import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -274,3 +275,34 @@ async def test_chromium_only_cleared_in_all_mode(conn):
     assert not conn.executed  # ON DELETE CASCADE handles expiring files
     assert await hk.delete_expired_chromium_data(datetime.max) is True
     assert conn.sql("DELETE FROM chromium.logins")
+
+
+# --- trigger_cleanup expiration must carry a timezone ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["2026-01-01T00:00:00", "not a date"])
+async def test_trigger_rejects_naive_or_invalid_expiration(monkeypatch, value):
+    from common import data_issues
+
+    calls = []
+    monkeypatch.setattr(data_issues, "logger", type("L", (), {"warning": lambda self, e, **kw: calls.append(kw)})())
+    monkeypatch.setattr(hk, "is_initialized", True)
+    run = AsyncMock()
+    monkeypatch.setattr(hk, "run_cleanup_job", run)
+    result = await hk.trigger_cleanup(hk.CleanupRequest(expiration=value))
+    assert result["status"] == "error" and "timezone" in result["message"]
+    run.assert_not_called()
+    assert calls and calls[0]["kind"] == "rejected_input" and calls[0]["field"] == "cleanup.expiration"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["2026-01-01T00:00:00Z", "2026-01-01T02:00:00+02:00"])
+async def test_trigger_accepts_aware_expiration_as_utc(monkeypatch, value):
+    monkeypatch.setattr(hk, "is_initialized", True)
+    run = AsyncMock()
+    monkeypatch.setattr(hk, "run_cleanup_job", run)
+    result = await hk.trigger_cleanup(hk.CleanupRequest(expiration=value))
+    await asyncio.sleep(0)
+    assert result["expiration_mode"] == "custom"
+    assert run.call_args.args[0] == datetime(2026, 1, 1, tzinfo=UTC)

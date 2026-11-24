@@ -632,7 +632,7 @@ def _evict_stale_container_progress(max_age: timedelta = CONTAINER_PROGRESS_MAX_
     """Drop in-memory progress entries older than max_age. Returns the number evicted."""
     tracker = container_processor.progress_tracker
     entries: dict[str, dict[str, Any]] = getattr(tracker, "_progress", {})
-    cutoff = datetime.now() - max_age
+    cutoff = datetime.now(UTC) - max_age
     stale = [
         cid
         for cid, progress in list(entries.items())

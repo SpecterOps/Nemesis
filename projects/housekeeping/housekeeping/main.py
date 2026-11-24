@@ -6,8 +6,10 @@ from datetime import UTC, datetime
 import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from common.data_issues import DataIssueKind, log_data_issue
 from common.db import get_postgres_connection_str
 from common.logger import get_logger
+from common.models2.api import ensure_utc_datetime
 from common.storage import StorageS3
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -43,7 +45,7 @@ async def get_expired_object_ids(expiration_date: datetime | None = None) -> lis
     """
     try:
         pool = await get_db_pool()
-        comparison_date = expiration_date if expiration_date is not None else datetime.now()
+        comparison_date = expiration_date if expiration_date is not None else datetime.now(UTC)
 
         async with pool.acquire() as conn:
             records = await conn.fetch(
@@ -238,7 +240,7 @@ async def delete_expired_file_listings(expiration_date: datetime | None = None) 
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             # Use provided expiration date or current datetime
-            comparison_date = expiration_date if expiration_date is not None else datetime.now()
+            comparison_date = expiration_date if expiration_date is not None else datetime.now(UTC)
 
             # Use DELETE...RETURNING to get count in a single query
             if expiration_date != datetime.max:
@@ -292,7 +294,7 @@ async def delete_expired_file_linkings(expiration_date: datetime | None = None) 
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             # Use provided expiration date or current datetime
-            comparison_date = expiration_date if expiration_date is not None else datetime.now()
+            comparison_date = expiration_date if expiration_date is not None else datetime.now(UTC)
 
             # Use DELETE...RETURNING to get count in a single query
             if expiration_date != datetime.max:
@@ -352,7 +354,7 @@ async def delete_expired_dpapi_data(expiration_date: datetime | None = None) -> 
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             # Use provided expiration date or current datetime
-            comparison_date = expiration_date if expiration_date is not None else datetime.now()
+            comparison_date = expiration_date if expiration_date is not None else datetime.now(UTC)
 
             # Delete all dpapi tables in a transaction
             async with conn.transaction():
@@ -403,7 +405,7 @@ async def delete_expired_containers(expiration_date: datetime | None = None) -> 
         pool = await get_db_pool()
         async with pool.acquire() as conn:
             # Use provided expiration date or current datetime
-            comparison_date = expiration_date if expiration_date is not None else datetime.now()
+            comparison_date = expiration_date if expiration_date is not None else datetime.now(UTC)
 
             # Use DELETE...RETURNING to get count in a single query
             if expiration_date != datetime.max:
@@ -696,13 +698,17 @@ async def trigger_cleanup(request: CleanupRequest):
             expiration_date = datetime.max
             logger.info("Triggering cleanup with 'all' option - will remove ALL files")
         else:
-            # Parse the provided ISO format datetime
+            # Parse the provided ISO format datetime; it must carry a timezone (Z or an offset)
             try:
-                expiration_date = datetime.fromisoformat(request.expiration)
+                expiration_date = ensure_utc_datetime(request.expiration)
                 logger.info(f"Triggering cleanup with custom expiration: {expiration_date}")
-            except ValueError:
+            except ValueError as e:
+                log_data_issue(
+                    DataIssueKind.REJECTED_INPUT, field="cleanup.expiration", reason=str(e), value=request.expiration
+                )
                 return {
-                    "message": "Invalid expiration format. Use ISO format (YYYY-MM-DDTHH:MM:SS) or 'all'",
+                    "message": "Invalid expiration format. Use an ISO datetime with a timezone "
+                    "(YYYY-MM-DDTHH:MM:SSZ or +HH:MM) or 'all'",
                     "status": "error",
                 }
 
