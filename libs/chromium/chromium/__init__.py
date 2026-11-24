@@ -16,7 +16,7 @@ from .local_state import (
     retry_decrypt_state_keys_for_masterkey,
 )
 from .logins import process_chromium_logins
-from .retry import retry_decrypt_chromium_data
+from .retry import retry_decrypt_chromium_data, retry_decrypt_chromium_data_for_state_key
 
 __all__ = [
     "convert_chromium_timestamp",
@@ -29,6 +29,7 @@ __all__ = [
     "process_chromium_local_state",
     "retry_decrypt_chrome_keys_for_masterkey",
     "retry_decrypt_chromium_data",
+    "retry_decrypt_chromium_data_for_state_key",
     "retry_decrypt_state_keys_for_chromekey",
     "retry_decrypt_state_keys_for_masterkey",
     "try_decrypt_with_all_keys",

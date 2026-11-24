@@ -21,6 +21,7 @@ from .helpers import (
     parse_abe_blob,
     parse_chromium_file_path,
 )
+from .retry import retry_decrypt_chromium_data_for_state_key
 
 logger = get_logger(__name__)
 
@@ -439,6 +440,11 @@ async def _insert_state_keys(
             has_encrypted_key=bool(key_bytes_enc),
             has_app_bound_key=bool(app_bound_key_enc),
         )
+
+        # Cookies/Login Data processed before this Local State were stored encrypted. Decrypt them now; otherwise
+        # they would wait for an unrelated masterkey upload.
+        if key_is_decrypted or app_bound_key_is_decrypted:
+            await retry_decrypt_chromium_data_for_state_key(file_enriched.source, username, browser, asyncpg_pool)
 
         return serializable_data
 
@@ -946,6 +952,7 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
                             )
 
                         result["state_keys_decrypted"] += 1
+                        await retry_decrypt_chromium_data_for_state_key(source_val, username, browser, asyncpg_pool)
 
                         logger.debug(
                             "Successfully decrypted ABE v3 with chromekey",

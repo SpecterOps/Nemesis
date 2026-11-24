@@ -77,6 +77,19 @@ def _filetime_to_str(filetime: int) -> str | None:
         return None
 
 
+def _normalize_hive_path(path: str | None) -> str:
+    """Forward slashes and lower case, for comparing Windows paths recorded either way."""
+    return (path or "").replace("\\", "/").lower()
+
+
+def _parent_dir(path: str | None) -> str | None:
+    """Normalized parent directory of ``path``, or None if it has none."""
+    normalized = _normalize_hive_path(path).rstrip("/")
+    if "/" not in normalized:
+        return None
+    return normalized.rsplit("/", 1)[0]
+
+
 class RegistryHiveAnalyzer(EnrichmentModule):
     name: str = "registry_hive"
     dependencies: list[str] = []
@@ -143,52 +156,63 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             return None
 
     async def _find_existing_hive(self, file_enriched, target_hive_path: str) -> str | None:
-        """Find an existing hive by path."""
+        """Find a hive to pair with ``file_enriched``: same project and source, never across projects.
+
+        First match the expected path exactly (case-insensitive, either slash style). Failing that, take a registry
+        file of the target hive type that sits in the same directory as ``file_enriched`` (e.g. SAM and SYSTEM
+        dumped side by side). A hive elsewhere on the source is never used, since it may come from another system
+        image or snapshot.
+        """
         if not self.asyncpg_pool:
             logger.warning("No connection pool available, cannot find existing hive")
             return None
 
         try:
             async with self.asyncpg_pool.acquire() as conn:
-                # Look for existing hive by path
                 result = await conn.fetchrow(
                     """
                     SELECT object_id
                     FROM files_enriched
                     WHERE source = $1
-                    AND LOWER(path) = LOWER($2)
+                    AND project IS NOT DISTINCT FROM $2
+                    AND LOWER(REPLACE(path, '\\', '/')) = LOWER($3)
                     ORDER BY timestamp DESC
                     LIMIT 1
                 """,
                     file_enriched.source,
-                    target_hive_path,
+                    file_enriched.project,
+                    _normalize_hive_path(target_hive_path),
                 )
 
                 if result:
                     return str(result["object_id"])  # Convert UUID to string
 
-                # Fallback query: look for registry files by magic_type and enrichment results
-                # Extract the hive type from the target path (e.g., SECURITY from .../Windows/System32/Config/SECURITY)
-                target_hive_type = posixpath.basename(target_hive_path).upper()
+                # Fallback: a registry file of the target hive type in the same directory as this hive.
+                own_dir = _parent_dir(getattr(file_enriched, "path", None))
+                if not own_dir:
+                    return None
+                target_hive_type = posixpath.basename(_normalize_hive_path(target_hive_path)).upper()
 
-                result = await conn.fetchrow(
+                rows = await conn.fetch(
                     """
-                    SELECT fe.object_id
+                    SELECT fe.object_id, fe.path
                     FROM files_enriched fe
                     JOIN enrichments e ON fe.object_id = e.object_id
                     WHERE fe.source = $1
+                    AND fe.project IS NOT DISTINCT FROM $2
                     AND fe.magic_type = 'MS Windows registry file, NT/2000 or above'
                     AND e.module_name = 'registry_hive'
-                    AND e.result_data->'results'->'hive_type' = $2
+                    AND e.result_data->'results'->'hive_type' = $3
                     ORDER BY fe.timestamp DESC
-                    LIMIT 1
+                    LIMIT 100
                 """,
                     file_enriched.source,
+                    file_enriched.project,
                     f'"{target_hive_type}"',
                 )
-
-                if result:
-                    return str(result["object_id"])  # Convert UUID to string
+                for row in rows:
+                    if _parent_dir(row["path"]) == own_dir:
+                        return str(row["object_id"])
 
         except Exception as e:
             logger.error(f"Failed to find existing hive {target_hive_path}: {e}")
