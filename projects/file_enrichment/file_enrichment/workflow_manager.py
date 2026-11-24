@@ -168,12 +168,22 @@ class WorkflowManager:
                 current_span.set_attribute("workflow.instance_id", instance_id)
 
                 # Schedule the workflow in Dapr
-                await asyncio.to_thread(
-                    global_vars.workflow_client.schedule_new_workflow,
-                    instance_id=instance_id,
-                    workflow=enrichment_pipeline_workflow,
-                    input=file.model_dump(exclude_unset=True),
-                )
+                try:
+                    await asyncio.to_thread(
+                        global_vars.workflow_client.schedule_new_workflow,
+                        instance_id=instance_id,
+                        workflow=enrichment_pipeline_workflow,
+                        input=file.model_dump(exclude_unset=True),
+                    )
+                except Exception:
+                    # The caller retries the message with a new instance; don't leave this row SCHEDULED forever.
+                    try:
+                        await global_vars.tracking_service.update_status(
+                            instance_id, WorkflowStatus.FAILED, error_message="could not schedule workflow"
+                        )
+                    except Exception:
+                        logger.warning("Could not mark unscheduled workflow as failed", instance_id=instance_id)
+                    raise
 
                 # await asyncio.to_thread(global_vars.workflow_client.wait_for_workflow_completion, instance_id)
 

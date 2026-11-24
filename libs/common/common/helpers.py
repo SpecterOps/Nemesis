@@ -246,19 +246,24 @@ def get_drive_from_path(path: str) -> str | None:
 
 
 def create_text_reader(binary_file: BinaryIO) -> io.TextIOWrapper:
-    """Creates a text reader that handles BOMs and mixed content"""
+    """Creates a text reader that handles BOMs and mixed content.
+
+    Every encoding uses errors="replace": `file` can call content text/plain even when it holds bytes that are invalid
+    in its encoding (e.g. a UTF-8 BOM followed by 0xFF), and a strict decode would raise and abort the caller.
+    """
 
     bom_check = binary_file.read(4)
     binary_file.seek(0)  # Reset to start
 
     if bom_check.startswith(b"\xff\xfe"):
-        return io.TextIOWrapper(binary_file, encoding="utf-16le")
+        encoding = "utf-16le"
     elif bom_check.startswith(b"\xfe\xff"):
-        return io.TextIOWrapper(binary_file, encoding="utf-16be")
+        encoding = "utf-16be"
     elif bom_check.startswith(b"\xef\xbb\xbf"):
-        return io.TextIOWrapper(binary_file, encoding="utf-8-sig")
+        encoding = "utf-8-sig"
     else:
-        return io.TextIOWrapper(binary_file, encoding="utf-8", errors="replace")
+        encoding = "utf-8"
+    return io.TextIOWrapper(binary_file, encoding=encoding, errors="replace")
 
 
 def escape_markdown(text):

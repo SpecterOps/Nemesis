@@ -68,6 +68,30 @@ def topological_sort(graph):
     return order
 
 
+def _await_each(ctx: wf.DaprWorkflowContext, named_tasks, object_id: str):
+    """Wait for already-scheduled tasks one by one, tolerating individual failures.
+
+    Used with ``yield from`` inside a workflow. The tasks were all scheduled before this is called, so they still run
+    concurrently. Returns ``(results_by_name, failed_names)``.
+    """
+    results: dict = {}
+    failed: list[str] = []
+    for name, task in named_tasks:
+        try:
+            results[name] = yield task
+        except TaskFailedError as e:
+            failed.append(name)
+            if not ctx.is_replaying:
+                logger.error(
+                    "Workflow activity failed; continuing with the remaining steps",
+                    activity=name,
+                    object_id=object_id,
+                    error_type=e.details.error_type,
+                    error_message=e.details.message,
+                )
+    return results, failed
+
+
 # endregion
 
 ##########################################
@@ -98,42 +122,59 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
                 processing_time=f"{ctx.current_utc_datetime - start_time}",
             )
 
+        # The three tasks are scheduled together and run in parallel. Each is awaited on its own so one failure
+        # (e.g. plaintext indexing) doesn't skip the others or the publishing steps below; wf.when_all would raise on
+        # the first failure and abandon the rest of the workflow.
         enrichment_tasks = [
-            ctx.call_activity(
-                run_enrichment_modules,
-                input={"object_id": object_id},
-            ),
-            ctx.call_activity(check_file_linkings, input={"object_id": object_id}),
-            ctx.call_activity(handle_file_if_plaintext, input={"object_id": object_id}),
+            ("run_enrichment_modules", ctx.call_activity(run_enrichment_modules, input={"object_id": object_id})),
+            ("check_file_linkings", ctx.call_activity(check_file_linkings, input={"object_id": object_id})),
+            ("handle_file_if_plaintext", ctx.call_activity(handle_file_if_plaintext, input={"object_id": object_id})),
         ]
-
-        results = yield wf.when_all(enrichment_tasks)
+        results, failed = yield from _await_each(ctx, enrichment_tasks, object_id)
 
         if not ctx.is_replaying:
-            for r in results:
-                logger.debug(f"enrichment_tasks result: {r}")
+            for name, r in results.items():
+                logger.debug(f"enrichment_tasks result: {name}: {r}")
 
             logger.debug(
                 "Enrichment tasks complete - handle_file_if_plaintext, check_file_linkings, enrichment_module_workflow",
                 processing_time=f"{ctx.current_utc_datetime - start_time}",
+                failed=failed,
             )
 
-        final_tasks = [
-            ctx.call_activity(publish_enriched_file, input=object_id),
-            # ctx.call_activity(extract_and_store_features, input={"object_id": object_id}),
-            ctx.call_activity(publish_findings_alerts, input=object_id),
-        ]
-
         # Always wait (also on replay), or finalize runs before the alerts are published
-        results = yield wf.when_all(final_tasks)
+        final_tasks = [
+            ("publish_enriched_file", ctx.call_activity(publish_enriched_file, input=object_id)),
+            ("publish_findings_alerts", ctx.call_activity(publish_findings_alerts, input=object_id)),
+        ]
+        results, final_failed = yield from _await_each(ctx, final_tasks, object_id)
+        failed += final_failed
         if not ctx.is_replaying:
-            for r in results:
-                logger.debug(f"final_tasks result: {r}")
+            for name, r in results.items():
+                logger.debug(f"final_tasks result: {name}: {r}")
 
             logger.debug(
                 "Final tasks complete - publish_enriched_file, publish_findings_alerts",
                 processing_time=f"{ctx.current_utc_datetime - start_time}",
             )
+
+        if failed:
+            # Everything that could run has run; record the partial failure instead of failing the whole workflow.
+            if not ctx.is_replaying:
+                logger.error(
+                    "Enrichment workflow finished with failed activities",
+                    object_id=object_id,
+                    failed_activities=failed,
+                    processing_time=f"{ctx.current_utc_datetime - start_time}",
+                )
+            yield ctx.call_activity(
+                finalize_workflow_failure,
+                input={
+                    "error_message": f"activities failed: {', '.join(failed)}"[:200],
+                    "start_time": start_time.isoformat(),
+                },
+            )
+            return {"failed_activities": failed}
 
         if not ctx.is_replaying:
             logger.info(

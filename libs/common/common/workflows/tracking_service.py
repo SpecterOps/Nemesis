@@ -102,10 +102,27 @@ class WorkflowTrackingService:
             instance_id: The workflow instance ID
             status: New status (WorkflowStatus enum)
             error_message: Optional error message (appended to enrichments_failure)
+
+        Moving a workflow from SCHEDULED to RUNNING also resets ``start_time`` to now. ``start_time`` is first set at
+        registration, and the timeout checks (WorkflowPurger and the file_enrichment WorkflowManager) and the runtime
+        count from it, so without the reset time spent waiting in the queue counted against the execution limit.
         """
         try:
             async with self.pool.acquire() as conn:
-                if error_message:
+                if status == WorkflowStatus.RUNNING and not error_message:
+                    await conn.execute(
+                        """
+                        UPDATE workflows
+                        SET start_time = CASE WHEN status = $1 THEN $2 ELSE start_time END,
+                            status = $3
+                        WHERE wf_id = $4
+                        """,
+                        WorkflowStatus.SCHEDULED,
+                        datetime.now(UTC),
+                        status,
+                        instance_id,
+                    )
+                elif error_message:
                     # Update with error message appended to enrichments_failure
                     await conn.execute(
                         """
