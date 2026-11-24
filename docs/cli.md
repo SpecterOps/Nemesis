@@ -186,6 +186,16 @@ Options:
 | `--ignore-cert-errors` | `false`      | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
 | `--ca-file`            | system store | PEM file of CAs to trust for Nemesis (env: `NEMESIS_CA_FILE`) |
 
+### Original file times and ownership
+
+For each file (not for `--container` uploads), `submit` and `monitor` also send the file's times and ownership on
+the machine running the CLI: `modification_time` and `access_time`, `creation_time` where the platform records it
+(macOS, Windows, some Linux filesystems), and `security_info` (owner, group and mode bits; Windows sends only the
+mode). These are optional `/api/files` metadata fields; any client can send them as timezone-aware ISO 8601 times.
+Files extracted from containers get the same fields from the archive or disk image: ZIP modification times (read as
+UTC, because ZIP stores no timezone), tar and 7z modification times, tar owner/group/mode, and disk-image
+created/modified/accessed times with UID/GID/mode. The file details page shows them under Submission Metadata.
+
 ## Folder Monitoring
 
 Monitor a folder for new files and automatically submit them to Nemesis for processing. This includes both existing files (optional) and any new files added to the folder while monitoring is active.

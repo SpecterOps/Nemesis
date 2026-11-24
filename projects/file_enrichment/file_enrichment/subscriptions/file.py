@@ -13,11 +13,11 @@ DROP with a log, so they don't loop forever.
 
 import asyncio
 import os
-from datetime import datetime
 from typing import Any
 
 import asyncpg
 import file_enrichment.global_vars as global_vars
+from common.helpers import jsonb_dumps
 from common.logger import get_logger
 from common.models import CloudEvent, File
 from dapr.ext.workflow.workflow_state import WorkflowStatus as DaprWorkflowStatus
@@ -169,9 +169,9 @@ async def save_file_message(file: File):
         INSERT INTO files (
             object_id, agent_id, source, project, timestamp, expiration,
             path, originating_object_id, originating_container_id, nesting_level,
-            file_creation_time, file_access_time, file_modification_time
+            file_creation_time, file_access_time, file_modification_time, security_info
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
         ) ON CONFLICT (object_id) DO UPDATE SET
             agent_id = EXCLUDED.agent_id,
             source = EXCLUDED.source,
@@ -185,6 +185,7 @@ async def save_file_message(file: File):
             file_creation_time = EXCLUDED.file_creation_time,
             file_access_time = EXCLUDED.file_access_time,
             file_modification_time = EXCLUDED.file_modification_time,
+            security_info = EXCLUDED.security_info,
             updated_at = CURRENT_TIMESTAMP;
         """
 
@@ -202,9 +203,12 @@ async def save_file_message(file: File):
                 file.originating_object_id,
                 getattr(file, "originating_container_id", None),
                 file.nesting_level,
-                datetime.fromisoformat(file.creation_time) if file.creation_time else None,
-                datetime.fromisoformat(file.access_time) if file.access_time else None,
-                datetime.fromisoformat(file.modification_time) if file.modification_time else None,
+                file.creation_time,
+                file.access_time,
+                file.modification_time,
+                jsonb_dumps(file.security_info, column="files.security_info", object_id=file.object_id)
+                if file.security_info is not None
+                else None,
             )
 
         logger.debug("Successfully saved file message to database", object_id=file.object_id)

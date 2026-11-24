@@ -334,6 +334,10 @@ def normalize_path(path: str) -> str:
     `timestamp` and `expiration` must be ISO 8601 datetimes with a timezone (`Z` or an offset such as
     `+02:00`); times without one are rejected with 400. They are stored in UTC.
 
+    Optional fields describe the file on its original system: `creation_time`, `access_time` and
+    `modification_time` (timezone-aware like the above) and `security_info`
+    (`{"owner": ..., "group": ..., "mode": <st_mode int>, "extra": {...}}`).
+
     Example:
     ```
     curl -k -u n:n -F "file=@example.txt" \
@@ -345,6 +349,13 @@ def normalize_path(path: str) -> str:
     ```
     curl -k -u n:n -F "file=@example.txt" \
          -F 'metadata={"agent_id":"agent123","project":"proj1","path":"/tmp/example.txt"}' \
+         https://nemesis:7443/api/files
+    ```
+
+    Example with original file times and ownership:
+    ```
+    curl -k -u n:n -F "file=@example.txt" \
+         -F 'metadata={"agent_id":"agent123","project":"proj1","path":"/tmp/example.txt","modification_time":"2024-01-28T09:15:00Z","security_info":{"owner":"alice","group":"staff","mode":33188}}' \
          https://nemesis:7443/api/files
     ```
     """,

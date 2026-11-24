@@ -389,3 +389,31 @@ class TestUploadTimesAndRejections:
         response = _post_file(client, _metadata(expiration="2001-01-01T00:00:00Z"))
         assert response.status_code == 400
         assert issues[-1]["field"] == "metadata.expiration" and issues[-1]["reason"] == "not in the future"
+
+
+class TestUploadOriginalFileDetails:
+    def test_original_times_and_security_reach_the_file_message(self, client, upload_storage, submit_mock):
+        response = _post_file(
+            client,
+            _metadata(
+                creation_time="2024-01-01T00:00:00Z",
+                modification_time="2024-01-02T00:00:00+02:00",
+                security_info={"owner": "alice", "group": "staff", "mode": 0o100644},
+            ),
+        )
+        assert response.status_code == 200
+        file_model = submit_mock.await_args.args[0]
+        assert file_model.creation_time == datetime(2024, 1, 1, tzinfo=UTC)
+        assert file_model.modification_time == datetime(2024, 1, 1, 22, tzinfo=UTC)
+        assert file_model.security_info.owner == "alice" and file_model.security_info.mode == 0o100644
+
+    @pytest.mark.parametrize("field", ["creation_time", "access_time", "modification_time"])
+    def test_naive_original_time_rejected(self, client, upload_storage, submit_mock, field):
+        response = _post_file(client, _metadata(**{field: "2024-01-01T00:00:00"}))
+        assert response.status_code == 400
+        upload_storage.upload_uploadfile.assert_not_called()
+
+    def test_invalid_security_info_rejected(self, client, upload_storage, submit_mock):
+        response = _post_file(client, _metadata(security_info={"owner": "a", "unexpected": True}))
+        assert response.status_code == 400
+        upload_storage.upload_uploadfile.assert_not_called()

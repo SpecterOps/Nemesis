@@ -62,6 +62,15 @@ def _transform_file_enriched_data(file_data: dict) -> dict:
         if field in file_data and file_data[field]:
             file_data[field] = file_data[field].isoformat()
 
+    # Columns are prefixed with file_ in the table; the models use the plain names
+    for column, field in (
+        ("file_creation_time", "creation_time"),
+        ("file_access_time", "access_time"),
+        ("file_modification_time", "modification_time"),
+    ):
+        if column in file_data:
+            file_data[field] = file_data.pop(column)
+
     # Handle JSON fields (parse if string, keep as-is if dict)
     if "security_info" in file_data and isinstance(file_data["security_info"], str):
         file_data["security_info"] = json.loads(file_data["security_info"])

@@ -7,6 +7,24 @@ import { ChevronDown, Plus, Tag, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+// Times and ownership the file had on its original system (absent when the producer didn't report them)
+const formatOriginalTime = (value) => (value ? new Date(value).toLocaleString() : null);
+
+const formatMode = (mode) => (Number.isInteger(mode) ? `0${(mode & 0o7777).toString(8).padStart(3, '0')}` : null);
+
+const originalSystemRows = (fileData) => {
+  const security = fileData?.security_info || {};
+  const owner = [security.owner, security.group].filter(Boolean).join(' : ');
+  return [
+    ['Created', formatOriginalTime(fileData?.file_creation_time)],
+    ['Modified', formatOriginalTime(fileData?.file_modification_time)],
+    ['Accessed', formatOriginalTime(fileData?.file_access_time)],
+    ['Owner : Group', owner || null],
+    ['Mode', formatMode(security.mode)],
+    ['Security Details', security.extra ? JSON.stringify(security.extra) : null],
+  ].filter(([, value]) => value);
+};
+
 const FileDetailsSection = ({ fileData, setFileData }) => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
@@ -461,6 +479,12 @@ const FileDetailsSection = ({ fileData, setFileData }) => {
                       <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">SHA1</td>
                       <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-hidden text-ellipsis">{fileData?.hashes?.sha1}</td>
                     </tr>
+                    {originalSystemRows(fileData).map(([label, value]) => (
+                      <tr key={label}>
+                        <td className="py-0.5 pr-4 text-gray-500 dark:text-gray-400 whitespace-nowrap w-40">{label}</td>
+                        <td className="py-0.5 font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap overflow-hidden text-ellipsis">{value}</td>
+                      </tr>
+                    ))}
                   </>
                 )}
                 {/* <tr>

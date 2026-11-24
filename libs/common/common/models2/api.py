@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, BeforeValidator, Field, field_serializer, field_validator
@@ -115,6 +115,17 @@ AgentId = Annotated[str, Field(min_length=1, max_length=MAX_AGENT_ID_LENGTH, pat
 SourceName = Annotated[str, Field(min_length=1, max_length=MAX_SOURCE_LENGTH, pattern=r"\S")]
 
 
+class SecurityInfo(BaseModel):
+    """Ownership and permissions of a collected file, as far as its producer knows them (stored as JSONB)."""
+
+    model_config = {"extra": "forbid"}
+
+    owner: str | None = Field(default=None, max_length=1000, description="Owner: user name, UID or SID")
+    group: str | None = Field(default=None, max_length=1000, description="Group: name or GID")
+    mode: int | None = Field(default=None, ge=0, le=0o177777, description="POSIX mode bits (st_mode)")
+    extra: dict[str, Any] | None = Field(default=None, description="Producer-specific details")
+
+
 class FileMetadata(BaseModel):
     """Metadata model for file uploads"""
 
@@ -130,6 +141,18 @@ class FileMetadata(BaseModel):
         description="ISO 8601 expiration date with a timezone (e.g. 'Z'): when the data should be deleted",
     )
     path: str
+    creation_time: UTCDatetime | None = Field(
+        default=None, description="ISO 8601 time with a timezone when the file was created on its original system"
+    )
+    access_time: UTCDatetime | None = Field(
+        default=None, description="ISO 8601 time with a timezone when the file was last accessed on its original system"
+    )
+    modification_time: UTCDatetime | None = Field(
+        default=None, description="ISO 8601 time with a timezone when the file was last modified on its original system"
+    )
+    security_info: SecurityInfo | None = Field(
+        default=None, description="Owner, group and permission bits of the file on its original system"
+    )
     file_filters: FileFilters | None = Field(
         default=None, description="Optional file filtering configuration for container extraction"
     )
@@ -152,7 +175,9 @@ class FileMetadata(BaseModel):
         }
     }
 
-    @field_serializer("timestamp", "expiration", when_used="unless-none")
+    @field_serializer(
+        "timestamp", "expiration", "creation_time", "access_time", "modification_time", when_used="unless-none"
+    )
     def serialize_datetime(self, dt: datetime, _info):
         return dt.isoformat()
 

@@ -17,6 +17,7 @@ import psycopg
 import pytsk3
 from common.data_issues import DataIssueKind, log_data_issue
 from common.db import get_postgres_connection_str
+from common.file_details import tsk_meta_details, zip_member_details
 from common.helpers import get_drive_from_path
 from common.logger import get_logger
 from common.models import File as FileModel
@@ -288,8 +289,13 @@ class BaseContainerExtractor:
         member_path = member_path.replace("\\", "/")
         return posixpath.join(base_dir, member_path).removeprefix(MOUNTED_CONTAINER_PATH)
 
-    def publish_file_message(self, temp_file_path: str, object_id: UUID, real_path: str):
-        """Publish file message to the message bus"""
+    def publish_file_message(
+        self, temp_file_path: str, object_id: UUID, real_path: str, details: dict[str, Any] | None = None
+    ):
+        """Publish file message to the message bus.
+
+        ``details`` carries the member's times and ownership from the container (see common.file_details).
+        """
         if self.file_metadata is None or self.container_id is None:
             raise RuntimeError("container_id and file_metadata must be set via set_container_info before publishing")
         file_message = FileModel(
@@ -303,6 +309,7 @@ class BaseContainerExtractor:
             originating_object_id=self.file_metadata.get("originating_object_id"),
             nesting_level=(self.file_metadata.get("nesting_level", 0) + 1),
             originating_container_id=self.container_id,
+            **(details or {}),
         )
 
         data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
@@ -326,7 +333,9 @@ class BaseContainerExtractor:
             path=real_path,
         )
 
-    def _upload_and_publish(self, write_content: Callable[[IO[bytes]], None], real_path: str) -> None:
+    def _upload_and_publish(
+        self, write_content: Callable[[IO[bytes]], None], real_path: str, details: dict[str, Any] | None = None
+    ) -> None:
         """Write content to a temp file, upload it, and publish the file message.
 
         The temp file is always removed. If publishing fails after the upload succeeded, the
@@ -342,7 +351,7 @@ class BaseContainerExtractor:
             object_id = self.storage.upload_file(temp_path)
 
             try:
-                self.publish_file_message(temp_path, object_id, real_path)
+                self.publish_file_message(temp_path, object_id, real_path, details)
             except Exception:
                 try:
                     self.storage.delete_object(object_id)
@@ -554,6 +563,7 @@ class ZipContainerExtractor(BaseContainerExtractor):
         if self.file_metadata is None:
             raise RuntimeError("file_metadata must be set via set_container_info before extraction")
         processed_count = 0
+        zip_times_assumed_utc = 0
 
         try:
             with zipfile.ZipFile(container_file_path, "r") as zip_ref:
@@ -583,8 +593,9 @@ class ZipContainerExtractor(BaseContainerExtractor):
                                 shutil.copyfileobj(src, dest, EXTRACT_CHUNK_SIZE)
 
                         real_path = self.container_member_path(info.filename)
-                        self._upload_and_publish(write_member, real_path)
+                        self._upload_and_publish(write_member, real_path, zip_member_details(info))
                         processed_count += 1
+                        zip_times_assumed_utc += 1
 
                     except Exception as e:
                         logger.warning(f"Error processing file {info.filename}: {e}")
@@ -596,6 +607,15 @@ class ZipContainerExtractor(BaseContainerExtractor):
         except Exception as e:
             logger.exception(f"Error extracting ZIP file: {e}")
             raise
+
+        if zip_times_assumed_utc:
+            # ZIP records local wall-clock times with no timezone; they were stored as UTC
+            log_data_issue(
+                DataIssueKind.FILE_TIME_ASSUMED_UTC,
+                field="files.file_modification_time",
+                container_id=str(self.container_id),
+                files=zip_times_assumed_utc,
+            )
 
         # Log final statistics
         stats = self.get_processing_stats()
@@ -864,7 +884,7 @@ class DDImageContainerExtractor(BaseContainerExtractor):
 
                             member_path = posixpath.join(path_prefix, file_path) if path_prefix else file_path
                             real_path = self.container_member_path(member_path)
-                            self._upload_and_publish(write_entry, real_path)
+                            self._upload_and_publish(write_entry, real_path, tsk_meta_details(entry.info.meta))
                             processed_count += 1
 
                         except Exception as e:

@@ -7,7 +7,7 @@ from datetime import datetime
 
 import common.helpers as helpers
 import magic
-from common.helpers import as_uuid, get_file_extension, is_container
+from common.helpers import as_uuid, get_file_extension, is_container, jsonb_dumps
 from common.logger import get_logger
 from common.workflows.setup import workflow_activity
 from common.workflows.tracking_service import WorkflowStatus
@@ -171,10 +171,16 @@ async def save_file_enriched_to_db(file_enriched: dict) -> None:
                 file_enriched.get("originating_object_id"),
                 file_enriched.get("originating_container_id"),
                 file_enriched.get("nesting_level"),
-                parse_timestamp(file_enriched.get("file_creation_time")),
-                parse_timestamp(file_enriched.get("file_access_time")),
-                parse_timestamp(file_enriched.get("file_modification_time")),
-                json.dumps(file_enriched.get("security_info")) if file_enriched.get("security_info") else None,
+                parse_timestamp(file_enriched.get("creation_time")),
+                parse_timestamp(file_enriched.get("access_time")),
+                parse_timestamp(file_enriched.get("modification_time")),
+                jsonb_dumps(
+                    file_enriched["security_info"],
+                    column="files_enriched.security_info",
+                    object_id=file_enriched["object_id"],
+                )
+                if file_enriched.get("security_info") is not None
+                else None,
                 json.dumps(file_enriched.get("hashes")) if file_enriched.get("hashes") else None,
             )
             logger.debug("Stored file_enriched in PostgreSQL", object_id=file_enriched["object_id"])

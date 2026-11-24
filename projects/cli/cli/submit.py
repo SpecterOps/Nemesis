@@ -13,6 +13,7 @@ import click
 import colorlog
 import requests
 import urllib3
+from cli.file_details import local_file_details
 from cli.tls_trust import requests_verify
 from common.log_safety import mask
 from requests.adapters import HTTPAdapter
@@ -600,8 +601,12 @@ def create_metadata(
     agent_id: str = "submit.sh",
     source: str | None = None,
     file_filters: dict | None = None,
+    local_path: Path | None = None,
 ) -> dict:
-    """Create metadata dictionary for file submission"""
+    """Create metadata dictionary for file submission.
+
+    ``local_path`` is the file on this machine; when given, its times and ownership are sent too.
+    """
     metadata: dict = {
         "agent_id": agent_id,
         "project": project,
@@ -615,6 +620,11 @@ def create_metadata(
         # Validate filters before adding to metadata
         validate_filters(file_filters)
         metadata["file_filters"] = file_filters
+    if local_path is not None:
+        try:
+            metadata.update(local_file_details(local_path))
+        except OSError as e:
+            logger.warning(f"Could not read times/ownership of {local_path}: {e}")
     return metadata
 
 
@@ -684,7 +694,10 @@ def upload_file(
             # Calculate the metadata path (transformed if folder is provided)
             metadata_path = calculate_metadata_path(file_path, base_paths, folder)
 
-            metadata = create_metadata(metadata_path, project, agent_id, source, file_filters)
+            # Containers' own times aren't stored; their extracted files get times from the archive instead
+            metadata = create_metadata(
+                metadata_path, project, agent_id, source, file_filters, local_path=None if container else file_path
+            )
             file_size = file_path.stat().st_size
 
             endpoint = "/api/containers" if container else "/api/files"

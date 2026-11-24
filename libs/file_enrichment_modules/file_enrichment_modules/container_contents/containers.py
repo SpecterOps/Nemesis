@@ -9,8 +9,11 @@ import uuid
 import zipfile
 import zlib
 from io import SEEK_END
+from typing import Any
 
 import py7zr
+from common.data_issues import DataIssueKind, log_data_issue
+from common.file_details import sevenzip_member_details, tar_member_details, zip_member_details
 from common.logger import get_logger
 from common.models import File, FileEnriched
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
@@ -300,6 +303,41 @@ def safe_extract_archive(path: str, extract_dir: str) -> bool:
         return False
 
 
+def archive_member_details(path: str, object_id: uuid.UUID | None = None) -> dict[str, dict[str, Any]]:
+    """Times and ownership of each archive member, keyed by its "/"-separated path inside the archive.
+
+    Extracting to disk loses most of this (zipfile doesn't restore times), so it is read from the archive listing.
+    ZIP times have no timezone and are taken as UTC; that is logged once per archive.
+    """
+    details: dict[str, dict[str, Any]] = {}
+    try:
+        if zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path) as zf:
+                for info in zf.infolist():
+                    if not info.is_dir():
+                        details[info.filename.replace("\\", "/")] = zip_member_details(info)
+            if details:
+                log_data_issue(
+                    DataIssueKind.FILE_TIME_ASSUMED_UTC,
+                    field="files.file_modification_time",
+                    object_id=object_id,
+                    files=len(details),
+                )
+        elif py7zr.is_7zfile(path):
+            with py7zr.SevenZipFile(path) as sz:
+                for member in sz.list():
+                    if not member.is_directory:
+                        details[member.filename.replace("\\", "/")] = sevenzip_member_details(member.creationtime)
+        elif tarfile.is_tarfile(path):
+            with tarfile.open(path) as tf:
+                for member in tf.getmembers():
+                    if member.isfile():
+                        details[member.name] = tar_member_details(member)
+    except Exception:
+        logger.warning("Could not read archive member times", archive=path, exc_info=True)
+    return details
+
+
 def extract_archive(path: str) -> str:
     """
     Extracts an archive file to a temporary directory and returns the
@@ -412,8 +450,11 @@ class ContainerExtractor:
             data_content_type="application/json",
         )
 
-    async def process_extracted_file(self, extracted_file_path, tmp_dir, file_enriched):
-        """Process a single extracted file with security checks."""
+    async def process_extracted_file(self, extracted_file_path, tmp_dir, file_enriched, member_details=None):
+        """Process a single extracted file with security checks.
+
+        ``member_details`` maps archive member paths to their times/ownership (see archive_member_details).
+        """
         try:
             # Skip if not a file or empty
             if not os.path.isfile(extracted_file_path) or os.path.getsize(extracted_file_path) <= 0:
@@ -463,6 +504,7 @@ class ContainerExtractor:
             object_id = self.storage.upload_file(extracted_file_path)
             nesting_level = (file_enriched.nesting_level or 0) + 1
 
+            member_path = pathlib.PurePath(os.path.relpath(extracted_file_path, tmp_dir)).as_posix()
             file_message = File(
                 object_id=object_id,
                 agent_id=file_enriched.agent_id,
@@ -473,6 +515,7 @@ class ContainerExtractor:
                 path=real_path,
                 originating_object_id=file_enriched.object_id,
                 nesting_level=nesting_level,
+                **(member_details or {}).get(member_path, {}),
             )
 
             await self.publish_file_message(file_message)
@@ -507,6 +550,7 @@ class ContainerExtractor:
                 tmp_dir = self.extract_archive(temp_file, file_enriched)
                 if not tmp_dir:
                     return
+                member_details = archive_member_details(temp_file.name, object_id=file_enriched.object_id)
 
                 try:
                     processed_files = 0
@@ -521,7 +565,9 @@ class ContainerExtractor:
                             )
                             break
 
-                        if await self.process_extracted_file(str(extracted_file_path), tmp_dir, file_enriched):
+                        if await self.process_extracted_file(
+                            str(extracted_file_path), tmp_dir, file_enriched, member_details
+                        ):
                             processed_files += 1
 
                     logger.info(

@@ -969,6 +969,10 @@ const FileViewer = () => {
                 originating_object_id
                 originating_container_id
                 nesting_level
+                file_creation_time
+                file_access_time
+                file_modification_time
+                security_info
                 hashes
                 file_tags
                 created_at

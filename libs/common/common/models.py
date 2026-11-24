@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 from common.helpers import MAX_EXTENSION_LENGTH
-from common.models2.api import AgentId, ProjectName, SourceName, UTCDatetime
+from common.models2.api import AgentId, ProjectName, SecurityInfo, SourceName, UTCDatetime
 from common.models2.base import NemesisModel
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
@@ -292,9 +292,11 @@ class File(NemesisModel):
     originating_object_id: UUID | None = None
     originating_container_id: UUID | None = None
     nesting_level: int | None = None
-    creation_time: str | None = None
-    access_time: str | None = None
-    modification_time: str | None = None
+    # Times and ownership of the file on its original system, when the producer knows them
+    creation_time: UTCDatetime | None = None
+    access_time: UTCDatetime | None = None
+    modification_time: UTCDatetime | None = None
+    security_info: SecurityInfo | None = None
 
     @field_validator("nesting_level")
     @classmethod
@@ -330,6 +332,10 @@ class File(NemesisModel):
             timestamp=metadata.timestamp,
             expiration=metadata.expiration,
             path=metadata.path,
+            creation_time=metadata.creation_time,
+            access_time=metadata.access_time,
+            modification_time=metadata.modification_time,
+            security_info=metadata.security_info,
         )
 
     def is_extracted_from_archive(self) -> bool:
